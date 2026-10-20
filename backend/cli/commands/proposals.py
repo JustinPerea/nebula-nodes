@@ -82,12 +82,17 @@ def run_propose(
     except BuildError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    view = client.propose(body, agent_name=args.agent_name).get("proposal") or {}
+    response = client.propose(body, agent_name=args.agent_name)
+    view = response.get("proposal") or {}
+    warning = response.get("warning")
     if args.json and not args.wait:
-        print(json.dumps({"proposal": view}, ensure_ascii=False, indent=2), file=out)
+        print(json.dumps({"proposal": view, **({"warning": warning} if warning else {})},
+                         ensure_ascii=False, indent=2), file=out)
         return 0
     if not args.json:
         print(format_proposal(view, created=True), file=out, flush=True)
+        if warning:
+            print(f"warning: {warning}", file=out, flush=True)
     if not args.wait:
         return 0
     view, timed_out = wait_for_decision(client, view, timeout=args.timeout,

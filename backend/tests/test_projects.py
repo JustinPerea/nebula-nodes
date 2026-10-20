@@ -119,7 +119,9 @@ def test_preserves_ids_outputs_recipe_and_creator_state_on_switch(workspace, per
     # The opened project's pins (canvasPins) follow the graph replacement.
     replacement = next(call.args[0] for call in reversed(broadcast.await_args_list)
                        if call.args[0]["type"] == "graphSync")
-    assert broadcast.await_args.args[0]["type"] == "canvasPins"
+    # Then projectsChanged, for the Projects screen's list.
+    kinds = [call.args[0]["type"] for call in broadcast.await_args_list]
+    assert kinds[-3:] == ["graphSync", "canvasPins", "projectsChanged"]
     assert replacement["graphReplaced"] is True
     assert replacement["workspaceRevision"] == opened.json()["workspaceRevision"]
     assert replacement["activeProjectId"] == project_id
@@ -403,7 +405,9 @@ def test_stale_snapshot_recovery_is_inactive_atomic_and_idempotent(workspace, mo
     assert retry.status_code == 200
     assert retry.json() == recovery
     assert len(store.read()["projects"]) == 3
-    broadcast.assert_not_awaited()
+    # No canvas sync; only the Projects list hears of the copy, and once.
+    assert [call.args[0] for call in broadcast.await_args_list] == [
+        {"type": "projectsChanged", "change": "created", "projectId": body["recoveryId"]}]
     body["snapshot"]["nodes"][0]["data"]["params"]["value"] = "different"
     assert client.post("/api/projects/recover", json=body).status_code == 409
     before = store.path.read_bytes()
@@ -436,7 +440,9 @@ def test_deleting_an_inactive_project_leaves_the_open_canvas_alone(workspace):
     assert list(catalog["trash"]) == [first["project"]["id"]]
     assert catalog["workspaceRevision"] == second["workspaceRevision"]
     assert graph.get_state() == graph_before
-    broadcast.assert_not_awaited()
+    # No canvas sync; only the Projects list hears of it.
+    assert [call.args[0] for call in broadcast.await_args_list] == [
+        {"type": "projectsChanged", "change": "deleted", "projectId": first["project"]["id"]}]
     assert client.get(f"/api/projects/{first['project']['id']}").status_code == 404
     assert client.request("DELETE", f"/api/projects/{first['project']['id']}",
                           json={"workspaceRevision": second["workspaceRevision"]}).status_code == 404

@@ -9,7 +9,7 @@ import {
   type Connection,
 } from '@xyflow/react';
 import { v4 as uuidv4 } from 'uuid';
-import type { NodeData, DynamicNodeData, DynamicPortDefinition, DynamicParamDefinition, PortDataType, PortValue, CinemaSceneSpec, CinemaShot, ModelNodeDefinition, GenerationRequest, CreateOriginTag } from '../types';
+import type { NodeData, DynamicNodeData, DynamicPortDefinition, DynamicParamDefinition, PortDataType, PortValue, CinemaSceneSpec, CinemaShot, ModelNodeDefinition, GenerationRequest, CreateOriginTag, NodeState } from '../types';
 import { shotPortId } from '../constants/ports';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { buildSampleGraph } from '../constants/sampleGraph';
@@ -507,6 +507,12 @@ const terminalRunIds = new Set<string>();
 const retiredProjectRunIds = new Set<string>();
 const settledCinemaRuns = new Map<string, 'complete' | 'failed' | 'cancelled'>();
 const cancelledRunIds = new Set<string>();
+// Nodes another tab's run, or an agent's (run_nodes), put in queued or
+// executing, by run. This tab doesn't own those runs, so nothing else settles
+// a node the run never reached (a failed dependency, a Stop): its end does.
+const foreignRunNodes = new Map<string, Set<string>>();
+/** States a run's own events set, which a graphSync over unchanged outputs keeps. */
+const RUN_HELD_STATES: ReadonlySet<NodeState | undefined> = new Set<NodeState | undefined>(['error', 'skipped', 'queued', 'executing']);
 const pendingStartRunIds = new Set<string>();
 /** Runs whose start a backend refused (ExecutionStartRejectedError): they
  * never ran, so their records are not work a stale tab must keep. */
@@ -594,6 +600,28 @@ function closeTrackedRun(set: GraphSet, runId: string, patch: Parameters<typeof 
   runErrors.delete(runId);
   runShareableInputs.delete(runId);
   set((state) => ({ ...ownershipState(), runHistory: persistedRunHistory(closeRunRecord(state.runHistory, runId, patch)) }));
+}
+
+function noteForeignRunNode(runId: string, nodeId: string): void {
+  const ids = foreignRunNodes.get(runId) ?? new Set<string>();
+  ids.add(nodeId);
+  foreignRunNodes.set(runId, ids);
+  if (foreignRunNodes.size > 200) foreignRunNodes.delete(foreignRunNodes.keys().next().value!);
+}
+
+/** A run this tab doesn't own ended: its nodes still waiting go back to idle. */
+function settleForeignRun(runId: string, set: GraphSet): void {
+  const ids = foreignRunNodes.get(runId);
+  if (!ids) return;
+  foreignRunNodes.delete(runId);
+  set((state) => ({
+    nodes: state.nodes.map((node) => {
+      const pending = node.data.state === 'queued' || node.data.state === 'executing';
+      if (!ids.has(node.id) || !pending || scopeOverlaps([node.id])) return node;
+      return { ...node, data: { ...node.data, state: 'idle' as const, progress: undefined,
+        streamingText: undefined, streamingPartials: undefined, streamingSvg: undefined } };
+    }),
+  }));
 }
 
 function rememberCancelledRun(runId: string): void {
@@ -2585,7 +2613,13 @@ wsClient.subscribe((event) => {
             ...existing.data,
             ...cliNode.data,
             outputs: hasCliOutputs ? cliOutputs : existing.data.outputs,
-            state: hasCliOutputs ? cliNode.data.state : existing.data.state,
+            // The sync says "complete" for any node with outputs. Over the
+            // same outputs it must not hide what a run's events said since:
+            // a failure (an agent's run ends with a sync), a skip, or a run
+            // still going. New outputs do replace it.
+            state: !hasCliOutputs ? existing.data.state
+              : changedOutput || !RUN_HELD_STATES.has(existing.data.state) ? cliNode.data.state
+                : existing.data.state,
             keyStatus,
             ...(changedOutput ? clearBatchPreview() : {}),
             ...(isPaperSource && paperSource ? {
@@ -5566,6 +5600,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       && scopeOverlaps([event.nodeId])) return;
     switch (event.type) {
       case 'executionStatus':
+        if (event.runId && !ownsRun(event.runId)) {
+          settleForeignRun(event.runId, set);
+        }
         if (event.runId) get().hydrateExecutionStatuses([{
           runId: event.runId,
           status: event.status,
@@ -5625,6 +5662,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         });
         break;
       case 'queued':
+        if (event.runId && !ownsRun(event.runId)) noteForeignRunNode(event.runId, event.nodeId);
         get().updateNodeData(event.nodeId, {
           state: 'queued',
           ...clearBatchPreview(event.runId ?? currentRunId ?? undefined),
@@ -5634,6 +5672,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         });
         break;
       case 'executing': {
+        if (event.runId && !ownsRun(event.runId)) noteForeignRunNode(event.runId, event.nodeId);
         const runId = event.runId ?? currentRunId ?? undefined;
         const live = get().nodes.find((node) => node.id === event.nodeId);
         get().updateNodeData(event.nodeId, { state: 'executing', progress: 0, runStartedAt: Date.now(), streamingText: undefined,
@@ -5780,6 +5819,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
       case 'graphComplete': {
         const runId = event.runId ?? currentRunId;
+        if (runId && !ownsRun(runId)) settleForeignRun(runId, set);
         if (!runId || !ownsRun(runId)) break;
         const runFailed = runErrors.get(runId) === true;
         // A completion after Stop remains authoritative: completed work is
@@ -5792,6 +5832,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
       case 'graphCancelled': {
         const runId = event.runId ?? currentRunId;
+        if (runId && !ownsRun(runId)) settleForeignRun(runId, set);
         if (runId) {
           rememberCancelledRun(runId);
           settleTrackedExecutionStatus('cancelled', runId, set, get);
