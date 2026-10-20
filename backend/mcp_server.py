@@ -44,7 +44,7 @@ Workflow:
 Spending: the person sets limits (get_spend_limits). A run over a limit, or with a node that has no list price, is refused; send the same plan as propose_change. The person accepts or rejects it in Nebula; agents cannot accept, and get_proposal waits for the decision. Use propose_change too when the change is theirs to decide (reworking their graph, a costly run).
 
 Projects: list_projects, open_project, new_project. Start new work in a new project rather than emptying the person's canvas; they can switch back.
-Moodboards (the boards in Moodboard Studio): moodboard_create makes one from files, folders and image links, moodboard_update sets weights, notes, private notes (the person's own labels, never sent to generators) and the brief fields (Direction, Avoid, pinned colours, a hand-written brief), moodboard_analyze reads its palette (each colour lists the images it comes from; it can also preview an analysis, optionally with other colour thresholds, saving nothing). A board's `brief` is what generators get (brief.styleBrief, brief.negativePrompt, brief.palette); analysis.styleBrief is not. Only the person may change their own hand-written brief. Nebula checks the measured colours against the Direction and Avoid words: by default a clashing colour leaves the brief (brief.leftOut, each with its reason), brief.mayClash still goes, and pinned colours always go (brief.pinnedClashes). Tell the person what was left out; moodboard_update can keep one anyway. A board's notes are for the person, their team and you: generators get them only when the person turns that on (brief.notesSent).
+Moodboards (the boards in Moodboard Studio): moodboard_create makes one from files, folders and image links, moodboard_update sets weights, notes, private notes (the person's own labels, never sent to generators), Set aside (excluded: the image stays and its colours are still read, but it never steers; weight 0 shows as set aside too) and the brief fields (Direction, Avoid, pinned colours, a hand-written brief), moodboard_analyze reads its palette (each colour lists the images it comes from; it can also preview an analysis, optionally with other colour thresholds, saving nothing). A board's `brief` is what generators get (brief.styleBrief, brief.negativePrompt, brief.palette); analysis.styleBrief is not. Only the person may change their own hand-written brief. Nebula checks the measured colours against the Direction and Avoid words: by default a clashing colour leaves the brief (brief.leftOut, each with its reason), brief.mayClash still goes, and pinned colours always go (brief.pinnedClashes). Tell the person what was left out; moodboard_update can keep one anyway. A board's notes are for the person, their team and you: generators get them only when the person turns that on (brief.notesSent).
 A moodboard or Character is Global (every project lists it) or in one canvas project. moodboard_move and character_move move one between them ("global", "current" or a project); nodes that use it keep working everywhere, and moving it back undoes it.
 Deleted moodboards, characters and projects go to Recently deleted: list_trash shows them and restore_from_trash brings one back with the same id. Deleting for good is the person's alone.
 
@@ -841,7 +841,11 @@ def moodboard_get(board: str, ctx: Context | None = None) -> dict[str, Any]:
     """One moodboard by id or exact name: settings, the brief fields
     (direction, avoid, pinnedColors, briefOverride with who wrote it and
     whether it is stale), `brief`, numbered images (id, url, weight, notes,
-    excluded, privateNote, placements) and analysis (palette, accents, ...).
+    excluded, setAside, privateNote, placements) and analysis (palette, accents, ...).
+    `setAside` means the image doesn't steer (set aside, or weight 0). Both
+    are still read for their colours and no generator gets either;
+    analysis.images marks only the switched ones (`excluded`) with setAside,
+    and a weight-0 image keeps its ordinary entry there.
     An image's `privateNote` is the person's own label for it: read it, but
     never put it in a prompt (nothing that generates gets it). `placements`
     are its cards on the board (x, y, w, h in board pixels, weight, and
@@ -922,8 +926,11 @@ def moodboard_update(board: str, images: list[dict] | None = None, remove: list[
                      clash_mode: str | None = None, send_notes: bool | None = None,
                      ctx: Context | None = None) -> dict[str, Any]:
     """Change a moodboard. `images`: changes to single images, each
-    {"image": its number or id, "weight": 0-1, "notes": "...", "privateNote": "...", "excluded": true}
-    (excluded images stay on the board but stop steering). `privateNote` is
+    {"image": its number or id, "weight": 0-1, "notes": "...", "privateNote": "...", "excluded": true}.
+    `excluded` is the Set aside switch (`setAside` is the same key): a
+    set-aside image stays on the board with its weight and is still read for
+    its colours, but never steers. false uses it again; an image at weight 0
+    then takes the weight its card shows, unless you give a weight. `privateNote` is
     the person's own label ("PAINTERLY (liked)"); it isn't sent anywhere, so
     it keeps the analysis. `remove` takes
     images off the board by number or id; their files stay, and the result's

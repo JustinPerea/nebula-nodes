@@ -137,4 +137,4 @@ def test_analyze_runs_off_the_event_loop(client, monkeypatch):
 
     analyzed = client.post(f"/api/moodboards/{board['id']}/analyze").json()
 
-    assert loops == [None] and analyzed["analysis"]["version"] == 4
+    assert loops == [None] and analyzed["analysis"]["version"] == 5

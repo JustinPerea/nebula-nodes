@@ -90,7 +90,8 @@ export function SourcesOutdated({ analysis }: { analysis: MoodboardAnalysis }) {
 
 /** One image's own colours, for its card: small swatches with their share
  *  of the image. Nothing until the board is analyzed, or for an image the
- *  analysis left out (excluded) or couldn't read. */
+ *  analysis couldn't read. A set-aside image shows its colours too (analysis
+ *  version 5 on); an older analysis has none for it. */
 export function ImageColors({ analysis, imageId }: { analysis: MoodboardAnalysis | null; imageId: string }) {
   const item = analysis?.images?.find((image) => image.id === imageId);
   const colors = item?.colors ?? [];

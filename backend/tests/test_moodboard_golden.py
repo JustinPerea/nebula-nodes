@@ -68,6 +68,14 @@ before it was replaced (the review lists every path that moved):
   so every list is empty. Unchanged: ``analysisIsCurrent``, ``sourceHash``,
   ``briefBasis``, run notes, Krea style references, the brief's palette and
   accents, negative and avoid prompts, and every hand-written override.
+- 2026-10-20, moodboard canvas PR2 (one "Set aside" switch, analysis
+  version 5; plan section 4.4, Q7). The CLI's ``brief()`` gives every image
+  ``setAside`` (``excluded`` or weight 0): true for the 7 excluded and
+  weight-0 images, false for the other 32. ``sourceHash.version`` for the
+  never-analyzed ``prebrief_unanalyzed`` is today's analyzer's, 4 to 5; its
+  hash is the same. Nothing else moved: the node's bundle (the fresh analysis
+  of ``prebrief_unanalyzed`` included) still carries no excluded image, in
+  ``images`` or in ``analysis.images``.
 
 The board images are copied into the test OUTPUT_ROOT at
 ``moodboard-golden/``, so the boards' ``/api/outputs/moodboard-golden/...``

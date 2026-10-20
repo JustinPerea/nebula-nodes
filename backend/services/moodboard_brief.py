@@ -674,16 +674,22 @@ def generator_analysis(board: dict[str, Any], analysis: dict[str, Any], brief: d
     ``palette``, ``accents`` and ``colors`` hold only what generators get,
     and each image's colours drop the ones near a colour left out or pinned
     to keep out, so an LLM node reading the bundle can't put a left-out
-    colour back. The bundle's ``leftOut`` names what went, with why."""
-    from services.moodboard_analysis import _summary, _taste_profile
+    colour back. The bundle's ``leftOut`` names what went, with why.
+
+    Set-aside images (``images[].setAside``, analysis version 5) are left
+    out, as the bundle's own ``images`` leaves them out: they never steer,
+    so a generator never sees them or their colours."""
+    from services.moodboard_analysis import _summary, _taste_profile, set_aside
 
     view = copy.deepcopy(analysis)
+    if isinstance(view.get("images"), list):
+        view["images"] = [item for item in view["images"] if not (isinstance(item, dict) and item.get("setAside"))]
     notes_sent = bool(brief.get("notesSent"))
     notes = str(board.get("notes") or "").strip() if notes_sent else ""
     mode = str(analysis.get("mode") or board.get("mode") or "look")
     keywords = generator_keywords(analysis, notes_sent)
     palette, accents = list(brief.get("palette") or []), list(brief.get("accents") or [])
-    count = len([img for img in board.get("images") or [] if isinstance(img, dict) and not img.get("excluded")])
+    count = len([img for img in board.get("images") or [] if isinstance(img, dict) and not set_aside(img)])
     view["keywords"] = keywords
     view["summary"] = _summary(mode, count, palette, accents, notes)
     view["tasteProfile"] = _taste_profile(mode, keywords, palette)

@@ -56,6 +56,7 @@
           "notes": "",
           "number": 1,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/rust-portrait-3x4.png",
           "weight": 1.0
         },
@@ -65,6 +66,7 @@
           "notes": "",
           "number": 2,
           "privateNote": "",
+          "setAside": true,
           "url": "/api/outputs/moodboard-golden/peach-skin-3x4.png",
           "weight": 0.0
         },
@@ -74,6 +76,7 @@
           "notes": "",
           "number": 3,
           "privateNote": "",
+          "setAside": true,
           "url": "/api/outputs/moodboard-golden/neon-alley-9x16.png",
           "weight": 1.0
         },
@@ -83,6 +86,7 @@
           "notes": "background tone",
           "number": 4,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/paper-studio-1x1.png",
           "weight": 0.4
         }
@@ -596,7 +600,7 @@
     "runNotes": [],
     "sourceHash": {
       "hash": "2322e96345f6b3c4",
-      "version": 4
+      "version": 5
     }
   },
   "prebrief_v2_edited": {
@@ -1097,6 +1101,7 @@
           "notes": "",
           "number": 1,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/glacier-16x9.png",
           "weight": 1.0
         },
@@ -1106,6 +1111,7 @@
           "notes": "",
           "number": 2,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/olive-market-4x3.png",
           "weight": 0.5
         },
@@ -1115,6 +1121,7 @@
           "notes": "this concrete",
           "number": 3,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/ink-wash-1x1.png",
           "weight": 1.0
         },
@@ -1124,6 +1131,7 @@
           "notes": "",
           "number": 4,
           "privateNote": "",
+          "setAside": false,
           "url": "https://images.example.com/refs/brutalist-stair.jpg",
           "weight": 1.0
         },
@@ -1133,6 +1141,7 @@
           "notes": "",
           "number": 5,
           "privateNote": "",
+          "setAside": true,
           "url": "/api/outputs/moodboard-golden/peach-skin-3x4.png",
           "weight": 0.0
         },
@@ -1142,6 +1151,7 @@
           "notes": "",
           "number": 6,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/teal-pool-9x16.png",
           "weight": 0.7
         }
@@ -2306,6 +2316,7 @@
           "notes": "the light we want",
           "number": 1,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/dusk-harbour-16x9.png",
           "weight": 1.0
         },
@@ -2315,6 +2326,7 @@
           "notes": "",
           "number": 2,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/moss-stone-4x3.png",
           "weight": 0.6
         },
@@ -2324,6 +2336,7 @@
           "notes": "",
           "number": 3,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/paper-studio-1x1.png",
           "weight": 1.0
         },
@@ -2333,6 +2346,7 @@
           "notes": "texture only",
           "number": 4,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/rust-portrait-3x4.png",
           "weight": 0.3
         },
@@ -2342,6 +2356,7 @@
           "notes": "",
           "number": 5,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/neon-alley-9x16.png",
           "weight": 0.8
         }
@@ -3521,6 +3536,7 @@
           "notes": "",
           "number": 1,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/dusk-harbour-16x9.png",
           "weight": 1.0
         },
@@ -3530,6 +3546,7 @@
           "notes": "",
           "number": 2,
           "privateNote": "",
+          "setAside": false,
           "url": "https://cdn.example.org/moodboards/ref-0042.webp",
           "weight": 0.8
         },
@@ -3539,6 +3556,7 @@
           "notes": "",
           "number": 3,
           "privateNote": "",
+          "setAside": true,
           "url": "/api/outputs/moodboard-golden/moss-stone-4x3.png",
           "weight": 0.0
         },
@@ -3548,6 +3566,7 @@
           "notes": "",
           "number": 4,
           "privateNote": "",
+          "setAside": true,
           "url": "/api/outputs/moodboard-golden/paper-studio-1x1.png",
           "weight": 1.0
         },
@@ -3557,6 +3576,7 @@
           "notes": "warm rust",
           "number": 5,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/rust-portrait-3x4.png",
           "weight": 0.5
         },
@@ -3566,6 +3586,7 @@
           "notes": "",
           "number": 6,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/neon-alley-9x16.png",
           "weight": 1.0
         },
@@ -3575,6 +3596,7 @@
           "notes": "",
           "number": 7,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/teal-pool-9x16.png",
           "weight": 0.25
         }
@@ -4712,6 +4734,7 @@
           "notes": "",
           "number": 1,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/olive-market-4x3.png",
           "weight": 1.0
         },
@@ -4721,6 +4744,7 @@
           "notes": "",
           "number": 2,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/ink-wash-1x1.png",
           "weight": 0.2
         },
@@ -4730,6 +4754,7 @@
           "notes": "",
           "number": 3,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/glacier-16x9.png",
           "weight": 1.0
         },
@@ -4739,6 +4764,7 @@
           "notes": "",
           "number": 4,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/teal-pool-9x16.png",
           "weight": 0.5
         }
@@ -6100,6 +6126,7 @@
           "notes": "",
           "number": 1,
           "privateNote": "HERO (liked)",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/dusk-harbour-16x9.png",
           "weight": 1.0
         },
@@ -6109,6 +6136,7 @@
           "notes": "",
           "number": 2,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/glacier-16x9.png",
           "weight": 0.9
         },
@@ -6118,6 +6146,7 @@
           "notes": "",
           "number": 3,
           "privateNote": "keep for later",
+          "setAside": true,
           "url": "/api/outputs/moodboard-golden/moss-stone-4x3.png",
           "weight": 0.0
         },
@@ -6127,6 +6156,7 @@
           "notes": "",
           "number": 4,
           "privateNote": "",
+          "setAside": true,
           "url": "/api/outputs/moodboard-golden/paper-studio-1x1.png",
           "weight": 1.0
         },
@@ -6136,6 +6166,7 @@
           "notes": "",
           "number": 5,
           "privateNote": "",
+          "setAside": false,
           "url": "https://images.example.com/refs/coastal-fog.jpg",
           "weight": 1.0
         },
@@ -6145,6 +6176,7 @@
           "notes": "",
           "number": 6,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/rust-portrait-3x4.png",
           "weight": 0.4
         },
@@ -6154,6 +6186,7 @@
           "notes": "neon edge light",
           "number": 7,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/neon-alley-9x16.png",
           "weight": 0.6
         },
@@ -6163,6 +6196,7 @@
           "notes": "",
           "number": 8,
           "privateNote": "skin tone ref",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/peach-skin-3x4.png",
           "weight": 1.0
         }
@@ -7615,6 +7649,7 @@
           "notes": "",
           "number": 1,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/teal-pool-9x16.png",
           "weight": 1.0
         },
@@ -7624,6 +7659,7 @@
           "notes": "",
           "number": 2,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/ink-wash-1x1.png",
           "weight": 0.8
         },
@@ -7633,6 +7669,7 @@
           "notes": "awning stripes",
           "number": 3,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/olive-market-4x3.png",
           "weight": 0.5
         },
@@ -7642,6 +7679,7 @@
           "notes": "",
           "number": 4,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/peach-skin-3x4.png",
           "weight": 1.0
         },
@@ -7651,6 +7689,7 @@
           "notes": "",
           "number": 5,
           "privateNote": "",
+          "setAside": false,
           "url": "/api/outputs/moodboard-golden/dusk-harbour-16x9.png",
           "weight": 0.3
         }

@@ -281,7 +281,7 @@ body.app-slava-restraint .moodboard-tile {
   background: rgba(255, 255, 255, 0.025);
 }
 
-body.app-slava-restraint .moodboard-tile--excluded {
+body.app-slava-restraint .moodboard-tile--set-aside {
   opacity: 0.48;
 }
 

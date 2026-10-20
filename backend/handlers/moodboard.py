@@ -7,7 +7,7 @@ from typing import Any, Awaitable, Callable
 
 from models.events import ExecutionEvent, add_run_note
 from models.graph import GraphNode, PortValueDict
-from services.moodboard_analysis import analysis_is_current, analyze_moodboard, rank_representative_images
+from services.moodboard_analysis import analysis_is_current, analyze_moodboard, rank_representative_images, set_aside
 from services.moodboard_brief import NODE_NOTES_CHOICES, compose, generator_analysis
 from services.moodboard_store import MoodboardStore, output_image
 
@@ -68,11 +68,12 @@ async def handle_moodboard_node(
     notes_sent = bool(brief["notesSent"])
     # Only the keys generators read: never the person's private notes, which
     # never leave the board, or the layout (placements), which steers nothing.
-    # Image notes go only when the board's notes do (gap 18, P4).
+    # Image notes go only when the board's notes do (gap 18, P4). Set-aside
+    # images never steer, so no generator gets them.
     images = [
         output_image(img) if notes_sent else {**output_image(img), "notes": ""}
         for img in moodboard.get("images", [])
-        if isinstance(img, dict) and not bool(img.get("excluded"))
+        if isinstance(img, dict) and not set_aside(img)
     ]
     representative = analysis.get("representativeImages") or rank_representative_images(images)
     # What a generator (or an LLM on an Any port) may read of the analysis:

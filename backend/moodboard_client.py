@@ -743,6 +743,12 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
     stay, and the returned URLs can be added back). Returns (board, removed
     URLs, the settings before the change), so any change can be put back.
 
+    `excluded` is the Set aside switch (`setAside` is the same key): a
+    set-aside image is still read for its colours but never steers. True
+    keeps its weight and card. False uses it again; an image at weight 0
+    (which shows as set aside too) then takes the weight its card shows,
+    unless the same change sets a weight.
+
     The brief fields: `direction` ("" clears it); `avoid` replaces the Avoid
     list, `avoid_remove` then `avoid_add` take items off and add them;
     `pinned_colors` ({"include", "exclude"}) replaces the pinned colours,
@@ -784,13 +790,21 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
         body["strength"] = _check_unit("strength", strength)
         content_changed |= body["strength"] != board.get("strength")
     images_changed = False
+    # Two changes can name one image (by number and by id); they mustn't
+    # pull its switch both ways, or the later one would quietly win.
+    switches: dict[int, bool] = {}
     for edit in images or []:
         if not isinstance(edit, dict) or "image" not in edit:
             raise MoodboardError('each image change needs "image": its number or id')
-        target = current[find_image(current, edit["image"])]
-        unknown = set(edit) - {"image", "weight", "notes", "privateNote", "excluded"}
+        index = find_image(current, edit["image"])
+        target = current[index]
+        unknown = set(edit) - {"image", "weight", "notes", "privateNote", "excluded", "setAside"}
         if unknown:
             raise MoodboardError(f"unknown image setting: {', '.join(sorted(unknown))}")
+        switch = _set_aside_switch(edit)
+        if switch is not None and switches.setdefault(index, switch) != switch:
+            raise MoodboardError(f"image {index + 1} is both set aside and used in this change: pick one. "
+                                 "Nothing was changed.")
         if edit.get("privateNote") is not None:
             if "privateNote" not in target:
                 raise MoodboardError("this version of Nebula has no private notes on images. Nothing was changed.")
@@ -802,8 +816,10 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
             target["weight"] = _check_unit("weight", edit["weight"])
         if "notes" in edit and edit["notes"] is not None:
             target["notes"] = str(edit["notes"])
-        if "excluded" in edit and edit["excluded"] is not None:
-            target["excluded"] = bool(edit["excluded"])
+        if switch is not None:
+            target["excluded"] = switch
+            if not switch and edit.get("weight") is None and _weight_is_zero(target.get("weight")):
+                target["weight"] = card_weight(target)
         images_changed = True
     removed: list[str] = []
     if remove:
@@ -930,6 +946,45 @@ _PERSON_NOTES = ("Only the person can send this board's notes to generators: the
 
 # The backend's cap on an image's private note (services/moodboard_store.py).
 PRIVATE_NOTE_LIMIT = 2000
+
+
+def _set_aside_switch(edit: dict[str, Any]) -> bool | None:
+    """What an image change does with the Set aside switch: True sets it
+    aside, False uses it again, None leaves it. `setAside` and `excluded`
+    are the same switch, so they must agree when both are given."""
+    given = {bool(edit[key]) for key in ("excluded", "setAside") if edit.get(key) is not None}
+    if len(given) > 1:
+        raise MoodboardError('"excluded" and "setAside" are the same switch: give one, or the same value')
+    return given.pop() if given else None
+
+
+def _weight_is_zero(weight: Any) -> bool:
+    try:
+        return float(weight) <= 0
+    except (TypeError, ValueError):
+        return False
+
+
+def card_weight(image: dict[str, Any]) -> float:
+    """The weight an image's card shows: its largest card's (the board's
+    weight is its largest copy's, section 4.3 of the canvas plan), or full
+    weight when it has no card yet (a weight-0 card is laid out at full
+    size)."""
+    weights = []
+    for placement in image.get("placements") or []:
+        try:
+            weight = float(placement.get("weight")) if isinstance(placement, dict) else 0.0
+        except (TypeError, ValueError):
+            continue
+        if weight > 0 and weight == weight:
+            weights.append(min(1.0, weight))
+    return max(weights) if weights else 1.0
+
+
+def is_set_aside(image: dict[str, Any]) -> bool:
+    """Whether an image shows as set aside: switched aside (`excluded`), or
+    at weight 0, which steers nothing either."""
+    return bool(image.get("excluded")) or _weight_is_zero(image.get("weight"))
 
 
 # The image keys the analysis reads (services/moodboard_analysis.source_hash).
@@ -1103,7 +1158,11 @@ def brief(board: dict[str, Any], *, layout: bool = False) -> dict[str, Any]:
 
     An image's `privateNote` is the person's own label for it, shown to
     whoever inspects the board; nothing that generates gets it, so don't put
-    it in a prompt. Its `notes` are the ones that steer.
+    it in a prompt. Its `notes` are the ones that steer. `setAside` says it
+    doesn't steer: `excluded` (the switch) or weight 0. Either way it is
+    still read for its colours and nothing that generates gets it. The
+    analysis marks only the switched ones with `setAside: true`; a weight-0
+    image keeps its ordinary entry there.
 
     `brief` is the backend's composed brief as it sent it (`styleBrief` is
     the text generators get, `negativePrompt` their negatives); None when
@@ -1129,6 +1188,7 @@ def brief(board: dict[str, Any], *, layout: bool = False) -> dict[str, Any]:
         "brief": composed if isinstance(composed, dict) else None,
         "images": [
             {"number": index + 1, **{key: image.get(key) for key in ("id", "url", "weight", "notes", "excluded")},
+             "setAside": is_set_aside(image),
              **({"privateNote": image.get("privateNote") or ""} if "privateNote" in image else {})}
             for index, image in enumerate(board.get("images") or [])
         ],

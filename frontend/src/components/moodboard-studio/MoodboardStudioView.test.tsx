@@ -26,7 +26,7 @@ vi.mock('../../hooks/useAssetDelete', () => ({
 }));
 
 import { MoodboardStudioView } from './MoodboardStudioView';
-import { patchSteers } from './steering';
+import { cardWeight, isSetAside, patchSteers, setAsidePatch } from './steering';
 import { emptyRailMessage } from '../../lib/assetHome';
 import { setOpenProject } from '../../test/projectState';
 import { useUIStore } from '../../store/uiStore';
@@ -159,6 +159,54 @@ describe('Moodboard Studio and the board layout', () => {
     for (const patch of [{ weight: 0.5 }, { notes: 'x' }, { excluded: true }, { url: '/api/outputs/b.png' }]) {
       expect(patchSteers(patch)).toBe(true);
     }
+  });
+});
+
+describe('Moodboard Studio Set aside', () => {
+  const card = (weight: number) => ({ id: `c${weight}`, frameId: null, x: 0, y: 0, w: 480, h: 270, weight,
+    placedBy: 'person' as const, placedAt: '2026-10-19T00:00:00+00:00' });
+  const image = (id: string, weight: number, excluded: boolean, cards = [card(weight > 0 ? weight : 1)]) => (
+    { id, url: `/api/outputs/${id}.png`, weight, notes: '', privateNote: '', excluded, placements: cards });
+
+  it('labels the switch Set aside and dims set-aside and weight-0 tiles', async () => {
+    boards.g1 = board({ images: [image('i1', 1, false), image('i2', 0.6, true), image('i3', 0, false)] });
+    await openStudio('g1', 'global', 'Global board');
+
+    expect(screen.queryByText('Exclude')).toBeNull();
+    const switches = screen.getAllByRole('checkbox', { name: 'Set aside' }) as HTMLInputElement[];
+    expect(switches.map((input) => input.checked)).toEqual([false, true, true]);
+    const tiles = switches.map((input) => input.closest('.moodboard-tile')!);
+    expect(tiles.map((tile) => tile.classList.contains('moodboard-tile--set-aside'))).toEqual([false, true, true]);
+  });
+
+  it('keeps the weight when set aside; using a weight-0 image again gives it its card weight', async () => {
+    boards.g1 = board({ images: [image('i1', 0.4, false), image('i2', 0, false, [card(0.55), card(0.3)])] });
+    await openStudio('g1', 'global', 'Global board');
+    const [first, second] = screen.getAllByRole('checkbox', { name: 'Set aside' });
+
+    fireEvent.click(first);
+    await waitFor(() => expect(api.updateMoodboard).toHaveBeenCalled(), { timeout: 3000 });
+    let images = api.updateMoodboard.mock.calls.at(-1)![1].images;
+    expect([images[0].excluded, images[0].weight]).toEqual([true, 0.4]);
+    expect(api.updateMoodboard.mock.calls.at(-1)![1].analysis).toBeNull();
+
+    api.updateMoodboard.mockClear();
+    fireEvent.click(second);
+    await waitFor(() => expect(api.updateMoodboard).toHaveBeenCalled(), { timeout: 3000 });
+    images = api.updateMoodboard.mock.calls.at(-1)![1].images;
+    expect([images[1].excluded, images[1].weight]).toEqual([false, 0.55]);
+    expect((screen.getAllByRole('checkbox', { name: 'Set aside' })[1] as HTMLInputElement).checked).toBe(false);
+  });
+
+  it('reads set aside as the switch or weight 0', () => {
+    expect(isSetAside({ excluded: false, weight: 0.2 })).toBe(false);
+    expect(isSetAside({ excluded: true, weight: 0.2 })).toBe(true);
+    expect(isSetAside({ excluded: false, weight: 0 })).toBe(true);
+    expect(cardWeight({ placements: [] })).toBe(1);
+    expect(cardWeight({ placements: [card(0.25), card(0.7)] })).toBe(0.7);
+    expect(setAsidePatch(image('a', 0.3, false), true)).toEqual({ excluded: true });
+    expect(setAsidePatch(image('a', 0.3, true), false)).toEqual({ excluded: false });
+    expect(setAsidePatch(image('a', 0, true, []), false)).toEqual({ excluded: false, weight: 1 });
   });
 });
 

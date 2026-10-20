@@ -63,7 +63,7 @@ def test_weights_decide_the_palette_order() -> None:
     assert _close(cream_first["palette"][0], CREAM) and _close(cream_first["palette"][1], NAVY)
     shares = [c["share"] for c in cream_first["colors"] if c["role"] == "dominant"]
     assert shares == sorted(shares, reverse=True) and abs(sum(shares) - 1.0) < 0.01
-    assert cream_first["version"] == ANALYSIS_VERSION == 4
+    assert cream_first["version"] == ANALYSIS_VERSION == 5
 
 
 def test_the_largest_colour_leads_not_the_darkest() -> None:
@@ -108,7 +108,7 @@ def test_weight_zero_stays_on_the_board_without_shaping_it() -> None:
 
     nothing = analyze_moodboard(_board((cream, 0.0)))
     assert nothing["palette"] == [] and nothing["representativeImages"] == []
-    assert nothing["warnings"] == ["Every image has weight 0, so none of them shapes the board."]
+    assert nothing["warnings"] == ["Every reference is set aside, so none of them shapes the board."]
 
 
 def test_representative_images_rank_by_weight_then_board_order() -> None:
