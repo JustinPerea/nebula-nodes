@@ -91,6 +91,12 @@ EVENT_KINDS = frozenset({
     "board.sorted",
     "board.arranged",
     "board.suggested",
+    # An undo or redo of a whole edit (an agent's undo_canvas_edit, or the
+    # person's Cmd+Z of a step the canvas knew the edit of), after the node
+    # and wire events it made. data {editId, of?, events?, ...}; see
+    # services/canvas_undo.py.
+    "edit.undone",
+    "edit.redone",
 })
 EVENT_GROUPS = frozenset(kind.split(".", 1)[0] for kind in EVENT_KINDS)
 
@@ -293,7 +299,11 @@ class CanvasEventJournal:
         node_id: str | None = None,
         data: Mapping[str, Any] | None = None,
         summary: str = "",
+        edit: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """``edit`` names the canvas edit behind the event (services/canvas_undo.py):
+        ``{id}`` for an agent's edit, plus ``undoes`` or ``redoes`` (the edit id it
+        reverts or applies again) and ``of`` (whose edit that was) for an undo."""
         if kind not in EVENT_KINDS:
             raise ValueError(f"unknown canvas event kind '{kind}'")
         self._seq += 1
@@ -308,6 +318,8 @@ class CanvasEventJournal:
         }
         if node_id is not None:
             event["nodeId"] = str(node_id)[:128]
+        if edit:
+            event["edit"] = _cap_strings(dict(edit))
         self._events.append(event)
         self._wake()
         return event
@@ -416,6 +428,10 @@ class CanvasEventJournal:
                                kinds=kinds, exclude_actor_id=exclude_actor_id)
             if result["events"] or result["gap"]:
                 return result
+
+    def seqs_of_edit(self, edit_id: str) -> list[int]:
+        """The buffered events of one canvas edit (``edit.id``), oldest first."""
+        return [event["seq"] for event in self._events if (event.get("edit") or {}).get("id") == edit_id]
 
     @property
     def waiting(self) -> int:

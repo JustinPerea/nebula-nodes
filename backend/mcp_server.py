@@ -43,7 +43,7 @@ Nebula Nodes is a node-graph studio for AI images, video and audio. You work on 
 Workflow:
 1. look_at_canvas: nodes, wires, outputs, the person's selection and pins. Read get_selected_nodes before acting on "these" or "the selected".
 2. find_nodes / describe_node: pick a node type that can run here (runsWith) and learn its ports, params and price. A node with `routes` runs on one provider each: each route's `params` are what that provider offers (a setting it lacks is absent or has `onlyWhen`); `_provider` changes go through propose_change.
-3. edit_canvas: add nodes (refs like "+img"), wires, param changes, renames and moves in one call; all of it lands or none of it. Set arrange=true to have the canvas lay out the new nodes by their real size. remove_from_canvas deletes nodes or wires.
+3. edit_canvas: add nodes (refs like "+img"), wires, param changes, renames, moves, removals and unwires in one call; all of it lands or none of it (or send `steps`, each landing on its own). Set arrange=true to have the canvas lay out the new nodes by their real size. remove_from_canvas deletes nodes or wires. Each edit returns an undo token: undo_canvas_edit takes your edit back, leaving any part changed since as it is.
 4. run_nodes: runs a node and what feeds it. It returns outputs with small previews, or status "running" with a runId: then get_run(runId) or cancel_run(runId).
 5. view_output: look at any node's output again.
 
@@ -280,8 +280,12 @@ def wait_for_canvas_change(
 
     Returns `events`, each with `kind` (node.added, node.params, node.moved,
     node.renamed, edge.added, selection.changed, run.finished,
-    run.skipped, canvas.replaced, ...), the `actor` who did it (`person`, an `agent`,
-    or `anonymous`), `nodeId`, `data` and a one-line `summary`. Your own
+    run.skipped, canvas.replaced, edit.undone, ...), the `actor` who did it (`person`, an `agent`,
+    or `anonymous`), `nodeId`, `data` and a one-line `summary`. An event
+    from a canvas edit has `edit`: your edit_canvas events carry its `id`
+    (your `undo.editId`); an undo's events carry `undoes` (the edit id it
+    reverted) and `of` (whose edit), and end with `edit.undone`, so you learn
+    when the person undoes your change with Cmd+Z. Your own
     edits are skipped unless `include_self`; that only covers your
     `nebula` CLI calls too when NEBULA_AGENT_NAME is set, because without
     it the CLI sends no name and its edits arrive as `anonymous` (the
@@ -495,6 +499,9 @@ def edit_canvas(
     rename: dict[str, str] | None = None,
     move: dict[str, dict] | None = None,
     arrange: bool | dict | None = None,
+    remove: list[str] | None = None,
+    unwire: list[dict] | None = None,
+    steps: list[dict] | None = None,
     ctx: Context | None = None,
 ) -> dict[str, Any]:
     """Change the canvas directly, all at once: every part applies, or none does.
@@ -512,19 +519,48 @@ def edit_canvas(
       the canvas lay out this call's new nodes by their real size once it has
       drawn them, starting where they were placed. Other nodes never move. With
       no canvas open, the first one to open does it; the result's `arrange` says which.
+    - `remove`: node ids to delete, with their wires. `unwire`: single wires,
+      [{"source", "sourceHandle", "target", "targetHandle"}].
     - `note`: one line on what this is for; shown beside your cursor.
     No limit on how much one call adds; it all lands or none of it does.
+    Applied in this order: unwire, remove, add and change, rename, move.
+    - `steps`: a list of such plans (no `run`), sent one after another, each
+      all or nothing; a step may use the +refs earlier steps made. Give only
+      `note` beside it. If a step is refused, nothing after it is sent and the
+      result is `status: "stopped"` with `failedStep`, `error`, what the
+      earlier steps `applied` (and the ids their refs became), and their undo
+      tokens, so you can fix that step and send the rest, or undo what landed.
     Who bills a run is the person's call: Krea billing (`_kreaAuth`: API token
     or the Krea plan) and a multi-provider node's route (`_provider`: a route id
     or auto; describe_node lists them and the values each takes). Send a change
     to either with propose_change; edit_canvas refuses it.
-    Nothing runs; call run_nodes next. Returns `idMap` (ref → node id) and a summary.
+    Nothing runs; call run_nodes next. Returns `idMap` (ref → node id), a
+    summary and `undo` ({token, editId, expiresInSeconds, summary}): pass the
+    token to undo_canvas_edit to take this edit back (a steps plan returns
+    `undo.tokens`, newest first).
     """
     body: dict[str, Any] = {key: value for key, value in {
         "note": note, "nodes": nodes, "edges": edges, "params": params, "rename": rename, "move": move,
-        "arrange": arrange,
+        "arrange": arrange, "remove": remove, "unwire": unwire,
     }.items() if value}
+    if steps is not None:
+        return _edit_in_steps({**body, "steps": steps}, ctx)
     return _canvas_call("POST", "/api/graph/apply", ctx, json=body)
+
+
+def _edit_in_steps(plan: dict[str, Any], ctx: Context | None) -> dict[str, Any]:
+    """edit_canvas(steps=...): the checks and stop-and-report of `nebula apply`
+    (apply_steps.py, one implementation for both)."""
+    import apply_steps
+
+    try:
+        steps = apply_steps.check_steps(plan, run_hint="run_nodes")
+    except apply_steps.PlanError as exc:
+        raise ValueError(str(exc)) from exc
+    outcome = apply_steps.run_steps(
+        steps, lambda step: _canvas_call("POST", "/api/graph/apply", ctx, json=step),
+        reason=lambda exc: apply_steps.stop_reason(exc, _current_url()))
+    return outcome.as_json()
 
 
 # -- projects ---------------------------------------------------------------------
@@ -600,6 +636,39 @@ def remove_from_canvas(node_ids: list[str] | None = None, wires: list[dict] | No
     if wires:
         body["unwire"] = wires
     return _canvas_call("POST", "/api/graph/apply", ctx, json=body)
+
+
+@_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False))
+def undo_canvas_edit(token: str | list[str], ctx: Context | None = None) -> dict[str, Any]:
+    """Undo one of your own canvas edits: the `undo.token` that edit_canvas or
+    remove_from_canvas returned (for a steps plan, its `undo.tokens` list,
+    newest first; they are undone in that order, stopping at the first refused).
+
+    Each part of the edit goes back only if the canvas still has it as your
+    edit left it: a node you added is removed, params, names and positions you
+    changed return to their earlier values, and nodes you removed come back
+    with their params, outputs, name and wires. A part the person (or anyone)
+    changed since stays as it is and is listed in `skipped` with the reason.
+    Returns `{status, added, removed, changed, renamed, moved, skipped}`;
+    `status` is "undone", "skipped" (nothing could go back; the token still
+    works) or "already-undone" (by you, or by the person with Cmd+Z, in
+    `undoneBy`). A token works for 60 minutes, only for you, only while the
+    project you edited is open. Calling it twice changes nothing the second
+    time. The person sees the undo as your edit and can undo it in turn.
+    """
+    tokens = [token] if isinstance(token, str) else list(token or [])
+    if not tokens:
+        raise ValueError("token must be an undo token, or a list of them")
+    if len(tokens) == 1:
+        return _canvas_call("POST", "/api/graph/apply/undo", ctx, json={"token": tokens[0]})
+    undone: list[dict[str, Any]] = []
+    for number, one in enumerate(tokens, start=1):
+        try:
+            undone.append(_canvas_call("POST", "/api/graph/apply/undo", ctx, json={"token": one}))
+        except NebulaAPIError as exc:
+            return {"status": "stopped", "failedToken": number, "tokens": len(tokens), "error": exc.detail,
+                    "undone": undone}
+    return {"status": "undone", "undone": undone}
 
 
 def _absolute(value: Any) -> Any:
