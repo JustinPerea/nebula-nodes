@@ -222,6 +222,48 @@ def instance_access(
     return None if route.kind == node_route.UNSET else KEY
 
 
+KREA_SIGN_IN = "needs the Krea account signed in (Settings > Providers)"
+
+
+def instance_missing(
+    definition: Mapping[str, Any], params: Mapping[str, Any] | None, configured_keys: Iterable[str],
+    krea_signed_in: bool = False, definitions: Mapping[str, Mapping[str, Any]] | None = None,
+    wired: Any = (),
+) -> str | None:
+    """What this node, with these params, needs before it can run here, in
+    the words `missing` uses (find_nodes, describe_node); None when it can run.
+
+    For one node on a canvas or in a proposal, where its own choices count:
+    a Krea node bills its saved `_kreaAuth` (the API token unless "mcp"), so
+    a Krea sign-in doesn't make an API-token node ready; a route-table node
+    runs its chosen route or Auto's (``wired`` as the router reads it, so a
+    wired input can block a route), in node_route's own words; a ``kind:
+    param`` or ``kind: model`` node needs the keys its value picks."""
+    from services import node_route
+
+    configured = set(configured_keys)
+    if node_route.has_routes(definition):
+        routed = node_route.with_wired_blockers(definition, params, wired)
+        if node_route.uses_krea_plan(definition, routed):
+            return None if krea_signed_in else KREA_SIGN_IN
+        why = node_route.route_unavailable(definition, routed, {key: "set" for key in configured})
+        return str(why.get("message") or "can't run on its chosen provider") if why else None
+    if krea_modes(definition):
+        if node_route.uses_krea_plan(definition, params):
+            return None if krea_signed_in else KREA_SIGN_IN
+        keys = _keys(definition.get("envKeyName")) + _keys(definition.get("directKeyName"))
+        if not keys or any(key in configured for key in keys):
+            return None
+        return f"needs {' or '.join(dict.fromkeys(keys))} {_WHERE}"
+    needs = keys_needed(definition, params, definitions)
+    if needs is None:
+        return missing(definition, krea_signed_in, definitions)
+    for need in needs:
+        if _plain_access(need, configured, krea_signed_in) is None:
+            return missing(need, krea_signed_in, definitions)
+    return None
+
+
 def missing(
     definition: Mapping[str, Any], krea_signed_in: bool,
     definitions: Mapping[str, Mapping[str, Any]] | None = None,
@@ -248,7 +290,7 @@ def missing(
     keys = _keys(definition.get("envKeyName")) + _keys(definition.get("directKeyName"))
     modes = krea_modes(definition)
     if modes == ["mcp"] or ("mcp" in modes and not krea_signed_in and not keys):
-        return "needs the Krea account signed in (Settings > Providers)"
+        return KREA_SIGN_IN
     if keys:
         options = " or ".join(dict.fromkeys(keys))
         also = " (or a Krea sign-in)" if "mcp" in modes else ""

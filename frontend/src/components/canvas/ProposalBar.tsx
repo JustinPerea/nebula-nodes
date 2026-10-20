@@ -1,15 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { Panel, useReactFlow } from '@xyflow/react';
 import { ChevronDown, ChevronLeft, ChevronRight, Eye, Play, X } from 'lucide-react';
 import {
   acceptLabel,
   countdown,
-  GHOST_WIDTH,
-  ghostHeight,
-  ghostPosition,
+  ghostBoxes,
+  notReadyLine,
   proposalChanges,
   proposalSummary,
 } from '../../lib/canvasProposals';
+import { useProposalNotReady } from '../../hooks/useProposalReadiness';
 import { useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasProposalsStore';
 import { useGraphStore } from '../../store/graphStore';
 import '../../styles/canvasProposals.css';
@@ -17,9 +17,29 @@ import { CanvasUndoNotice } from './CanvasUndoNotice';
 
 /** How long Accept/Reject ignore clicks after the shown proposal changes on its own. */
 const SWITCH_GUARD_MS = 600;
+/** Not-ready lines the bar shows before the rest move to the details. */
+const READINESS_LINES = 3;
 
 function prefersReducedMotion(): boolean {
   return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+}
+
+/**
+ * Whether the note's three-line clamp hides some of it, so the bar can
+ * offer the whole note in its details. Measured when the note changes (a
+ * new observer reports at once) and whenever the bar's width does.
+ */
+function useClamped(note: string | undefined): [RefObject<HTMLParagraphElement | null>, boolean] {
+  const ref = useRef<HTMLParagraphElement | null>(null);
+  const [clamped, setClamped] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver !== 'function') return;
+    const observer = new ResizeObserver(() => setClamped(el.scrollHeight > el.clientHeight + 1));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [note]);
+  return [ref, clamped && Boolean(note)];
 }
 
 /** Ticks once a second while something is counting down. */
@@ -74,6 +94,8 @@ export function ProposalBar() {
   const current = open.find((entry) => entry.view.id === selectedId) ?? open[0];
   const currentId = current?.view.id ?? null;
   const position = current ? open.indexOf(current) : 0;
+  const notReady = useProposalNotReady(current);
+  const [noteRef, noteClamped] = useClamped(current?.view.note);
 
   useEffect(() => {
     pruneExpired(now);
@@ -107,15 +129,19 @@ export function ProposalBar() {
   };
   const settled = () => !guarding.current;
   const changes = current ? proposalChanges(current.view, current.values) : [];
+  const hasChangeLines = changes.some((group) => group.lines.length > 0);
+  const moreNotReady = notReady.length > READINESS_LINES;
+  const hasDetails = hasChangeLines || noteClamped || moreNotReady;
+  const detailsLabel = hasChangeLines
+    ? (detailsOpen ? 'Hide what Accept writes' : 'See what Accept writes')
+    : noteClamped
+      ? (detailsOpen ? 'Hide the note' : 'Read the whole note')
+      : (detailsOpen ? 'Hide the list' : "See every node that can't run");
 
   const show = (entry: ProposalEntry) => {
     const { view } = entry;
     const drag = useCanvasProposalsStore.getState().drag[view.id];
-    const boxes: Array<{ x: number; y: number; width: number; height: number }> = [];
-    for (const node of view.nodes) {
-      const at = ghostPosition(view, node.ref, drag);
-      if (at) boxes.push({ x: at.x, y: at.y, width: GHOST_WIDTH, height: ghostHeight(node) });
-    }
+    const boxes = ghostBoxes(view, drag);
     for (const nodeId of view.references) {
       const node = getInternalNode(nodeId);
       if (!node) continue;
@@ -167,15 +193,32 @@ export function ProposalBar() {
                 </span>
               )}
             </div>
-            <p className="proposal-bar__note">{current.view.note}</p>
+            <p ref={noteRef} className="proposal-bar__note">{current.view.note}</p>
             <p className="proposal-bar__summary">{proposalSummary(current.view)}</p>
+            {notReady.length > 0 && (
+              // Accept stays as the Run button does for a node without its
+              // key: the run is refused at that node, before anything is spent.
+              <ul className="proposal-bar__readiness" aria-label="Can't run here">
+                {notReady.slice(0, READINESS_LINES).map((row) => (
+                  <li key={row.ref} className="proposal-bar__not-ready">
+                    <span className="proposal-bar__not-ready-mark" aria-hidden="true">&#x26A0;</span>
+                    {notReadyLine(row)}
+                  </li>
+                ))}
+                {moreNotReady && (
+                  <li className="proposal-bar__not-ready proposal-bar__not-ready--more">
+                    and {notReady.length - READINESS_LINES} more in the details
+                  </li>
+                )}
+              </ul>
+            )}
             <p className="proposal-bar__meta">
               {current.view.run.length > 0 && current.view.cost.paidRuns > 0
                 ? (current.view.cost.estimate ? 'List prices, not a quote · ' : 'No list price · ')
                 : ''}
               expires in {countdown(current.view.expiresAt, now)}
             </p>
-            {changes.some((group) => group.lines.length > 0) && (
+            {hasDetails && (
               <button
                 type="button"
                 className="proposal-bar__details-toggle"
@@ -183,12 +226,26 @@ export function ProposalBar() {
                 onClick={() => setDetailsOpen((value) => !value)}
               >
                 <ChevronDown size={12} aria-hidden="true" className="proposal-bar__chevron" />
-                {detailsOpen ? 'Hide what Accept writes' : 'See what Accept writes'}
+                {detailsLabel}
               </button>
             )}
-            {detailsOpen && (
-              <div className="proposal-bar__details" aria-label="What Accept writes">
-                {changes.map((group) => (
+            {detailsOpen && hasDetails && (
+              <div className="proposal-bar__details" aria-label={hasChangeLines ? 'What Accept writes' : 'Details'}>
+                {noteClamped && (
+                  <section className="proposal-bar__group">
+                    <h3 className="proposal-bar__group-title">Note</h3>
+                    <p className="proposal-bar__note-full">{current.view.note}</p>
+                  </section>
+                )}
+                {moreNotReady && (
+                  <section className="proposal-bar__group">
+                    <h3 className="proposal-bar__group-title">Can&apos;t run here</h3>
+                    {notReady.map((row) => (
+                      <p key={row.ref} className="proposal-bar__line">{notReadyLine(row)}</p>
+                    ))}
+                  </section>
+                )}
+                {hasChangeLines && changes.map((group) => (
                   <section key={group.id} className="proposal-bar__group">
                     <h3 className="proposal-bar__group-title">{group.title}</h3>
                     {group.lines.length === 0 ? (

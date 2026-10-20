@@ -6,13 +6,17 @@ import {
   briefValue,
   changeTag,
   fullValue,
+  ghostKeyWarning,
   ghostPosition,
   ghostRows,
   wireEnd,
   wirePath,
   type ProposalView,
 } from '../../lib/canvasProposals';
+import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
+import { useProposalNotReady } from '../../hooks/useProposalReadiness';
 import { useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasProposalsStore';
+import { useUIStore } from '../../store/uiStore';
 import '../../styles/canvasProposals.css';
 
 const ENTER_FROM = 0.92;
@@ -30,6 +34,7 @@ function GhostCard({
   node,
   exact,
   agentName,
+  warning,
   register,
 }: {
   proposalId: string;
@@ -37,6 +42,8 @@ function GhostCard({
   /** The full values Accept will write (browser-only), when the canvas has them. */
   exact?: Record<string, unknown>;
   agentName: string;
+  /** Why this node can't run here, as its ⚠ title; null when it can. */
+  warning: string | null;
   register: (ref: string, el: HTMLDivElement | null) => void;
 }) {
   const store = useStoreApi<Node<NodeData>>();
@@ -98,7 +105,13 @@ function GhostCard({
     >
       <div className="proposal-ghost__header">
         <span className="proposal-ghost__category">{node.category || 'node'}</span>
-        <span className="proposal-ghost__name">{node.name}</span>
+        <span className="proposal-ghost__title">
+          <span className="proposal-ghost__name">{node.name}</span>
+          {warning && (
+            <span className="model-node__badge model-node__badge--warning proposal-ghost__warning"
+              role="img" aria-label={warning} title={warning}>&#x26A0;</span>
+          )}
+        </span>
       </div>
       <div className="proposal-ghost__body">
         {params.map(([key, value]) => (
@@ -144,6 +157,10 @@ function ProposalGhosts({ entry }: { entry: ProposalEntry }) {
   const paths = useRef(new Map<number, SVGPathElement>());
   const rings = useRef(new Map<string, HTMLDivElement>());
   const scale = useRef<SpringState>({ x: prefersReducedMotion() ? 1 : ENTER_FROM, y: 0, vx: 0, vy: 0 });
+  // The same ⚠ a real node shows, from the saved keys; failing that, the
+  // backend's reason this run node can't run (a route, a sign-in).
+  const cache = useUIStore((s) => s.settingsCache);
+  const notReady = useProposalNotReady(entry);
   const apply = useRef<() => void>(() => {});
 
   useLayoutEffect(() => {
@@ -262,6 +279,8 @@ function ProposalGhosts({ entry }: { entry: ProposalEntry }) {
           node={node}
           exact={entry.values?.nodes[node.ref]}
           agentName={view.agent.name}
+          warning={ghostKeyWarning(NODE_DEFINITIONS[node.definitionId], entry.values?.nodes[node.ref] ?? node.params, cache)
+            ?? notReady.find((row) => row.nodeId === null && row.ref === node.ref)?.missing ?? null}
           register={(ref, el) => {
             if (el) {
               cards.current.set(ref, el);

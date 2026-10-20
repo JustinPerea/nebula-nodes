@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import type { ProposalView } from '../src/lib/wsClient';
 
 const flow = vi.hoisted(() => ({
@@ -15,10 +15,15 @@ vi.mock('@xyflow/react', () => ({
   ViewportPortal: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { subscribe: () => () => {} } }));
-vi.mock('../src/store/graphStore', () => ({ useGraphStore: { getState: () => ({}) } }));
+vi.mock('../src/store/graphStore', () => {
+  const useGraphStore = (selector: (state: { nodes: unknown[] }) => unknown) => selector({ nodes: [] });
+  useGraphStore.getState = () => ({});
+  return { useGraphStore };
+});
 
 const { ProposalLayer } = await import('../src/components/canvas/ProposalLayer');
 const { useCanvasProposalsStore } = await import('../src/store/canvasProposalsStore');
+const { useUIStore } = await import('../src/store/uiStore');
 
 function proposal(): ProposalView {
   return {
@@ -44,6 +49,7 @@ beforeEach(() => {
   }]]);
   useCanvasProposalsStore.setState({ proposals: {}, drag: {}, pending: {}, errors: {}, focusedId: null, deferredRun: null });
   useCanvasProposalsStore.getState().open(proposal(), 'key-a');
+  useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: false } });
 });
 afterEach(() => {
   cleanup();
@@ -96,6 +102,31 @@ describe('ProposalLayer', () => {
     const tag = container.querySelector<HTMLElement>('.proposal-ring__tag')!;
     expect(tag.textContent).toContain('value: a → warm golden hour light');
     expect(tag.title).toContain(long.trim().slice(0, 60));
+  });
+
+  it("warns on a ghost that can't run here, as a real node's card does", () => {
+    const keyless = proposal();
+    keyless.nodes[0] = { ...keyless.nodes[0], definitionId: 'gpt-image-2-generate', name: 'GPT Image 2', params: {} };
+    useCanvasProposalsStore.getState().open(keyless, 'key-a');
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    const { container } = render(<ProposalLayer />);
+    const badge = container.querySelector<HTMLElement>('.proposal-ghost .model-node__badge--warning')!;
+    expect(badge.textContent).toBe('\u26A0');
+    expect(badge.title).toBe('Needs OPENAI_API_KEY');
+
+    // Adding the key clears it, while the proposal is still open.
+    act(() => useUIStore.setState({ settingsCache: { apiKeys: { OPENAI_API_KEY: 'set' }, loaded: true } }));
+    expect(container.querySelector('.proposal-ghost .model-node__badge--warning')).toBeNull();
+  });
+
+  it("names the backend's reason when the canvas can't check it (a route, before settings load)", () => {
+    const routed = proposal();
+    routed.cost = { ...routed.cost, notReady: [{ ref: '+up', nodeId: null, name: 'Nano Banana',
+      missing: 'Nano Banana runs on fal here, which needs FAL_KEY in Settings > Providers' }] };
+    useCanvasProposalsStore.getState().open(routed, 'key-a');
+    const { container } = render(<ProposalLayer />);
+    expect(container.querySelector<HTMLElement>('.proposal-ghost .model-node__badge--warning')!.title)
+      .toBe('Nano Banana runs on fal here, which needs FAL_KEY in Settings > Providers');
   });
 
   it('fades closing proposals', () => {
