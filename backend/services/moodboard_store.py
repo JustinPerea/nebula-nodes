@@ -748,6 +748,46 @@ class MoodboardStore:
                 continue
         return results
 
+    def summaries(self) -> list[dict[str, Any]]:
+        """Every board in every scope as one short row, newest edit first.
+
+        For an agent's first call (GET /api/agent/start): `id`, `name`,
+        `projectId` (the folder it is listed in; None for Global), `images`
+        (how many), `analyzed` (it has an analysis; changing the images
+        clears it) and `direction`, plus `updatedAt`. It reads each board's
+        file and nothing else: never an image, and no notes or private
+        notes leave here. Dot folders (`.trash`, side files) are skipped, so
+        a board in Recently deleted isn't listed."""
+        root = _moodboard_root()
+        if not root.exists():
+            return []
+        rows: list[dict[str, Any]] = []
+        for scope in sorted(root.iterdir()):
+            if not scope.is_dir() or is_trash_folder(scope):
+                continue
+            project_id = None if scope.name == "_global" else scope.name
+            if project_id is not None and not _PROJECT_ID_RE.fullmatch(project_id):
+                continue
+            for path in sorted(scope.glob("*.json")):
+                try:
+                    board = json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    continue
+                if not isinstance(board, dict) or not isinstance(board.get("id"), str):
+                    continue
+                images = board.get("images")
+                rows.append({
+                    "id": board["id"],
+                    "name": str(board.get("name") or board["id"]),
+                    "projectId": project_id,
+                    "images": sum(1 for image in images if isinstance(image, dict)) if isinstance(images, list) else 0,
+                    "analyzed": bool(board.get("analysis")),
+                    "direction": str(board.get("direction") or ""),
+                    "updatedAt": board.get("updatedAt") if isinstance(board.get("updatedAt"), str) else None,
+                })
+        rows.sort(key=lambda row: row["updatedAt"] or "", reverse=True)
+        return rows
+
     def update(self, moodboard_id: str, *, by: str = "agent", base_version: int | None = None,
                **fields: Any) -> dict[str, Any]:
         """Change a board's fields. ``by`` is who asked ("person" only when the
