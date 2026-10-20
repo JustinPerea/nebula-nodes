@@ -56,6 +56,13 @@ Branch `fix/moodboard-weight0-and-outside-edits` (from `fix/moodboard-count-and-
 - **Gates.** Backend, isolated, in 3 shards (one run hit the 1 h `lg` limit at 81% with the machine at load ~80): 7356 passed, 61 skipped, 1 failed: `test_iterator_execution.py::test_cancelled_batch_cancels_active_handler_and_keeps_completed_items` (a 1 s `wait_for` under load; the file passes alone, 16/16; not touched here). Vitest: 3437 tests, 3203 passed in the full run and the 234 in the 90 files that timed out under load all passed on a rerun with 4 workers. `tsc -b` clean, lint clean, build budget 480,198 bytes raw / 140,033 gzip (limit 512,000).
 - **Docs.** `docs/contracts/07-studios-and-resources.md` (1.3a, 1.4, 1.10, 1.12, new §2.1, changelog), `docs/MCP-SETUP.md`, `skills/nebula/SKILL.md`, `docs/moodboard-canvas-plan.md`, `backend/mcp_server.py` `moodboard_get` docstring (changes its tools/list description). Settings > Connect your agent untouched.
 
+## 2026-10-20 — A new edge never takes a live edge's id
+
+Found by the ModelNode render-scope review: `CLIGraph.connect` named a new edge `e{len(edges)+1}`, so after a removal it could give a second live edge the same id (edges e1-e3, remove e1, connect: a second `e3`). The canvas then held two wires with one id: duplicate React keys, and selecting or removing by id could hit the other wire. Two routes (`create_node_and_connect`, `send_cinema_shot_to_motion`) had each patched the id after the fact; the allocator now skips ids in use, and both patches are gone.
+
+- Ids of removed edges can still come back; nothing keys on an old edge id (canvas undo matches wires by their four endpoints, `canvas_undo.wire_key`).
+- Test: `test_a_new_edge_never_takes_the_id_of_one_still_on_the_canvas` (failed first). The existing `test_deleted_edge_does_not_reuse_an_existing_confirmed_edge_id` still passes, now through the allocator.
+
 ## 2026-10-20 — Moodboard: the board's cover (a pick, not a reorder)
 
 Justin's "Go" on the board cover pick. Built on origin/main 0e6e645d in `nebula_nodes-board-cover` (branch `feat/moodboard-cover`), nothing committed. No paid API was called; every provider in the request-capture test is mocked at the transport.
