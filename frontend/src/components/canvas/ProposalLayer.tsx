@@ -97,7 +97,7 @@ function GhostCard({
       className="proposal-ghost nodrag nopan nowheel"
       style={{ ['--ghost-rows' as string]: ghostRows(node) }}
       data-ref={node.ref}
-      aria-label={`Proposed ${node.name} (${node.ref}) from ${agentName}`}
+      aria-label={`Proposed ${node.name} (${node.model ? `${node.ref}, ${node.model}` : node.ref}) from ${agentName}`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
@@ -126,7 +126,8 @@ function GhostCard({
         )}
         <span className={`proposal-ghost__cost proposal-ghost__cost--${node.cost.kind}`}>{node.cost.label}</span>
         <p className="proposal-ghost__caption">
-          {node.ref} · proposed by {agentName}
+          {node.model ? `${node.ref} · ${node.model}` : node.ref} ·{' '}
+          <span className="proposal-ghost__by">proposed by {agentName}</span>
         </p>
       </div>
       {node.ports.inputs.map((port, row) => (

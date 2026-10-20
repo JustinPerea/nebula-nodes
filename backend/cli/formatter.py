@@ -4,7 +4,7 @@ import json
 from typing import Any
 
 # The readiness rule lives with the backend so the CLI and MCP server agree.
-from services.node_readiness import detail, krea_modes, node_access, provider_via  # noqa: F401 (node_access is re-exported)
+from services.node_readiness import node_access  # noqa: F401 (re-exported for tests and callers)
 from services.agent_params import ASSET_PARAM_TYPES
 from services.maker_sizes import rule_note
 from services.node_route import all_param_definitions, route_hides, route_param_definitions
@@ -166,7 +166,41 @@ def format_node_detail(node: dict[str, Any]) -> str:
         lines.append(f"SIZE: {size_note}")
         lines.append("")
 
+    board = node.get("moodboardAdapter")
+    if isinstance(board, dict):
+        lines.extend(_moodboard_lines(board))
+        lines.append("")
+
     return "\n".join(lines)
+
+
+def _moodboard_lines(board: dict[str, Any]) -> list[str]:
+    """What a wired moodboard does here (describe_node's moodboardAdapter):
+    the card's line, then the channel, weight, ports it skips and the params
+    or routes that change it, on one line."""
+    route = f" (on {board['route']})" if board.get("route") else ""
+    lines = [f"MOODBOARD: {board.get('line')}{route}"]
+    parts = [str(board.get("channel") or board.get("note") or "")]
+    weight = board.get("weight") if isinstance(board.get("weight"), dict) else None
+    if weight:
+        span = weight.get("range")
+        parts.append(" ".join(str(bit) for bit in (
+            "weight", weight.get("mode"), weight.get("field") or weight.get("param"),
+            f"{span[0]}-{span[1]}" if isinstance(span, list) and len(span) == 2 else None) if bit))
+    if board.get("needsWired"):
+        parts.append(f"needs {', '.join(board['needsWired'])} wired")
+    if board.get("never"):
+        parts.append(f"never {', '.join(board['never'])}")
+    for variant in board.get("variants") or []:
+        when = ", ".join(f"{key}={value}" for key, value in (variant.get("when") or {}).items())
+        slots = variant.get("slots")
+        said = (f"up to {slots[0].get('max')}" if isinstance(slots, list) and slots and variant.get("line") == board.get("line")
+                else variant.get("line"))
+        parts.append(f"{when}: {said}")
+    parts = [part for part in parts if part]
+    if parts:
+        lines.append("  " + " · ".join(parts))
+    return lines
 
 
 def _option_condition(only: dict[str, list[Any]], param_when: dict[str, list[Any]]) -> str:
@@ -298,107 +332,131 @@ def format_selection(selection: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def format_context(
-    settings: dict[str, Any], nodes: list[dict[str, Any]], krea_status: str | None = None,
-) -> str:
-    """Compact summary of what can run right now, by definition id."""
-    api_keys = settings.get("apiKeys", {})
-    configured_keys = {k for k, v in api_keys.items() if v}
-    krea_signed_in = krea_status == "connected"
+def _price(value: Any) -> str:
+    if value == "free":
+        return "free"
+    if isinstance(value, (list, tuple)) and len(value) == 2:
+        low, high = float(value[0]), float(value[1])
+        return _usd(high) if _usd(low) == _usd(high) else f"{_usd(low)}–{_usd(high)[1:]}"
+    return "no list price"
 
-    definitions = {n["id"]: n for n in nodes}
-    by_cat: dict[str, list[str]] = {}
-    access_count: dict[str, int] = {}
-    krea_both: list[str] = []
-    keyed_modes: list[str] = []   # free at defaults, a provider call in another mode
-    base_notes: list[str] = []    # a node whose default model can't run but another can
-    for n in nodes:
-        access = node_access(n, configured_keys, krea_signed_in, definitions)
-        if access is None:
-            continue
-        access_count[access] = access_count.get(access, 0) + 1
-        if access == "krea" and krea_modes(n) != ["mcp"]:
-            krea_both.append(n["id"])
-        mark = {"krea": "*", "nous": "^"}.get(access, "")
-        via = provider_via(n)
-        if via and via.get("kind") == "param" and access == "free":
-            mark = "+"
-            keyed_modes.append(n["id"])
-        options = detail(n, configured_keys, krea_signed_in, definitions) if via else None
-        if via and via.get("kind") == "model" and options and options.get("note"):
-            base_notes.append(f"{n['id']}: {options['note']}")
-        by_cat.setdefault(n.get("category", "other"), []).append(n["id"] + mark)
 
-    cat_names = {
-        "image-gen": "Image", "video-gen": "Video", "text-gen": "Text/Chat",
-        "audio-gen": "Audio", "3d-gen": "3D", "transform": "Transform",
-        "analyzer": "Analyzer", "utility": "Utility", "universal": "Universal",
-        "cinematic": "Cinema", "character": "Character",
-    }
+def format_start(start: dict[str, Any]) -> str:
+    """Render GET /api/agent/start (services/agent_start.py) for `nebula context`:
+    the canvas, pins, proposals, boards, the nodes that run here with prices,
+    the spend limits and what to do next."""
+    from services import node_categories
 
-    ready = sum(access_count.values())
     lines: list[str] = []
-    lines.append(f"Nebula Nodes — {ready} of {len(nodes)} nodes can run here")
-    parts = [f"{access_count.get('key', 0)} with your keys", f"{access_count.get('free', 0)} free"]
-    if access_count.get("krea"):
-        parts.append(f"{access_count['krea']} on the Krea account")
-    if access_count.get("nous"):
-        parts.append(f"{access_count['nous']} with a Nous sign-in")
-    lines.append("(" + ", ".join(parts) + ")")
-    lines.append("")
-    lines.append(f"Keys set: {', '.join(sorted(configured_keys)) or 'none'}")
-    if krea_status is not None:
-        if krea_signed_in:
-            lines.append("Krea account: signed in")
-        else:
-            more = sum(1 for n in nodes if node_access(n, configured_keys, True) == "krea")
-            lines.append(f"Krea account: not signed in ({krea_status})"
-                         + (f"; signing in (Settings > Providers) adds {more} nodes" if more else ""))
-    lines.append("")
+    canvas = start.get("canvas") or {}
+    project = canvas.get("project") or {}
+    watching = "no browser watching" if (canvas.get("view") or {}).get("stale") else "open in the browser"
+    title = f"{project.get('name')} ({project.get('id')})" if project else "no project open"
+    lines.append(f"CANVAS: {title}, {canvas.get('nodeCount', 0)} nodes, {watching}")
+    selection = canvas.get("selection") or []
+    lines.append(f"  selected: {', '.join(selection) if selection else 'nothing'}")
+    for agent in canvas.get("agents") or []:
+        target = agent.get("target") or {}
+        at = target.get("nodeId") or (f"({target.get('x')},{target.get('y')})" if target else "?")
+        lines.append(f"  {agent.get('name')}'s cursor is at {at}")
+    for node in canvas.get("nodes") or []:
+        state = f" [{node['state']}]" if node.get("state") not in (None, "unknown", "idle") else ""
+        inputs = f" <- {', '.join(node['inputsFrom'])}" if node.get("inputsFrom") else ""
+        params = node.get("params") or {}
+        shown = ", ".join(f"{key}={json.dumps(value, ensure_ascii=False)}" for key, value in params.items())
+        more = f", +{node['moreParams']} more" if node.get("moreParams") else ""
+        lines.append(f"  {node.get('id')}  {node.get('name')} ({node.get('definitionId')}){state}{inputs}")
+        if shown:
+            lines.append(f"      {shown}{more}")
+    others = canvas.get("others") or {}
+    if others:
+        lines.append("  also: " + ", ".join(f"{node_id} {name}" for node_id, name in others.items()))
+    if canvas.get("more"):
+        lines.append(f"  ({canvas['more']})")
 
-    for cat, ids in by_cat.items():
-        display = cat_names.get(cat, cat)
-        lines.append(f"{display}: {', '.join(sorted(ids))}")
-
+    pins = start.get("pins") or {}
     lines.append("")
-    if access_count.get("krea"):
-        lines.append("* runs on the signed-in Krea account (workspace compute).")
-        if krea_both:
-            lines.append("  Those that also take a token default to it. Moving one to the Krea plan is the person's")
-            lines.append("  call: `nebula propose` the _kreaAuth=mcp change; direct edits of it are refused.")
-    multi = [n["id"] for n in nodes if isinstance(n.get("routes"), list) and n.get("routes")]
-    if multi:
-        lines.append(f"{len(multi)} node(s) run on a provider route you choose (_provider; `nebula info <id>` lists")
-        lines.append("  them). Auto takes the first route with its key set; switching is the person's call:")
-        lines.append("  `nebula propose` it.")
-    if access_count.get("nous"):
-        lines.append("^ needs a local Nous (Hermes) sign-in; not checked here.")
-    legends: list[str] = []
-    for node_id in keyed_modes:
-        via = provider_via(definitions[node_id]) or {}
-        keys = [str(key) for key in via.get("anyKey") or []]
-        own = via.get("byValue") if isinstance(via.get("byValue"), dict) else {}
-        skip = list(via.get("freeWhen") or []) + list(own)
-        legend = (f"+ free at its defaults; {via.get('param')} other than {'/'.join(skip)} calls a "
-                  f"{via.get('provider')} model with {' or '.join(keys)}"
-                  f"{' (set here)' if any(key in configured_keys for key in keys) else ''}. No list price, "
-                  "so under a spending limit that takes a proposal.")
-        for value, route in own.items():
-            route_keys = [str(key) for key in (route or {}).get("anyKey") or []]
-            legend += (f" {via.get('param')} {value} calls {(route or {}).get('provider')} with "
-                       f"{' or '.join(route_keys)}"
-                       f"{' (set here)' if any(key in configured_keys for key in route_keys) else ''}, "
-                       "priced per run.")
-        if legend not in legends:
-            legends.append(legend)
-    lines.extend(legends)
-    for note in base_notes:
-        lines.append(note)
-    lines.append("Ids above go to `nebula create <id>`; `nebula info <id>` shows ports and params.")
-    lines.append("Port types: Text, Image, Video, Audio, Mesh, Array, SVG, Any")
-    lines.append("Connections must match types (Any connects to anything).")
-    lines.append("Paid runs over your spending limits need a proposal: `nebula spend` shows them.")
+    lines.append(f"PINS ({pins.get('openCount', 0)} open) — requests from the person:")
+    for pin in pins.get("open") or []:
+        anchor = pin.get("anchor") or {}
+        at = anchor.get("nodeId") or f"({anchor.get('x')},{anchor.get('y')})"
+        lines.append(f"  {pin.get('id')} on {at}: {json.dumps(pin.get('text') or '', ensure_ascii=False)}")
+    if pins.get("more"):
+        lines.append(f"  ({pins['more']})")
 
+    proposals = start.get("proposals") or {}
+    if proposals.get("count"):
+        lines.append("")
+        lines.append(f"PROPOSALS ({proposals['count']} waiting for the person):")
+        for proposal in proposals.get("open") or []:
+            note = json.dumps(str(proposal.get("note") or ""), ensure_ascii=False)
+            lines.append(f"  {proposal.get('id')} by {proposal.get('agent')}: {note} "
+                         f"(expires in {_minutes(proposal.get('expiresInSeconds'))})")
+        if proposals.get("more"):
+            lines.append(f"  ({proposals['more']})")
+
+    boards = start.get("boards") or {}
+    lines.append("")
+    lines.append(f"BOARDS ({boards.get('count', 0)}):")
+    for row in boards.get("rows") or []:
+        analyzed = "analyzed" if row.get("analyzed") else "not analyzed"
+        direction = f" — {row['direction']}" if row.get("direction") else ""
+        lines.append(f"  {row.get('id')}  {row.get('name')} [{row.get('where')}] "
+                     f"{row.get('images', 0)} images, {analyzed}{direction}")
+    if boards.get("more"):
+        lines.append(f"  ({boards['more']})")
+
+    nodes = start.get("nodes") or {}
+    lines.append("")
+    lines.append(f"NODES THAT RUN HERE ({nodes.get('ready', 0)} of {nodes.get('total', 0)}; "
+                 "price per run at default settings):")
+    for category, ids in (nodes.get("byCategory") or {}).items():
+        listed = ", ".join(f"{node_id} {_price(price)}" for node_id, price in ids.items())
+        lines.append(f"  {node_categories.label(category)}: {listed}")
+    for access, ids in (nodes.get("runsWith") or {}).items():
+        lines.append(f"  runs with {access}: {', '.join(ids)}")
+    rest = nodes.get("rest") or {}
+    if rest:
+        lines.append("  not shown: " + ", ".join(f"{count} {category}" for category, count in rest.items()))
+    for note in nodes.get("notes") or []:
+        lines.append(f"  {note}")
+    if nodes.get("krea"):
+        lines.append(f"  Krea account: {nodes['krea']}")
+    if nodes.get("more"):
+        lines.append(f"  ({nodes['more']})")
+
+    spend = start.get("spend") or {}
+    lines.append("")
+    per_run = spend.get("perRunUsd")
+    per_run_text = f"{_usd(float(per_run))} per run" if isinstance(per_run, (int, float)) else "no per-run limit"
+    if not spend.get("limited", True):
+        lines.append(f"SPEND: not limited ({per_run_text} for agents)")
+    else:
+        limit = spend.get("limitUsd")
+        used = float(spend.get("usedUsd") or 0)
+        window = f" in the last {spend['window']}" if spend.get("window") else ""
+        budget = (f"{_usd(used)} of {_usd(float(limit))} used{window}" if isinstance(limit, (int, float))
+                  else f"{_usd(used)} used{window}, no budget limit")
+        if spend.get("budget") == "app":
+            shared_limit = spend.get("sharedLimitUsd")
+            shared_used = float(spend.get("sharedUsedUsd") or 0)
+            budget += (f"; every outside agent together {_usd(shared_used)} of {_usd(float(shared_limit))}"
+                       if isinstance(shared_limit, (int, float))
+                       else f"; every outside agent together {_usd(shared_used)}, no limit")
+        plan = spend.get("kreaPlanRuns") or {}
+        plan_limit = plan.get("limit")
+        plan_text = f"Krea plan runs {plan.get('used') or 0} of {plan_limit if plan_limit is not None else 'no limit'}"
+        lines.append(f"SPEND: {per_run_text}; {spend.get('budget')} budget {budget}; {plan_text}")
+        lines.append("  (a run over a limit goes through `nebula propose`; `nebula spend` has the detail)")
+
+    nxt = start.get("next") or {}
+    events = nxt.get("events") or {}
+    lines.append("")
+    lines.append("NEXT:")
+    for key in ("describe", "propose", "pins"):
+        if nxt.get(key):
+            lines.append(f"  {nxt[key]}")
+    lines.append(f"  Events cursor {events.get('cursor')} (journal {events.get('journal')}).")
     return "\n".join(lines)
 
 
@@ -731,8 +789,10 @@ def format_proposal(view: dict[str, Any], *, created: bool = False, now_ms: floa
     return "\n".join(lines)
 
 
-def format_applied(result: dict[str, Any]) -> str:
-    """`nebula apply`'s result: what changed, then each new node's id for the next command."""
+def format_applied(result: dict[str, Any], *, undo: bool = True) -> str:
+    """`nebula apply`'s result: what changed, then each new node's id for the
+    next command, then how to undo it (a steps plan prints one undo line for
+    all its steps instead, so `undo=False` there)."""
     lines = [f"Applied: {result.get('summary') or 'no change'}."]
     refs = {node_id: ref for ref, node_id in (result.get("idMap") or {}).items()}
     for node in result.get("added") or []:
@@ -741,6 +801,29 @@ def format_applied(result: dict[str, Any]) -> str:
     arrange = result.get("arrange")
     if isinstance(arrange, dict) and arrange.get("message"):
         lines.append(f"  Arrange: {arrange['message']}")
+    token = (result.get("undo") or {}).get("token") if undo else None
+    if token:
+        minutes = int((result["undo"].get("expiresInSeconds") or 0) // 60)
+        lines.append(f"  Undo: nebula undo {token}  (for {minutes} minutes; parts changed since stay)")
+    return "\n".join(lines)
+
+
+_UNDONE_VERBS = (("removed", "removed"), ("added", "put back"), ("changed", "reset"), ("renamed", "renamed"),
+                 ("moved", "moved"))
+
+
+def format_undone(result: dict[str, Any]) -> str:
+    """`nebula undo`'s result: what went back, then each part left as it was."""
+    status = result.get("status")
+    if status == "already-undone":
+        return result.get("message") or "Already undone; nothing changed."
+    if status == "skipped":
+        lines = [result.get("message") or "Nothing went back."]
+    else:
+        done = ", ".join(f"{verb} {len(result.get(key) or [])}" for key, verb in _UNDONE_VERBS if result.get(key))
+        lines = [f"Undone: {done}." if done else (result.get("message") or "Undone: no change.")]
+    for item in result.get("skipped") or []:
+        lines.append(f"  Left as is: {item.get('message') or item.get('reason')}")
     return "\n".join(lines)
 
 

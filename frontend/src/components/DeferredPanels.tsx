@@ -3,6 +3,8 @@ import { X } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 import {
   DeferredAgentLog,
+  DeferredAgentNoteOutlineLayer,
+  DeferredAgentNotes,
   DeferredConnectionPopup,
   DeferredMaskPainterModal,
   DeferredOnboardingOverlay,
@@ -55,6 +57,33 @@ export function AgentLog() {
     <DeferredBoundary chunk={DeferredAgentLog} failed={null}>
       <Suspense fallback={null}>
         <DeferredAgentLog />
+      </Suspense>
+    </DeferredBoundary>
+  );
+}
+
+/**
+ * The Updates corner in the canvas's top right (PR9a). Like the Agent log it
+ * shows at once, so it mounts straight away and appears when its chunk
+ * lands; until then (or if the chunk fails, until it retries on focus or
+ * reconnect) the store keeps counting, so the chip arrives with the count.
+ */
+export function AgentNotes() {
+  return (
+    <DeferredBoundary chunk={DeferredAgentNotes} failed={null}>
+      <Suspense fallback={null}>
+        <DeferredAgentNotes />
+      </Suspense>
+    </DeferredBoundary>
+  );
+}
+
+/** The Updates outlines; mounted inside Canvas (it needs React Flow's viewport). */
+export function AgentNoteOutlines() {
+  return (
+    <DeferredBoundary chunk={DeferredAgentNoteOutlineLayer} failed={null}>
+      <Suspense fallback={null}>
+        <DeferredAgentNoteOutlineLayer />
       </Suspense>
     </DeferredBoundary>
   );

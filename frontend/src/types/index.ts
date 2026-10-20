@@ -715,6 +715,11 @@ export interface Moodboard {
   frames?: MoodboardFrame[];
   suggestions?: Array<Record<string, unknown>>;
   readings?: Record<string, Record<string, unknown>>;
+  /** The id of the image the board opens on (lib/moodboardCover); null or
+   *  absent: it opens on #1. A pick, not a reorder: no image changes number,
+   *  and nothing that generates reads it. Set with the `cover` op. */
+  coverImageId?: string | null;
+  /** The server's: the cover image's url, else #1's. */
   thumbnail: string;
   projectId?: string;
   createdAt: string;

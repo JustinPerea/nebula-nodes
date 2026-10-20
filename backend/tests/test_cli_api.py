@@ -1354,12 +1354,14 @@ class TestProviderCapabilityValidationResponse:
         with client.websocket_connect("/ws") as websocket:
             initial = websocket.receive_json()
             pins = websocket.receive_json()  # the active project's pins follow graphSync
+            notes = websocket.receive_json()  # then its Updates
             response = client.post("/api/execute", json=graph)
             event = websocket.receive_json()
 
         assert initial["type"] == "graphSync"
         assert "executionStatuses" in initial
         assert pins["type"] == "canvasPins"
+        assert notes["type"] == "agentNotes"
         assert response.status_code == 200
         assert response.json()["status"] == "validation_error"
         assert event["type"] == "validationError"

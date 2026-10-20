@@ -6,6 +6,7 @@
  */
 import type { NodeData } from '../types';
 import type { Node } from '@xyflow/react';
+import { nodeById } from './graphIndex';
 
 export const SKIPPED_FALLBACK_REASON = 'a gate upstream withheld its input';
 
@@ -27,9 +28,10 @@ export function isInactiveEdge(
 
 /** The same check from the store's node list, for one edge. */
 export function edgeIsInactive(
-  nodes: Node<NodeData>[], sourceId: string, sourceHandle: string | null | undefined,
+  nodes: readonly Node<NodeData>[], sourceId: string, sourceHandle: string | null | undefined,
 ): boolean {
-  const source = nodes.find((node) => node.id === sourceId);
+  // Every wire's TypedEdge runs this on every store change: a map lookup, not a scan.
+  const source = nodeById(nodes, sourceId);
   return isInactiveEdge(source?.data, sourceHandle);
 }
 

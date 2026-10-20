@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useReactFlow } from '@xyflow/react';
+import { useShallow } from 'zustand/react/shallow';
 import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import {
@@ -14,6 +15,9 @@ import { computeCanvasFitPadding } from '../lib/canvasFit';
 import { useFitCanvasView } from '../hooks/useFitCanvasView';
 import { canLoadGraph, canSaveGraph, requestGraphLoad, requestGraphSave } from '../lib/graphFileActions';
 import '../styles/command-palette.css';
+
+const NO_NODE_FIELDS: readonly string[] = Object.freeze([]);
+const NO_COMMANDS: PaletteCommand[] = [];
 
 /**
  * Global ⌘K / Ctrl+K command palette. Searches + inserts nodes, runs toolbar
@@ -42,7 +46,13 @@ export function CommandPalette() {
   const enterCreateView = useUIStore((s) => s.enterCreateView);
   const togglePanel = useUIStore((s) => s.togglePanel);
   const selectNode = useUIStore((s) => s.selectNode);
-  const nodes = useGraphStore((s) => s.nodes);
+  // Canvas nodes for search-and-focus, read only while the palette is open
+  // and only their ids and labels: the closed palette (always mounted) used
+  // to rebuild every command, model search text included, on each graph
+  // change, a run's progress events too.
+  const canvasNodeFields = useGraphStore(useShallow((s) => (open
+    ? s.nodes.flatMap((n) => [n.id, (typeof n.data?.label === 'string' && n.data.label) || n.data?.definitionId || n.id])
+    : NO_NODE_FIELDS)));
 
   const close = useCallback(() => {
     setOpen(false);
@@ -80,14 +90,11 @@ export function CommandPalette() {
   );
 
   // Existing canvas nodes, for search-and-focus (the "canvas search" affordance).
-  const canvasNodes = useMemo(
-    () =>
-      nodes.map((n) => ({
-        id: n.id,
-        label: (typeof n.data?.label === 'string' && n.data.label) || n.data?.definitionId || n.id,
-      })),
-    [nodes]
-  );
+  const canvasNodes = useMemo(() => {
+    const pairs: Array<{ id: string; label: string }> = [];
+    for (let i = 0; i < canvasNodeFields.length; i += 2) pairs.push({ id: canvasNodeFields[i], label: canvasNodeFields[i + 1] });
+    return pairs;
+  }, [canvasNodeFields]);
 
   const focusNode = useCallback(
     (id: string) => {
@@ -98,7 +105,7 @@ export function CommandPalette() {
   );
 
   const commands = useMemo(
-    () =>
+    () => !open ? NO_COMMANDS :
       buildCommands({
         addNodeAtCenter,
         runGraph: () => executeGraph(),
@@ -117,7 +124,7 @@ export function CommandPalette() {
         canvasNodes,
         focusNode,
       }),
-    [addNodeAtCenter, executeGraph, fitCanvasView, enterCreateView, togglePanel, nodeCount, isExecuting, isImportingGraph, canSave, canLoad, canvasNodes, focusNode]
+    [open, addNodeAtCenter, executeGraph, fitCanvasView, enterCreateView, togglePanel, nodeCount, isExecuting, isImportingGraph, canSave, canLoad, canvasNodes, focusNode]
   );
 
   // Mirror `open` into a ref so the global hotkey handler stays subscribed once.

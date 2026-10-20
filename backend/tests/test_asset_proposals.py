@@ -387,6 +387,7 @@ def test_the_persons_canvas_gets_open_asset_proposals_with_keys_on_hello(api):
     with api.client.websocket_connect("/ws") as socket:
         assert socket.receive_json()["type"] == "graphSync"
         socket.receive_json()  # pins
+        socket.receive_json()  # updates (post_note, #124)
         socket.send_json({"type": "hello", "personToken": api.person["X-Nebula-Person"]})
         seen = [socket.receive_json(), socket.receive_json()]
     sync = next(message for message in seen if message["type"] == "assetProposalSync")

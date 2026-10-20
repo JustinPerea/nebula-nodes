@@ -16,7 +16,9 @@ that image and its contribution to the board share.
 Set aside (the stored ``excluded`` switch) means read, never steers: a
 set-aside image is measured and listed in ``images`` with ``setAside: true``
 and its colours, and adds nothing else. An image steers when it isn't set
-aside and its weight is above 0 (``steers``).
+aside and its weight is above 0 (``steers``). Weight 0 reads as set aside
+wherever a board is shown (plan section 4.4): its entry keeps its version 4
+shape (no ``setAside`` key), and the summary counts only images that steer.
 
 The brief and negatives are written by services/moodboard_brief.py, which
 also joins in the person's Direction, Avoid and pinned colours (kept on the
@@ -33,6 +35,7 @@ import functools
 import hashlib
 import json
 import math
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -59,6 +62,10 @@ from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT
 # with ``setAside: true`` and its colours, and never steers. Everything that
 # steers is as in 4, and the source hash is unchanged, so a version 4 (or 3)
 # analysis stays current; it just doesn't list set-aside images.
+# Still 5 (2026-10-20): the summary counts only images that steer, weight 0
+# left out as the switch is. Nothing else moved and the hash is the same, so
+# no bump: a saved analysis that counted weight 0 reads with the new count
+# (``with_steering_count``, applied by the store on every read).
 ANALYSIS_VERSION = 5
 PALETTE_SIZE = 8
 ACCENT_LIMIT = 4
@@ -143,6 +150,8 @@ def parse_thresholds(raw: dict[str, Any] | None) -> Thresholds:
 
 # Said when no image steers: every one is set aside or has weight 0.
 ALL_SET_ASIDE_WARNING = "Every reference is set aside, so none of them shapes the board."
+# The summary of a board with images none of which steers.
+NONE_STEER_SUMMARY = "No reference image steers this board: every one is set aside."
 
 
 def set_aside(image: dict[str, Any]) -> bool:
@@ -174,9 +183,9 @@ def analyze_moodboard(moodboard: dict[str, Any], *, thresholds: Thresholds | Non
         (number, img) for number, img in enumerate(moodboard.get("images", []), start=1)
         if isinstance(img, dict)
     ]
-    # The images not set aside: what the summary counts and what may be
-    # representative. Weight 0 still counts here, as it always has.
-    images = [img for _, img in numbered if not set_aside(img)]
+    # The images that steer: what the summary counts and what may be
+    # representative. Weight 0 is set aside too, so it isn't counted.
+    images = [img for _, img in numbered if steers(img)]
     notes = str(moodboard.get("notes") or "").strip()
     mode = str(moodboard.get("mode") or "look")
     strength = _clamp_float(moodboard.get("strength"), 0.7, 0.0, 1.0)
@@ -264,7 +273,7 @@ def analyze_moodboard(moodboard: dict[str, Any], *, thresholds: Thresholds | Non
         "mode": mode,
         "modeIntent": _MODE_LABELS.get(mode, _MODE_LABELS["look"]),
         "strength": strength,
-        "summary": _summary(mode, len(images), palette, accents, notes),
+        "summary": _summary(mode, len(images), palette, accents, notes, has_images=bool(numbered)),
         "tasteProfile": _taste_profile(mode, keywords, palette),
         "styleBrief": style_brief,
         "negativePrompt": ", ".join(avoids),
@@ -398,6 +407,45 @@ def analysis_is_current(moodboard: dict[str, Any], analysis: Any) -> bool:
     except (TypeError, ValueError):
         return False
     return analysis.get("sourceHash") == source_hash(moodboard, version)
+
+
+_COUNTED = re.compile(r"^\d+ reference image\(s\) analyzed as ")
+_EMPTY_SUMMARY_START = "Empty moodboard;"
+
+
+def steering_count(moodboard: dict[str, Any]) -> tuple[int, bool]:
+    """How many of the board's images steer, and whether it has any."""
+    images = [img for img in moodboard.get("images") or [] if isinstance(img, dict)]
+    return sum(1 for img in images if steers(img)), bool(images)
+
+
+def with_steering_count(moodboard: dict[str, Any]) -> dict[str, Any]:
+    """The board with its saved analysis's summary counting only the images
+    that steer, in memory; the board as it is when nothing changes.
+
+    An analysis saved before weight 0 left the count (2026-10-20) still
+    describes the board (same hash), so it stays current, but its summary
+    counted weight-0 images, and one of a board whose images were all set
+    aside said "Empty moodboard". Only the count changes: the rest of the
+    summary is the analyzer's, and an analysis that no longer describes the
+    board is left as it was saved."""
+    analysis = moodboard.get("analysis")
+    if not isinstance(analysis, dict) or not isinstance(analysis.get("summary"), str):
+        return moodboard
+    summary = analysis["summary"]
+    counted = _COUNTED.match(summary)
+    if not counted and not summary.startswith(_EMPTY_SUMMARY_START):
+        return moodboard
+    count, has_images = steering_count(moodboard)
+    if count == 0:
+        fixed = NONE_STEER_SUMMARY if has_images else summary
+    elif counted:
+        fixed = f"{count} reference image(s) analyzed as {summary[counted.end():]}"
+    else:  # "Empty moodboard" over a board with images that steer: not this analysis's board
+        return moodboard
+    if fixed == summary or not analysis_is_current(moodboard, analysis):
+        return moodboard
+    return {**moodboard, "analysis": {**analysis, "summary": fixed}}
 
 
 def rank_representative_images(
@@ -712,8 +760,13 @@ def _keywords_from_analysis(
     return keywords[:12]
 
 
-def _summary(mode: str, count: int, palette: list[str], accents: list[str], notes: str) -> str:
+def _summary(mode: str, count: int, palette: list[str], accents: list[str], notes: str, *,
+             has_images: bool = False) -> str:
+    """``count``: the images that steer. ``has_images``: the board has any,
+    so none steering means every one is set aside, not an empty board."""
     if count == 0:
+        if has_images:
+            return NONE_STEER_SUMMARY
         return "Empty moodboard; add images before using this as a strong creative reference."
     palette_text = ", ".join(palette[:5]) if palette else "no local palette extracted"
     accent_text = f" Accents: {', '.join(accents)}." if accents else ""

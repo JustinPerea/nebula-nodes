@@ -2,6 +2,7 @@ import { backendWebSocketUrl, personTokenForSocket } from './backend';
 import { onPersonConnected, reportPersonRequired } from './personSession';
 import type { PortValue, VariantScope } from '../types';
 import type { ExecutionStatusResult } from './api';
+import type { AgentNotesEvent } from './agentNotes';
 import type {
   ProviderRecoveryCheckpoint,
   ProviderStartAmbiguity,
@@ -165,7 +166,10 @@ export interface ProposalView {
   nodes: Array<{
     ref: string;
     definitionId: string;
+    /** The name the agent gave it (`rename`), or the model's name. */
     name: string;
+    /** The model's name, sent only when the agent named the node. */
+    model?: string;
     category: string;
     params: Record<string, unknown>;
     position: { x: number; y: number };
@@ -286,6 +290,7 @@ export type ExecutionEvent = (
     }
   | AgentPresenceEvent
   | CanvasPinsEvent
+  | AgentNotesEvent
   | StoredAssetChangedEvent
   | ProjectsChangedEvent
   | ProposalOpenedEvent

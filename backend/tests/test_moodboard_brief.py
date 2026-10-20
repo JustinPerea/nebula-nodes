@@ -257,7 +257,10 @@ def test_every_node_with_a_board_port_is_classified():
     assert with_port, "generators take a Moodboard input"
     instruction = [i for i in with_port if moodboard_brief.follows_instructions(i)]
     diffusion = [i for i in with_port if not moodboard_brief.follows_instructions(i)]
-    assert all(i.startswith(("gpt-image-", "nano-banana")) for i in instruction)
+    # Krea 2's port became a Moodboard port in PR13 (Any to Moodboard), so it
+    # is counted here now; it was already an instruction-following model.
+    assert all(i.startswith(("gpt-image-", "nano-banana")) or i == "krea-2-generate" for i in instruction)
+    assert "krea-2-generate" in instruction
     assert set(diffusion) == {"fast-sdxl", "flux-2-pro"}
     assert all(_node_def_for(i) for i in with_port)
 
