@@ -1,13 +1,15 @@
 import type { Edge, InternalNode, Node } from '@xyflow/react';
-import type { NodeData } from '../types';
+import type { ModelNodeDefinition, NodeData } from '../types';
 import { apiFetch } from './backend';
 import { formatUsd, formatUsdRange } from './pricing';
 import { resolveAnchor, type Point } from './agentCursorMotion';
-import type { ProposalPersonValues, ProposalView } from './wsClient';
+import type { ProposalNotReady, ProposalPersonValues, ProposalView } from './wsClient';
 import { BILLING_PARAM_LABELS, providerChoiceLabel } from './billingParams';
 import { PROVIDER_PARAM } from './directRoute';
+import { nodeKeyStatus, usesKreaAccount, type CredentialReadiness } from './kreaConnection';
+import { missingKeyTitle } from './nodeKeys';
 
-export type { ProposalPersonValues, ProposalView } from './wsClient';
+export type { ProposalNotReady, ProposalPersonValues, ProposalView } from './wsClient';
 
 /** What the backend returns when the person accepts (main.accept_canvas_proposal). */
 export interface AcceptedProposal {
@@ -172,6 +174,56 @@ export function ghostRows(node: ProposalView['nodes'][number]): number {
 /** An estimated ghost card height, for "Show" framing. */
 export function ghostHeight(node: ProposalView['nodes'][number]): number {
   return Math.max(GHOST_PORT_TOP + ghostRows(node) * GHOST_PORT_STEP + 16, 150);
+}
+
+/** Where each of a proposal's ghosts sits now, as a flow rectangle (Show, Fit view). */
+export function ghostBoxes(
+  view: ProposalView,
+  drag: Record<string, Point> | undefined,
+): Array<{ x: number; y: number; width: number; height: number }> {
+  const boxes: Array<{ x: number; y: number; width: number; height: number }> = [];
+  for (const node of view.nodes) {
+    const at = ghostPosition(view, node.ref, drag);
+    if (at) boxes.push({ x: at.x, y: at.y, width: GHOST_WIDTH, height: ghostHeight(node) });
+  }
+  return boxes;
+}
+
+/**
+ * A ghost's ⚠, as a real node's card shows it (ModelNode): the key check
+ * against the saved settings, with the same title. Null when it can run.
+ */
+export function ghostKeyWarning(
+  definition: ModelNodeDefinition | undefined,
+  params: Record<string, unknown>,
+  cache: CredentialReadiness,
+): string | null {
+  if (!definition || nodeKeyStatus(definition, params, cache) !== 'missing') return null;
+  return usesKreaAccount(definition, params) ? 'Krea sign-in required' : missingKeyTitle(definition, params);
+}
+
+/**
+ * The proposal's run nodes that can't run here (cost.notReady, read when the
+ * agent proposed), less the ones the person has set up since: a "needs …"
+ * reason whose key check now passes. Route reasons stay, since the canvas
+ * can't re-check what the backend's router saw.
+ */
+export function stillNotReady(
+  view: ProposalView,
+  cache: CredentialReadiness,
+  nodeFor: (row: ProposalNotReady) => { definition: ModelNodeDefinition | undefined; params: Record<string, unknown> } | null,
+): ProposalNotReady[] {
+  return (view.cost.notReady ?? []).filter((row) => {
+    if (!cache.loaded || !row.missing.startsWith('needs ')) return true;
+    const node = nodeFor(row);
+    return !node?.definition || nodeKeyStatus(node.definition, node.params, cache) === 'missing';
+  });
+}
+
+/** "GPT Image 2 (n3) needs OPENAI_API_KEY in Settings > Providers", in find_nodes' words. */
+export function notReadyLine(row: ProposalNotReady): string {
+  // Route messages already start with the node's name.
+  return row.missing.startsWith(row.name) ? `${row.ref}: ${row.missing}` : `${row.name} (${row.ref}) ${row.missing}`;
 }
 
 /** "Adds 1 node · 1 wire · changes n4 · runs up to 1 paid model (fal)". */
