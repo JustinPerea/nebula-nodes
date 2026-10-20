@@ -15,6 +15,7 @@ What changed from version 1:
 - A new shared layer, moodboard adapters (§5.7), decides how each node takes a board. Twelve new PRs (PR13 to PR24) build it.
 - Q4 and Q12 are reworded. Q18 to Q28 are new; Q22 and Q23 turned out to be already answered (§7.2).
 - Version 2.1 (same day) fixes what a critic found in version 2: §10.3 lists each point and what changed.
+- Version 2.2 (2026-10-20) adds Analyze as an overseer (GM's mockup v5): the reader's trace (§5.6.1), Q29 (§7.3), the new PR10b, and a checker's corrections (§10.4).
 
 ---
 
@@ -57,7 +58,7 @@ Out of scope: Avoid as an area on the canvas (C5), the reading feeding the visua
 | C7 | Numbered in add order; moving never renumbers | `#n` stays `index + 1` in `images[]`. **No canvas operation ever reorders `images[]`**: drag, frames, arrange, Analyze and undo all leave it alone. Removing a reference still renumbers the ones after it; the decision page's C7 "why" says so ("as today. Ids work everywhere for anything that has to be exact"). So there is no number field and no counter. Undoing a removal puts the image back at its old index, which restores its number. A look keeps the board's numbers (§4.11). |
 | C8 | Free space next to the view, else after the last; `--at`, `--in`, `--size`; `arrange --by look\|colour\|weight` | `moodboard_layout.place()` runs on the server only, so the CLI, MCP and Studio drops all land the same way. The view report (PR8) says what's in view. Arrange is a server-computed layout applied as one op batch (PR12). |
 | C9 | The canvas agent model on the board | `GET /api/moodboards/{id}/look`, `GET …/picture`, `POST …/edits` (checked, atomic, with a cursor), `board.*` journal kinds, and a "Since your last turn" block in each runner. |
-| C10 | Analyze sorts the selection, or the whole board; the result is an editable draft; your edits are signals; the price shows first | A new reader, `services/moodboard_reader.py`, works in two phases: per-image reading, then one sort call. Its result is applied as one edit batch from actor `analyze`. Gating: the person confirms above `runCostConfirmUsd`, and agents go through `agent_spend.decide`. |
+| C10 | Analyze sorts the selection, or the whole board; the result is an editable draft; your edits are signals; the price shows first | A new reader, `services/moodboard_reader.py`, works in two phases: per-image reading, then one sort call. Its result is applied as one edit batch from the reader (actor kind `reader`, with the model's name and colour, and `requestedBy`; §5.6.1). Gating: the person confirms above `runCostConfirmUsd`, and agents go through `agent_spend.decide`. |
 | C11 | Nothing selected: keep what you placed or renamed, and sort only new and Unsorted. A selection: read those again | Decided by `placedBy` on each placement, `namedBy` on each frame, and `readings[imageId].url`. |
 | C12 | b) A re-analyze may move a reference you placed, if you selected it; one Undo puts it back | When an image is selected, the sort may move its placement even if `placedBy` is `"person"`. The whole run is one undo step. |
 | C13 | Linked copies, shared reading and notes, weight per frame, suggest a second look and never add one silently, hybrid frames | Several placements per image, at most one per frame. Second looks and hybrids are stored as `suggestions[]` and become memberships only when you accept them. **Per-frame weight is read by the look's analysis and the look's bundle** (§4.11), so Krea strengths and every adapter's order follow the card's size in that look. |
@@ -148,9 +149,9 @@ These were checked in the code. Some of them correct the subsystem maps, the rea
 |---|---|---|---|
 | `layoutVersion` | absent | `1` | Absent: an old board, laid out on read (§4.8). Stamped `1` by the first write that saves a layout. |
 | `frames[]` | `[]` | ≤ 100; at most one `kind: "unsorted"`; names 1 to 60 characters, unique on the board ignoring case | `{id (12 hex), name, kind: "look"\|"unsorted", x, y, w, h, createdBy, namedBy: "person"\|"agent"\|"analyze", createdAt}`. Coordinates are absolute flow pixels, rounded to 1 px. `w, h` ≥ 160. Frames stay layout only; a look's words and analysis live in the maps below. |
-| `suggestions[]` | `[]` | ≤ 200 | `{id, kind: "alsoIn"\|"hybrid", imageIds[], frameIds[], name?, reason (≤ 200), by: "analyze"\|"agent", runId, status: "open"\|"dismissed", createdAt}`. Dismissed suggestions are kept so a re-analyze doesn't repeat them. The key is the kind plus the sorted ids. |
-| `readings{}` | `{}` | one per image id, ≤ 2 KB each | `{model, at, url, readerVersion, medium, style, light, motifs[], looks: [{name, fit}], reason}`. Written by Analyze only. Never in `source_hash`, `brief_basis`, `compose` or node outputs (analysis option 1 is unpicked). `url` makes a reading stale when the image's file changes. |
-| `lastRead` | `null` | — | `{runId, model, at, imageIds, estimate: {low, high}, spent?}` |
+| `suggestions[]` | `[]` | ≤ 200 | `{id, kind: "alsoIn"\|"hybrid", imageIds[], frameIds[], name?, reason (≤ 200), by: "analyze"\|"agent", runId, model? (the reader id, set when `by` is `analyze`; §5.6.1), status: "open"\|"dismissed", createdAt}`. Dismissed suggestions are kept so a re-analyze doesn't repeat them. The key is the kind plus the sorted ids. |
+| `readings{}` | `{}` | one per image id, ≤ 2 KB each | `{model, at, url, readerVersion, medium, style, light, motifs[], looks: [{name, fit}], reason}`. `reason` is at most 120 characters, never names another image, and is the line the trace shows (§5.6.1). Written by Analyze only. Never in `source_hash`, `brief_basis`, `compose` or node outputs (analysis option 1 is unpicked). `url` makes a reading stale when the image's file changes. |
+| `lastRead` | `null` | — | `{runId, model, at, imageIds, estimate: {low, high}, spent?, requestedBy?: {kind, name}, summary?: {sorted, looks, unsorted, couldntRead, newLooks, suggestions}}` |
 | `lookFields{}` (PR7b) | absent | keyed by a frame id of kind `look`; ≤ 100 | The person's words for one look: `{direction?, avoid?, pins?: {mustAppear?, keepOut?}, briefOverride?, colorChoices?, musicDirection?}`. A missing field means "use the board's" (§4.11.5). Edited only through `look.set` / `look.inherit` ops. |
 | `lookAnalyses{}` (PR7b) | absent | keyed by frame id | Derived, ignored if a client sends it: `{analysis, colorCheck}` (§4.11.2). `analysis` is written by Measure and Analyze; `colorCheck` also by any write that moves its basis (§4.11.3). |
 | `lookAliases{}` (PR7b) | absent | ≤ 200 | `{oldFrameId: newFrameId}`, written by a merge so nodes saved on the old look follow it. Chains resolve, at most 8 steps. |
@@ -277,6 +278,7 @@ Placement rules:
 | Look aliases | ≤ 200; chains ≤ 8 | store |
 | Undo steps | 50 per board (graph `UNDO_CAP` is also 50) | Studio |
 | Journal | one event per batch; `data` ≤ 4 KB (the journal's own cap) | `canvas_events.py` |
+| Reader trace | ≤ 400 lines and ≤ 64 KB per job, ≤ 200 characters a line; in memory with the job, kept 15 minutes after it ends | reader job (§5.6.1) |
 | Board images per node run | the entry's slot limit for the active route and model, minus wired | adapter planner |
 | Prepared board images | content-addressed copies; the folder is trimmed oldest first above 1 GB | `prepare_board_image` |
 
@@ -442,7 +444,7 @@ See §4.8 items 6 and 7. A board with frames whose node is on Whole board gives 
 - **The stack.** It is per board, keyed by the draft key, capped at 50, and cleared on an epoch change, a board switch or a delete. Each step is `{label, origin: self|agent|analyze, actorName, ops, undo}`.
 - **What makes one step.** A drag end or a resize end; a frame op; a set-aside toggle; a note (on blur or after 600 ms); a look field (on blur or after 600 ms); a whole Analyze run; a whole agent batch.
 - **Undo and redo.** Undo sends `restore` with `expect`; redo resends the ops. Skipped slices show a notice: "#12 changed since, left as is".
-- **Foreign steps.** Agent and Analyze batches arrive with `edit.actor` and `undo`, and become one foreign step with a notice: "Claude moved #12 into Dither · Undo". This follows `ForeignEdit` (`lib/canvasUndo.ts:50`).
+- **Foreign steps.** Agent and Analyze batches arrive with `edit.actor` and `undo`, and become one foreign step with a notice: "Claude moved #12 into Dither · Undo". An Analyze step names the reader and who asked: "Gemini 4 Argon sorted 19 into 4 looks (asked by Claude) · Undo". This follows `ForeignEdit` (`lib/canvasUndo.ts:50`).
 - **The analysis.** Undo never brings an analysis back. With Q9, Measure reruns on its own.
 - **Keys.** Studio-scoped Cmd+Z, Shift+Cmd+Z and Cmd+S, all skipped inside text fields. Cmd+S calls `preventDefault`, so `GraphFileActions` (which yields on `defaultPrevented`, `GraphFileActions.tsx:129`) never opens the graph save.
 - **Delete.** React Flow's `deleteKeyCode` is `null`. Delete removes the selected references with an Undo toast (Q15).
@@ -483,10 +485,11 @@ With nobody looking, or a stale report, `look` describes the whole board.
 - **`services/moodboard_reader.py`**, modelled on `services/vision_llm.py`:
   - The person picks `(provider, model)` explicitly. `vision_llm` always uses `providers[0]` and caps a call at 13 images (`:21`); the reader does neither.
   - Batches of 6 images, longest edge 1024 px (Q13), JPEG in memory.
-  - At most 2 requests at once, 60 s each, one retry on invalid JSON.
-  - `responseSchema` for Gemini, plus the Argon settings `GEMINI_CHAT_NO_SAMPLING`, `GEMINI_CHAT_THINKING_LEVELS` and `GEMINI_CHAT_MAX_OUTPUT` (`handlers/google_gemini.py:32-45`). Output is capped per batch.
+  - At most 2 requests at once, each under the time bounds in §5.6.1, and one retry per batch that asks only for what didn't come back (§5.6.1).
+  - A response schema for Gemini, sent as `generationConfig.responseFormat.text = {mimeType: "APPLICATION_JSON", schema}` (`responseSchema` is deprecated, and key order is documented for this form; §5.6.1), plus the Argon settings `GEMINI_CHAT_NO_SAMPLING`, `GEMINI_CHAT_THINKING_LEVELS` and `GEMINI_CHAT_MAX_OUTPUT` (`handlers/google_gemini.py:32-45`). Output is capped per batch by `maxOutputTokens`, which counts thinking too.
+  - Images go in under batch-local labels (`Image A` to `F`), never board numbers (§5.6.1).
   - `usageMetadata` is captured.
-- **Phase 1 (per image):** medium, style, light, motifs, and candidate looks with a fit score. Existing frame names go into the prompt so the model reuses them. From PR17, if Q26 a, also `people: "none" | "drawn" | "photo"`, which the face policy reads.
+- **Phase 1 (per image):** medium, style, light, motifs, and candidate looks with a fit score. Existing frame names go into the prompt so the model reuses them. Notes follow #18's opt-in in both phases, as for the music call below: board notes, image notes and note-derived keywords only when `sendNotes` is on; private notes never. From PR17, if Q26 a, also `people: "none" | "drawn" | "photo"`, which the face policy reads.
 - **Phase 2 (one text-only sort):** assignments, Unsorted, `alsoIn` and hybrids.
 - **Python enforces the rules afterwards:** only targets move (C11, C12); frames you named are never renamed or deleted; frames holding words you wrote are never deleted or merged; at most 8 new frames per run; a fit below 0.5, or a failed read, goes to Unsorted (Q17); each image goes to its best frame only, and a second fit becomes an `alsoIn` suggestion; when 3 or more references share a pair, one `hybrid` suggestion replaces their `alsoIn` suggestions (Q10).
 - **The music direction (B1, PR19)** is a separate call, not part of the sort: one request per scope (Q25). It returns at most 3 sentences: instruments, tempo or energy, texture and mood. No colour-to-key mapping. It is priced through the same model file, shown first, and gated like Analyze.
@@ -499,13 +502,191 @@ With nobody looking, or a stale report, `look` describes the whole board.
   - GM's "Gemini 3 Flash" row appears only after its price and vision support are verified.
 - **Price.**
   - `POST /api/moodboards/{id}/read/estimate {model, imageIds?}` returns `{count, batches, low, high, unconfirmed, sources}`.
-  - Low/high = (image tokens at 1024 px + prompt) per batch, plus capped output per batch, plus phase 2, at the vendor's per-token prices.
+  - Low/high = (image tokens at 1024 px + prompt) per batch, plus capped output per batch, plus phase 2, at the vendor's per-token prices. The output cap already includes thinking. The high estimate also counts one retry per batch (§5.6.1).
   - The prices live in a curated `backend/data/moodboard_reader_models.json`, each entry with `sources`, `checked` and `unconfirmed`, and a test validates it. This is not `model_pricing.json`, whose validator needs a node definition.
   - **Gemini 4 Argon's price is not in the repo.** PR4 fetches Google's pricing page. If it isn't exact, the row says "No list price, may cost more" and asks for confirmation (Q16).
 - **Gating.**
   - **The person:** the price shows in the menu row and on the button. Above `runCostConfirmUsd`, the bar asks inline (`shouldConfirmRunCost`, `lib/runScope.ts:359`).
   - **Agents:** `agent_spend.decide` (`agent_spend.py:590`) takes `pricing` and `definitions` as arguments. The reader passes one item, `{definitionId: "gemini-chat", params: {model}}`, with a one-off pricing entry built from its own estimate. Per-model caps then apply to the chat model the person already sees in Settings (Q11).
   - **The hold:** the high estimate is held at the start. Batches that never start are given back (`_release_unspent_hold`, `main.py:1896`). An unpriced read under any USD limit is refused, as for unpriced nodes.
+
+### 5.6.1 The reader's trace: Analyze as an overseer (Q29, written for b)
+
+GM's mockup v5 shows Analyze as an overseer, not as an agent. There is no cursor. The canvas ripples outward from the pile, or from each selected card on a selection pass. A panel drops from the Analyze bar and streams short lines such as "#21 clouds under a halftone screen → Dither". Each card a line names gets a lavender outline, while orange stays the agent's. Results ("couldn't place", the Painterly × Dither suggestion) are voiced by Gemini 4 Argon. This section is what the reader must give for that. Q29 (§7.3) asks where the lines come from; it is written for the recommendation, b), and marks what c) adds.
+
+**What Google documents** (fetched 2026-10-19, rechecked 2026-10-20):
+
+- **The answer streams as partial JSON, keys in schema order.**
+  - "The streamed chunks will be valid partial JSON strings, which can be concatenated to form the final, complete JSON object."
+  - "When using structured outputs, the model will produce outputs in the same order as the keys in the schema."
+  - REST sets the schema as `generationConfig.responseFormat.text = {mimeType: "APPLICATION_JSON", schema: <JSON Schema>}` (structured-output page: "`response_json_schema` (or `responseFormat.text.schema` in REST)"). The API reference marks `responseSchema` deprecated, and its OpenAPI form orders keys only through `propertyOrdering`. So the reader uses `responseFormat`.
+  - Gemini 4 Argon is listed under structured-output model support.
+  - Google sends no per-item event. Cutting out each finished item is our parser's job.
+- **Strings take only `enum` and `format`.** `maxLength` isn't supported, so a length cap is a request in the field's `description` plus a Python trim.
+- **Thought summaries are optional and may be empty.**
+  - `includeThoughts`: "If true, thoughts are returned only when available."
+  - From the thinking guide: "Certain thought content types, such as images, may not have text summaries."
+  - From Vertex: "Reasoning over certain modalities (such as image analysis) might not produce text summaries."
+  - No page shows `includeThoughts` and a response schema in the same request.
+- **Thinking is billed in full, can't be turned off on Argon, and counts against the output cap.**
+  - "pricing is based on the full thought tokens"; "You cannot disable thinking for Gemini 4 Argon."
+  - "The max_output_tokens generation parameter sets the maximum number of tokens a response can generate, including thought tokens. … If the model hits this limit while reasoning, it stops generating with finish_reason: MAX_TOKENS and returns truncated or empty output (while still billing for any thinking tokens generated)."
+  - A single streaming request returns at most 65,536 tokens.
+  - Pricing page (2026-10-19): Argon's "Output price (including thinking tokens)" is $10.00 through November 30, 2026, then $20.00 from December 1, 2026. PR4 records both rows with their dates, and the units.
+- **Not confirmed (PR4's probe measures these):**
+  - whether any bytes arrive while Argon thinks with summaries off;
+  - time to the first item at each thinking level;
+  - `thoughtsTokenCount` per batch;
+  - whether summaries come back alongside a response schema on image batches;
+  - whether an aborted stream is billed.
+
+**What today's code can't do:**
+
+- `handlers/google_gemini.py:191` streams through `StreamConfig` with `delta_path="candidates.0.content.parts.0.text"`. It keeps only the first part of each chunk and ignores the `thought` flag. The reader doesn't reuse that path.
+- `execution/stream_runner.py:63` opens `httpx.Timeout(config.timeout, read=None)`. Its 60 s bounds the connection, not the answer, so a quiet stream never times out.
+- `canvas_events` knows the actor kinds `agent | person | anonymous | system` only. `actor_record` (`canvas_events.py:133`) turns any other kind into `anonymous`, and the frontend unions (`lib/trash.ts:15`, `lib/wsClient.ts:29`) and `asset_trash.py:67` list the same kinds. C10's actor `analyze` has no journal kind.
+- `agent_presence` is keyed by header identity: one cursor per agent, one `point()` target (`agent_presence.py:226`). It doesn't fit an overseer. §5.5's cursor stays agent-only.
+
+**The reader (`services/moodboard_reader.py`, PR4):**
+
+- **Batch-local labels.** Each image goes in as a text part `Image A` followed by the image part, `A` to `F` within a batch. The job freezes `label → imageId` when the batch is sent.
+  - The model never sees board numbers. Board numbers shift when an image is removed (§4.5), so a reason that said "like #18" would later point at the wrong card.
+  - The prompt says a reason describes its own image and never mentions another one. Before a reason is shown or saved, Nebula strips any batch label or `#n` token from it.
+  - Board numbers appear only in Nebula-written text, built from `refs` when the line is shown.
+- **Phase 1 schema, `ref` first and `reason` last:** `{readings: [{ref, medium, style, light, motifs[], looks[{name, fit}], people?, reason}]}`.
+  - `ref` is `{type: "string", enum: [the batch's labels]}`. The deprecated OpenAPI form would also need `format: "enum"`.
+  - `reason` asks for at most 120 characters in its `description`. Python trims it at a word boundary to 120 and never fails an item over length. It stays the reading's one free-text field (§4.1), now written to be shown.
+- **Our own stream parser,** `services/moodboard_reader_stream.py`:
+  - it keeps parts with `thought: true` out of the answer buffer (under c) they feed the thought stream);
+  - it joins text from every part, not only `parts[0]`;
+  - it scans the answer as JSON incrementally;
+  - it raises `focus(ref)` when an item's `ref` closes, and `item(reading)` when the item closes.
+- **Each item is checked.**
+  - A `ref` that isn't in this batch is ignored and logged, and the image counts as missing.
+  - For a duplicate `ref`, the first item wins.
+  - An item that fails the schema counts as missing.
+- **Output cap.** `maxOutputTokens` per batch is the level's thinking allowance plus the answer allowance, because the cap includes thinking and is a hard cutoff. PR4's probe records `thoughtsTokenCount` to set it.
+- **Time bounds per request** (these replace §5.6's "60 s each"). Until the probe shows bytes arrive while Argon thinks, assume none do.
+  - First byte: 120 s at `high`, 60 s at `low` and `medium`.
+  - No quiet stretch longer than the same figure.
+  - The whole request finishes within 300 s at `high`, 180 s otherwise.
+  - The probe calibrates all of these.
+- **One retry, for what's missing.** When a stream ends with invalid JSON, a cut-off answer or missing refs, the items that closed are kept: they are real readings and were already shown. The retry asks only for the missing refs. After `finishReason: MAX_TOKENS` it goes out as two smaller batches (half the refs each), never the same request again. Whatever is still missing is "couldn't read" (Q17).
+- **A reader that can't stream** (a non-streaming route, or a later non-Google reader) parses the whole answer at batch end and raises the same calls at once. Only the timing changes. `moodboard_reader_models.json` gets `streams: true|false` and `thoughtSummaries: true|false|"unconfirmed"` per model.
+- **Phase 2 lines come from what was applied.** They are written after Python enforces §5.6's rules, never from the model's raw proposal. A refused merge reads "Kept Grain: it holds your words" (Q28), never as done.
+- **Notes follow #18's opt-in, in both phases and the retry,** as for the music call: board notes, image notes and note-derived keywords go in only when the board's `sendNotes` is on. Private notes never go. The prompt says "describe images; never identify people", and no line echoes `people` (Q26).
+
+**The reader's identity (the "overseer"):**
+
+- **A fixed identity, not a header identity:** `{kind: "reader", id: "reader:<model>", name: "Gemini 4 Argon", model, provider, color}`.
+  - The name and colour live in each model's entry in `moodboard_reader_models.json`.
+  - Argon's colour is lavender. The hex is GM's call; `#B49CFF` is a placeholder. A test keeps it out of `_EXTERNAL_COLORS` and away from Claude's `#E8825A`.
+  - The Studio draws it through `--reader-color`, next to `--agent-color`.
+- **Who asked.** Every run records `requestedBy`, the actor from `actor_for_headers` (`canvas_events.py:96`): person, agent or anonymous.
+- **Journal.** `canvas_events` gets the actor kind `reader`. `actor_label` returns its name, and `actor_record` keeps `reader` instead of folding it to `anonymous`. The frontend unions in `lib/trash.ts` and `lib/wsClient.ts`, and `asset_trash.py`, add it. `board.sorted` and `board.suggested` take the reader as actor, with `data.requestedBy: {kind, name}`, inside the 4 KB cap.
+- **Undo notice (§5.4):** "Gemini 4 Argon sorted 19 into 4 looks · Undo", or "… (asked by Claude) · Undo".
+- **Suggestions gain `model`** (the reader id, for example `gemini-4-argon`). A chip then says "Gemini 4 Argon suggests …" for suggestions from older runs too; `lastRead` only knows the latest run.
+- **No cursor for the reader.** It never calls `agent_presence.point()`. An agent that starts Analyze keeps its own orange cursor.
+
+**Events on the socket.**
+
+`moodboardRead` carries the job's state. It goes out on every phase change and each time an image finishes, at most every 250 ms:
+
+```
+{type: "moodboardRead", boardId, jobId, runId,
+ reader: {id, name, model, provider, color},
+ requestedBy: {kind, name, color?},
+ phase: "reading" | "sorting" | "applying" | "done" | "failed" | "cancelled",
+ done, total, failed,
+ batches: {total, sent, done},
+ targets: [imageId],      // C11/C12 targets: where the ripple starts
+ inFlight: [imageId],     // images in batches sent and not finished: the pulse
+ lastSeq,
+ summary?: {sorted, looks, unsorted, couldntRead, newLooks, suggestions},
+ spent?: {usd, inputTokens, outputTokens, thoughtsTokens},
+ at}
+```
+
+`moodboardReadTrace` carries one line, append-only:
+
+```
+{type: "moodboardReadTrace", boardId, jobId, seq,
+ kind: "batch" | "focus" | "reading" | "retry" | "skipped" | "result"
+     | "suggestion" | "kept" | "error" | "cancelled" | "done"
+     | "thought",            // c) only
+ source: "nebula" | "reader",  // who wrote `text`
+ text,                         // ≤ 200 characters; empty for "focus"
+ refs: [{imageId, number}],    // Nebula's ids and the number at send; never parsed from model text
+ phase, batch?, attempt?,
+ look?: {frameId, name},
+ fit?,
+ at}
+```
+
+- **`seq`** starts at 1 for each job and has no gaps. Two batches stream at once, so their lines interleave. Within a batch, order is the model's.
+- **The `#21` in a line** is drawn by the Studio from `refs` with the image's current number ("removed" if it's gone). The `text` of a `reading` line is the trimmed `reason` plus "→ Dither" from `looks[0]`. That gives v5's "#NN description" shape without the model ever writing a number.
+
+| kind | source | text | refs | What the Studio does |
+|---|---|---|---|---|
+| `batch` | nebula | "Reading #1–#6" | the batch | A soft pulse on those cards; the ripple starts from them |
+| `focus` | nebula | (empty) | one | The lavender outline goes on |
+| `reading` | reader | the reason, "→ Dither" | one | The line shows in the panel; the outline settles |
+| `retry` | nebula | "Answer cut off after #9; asking again for #10–#12" | the missing | Pulse again |
+| `skipped` | nebula | "Ignored an answer for an image not in this batch" | none | A grey line |
+| `error` | nebula | "Couldn't read #6: Google returned 503" | one | A "couldn't read" dot |
+| `result` | nebula | "#21 → Dither", "#6 Unsorted: no look fits (0.41)" | one or more | The card springs into its frame (PR6 springs) |
+| `suggestion` | nebula | "Make a Painterly × Dither look for #3, #9, #14?" | the members | A chip (PR11) |
+| `kept` | nebula | "Kept Grain: it holds your words" | none | A grey line |
+| `cancelled` / `done` | nebula | "Cancelled · nothing moved" / "Sorted 19 into 4 looks · 1 Unsorted" | none | The panel closes into the bar's last line |
+| `thought` (c) | reader | summary text, merged into chunks of at least 250 ms | always empty | Dim italic under "thinking (summary)"; never an outline |
+
+- **The panel's title** follows the source. Under b) it reads "Gemini 4 Argon · reading", because every reader line is a reading. "· thinking" belongs only above `thought` lines under c).
+- **Linked copies (C13).** A ref outlines each placement of that image inside the run's targets, or all its placements when none is in the targets.
+
+**Job routes and catching up (PR10):**
+
+- `GET /api/moodboards/{id}/read` returns `{active: jobId|null, last: jobId|null}`, so a Studio that opens mid-run finds the job.
+- `GET /api/moodboards/{id}/read/{job}?afterSeq=N` returns `{state, trace: [lines with seq > N], nextSeq, truncated}`. The Studio calls it on open, on socket reconnect and on any `seq` gap.
+- **The trace lives with the in-memory job only.** It holds at most 400 lines and 64 KB, dropping the oldest `thought` lines first. A finished job is kept 15 minutes. A backend restart loses it, like every in-memory job in this plan.
+- **Nothing new is saved on the board** except `lastRead.requestedBy` and `lastRead.summary`. Each image's `reading.reason` already is its line, and the side panel shows it afterwards (Q12). Thought summaries are never saved.
+- **Cancel** (`DELETE …/read/{job}`):
+  - no new batch starts, and streams in flight are closed;
+  - a `cancelled` line follows, and no `seq` comes after it;
+  - nothing moves on the board.
+  - Readings that closed before the cancel are saved, so a re-run with nothing selected skips reading them (C11). A re-run on a selection reads them again, as C11 says.
+  - Unstarted batches are given back to the hold. A closed stream's batch stays charged at its high estimate, because whether an aborted stream is billed is unconfirmed.
+
+**CLI and MCP:**
+
+- `nebula moodboard analyze <board> --read-with gemini-4-argon` prints lines as they arrive, polling `afterSeq` every second, for example `#21  clouds under a halftone screen → Dither (0.82)`. `--quiet` prints the summary only, `--json` prints one JSON line per trace line, and `--dry-run` prints the same lines and applies nothing.
+- MCP `moodboard_analyze` waits up to 60 s. It returns the summary, each image's result (`{number, id, look, fit, reason}`) and the last 20 non-thought lines, or the `jobId` if the run is still going. A new `moodboard_read_status(board, job_id, after_seq)` returns later lines. `thought` lines come only with `include_thoughts`.
+- `wait_for_canvas_change kinds=board` still sees one `board.sorted`.
+
+**Price (Q11, Q16).**
+
+- **The cap already includes thinking.** The high estimate per attempt is `maxOutputTokens` × the output price. No separate thinking allowance goes on top.
+- **The high estimate includes one retry per batch:** its input (the missing refs' images plus the prompt) and its full output cap. The hold covers it. §5.6's "one retry" already needed this, and the trace adds nothing beyond it.
+- **Under c)**, whether writing summaries adds tokens isn't documented. The probe compares one request with summaries against one without.
+- **The spend gate doesn't change** (`agent_spend.decide`, one `gemini-chat` item). The trace is display only.
+
+**Tests:**
+
+- A recorded Argon SSE answer split at every byte offset gives the same lines in the same order. `focus` comes before `reading` for each ref, and `seq` has no gaps.
+- `thought: true` parts never reach the JSON buffer, even with `includeThoughts` off. Text in `parts[1+]` is read.
+- Wrong refs: a label outside the batch gives `skipped` and no outline; a duplicate keeps the first; the missing image is retried once and then "couldn't read".
+- The retry asks only for the missing refs; after `MAX_TOKENS` it splits in two.
+- A reason that mentions `#18` or `Image B` is shown and saved without it.
+- A reason over 120 characters is trimmed and the item kept.
+- A reader that can't stream gives the same line set at batch end.
+- Two batches interleave and order within each holds.
+- Cancel mid-stream: nothing after `cancelled`, unstarted batches given back, nothing moves, closed readings saved.
+- `afterSeq` returns exactly the missing lines; a job past its 15 minutes returns 404.
+- A merge the rules refused gives `kept`, never `result`.
+- An image removed mid-run keeps its `imageId`, and the Studio shows "removed".
+- A stream quiet past its bound fails that batch, and its images go to the retry.
+- `test_reader_prompt_has_no_notes_unless_opted_in` and `test_reader_prompt_never_has_private_notes`, for both phases and the retry.
+- `actor_record` keeps `reader`; the undo notice names the reader and who asked.
+- Studio: outlines on target placements; reduced motion turns the pulse and ripple into a static tint; PR5's 300-card budget (p95 below 20 ms) holds with the ripple and 12 outlines on.
 
 ### 5.7 Moodboard adapters (A1 to A5, B1 to B4)
 
@@ -817,7 +998,7 @@ PR1 to PR12 keep their numbers and order. The look PRs slot in after PR7 as PR7b
 
 | Lane | PRs, in order | Starts when |
 |---|---|---|
-| Canvas | PR1 → PR3 → PR5 → PR6 → PR7 → PR7b → PR10 → PR11; PR2 and PR4 early beside it | now (PR1 merged as #87) |
+| Canvas | PR1 → PR3 → PR5 → PR6 → PR7 → PR7b → PR10 → {PR10b, PR11} (either order); PR2 and PR4 early beside it | now (PR1 merged as #87) |
 | Canvas side | PR8 → PR9; PR12; PR7c and PR7d after PR7b | PR5 (PR8), PR7 (PR12) |
 | Adapters | PR13 → PR14 → {PR15, PR16, PR17, PR18, PR20 in parallel} → PR21 (after PR15, PR16, PR17) and PR23 (after PR15, PR16; PR20 for Meshy); PR22 after PR14 and PR7d; PR19 after PR4 and PR18 (works from images until PR10 lands); PR24 after PR15 and PR7b | #18 has merged |
 
@@ -889,16 +1070,16 @@ Can be built alongside PR1; merges after it.
 Runs alongside PR3 and PR5.
 
 - **Goal.** Retire the model-quality and price unknowns before any Analyze UI.
-- **Scope.** `services/moodboard_reader.py`, both phases (§5.6). `data/moodboard_reader_models.json`. `POST …/read/estimate` and `POST …/read?dryRun=1`. CLI `nebula moodboard analyze <board> --read-with gemini-4-argon --dry-run [--only 3,5]`. MCP `moodboard_analyze(read_with, dry_run)`. The spend gate for agents. The reader's text-call helper is written so PR19 can reuse it for the music direction.
-- **What the person sees.** In the CLI, a priced dry run.
+- **Scope.** `services/moodboard_reader.py`, both phases (§5.6), and the trace's reader half (§5.6.1): batch-local labels, the schema with `ref` first through `responseFormat`, `services/moodboard_reader_stream.py` (thought parts kept apart, every part joined, JSON scanned as it arrives, `focus` and `item` calls), each item checked, the retry for missing refs (split after `MAX_TOKENS`), reasons trimmed and stripped of labels, and the time bounds. `data/moodboard_reader_models.json`, with `streams`, `thoughtSummaries`, the reader's name and colour, and thinking allowances per level. `POST …/read/estimate` and `POST …/read?dryRun=1`. CLI `nebula moodboard analyze <board> --read-with gemini-4-argon --dry-run [--only 3,5]`. MCP `moodboard_analyze(read_with, dry_run)`. The spend gate for agents. The reader's text-call helper is written so PR19 can reuse it for the music direction.
+- **What the person sees.** In the CLI, a priced dry run that prints the trace lines.
 - **Tests.** Recorded provider responses; more than 13 images per run; batching and the schema; a retry on malformed JSON; partial failure leaves those images unsorted; the estimate maths; an agent is refused when any USD limit is set and the read is unpriced; the hold is given back when the key is missing; the person passes.
-- **Live check.** A mocked provider. One real Argon probe with Justin's key, only after he approves the spend.
+- **Live check.** A mocked provider. One real Argon probe with Justin's key, only after he approves the spend. It also measures what §5.6.1 leaves unconfirmed: bytes during thinking, time to the first item per level, `thoughtsTokenCount`, and, in a second request with `includeThoughts`, whether summaries come back alongside the schema on image batches.
 - **Docs.** `skills/nebula/SKILL.md`, `docs/MCP-SETUP.md`, contract 07 new §1.13 "Reading references".
 
 ### PR5: The Board view (preview, behind a switch)
 
 - **Goal.** Retire the React Flow feel and speed risk on real boards.
-- **Scope.** `BoardCanvas.tsx` (own `ReactFlowProvider`), `BoardCardNode.tsx`, `BoardSidePanel.tsx`, `MoodboardListView.tsx` (today's grid, moved unchanged), `boardCanvasStore.ts`, `boardUndo.ts`. Rail | canvas | panel layout. A Board/List switch remembered per viewer in `localStorage` (try/catch); List stays the default. Interaction from `CANVAS_INTERACTION_PROPS`. `visibleFlowRect` moves into `lib/`. Thumbnails unless a card is wider than about 480 css px. `onlyRenderVisibleElements`. One `place` op per drag. File drop at the pointer. Side panel: a selected reference's notes, colours, Set aside and weight; with nothing selected, the board fields, `BriefFields`, the brief and swatches. Studio undo and keys (§5.4).
+- **Scope.** `BoardCanvas.tsx` (own `ReactFlowProvider`), `BoardCardNode.tsx`, `BoardSidePanel.tsx`, `MoodboardListView.tsx` (today's grid, moved unchanged), `boardCanvasStore.ts`, `boardUndo.ts`. Rail | canvas | panel layout. A Board/List switch remembered per viewer in `localStorage` (try/catch); List stays the default. Interaction from `CANVAS_INTERACTION_PROPS`. `visibleFlowRect` moves into `lib/`. Thumbnails unless a card is wider than about 480 css px. `onlyRenderVisibleElements`. One `place` op per drag. File drop at the pointer. Side panel: a selected reference's notes, colours, Set aside and weight; with nothing selected, the board fields, `BriefFields`, the brief and swatches. Studio undo and keys (§5.4). An empty background layer under the cards, which PR10b's ripple fills.
 - **What the person sees.** A "Board" switch. His board as a canvas in the same order, with nothing moved.
 - **Tests.** Provider isolation; cards at server positions; one op and one undo step per drag; a foreign edit rebases without losing a pending note; List and Board stay consistent; opening doesn't set `dirty`; Cmd+S doesn't trigger the graph save; Delete removes and offers Undo.
 - **Speed check.** 300 references: drag 400 px, pan and fit; rAF frame p95 under 20 ms. The PR states the number.
@@ -1006,16 +1187,33 @@ Runs alongside PR3 and PR5.
 ### PR10: Analyze sorts into looks (C10, C11, C12)
 
 - **Goal.** One button turns a pile into an editable first draft.
-- **Scope.** The bar ("20 new references · not analyzed", "Analyze ▾"). The menu with prices, cancel and progress ("Analyzing with Gemini 4 Argon · 7 of 20", "Read with Gemini 4 Argon · sorting into looks", "Sorted 19 into 4 looks · 1 Unsorted · Undo"). One in-memory job per board, WS `moodboardRead`, `GET`/`DELETE …/read/{job}`. Targets per C11. One edit batch from actor `analyze`, journaled `board.sorted`, one undo step; C12 b). Unsorted in free space. Cards spring into frames. **Measure runs per look in the same run** (free). Analyze never deletes or merges a frame that holds words the person wrote. The music direction is not part of the sort (PR19). CLI and MCP without `--dry-run`. The side panel shows the reading, read-only (Q12). If Q26 a, phase 1 also returns `people`.
+- **Scope.** The bar ("20 new references · not analyzed", "Analyze ▾"). The menu with prices, cancel and progress ("Analyzing with Gemini 4 Argon · 7 of 20", "Read with Gemini 4 Argon · sorting into looks", "Sorted 19 into 4 looks · 1 Unsorted · Undo"). One in-memory job per board, WS `moodboardRead` and `moodboardReadTrace` (§5.6.1), `GET …/read`, `GET …/read/{job}?afterSeq`, `DELETE …/read/{job}` with §5.6.1's cancel rules, and the job's trace ring. Targets per C11. One edit batch from the reader (actor kind `reader` in `canvas_events`, with `requestedBy`; `lastRead.requestedBy` and `summary`), journaled `board.sorted`, one undo step; C12 b). Unsorted in free space. Cards spring into frames. **Measure runs per look in the same run** (free). Analyze never deletes or merges a frame that holds words the person wrote. The music direction is not part of the sort (PR19). CLI and MCP without `--dry-run`: the CLI prints lines live (`--quiet`, `--json`), MCP adds `moodboard_read_status`. The bar shows the counter strings; the overseer panel and ripple are PR10b. The side panel shows the reading, read-only (Q12). If Q26 a, phase 1 also returns `people`.
 - **What the person sees.** The full flow from GM's video, frames 2 to 2b, and each new look's own brief right after.
 - **Tests.** The C11 rule matrix; C12 b) with one Undo; a named frame is never renamed; a frame with person words is never deleted or merged; partial failure lands in Unsorted with a "couldn't read" dot; cancel gives back unstarted batches; the button waits for the estimate; an agent-run Analyze goes through the gate; per-look analyses are current after the run.
 - **Live check.** Mocked provider for the flow and screenshots. One real run only with Justin's approval.
 - **Depends on.** PR4, PR7, PR7b.
 - **Docs.** Contract 07 §1.13. `skills/nebula/SKILL.md`, `docs/MCP-SETUP.md`.
 
+### PR10b: Analyze as an overseer in the Studio (GM's mockup v5; Q29) — new
+
+- **Goal.** While Analyze runs, the person watches the reader work: the board ripples, a panel streams its lines, and the cards it names light up.
+- **Scope.**
+  - The panel that drops from the Analyze bar, titled "Gemini 4 Argon · reading". Lines by `source`; clicking a line selects and frames its cards. It closes into the bar's last line.
+  - `--reader-color`.
+  - The pulse on cards in flight, the lavender outline on `focus`, and the settle on `reading`. Linked copies per C13 (§5.6.1).
+  - The ripple layer behind the cards in `BoardCanvas` (PR5's reserved slot), starting from `targets`, then each batch's `inFlight`. Tuned springs, not stock easing.
+  - Catching up through `afterSeq` on open, reconnect and a `seq` gap.
+  - Reduced motion: a static tint, no ripple.
+- **What the person sees.** Mockup v5 on his own board.
+- **Tests.** Outlines on the right placements; nothing outlined from a `thought` line; a gap in `seq` fetches the missing lines; reduced motion.
+- **Speed check.** PR5's 300 references with the ripple and 12 outlines on: rAF frame p95 under 20 ms.
+- **Live check.** A mocked stream; screenshots at 1440×900 and 1920×1080 mid-run and at the end.
+- **Depends on.** PR10. If Q29 c, add the dim "thinking (summary)" stream, collapsed by default, and a Settings switch "Show the reader's thinking" (+1 day), once PR4's probe shows summaries arrive alongside the schema on image batches.
+- **Docs.** Contract 07 §1.13.
+
 ### PR11: Second-look and hybrid suggestions (C13 from Analyze)
 
-- **Scope.** "Fits Dither too?" chips with accept or dismiss; accepting creates a linked copy in free space in that frame, at the same weight. The hybrid suggestion ("Make a 'Painterly × Pixel' look for #3, #9, #14?"); accepting creates the frame, moves those references in (Q10), replaces their `alsoIn` suggestions; one Undo. CLI `nebula moodboard suggestions [--accept ID|--dismiss ID]`; suggestions in `moodboard_look`. An accepted suggestion makes the target look stale by hash; Measure re-rolls it.
+- **Scope.** "Fits Dither too?" chips with accept or dismiss, voiced "Gemini 4 Argon suggests …" from `suggestions[].model`; accepting creates a linked copy in free space in that frame, at the same weight. The hybrid suggestion ("Make a 'Painterly × Pixel' look for #3, #9, #14?"); accepting creates the frame, moves those references in (Q10), replaces their `alsoIn` suggestions; one Undo. CLI `nebula moodboard suggestions [--accept ID|--dismiss ID]`; suggestions in `moodboard_look`. An accepted suggestion makes the target look stale by hash; Measure re-rolls it.
 - **Tests.** A second frame is never added without an accept; a hybrid replaces the pair suggestions; a dismissed suggestion never comes back.
 
 ### PR12: Arrange (C8)
@@ -1255,6 +1453,12 @@ Q22 and Q23 stay listed so their numbers don't move, but they are already answer
 
 ---
 
+### 7.3 Analyze as an overseer (Q29)
+
+| # | Question | Options | Recommendation and why | Gates |
+|---|---|---|---|---|
+| Q29 | GM's mockup v5 shows Analyze as an overseer: a panel streams the reader's lines and outlines each card a line names. Where do the lines come from? | a) Argon's own thought summaries, shown as they stream. b) The readings themselves: each image's reading streams back as soon as the model finishes it, and its short reason becomes that image's line. Nebula adds its own plainly marked lines ("Reading #1–#6", "Asking again for #10–#12", "Cancelled"), and results come from what Nebula actually applied. c) b), plus Argon's thought summaries as a second, dimmer stream labelled "thinking (summary)" that never outlines cards. | **b) now, and decide c) after PR4's one approved Argon probe.** In b) each line is the model's actual reading of that image, the same text the side panel shows afterwards, and Nebula ties every line to an image it sent, so an outline never rests on the model's guess about a number. It costs nothing beyond the plan's existing retry, works with a mocked provider, and works with a reader that can't stream (its lines then come at the end of each batch). a) can't drive outlines: Google says summaries come back "only when available" and that image analysis "might not produce text summaries", so the panel could stay empty on exactly this job. c) fills the quiet while Argon thinks, but no Google page shows summaries and a response schema in one request, so the probe checks that first. Under b) the panel reads "Gemini 4 Argon · reading", not "· thinking". | PR4, PR10, PR10b |
+
 ## 8. Out of scope, and what this waits on
 
 - **C5 Avoid area.** The brief-conflicts calls (#18) are answered, so it is unblocked; it goes with frames (PR7) or after. A frame `kind: "avoid"` is cheap to add later, and nothing here prevents it.
@@ -1265,6 +1469,7 @@ Q22 and Q23 stay listed so their numbers don't move, but they are already answer
 - **Per-look mode and strength** (one look "subject", another "look"). Later; mode and strength stay per board.
 - **"Used by 2 nodes" in the Studio.** It needs a scan of every project's graphs. Later.
 - **A board history kept on the server.** Needed before Q28 can open up. Not in this plan.
+- **Analyze mockups before v5** that show an agent cursor sweeping over the cards are out of scope. Mockup v5 (the overseer) is in scope through PR10b.
 - **GM video beats 5 to 12:** marking a region, a correctable reading, comments and approvals, test images and reactions, liked vs decided, "more like this", and board history.
 - **A board picture captured from the browser.** The server composite covers C9.
 - **A hard cap on images per board.** None exists today. PR5 measures speed at 300 images.
@@ -1286,8 +1491,8 @@ Q22 and Q23 stay listed so their numbers don't move, but they are already answer
 | 1 Board model v2 | ~600 | ~500 | 2.5 | — (merged, #87) |
 | 2 Set aside | ~250 | ~250 | 1.5 | 1 (merge order) |
 | 3 Checked edits + live Studio | ~1,100 | ~700 | 3.5 | 1 |
-| 4 Reader dry run + price | ~1,000 | ~500 | 3 | 1 |
-| 5 Board view (preview) | ~1,300 | ~400 | 4 | 3 |
+| 4 Reader dry run + price + trace parser | ~1,600 | ~900 | 4.75 | 1 |
+| 5 Board view (preview) | ~1,300 | ~400 | 4.25 | 3 |
 | 6 Size is weight, motion, default | ~500 | ~200 | 2 | 2, 5 |
 | 7 Frames + linked copies | ~1,500 | ~550 | 4 | 6 |
 | 7b Per-look analysis and brief | ~1,000 | ~700 | 3.5 | 7, 3, 2, #18 |
@@ -1295,8 +1500,9 @@ Q22 and Q23 stay listed so their numbers don't move, but they are already answer
 | 7d The node picks a look | ~700 | ~400 | 2 | 7b |
 | 8 Agents see + placement | ~1,300 | ~500 | 3.5 | 5 |
 | 9 Agents edit + recent edits | ~1,000 | ~400 | 3 | 8 |
-| 10 Analyze sorts | ~1,500 | ~650 | 4.5 | 4, 7, 7b |
-| 11 Suggestions | ~800 | ~350 | 2.5 | 10 |
+| 10 Analyze sorts + trace events | ~1,900 | ~850 | 6 | 4, 7, 7b |
+| 10b The overseer in the Studio | ~450 | ~250 | 3 | 10 |
+| 11 Suggestions | ~800 | ~350 | 2.75 | 10 |
 | 12 Arrange | ~700 | ~300 | 2 | 7 |
 | 13 Adapter table + contract test | ~900 | ~700 | 3 | #18 |
 | 14 Board images on content slots + the whole dispatcher | ~1,800 | ~1,100 | 5 | 13 |
@@ -1311,9 +1517,9 @@ Q22 and Q23 stay listed so their numbers don't move, but they are already answer
 | 23 Combine into one image | ~700 | ~400 | 2 | 14, 15, 16 (20) |
 | 24 Recraft style objects | ~1,000 | ~500 | 3 | 15, 7b; Q24 |
 
-- **Total:** about 24,200 lines of code and 13,200 lines of tests (about 37,400), about 74.5 agent-days in sequence. Canvas 36, looks 8, adapters 30.5.
-- **Critical path (canvas and looks):** PR1 → PR3 → PR5 → PR6 → PR7 → PR7b → PR10 → PR11, about 26.5 days (v1 was 23). PR7c and PR7d run beside PR10.
-- **Adapter lane:** #18 → PR13 → PR14 → PR17 → PR21 is about 13 days of work after #18 merges, with PR15, PR16, PR18 and PR20 beside PR17, and PR23 after PR15 and PR16. PR22 waits for PR7d, PR19 for PR4 (and uses PR10's readings once they exist), PR24 for Q24. With three lanes the whole plan fits in about 29 to 31 days.
+- **Total:** about 25,650 lines of code and 14,050 lines of tests (about 39,700), about 81 agent-days in sequence. Canvas 42.75, looks 8, adapters 30.5. Version 2.2's overseer adds about 2,300 lines and 6.75 days (PR4, PR5, PR10, PR10b, PR11).
+- **Critical path (canvas and looks):** PR1 → PR3 → PR5 → PR6 → PR7 → PR7b → PR10 → PR10b, about 29 days (v2.1 was 26.5, v1 was 23). PR7c and PR7d run beside PR10.
+- **Adapter lane:** #18 → PR13 → PR14 → PR17 → PR21 is about 13 days of work after #18 merges, with PR15, PR16, PR18 and PR20 beside PR17, and PR23 after PR15 and PR16. PR22 waits for PR7d, PR19 for PR4 (and uses PR10's readings once they exist), PR24 for Q24. With three lanes the whole plan fits in about 31 to 33 days.
 - **When Justin gets something:** a priced CLI dry run of the sort after PR4 (about 6 days); a usable canvas after PR6 (about 12 days); board images on GPT Image edits and Nano Banana after PR14 (about 8 days after #18 merges); style slots by default after PR15 (about 11 days after #18); one brief per look on a node after PR7d (about 21.5 days).
 
 ---
@@ -1371,11 +1577,32 @@ Each point was checked against the code (main `12257250`, `e457b51d` on #18, `fe
 | 17 | B2's "or pick one" not built | Holds. | "Use a board image as the first frame" in §5.7.8 and PR17. |
 | 18 | Nano Banana 2.1, the count of seven, section E ids | Holds. | 2.1 sends text only with a node line (the note likely joins 2.1 with 3.1 Flash); "six of the seven"; real ids in §5.7.11 E, plus `flux-video-edit` and `sync-lipsync`. `mmaudio-v2` now gets the music direction and no visual negatives (found while fixing 16). |
 
+### 10.4 Version 2.2: the overseer, and its checker
+
+GM - Design relayed Justin's "overseer" idea and mockup v5, and asked what it needs from the reader API. Two researchers read Google's pages (fetched 2026-10-19) and this plan. A drafter wrote §5.6.1 and Q29, and a checker reread the vendor pages and the code. Every point the checker raised holds, and each is now in the text:
+
+| # | Point | What changed |
+|---|---|---|
+| 1 | Key order is documented for the JSON Schema form (`responseFormat.text.schema`); `responseSchema` is deprecated | §5.6 and §5.6.1 send `responseFormat` (REST shape rechecked 2026-10-20) |
+| 2 | `maxOutputTokens` counts thinking and is a hard cutoff | The cap is thinking plus answer; the retry after `MAX_TOKENS` splits in two; no thinking allowance on top in the price |
+| 3 | The retry wasn't in the price or the hold | The high estimate counts one retry per batch |
+| 4 | Only private notes were kept out of the reader's prompt | Both phases and the retry follow #18's opt-in, with two tests |
+| 5 | Board numbers as labels let reasons name the wrong card after renumbering | Batch-local labels; reasons stripped of labels and `#n`; numbers drawn from `refs` |
+| 6 | `maxLength` isn't supported on strings | The 120-character cap is a request plus a Python trim |
+| 7 | `enum` on strings is documented | No PR4 check needed |
+| 8 | `suggestions[].runId` can't name an older run's model | `suggestions[].model` |
+| 9 | `actor_for_headers`, `stream_runner.py:63`, `actor_record` and the frontend unions | Cited and in scope |
+| 10 | The lane order contradicted itself | PR10 → {PR10b, PR11} |
+| 11 | PR19's trace line doesn't fire under Q25 a | Dropped |
+| 12 | "Skip by url" after a cancel contradicted C11 for a selection | Skips only with nothing selected |
+| 13 | The stream may be silent while Argon thinks | Longer first-byte and quiet bounds at `high`, calibrated by the probe |
+
 ### Not verified (check in the PR that needs it)
 
 **Canvas (version 1, still open):**
 
-- Gemini 4 Argon's per-token price and its image token cost (PR4).
+- Gemini 4 Argon's per-token price and its image token cost (PR4). The checker's fetch shows output at $10.00 through November 30, 2026 and $20.00 from December 1, 2026; PR4 records both with the units and the input price.
+- The overseer (§5.6.1): bytes during thinking, time to the first item, `thoughtsTokenCount`, thought summaries alongside a schema on image batches, and whether an aborted stream is billed (PR4's probe).
 - That `estimate_run` prices a one-off `per: "request"` entry passed through `decide` with no further fields (PR4).
 - React Flow speed with 300 image cards (PR5).
 - Whether `CommandPalette`, `ContextMenu`, `KeyboardShortcuts` or `WorkspaceRail` act on keys inside the Studio (PR5).
