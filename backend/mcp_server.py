@@ -52,7 +52,7 @@ The loop:
 5. propose_change instead, for a run over a limit or without a list price, or reworking their graph: the person accepts or rejects it in Nebula; agents cannot accept.
 
 Pins are the person's requests: act on one, then answer it with resolve_pin. wait_for_canvas_change waits for the next change instead of polling.
-When you start on a request, call point_at with a short say naming your own next step (under 8 words), not what you noticed.
+When you start on a request, call point_at with a short say naming your own next step (under 8 words). What you noticed, a report or a suggestion goes in post_note: the person reads those in Updates, top right, not at your cursor.
 Moodboards: see moodboard_get; moodboard_update(cover=...) picks the image a board opens on. New work goes in a new project (new_project), not over theirs.
 If you also use the `nebula` CLI, set NEBULA_AGENT_NAME so both share one name.
 """
@@ -262,12 +262,82 @@ def resolve_pin(pin_id: str, reply: str, ctx: Context | None = None) -> dict[str
     `pin_id` comes from look_at_canvas `pins` (e.g. "pin_8c41d2aa"). `reply`
     is a short line (280 characters max) shown on the pin, such as "Warmed the
     grade on n7". Your cursor moves to the pin. Only the person can create or
-    delete pins; agents answer them.
+    delete pins; agents answer them. The reply is about your own answer only;
+    what you noticed along the way goes in post_note.
     """
     from urllib.parse import quote
 
     return _canvas_call("POST", f"/api/canvas/pins/{quote(pin_id, safe='')}/resolve", ctx,
                         json={"reply": reply})
+
+
+@_tool(annotations=_EDIT)
+def post_note(
+    text: str,
+    board: str | None = None,
+    refs: list[str] | None = None,
+    about: str | None = None,
+    ctx: Context | None = None,
+) -> dict[str, Any]:
+    """Tell the person what you noticed, a report or a suggestion. It is saved,
+    and they read it under Updates in the top right of Nebula (a card drops
+    from the Updates chip, and the list keeps it). Your cursor's `say` is for
+    your own action only; an update is where a notice goes, so the person
+    isn't shown text at your cursor every time you notice something.
+
+    - `text`: one plain line, at most 240 characters. Never quote a private
+      note (the person's own label on a board image): an update that does is
+      refused.
+    - `board`: a moodboard id or exact name to post on that board instead of
+      the main canvas. There `#12` in the text names image 12: Nebula keeps it
+      as that image and always shows its current number; a number not on the
+      board refuses the update.
+    - `refs`: what it is about, outlined when the person looks: node ids
+      ("n4") on the canvas, image ids or numbers on a board (at most 12).
+      Unknown ones are dropped and listed in `dropped`.
+    - `about`: "sinceLastTurn" for an update about what the person changed
+      since your last turn (a newer one replaces your unread one), else
+      "other" (the default).
+    At most 6 a minute: put more in one update. Updates carry no buttons; do
+    the change, or propose it with propose_change. An update you saw from the
+    person ("I saw your update") is in list_notes.
+    """
+    body: dict[str, Any] = {"text": text}
+    if refs:
+        body["refs"] = list(refs)
+    if about:
+        body["about"] = about
+    if board:
+        import moodboard_client as boards
+
+        found = _board_call(boards.get_board, _api(), board, _board_headers(ctx))
+        from urllib.parse import quote
+
+        return _canvas_call("POST", f"/api/moodboards/{quote(str(found['id']), safe='')}/agent-notes", ctx,
+                            json=body)
+    return _canvas_call("POST", "/api/canvas/agent-notes", ctx, json=body)
+
+
+@_tool(annotations=_READ)
+def list_notes(board: str | None = None, unread: bool = False, ctx: Context | None = None) -> dict[str, Any]:
+    """The Updates list: what agents and the reader posted for the person,
+    newest first, with who wrote each (`author`), `about`, the clock time
+    (`at`), `refs`, and `readAt` / `dismissedAt` once the person opened the
+    list or dismissed one. `unread` is how many the person hasn't opened.
+    The main canvas's list is kept with the open project; pass `board` (an
+    id or exact name) for a moodboard's. `unread=True` lists only those.
+    Only the person marks them read or dismisses them.
+    """
+    params = {"unread": 1} if unread else None
+    if board:
+        import moodboard_client as boards
+
+        found = _board_call(boards.get_board, _api(), board, _board_headers(ctx))
+        from urllib.parse import quote
+
+        return _canvas_call("GET", f"/api/moodboards/{quote(str(found['id']), safe='')}/agent-notes", ctx,
+                            **({"params": params} if params else {}))
+    return _canvas_call("GET", "/api/canvas/agent-notes", ctx, **({"params": params} if params else {}))
 
 
 @_tool(annotations=_EDIT)
@@ -286,10 +356,12 @@ def point_at(
 
     Point at a node (`node_id`), one of its ports (`node_id` + `port`), or a
     spot in flow coordinates (`x`, `y`). `say` shows a short line beside the
-    cursor. Give `from_node_id` (and `from_port`) with action "drag" to show a
+    cursor for a few seconds: your own action only ("Trying a tighter crop
+    here"). Give `from_node_id` (and `from_port`) with action "drag" to show a
     wire being pulled. Graph edits made through Nebula's API move your cursor
-    on their own; use this to narrate, to point while explaining, or to show
-    what you are about to change.
+    on their own; use this to point while explaining, or to show what you are
+    about to change. What you noticed, a report or a suggestion goes in
+    post_note, which the person reads in the Updates list, not at your cursor.
     """
     def anchor(node: str | None, handle: str | None, px: float | None, py: float | None) -> dict[str, Any]:
         if node:
@@ -393,7 +465,8 @@ def propose_change(
     wires; nothing changes until they click Accept, and that click is their
     approval for the runs listed. You cannot accept your own proposal.
 
-    - `note`: one line (≤160 chars) saying what this does and why.
+    - `note`: one line (≤160 chars) saying what this does and why: your own
+      proposal only; what you noticed goes in post_note.
     - `nodes`: new nodes, each {"ref": "+up", "definitionId": "...",
       "params": {...}, "position": {"x", "y"}} (params and position optional).
       Refs start with "+" and are only used inside this proposal.
@@ -572,7 +645,8 @@ def edit_canvas(
       no canvas open, the first one to open does it; the result's `arrange` says which.
     - `remove`: node ids to delete, with their wires. `unwire`: single wires,
       [{"source", "sourceHandle", "target", "targetHandle"}].
-    - `note`: one line on what this is for; shown beside your cursor.
+    - `note`: one line on what this is for; shown beside your cursor. Your own
+      edit only; what you noticed goes in post_note.
     No limit on how much one call adds; it all lands or none of it does.
     Applied in this order: unwire, remove, add and change, rename, move.
     - `steps`: a list of such plans (no `run`), sent one after another, each

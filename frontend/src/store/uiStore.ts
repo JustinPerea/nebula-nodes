@@ -292,6 +292,9 @@ interface UIState {
   settingsProviderTarget: ProviderSetupTarget | null;
   skin: SkinId;
   agentLogEnabled: boolean;
+  /** The Agent log is expanded (not saved; it starts collapsed). The Updates
+   * list's "See all actions →" opens it (PR9a). */
+  agentLogOpen: boolean;
   canvasPerfMode: boolean;
   canvasLowDetail: boolean;
   /** Zoomed out past the level-of-detail cutoff (lib/canvasOverview.ts); set by the canvas. */
@@ -371,6 +374,9 @@ interface UIState {
   setKreaConnection: (connection: KreaConnectionState) => void;
   setKreaConnectionMode: (mode: KreaConnectionMode) => void;
   setAgentLogEnabled: (enabled: boolean) => void;
+  setAgentLogOpen: (open: boolean) => void;
+  /** Expand the Agent log ("See all actions →"). Does nothing while it is switched off. */
+  openAgentLog: () => void;
   setCanvasPerfMode: (enabled: boolean) => void;
   setCanvasLowDetail: (enabled: boolean) => void;
   setCanvasZoomedOut: (zoomedOut: boolean) => void;
@@ -439,6 +445,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   settingsProviderTarget: null,
   skin: loadSkin(),
   agentLogEnabled: loadAgentLogEnabled(),
+  agentLogOpen: false,
   canvasPerfMode: loadCanvasPref(CANVAS_PERF_MODE_KEY),
   canvasLowDetail: loadCanvasPref(CANVAS_LOW_DETAIL_KEY),
   canvasZoomedOut: false,
@@ -836,6 +843,12 @@ export const useUIStore = create<UIState>((set, get) => ({
   setAgentLogEnabled: (enabled) => {
     persistAgentLogEnabled(enabled);
     set({ agentLogEnabled: enabled });
+  },
+
+  setAgentLogOpen: (open) => set({ agentLogOpen: open }),
+
+  openAgentLog: () => {
+    if (get().agentLogEnabled) set({ agentLogOpen: true });
   },
 
   setCanvasPerfMode: (enabled) => {

@@ -19,7 +19,7 @@ import { useUIStore } from '../store/uiStore';
 import { useIsValidConnection } from '../hooks/useIsValidConnection';
 import { CANVAS_EDGE_TYPES, CANVAS_NODE_TYPES } from './canvasTypes';
 import { ContextMenu } from './ContextMenu';
-import { ConnectionPopup } from './DeferredPanels';
+import { AgentNoteOutlines, ConnectionPopup } from './DeferredPanels';
 import { SelectionToolbar } from './SelectionToolbar';
 import { CanvasNavigation } from './CanvasNavigation';
 import { AgentCursorLayer } from './canvas/AgentCursorLayer';
@@ -776,6 +776,7 @@ export function Canvas() {
         <CanvasViewReporter />
         <ArrangeController />
         <AgentCursorLayer />
+        <AgentNoteOutlines />
         <PinLayer />
         <ProposalLayer />
         <ProposalBar />
