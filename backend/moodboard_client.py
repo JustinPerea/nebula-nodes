@@ -538,21 +538,92 @@ def create_board(api: NebulaAPI, name: str, sources: Iterable[str] = (), *, proj
     return board, skipped
 
 
+EDITS_UNSUPPORTED = ("this version of Nebula has no board edits (POST /api/moodboards/{id}/edits), so nothing "
+                     "was changed. Update Nebula.")
+
+
+def _edits_missing(exc: NebulaAPIError) -> bool:
+    """Whether a refusal means the backend has no edits route at all (an
+    older Nebula), as opposed to no such board."""
+    return exc.status in (404, 405) and str(exc.detail).strip() in ("Not Found", "Method Not Allowed")
+
+
+def edit_board(api: NebulaAPI, ref: str, ops: list[dict[str, Any]], *, base_version: int | None = None,
+               say: str | None = None, headers: dict[str, str] | None = None) -> dict[str, Any]:
+    """Send checked board edits (POST /api/moodboards/{id}/edits): the ops land
+    together, or none do. Returns the route's answer: `board`, `version`,
+    `applied` (one entry per op: applied or unchanged, and what a `restore`
+    skipped) and `undo`, the ops that put the board back (pass them to this
+    function again; a part that changed since is skipped and reported).
+
+    `base_version` refuses the edit when the board was saved since that
+    version (MoodboardError naming the version it is at); without it the
+    ops apply to the board as it is, which suits absolute ops like these.
+    `say` is your own words for what you did ("Moved #12 into Dither")."""
+    board = get_board(api, ref, headers)
+    body: dict[str, Any] = {"ops": ops}
+    if base_version is not None:
+        body["baseVersion"] = base_version
+    if say:
+        body["say"] = say
+    try:
+        return _send(api, "POST", f"/api/moodboards/{board['id']}/edits", json=body, headers=headers)
+    except NebulaAPIError as exc:
+        if exc.status == 409:
+            current = re.search(r"at version (\d+)", str(exc.detail))
+            at = f" (it is at version {current.group(1)})" if current else ""
+            raise MoodboardError(f"the board changed since you read it{at}: read it again "
+                                 f"(`nebula moodboard show {board['id']}`) and redo the change") from exc
+        if _edits_missing(exc):
+            raise MoodboardError(EDITS_UNSUPPORTED) from exc
+        raise
+
+
 def add_to_board(api: NebulaAPI, ref: str, sources: Iterable[str], *, headers: dict[str, str] | None = None,
-                 transport: httpx.AsyncBaseTransport | None = None) -> tuple[dict[str, Any], int, int]:
-    """Append `sources`; returns (board, images added, duplicates skipped)."""
+                 transport: httpx.AsyncBaseTransport | None = None
+                 ) -> tuple[dict[str, Any], int, int, dict[str, Any] | None]:
+    """Append `sources`; returns (board, images added, duplicates skipped,
+    undo). `undo` is the board edit that takes them off again (`ops` for
+    `edit_board`), from the route's own answer; None when nothing was added
+    or the backend is older and the images went on with a PUT.
+
+    The images go on as one `add` op with `unique`, so the backend skips a
+    URL already on the board at the moment it saves, and an edit made in
+    Moodboard Studio meanwhile (or another add) is never overwritten."""
     board = get_board(api, ref, headers)  # fail on a wrong board before downloading anything
     urls = source_urls(api, sources, headers=headers, transport=transport)
-    # Downloads can take a while; read the board again so an edit made in
-    # Moodboard Studio meanwhile isn't overwritten by the old image list.
+    # Downloads can take a while; read the board again, so what is skipped
+    # as a duplicate is counted against the board as it is now.
     board = api.request("GET", f"/api/moodboards/{board['id']}", headers=headers)
     images = list(board.get("images") or [])
     fresh, skipped = _unique_new(images, urls)
     if not fresh:
-        return board, 0, skipped
-    body = {"images": images + [_image_entry(url) for url in fresh], "analysis": None}
-    updated = api.request("PUT", f"/api/moodboards/{board['id']}", json=body, headers=headers)
-    return updated, len(fresh), skipped
+        return board, 0, skipped, None
+    try:
+        result = api.request("POST", f"/api/moodboards/{board['id']}/edits",
+                             json={"ops": [{"op": "add", "urls": fresh, "unique": True}]}, headers=headers)
+    except NebulaAPIError as exc:
+        if not _edits_missing(exc):
+            raise
+        # An older Nebula: the whole list goes back with a PUT, as before.
+        body = {"images": images + [_image_entry(url) for url in fresh], "analysis": None}
+        updated = api.request("PUT", f"/api/moodboards/{board['id']}", json=body, headers=headers)
+        return updated, len(fresh), skipped, None
+    entry = (result.get("applied") or [{}])[0]
+    added = list(entry.get("added") or [])
+    return result["board"], len(added), skipped + int(entry.get("skipped") or 0), (
+        result.get("undo") if added else None)
+
+
+def added_ids(board: dict[str, Any], undo: dict[str, Any] | None) -> list[str]:
+    """The ids of the images an add put on the board, from its `undo`."""
+    ids = []
+    for op in (undo or {}).get("ops") or []:
+        for item in op.get("slices") or []:
+            if item.get("part") == "image" and item.get("before") is None:
+                ids.append(str(item.get("image")))
+    on_board = {str(image.get("id")) for image in board.get("images") or []}
+    return [image_id for image_id in ids if image_id in on_board]
 
 
 def _check_unit(label: str, value: Any) -> float:
@@ -726,6 +797,186 @@ def _send(api: NebulaAPI, method: str, path: str, *, person_brief: str | None = 
         raise
 
 
+# How many times update_board sends the board's fields when someone else
+# keeps saving the board between its read and its write.
+BOARD_WRITE_TRIES = 3
+
+_FIELD_LABELS = {
+    "name": "The name", "notes": "Notes", "mode": "Mode", "strength": "Strength", "direction": "Direction",
+    "avoid": "The Avoid list", "pinnedColors": "The pinned colours", "clashMode": "The clash mode",
+    "colorChoices": "The colour choices", "sendNotes": "Send notes to generators",
+    "briefOverride": "The hand-written brief",
+}
+
+
+def _field_value(board: dict[str, Any], key: str) -> Any:
+    """A board field as the backend reads it, to tell whether it changed
+    (the same reading a `restore` checks its `expect` with)."""
+    from services.moodboard_edits import field_value
+
+    return field_value(board, key)
+
+
+def _changed_under(read: dict[str, Any], at: dict[str, Any], body: dict[str, Any],
+                   outright: list[str]) -> str | None:
+    """The first field this call gives outright that someone else changed
+    since `read`, to something other than what the call sets. Such a field
+    is never sent over theirs: the caller hasn't seen their value, so it
+    reads the board again and runs the change again (the later explicit
+    write wins, through a fresh read). A field they set to the same value
+    is no conflict."""
+    for key in outright:
+        if key not in body or _field_value(at, key) == _field_value(read, key):
+            continue
+        if _sends_change(at, body, key):
+            return key
+    return None
+
+
+def _sends_change(at: dict[str, Any], body: dict[str, Any], key: str) -> bool:
+    """Whether the PUT body's `key` changes the field from what `at` holds,
+    both read as the backend reads them."""
+    sending = body[key]
+    if key == "briefOverride":
+        sending = str((sending or {}).get("text") or "").strip()
+    elif key in ("direction", "avoid", "pinnedColors", "clashMode", "colorChoices"):
+        sending = _field_value({**at, key: sending}, key)
+    return sending != _field_value(at, key)
+
+
+# The PUT's board fields and the update_board arguments that set them.
+_RESTORE_NAMES = {"name": "name", "notes": "notes", "mode": "mode", "strength": "strength",
+                  "direction": "direction", "avoid": "avoid", "pinnedColors": "pinned_colors",
+                  "clashMode": "clash_mode", "colorChoices": "color_choices", "sendNotes": "send_notes",
+                  "briefOverride": "brief_override"}
+
+
+def _fields_undo(at: dict[str, Any], body: dict[str, Any]) -> dict[str, Any]:
+    """What puts back the board fields a PUT of `body` over `at` changed:
+    only those, as `at` held them, so undoing it leaves alone every field
+    the call didn't change, whoever changed it since."""
+    was = previous_settings(at, brief=True, notes=True)
+    return {name: was[name] for key, name in _RESTORE_NAMES.items()
+            if key in body and name in was and _sends_change(at, body, key)}
+
+
+def _fields_slice(at: dict[str, Any], updated: dict[str, Any]) -> dict[str, Any] | None:
+    """The `restore` slice that puts back the fields a PUT changed: each as
+    `at` held it, expecting what the PUT saved, so a field someone changes
+    after it is left as they set it. The PUT carried `baseVersion` (over
+    `at`), so every field that differs is this PUT's, the ones it changed
+    along the way included (a colour pinned out leaves Keep anyway)."""
+    from services.moodboard_edits import fields_slice
+
+    return fields_slice(at, updated)
+
+
+def _images_undo(original: list[dict[str, Any]], current: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """What puts back the image settings this call changed: each image it
+    changed (by id), with only the settings it changed, as read. An image
+    or setting the call didn't touch isn't there, so undoing it never puts
+    back over a later edit someone else made to it."""
+    read = {str(image.get("id")): image for image in original}
+    undo = []
+    for image in current:
+        before = read.get(str(image.get("id")))
+        if before is None:
+            continue
+        keys = [key for key in ("weight", "notes", "privateNote", "excluded")
+                if (key != "privateNote" or key in before) and image.get(key) != before.get(key)]
+        if keys:
+            undo.append({"image": before.get("id"),
+                         **{key: (before.get(key) or "") if key == "privateNote" else before.get(key)
+                            for key in keys}})
+    return undo
+
+
+_NO_IMAGE_RE = re.compile(r"no image '([^']+)' on this board")
+
+
+def _image_taken(exc: NebulaAPIError, original: list[dict[str, Any]], board_id: str) -> MoodboardError | None:
+    """The edits route refuses an op on an image that isn't on the board: it
+    was there when this call read the board, so someone else took it off
+    since. Says so, by the number the caller used."""
+    found = _NO_IMAGE_RE.search(str(exc.detail)) if exc.status == 422 else None
+    if found is None:
+        return None
+    ids = [str(image.get("id")) for image in original]
+    label = f"Image {ids.index(found.group(1)) + 1}" if found.group(1) in ids else "An image this change names"
+    return MoodboardError(f"{label} was taken off the board by someone else after this call read it, so nothing "
+                          f"was changed. Read the board again (`nebula moodboard show {board_id}`) and redo the "
+                          "change.")
+
+
+def _base_version_unknown(exc: NebulaAPIError) -> bool:
+    """An older Nebula's PUT refuses keys it doesn't know (baseVersion)."""
+    detail = str(exc.detail)
+    return exc.status == 422 and "baseVersion" in detail and "extra_forbidden" in detail
+
+
+def _put_board(api: NebulaAPI, board_id: str, body: dict[str, Any], headers: dict[str, str] | None,
+               person_brief: str | None) -> tuple[dict[str, Any], bool]:
+    """PUT the board's fields; on an older Nebula, which has no baseVersion,
+    the same body again without it (unchecked, as before). Returns the
+    board and whether this Nebula took baseVersion (so it has checked
+    edits, and an undo can go as a `restore`)."""
+    path = f"/api/moodboards/{board_id}"
+    try:
+        return _send(api, "PUT", path, json=body, headers=headers, person_brief=person_brief), "baseVersion" in body
+    except NebulaAPIError as exc:
+        if "baseVersion" not in body or not _base_version_unknown(exc):
+            raise
+    unchecked = {key: value for key, value in body.items() if key != "baseVersion"}
+    return _send(api, "PUT", path, json=unchecked, headers=headers, person_brief=person_brief), False
+
+
+def _undo_token(slices: list[dict[str, Any]]) -> dict[str, Any]:
+    return {"ops": [{"op": "restore", "slices": slices}]}
+
+
+def undo_board(api: NebulaAPI, ref: str, undo: Any, *, fallback: dict[str, Any] | None = None,
+               headers: dict[str, str] | None = None) -> tuple[dict[str, Any], list[str], dict[str, Any], list[str]]:
+    """Undo a change from the `undo` in its `previous`: one checked `restore`
+    (POST /api/moodboards/{id}/edits) that puts back what the change
+    changed, image settings, cards, images it took off and the board's own
+    fields alike, in one write. A part someone changed since the change is
+    left as they set it, and said so: "Direction changed since, left as
+    is", "#2's weight changed since, left as is".
+
+    Returns (board, the URLs the undo took off the board, `previous` for
+    undoing the undo, what was left as is). `fallback` is the rest of
+    `previous` (update_board's arguments): on a Nebula without board edits
+    it is put back with update_board instead, unchecked, as before."""
+    board = get_board(api, ref, headers)
+    ops = undo.get("ops") if isinstance(undo, dict) else None
+    if not isinstance(ops, list) or not all(isinstance(op, dict) and op.get("op") == "restore" for op in ops):
+        raise MoodboardError("`undo` must be the `undo` a change handed back in its `previous`. Nothing was changed.")
+    if not ops:
+        return board, [], {}, []
+    try:
+        answer = _send(api, "POST", f"/api/moodboards/{board['id']}/edits", json={"ops": ops}, headers=headers)
+    except NebulaAPIError as exc:
+        if not _edits_missing(exc):
+            if exc.status == 422:
+                raise MoodboardError(f"the undo can't be put back: {exc.detail}. Nothing was changed.") from exc
+            raise
+        if not fallback:
+            raise MoodboardError(EDITS_UNSUPPORTED) from exc
+        updated, removed, previous = update_board(api, ref, **fallback, headers=headers)
+        return updated, removed, previous, []
+    updated = answer["board"]
+    # Only the images the restore itself took off: one someone else took off
+    # since is "unchanged" there, and not this undo's to report.
+    taken = {str(image_id) for entry in answer.get("applied") or [] for image_id in entry.get("removed") or []}
+    removed = [str(item["expect"].get("url")) for op in ops for item in op.get("slices") or []
+               if isinstance(item, dict) and item.get("part") == "image" and item.get("before") is None
+               and isinstance(item.get("expect"), dict) and str(item.get("image")) in taken]
+    skipped = [str(report.get("message")) for entry in answer.get("applied") or []
+               for report in entry.get("skipped") or []]
+    redo = answer.get("undo") or {}
+    return updated, removed, ({"undo": redo} if redo.get("ops") else {}), skipped
+
+
 def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: str | None = None,
                  mode: str | None = None, strength: float | None = None,
                  images: list[dict[str, Any]] | None = None, remove: list[Any] | None = None,
@@ -737,12 +988,28 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
                  keep_anyway: list[str] | None = None, leave_out: list[str] | None = None,
                  leave_out_flagged: bool = False, reset_colors: list[str] | None = None,
                  color_choices: dict[str, Any] | None = None, clash_mode: str | None = None,
-                 send_notes: bool | None = None,
+                 send_notes: bool | None = None, undo: dict[str, Any] | None = None,
                  headers: dict[str, str] | None = None) -> tuple[dict[str, Any], list[str], dict[str, Any]]:
     """Change a board. `images` is a list of {"image": number or id, "weight",
     "notes", "privateNote", "excluded"}; `remove` takes images off the board (their files
     stay, and the returned URLs can be added back). Returns (board, removed
     URLs, the settings before the change), so any change can be put back.
+    Image changes and removals go as one checked board edit (absolute ops by
+    image id), so an edit saved by someone else since this read is kept; the
+    board's own fields then go with a PUT that sends only the fields this
+    call sets, with `baseVersion`. If someone else saved the board in
+    between (409), it reads the board again and sends them again (changes
+    to a list, like `avoid_add`, go on the list as it is now), up to
+    BOARD_WRITE_TRIES times. A field given outright that they changed too
+    is never sent over their value: the call stops there with a
+    MoodboardError naming it, and nothing more is written (run it again to
+    set it over theirs). `previous` undoes only what this call changed: the
+    image settings it changed and the fields its PUT changed, as they were
+    before, so undoing it leaves alone what someone else changed since in
+    anything else; its `undo` (undo_board) also leaves a setting the call
+    changed and they changed again since as they set it. An image op on an image someone else took off
+    the board since this read stops the call, nothing saved, as a
+    MoodboardError naming its number.
 
     `excluded` is the Set aside switch (`setAside` is the same key): a
     set-aside image is still read for its colours but never steers. True
@@ -769,28 +1036,37 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
     "leaveOut"}) replaces both lists; `clash_mode` is leave-out (default),
     flag, no-measured or keep-all. `send_notes` False stops the board's
     notes reaching generators; True is the person's call (refused for an
-    agent, before anything is saved)."""
+    agent, before anything is saved).
+
+    `undo` (from a `previous`) makes the call an undo: see undo_board,
+    which also says what it left as is. The other arguments are then what
+    an older Nebula, without board edits, puts back instead."""
+    if undo is not None:
+        arguments = dict(locals())
+        given = {key: value for key, value in arguments.items()
+                 if key not in ("api", "ref", "undo", "headers") and value is not None
+                 and not (key in ("keep_brief", "leave_out_flagged") and value is False)}
+        return undo_board(api, ref, undo, fallback=given, headers=headers)[:3]
     board = get_board(api, ref, headers)
     original = [dict(image) for image in board.get("images") or []]
     current = [dict(image) for image in original]
-    body: dict[str, Any] = {}
-    content_changed = False
+    # The board fields given as values, the same whatever the board holds.
+    fixed: dict[str, Any] = {}
     if name is not None:
         if not name.strip():
             raise MoodboardError("a board needs a name")
-        body["name"] = name.strip()
+        fixed["name"] = name.strip()
     if notes is not None:
-        body["notes"] = notes
-        content_changed |= notes != board.get("notes")
+        fixed["notes"] = notes
     if mode is not None:
         if mode not in MODES:
             raise MoodboardError(f"mode must be one of {', '.join(MODES)}")
-        body["mode"] = mode
-        content_changed |= mode != board.get("mode")
+        fixed["mode"] = mode
     if strength is not None:
-        body["strength"] = _check_unit("strength", strength)
-        content_changed |= body["strength"] != board.get("strength")
-    images_changed = False
+        fixed["strength"] = _check_unit("strength", strength)
+    # Image changes go as checked board edits (absolute ops by id), so an
+    # edit someone else saves between this read and the write is kept.
+    ops: list[dict[str, Any]] = []
     # Two changes can name one image (by number and by id); they mustn't
     # pull its switch both ways, or the later one would quietly win.
     switches: dict[int, bool] = {}
@@ -806,76 +1082,93 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
         if switch is not None and switches.setdefault(index, switch) != switch:
             raise MoodboardError(f"image {index + 1} is both set aside and used in this change: pick one. "
                                  "Nothing was changed.")
+        image_id = str(target.get("id"))
+        note_op: dict[str, Any] = {}
         if edit.get("privateNote") is not None:
             if "privateNote" not in target:
                 raise MoodboardError("this version of Nebula has no private notes on images. Nothing was changed.")
             note = str(edit["privateNote"])
             if len(note) > PRIVATE_NOTE_LIMIT:
                 raise MoodboardError(f"a private note holds at most {PRIVATE_NOTE_LIMIT} characters")
-            target["privateNote"] = note
-        if "weight" in edit and edit["weight"] is not None:
-            target["weight"] = _check_unit("weight", edit["weight"])
-        if "notes" in edit and edit["notes"] is not None:
-            target["notes"] = str(edit["notes"])
+            target["privateNote"] = note_op["privateNote"] = note
+        # The switch goes first: used again from weight 0, the backend gives
+        # the image its card's weight, and a weight in the same change wins.
         if switch is not None:
             target["excluded"] = switch
             if not switch and edit.get("weight") is None and _weight_is_zero(target.get("weight")):
                 target["weight"] = card_weight(target)
-        images_changed = True
+            ops.append({"op": "setAside", "image": image_id, "value": switch})
+        if "weight" in edit and edit["weight"] is not None:
+            target["weight"] = _check_unit("weight", edit["weight"])
+            ops.append({"op": "weight", "image": image_id, "value": target["weight"]})
+        if "notes" in edit and edit["notes"] is not None:
+            target["notes"] = note_op["notes"] = str(edit["notes"])
+        if note_op:
+            ops.append({"op": "note", "image": image_id, **note_op})
     removed: list[str] = []
     if remove:
         drop = {find_image(current, item) for item in remove}
         removed = [str(current[index]["url"]) for index in sorted(drop)]
+        ops.append({"op": "remove", "images": [str(current[index]["id"]) for index in sorted(drop)]})
         current = [image for index, image in enumerate(current) if index not in drop]
-        images_changed = True
-    if images_changed:
-        body["images"] = current
-        # A private note isn't an analysis input, so changing only that keeps it.
-        content_changed |= _steering(current) != _steering(original)
     # The brief fields aren't analysis inputs, so they keep the analysis
     # (as in Moodboard Studio).
     rules = _brief_rules()
     if direction is not None:
         try:
-            body["direction"] = rules.normalize_direction(direction)
+            fixed["direction"] = rules.normalize_direction(direction)
         except ValueError as exc:
             raise MoodboardError(f"Direction: {exc}") from exc
-    if avoid is not None or avoid_add or avoid_remove:
-        body["avoid"] = _new_avoid(list(board.get("avoid") or []), avoid, avoid_add, avoid_remove)
-    if pinned_colors is not None or pin_colors or keep_out_colors or unpin_colors:
-        body["pinnedColors"] = _new_pinned(board.get("pinnedColors") or {}, pinned_colors, pin_colors,
-                                           keep_out_colors, unpin_colors)
     if clash_mode is not None:
         if clash_mode not in rules.CLASH_MODES:
             raise MoodboardError(f"clash mode must be one of {', '.join(rules.CLASH_MODES)}")
-        body["clashMode"] = clash_mode
-    if color_choices is not None or keep_anyway or leave_out or leave_out_flagged or reset_colors:
-        if "clashMode" not in board:
-            raise MoodboardError("this version of Nebula doesn't check colours against the board's words. "
-                                 "Nothing was changed.")
-        kept_out = (body.get("pinnedColors") or rules.board_fields(board)[2])["exclude"]
-        choices = _new_choices(board, color_choices, keep_anyway, leave_out, leave_out_flagged, reset_colors,
-                               kept_out)
-        if choices != rules.board_options(board)[1]:
-            body["colorChoices"] = choices
-    if send_notes is not None:
-        if "sendNotes" not in board:
-            raise MoodboardError("this version of Nebula always sends the board's notes to generators. "
-                                 "Nothing was changed.")
-        if bool(send_notes) != (board.get("sendNotes") is True):
-            body["sendNotes"] = bool(send_notes)
-    saved_override = _override(board)
-    refused_put: str | None = None
+        fixed["clashMode"] = clash_mode
+    choosing = color_choices is not None or keep_anyway or leave_out or leave_out_flagged or reset_colors
+    if choosing and "clashMode" not in board:
+        raise MoodboardError("this version of Nebula doesn't check colours against the board's words. "
+                             "Nothing was changed.")
+    if send_notes is not None and "sendNotes" not in board:
+        raise MoodboardError("this version of Nebula always sends the board's notes to generators. "
+                             "Nothing was changed.")
+    override_text: str | None = None
     if brief_override is not None:
         try:
-            text = rules.normalize_override_text(brief_override)
+            override_text = rules.normalize_override_text(brief_override)
         except ValueError as exc:
             raise MoodboardError(f"the hand-written brief: {exc}") from exc
-        if text != str((saved_override or {}).get("text") or "").strip():
-            refused_put = _PERSON_BRIEF.format(action="replace" if text else "remove")
-            if saved_override and saved_override["by"] == "person":
-                raise MoodboardError(refused_put)
-            body["briefOverride"] = {"text": text} if text else None
+
+    def fields_for(at: dict[str, Any]) -> tuple[dict[str, Any], bool, str | None]:
+        """The PUT body for the board as `at` holds it, whether it clears the
+        analysis, and what to say if the backend refuses the brief. Values
+        given outright go as given; a change to a list (`avoid_add`,
+        `pin_colors`, `keep_anyway`...) goes on the list as `at` has it."""
+        body = dict(fixed)
+        changed = any(key in fixed and fixed[key] != at.get(key) for key in ("notes", "mode", "strength"))
+        if avoid is not None or avoid_add or avoid_remove:
+            body["avoid"] = _new_avoid(list(at.get("avoid") or []), avoid, avoid_add, avoid_remove)
+        if pinned_colors is not None or pin_colors or keep_out_colors or unpin_colors:
+            body["pinnedColors"] = _new_pinned(at.get("pinnedColors") or {}, pinned_colors, pin_colors,
+                                               keep_out_colors, unpin_colors)
+        if choosing:
+            kept_out = (body.get("pinnedColors") or rules.board_fields(at)[2])["exclude"]
+            choices = _new_choices(at, color_choices, keep_anyway, leave_out, leave_out_flagged, reset_colors,
+                                   kept_out)
+            if choices != rules.board_options(at)[1]:
+                body["colorChoices"] = choices
+        if send_notes is not None and bool(send_notes) != (at.get("sendNotes") is True):
+            body["sendNotes"] = bool(send_notes)
+        refused: str | None = None
+        if override_text is not None:
+            saved = _override(at)
+            if override_text != str((saved or {}).get("text") or "").strip():
+                refused = _PERSON_BRIEF.format(action="replace" if override_text else "remove")
+                if saved and saved["by"] == "person":
+                    raise MoodboardError(refused)
+                body["briefOverride"] = {"text": override_text} if override_text else None
+        return body, changed, refused
+
+    body, _changed, _refused = fields_for(board)
+    saved_override = _override(board)
     # Keep runs after the PUT (it keeps the brief for the board as it ends
     # up), so one the backend would refuse stops here, before anything is
     # saved. New text is already written against the board as it ends up.
@@ -889,17 +1182,98 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
             raise MoodboardError("This board has no hand-written brief to keep. Nothing was changed.")
         elif saved_override["by"] == "person":
             raise MoodboardError(_PERSON_KEEP.format(outcome=_NOTHING_KEPT))
-    if not body and not keep_brief:
+    if not body and not ops and not keep_brief:
         raise MoodboardError("nothing to change")
-    if content_changed:
-        body["analysis"] = None
     updated = board
-    previous = previous_settings(board, brief="briefOverride" in body, notes=send_notes is not None,
-                                 skip={str(image.get("id")) for image in original} - {
-                                     str(image.get("id")) for image in current})
-    if body:
-        updated = _send(api, "PUT", f"/api/moodboards/{board['id']}", json=body, headers=headers,
-                        person_brief=refused_put)
+    # `previous` undoes only what this call changes: the image settings it
+    # changes, then (once the PUT is saved) the fields that PUT changed.
+    previous: dict[str, Any] = {}
+    images_undo = _images_undo(original, current)
+    if images_undo:
+        previous["images"] = images_undo
+    # Fields given outright: re-sent after a conflict only while the board
+    # still holds what this call read for them (see _changed_under).
+    outright = [key for key, given in (("name", name), ("notes", notes), ("mode", mode), ("strength", strength),
+                                       ("direction", direction), ("avoid", avoid), ("pinnedColors", pinned_colors),
+                                       ("clashMode", clash_mode), ("colorChoices", color_choices),
+                                       ("sendNotes", send_notes), ("briefOverride", brief_override))
+                if given is not None]
+    edited = False
+    # The way back as one checked `restore`: the batch's own undo, then the
+    # fields the PUT changed (expecting what it wrote), so undoing it skips
+    # whatever someone else has changed since (undo_board).
+    undo_slices: list[dict[str, Any]] = []
+    steering_changed = False
+    checked = True  # the PUT carries baseVersion (an older Nebula refuses the key)
+    if ops:
+        try:
+            # The backend clears the analysis itself when what it reads changed.
+            answer = _send(api, "POST", f"/api/moodboards/{board['id']}/edits", json={"ops": ops},
+                           headers=headers)
+            updated = answer["board"]
+            edited = True
+            for op in (answer.get("undo") or {}).get("ops") or []:
+                undo_slices.extend(op.get("slices") or [])
+            if undo_slices:
+                previous["undo"] = _undo_token(list(undo_slices))
+        except NebulaAPIError as exc:
+            taken = _image_taken(exc, original, str(board["id"]))
+            if taken is not None:
+                raise taken from exc
+            if not _edits_missing(exc):
+                raise
+            # An older Nebula: the whole image list goes with the PUT, as before,
+            # without baseVersion, which it doesn't know.
+            checked = False
+            # A private note isn't an analysis input, so changing only that keeps it.
+            steering_changed = _steering(current) != _steering(original)
+    try:
+        at = updated
+        for attempt in range(1, BOARD_WRITE_TRIES + 1):
+            body, changed, refused_put = fields_for(at)
+            moved = _changed_under(board, at, body, outright)
+            if moved:
+                raise MoodboardError(
+                    f"{_FIELD_LABELS[moved]} was changed by someone else after this call read the board, so it "
+                    f"wasn't set. Nothing more was written: read the board again (`nebula moodboard show "
+                    f"{board['id']}`) and run the change again to set it over theirs.")
+            if not checked:
+                body["images"] = current
+            if changed or steering_changed:
+                body["analysis"] = None
+            if not body:
+                updated = at  # nothing left to send: the board as last read is the board
+                break
+            fields_undo = _fields_undo(at, body)
+            if checked and isinstance(at.get("version"), int):
+                body["baseVersion"] = at["version"]
+            try:
+                updated, took_base = _put_board(api, str(board["id"]), body, headers, refused_put)
+                previous.update(fields_undo)
+                fields = _fields_slice(at, updated) if took_base else None
+                if fields is not None:
+                    undo_slices.append(fields)
+                    previous["undo"] = _undo_token(list(undo_slices))
+                break
+            except NebulaAPIError as exc:
+                if not (exc.status == 409 and "baseVersion" in body):
+                    raise
+                if attempt == BOARD_WRITE_TRIES:
+                    raise MoodboardError(
+                        f"The board kept changing while this ran ({BOARD_WRITE_TRIES} tries), so its settings "
+                        f"weren't saved. Nothing more was written: read it again (`nebula moodboard show "
+                        f"{board['id']}`) and redo the change.") from exc
+                at = get_board(api, str(board["id"]), headers)
+    except (MoodboardError, NebulaAPIError) as exc:
+        if not edited:
+            raise
+        # The image changes are saved: hand back what undoes them.
+        reason = (str(exc) if isinstance(exc, MoodboardError)
+                  else f"Saving the board's settings failed: {exc.detail}")
+        if not previous:  # the image ops landed but set what the board already held
+            raise MoodboardError(f"{reason} The image changes were saved, and changed nothing.") from exc
+        raise MoodboardError(f"{reason} The image changes were saved; `previous` puts them back.",
+                             previous=previous, board_id=str(board["id"])) from exc
     if keep_brief:
         keep_path = f"/api/moodboards/{board['id']}/brief-override/keep"
         if not body:
@@ -921,6 +1295,8 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
                     reason = "The board's hand-written brief was removed while this ran, so there is none to keep."
                 else:
                     reason = f"Keeping the brief failed: {exc.detail}"
+                if not previous:  # the PUT set what the board already held
+                    raise MoodboardError(f"{reason} The other changes were saved, and changed nothing.") from exc
                 raise MoodboardError(f"{reason} {_OTHERS_SAVED}", previous=previous,
                                      board_id=str(board["id"])) from exc
     return updated, removed, previous
@@ -1002,15 +1378,18 @@ def _steering(images: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # Every key previous_settings can return: update_board's arguments that put
 # a board back (`nebula moodboard set --restore` checks against it). Each
 # image in `images` carries its weight, notes, private note and excluded.
+# `undo` is the checked way back a change hands over too (undo_board).
 RESTORE_KEYS = ("name", "notes", "mode", "strength", "images", "direction", "avoid", "pinned_colors",
-                "brief_override", "clash_mode", "color_choices", "send_notes")
+                "brief_override", "clash_mode", "color_choices", "send_notes", "undo")
 
 
 def previous_settings(board: dict[str, Any], *, brief: bool = False, notes: bool = False,
                       skip: Iterable[str] = ()) -> dict[str, Any]:
-    """What `update_board` takes to put a board back the way it was: its
-    settings, each image's weight, notes, private note and excluded, by image
-    id, and the brief fields (pass them as update_board's keyword arguments).
+    """What `update_board` takes to put a whole board back the way it was:
+    its settings, each image's weight, notes, private note and excluded, by
+    image id, and the brief fields (pass them as update_board's keyword
+    arguments). update_board's own `previous` is the part of this its change
+    touched (_fields_undo, _images_undo).
     A Nebula without private notes sends none, and `previous` has none.
 
     `skip` names images the change took off the board. They aren't in

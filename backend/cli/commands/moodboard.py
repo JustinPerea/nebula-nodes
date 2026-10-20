@@ -456,15 +456,21 @@ def run(client: NebulaClient, args) -> None:
             print(f"Made {board.get('name')} ({board.get('id')}) with "
                   f"{_added_line(len(board.get('images') or []), skipped)}. It's in Moodboard Studio.")
         elif verb == "add":
-            board, added, skipped = boards.add_to_board(api, args.board, args.sources, headers=headers)
+            board, added, skipped, undo = boards.add_to_board(api, args.board, args.sources, headers=headers)
+            ids = boards.added_ids(board, undo)
             if args.json:
-                _print_json(boards.brief(board))
+                _print_json({**boards.brief(board), "added": added, "duplicatesSkipped": skipped, "addedIds": ids,
+                             "undo": undo})
                 return
             print(f"Added {_added_line(added, skipped)} to {board.get('name')} "
                   f"({len(board.get('images') or [])} in all).")
+            if ids:
+                removes = " ".join(f"--remove {image_id}" for image_id in ids)
+                print(f"Take them off again: nebula moodboard set {board.get('id')} {removes}")
             if added:
                 print(f"Its analysis is out of date now: `nebula moodboard analyze {board.get('id')}`")
         elif verb == "set":
+            skipped: list[str] = []  # what an undo left as is
             edits: dict[str, dict[str, Any]] = {}
             for image, value in _pairs(args.weight, "--weight"):
                 edits.setdefault(image, {"image": image})["weight"] = value
@@ -486,8 +492,14 @@ def run(client: NebulaClient, args) -> None:
             if args.restore is not None:
                 if edits or args.remove or _changes_flags(args):
                     _fail("--restore puts back a whole `previous`, so it can't go with other changes")
-                board, removed, previous = boards.update_board(api, args.board, **_read_previous(args.restore),
-                                                               headers=headers)
+                restore = _read_previous(args.restore)
+                if "undo" in restore:
+                    # One checked restore: what changed since is left as it is, and said.
+                    rest = {key: value for key, value in restore.items() if key != "undo"}
+                    board, removed, previous, skipped = boards.undo_board(api, args.board, restore["undo"],
+                                                                          fallback=rest, headers=headers)
+                else:  # a `previous` from before checked undo
+                    board, removed, previous = boards.update_board(api, args.board, **restore, headers=headers)
             else:
                 board, removed, previous = boards.update_board(
                     api, args.board, name=args.name, notes=args.notes, mode=args.mode, strength=args.strength,
@@ -499,9 +511,12 @@ def run(client: NebulaClient, args) -> None:
                     leave_out_flagged=args.leave_out_flagged, reset_colors=args.reset_color,
                     clash_mode=args.clash_mode, send_notes=args.send_notes, headers=headers)
             if args.json:
-                _print_json({**boards.brief(board), "removed": removed, "previous": previous})
+                _print_json({**boards.brief(board), "removed": removed, "previous": previous,
+                             **({"skipped": skipped} if args.restore is not None else {})})
                 return
             print(f"Updated {board.get('name')} ({board.get('id')}).")
+            for message in skipped:
+                print(f"  {message}.")
             for url in removed:
                 print(f"  Took {url} off the board. Put it back with `nebula moodboard add {board.get('id')} {url}`.")
             if not board.get("analysis"):
@@ -663,7 +678,8 @@ def add_parser(sub) -> None:
                          help="Keep the board's notes for people and agents only (the default)")
     set_p.add_argument("--restore", metavar="FILE",
                        help="Undo a change: the `previous` from `set --json` (or its whole output), "
-                            "as a file or - for stdin")
+                            "as a file or - for stdin. What someone changed since is left as they set it, "
+                            "and said")
     set_p.add_argument("--json", action="store_true", help="Print JSON")
 
     analyze_p = msub.add_parser(

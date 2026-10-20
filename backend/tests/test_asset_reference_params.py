@@ -322,12 +322,16 @@ def test_moodboard_changes_reach_the_canvas(api):
     api.client.put(f"/api/moodboards/{board['id']}", json={"name": "Renamed"})
     api.client.post(f"/api/moodboards/{board['id']}/analyze")
     api.client.delete(f"/api/moodboards/{board['id']}")
-    assert _changed(api) == [
+    changed = _changed(api)
+    assert [{key: m[key] for key in ("type", "kind", "id", "deleted")} for m in changed] == [
         {"type": "storedAssetChanged", "kind": "moodboard", "id": board["id"], "deleted": False},
         {"type": "storedAssetChanged", "kind": "moodboard", "id": board["id"], "deleted": False},
         {"type": "storedAssetChanged", "kind": "moodboard", "id": board["id"], "deleted": False},
         {"type": "storedAssetChanged", "kind": "moodboard", "id": board["id"], "deleted": True},
     ]
+    # A write also says the board's new version, so an open Studio can tell
+    # someone else's edit from the echo of its own (moodboard canvas PR3).
+    assert [m.get("version") for m in changed] == [None, 2, 3, None]
 
 
 def test_character_changes_reach_the_canvas(api):
