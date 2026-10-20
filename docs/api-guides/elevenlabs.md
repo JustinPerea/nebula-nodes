@@ -136,7 +136,7 @@ Prices (checked 2026-10-14 on https://elevenlabs.io/pricing/api): Music is "$0.1
 | History — `GET /v1/history` | Yes | **none** | Past-generation retrieval/download. Nebula manages its own run outputs instead. |
 | Streaming / WebSocket variants (TTS stream, multi-context, realtime STT) | Yes | **none** | All Nebula nodes are request/response; no low-latency streaming. |
 
-Coverage: 8 of the ~18 major capability families in the table have a node (TTS, sound effects, speech-to-speech, isolation, dubbing, speech-to-text, music and text-to-dialogue), some of them partly.
+Coverage: 8 of the ~19 major capability families in the table have a node (TTS, sound effects, speech-to-speech, isolation, dubbing, speech-to-text, music and text-to-dialogue), some of them partly.
 
 Notable unused capabilities: music extras (composition plans, stems), **Voice Design** (create a new voice from a description), and **Voice cloning** (IVC/PVC).
 
