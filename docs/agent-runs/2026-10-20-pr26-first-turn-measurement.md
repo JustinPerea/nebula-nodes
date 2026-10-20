@@ -1,6 +1,6 @@
 # PR26 measurement: orientation turns before and after (not run yet)
 
-**Status: waiting for Justin's OK.** The fifteen runs start Claude Code sessions on Justin's Claude plan. GM's single run cost $0.226, so fifteen come to about $3.40 at that rate (MCP runs may differ). Nothing in Nebula is spent: no paid node runs (below). When they have run, the counts go in `implementation-notes.md` and plan §10, and this file keeps the sanitized table per run, as GM's record does (`2026-10-20-cli-headless.md`).
+**Status: waiting for Justin's OK** (the setup questions are settled, below). The fifteen runs start Claude Code sessions on Justin's Claude plan. GM's single run cost $0.226, so fifteen come to about $3.40 at that rate (MCP runs may differ). Nothing in Nebula is spent: no paid node runs (below). When they have run, the counts go in `implementation-notes.md` and plan §10, and this file keeps the sanitized table per run, as GM's record does (`2026-10-20-cli-headless.md`).
 
 Plan v2.7 §5.10.1 sets the method. This file is the exact commands.
 
@@ -21,11 +21,18 @@ Arm A checks that the baseline reproduces GM's 8 of 16. The target on B, C and E
 Every run gets a fresh isolated stack, so no run sees another's canvas. Ports 8787 (backend) only; never 8000-8010 or 5173.
 
 ```bash
-# 0. Once: a checkout per side. The baseline is a detached worktree of origin/main.
-git -C ~/Developer/projects/nebula_nodes worktree add --detach "$SCRATCH/nebula_nodes-pr26-baseline" origin/main
-ln -s ~/Developer/projects/nebula_nodes/backend/.venv "$SCRATCH/nebula_nodes-pr26-baseline/backend/.venv"
+# 0. Once: a detached checkout per side, pinned around PR26's merge so later
+#    merges don't move either side. Before PR26 merges: origin/main and the branch.
+MAIN=~/Developer/projects/nebula_nodes
+MERGE=$(git -C $MAIN log origin/main --merges --first-parent --grep 'feat/agent-first-turn' -1 --format=%H)
+BEFORE=${MERGE:+$MERGE^1}; BEFORE=${BEFORE:-origin/main}; AFTER=${MERGE:-origin/feat/agent-first-turn}
+for side in baseline after; do
+  ref=$([ $side = baseline ] && echo "$BEFORE" || echo "$AFTER")
+  git -C $MAIN worktree add --detach "$SCRATCH/nebula_nodes-pr26-$side" "$ref"
+  ln -s $MAIN/backend/.venv "$SCRATCH/nebula_nodes-pr26-$side/backend/.venv"
+done
 REPO=$SCRATCH/nebula_nodes-pr26-baseline   # arms A and D
-REPO=~/Developer/projects/nebula_nodes-pr26-first-turn   # arms B, C and E
+REPO=$SCRATCH/nebula_nodes-pr26-after      # arms B, C and E
 
 # 1. Isolated state. Placeholder keys make GM's models show as ready (as on his
 #    Nebula). Two locks keep every provider call from leaving the machine:
@@ -88,7 +95,7 @@ SYSTEM='You are working on the person'"'"'s open Nebula Nodes canvas; they are w
 # Arm C only: the same text with `nebula apply --help` replaced by `nebula context`.
 PROMPT="Turn my Good Machines moodboard (it's in my Good Machines project) into a hero image for the site: a quiet lake at dawn. Show me what the board gives you first, and ask me before anything that costs money."
 
-cd $T && PATH="$T/bin:$REPO/backend/.venv/bin:$PATH" NEBULA_URL=http://127.0.0.1:8787 NEBULA_DEMO_REPO=$REPO NEBULA_AGENT_NAME="Claude Code" \
+mkdir -p $T/agentcwd && cd $T/agentcwd && PATH="$T/bin:$REPO/backend/.venv/bin:$PATH" NEBULA_URL=http://127.0.0.1:8787 NEBULA_DEMO_REPO=$REPO NEBULA_AGENT_NAME="Claude Code" \
   claude -p "$PROMPT" --model claude-sonnet-5-5 --append-system-prompt "$SYSTEM" \
     --allowedTools "Bash(nebula:*)" --strict-mcp-config --mcp-config '{"mcpServers":{}}' \
     --max-budget-usd 0.6 --output-format stream-json --verbose > $T/run.jsonl
@@ -104,7 +111,7 @@ cat > $T/mcp.json <<JSON
 JSON
 SYSTEM_MCP='You are working on the person'"'"'s open Nebula Nodes canvas; they are watching it. Stay in the open project (a board from another project works by its id). Use only the nebula tools. Narrate as you work with point_at and a short say: a few words. To show the person what a board gives, wire the Moodboard'"'"'s moodboard output into a Preview node and run the Preview; Moodboard, Preview and Text input are free to run. Anything that calls a paid model goes through propose_change; then stop and tell the person it is waiting for their Accept. Keep chat replies to one or two short sentences.'
 
-cd $T && claude -p "$PROMPT" --model claude-sonnet-5-5 --append-system-prompt "$SYSTEM_MCP" \
+mkdir -p $T/agentcwd && cd $T/agentcwd && claude -p "$PROMPT" --model claude-sonnet-5-5 --append-system-prompt "$SYSTEM_MCP" \
     --allowedTools "mcp__nebula" --strict-mcp-config --mcp-config $T/mcp.json \
     --max-budget-usd 0.6 --output-format stream-json --verbose > $T/run.jsonl
 ```
@@ -112,17 +119,27 @@ cd $T && claude -p "$PROMPT" --model claude-sonnet-5-5 --append-system-prompt "$
 ### Count, then clean up
 
 ```bash
-python3 ~/Developer/projects/nebula_nodes-pr26-first-turn/scripts/count_agent_turns.py $T/run.jsonl          # table
-python3 ~/Developer/projects/nebula_nodes-pr26-first-turn/scripts/count_agent_turns.py A1.jsonl A2.jsonl A3.jsonl   # an arm: median and range
+python3 $SCRATCH/nebula_nodes-pr26-after/scripts/count_agent_turns.py $T/run.jsonl          # table
+python3 $SCRATCH/nebula_nodes-pr26-after/scripts/count_agent_turns.py A1.jsonl A2.jsonl A3.jsonl   # an arm: median and range
 kill $(cat $T/backend.pid); lsof -ti tcp:8787 | xargs kill 2>/dev/null; rm -rf $T     # the state dir holds the person token
 ```
 
 During each run, sample `lsof -nP -a -p <backend pid> -i` a few times and keep only the count of non-loopback connections (expected 0).
 
-## Two choices to confirm before running
+## Settled with GM (2026-10-20)
 
-- **`--append-system-prompt`.** GM's record gives his system prompt but not the flag that carried it. Appending keeps Claude Code's own system prompt, as a normal Claude Code session has; `--system-prompt` would replace it. Use the one GM used, if he can say.
-- **The MCP arms' system prompt** (`SYSTEM_MCP` above) is GM's with the CLI words changed to the tools': no command list (the server's instructions name `start_here`), `point_at`, `propose_change`. The plan says "the same task on the MCP path" without the text; this is the closest equivalent.
+GM checked his recorder script and the files it read:
+- **The flag was `--append-system-prompt`.**
+- **The record's system prompt and user prompt are the exact text used.** GM compared them programmatically.
+- **His command:** `claude -p PROMPT --output-format stream-json --verbose --model claude-sonnet-5-5 --allowedTools "Bash(nebula:*)" --strict-mcp-config --append-system-prompt SYS`, with `NEBULA_AGENT_NAME="Claude Code"` and the guard wrapper first on PATH.
+- **It ran from an empty folder,** so no project CLAUDE.md was loaded. The commands above `cd` into an empty `$T/agentcwd` for the same reason.
+- **There was no `--bare` or `--setting-sources`,** so user-level settings and `~/.claude/CLAUDE.md` applied, as for any `claude -p` on this Mac. The runs here leave those as they are.
+
+Still a choice: **the MCP arms' system prompt** (`SYSTEM_MCP` above). It is GM's text with the CLI words changed to the tools' words:
+- no command list, because the server's instructions name `start_here`;
+- `point_at` and `propose_change` in place of the CLI commands.
+
+The plan says "the same task on the MCP path" without giving the text, so this is the closest equivalent.
 
 ## Results
 
