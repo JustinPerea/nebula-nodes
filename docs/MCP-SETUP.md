@@ -21,9 +21,35 @@ Configure an MCP host to launch:
 color, and daily limit, and shows the exact config for Hermes, OpenClaw,
 Claude Desktop, Claude Code, Cursor or Codex.
 
+An agent's first call is `start_here` (the server's instructions say so).
+One answer gives what a first turn needs, each part with its own budget so
+the whole stays under about 7,000 tokens (28,000 characters), below Claude
+Code's 10,000-token warning and its 50,000-character file cut:
+
+| Part | What's in it | Past its budget |
+|---|---|---|
+| `canvas` | The open project, `view.stale`, the selection, other agents' cursors, and each node's id, name, `definitionId`, state, `onScreen`, `inputsFrom` and up to 8 params (each cut to 60 characters, redacted as `look_at_canvas` redacts them) | The first nodes in full (selected, then on screen), the rest as `others: {id: name}`, `truncated: true`, and "look_at_canvas gives every node" |
+| `pins` | Open pins: id, text, anchor | The 10 newest, and `openCount` |
+| `proposals` | Open proposals, briefly | 5, and `count` |
+| `boards` | Every moodboard: id, name, `where` (`current`, `global` or the project's name), image count, analyzed or not, Direction cut to 80 characters. Boards in Recently deleted, or in a project there, are left out | 30 rows (this project, then Global, then the rest by last edit), `count`, and "moodboard_get gives one in full" |
+| `nodes` | The node types that run here, by category: `{id: price}` (`"free"`, `[low, high]` USD or `null`), `runsWith` for those that don't run on a key, and notes on modes, providers and Krea | Categories in a fixed order, cut at the budget, `rest: {category: count}`, and "find_nodes(category=…) gives the rest" |
+| `spend` | The per-run limit, the budget kind, its limit and what is used, Krea plan runs. Outside agents share one 24-hour budget, so `usedUsd` is what all of them used; an app with a token also gets its own line (`limitUsd`, `usedUsd`) beside the shared one (`sharedLimitUsd`, `sharedUsedUsd`) | |
+| `next` | `events.cursor` and the journal id for `wait_for_canvas_change`, and how to describe a node, propose and answer a pin | |
+
+No private note, image note, board note or pin reply history goes in. The
+route is `GET /api/agent/start` (`?via=cli` words the hints for the CLI);
+`nebula context` prints the same, and `nebula context --json` prints it as
+it comes. Later turns use `look_at_canvas`, which stays the full snapshot.
+
+The server's instructions stay under 3,000 characters, inside the 4,096
+Claude Code shows, with the commons guide's two safety lines first in its
+part. How to use moodboards, projects and Recently deleted is in those
+tools' own descriptions.
+
 The server exposes these tools for building and running (see
 [Building and running over MCP](#building-and-running-over-mcp)):
 
+- `start_here`: the first-turn answer above.
 - `find_nodes`: node types to build with, best matches first, each with
   `runsWith` (key, free, krea, nous) and a list `price` at default settings.
   `ready_only=false` also lists nodes that can't run here, with what's
@@ -47,12 +73,15 @@ The server exposes these tools for building and running (see
   [Provider routes](PROVIDER-ROUTES.md#hidden-settings-paramvisiblewhen).
 - `edit_canvas`: adds nodes, wires, param changes, renames, moves, removals
   (`remove`) and unwires (`unwire`) in one call, all or nothing: everything
-  `nebula apply` does. Same shape as `propose_change`, with no limit on how
-  much one call adds. `arrange: true` has the canvas lay out the new nodes by
-  their real size. `steps` sends a list of such plans one after another,
-  with the checks and stop-and-report of `nebula apply`'s steps. Its result
-  has `undo`, the token that takes the edit back (see
-  [Undoing your own edit](#undoing-your-own-edit)).
+  `nebula apply` does, with no limit on how much one call adds. `arrange:
+  true` has the canvas lay out the new nodes by their real size. `steps`
+  sends a list of such plans one after another, with the checks and
+  stop-and-report of `nebula apply`'s steps. Its result has `undo`, the token
+  that takes the edit back (see
+  [Undoing your own edit](#undoing-your-own-edit)). A proposal
+  (`propose_change`) takes the same nodes, wires and params, but not moves,
+  removals, unwires, `arrange`, `steps` or renames of nodes already on the
+  canvas; it can name its own new nodes (`rename`).
 - `remove_from_canvas`: deletes nodes or single wires, all or nothing. Its
   result has `undo` too, which puts the nodes back with their params,
   outputs, names and wires.
@@ -492,9 +521,15 @@ nebula proposals                      # what's waiting for the person
 New nodes use refs (`+up`, letters, digits, `_` and `-`, up to 24); existing
 nodes use their ids (`n4`). `--at +up=820,140` places a node; otherwise
 Nebula puts new nodes to the right of the nodes they connect to, or in the
-middle of the person's view, clear of existing nodes. `--file plan.json`
-takes the same thing as JSON, which is also the `POST /api/canvas/proposals`
-body and the `propose_change` arguments:
+middle of the person's view, clear of existing nodes. `--rename
++up="Wide, upscaled"` names a new node: the ghost shows the name with the
+model beside its ref ("+up · Topaz Image Upscale · proposed by Codex"), and
+Accept applies it. A proposal can't rename a node already on the canvas
+(422, "Rename existing nodes with edit_canvas (or `nebula rename`)"), and
+`nebula propose` doesn't take `apply`'s `--move`, `--remove`, `--unwire` or
+`--arrange` (each gets an error naming it). `--file plan.json` takes the
+same thing as JSON, which is also the `POST /api/canvas/proposals` body and
+the `propose_change` arguments:
 
 ```json
 {
@@ -502,9 +537,13 @@ body and the `propose_change` arguments:
   "nodes": [{"ref": "+up", "definitionId": "topaz-image-upscale", "params": {"upscale_factor": 2}}],
   "edges": [{"source": "n4", "sourceHandle": "image", "target": "+up", "targetHandle": "image"}],
   "params": [{"nodeId": "n4", "params": {"aspect_ratio": "16:9"}}],
+  "rename": {"+up": "Wide, upscaled"},
   "run": ["+up"]
 }
 ```
+
+A named node's entry in the proposal has `name` (the given name) and
+`model` (the model's own name); an unnamed one has only `name`, the model's.
 
 `--wait` exits 0 when accepted (printing the new ids and what the canvas will
 run), 3 when rejected (with the person's reason, if any), 4 when withdrawn,

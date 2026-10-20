@@ -85,6 +85,7 @@ from services.settings import (
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
+from services import agent_start, node_categories
 from services import output_thumbnail
 from services.node_errors import NodeErrors
 from services import project_cover
@@ -3595,14 +3596,9 @@ def _keyed_mode_hint(definition: Mapping[str, Any]) -> str | None:
                      for (keys, priced), values in groups.items())
 
 
-@app.get("/api/agent/nodes")
-async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool = True, limit: int = 20) -> dict[str, Any]:
-    """Node types an agent can use, best matches first: whether each can run
-    here (and if not, what's missing) and its list price at default settings.
-
-    Every word of `query` must appear in the id, name or description."""
+def _agent_node_context() -> dict[str, Any]:
+    """What find_nodes and the start call read once per request: settings, keys, Krea sign-in, prices."""
     settings = load_settings()
-    keys = node_readiness.configured_keys(settings)
     try:
         krea_signed_in = _krea_connector().status().get("status") == "connected"
     except Exception:  # noqa: BLE001 - an unreadable Krea vault just means not signed in
@@ -3611,57 +3607,84 @@ async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool
         pricing = model_pricing.load_pricing().get("nodes") or {}
     except (OSError, ValueError):
         pricing = {}
+    return {"settings": settings, "keys": node_readiness.configured_keys(settings), "krea": krea_signed_in,
+            "pricing": pricing, "definitions": node_registry.get_all()}
+
+
+def _agent_node_row(definition: Mapping[str, Any], context: Mapping[str, Any]) -> dict[str, Any]:
+    """One node type as find_nodes lists it: whether it runs here (and if not,
+    what's missing) and its list price at default settings."""
+    settings = context["settings"]
+    definitions = context["definitions"]
+    name = str(definition.get("displayName") or definition["id"])
+    access = node_readiness.node_access(definition, context["keys"], context["krea"], definitions)
+    row: dict[str, Any] = {
+        "id": definition["id"], "name": name, "category": definition.get("category"),
+        "runsWith": access,
+    }
+    if definition.get("description"):
+        row["description"] = _short(definition["description"])
+    if access is None:
+        row["missing"] = node_readiness.missing(definition, context["krea"], definitions)
+    hint = _keyed_mode_hint(definition)
+    if hint:
+        row["needsKeyFor"] = hint  # free at its defaults; describe_node has the detail
+    if node_route.has_routes(definition):
+        # Each provider route it can run on, in Auto order (describe_node has each one).
+        row["providers"] = [str(route["id"]) for route in node_route.routes_of(definition)]
+    if definition["id"] == model_pricing.CINEMA_SCENE:
+        row["price"] = None  # its base model's price, once per shot (describe_node)
+    elif model_pricing.is_local(definition):
+        row["price"] = "free"
+    elif definition.get("apiProvider") == "utility":
+        row["price"] = None
+    else:
+        estimate = model_pricing.estimate_node(
+            context["pricing"].get(definition["id"]), definition, {},
+            model_pricing.route_price_key(
+                definition, node_route.select_route(definition, {}, settings.get("apiKeys") or {}))
+            if node_route.has_routes(definition)
+            else model_pricing.route_provider(definition, settings.get("apiKeys") or {}))
+        row["price"] = ([round(estimate["low"], 4), round(estimate["high"], 4)]
+                        if estimate and estimate.get("currency") == "usd" else None)
+    return row
+
+
+@app.get("/api/agent/nodes")
+async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool = True, limit: int = 20) -> dict[str, Any]:
+    """Node types an agent can use, best matches first: whether each can run
+    here (and if not, what's missing) and its list price at default settings.
+
+    Every word of `query` must appear in the id, name or description.
+    `category` is a category id (image-gen) or its short name (image),
+    services/node_categories.py."""
+    context = _agent_node_context()
     words = [word for word in query.lower().split() if word]
     limit = max(1, min(int(limit), 100))
+    definitions = context["definitions"]
+    wanted = (node_categories.resolve(category, {str(d.get("category")) for d in definitions.values()}) or category
+              if category else "")
     rows: list[tuple[tuple[int, int, str], dict[str, Any]]] = []
-    definitions = node_registry.get_all()
     for definition in definitions.values():
-        if category and definition.get("category") != category:
+        if wanted and definition.get("category") != wanted:
             continue
         name = str(definition.get("displayName") or definition["id"])
         haystack = f"{definition['id']} {name} {definition.get('description') or ''}".lower()
         if any(word not in haystack for word in words):
             continue
-        access = node_readiness.node_access(definition, keys, krea_signed_in, definitions)
-        if ready_only and access is None:
+        if ready_only and node_readiness.node_access(definition, context["keys"], context["krea"], definitions) is None:
             continue
-        row: dict[str, Any] = {
-            "id": definition["id"], "name": name, "category": definition.get("category"),
-            "runsWith": access,
-        }
-        if definition.get("description"):
-            row["description"] = _short(definition["description"])
-        if access is None:
-            row["missing"] = node_readiness.missing(definition, krea_signed_in, definitions)
-        hint = _keyed_mode_hint(definition)
-        if hint:
-            row["needsKeyFor"] = hint  # free at its defaults; describe_node has the detail
-        if node_route.has_routes(definition):
-            # Each provider route it can run on, in Auto order (describe_node has each one).
-            row["providers"] = [str(route["id"]) for route in node_route.routes_of(definition)]
-        if definition["id"] == model_pricing.CINEMA_SCENE:
-            row["price"] = None  # its base model's price, once per shot (describe_node)
-        elif model_pricing.is_local(definition):
-            row["price"] = "free"
-        elif definition.get("apiProvider") == "utility":
-            row["price"] = None
-        else:
-            estimate = model_pricing.estimate_node(
-                pricing.get(definition["id"]), definition, {},
-                model_pricing.route_price_key(
-                    definition, node_route.select_route(definition, {}, settings.get("apiKeys") or {}))
-                if node_route.has_routes(definition)
-                else model_pricing.route_provider(definition, settings.get("apiKeys") or {}))
-            row["price"] = ({"usd": [round(estimate["low"], 4), round(estimate["high"], 4)]}
-                            if estimate and estimate.get("currency") == "usd" else None)
+        row = _agent_node_row(definition, context)
+        if isinstance(row["price"], list):
+            row["price"] = {"usd": row["price"]}
         # Ready first; then exact id, id prefix, name hits; then by name.
         idq = " ".join(words)
         rank = 0 if definition["id"] == idq else 1 if idq and definition["id"].startswith(idq) else \
             2 if idq and idq in name.lower() else 3
-        rows.append(((0 if access else 1, rank, name.lower()), row))
+        rows.append(((0 if row["runsWith"] else 1, rank, name.lower()), row))
     rows.sort(key=lambda pair: pair[0])
     return {"total": len(rows), "nodes": [row for _, row in rows[:limit]],
-            "krea": "signed in" if krea_signed_in else "not signed in"}
+            "krea": "signed in" if context["krea"] else "not signed in"}
 
 
 PROVIDER_CHOICE_NOTE = (
@@ -4161,6 +4184,93 @@ async def get_canvas_snapshot() -> dict[str, Any]:
     return snapshot
 
 
+def _start_node_notes(rows: list[dict[str, Any]], context: Mapping[str, Any], via: str) -> list[str]:
+    """What the start call's node list can't say in a price: nodes free at
+    their defaults that call a provider in another mode, a local node whose
+    default base model can't run here, Krea plan billing and provider routes.
+    The CLI's `nebula context` said the same before it moved onto the route."""
+    ready = [row for row in rows if row.get("runsWith")]
+    notes: list[str] = []
+    keyed: dict[str, list[str]] = {}
+    for row in ready:
+        if row.get("needsKeyFor"):
+            keyed.setdefault(str(row["needsKeyFor"]), []).append(str(row["id"]))
+    for hint, ids in keyed.items():
+        notes.append(f"{', '.join(ids)}: free at the defaults; {hint}.")
+    definitions = context["definitions"]
+    for row in ready:
+        definition = definitions.get(str(row["id"])) or {}
+        via_spec = node_readiness.provider_via(definition) or {}
+        if via_spec.get("kind") == "model":
+            options = node_readiness.detail(definition, context["keys"], context["krea"], definitions) or {}
+            if options.get("note"):
+                notes.append(f"{row['id']}: {options['note']}")
+    look = "`nebula info <id>`" if via == "cli" else "describe_node"
+    propose = "`nebula propose`" if via == "cli" else "propose_change"
+    if any(row.get("runsWith") == "krea" for row in ready):
+        notes.append(f"runsWith krea: runs on the signed-in Krea account. Billing a node differently (_kreaAuth) "
+                     f"is the person's call: {propose} it.")
+    if any(row.get("providers") for row in ready):
+        notes.append(f"A node with providers runs on one route (_provider; {look} lists them); switching it is "
+                     f"the person's call: {propose} it.")
+    if via == "cli":
+        # find_nodes' hints name MCP tools; a shell-only agent reads the `nebula` commands.
+        notes = [_cli_words(note) for note in notes]
+    return notes
+
+
+_CLI_WORDS = {"describe_node": "`nebula info <id>`", "propose_change": "`nebula propose`",
+              "find_nodes": "`nebula nodes`", "edit_canvas": "`nebula apply`"}
+
+
+def _cli_words(text: str) -> str:
+    return re.sub(r"\b(" + "|".join(_CLI_WORDS) + r")\b", lambda match: _CLI_WORDS[match.group(1)], text)
+
+
+@app.get("/api/agent/start")
+async def agent_start_here(request: Request, via: str = "mcp") -> dict[str, Any]:
+    """An agent's first call: the canvas, open pins and proposals, every board,
+    the node types that run here with prices, and the spend limits, each in
+    its own budget (services/agent_start.py). MCP `start_here` and `nebula
+    context` print it; `via=cli` words its hints as `nebula` commands."""
+    if via not in agent_start.VIAS:
+        raise HTTPException(status_code=422, detail="via must be mcp or cli")
+    headers = current_request_headers()
+    caller = identify_agent(headers)
+    selected = selection_context.snapshot(cli_graph, node_registry).get("selectedNodeIds", [])
+    snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=selected)
+    catalog = project_store.read()
+    active_id = catalog.get("activeProjectId")
+    projects = catalog.get("projects") or {}
+    active = projects.get(active_id) if active_id else None
+    project = {"id": active_id, "name": active.get("name")} if active else None
+    try:
+        pins = canvas_pins.list()["pins"]
+    except (PinError, ProjectStoreError):
+        pins = []
+    await _sweep_proposals()
+    briefs = [canvas_proposals.brief(p) for p in canvas_proposals.open_list()]
+    # Reads every board file; off the event loop.
+    summaries = await asyncio.to_thread(lambda: _moodboard_store().summaries())
+    context = await asyncio.to_thread(_agent_node_context)
+    rows = await asyncio.to_thread(
+        lambda: [_agent_node_row(definition, context) for definition in context["definitions"].values()])
+    spend = await agent_spend_status(request)
+    return agent_start.build(
+        canvas=agent_start.canvas_part(snapshot, project=project, caller_id=caller.id if caller else None, via=via),
+        pins=agent_start.pins_part(pins, via=via),
+        proposals=agent_start.proposals_part(briefs, via=via),
+        boards=agent_start.boards_part(
+            summaries, active_project_id=active_id,
+            project_names={str(pid): str(p.get("name") or pid) for pid, p in projects.items() if isinstance(p, dict)},
+            via=via),
+        nodes=agent_start.nodes_part(rows, total=len(rows), notes=_start_node_notes(rows, context, via),
+                                     krea="signed in" if context["krea"] else "not signed in", via=via),
+        spend=agent_start.spend_part(spend),
+        next=agent_start.next_part({"journal": canvas_events.journal_id, "cursor": canvas_events.latest}, via=via),
+    )
+
+
 def _query_number(raw: str | None, name: str, *, integer: bool, low: float, high: float | None) -> float | None:
     if raw is None or raw == "":
         return None
@@ -4640,12 +4750,15 @@ def _stage_proposal(
         _validate_params(definition_id, change.params)
         candidate.update_params(change.node_id, migrate_param_update(
             definition_id, node.get("params"), _coerce_params(definition_id, change.params)))
+    names = spec.names
     raw_nodes = [
         {
             "tempId": node.ref,
             "definitionId": node.definition_id,
             "params": copy.deepcopy(node.params),
             "position": (positions or {}).get(node.ref) or node.position,
+            # A proposal's name for its own new node (canvas_proposals._names).
+            **({"label": names[node.ref]} if node.ref in names else {}),
         }
         for node in spec.nodes
     ]
@@ -4843,8 +4956,9 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
 
     Body: {note, nodes?: [{ref: "+up", definitionId, params?, position?}],
     edges?: [{source, sourceHandle, target, targetHandle}] (refs or node ids),
-    params?: [{nodeId, params}], run?: [ref or node id]}. Nothing changes on
-    the canvas until the person accepts in Nebula.
+    params?: [{nodeId, params}], run?: [ref or node id], rename?: {"+up": name}}
+    (names for the proposal's own new nodes only). Nothing changes on the
+    canvas until the person accepts in Nebula.
     """
     headers = current_request_headers()
     identity = identify_agent(headers)
