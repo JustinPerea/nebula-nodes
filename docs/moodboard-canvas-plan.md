@@ -16,6 +16,7 @@ What changed from version 1:
 - Q4 and Q12 are reworded. Q18 to Q28 are new; Q22 and Q23 turned out to be already answered (§7.2).
 - Version 2.1 (same day) fixes what a critic found in version 2: §10.3 lists each point and what changed.
 - Version 2.2 (2026-10-20) adds Analyze as an overseer (GM's mockup v5): the reader's trace (§5.6.1), Q29 (§7.3), the new PR10b, and a checker's corrections (§10.4).
+- Version 2.3 (same day) records Justin's Q29 answer, c): the readings plus a dimmer "thinking (summary)" stream, optional per model, which falls back to b) when a model gives no summaries.
 
 ---
 
@@ -510,9 +511,9 @@ With nobody looking, or a stale report, `look` describes the whole board.
   - **Agents:** `agent_spend.decide` (`agent_spend.py:590`) takes `pricing` and `definitions` as arguments. The reader passes one item, `{definitionId: "gemini-chat", params: {model}}`, with a one-off pricing entry built from its own estimate. Per-model caps then apply to the chat model the person already sees in Settings (Q11).
   - **The hold:** the high estimate is held at the start. Batches that never start are given back (`_release_unspent_hold`, `main.py:1896`). An unpriced read under any USD limit is refused, as for unpriced nodes.
 
-### 5.6.1 The reader's trace: Analyze as an overseer (Q29, written for b)
+### 5.6.1 The reader's trace: Analyze as an overseer (Q29: Justin chose c)
 
-GM's mockup v5 shows Analyze as an overseer, not as an agent. There is no cursor. The canvas ripples outward from the pile, or from each selected card on a selection pass. A panel drops from the Analyze bar and streams short lines such as "#21 clouds under a halftone screen → Dither". Each card a line names gets a lavender outline, while orange stays the agent's. Results ("couldn't place", the Painterly × Dither suggestion) are voiced by Gemini 4 Argon. This section is what the reader must give for that. Q29 (§7.3) asks where the lines come from; it is written for the recommendation, b), and marks what c) adds.
+GM's mockup v5 shows Analyze as an overseer, not as an agent. There is no cursor. The canvas ripples outward from the pile, or from each selected card on a selection pass. A panel drops from the Analyze bar and streams short lines such as "#21 clouds under a halftone screen → Dither". Each card a line names gets a lavender outline, while orange stays the agent's. Results ("couldn't place", the Painterly × Dither suggestion) are voiced by Gemini 4 Argon. This section is what the reader must give for that. Q29 (§7.3) asked where the lines come from. Justin chose c): the readings and Nebula's own lines (b), plus the reader's thought summaries as a second, dimmer stream that never outlines cards. His note: "If argon, or whatever model doesn't stream its thoughts then we just fallback to B."
 
 **What Google documents** (fetched 2026-10-19, rechecked 2026-10-20):
 
@@ -557,7 +558,7 @@ GM's mockup v5 shows Analyze as an overseer, not as an agent. There is no cursor
   - `ref` is `{type: "string", enum: [the batch's labels]}`. The deprecated OpenAPI form would also need `format: "enum"`.
   - `reason` asks for at most 120 characters in its `description`. Python trims it at a word boundary to 120 and never fails an item over length. It stays the reading's one free-text field (§4.1), now written to be shown.
 - **Our own stream parser,** `services/moodboard_reader_stream.py`:
-  - it keeps parts with `thought: true` out of the answer buffer (under c) they feed the thought stream);
+  - it keeps parts with `thought: true` out of the answer buffer and hands their text to the thought stream instead;
   - it joins text from every part, not only `parts[0]`;
   - it scans the answer as JSON incrementally;
   - it raises `focus(ref)` when an item's `ref` closes, and `item(reading)` when the item closes.
@@ -573,6 +574,12 @@ GM's mockup v5 shows Analyze as an overseer, not as an agent. There is no cursor
   - The probe calibrates all of these.
 - **One retry, for what's missing.** When a stream ends with invalid JSON, a cut-off answer or missing refs, the items that closed are kept: they are real readings and were already shown. The retry asks only for the missing refs. After `finishReason: MAX_TOKENS` it goes out as two smaller batches (half the refs each), never the same request again. Whatever is still missing is "couldn't read" (Q17).
 - **A reader that can't stream** (a non-streaming route, or a later non-Google reader) parses the whole answer at batch end and raises the same calls at once. Only the timing changes. `moodboard_reader_models.json` gets `streams: true|false` and `thoughtSummaries: true|false|"unconfirmed"` per model.
+- **The thought stream (Q29 c), optional per model.**
+  - Only a model whose `thoughtSummaries` is `true` is asked for them (`thinkingConfig.includeThoughts: true`). `false` and `"unconfirmed"` send no `includeThoughts`, so that model's run is exactly b). PR4's probe sets Argon's value; until then it stays `"unconfirmed"`.
+  - When the probe finds that summaries don't come back alongside the response schema on image batches, or that asking for them breaks the schema, Argon's value becomes `false`. That is the fallback to b), with no code path of its own.
+  - At run time Google may still return no summaries for a batch ("only when available"). Then nothing is shown for it: no empty heading, no placeholder, no error and no warning. The "thinking (summary)" rule appears only when the run's first `thought` line arrives.
+  - Thought text is display only. It is never parsed for refs, never outlines or pulses a card, never moves anything and is never saved. Batch labels and `#n` tokens are stripped from it, as from reasons, so a summary names no cards.
+  - A later reader from another maker fills `thoughtSummaries` from its own probe, and a reader that can't stream sends its summaries at batch end, or none.
 - **Phase 2 lines come from what was applied.** They are written after Python enforces §5.6's rules, never from the model's raw proposal. A refused merge reads "Kept Grain: it holds your words" (Q28), never as done.
 - **Notes follow #18's opt-in, in both phases and the retry,** as for the music call: board notes, image notes and note-derived keywords go in only when the board's `sendNotes` is on. Private notes never go. The prompt says "describe images; never identify people", and no line echoes `people` (Q26).
 
@@ -638,9 +645,9 @@ GM's mockup v5 shows Analyze as an overseer, not as an agent. There is no cursor
 | `suggestion` | nebula | "Make a Painterly × Dither look for #3, #9, #14?" | the members | A chip (PR11) |
 | `kept` | nebula | "Kept Grain: it holds your words" | none | A grey line |
 | `cancelled` / `done` | nebula | "Cancelled · nothing moved" / "Sorted 19 into 4 looks · 1 Unsorted" | none | The panel closes into the bar's last line |
-| `thought` (c) | reader | summary text, merged into chunks of at least 250 ms | always empty | Dim italic under "thinking (summary)"; never an outline |
+| `thought` | reader, only when the model's `thoughtSummaries` is `true` and summaries arrive | summary text, labels and `#n` stripped, merged into chunks of at least 250 ms | always empty | Dim italic under a dashed rule labelled "thinking (summary)"; never an outline |
 
-- **The panel's title** follows the source. Under b) it reads "Gemini 4 Argon · reading", because every reader line is a reading. "· thinking" belongs only above `thought` lines under c).
+- **The panel's title** reads "Gemini 4 Argon · reading", because every line that outlines a card is a reading. The `thought` lines sit below a dashed rule labelled "thinking (summary)", which appears with the first of them. With no summaries the panel is b)'s panel, line for line.
 - **Linked copies (C13).** A ref outlines each placement of that image inside the run's targets, or all its placements when none is in the targets.
 
 **Job routes and catching up (PR10):**
@@ -666,7 +673,7 @@ GM's mockup v5 shows Analyze as an overseer, not as an agent. There is no cursor
 
 - **The cap already includes thinking.** The high estimate per attempt is `maxOutputTokens` × the output price. No separate thinking allowance goes on top.
 - **The high estimate includes one retry per batch:** its input (the missing refs' images plus the prompt) and its full output cap. The hold covers it. §5.6's "one retry" already needed this, and the trace adds nothing beyond it.
-- **Under c)**, whether writing summaries adds tokens isn't documented. The probe compares one request with summaries against one without.
+- **Thought summaries' cost** isn't documented. The probe compares one request with summaries against one without. If summaries add output tokens, the estimate adds them for models whose `thoughtSummaries` is `true`; if they add more than 10% to a batch, Q29's fallback is raised with Justin before the value is set.
 - **The spend gate doesn't change** (`agent_spend.decide`, one `gemini-chat` item). The trace is display only.
 
 **Tests:**
@@ -678,6 +685,9 @@ GM's mockup v5 shows Analyze as an overseer, not as an agent. There is no cursor
 - A reason that mentions `#18` or `Image B` is shown and saved without it.
 - A reason over 120 characters is trimmed and the item kept.
 - A reader that can't stream gives the same line set at batch end.
+- A model with `thoughtSummaries` `false` or `"unconfirmed"` sends no `includeThoughts`, and its trace has no `thought` line.
+- A model with `thoughtSummaries` `true` whose answer has no thought parts gives b)'s lines exactly, no `thought` line, and no error.
+- Thought text that names `Image B` or `#18` is shown without it, and no `focus` or outline follows from it.
 - Two batches interleave and order within each holds.
 - Cancel mid-stream: nothing after `cancelled`, unstarted batches given back, nothing moves, closed readings saved.
 - `afterSeq` returns exactly the missing lines; a job past its 15 minutes returns 404.
@@ -1073,7 +1083,7 @@ Runs alongside PR3 and PR5.
 - **Scope.** `services/moodboard_reader.py`, both phases (§5.6), and the trace's reader half (§5.6.1): batch-local labels, the schema with `ref` first through `responseFormat`, `services/moodboard_reader_stream.py` (thought parts kept apart, every part joined, JSON scanned as it arrives, `focus` and `item` calls), each item checked, the retry for missing refs (split after `MAX_TOKENS`), reasons trimmed and stripped of labels, and the time bounds. `data/moodboard_reader_models.json`, with `streams`, `thoughtSummaries`, the reader's name and colour, and thinking allowances per level. `POST …/read/estimate` and `POST …/read?dryRun=1`. CLI `nebula moodboard analyze <board> --read-with gemini-4-argon --dry-run [--only 3,5]`. MCP `moodboard_analyze(read_with, dry_run)`. The spend gate for agents. The reader's text-call helper is written so PR19 can reuse it for the music direction.
 - **What the person sees.** In the CLI, a priced dry run that prints the trace lines.
 - **Tests.** Recorded provider responses; more than 13 images per run; batching and the schema; a retry on malformed JSON; partial failure leaves those images unsorted; the estimate maths; an agent is refused when any USD limit is set and the read is unpriced; the hold is given back when the key is missing; the person passes.
-- **Live check.** A mocked provider. One real Argon probe with Justin's key, only after he approves the spend. It also measures what §5.6.1 leaves unconfirmed: bytes during thinking, time to the first item per level, `thoughtsTokenCount`, and, in a second request with `includeThoughts`, whether summaries come back alongside the schema on image batches.
+- **Live check.** A mocked provider. One real Argon probe with Justin's key, only after he approves the spend. It also measures what §5.6.1 leaves unconfirmed: bytes during thinking, time to the first item per level, `thoughtsTokenCount`, and, in a second request with `includeThoughts`, whether summaries come back alongside the schema on image batches and what they add to the output tokens. That result sets Argon's `thoughtSummaries` (Q29 c).
 - **Docs.** `skills/nebula/SKILL.md`, `docs/MCP-SETUP.md`, contract 07 new §1.13 "Reading references".
 
 ### PR5: The Board view (preview, behind a switch)
@@ -1203,12 +1213,13 @@ Runs alongside PR3 and PR5.
   - The pulse on cards in flight, the lavender outline on `focus`, and the settle on `reading`. Linked copies per C13 (§5.6.1).
   - The ripple layer behind the cards in `BoardCanvas` (PR5's reserved slot), starting from `targets`, then each batch's `inFlight`. Tuned springs, not stock easing.
   - Catching up through `afterSeq` on open, reconnect and a `seq` gap.
+  - The dim "thinking (summary)" stream (Q29 c): italic, below a dashed rule that appears with the first `thought` line, never outlining a card. Absent for a model that gives no summaries.
   - Reduced motion: a static tint, no ripple.
 - **What the person sees.** Mockup v5 on his own board.
-- **Tests.** Outlines on the right placements; nothing outlined from a `thought` line; a gap in `seq` fetches the missing lines; reduced motion.
+- **Tests.** Outlines on the right placements; nothing outlined from a `thought` line; no dashed rule or heading when a run has no `thought` lines; a gap in `seq` fetches the missing lines; reduced motion.
 - **Speed check.** PR5's 300 references with the ripple and 12 outlines on: rAF frame p95 under 20 ms.
 - **Live check.** A mocked stream; screenshots at 1440×900 and 1920×1080 mid-run and at the end.
-- **Depends on.** PR10. If Q29 c, add the dim "thinking (summary)" stream, collapsed by default, and a Settings switch "Show the reader's thinking" (+1 day), once PR4's probe shows summaries arrive alongside the schema on image batches.
+- **Depends on.** PR10. The thought stream shows only once PR4's probe sets Argon's `thoughtSummaries` to `true`; with it `false`, PR10b ships as b) and the stream code stays for the next model that gives summaries. Q29 c is built as the mockup shows it: visible, not collapsed, and with no Settings switch.
 - **Docs.** Contract 07 §1.13.
 
 ### PR11: Second-look and hybrid suggestions (C13 from Analyze)
@@ -1457,7 +1468,7 @@ Q22 and Q23 stay listed so their numbers don't move, but they are already answer
 
 | # | Question | Options | Recommendation and why | Gates |
 |---|---|---|---|---|
-| Q29 | GM's mockup v5 shows Analyze as an overseer: a panel streams the reader's lines and outlines each card a line names. Where do the lines come from? | a) Argon's own thought summaries, shown as they stream. b) The readings themselves: each image's reading streams back as soon as the model finishes it, and its short reason becomes that image's line. Nebula adds its own plainly marked lines ("Reading #1–#6", "Asking again for #10–#12", "Cancelled"), and results come from what Nebula actually applied. c) b), plus Argon's thought summaries as a second, dimmer stream labelled "thinking (summary)" that never outlines cards. | **b) now, and decide c) after PR4's one approved Argon probe.** In b) each line is the model's actual reading of that image, the same text the side panel shows afterwards, and Nebula ties every line to an image it sent, so an outline never rests on the model's guess about a number. It costs nothing beyond the plan's existing retry, works with a mocked provider, and works with a reader that can't stream (its lines then come at the end of each batch). a) can't drive outlines: Google says summaries come back "only when available" and that image analysis "might not produce text summaries", so the panel could stay empty on exactly this job. c) fills the quiet while Argon thinks, but no Google page shows summaries and a response schema in one request, so the probe checks that first. Under b) the panel reads "Gemini 4 Argon · reading", not "· thinking". | PR4, PR10, PR10b |
+| Q29 | GM's mockup v5 shows Analyze as an overseer: a panel streams the reader's lines and outlines each card a line names. Where do the lines come from? | a) Argon's own thought summaries, shown as they stream. b) The readings themselves: each image's reading streams back as soon as the model finishes it, and its short reason becomes that image's line. Nebula adds its own plainly marked lines ("Reading #1–#6", "Asking again for #10–#12", "Cancelled"), and results come from what Nebula actually applied. c) b), plus Argon's thought summaries as a second, dimmer stream labelled "thinking (summary)" that never outlines cards. | **b) now, and decide c) after PR4's one approved Argon probe.** In b) each line is the model's actual reading of that image, the same text the side panel shows afterwards, and Nebula ties every line to an image it sent, so an outline never rests on the model's guess about a number. It costs nothing beyond the plan's existing retry, works with a mocked provider, and works with a reader that can't stream (its lines then come at the end of each batch). a) can't drive outlines: Google says summaries come back "only when available" and that image analysis "might not produce text summaries", so the panel could stay empty on exactly this job. c) fills the quiet while Argon thinks, but no Google page shows summaries and a response schema in one request, so the probe checks that first. Under b) the panel reads "Gemini 4 Argon · reading", not "· thinking". **Justin (2026-10-20): c).** "If argon, or whatever model doesn't stream its thoughts then we just fallback to B." So the summary stream is optional per model and absent when a model returns none (§5.6.1). | PR4, PR10, PR10b |
 
 ## 8. Out of scope, and what this waits on
 
@@ -1500,8 +1511,8 @@ Q22 and Q23 stay listed so their numbers don't move, but they are already answer
 | 7d The node picks a look | ~700 | ~400 | 2 | 7b |
 | 8 Agents see + placement | ~1,300 | ~500 | 3.5 | 5 |
 | 9 Agents edit + recent edits | ~1,000 | ~400 | 3 | 8 |
-| 10 Analyze sorts + trace events | ~1,900 | ~850 | 6 | 4, 7, 7b |
-| 10b The overseer in the Studio | ~450 | ~250 | 3 | 10 |
+| 10 Analyze sorts + trace events | ~1,950 | ~900 | 6.25 | 4, 7, 7b |
+| 10b The overseer in the Studio | ~550 | ~300 | 3.75 | 10 |
 | 11 Suggestions | ~800 | ~350 | 2.75 | 10 |
 | 12 Arrange | ~700 | ~300 | 2 | 7 |
 | 13 Adapter table + contract test | ~900 | ~700 | 3 | #18 |
@@ -1517,9 +1528,9 @@ Q22 and Q23 stay listed so their numbers don't move, but they are already answer
 | 23 Combine into one image | ~700 | ~400 | 2 | 14, 15, 16 (20) |
 | 24 Recraft style objects | ~1,000 | ~500 | 3 | 15, 7b; Q24 |
 
-- **Total:** about 25,650 lines of code and 14,050 lines of tests (about 39,700), about 81 agent-days in sequence. Canvas 42.75, looks 8, adapters 30.5. Version 2.2's overseer adds about 2,300 lines and 6.75 days (PR4, PR5, PR10, PR10b, PR11).
-- **Critical path (canvas and looks):** PR1 → PR3 → PR5 → PR6 → PR7 → PR7b → PR10 → PR10b, about 29 days (v2.1 was 26.5, v1 was 23). PR7c and PR7d run beside PR10.
-- **Adapter lane:** #18 → PR13 → PR14 → PR17 → PR21 is about 13 days of work after #18 merges, with PR15, PR16, PR18 and PR20 beside PR17, and PR23 after PR15 and PR16. PR22 waits for PR7d, PR19 for PR4 (and uses PR10's readings once they exist), PR24 for Q24. With three lanes the whole plan fits in about 31 to 33 days.
+- **Total:** about 25,800 lines of code and 14,150 lines of tests (about 39,950), about 82 agent-days in sequence. Canvas 43.75, looks 8, adapters 30.5. Version 2.2's overseer adds about 2,300 lines and 6.75 days (PR4, PR5, PR10, PR10b, PR11); version 2.3's thought stream (Q29 c) adds about 250 lines and 1 day (PR10, PR10b).
+- **Critical path (canvas and looks):** PR1 → PR3 → PR5 → PR6 → PR7 → PR7b → PR10 → PR10b, about 30 days (v2.2 was 29, v2.1 was 26.5, v1 was 23). PR7c and PR7d run beside PR10.
+- **Adapter lane:** #18 → PR13 → PR14 → PR17 → PR21 is about 13 days of work after #18 merges, with PR15, PR16, PR18 and PR20 beside PR17, and PR23 after PR15 and PR16. PR22 waits for PR7d, PR19 for PR4 (and uses PR10's readings once they exist), PR24 for Q24. With three lanes the whole plan fits in about 32 to 34 days.
 - **When Justin gets something:** a priced CLI dry run of the sort after PR4 (about 6 days); a usable canvas after PR6 (about 12 days); board images on GPT Image edits and Nano Banana after PR14 (about 8 days after #18 merges); style slots by default after PR15 (about 11 days after #18); one brief per look on a node after PR7d (about 21.5 days).
 
 ---
