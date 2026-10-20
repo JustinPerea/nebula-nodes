@@ -37,6 +37,7 @@ import { downloadWorldAsset } from '../../lib/worldDownload';
 import '../../styles/nodes.css';
 import { NodeLabel } from './NodeLabel';
 import { NodeRunStatus } from './NodeRunStatus';
+import { MoodboardAdapterRow } from './MoodboardAdapterRow';
 import { OverviewImage, OverviewVideoStill } from './OverviewImage';
 import { StructuredOutputs } from './StructuredValuePreview';
 import { JevResultView, type JevResultInputs } from './JevResult';
@@ -551,6 +552,8 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
           })}
         </div>
       )}
+
+      <MoodboardAdapterRow data={nodeData} definition={definition} nodeId={id} />
 
       {/* Inline textarea for text-input and Slava sticky-note nodes */}
       {isInlineTextNode && (

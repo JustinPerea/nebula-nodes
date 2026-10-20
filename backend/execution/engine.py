@@ -1193,17 +1193,19 @@ async def _execute_graph(
             if node.definition_id not in _PASSTHROUGH_NODE_IDS:
                 resolved_inputs = _local_media_inputs(resolved_inputs)
             # A wired Nebula moodboard reaches every generator here, in one
-            # place: its brief joins the prompt, its negatives fill a negative
-            # field, and its Avoid list joins the prompt only for
+            # place, through the node's moodboard adapter entry (resolved for
+            # the route these keys pick; services/moodboard_adapters.py): its
+            # brief joins the prompt, its negatives fill a negative field,
+            # and its Avoid list joins the prompt only for
             # instruction-following models. The handler (and the cache key)
             # get these params; the node's own params (its saved recipe)
             # stay the person's. What it says (a board at strength 0 isn't
-            # sent, Q36 a) joins this run's notes.
+            # sent, Q36 a; a node without an entry) joins this run's notes.
             board_notes: list[str] = []
             notes_token = execution_notes.set(board_notes)
             try:
                 resolved_inputs, handler_params = apply_board_to_generator(
-                    node.definition_id, registered_node_def, resolved_inputs, node.params)
+                    node.definition_id, registered_node_def, resolved_inputs, node.params, api_keys=api_keys)
             finally:
                 execution_notes.reset(notes_token)
             handler_node = node if handler_params is node.params else node.model_copy(

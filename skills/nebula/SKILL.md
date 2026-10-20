@@ -65,7 +65,7 @@ describe` is `nebula info`.
 | Command | What it does |
 |---|---|
 | `nebula nodes upscale` | Node types whose id or name has every word (`--category image` and so on) |
-| `nebula info <node-id>` | Ports, params, options, defaults and prices |
+| `nebula info <node-id>` | Ports, params, options, defaults and prices; on a node with a Moodboard port, what a wired board does there (`MOODBOARD:`) |
 | `nebula keys` | Which provider keys are set |
 | `nebula spend` | The spending limits you work under, and what you used |
 
@@ -187,6 +187,13 @@ nebula moodboard move <board> --to global      # or --to current, or a project's
 nebula character move <character> --to current
 nebula moodboard delete <board>
 ```
+
+- Before wiring a board into a generator's `moodboard` port, `nebula info
+  <node-id>` says what that node takes from it: the `MOODBOARD:` line is the
+  card's ("Board images: on · up to 10 to Image Style Refs", or the brief as
+  text only), with `(on <route>)` after it on a node with more than one
+  route, then the channel, weights, ports the board never fills, and the
+  models or routes that change it.
 
 - `show` lists each palette and accent colour with its share of the board
   and the images it comes from (`#4 0.35%, #5 0.26%`: image number from

@@ -11,6 +11,11 @@ operation's `x-krea-pricing` block. These are API-token (USD) prices; Krea
 account runs bill workspace compute units, which Krea doesn't publish per
 option, so they stay unpriced. A model whose price dimensions don't map onto
 its request fields is left unpriced and listed, never guessed.
+
+And writes backend/data/moodboard_adapters_krea.json, the moodboard adapter
+entries of the Krea nodes that have a Moodboard port (BOARD_PORT_MODELS),
+from each model's port names and request schema. An Image or Any input the
+script hasn't classified (SLOT_FIELDS or NEVER_FIELDS) fails, --check too.
 """
 from __future__ import annotations
 
@@ -1295,7 +1300,7 @@ def definitions(catalog):
             "category": category_for(model["endpoint"], media_type),
             "apiProvider": "krea", "apiEndpoint": model["endpoint"],
             "envKeyName": "KREA_API_TOKEN", "executionPattern": "async-poll",
-            "inputPorts": ports,
+            "inputPorts": ports + ([dict(BOARD_PORT)] if node_id in BOARD_PORT_MODELS else []),
             "outputPorts": [
                 {"id": singular, "label": media_type, "dataType": media_type, "required": True},
                 {"id": plural, "label": "All " + plural, "dataType": "Array", "required": False},
@@ -1572,6 +1577,167 @@ def k2_node_entry(catalog, registry):
     return entry
 
 
+# Moodboard adapter entries for Krea catalog nodes (plan section 5.7.2, A5).
+# backend/data/moodboard_adapters_krea.json is written here and never by
+# hand; backend/services/moodboard_adapters.py merges it with the hand table
+# and checks both (section 5.7.10). An entry exists only for a generated node
+# with a Moodboard port, so the file stays empty until a later PR gives Krea
+# catalog nodes one (BOARD_PORT_MODELS).
+ADAPTERS = ROOT / "backend/data/moodboard_adapters_krea.json"
+ADAPTER_ABOUT = ("Moodboard adapter entries for Krea catalog nodes, written by scripts/sync-krea-catalog.py from "
+                 "the catalog's port names and request schemas; never edit by hand. The hand-written table is "
+                 "backend/data/moodboard_adapters.json; backend/services/moodboard_adapters.py reads both.")
+BOARD_PORT = {"id": "moodboard", "label": "Moodboard", "dataType": "Moodboard", "required": False,
+              "maxConnections": 1}
+# Krea catalog node ids that get BOARD_PORT. Empty in PR13: PR15 and PR16 add
+# their families here, and each gains an adapter entry in the same run.
+BOARD_PORT_MODELS: frozenset[str] = frozenset()
+# Board images can go into these fields (section 5.7.10 rule 4). Style fields
+# make a weighted-style entry; a video model's reference fields make role
+# slots (B2); the rest are content references.
+STYLE_FIELDS = ("style_images", "image_style_references")
+VIDEO_REFERENCE_FIELDS = ("reference_images", "style_references")
+SLOT_FIELDS = (*STYLE_FIELDS, "reference_images", "style_references", "image_urls")
+# Board images never go into these: frames and edit targets (rule 5), masks,
+# identities, Krea's own style and moodboard ids, view images of 3D models,
+# camera paths, effect lists and per-shot prompts.
+NEVER_FIELDS = {
+    "start_image": "a start frame", "end_image": "an end frame", "start_video": "a source video",
+    "edit_video": "the video being edited", "keyframes": "frames", "image_url": "the image being edited",
+    "mask_url": "a mask", "element_references": "an identity (element) reference",
+    "character_reference_images": "an identity (character) reference",
+    "styles": "Krea style ids, not images", "moodboards": "Krea moodboard ids, not images",
+    "video_reference": "a source video", "camera_trajectory": "a camera path", "effects": "an effect list",
+    "multi_prompt": "per-shot prompts",
+    "back_image_url": "a 3D view", "bottom_image_url": "a 3D view", "left_front_image_url": "a 3D view",
+    "left_image_url": "a 3D view", "right_front_image_url": "a 3D view", "right_image_url": "a 3D view",
+    "top_image_url": "a 3D view",
+}
+# A generated style entry defaults to images only for a model whose style
+# field a source shows is style (plan section 5.7.1; Seedream 4 and Krea's
+# Runway gen-4 left this list in plan version 2.4). A model joins it only with
+# a source, or after a mocked run and one paid run Justin approves.
+_KREA2_STYLE_SOURCE = {"url": "https://www.krea.ai/docs/developers/krea-2/style-transfer.md",
+                       "quote": "The references blend additively — start with strengths that sum near `1.0` "
+                                "and tune from there.",
+                       "checked": "2026-10-20"}
+STYLE_VERIFIED = {
+    "/generate/image/krea/krea-2/medium": {"field": "image_style_references", "source": _KREA2_STYLE_SOURCE},
+    "/generate/image/krea/krea-2/large": {"field": "image_style_references", "source": _KREA2_STYLE_SOURCE},
+    "/generate/image/krea/krea-2/medium-turbo": {"field": "image_style_references", "source": _KREA2_STYLE_SOURCE},
+    "/generate/image/ideogram/ideogram-3": {
+        "field": "style_images",
+        "source": {"url": "https://developer.ideogram.ai/v2/api-reference/images/generate/ideogram-3.md",
+                   "quote": "`style_reference_images` (files, optional) — Images to use as style references "
+                            "(max 10, max 25MB each; JPEG, PNG, or WEBP).",
+                   "checked": "2026-10-20"}},
+}
+_DEFAULT_SLOT_MAX = 10
+
+
+def _classified_ports(model):
+    return [port for port in model["inputPorts"] if port["dataType"] in ("Image", "Any")]
+
+
+def unclassified_fields(catalog):
+    """Image or Any inputs of Krea generation models the script hasn't
+    classified as a slot or never; --check fails on any. Enhance (upscale)
+    routes aren't generators and take no board."""
+    out = []
+    for node_id, model in sorted(catalog["models"].items()):
+        if model.get("foldedInto") or route_family(model["endpoint"]) == "enhance":
+            continue
+        for port in _classified_ports(model):
+            if port["id"] not in SLOT_FIELDS and port["id"] not in NEVER_FIELDS:
+                out.append(f"{node_id}.{port['id']}")
+    return out
+
+
+def _item_schema(model, field):
+    simple = simple_schema(model["requestSchema"].get("properties", {}).get(field, {}))
+    return simple_schema(simple.get("items", {})) if simple.get("type") == "array" else {}
+
+
+def _adapter_entry(node_id, model, definition, catalog):
+    ports = {port["id"]: port for port in definition["inputPorts"]}
+    slots = [field for field in SLOT_FIELDS if field in ports]
+    never = sorted(field for field in ports if field in NEVER_FIELDS)
+    checked = model.get("fetchedAt", catalog["fetchedAt"])
+    endpoint = model["endpoint"]
+    code = {"code": "backend/data/krea_gateway_models.json", "quote": f"{endpoint} inputPorts: "
+            + ", ".join(f"{port['id']} ({port['dataType']})" for port in _classified_ports(model))}
+    if not slots:
+        return {"channel": "text-only", "never": never, "textSlot": {"port": "prompt"}, "text": "brief",
+                "reason": "No input of this Krea model takes reference images, so the board goes as text.",
+                "sources": [code], "checked": checked}
+    style = [field for field in slots if field in STYLE_FIELDS]
+    video = model["mediaType"] == "Video"
+    if style:
+        channel, slots = "weighted-style", style
+    elif video and any(field in VIDEO_REFERENCE_FIELDS for field in slots):
+        channel, slots = "role-slots", [field for field in slots if field in VIDEO_REFERENCE_FIELDS]
+    else:
+        channel = "refs"
+    # Slot fields the channel doesn't use get no board image.
+    never = sorted({*never, *(field for field in SLOT_FIELDS if field in ports and field not in slots)})
+    unconfirmed = []
+    entry_slots = []
+    for field in slots:
+        limit = ports[field].get("maxConnections")
+        if not isinstance(limit, int):
+            limit = _DEFAULT_SLOT_MAX
+            unconfirmed.append(f"{field}: Krea's schema gives no maxItems, so Nebula sends up to "
+                               f"{_DEFAULT_SLOT_MAX}")
+        slot = {"port": field, "max": limit}
+        shares = [other for other in slots if other != field]
+        if shares:
+            slot["sharesLimitWith"] = shares
+        entry_slots.append(slot)
+    verified = STYLE_VERIFIED.get(endpoint)
+    default = "images" if (verified and verified["field"] in slots and channel == "weighted-style") \
+        or channel == "role-slots" else "text"
+    # Rule 13: a strength in the item schema makes the weight native, with
+    # Krea's own range; a bare list of URLs ranks the board's weights.
+    strength = (_item_schema(model, slots[0]).get("properties") or {}).get("strength")
+    if channel == "weighted-style" and isinstance(strength, dict) and "minimum" in strength and "maximum" in strength:
+        weight = {"mode": "native", "field": "strength", "range": [strength["minimum"], strength["maximum"]],
+                  "normalize": "sum-to-strength", "precision": 0.0001,
+                  "schema": {"source": "krea-catalog", "endpoints": [endpoint], "field": slots[0]}}
+        syntax = {"syntax": None, "syntaxReason": "The weight is native: each board image goes with its own "
+                                                  "strength, so the prompt names none."}
+        code["quote"] += (f"; {slots[0]}[].strength minimum {strength['minimum']}, maximum "
+                          f"{strength['maximum']}")
+    else:
+        weight = {"mode": "select", "normalize": "rank"}
+        syntax = {"syntax": "Image {n}"}
+        unconfirmed.append("syntax: how this model reads image numbers in the prompt (PR14's legend writer "
+                           "settles it)")
+    entry = {"channel": channel, "default": default, "slots": entry_slots,
+             **({"never": never} if never else {}), "textSlot": {"port": "prompt"}, "text": "brief",
+             "weight": weight, "order": "weight", **syntax}
+    if default == "images":
+        priced = any(K2_TIER in point.get("dimensions", {})
+                     for point in (model.get("pricing") or {}).get("price_points") or [])
+        entry["costPerRef"] = "priced" if priced else "unknown"
+    sources = [code]
+    if verified and default == "images" and channel == "weighted-style":
+        sources.insert(0, dict(verified["source"]))
+    entry.update(sources=sources, checked=checked)
+    if unconfirmed:
+        entry["unconfirmed"] = unconfirmed
+    return entry
+
+
+def adapter_table(catalog, generated):
+    """moodboard_adapters_krea.json: one entry per generated node with a
+    Moodboard input port."""
+    entries = {}
+    for node_id, definition in sorted(generated.items()):
+        if any(port["id"] == BOARD_PORT["id"] for port in definition["inputPorts"]):
+            entries[node_id] = _adapter_entry(node_id, catalog["models"][node_id], definition, catalog)
+    return {"_about": ADAPTER_ABOUT, "generatedBy": PRICING_GENERATOR, "entries": entries}
+
+
 def pricing_source(source, entries):
     """Replace only this script's entries; hand-curated ones stay as they are."""
     data = json.loads(source)
@@ -1679,6 +1845,10 @@ def main():
     problems = folded_problems(catalog, json.loads(REGISTRY.read_text()))
     if problems:
         raise SystemExit("Folded Krea models don't match their nodes:\n  " + "\n  ".join(problems))
+    unclassified = unclassified_fields(catalog)
+    if unclassified:
+        raise SystemExit("Krea catalog inputs the moodboard adapter script doesn't classify (add each to "
+                         "SLOT_FIELDS or NEVER_FIELDS):\n  " + "\n  ".join(unclassified))
     generated = definitions(catalog)
     prices, unpriced = pricing_entries(catalog, json.loads(REGISTRY.read_text()))
     expected = {
@@ -1686,11 +1856,13 @@ def main():
         REGISTRY: registry_source(REGISTRY.read_text(), generated),
         FRONTEND: frontend_source(FRONTEND.read_text(), generated),
         PRICING: pricing_source(PRICING.read_text(), prices),
+        ADAPTERS: json.dumps(adapter_table(catalog, generated), indent=2, ensure_ascii=False) + "\n",
     }
     for path, content in expected.items():
         if args.check:
-            if path.read_text() != content:
-                raise SystemExit(f"Krea catalog drift: {path.relative_to(ROOT)}; run scripts/sync-krea-catalog.py")
+            if not path.exists() or path.read_text() != content:
+                shown = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path
+                raise SystemExit(f"Krea catalog drift: {shown}; run scripts/sync-krea-catalog.py")
         else:
             path.write_text(content)
     print(f"Krea catalog {'check passed' if args.check else 'generated'}: {len(generated)} generation models, "
