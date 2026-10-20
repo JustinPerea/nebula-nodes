@@ -601,9 +601,12 @@ How it works (`backend/services/agent_spend.py`):
   - project snapshots: `PUT /api/projects/{id}` and `/api/projects/recover`
     (opening a project loads its snapshot onto the canvas), compared with the
     live canvas and the project as saved;
-  - runs that take nodes in the request: `/api/execute`, `/api/execute-node`
-    and `/api/quick`. A node there may bill only the way the canvas node with
-    its id and definition does; any other node starts on the API token. A
+  - runs that take nodes in the request: `/api/execute`, `/api/execute-node`,
+    `/api/cinema/generate-shot` and `/api/quick`. A node there may bill only
+    the way the canvas node with its id and definition does (`_kreaAuth`, and
+    a multi-provider node's `_provider` too; a Moodboard node can't open
+    `send_notes` further), judged on its params after retired ones are
+    renamed; any other node starts on Auto and the API token. A
     run's params are written back to the canvas only onto a node of the same
     definition, and for a run that isn't the person's only what the run
     itself changed, never `_kreaAuth`.
