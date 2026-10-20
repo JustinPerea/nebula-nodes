@@ -30,6 +30,20 @@ export const DeferredAgentLog = lazyWithPreload(
   (module) => module.AgentLog,
 );
 
+// The Updates corner (PR9a): the chip shows on the canvas at once but isn't
+// needed for the first paint. Its store (store/agentNotesStore.ts) is imported
+// eagerly by App.tsx, so no update is missed before the chip arrives. The
+// node outlines mount inside Canvas, beside the agent cursors.
+export const DeferredAgentNotes = lazyWithPreload(
+  () => import('../components/agent-notes/AgentNotesCorner'),
+  (module) => module.CanvasAgentNotes,
+);
+
+export const DeferredAgentNoteOutlineLayer = lazyWithPreload(
+  () => import('../components/agent-notes/AgentNoteOutlineLayer'),
+  (module) => module.AgentNoteOutlineLayer,
+);
+
 export const DeferredConnectionPopup = lazyWithPreload(
   () => import('../components/ConnectionPopup'),
   (module) => module.ConnectionPopup,
@@ -55,6 +69,8 @@ export const DeferredWorldPreview = lazyWithPreload(
 /** Fetch every deferred chunk; called once the canvas is idle after first paint. */
 export const DEFERRED_PRELOADS: readonly (() => Promise<unknown>)[] = [
   DeferredAgentLog.preload,
+  DeferredAgentNotes.preload,
+  DeferredAgentNoteOutlineLayer.preload,
   DeferredRunHistoryPanel.preload,
   DeferredOnboardingOverlay.preload,
   DeferredConnectionPopup.preload,
@@ -66,6 +82,12 @@ export const DEFERRED_PRELOADS: readonly (() => Promise<unknown>)[] = [
 /** Source paths (relative to src/) that must stay out of the startup entry. */
 export const DEFERRED_MODULES: readonly string[] = [
   'components/panels/AgentLog.tsx',
+  'components/agent-notes/AgentNotesCorner.tsx',
+  'components/agent-notes/AgentNoteCard.tsx',
+  'components/agent-notes/AgentNotesList.tsx',
+  'components/agent-notes/AgentNoteParts.tsx',
+  'components/agent-notes/AgentNoteOutlineLayer.tsx',
+  'lib/agentNotesView.ts',
   'components/panels/RunHistoryPanel.tsx',
   'components/onboarding/OnboardingOverlay.tsx',
   'components/ConnectionPopup.tsx',

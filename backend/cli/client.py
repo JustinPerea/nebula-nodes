@@ -137,6 +137,32 @@ class NebulaClient:
         return self._request("POST", f"/api/canvas/pins/{quote(pin_id, safe='')}/resolve",
                              json={"reply": reply}, headers=headers)
 
+    # -- Updates: what an agent noticed, read by the person in the Updates list --
+    def post_note(self, body: dict[str, Any], board_id: str | None = None,
+                  agent_name: str | None = None) -> dict[str, Any]:
+        headers = {"X-Nebula-Agent": agent_name} if agent_name else None
+        path = (f"/api/moodboards/{quote(board_id, safe='')}/agent-notes" if board_id
+                else "/api/canvas/agent-notes")
+        return self._request("POST", path, json=body, headers=headers)
+
+    def list_notes(self, board_id: str | None = None, unread: bool = False) -> dict[str, Any]:
+        path = (f"/api/moodboards/{quote(board_id, safe='')}/agent-notes" if board_id
+                else "/api/canvas/agent-notes")
+        return self._request("GET", path, params={"unread": 1} if unread else None)
+
+    def board_id(self, ref: str) -> str:
+        """A board's id from its id or exact name (`nebula moodboard list`)."""
+        import moodboard_client as boards
+
+        try:
+            return str(boards.get_board(self.api, ref, self._identity_headers())["id"])
+        except boards.MoodboardError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            sys.exit(1)
+        except NebulaAPIError as exc:
+            print(f"error: {exc.detail}", file=sys.stderr)
+            sys.exit(1)
+
     # -- Plans: proposals (only the person accepts, in Nebula) and direct edits --
     def propose(self, body: dict[str, Any], agent_name: str | None = None) -> dict[str, Any]:
         headers = {"X-Nebula-Agent": agent_name} if agent_name else None

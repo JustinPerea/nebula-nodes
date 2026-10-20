@@ -91,6 +91,10 @@ EVENT_KINDS = frozenset({
     "board.sorted",
     "board.arranged",
     "board.suggested",
+    # Updates (services/agent_notes.py): one event per update an agent or
+    # Nebula posts, data {surface, boardId?, noteId, about, refs, text}.
+    # Marking read and dismissing aren't journaled.
+    "note.posted",
     # An undo or redo of a whole edit (an agent's undo_canvas_edit, or the
     # person's Cmd+Z of a step the canvas knew the edit of), after the node
     # and wire events it made. data {editId, of?, events?, ...}; see

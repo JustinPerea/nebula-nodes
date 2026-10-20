@@ -102,7 +102,12 @@ export function AgentLog() {
     if (enabled && hiddenNotice) setHiddenNotice(false);
   }
 
-  const [open, setOpen] = useState(false);
+  // Expanded or not lives in uiStore, so the Updates list's "See all
+  // actions →" can open it (PR9a). It starts collapsed, and collapses again
+  // when the log unmounts (leaving the canvas), as its local state did.
+  const open = useUIStore((s) => s.agentLogOpen);
+  const setOpen = useUIStore((s) => s.setAgentLogOpen);
+  useEffect(() => () => useUIStore.getState().setAgentLogOpen(false), []);
   // Every agent's actions and the chat's thinking lines, collected while
   // this panel is unmounted too (store/agentLogStore.ts).
   const entries = useAgentLogStore((s) => s.entries);
@@ -313,7 +318,7 @@ export function AgentLog() {
       justDraggedRef.current = false;
       return;
     }
-    setOpen((current) => !current);
+    setOpen(!open);
   }
 
   // Persist position on the latest setPosition that happened during the drag —
