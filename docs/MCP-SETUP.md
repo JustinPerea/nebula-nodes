@@ -417,7 +417,9 @@ and `describe_node` use (`node_readiness.instance_missing`, read at the
 values Accept would write: "needs OPENAI_API_KEY in Settings > Providers",
 a Krea sign-in, or why the chosen route can't take it), and the cost entry
 of such a node has the same `missing`. `propose_change` and `nebula propose`
-turn the list into a `warning` (`canvas_proposals.readiness_warning`). On
+turn the list into a `warning` (`canvas_proposals.readiness_warning`), each
+pointing at its own way to find a node that runs here: `find_nodes` for MCP,
+`nebula context` for the CLI, and `GET /api/agent/nodes` in the HTTP reply. On
 the canvas the ghost shows the ⚠ a real node shows, with the same title, and
 the bar lists the nodes under its summary (three, then the rest in its
 details). Both re-check keys as the person adds them, so a line goes away
@@ -1019,7 +1021,16 @@ A run in which any node failed reports `status: "failed"` with `error`
 naming the node, `errors` with each message and `results` with what
 finished; `get_run` and `nebula result` say the same. The backend keeps each
 node's last error (`services/node_errors.py`) for `look_at_canvas`,
-`view_output`, `nebula look` and `nebula path` until the node runs again. It waits 45
+`view_output`, `nebula look` and `nebula path` until the node runs again,
+whoever ran it (the canvas Run button too). It is kept per project, in
+`node-errors.json` in the state dir, so it survives a page reload, a switch to
+another project and back, and a backend restart; every graph the canvas loads
+(graphSync, `GET /api/projects/{id}`) gives such a node `state: "error"` with
+the card's `error`, `errorFriendly` and `errorCategory`. Loading a graph over
+the project or clearing it forgets its errors, as does deleting the project
+for good. Deleting a node keeps its error, so undoing the delete
+(`POST /api/graph/restore`) puts the node back failed, as the canvas's undo
+shows it; an undo that swaps another node in under the id forgets it. It waits 45
 seconds by default because Codex gives each tool call 60 seconds unless
 configured otherwise (in-app Codex gets 150); `get_run` waits again (up to 300). Finished image and
 video outputs come back as small previews from
