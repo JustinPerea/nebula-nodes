@@ -58,7 +58,7 @@ export function StoredAssetPicker({ kind, label, value, onChange }: StoredAssetP
     load();
     // A board saved, renamed or deleted elsewhere (the Studio, an agent).
     const unsubscribe = wsClient.subscribe((event) => {
-      if (event.type === 'storedAssetChanged' && event.kind === kind) load();
+      if ((event.type === 'storedAssetChanged' && event.kind === kind) || event.type === 'socketReconnected') load();
     });
     return () => {
       cancelled = true;

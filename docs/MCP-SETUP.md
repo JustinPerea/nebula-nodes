@@ -1308,7 +1308,12 @@ nebula moodboard delete <board>
   unless the same change gives a weight. Set-aside images still count in a
   board's image count, named beside it: `nebula moodboard list` reads
   "(5 images, 1 set aside, look, ...)", and the Moodboard node card, the
-  Studio's board list and the Assets panel read "5 images · 1 set aside · look". When nothing steers, the analysis
+  Studio's board list and the Assets panel read "5 images · 1 set aside · look"
+  (the card on one line, the whole of it on hover). An open Studio, the card and the
+  lists also catch up on a change made while their tab's socket was closed
+  (a backend restart), once it opens again. A Preview of the run
+  counts only the images that steer ("4 images"), weight 0 left out like
+  the switch. When nothing steers, the analysis
   warns "Every reference is set aside, so none of them shapes the board."
 - Each image has `notes`, which steer (the analysis reads them), and
   `privateNote`, the person's own label (`--private-note`, or

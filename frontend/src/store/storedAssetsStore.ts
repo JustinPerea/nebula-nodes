@@ -87,8 +87,11 @@ function listen() {
   wsClient.subscribe((event) => {
     const store = useStoredAssetsStore.getState();
     if (event.type === 'storedAssetChanged') store.applyChange(event);
-    // Another project (or an import) arrived; anything may have changed meanwhile.
-    else if (event.type === 'graphSync' && event.graphReplaced) void store.refreshAll();
+    // Another project (or an import) arrived, or the socket was down and its
+    // changes weren't replayed: anything may have changed meanwhile.
+    else if ((event.type === 'graphSync' && event.graphReplaced) || event.type === 'socketReconnected') {
+      void store.refreshAll();
+    }
   });
 }
 
