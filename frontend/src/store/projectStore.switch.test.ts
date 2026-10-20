@@ -177,3 +177,146 @@ describe('the Nodes panel when a project opens (design-canvas gap 19)', () => {
     expect(useUIStore.getState().panels.library.visible).toBe(true);
   });
 });
+
+describe('Projects follows projects other writers make, rename and delete', () => {
+  const summer = summary('p3', 'Summer campaign');
+  const onProjects = (revision = 'r0') => {
+    setProjectContext(null);
+    useProjectStore.setState({ screen: 'home', activeProject: null, workspaceRevision: revision, projects: [], trash: [] });
+  };
+  const listing = (projects: ProjectSummary[], activeProjectId: string | null, workspaceRevision: string) => {
+    vi.mocked(api.listProjects).mockResolvedValue({
+      projects, trash: [], activeProjectId, workspaceRevision, paramsVersion: GRAPH_PARAMS_VERSION,
+    } as never);
+    vi.mocked(fetchCLIGraph).mockResolvedValue({ nodes: [], edges: [], empty: true, workspaceRevision } as never);
+  };
+
+  it('opens an agent’s new project on the canvas from Projects with nothing open, and names the agent', async () => {
+    onProjects('r0');
+    listing([summer], 'p3', 'r1');
+    vi.mocked(api.getProject).mockResolvedValue(saved(summer));
+    socket()({ type: 'graphSync', workspaceRevision: 'r1', activeProjectId: 'p3', graphReplaced: true,
+      paramsVersion: GRAPH_PARAMS_VERSION, projectSwitch: { ...agentSwitch, projectId: 'p3', projectName: 'Summer campaign',
+        previousProjectId: null, previousProjectName: null, previousRevision: 'r0' } } as never);
+    await vi.waitFor(() => expect(useProjectStore.getState().switchNotice).not.toBeNull());
+
+    const state = useProjectStore.getState();
+    expect(state).toMatchObject({ screen: 'workspace', activeProject: { id: 'p3' }, error: null, initialized: true });
+    expect(state.projects.map((project) => project.id)).toEqual(['p3']);
+    expect(getProjectContext()).toEqual({ id: 'p3', revision: 'r1' });
+    expect(saveProject).not.toHaveBeenCalled();
+    expect(state.switchNotice).toMatchObject({ previousProjectId: null, created: true });
+    expect(switchMessage(state.switchNotice!)).toBe('Claude Code made a new project, “Summer campaign”, and opened it.');
+  });
+
+  it('opens the canvas when Projects still had a project loaded', async () => {
+    useProjectStore.setState({ screen: 'home' });
+    socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION, projectSwitch: agentSwitch } as never);
+    await vi.waitFor(() => expect(useProjectStore.getState().switchNotice).not.toBeNull());
+    expect(useProjectStore.getState()).toMatchObject({ screen: 'workspace', activeProject: { id: 'p2' } });
+    expect(useProjectStore.getState().switchNotice?.previousProjectId).toBe('p1');
+  });
+
+  it('doesn’t follow from Projects a switch made from a workspace it never listed, but lists again', async () => {
+    onProjects('r0');
+    vi.mocked(api.listProjects).mockClear();
+    socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION,
+      projectSwitch: { ...agentSwitch, previousProjectId: null, previousRevision: 'r9' } } as never);
+    expect(useProjectStore.getState()).toMatchObject({ screen: 'home', switchNotice: null, activeProject: null });
+    await vi.waitFor(() => expect(useProjectStore.getState().workspaceRevision).toBe('r2'));
+    expect(api.listProjects).toHaveBeenCalledTimes(1);
+    expect(useProjectStore.getState()).toMatchObject({ screen: 'home', activeProject: null });
+  });
+
+  it('lists again on Projects after a reconnect’s sync shows changes it missed', async () => {
+    onProjects('r0');
+    listing([summer], 'p3', 'r1');
+    // What a socket gets on (re)connect: no projectsChanged was replayed.
+    socket()({ type: 'graphSync', workspaceRevision: 'r1', activeProjectId: 'p3', paramsVersion: GRAPH_PARAMS_VERSION,
+      nodes: [], edges: [], empty: true } as never);
+    await vi.waitFor(() => expect(useProjectStore.getState().projects.map((project) => project.id)).toEqual(['p3']));
+    // So its next New project or Open goes from the current revision.
+    expect(useProjectStore.getState()).toMatchObject({ workspaceRevision: 'r1', screen: 'home', activeProject: null });
+  });
+
+  it('drops the toast’s way back on the canvas once that project is deleted elsewhere', async () => {
+    useProjectStore.setState({ switchNotice: { actorName: 'Claude Code', created: true,
+      projectName: 'Agent sketches', previousProjectId: 'p1', previousProjectName: 'Loop', keptCopy: false } });
+    vi.mocked(api.listProjects).mockClear();
+    socket()({ type: 'projectsChanged', change: 'saved', projectId: 'p2' } as never);
+    expect(api.listProjects).not.toHaveBeenCalled(); // the canvas's own saves don't list
+    listing([sketches], 'p2', 'r1');
+    socket()({ type: 'projectsChanged', change: 'deleted', projectId: 'p1' } as never);
+    await vi.waitFor(() => expect(useProjectStore.getState().switchNotice?.previousProjectId).toBeNull());
+    expect(useProjectStore.getState()).toMatchObject({ screen: 'workspace', workspaceRevision: 'r1' });
+  });
+
+  it('lists again on Projects when someone else makes, renames or deletes a project', async () => {
+    onProjects('r0');
+    listing([summary('p4', 'Renamed by the CLI'), loop], null, 'r5');
+    socket()({ type: 'projectsChanged', change: 'renamed', projectId: 'p4' } as never);
+    await vi.waitFor(() => expect(useProjectStore.getState().projects.map((project) => project.name))
+      .toEqual(['Renamed by the CLI', 'Loop']));
+    // Nothing open here, so its next New project or Open goes from the current revision.
+    expect(useProjectStore.getState().workspaceRevision).toBe('r5');
+  });
+
+  it('keeps the switch toast’s way back current: renamed, or gone once deleted', async () => {
+    useProjectStore.setState({ screen: 'home', switchNotice: { actorName: 'Claude Code', created: true,
+      projectName: 'Agent sketches', previousProjectId: 'p1', previousProjectName: 'Loop', keptCopy: false } });
+    listing([sketches, summary('p1', 'Loop v2')], 'p2', 'r1');
+    socket()({ type: 'projectsChanged', change: 'renamed', projectId: 'p1' } as never);
+    await vi.waitFor(() => expect(useProjectStore.getState().switchNotice?.previousProjectName).toBe('Loop v2'));
+    listing([sketches], 'p2', 'r1');
+    socket()({ type: 'projectsChanged', change: 'deleted', projectId: 'p1' } as never);
+    await vi.waitFor(() => expect(useProjectStore.getState().switchNotice?.previousProjectId).toBeNull());
+  });
+
+  it('leaves the toast alone when a listing doesn’t change its way back (its timer keeps running)', async () => {
+    const notice = { actorName: 'Claude Code', created: true, projectName: 'Agent sketches',
+      previousProjectId: 'p1', previousProjectName: 'Loop', keptCopy: false };
+    useProjectStore.setState({ screen: 'home', switchNotice: notice });
+    listing([sketches, summary('p4', 'New elsewhere'), loop], 'p2', 'r1');
+    socket()({ type: 'projectsChanged', change: 'created', projectId: 'p4' } as never);
+    await vi.waitFor(() => expect(useProjectStore.getState().projects).toHaveLength(3));
+    expect(useProjectStore.getState().switchNotice).toBe(notice);
+  });
+
+  it('keeps the open project’s revision when it relists', async () => {
+    useProjectStore.setState({ screen: 'home' });
+    listing([sketches, loop], 'p1', 'r1');
+    socket()({ type: 'projectsChanged', change: 'created', projectId: 'p2' } as never);
+    await vi.waitFor(() => expect(useProjectStore.getState().projects).toHaveLength(2));
+    expect(useProjectStore.getState().workspaceRevision).toBe('r1');
+    expect(getProjectContext()).toEqual({ id: 'p1', revision: 'r1' });
+  });
+
+  it('waits until the person is back on Projects to list again', async () => {
+    vi.mocked(api.listProjects).mockClear();
+    listing([sketches, loop], 'p1', 'r1');
+    socket()({ type: 'projectsChanged', change: 'created', projectId: 'p2' } as never);
+    expect(api.listProjects).not.toHaveBeenCalled();
+    await useProjectStore.getState().goHome();
+    await vi.waitFor(() => expect(useProjectStore.getState().projects.map((project) => project.id)).toEqual(['p2', 'p1']));
+    expect(api.listProjects).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets go of a saved project another window replaced instead of stopping Projects with a conflict', async () => {
+    useProjectStore.setState({ screen: 'home' });
+    listing([sketches], 'p2', 'r2');
+    socket()({ type: 'graphSync', workspaceRevision: 'r2', activeProjectId: 'p2', graphReplaced: true,
+      paramsVersion: GRAPH_PARAMS_VERSION } as never);
+    await vi.waitFor(() => expect(useProjectStore.getState().projects.map((project) => project.id)).toEqual(['p2']));
+    expect(useProjectStore.getState()).toMatchObject({ initialized: true, error: null, activeProject: null, screen: 'home' });
+    expect(getProjectContext()).toBeNull();
+    expect(useProjectStore.getState().workspaceRevision).toBe('r2');
+  });
+
+  it('still keeps unsaved work on Projects as a conflict', () => {
+    useProjectStore.setState({ screen: 'home' });
+    setPrompt('unsaved');
+    socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION } as never);
+    expect(useProjectStore.getState()).toMatchObject({ initialized: false });
+    expect(useProjectStore.getState().error).toContain('another window');
+  });
+});
