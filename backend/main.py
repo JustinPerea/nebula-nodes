@@ -86,6 +86,7 @@ from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
 from services import output_thumbnail
+from services.node_errors import node_errors
 from services import project_cover
 from services.cli_graph import SHORT_ID_RE, CLIGraph
 from services.retired_nodes import folded_entry, migrate_graph, migrate_node, migrate_param_update, migrate_params, retired_message
@@ -123,6 +124,7 @@ from services.agent_profiles import (
 from services.local_guard import LocalRequestGuard
 from services.agent_workspaces import AgentWorkspaceContext, WorkspaceSessions, WorkspaceSessionError, workspace_scope
 from services.chat_actions import publish_action
+from services import moodboard_actions
 from services.agent_presence import (
     PresenceError,
     RequestHeadersContext,
@@ -167,6 +169,7 @@ from services.canvas_proposals import (
     cost_for,
     parse_spec,
     place_new_nodes,
+    readiness_warning,
     summarize_cost,
 )
 from services.local_guard import host_allowed
@@ -2749,6 +2752,33 @@ def _validation_response(errors: list[ValidationErrorDetail]) -> dict[str, Any]:
     }
 
 
+def _validation_messages(errors: list[ValidationErrorDetail]) -> dict[str, str]:
+    """Node id -> its pre-call errors joined in order ('' for graph-wide ones)."""
+    by_node: dict[str, list[str]] = {}
+    for error in errors:
+        messages = by_node.setdefault(error.node_id, [])
+        if error.message not in messages:
+            messages.append(error.message)
+    return {node_id: "; ".join(messages) for node_id, messages in by_node.items()}
+
+
+async def _announce_validation_errors(errors: list[ValidationErrorDetail], run_id: str) -> None:
+    """Every run path's pre-call refusal, told the same way.
+
+    Each node it names shows the message on its card (validationError, which
+    a canvas applies to another tab's or an agent's run too), agents read it
+    (node_errors: look_at_canvas, view_output), and the journal says which
+    nodes failed and for whom (run.failed). So an agent's refused run_nodes
+    looks on the canvas like the person's refused click on Run.
+    """
+    node_errors.record_validation(errors)
+    await manager.broadcast(ValidationErrorEvent(errors=errors, run_id=run_id))
+    for node_id, message in _validation_messages(errors).items():
+        if node_id:
+            _journal_execution_event(ErrorEvent(node_id=node_id, error=message, run_id=run_id), run_id)
+    canvas_events.forget_run(run_id)
+
+
 # ---------- WebSocket endpoint ----------
 
 def _proposal_sync_message() -> dict[str, Any]:
@@ -3909,6 +3939,23 @@ async def _show_agent(
         pass
 
 
+async def _say_agent_action(say: str) -> None:
+    """Tell open canvases what the calling agent did where no cursor can go
+    (a moodboard write, a run of the whole canvas). It is the cursor's own
+    event without a target, so the Agent log lists it under the agent's name
+    and colour and no cursor moves (frontend store/agentLogStore.ts). A no-op
+    for the browser's own requests; like _show_agent, it never fails the
+    route that called it.
+    """
+    identity = identify_agent(current_request_headers())
+    if identity is None:
+        return
+    try:
+        await manager.broadcast_raw(agent_presence.point(identity, target=None, action="click", say=say))
+    except Exception:  # noqa: BLE001 - decoration must not break a saved write
+        pass
+
+
 def _journal(
     kind: str,
     *,
@@ -4057,6 +4104,14 @@ async def get_canvas_snapshot() -> dict[str, Any]:
     """Read the canvas as data: what's on screen, node states, wires, selection, agent cursors."""
     selected = selection_context.snapshot(cli_graph, node_registry).get("selectedNodeIds", [])
     snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=selected)
+    # Why a node's last run failed, as its card says it (services/node_errors.py).
+    node_errors.prune(cli_graph.nodes)
+    for node in snapshot.get("nodes") or []:
+        failed = node_errors.get(node["id"])
+        if failed:
+            node["error"] = failed["error"]
+            if failed.get("hint"):
+                node["errorHint"] = failed["hint"]
     # `nebula look` then `nebula watch --since <cursor>` leaves no gap.
     snapshot["events"] = {"journal": canvas_events.journal_id, "cursor": canvas_events.latest}
     # The person's notes for agents: open pins first, plus recent replies.
@@ -4401,9 +4456,13 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
         nodes = [GraphNode.model_validate(node) for node in graph_nodes]
         edges = [GraphEdge.model_validate(edge) for edge in graph_edges]
         chosen: list[str] = []
+        # Every node the run's pre-call check reads, cached ancestors too.
+        scope: list[str] = []
         for target in run_ids:
             sub_nodes, _ = get_subgraph(nodes, edges, target)
             for node in sorted(sub_nodes, key=lambda n: _node_order(n.id)):
+                if node.id not in scope:
+                    scope.append(node.id)
                 if node.id in chosen:
                     continue
                 if node.id not in run_ids:
@@ -4436,8 +4495,52 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
                 "plan": [ref_for.get(i, i) for i in estimate["plan"]],
                 "unavailable": {ref_for.get(i, i): why for i, why in (estimate.get("unavailable") or {}).items()},
             }
-        return summarize_cost(entries, up_to=up_to, estimate=estimate)
+        not_ready = _not_ready_nodes(candidate, graph_edges, scope, ref_for, definitions)
+        needs = {row["ref"]: row["missing"] for row in not_ready}
+        for entry in entries:
+            if entry["ref"] in needs:
+                entry["missing"] = needs[entry["ref"]]
+        return summarize_cost(entries, up_to=up_to, estimate=estimate, not_ready=not_ready)
     return summarize_cost(entries, up_to=up_to)
+
+
+def _not_ready_nodes(
+    candidate: CLIGraph,
+    graph_edges: list[dict[str, Any]],
+    node_ids: list[str],
+    ref_for: dict[str, str],
+    definitions: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """The nodes of a proposal's run that can't run here as set up: no key,
+    no Krea sign-in, a route that can't take it. In the words find_nodes and
+    describe_node use (node_readiness.instance_missing), read at the values
+    Accept would write. The run after Accept would fail at these nodes."""
+    keys = node_readiness.configured_keys(load_settings())
+    try:
+        krea_signed_in = _krea_connector().status().get("status") == "connected"
+    except Exception:  # noqa: BLE001 - an unreadable Krea vault just means not signed in
+        krea_signed_in = False
+    wired: dict[str, dict[str, int]] = {}
+    for edge in graph_edges:
+        ports = wired.setdefault(str(edge.get("target")), {})
+        handle = str(edge.get("targetHandle") or "")
+        ports[handle] = ports.get(handle, 0) + 1
+    rows: list[dict[str, Any]] = []
+    for node_id in node_ids:
+        node = candidate.nodes.get(node_id) or {}
+        definition = definitions.get(str(node.get("definitionId") or ""))
+        if not definition:
+            continue
+        need = node_readiness.instance_missing(definition, node.get("params") or {}, keys, krea_signed_in,
+                                               definitions, wired.get(node_id, {}))
+        if need:
+            rows.append({
+                "ref": ref_for.get(node_id, node_id),
+                "nodeId": None if node_id in ref_for else node_id,
+                "name": str(node.get("label") or definition.get("displayName") or definition.get("id")),
+                "missing": need,
+            })
+    return rows
 
 
 def _estimate_proposal_run(
@@ -4549,6 +4652,7 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
     except ProposalError as exc:
         raise _proposal_http_error(exc) from exc
     view = _proposal_view(proposal)
+    warning = readiness_warning(cost)
     first_reference = next(iter(sorted(proposal.references, key=_node_order)), None)
     _journal(
         "proposal.created",
@@ -4584,7 +4688,9 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         target = None
     if target is not None:
         await _show_agent(target, action="click", say=spec.note)
-    return {"proposal": view}
+    # Nodes of the run that can't run here, so the agent can say so or pick
+    # another model before the person accepts (the canvas shows it too).
+    return {"proposal": view, **({"warning": warning} if warning else {})}
 
 
 @app.get("/api/canvas/proposals")
@@ -5382,7 +5488,7 @@ async def execute(request: ExecuteRequest) -> dict:
 
     errors = validate_graph(nodes, request.edges, api_keys)
     if errors:
-        await manager.broadcast(ValidationErrorEvent(errors=errors, run_id=run_id))
+        await _announce_validation_errors(errors, run_id)
         return {**_validation_response(errors), "runId": run_id}
 
     try:
@@ -5532,7 +5638,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
 
     errors = validate_graph(sub_nodes, sub_edges, api_keys)
     if errors:
-        await manager.broadcast(ValidationErrorEvent(errors=errors, run_id=run_id))
+        await _announce_validation_errors(errors, run_id)
         return {**_validation_response(errors), "runId": run_id}
 
     try:
@@ -6089,7 +6195,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
 
     errors = validate_graph(sub_nodes, sub_edges, api_keys)
     if errors:
-        await manager.broadcast(ValidationErrorEvent(errors=errors, run_id=run_id))
+        await _announce_validation_errors(errors, run_id)
         return {
             "status": "validation_error",
             "errorCount": len(errors),
@@ -6369,8 +6475,10 @@ async def _broadcast_graph_sync(
     positions into the undo step that added those nodes.
     """
     if graph_replaced:
-        # Node ids restart with another project; no open arrange can apply to it.
+        # Node ids restart with another project; no open arrange can apply to
+        # it, and no node's last run error is about the new one's nodes.
         canvas_arrange.clear()
+        node_errors.forget_all()
     export = await export_graph_for_frontend()
     if graph_replaced:
         agent_presence.forget_graph()
@@ -6485,7 +6593,8 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
     """Wrap manager.broadcast so ExecutedEvents also mirror their outputs
     into cli_graph. Used by /api/execute and /api/execute-node so the
     frontend-driven execution paths keep cli_graph in sync with what the
-    user sees in the canvas."""
+    user sees in the canvas, and by agent runs (/api/graph/run) so the
+    canvas shows them node by node, failures included."""
     if isinstance(event, ProviderStartAmbiguousEvent):
         # This control-plane event must survive Stop just like a recovered
         # operation ID. It is the only proof that a settled transport/5xx/
@@ -6547,6 +6656,7 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
     if record is not None and record.status in {"cancelling", "cancelled"}:
         return
     _journal_execution_event(event, run_id)
+    node_errors.observe(event)
     if isinstance(event, ErrorEvent) and run_id is not None:
         # The engine reports per-node failures as events and then returns
         # normally after GraphComplete. Preserve that semantic failure in the
@@ -8504,6 +8614,7 @@ async def get_node_image_path(node_id: str) -> dict:
 
     url = _resolve_primary_image_url(node)
     if url is None:
+        _raise_last_run_failed(node_id)
         raise HTTPException(
             status_code=400,
             detail=f"No image file for node '{node_id}'",
@@ -8532,10 +8643,20 @@ def _preview_port(node_id: str, outputs: dict[str, Any], port: str | None) -> tu
     candidates = [(name, entry) for name, entry in outputs.items()
                   if isinstance(entry, dict) and entry.get("value") not in (None, "", [])]
     if not candidates:
+        _raise_last_run_failed(node_id)
         raise HTTPException(status_code=404, detail=f"{node_id} has no output yet. Run it first.")
     candidates.sort(key=lambda item: (item[1].get("type") not in _PREVIEWABLE,
                                       _PREVIEW_PORT_ORDER.index(item[0]) if item[0] in _PREVIEW_PORT_ORDER else 99))
     return candidates[0]
+
+
+def _raise_last_run_failed(node_id: str) -> None:
+    """409 with why the node's last run failed, when it did: the answer an
+    agent needs instead of "no output yet" (view_output, `nebula path`)."""
+    failed = node_errors.get(node_id)
+    if failed:
+        hint = f" ({failed['hint']})" if failed.get("hint") else ""
+        raise HTTPException(status_code=409, detail=f"{node_id} has no output: its last run failed: {failed['error']}{hint}")
 
 
 def _preview_path(value: Any, node_id: str, port: str) -> Path:
@@ -8564,7 +8685,7 @@ async def preview_node_output(node_id: str, port: str | None = None, size: str =
     if kind not in _PREVIEWABLE and not (isinstance(value, list) and value):
         raise HTTPException(status_code=415, detail=(
             f"{node_id}:{name} is {kind or 'data'}, not an image or video; its value is in the run "
-            "result and look_at_canvas."))
+            "result and look_at_canvas."), headers=_last_run_error_header(node_id))
     try:
         if kind == "Video":
             path = _preview_path(value, node_id, name)
@@ -8580,7 +8701,15 @@ async def preview_node_output(node_id: str, port: str | None = None, size: str =
         raise
     except Exception as exc:  # noqa: BLE001 - unreadable media is the caller's answer, not a 500
         raise HTTPException(status_code=422, detail=f"Couldn't preview {node_id}:{name}: {exc}") from exc
-    return Response(content=data, media_type=mime, headers={"X-Nebula-Preview-Port": name})
+    return Response(content=data, media_type=mime,
+                    headers={"X-Nebula-Preview-Port": name, **(_last_run_error_header(node_id) or {})})
+
+
+def _last_run_error_header(node_id: str) -> dict[str, str] | None:
+    """The node's output is from before a run that failed: view_output says
+    so beside it, a picture (200) or a value (415) alike."""
+    failed = node_errors.get(node_id)
+    return {"X-Nebula-Last-Run-Error": quote(failed["error"], safe=" :,.()'")} if failed else None
 
 
 def _resolve_primary_image_url(node: dict[str, Any]) -> str | None:
@@ -9979,8 +10108,10 @@ async def export_graph_for_frontend() -> dict:
     _normalize_cli_graph_output_refs()
     state = cli_graph.get_state()
     if not state["nodes"]:
-        # A cleared canvas restarts node ids, so an open arrange can't apply.
+        # A cleared canvas restarts node ids, so an open arrange can't apply,
+        # and an old node's last run error must not reach a new one.
         canvas_arrange.clear()
+        node_errors.forget_all()
         return {
             **_workspace_context(),
             "nodes": [],
@@ -10057,7 +10188,15 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     Without ``wait`` the request waits for it, as it always has. With ``wait``
     (seconds) it returns ``{"status": "running", "runId"}`` if the run is still
     going then; GET /api/graph/runs/{runId} reports it later. Agents use this so
-    a long video run doesn't outlast their tool's time limit."""
+    a long video run doesn't outlast their tool's time limit.
+
+    Status is "finished", or "failed" when any node failed (`errors` has each
+    node's message, `error` says it in one line, and the nodes that finished
+    keep their outputs), as the canvas's own run status says. A node that
+    can't run as set up (the canvas Run's pre-call check: a missing key, an
+    unwired required input) fails the run before it starts, so nothing ran
+    and nothing was spent. Either way the canvas shows each node's state and
+    message, as it does for its own runs."""
     _check_workspace_revision()
     _capture_execution_workspace()
     if not cli_graph.nodes:
@@ -10087,8 +10226,19 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     if wait is not None and (isinstance(wait, bool) or not isinstance(wait, (int, float)) or wait < 0):
         raise HTTPException(status_code=400, detail="wait must be a number of seconds")
 
-    # Checked last: a request refused for anything else must not count.
     run_id = str(uuid4())
+    # The canvas Run's own pre-call check (/api/execute): a node that can't
+    # run as set up (no key, a required input unwired) stops the run here,
+    # before the spending check and any provider call, and shows on its card.
+    errors = validate_graph(sub_nodes, sub_edges, api_keys)
+    try:
+        topological_sort(sub_nodes, sub_edges)
+    except CycleError as exc:
+        errors.append(ValidationErrorDetail(node_id="", port_id="", message=f"Graph contains a cycle: {exc}"))
+    if errors:
+        return await _refused_cli_run(run_id, target, errors)
+
+    # Checked last: a request refused for anything else must not count.
     _require_spend_approval(sub_nodes, sub_edges, run_id=run_id, settings=settings,
                             run_ids=[target] if target else _end_node_ids(sub_nodes, sub_edges))
     canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
@@ -10097,6 +10247,9 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     )
     if target:
         await _show_agent({"nodeId": target}, say=f"Running {_node_label(target)}")
+    else:
+        # The whole canvas has no one node to point at: the Agent log only.
+        await _say_agent_action(f"Running {len(sub_nodes)} node{'' if len(sub_nodes) == 1 else 's'}")
 
     outcome: dict[str, Any] = {"results": {}, "errors": {}, "skipped": {}}
     task = asyncio.create_task(_execute_cli_run(run_id, sub_nodes, sub_edges, api_keys, outcome))
@@ -10115,6 +10268,36 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     return await _cli_run_response(run_id, None if wait is None else float(wait))
 
 
+async def _refused_cli_run(run_id: str, target: str | None, errors: list[ValidationErrorDetail]) -> dict[str, Any]:
+    """A CLI run the pre-call check stopped: nothing ran and nothing was spent.
+
+    The canvas shows it as it shows a refused click on Run
+    (_announce_validation_errors); the caller gets the run result's own
+    shape with status "failed", each node's message in `errors`."""
+    canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
+    await _announce_validation_errors(errors, run_id)
+    messages = _validation_messages(errors)
+    per_node = {node_id: message for node_id, message in messages.items() if node_id}
+    summary = "; ".join(f"{node_id} ({_node_label(node_id)}): {message}" if node_id else message
+                        for node_id, message in messages.items())
+    publish_action(f"Run stopped before it started. {summary}")
+    first = next(iter(per_node), None)
+    if first is not None:
+        await _show_agent({"nodeId": first}, say=f"{_node_label(first)} can't run: {per_node[first]}")
+    response = {
+        "runId": run_id,
+        "targetNodeId": target,
+        "status": "failed",
+        "error": f"Nothing ran, so nothing was spent. {summary}",
+        "results": {},
+        "errors": per_node,
+        "skipped": {},
+        "nodesExecuted": 0,
+    }
+    _cli_runs.refused(run_id, target, response)
+    return response
+
+
 async def _execute_cli_run(
     run_id: str, sub_nodes: list[GraphNode], sub_edges: list[GraphEdge], api_keys: dict[str, Any],
     outcome: dict[str, Any],
@@ -10125,23 +10308,22 @@ async def _execute_cli_run(
     skipped: dict[str, str] = outcome.setdefault("skipped", {})
 
     async def collect_events(event: ExecutionEvent) -> None:
-        # This path keeps per-node events to itself (it returns results in
-        # the response), so journal them here for watchers.
-        _release_unspent_hold(event, run_id)
-        _journal_execution_event(event, run_id)
-        if isinstance(event, (ProviderRecoveryEvent, ProviderStartAmbiguousEvent)):
-            await _emit_and_sync(event)
-        elif isinstance(event, ExecutedEvent):
+        # The response carries what each node made or why it failed. The
+        # events also go to the canvas as a canvas run's do (_emit_and_sync:
+        # journal, spend hold, outputs saved as each node finishes, so a
+        # stopped run keeps what it made), so the person sees an agent's run
+        # node by node: queued, running, done, or failed with the message on
+        # the card. Before, only the outputs arrived, by the closing graphSync,
+        # and a node that failed stayed idle.
+        if isinstance(event, ExecutedEvent):
             results[event.node_id] = event.outputs
             if event.notes:
                 outcome.setdefault("notes", {})[event.node_id] = list(event.notes)
-            # Saved as each node finishes, so a stopped run keeps what it made.
-            if event.node_id in cli_graph.nodes:
-                _sync_outputs_to_cli_graph(event.node_id, event.outputs)
         elif isinstance(event, ErrorEvent):
             errors[event.node_id] = event.error
         elif isinstance(event, SkippedEvent):
             skipped[event.node_id] = event.reason
+        await _emit_and_sync(event)
 
     handler_registry = get_handler_registry(emit=collect_events)
     start = _time_module.time()
@@ -10218,6 +10400,14 @@ class _CliRuns:
         for key in finished[:max(0, len(finished) - self.KEEP_FINISHED)]:
             self._runs.pop(key, None)
 
+    def refused(self, run_id: str, target: str | None, response: dict[str, Any]) -> None:
+        """A run the pre-call check stopped: get_run and `nebula result` answer
+        with the same reply the caller got."""
+        done: asyncio.Future = asyncio.get_running_loop().create_future()
+        done.set_result(None)
+        self.start(run_id, done, target, {"results": {}, "errors": dict(response.get("errors") or {})})
+        self._runs[run_id]["refused"] = response
+
     def get(self, run_id: str) -> dict[str, Any] | None:
         return self._runs.get(run_id)
 
@@ -10229,6 +10419,8 @@ async def _cli_run_response(run_id: str, wait: float | None, *, report_failure: 
     entry = _cli_runs.get(run_id)
     if entry is None:
         raise HTTPException(status_code=404, detail=f"No run '{run_id}' (finished runs are kept for a while, then forgotten)")
+    if "refused" in entry:
+        return entry["refused"]
     task: asyncio.Task = entry["task"]
     # asyncio.wait never cancels the run, even when this request is cancelled.
     await asyncio.wait({task}, timeout=None if wait is None else min(wait, 3600.0))
@@ -10243,7 +10435,15 @@ async def _cli_run_response(run_id: str, wait: float | None, *, report_failure: 
                 "nodesExecuted": len(made["results"]) + len(made["errors"])}
     if report_failure and task.exception() is not None:
         return {**head, "status": "failed", "error": str(task.exception())}
-    return {**head, "status": "finished", **task.result()}
+    result = task.result()
+    if result.get("errors"):
+        # As the canvas's run status says (execution_runs: a node error makes
+        # the run "failed"). Outputs of the nodes that finished are still here.
+        failed = list(result["errors"])
+        error = (f"{failed[0]} failed: {result['errors'][failed[0]]}" if len(failed) == 1
+                 else f"{len(failed)} nodes failed: {', '.join(failed)} (errors has each message)")
+        return {**head, "status": "failed", "error": error, **result}
+    return {**head, "status": "finished", **result}
 
 
 @app.get("/api/graph/runs/{run_id}")
@@ -11064,6 +11264,7 @@ async def create_moodboard(body: MoodboardCreate) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     await _broadcast_stored_asset("moodboard", moodboard)
+    await _say_agent_action(moodboard_actions.describe_create(moodboard))
     return _moodboard_out(moodboard)
 
 
@@ -11116,6 +11317,18 @@ def _journal_board_change(before: dict, after: dict, changes: dict, *, say: str 
     _journal(entry["kind"], data=data, summary=entry["summary"])
 
 
+async def _say_agent_board_change(before: dict, after: dict, changes: dict, *, say: str = "",
+                                  undo: bool = False) -> None:
+    """One Agent log line for an agent's board write (an edit batch or a
+    PUT): the agent's own ``say`` when it sent one, else the journal's
+    summary of the change (services/moodboard_actions.describe_change),
+    marked "Undo:" for a batch of ``restore`` ops. A write that changed
+    nothing, and the person's own writes, send nothing."""
+    if not changes.get("slices") or identify_agent(current_request_headers()) is None:
+        return
+    await _say_agent_action(say or moodboard_actions.describe_change(changes, before, after, undo=undo))
+
+
 def _base_version(raw: Any) -> int | None:
     if raw is None:
         return None
@@ -11162,6 +11375,7 @@ async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
     changes = diff(before, moodboard)
     _journal_board_change(before, moodboard, changes)
     await _broadcast_stored_asset("moodboard", moodboard, edit={"touched": changes["touched"], "undo": None})
+    await _say_agent_board_change(before, moodboard, changes)
     return _moodboard_out(moodboard)
 
 
@@ -11191,9 +11405,12 @@ async def edit_moodboard(moodboard_id: str, body: MoodboardEditsBody) -> dict:
             return _asset_not_found("moodboard", moodboard_id)
         raise HTTPException(status_code=422, detail=str(exc))
     if result.changed:
-        _journal_board_change(before, board, result.changes, say=clean_say(body.say))
+        say = clean_say(body.say)
+        _journal_board_change(before, board, result.changes, say=say)
         undo = result.undo if len(body.ops) <= UNDO_BROADCAST_LIMIT else None
         await _broadcast_stored_asset("moodboard", board, edit={"touched": result.touched, "undo": undo})
+        undo_batch = all(isinstance(op, dict) and op.get("op") == "restore" for op in body.ops)
+        await _say_agent_board_change(before, board, result.changes, say=say, undo=undo_batch)
     return {"board": _moodboard_out(board), "version": board.get("version"), "applied": result.applied,
             "undo": result.undo}
 
@@ -11214,6 +11431,7 @@ async def keep_moodboard_brief_override(moodboard_id: str) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     await _broadcast_stored_asset("moodboard", moodboard, edit=_UNTOUCHED_LAYOUT)
+    await _say_agent_action(moodboard_actions.describe_write("kept the brief on", moodboard))
     return _moodboard_out(moodboard)
 
 
@@ -11255,6 +11473,7 @@ async def analyze_moodboard_route(moodboard_id: str) -> dict:
         except (KeyError, ValueError):
             raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
     await _broadcast_stored_asset("moodboard", moodboard, edit=_UNTOUCHED_LAYOUT)
+    await _say_agent_action(moodboard_actions.describe_write("analyzed", moodboard))
     return _moodboard_out(moodboard)
 
 
@@ -11478,6 +11697,7 @@ async def delete_moodboard(moodboard_id: str) -> dict:
     except (KeyError, ValueError):
         raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
     await _broadcast_stored_asset("moodboard", None, moodboard_id, deleted=True)
+    await _say_agent_action(moodboard_actions.describe_write("deleted", record))
     return {"status": "trashed", "id": moodboard_id, "trashed": record}
 
 
@@ -11557,6 +11777,8 @@ async def _move_stored_asset(kind: str, asset_id: str, body: AssetMoveBody) -> d
     result["movedBy"] = actor_record(actor_for_headers(current_request_headers()))
     result["detail"] = f"Moved “{name}” from {names['from']} to {names['to']}."
     await _broadcast_stored_asset(kind, after, moved=True)
+    if kind == "moodboard":
+        await _say_agent_action(moodboard_actions.describe_write("moved", after, f"to {names['to']}"))
     return result
 
 
@@ -11675,6 +11897,8 @@ async def restore_trashed(kind: str, item_id: str) -> dict[str, Any]:
             return {"restored": kind, "id": item_id, "asset": _asset_out(kind, live), "alreadyRestored": True}
         raise HTTPException(status_code=404, detail=f"{_asset_noun(kind)} '{item_id}' isn't in Recently deleted")
     await _broadcast_stored_asset(kind, asset)
+    if kind == "moodboard":
+        await _say_agent_action(moodboard_actions.describe_write("restored", asset))
     # Read back through the store, as GET does (a board gets its brief).
     return {"restored": kind, "id": item_id, "asset": _asset_out(kind, _stored_asset(kind, item_id) or asset)}
 

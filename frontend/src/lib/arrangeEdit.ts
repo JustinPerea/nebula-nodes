@@ -11,7 +11,10 @@
  * Only the request's nodes get positions; every other node is an obstacle the
  * block must not land on. The block starts at the top-left of where the
  * agent placed the nodes and moves only if that spot would overlap another
- * node. Pure and unit-tested.
+ * node. With `bounds` (the part of the screen no floating bar covers, in
+ * flow units), a block that fits there lands inside it: moved in from where
+ * it was placed, and clear of other nodes when there is room. Pure and
+ * unit-tested.
  */
 
 import { computeLayout, DEFAULT_HEIGHT, DEFAULT_WIDTH, type LayoutEdge } from './autoLayout';
@@ -37,7 +40,10 @@ export interface PlacedNode {
 export const ARRANGE_STACK_GAP = 40;
 const MAX_SHIFTS = 200;
 
-interface Box { left: number; top: number; right: number; bottom: number }
+export interface Box { left: number; top: number; right: number; bottom: number }
+
+/** Grid step when looking for a free spot inside `bounds`. */
+const BOUNDS_SEARCH_STEP = ARRANGE_STACK_GAP * 2;
 
 function extent(value: number | undefined, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
@@ -62,6 +68,7 @@ export function arrangeNewNodes(
   request: ArrangeRequest,
   nodes: PlacedNode[],
   edges: LayoutEdge[],
+  bounds?: Box,
 ): Record<string, { x: number; y: number }> | null {
   const wanted = new Set(request.nodeIds);
   const fresh = request.nodeIds
@@ -90,18 +97,28 @@ export function arrangeNewNodes(
       : { x: anchorX + point.x, y: anchorY + point.y };
   }
 
+  const boxes = fresh.map((node) => boxOf({ ...node, position: positions[node.id] }));
+  const laidOut: Box = {
+    left: Math.min(...boxes.map((b) => b.left)),
+    top: Math.min(...boxes.map((b) => b.top)),
+    right: Math.max(...boxes.map((b) => b.right)),
+    bottom: Math.max(...boxes.map((b) => b.bottom)),
+  };
+  const shifted = (dx: number, dy: number): Box => ({
+    left: laidOut.left + dx, top: laidOut.top + dy, right: laidOut.right + dx, bottom: laidOut.bottom + dy,
+  });
+  const clear = (block: Box) => !others.some((other) => overlaps(block, other, ARRANGE_STACK_GAP));
+  const fits = bounds !== undefined
+    && laidOut.right - laidOut.left <= bounds.right - bounds.left
+    && laidOut.bottom - laidOut.top <= bounds.bottom - bounds.top;
+
+  // Into view first: the nearest spot inside the bounds.
+  let dx = fits && bounds ? clampShift(laidOut.left, laidOut.right, bounds.left, bounds.right) : 0;
+  let dy = fits && bounds ? clampShift(laidOut.top, laidOut.bottom, bounds.top, bounds.bottom) : 0;
   // Keep clear of every other node: move the whole block right or down,
   // whichever is the shorter way past what it hits.
-  const boxes = fresh.map((node) => boxOf({ ...node, position: positions[node.id] }));
-  let dx = 0;
-  let dy = 0;
   for (let step = 0; step < MAX_SHIFTS; step += 1) {
-    const block: Box = {
-      left: Math.min(...boxes.map((b) => b.left)) + dx,
-      top: Math.min(...boxes.map((b) => b.top)) + dy,
-      right: Math.max(...boxes.map((b) => b.right)) + dx,
-      bottom: Math.max(...boxes.map((b) => b.bottom)) + dy,
-    };
+    const block = shifted(dx, dy);
     const hits = others.filter((other) => overlaps(block, other, ARRANGE_STACK_GAP));
     if (hits.length === 0) break;
     const right = Math.max(...hits.map((hit) => hit.right)) + ARRANGE_STACK_GAP - block.left;
@@ -109,10 +126,49 @@ export function arrangeNewNodes(
     if (below <= right) dy += below;
     else dx += right;
   }
+  // Stepping past other nodes can leave the bounds. Then the free spot inside
+  // them nearest to where it was placed, if there is one; else the canvas
+  // brings the block into view (ArrangeController).
+  if (fits && bounds && !inside(shifted(dx, dy), bounds)) {
+    const spot = freeSpotInside(laidOut, bounds, clear);
+    if (spot) ({ dx, dy } = spot);
+  }
   for (const id of Object.keys(positions)) {
     positions[id] = { x: positions[id].x + dx, y: positions[id].y + dy };
   }
   return positions;
+}
+
+/** The smallest move that puts [low, high] inside [min, max] (it fits). */
+function clampShift(low: number, high: number, min: number, max: number): number {
+  if (low < min) return min - low;
+  if (high > max) return max - high;
+  return 0;
+}
+
+export function inside(block: Box, bounds: Box): boolean {
+  return block.left >= bounds.left && block.top >= bounds.top
+    && block.right <= bounds.right && block.bottom <= bounds.bottom;
+}
+
+/** The free spot inside `bounds` closest to `block`, as a move, or null. */
+function freeSpotInside(
+  block: Box,
+  bounds: Box,
+  clear: (candidate: Box) => boolean,
+): { dx: number; dy: number } | null {
+  const width = block.right - block.left;
+  const height = block.bottom - block.top;
+  let best: { dx: number; dy: number; distance: number } | null = null;
+  for (let top = bounds.top; top + height <= bounds.bottom; top += BOUNDS_SEARCH_STEP) {
+    for (let left = bounds.left; left + width <= bounds.right; left += BOUNDS_SEARCH_STEP) {
+      const candidate = { left, top, right: left + width, bottom: top + height };
+      if (!clear(candidate)) continue;
+      const distance = Math.hypot(left - block.left, top - block.top);
+      if (!best || distance < best.distance) best = { dx: left - block.left, dy: top - block.top, distance };
+    }
+  }
+  return best && { dx: best.dx, dy: best.dy };
 }
 
 /** A string that changes when any of these nodes' measured sizes change. */

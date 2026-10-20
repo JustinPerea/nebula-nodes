@@ -34,7 +34,13 @@ export function computeCanvasFitPadding(): PixelPadding {
     { selector: '.workspace-dock-panel', side: 'left' as const },
     { selector: '.chat-panel', side: 'right' as const },
     { selector: '.canvas-tabs', side: 'top' as const },
+    // The floating top bar (project name, Canvas / Creator Studio). It lost
+    // the `.canvas-tabs` class when it became the workspace header.
+    { selector: '.canvas-tabs-wrap', side: 'top' as const },
     { selector: '.toolbar', side: 'bottom' as const },
+    // An agent's proposal bar (and its undo notice) floats above the
+    // toolbar; Fit view with a proposal open must not tuck nodes under it.
+    { selector: '.proposal-bar-panel', side: 'bottom' as const },
     { selector: '.node-inspector-popover', side: null },
     { selector: '.panel--inspector', side: null },
   ];
@@ -81,4 +87,85 @@ export function computeCanvasFitPadding(): PixelPadding {
     bottom: px(Math.max(40, intrusion.bottom + safety)),
     left: px(leftPadding),
   };
+}
+
+export interface FlowBox { left: number; top: number; right: number; bottom: number }
+export interface ViewportValue { x: number; y: number; zoom: number }
+
+/**
+ * The part of the canvas no floating chrome covers (computeCanvasFitPadding),
+ * in flow units for this viewport. Agent edits land their arranged nodes
+ * inside it (ArrangeController).
+ */
+export function visibleFlowBox(
+  viewport: ViewportValue,
+  size: { width: number; height: number },
+  padding: PixelPadding = computeCanvasFitPadding(),
+): FlowBox {
+  const zoom = viewport.zoom || 1;
+  return {
+    left: (parseFloat(padding.left) - viewport.x) / zoom,
+    top: (parseFloat(padding.top) - viewport.y) / zoom,
+    right: (size.width - parseFloat(padding.right) - viewport.x) / zoom,
+    bottom: (size.height - parseFloat(padding.bottom) - viewport.y) / zoom,
+  };
+}
+
+/**
+ * The viewport that shows `block` whole inside the uncovered area, moving as
+ * little as it can: null when it is already in view; a pan when it fits at
+ * this zoom; else zoomed out just enough (never in, never under minZoom).
+ */
+export function viewportRevealing(
+  block: FlowBox,
+  viewport: ViewportValue,
+  size: { width: number; height: number },
+  minZoom: number,
+  padding: PixelPadding = computeCanvasFitPadding(),
+): ViewportValue | null {
+  const left = parseFloat(padding.left);
+  const top = parseFloat(padding.top);
+  const right = size.width - parseFloat(padding.right);
+  const bottom = size.height - parseFloat(padding.bottom);
+  const room = { width: right - left, height: bottom - top };
+  if (room.width <= 0 || room.height <= 0) return null;
+  const { zoom } = viewport;
+  const screen = {
+    left: block.left * zoom + viewport.x,
+    top: block.top * zoom + viewport.y,
+    right: block.right * zoom + viewport.x,
+    bottom: block.bottom * zoom + viewport.y,
+  };
+  if (screen.left >= left && screen.top >= top && screen.right <= right && screen.bottom <= bottom) return null;
+  const width = block.right - block.left;
+  const height = block.bottom - block.top;
+  if (width * zoom <= room.width && height * zoom <= room.height) {
+    const shift = (low: number, high: number, min: number, max: number) =>
+      low < min ? min - low : high > max ? max - high : 0;
+    return {
+      x: viewport.x + shift(screen.left, screen.right, left, right),
+      y: viewport.y + shift(screen.top, screen.bottom, top, bottom),
+      zoom,
+    };
+  }
+  const fitted = Math.max(minZoom, Math.min(zoom, room.width / width, room.height / height));
+  return {
+    x: left + (room.width - width * fitted) / 2 - block.left * fitted,
+    y: top + (room.height - height * fitted) / 2 - block.top * fitted,
+    zoom: fitted,
+  };
+}
+
+/** A flow-space rectangle, as React Flow's bounds helpers take it. */
+export interface FlowRect { x: number; y: number; width: number; height: number }
+
+/** The smallest rectangle around every given one, or null for none. */
+export function unionRects(rects: FlowRect[]): FlowRect | null {
+  const real = rects.filter((rect) => [rect.x, rect.y, rect.width, rect.height].every(Number.isFinite));
+  if (real.length === 0) return null;
+  const left = Math.min(...real.map((rect) => rect.x));
+  const top = Math.min(...real.map((rect) => rect.y));
+  const right = Math.max(...real.map((rect) => rect.x + rect.width));
+  const bottom = Math.max(...real.map((rect) => rect.y + rect.height));
+  return { x: left, y: top, width: right - left, height: bottom - top };
 }

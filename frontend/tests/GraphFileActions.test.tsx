@@ -19,8 +19,15 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
   useReactFlow: () => ({ fitView: mocks.fitView, getViewport: mocks.getViewport,
     screenToFlowPosition: (position: { x: number; y: number }) => position }),
   useStore: () => mocks.transform,
+  // Fit view reads the canvas size to frame open proposals' ghosts (useFitCanvasView).
+  useStoreApi: () => ({ getState: () => ({ width: 1280, height: 800, minZoom: 0.1, maxZoom: 2 }) }),
 }));
-vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn((handler: (event: ExecutionEvent) => void) => { mocks.onSync = handler; }) } }));
+vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn((handler: (event: ExecutionEvent) => void) => {
+    // Every subscriber hears each event, as with the real socket (the graph
+    // store and, since Fit view frames proposal ghosts, the proposals store).
+    const earlier = mocks.onSync;
+    mocks.onSync = earlier ? (event) => { earlier(event); handler(event); } : handler;
+  }) } }));
 
 import { GraphFileActions } from '../src/components/GraphFileActions';
 import { CommandPalette } from '../src/components/CommandPalette';

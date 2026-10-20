@@ -52,10 +52,14 @@ The server exposes these tools for building and running (see
 - `remove_from_canvas`: deletes nodes or single wires, all or nothing.
 - `run_nodes`: runs a node and what feeds it (or the whole canvas) under the
   person's spending limits. Returns outputs with small inline previews, or
-  `running` and a run id.
+  `running` and a run id. A run in which any node failed comes back
+  `failed`, with each node's message in `errors` and what did finish in
+  `results`; see [Building and running over MCP](#building-and-running-over-mcp).
 - `get_run` / `cancel_run`: collect or stop a run that is still going.
 - `view_output`: a node's output as an image (videos as three frames, image
-  lists as tiles), or as text.
+  lists as tiles), or as text. For a node whose last run failed it returns
+  the error instead of "no output yet"; if an older output is still on the
+  card it returns that with a note that the last run failed.
 - `get_spend_limits`: the limits and what this session has used.
 - `list_projects` / `open_project` / `new_project`: list the person's saved
   projects, switch the canvas to one, or start a new, empty one. The project
@@ -92,6 +96,8 @@ And these canvas tools:
   screenshot. It returns the browser's viewport and visible area, every node
   with its run state, position, size and whether it is on screen, redacted
   parameters, output availability, wires, the selection, and agent cursors.
+  A node whose last run failed has `state: "error"` with the message in
+  `error` (and the plain-language `errorHint`, when there is one).
   `view.stale` is true when no browser has reported for 30 seconds.
 - `point_at`: moves the agent's cursor on the canvas to a node, a port or a
   flow-space point, with an optional line of narration (`say`) and an
@@ -108,7 +114,10 @@ And these canvas tools:
   moves the agent's cursor to it. See [Pins](#pins).
 - `propose_change`: proposes new nodes, wires, param changes and runs as
   ghosts on the canvas. Nothing changes until the person clicks Accept. Use
-  it before paid runs or reworking their graph. See [Proposals](#proposals).
+  it before paid runs or reworking their graph. When a node the run needs
+  can't run here (no key, no Krea sign-in, a route that can't take it), the
+  reply has a `warning` naming each one, so the agent can say so or propose
+  another model. See [Proposals](#proposals).
 - `get_proposal`: reads one of your proposals; `wait_seconds` (up to 300)
   waits for the person's decision. On accept it returns `idMap` (your refs to
   real node ids) and `runNodeIds` (what the canvas will run; don't run them
@@ -148,6 +157,17 @@ NEBULA_AGENT_NAME="Claude Code" nebula point n2 --say "Checking this prompt"
 nebula point n2.prompt --from n1.text --say "Wiring the prompt in"
 nebula look          # the canvas as text; --json for the full snapshot
 ```
+
+Every one of these actions is also listed in the canvas's **Agent log**
+(bottom right, shown by default with or without the chat; hide it from its
+own eye-off button or Settings > Preferences > "Agent log"): the agent's
+name in its cursor colour, the cursor's words ("Added Moodboard", "Running
+Krea 2", "Accepted"), and the time. Moodboard writes are listed there too
+(your edit batch's `say`, else the journal's words: "Set aside #1 on board
+Dusk"; "Analyzed board Dusk"), and so is a run of the
+whole canvas ("Running 4 nodes"); neither has one place on the canvas, so
+they move no cursor. The log is in the browser's memory only: the last 50
+entries, gone on reload.
 
 The REST surface is `POST /api/canvas/cursor`, `GET /api/canvas/snapshot`, and
 `POST /api/canvas/view` (the browser's own report of viewport, node bounds and
@@ -405,6 +425,21 @@ e.g. input images), so the real total can be higher. Krea runs billed to a
 Krea account's plan are listed in `plan`. `estimate` is `null` when no node
 in the run has a list price. Each entry in `cost.nodes` carries its own
 `price` ({low, high} or null). These are list prices, not a quote.
+
+**Nodes that can't run here.** `cost.notReady` lists every node the run
+reads, upstream nodes with outputs included, that can't run here as set up,
+as `[{ref, nodeId, name, missing}]`. `missing` is in the words `find_nodes`
+and `describe_node` use (`node_readiness.instance_missing`, read at the
+values Accept would write: "needs OPENAI_API_KEY in Settings > Providers",
+a Krea sign-in, or why the chosen route can't take it), and the cost entry
+of such a node has the same `missing`. `propose_change` and `nebula propose`
+turn the list into a `warning` (`canvas_proposals.readiness_warning`). On
+the canvas the ghost shows the ⚠ a real node shows, with the same title, and
+the bar lists the nodes under its summary (three, then the rest in its
+details). Both re-check keys as the person adds them, so a line goes away
+once its key is set. Accept stays enabled, as the canvas's Run button does
+for a node without its key: the run is refused at that node before any
+provider is called, and the node shows why.
 
 Rules:
 
@@ -922,6 +957,15 @@ to the edit:
 Only that edit's new nodes move. The block starts at the top-left of where
 they were placed, and shifts right or down only if it would cover another
 node. The person's nodes never move. An edit with `arrange` must add nodes.
+When the block fits in what the person can see (clear of the top bar, the
+rail, the chat panel, the bottom toolbar and an open proposal bar:
+`computeCanvasFitPadding`), it
+lands inside that area, moved in from where it was placed and clear of other
+nodes when there is room. When it can't (too big at this zoom, or no free
+room), the canvas pans, or zooms out just enough, on the agent cursor's
+spring to show it whole, unless the person is dragging. Fit view (Shift+1,
+the toolbar button, the command palette) frames open proposals' ghosts along
+with the nodes, above the proposal bar.
 
 How it works (`services/canvas_arrange.py`, `components/canvas/ArrangeController.tsx`):
 the backend keeps the request and sends open requests with every graphSync
@@ -978,7 +1022,20 @@ the canvas is (`Person` when the tab is connected as you), with "(undo)" or
 "(redo)" on each line. Agents never need to call it.
 
 A run from `run_nodes` is a CLI run (`POST /api/graph/run` with `wait`), so
-it gets the same spending check and the same long-run handling. It waits 45
+it gets the same spending check and the same long-run handling. It also gets
+the canvas Run button's pre-call check (`validate_graph`: missing keys,
+unwired required inputs, a cycle), before the spending check. A node that
+fails it refuses the whole run: nothing is called or spent, the reply is
+`{status: "failed", error: "Nothing ran, so nothing was spent. …", errors:
+{nodeId: message}, results: {}}`, and the canvas marks the node exactly as a
+refused click on Run does. Every node's state from an agent's run reaches
+open canvases as it happens (queued, executing, done, failed), the same
+events a canvas run sends, so a failure shows on the card with its message.
+A run in which any node failed reports `status: "failed"` with `error`
+naming the node, `errors` with each message and `results` with what
+finished; `get_run` and `nebula result` say the same. The backend keeps each
+node's last error (`services/node_errors.py`) for `look_at_canvas`,
+`view_output`, `nebula look` and `nebula path` until the node runs again. It waits 45
 seconds by default because Codex gives each tool call 60 seconds unless
 configured otherwise (in-app Codex gets 150); `get_run` waits again (up to 300). Finished image and
 video outputs come back as small previews from

@@ -2,6 +2,7 @@ import { Suspense, useState, type ComponentProps, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 import {
+  DeferredAgentLog,
   DeferredConnectionPopup,
   DeferredMaskPainterModal,
   DeferredOnboardingOverlay,
@@ -25,6 +26,21 @@ function useOpenedOnce(open: boolean): boolean {
   const [opened, setOpened] = useState(open);
   if (open && !opened) setOpened(true);
   return opened || open;
+}
+
+/**
+ * The Agent log (bottom right on the canvas). Unlike the panels below it shows
+ * at once, with nothing opened first, so it mounts straight away and simply
+ * appears when its chunk lands; the empty fallback is what a hidden log draws.
+ */
+export function AgentLog() {
+  return (
+    <DeferredBoundary failed={null}>
+      <Suspense fallback={null}>
+        <DeferredAgentLog />
+      </Suspense>
+    </DeferredBoundary>
+  );
 }
 
 export function RunHistoryPanel() {
