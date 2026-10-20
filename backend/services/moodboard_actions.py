@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from services.moodboard_edits import FIELD_LABELS, board_where, journal_entry
+from services.moodboard_edits import FIELD_LABELS, board_where, cover_words, journal_entry
 
 
 def _images(n: int) -> str:
@@ -35,7 +35,8 @@ def _listed(words: list[str]) -> str:
     return words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]
 
 
-def _field_words(changes: Mapping[str, Any], entry: Mapping[str, Any] | None) -> list[str]:
+def _field_words(changes: Mapping[str, Any], entry: Mapping[str, Any] | None,
+                 after: Mapping[str, Any]) -> list[str]:
     """The board fields the change set, from its ``fields`` slice. The board's
     notes are left out only when the journal's summary is the one about them
     ("changed the notes of board Dusk")."""
@@ -48,6 +49,13 @@ def _field_words(changes: Mapping[str, Any], entry: Mapping[str, Any] | None) ->
     if board_notes_said:
         keys = [key for key in keys if key != "notes"]
     words: list[str] = []
+    if "coverImageId" in keys:
+        # Said with the image's number, not as a field: "made #3 the cover",
+        # or after a removal took it, "the cover is #1 again". The journal's
+        # own summary already says it when the cover is all that changed.
+        keys = [key for key in keys if key != "coverImageId"]
+        if entry is None or entry.get("kind") != "board.cover":
+            words.append(cover_words(after))
     changed = [key for key in keys if key != "sendNotes"]
     if changed:
         words.append("changed " + _listed([_label(key) for key in changed]))
@@ -68,7 +76,7 @@ def describe_change(changes: Mapping[str, Any], before: Mapping[str, Any], after
     otherwise reads like the change it undid: "Undo: Removed #3 from board
     Dusk"."""
     entry = journal_entry(dict(changes), dict(before), dict(after))
-    fields = _field_words(changes, entry)
+    fields = _field_words(changes, entry, after)
     where = board_where(after, before)
     if entry is not None:
         said = "; ".join([entry["summary"], *fields])

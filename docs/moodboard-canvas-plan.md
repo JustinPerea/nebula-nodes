@@ -290,7 +290,7 @@ Placement rules:
 
 - `#n` is `index + 1` in `images[]`, as today in the analysis (`moodboard_analysis.py:139-143`), the grid (`MoodboardStudioView.tsx:559`), CLI `show`, `find_image` (`moodboard_client.py:565`) and `brief()` (`:1005`).
 - The only things that change the array are add (append), remove, and undo of a remove (reinsert at the old index through the `add` op's `index`).
-- `thumbnail` stays `images[0].url`, the lowest number.
+- `thumbnail` is the board's cover, `coverImageId` (2026-10-20), else `images[0].url`, the lowest number. Picking a cover never reorders `images[]`, so `#n` stays the same image (contract 07 section 1.1).
 - A look's analysis, its `sources`, run notes ("Sent board images #3, #7") and adapter legends all use the board's numbers.
 
 ### 4.6 Frames and membership (C4, C13)

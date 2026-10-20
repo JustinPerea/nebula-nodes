@@ -31,11 +31,11 @@ def _print_json(data: Any) -> None:
 def _changes_flags(args) -> bool:
     """Whether `set` was given any change besides the image edits."""
     values = (args.name, args.notes, args.mode, args.strength, args.direction, args.brief, args.clash_mode,
-              args.send_notes)
+              args.send_notes, args.cover)
     lists = (args.avoid, args.unavoid, args.pin_color, args.keep_out_color, args.unpin_color, args.keep_anyway,
              args.leave_out, args.reset_color)
     return (any(value is not None for value in values) or any(lists)
-            or args.clear_avoid or args.clear_brief or args.keep_brief or args.leave_out_flagged)
+            or args.clear_avoid or args.clear_brief or args.keep_brief or args.leave_out_flagged or args.clear_cover)
 
 
 def _read_previous(source: str) -> dict[str, Any]:
@@ -177,10 +177,16 @@ def _print_board(board: dict[str, Any], names: dict[str, tuple[str, bool]] | Non
     for label, key in (("Colors that must appear", "include"), ("Colors to keep out", "exclude")):
         if pinned.get(key):
             print(f"  {label}: {' '.join(pinned[key])}")
+    cover = boards.cover_of(board) if "coverImageId" in board else None
+    if cover is not None:
+        print(f"  Cover: #{cover['number']} ({cover['id']})" if cover["chosen"]
+              else f"  Cover: #{cover['number']}, the first image (none chosen)")
     print(f"  Images ({len(images)}):")
     for index, image in enumerate(images, start=1):
         flags = ("  set aside" if image.get("excluded")
                  else "  set aside (weight 0)" if boards.is_set_aside(image) else "")
+        if cover is not None and cover["chosen"] and cover["number"] == index:
+            flags += "  cover"
         note = f'  "{image["notes"]}"' if image.get("notes") else ""
         print(f"    {index:>2}  {image.get('id')}  weight {float(image.get('weight', 1)):.2f}{flags}  "
               f"{image.get('url')}{note}")
@@ -448,6 +454,9 @@ def run(client: NebulaClient, args) -> None:
                 aside = sum(1 for image in images if boards.is_set_aside(image))
                 counted = f"{len(images)} {'image' if len(images) == 1 else 'images'}" + (
                     f", {aside} set aside" if aside else "")
+                cover = boards.cover_of(board) if "coverImageId" in board else None
+                if cover is not None and cover["chosen"]:
+                    counted += f", cover #{cover['number']}"
                 print(f"{board.get('id')}  {board.get('name')}  ({counted}, "
                       f"{board.get('mode')}, {analyzed}, {_scope_label(board, names)})")
         elif verb == "show":
@@ -497,6 +506,8 @@ def run(client: NebulaClient, args) -> None:
                 edits.setdefault(image, {"image": image})["excluded"] = False
             if args.brief is not None and args.clear_brief:
                 _fail("--brief and --clear-brief can't go together")
+            if args.cover is not None and args.clear_cover:
+                _fail("--cover and --clear-cover can't go together")
             if args.clear_avoid and args.unavoid:
                 _fail("--clear-avoid empties the Avoid list, so --unavoid has nothing to take off")
             if args.restore is not None:
@@ -519,7 +530,8 @@ def run(client: NebulaClient, args) -> None:
                     unpin_colors=args.unpin_color, brief_override="" if args.clear_brief else args.brief,
                     keep_brief=args.keep_brief, keep_anyway=args.keep_anyway, leave_out=args.leave_out,
                     leave_out_flagged=args.leave_out_flagged, reset_colors=args.reset_color,
-                    clash_mode=args.clash_mode, send_notes=args.send_notes, headers=headers)
+                    clash_mode=args.clash_mode, send_notes=args.send_notes,
+                    cover="" if args.clear_cover else args.cover, headers=headers)
             if args.json:
                 _print_json({**boards.brief(board), "removed": removed, "previous": previous,
                              **({"skipped": skipped} if args.restore is not None else {})})
@@ -641,6 +653,11 @@ def add_parser(sub) -> None:
                             "unless --weight sets one (repeatable; --include is the old name)")
     set_p.add_argument("--remove", action="append", default=[], metavar="IMAGE",
                        help="Take an image off the board (its file stays; repeatable)")
+    set_p.add_argument("--cover", metavar="IMAGE",
+                       help="The image the board opens on (its picture on the canvas card and in lists), by "
+                            "number or id, e.g. --cover 5. Nothing moves: no image changes number")
+    set_p.add_argument("--clear-cover", dest="clear_cover", action="store_true",
+                       help="Open the board on image #1 again (no cover chosen)")
     set_p.add_argument("--name", help="Rename the board")
     set_p.add_argument("--notes", help="Notes for the whole board")
     set_p.add_argument("--mode", choices=boards.MODES)
