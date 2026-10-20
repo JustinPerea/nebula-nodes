@@ -202,6 +202,11 @@ interface UIState {
    * Flow's start, or its first fit), not one the person moved: opening a
    * project doesn't make it an unsaved change (projectStore). */
   canvasViewportInitial?: boolean;
+  /** canvasViewport is a later move the canvas made itself (its fit after an
+   * agent's nodes land, an arrange's reveal; lib/canvasCameraOwner), not the
+   * person's pan or zoom: projectStore saves it with the change that caused
+   * it, without reading "Unsaved changes" or restarting the autosave wait. */
+  canvasViewportByCanvas?: boolean;
   /** Invalidates delayed initialization after an authoritative graph replacement. */
   canvasViewportRevision: number;
   /** Counts fresh-canvas panel resets (a project opened, created or deleted). */
@@ -304,7 +309,7 @@ interface UIState {
   inspectorPinned: boolean;
 
   enterEditor: (sourceNodeId: string) => void;
-  setCanvasViewport: (viewport: Viewport, options?: { initial?: boolean }) => void;
+  setCanvasViewport: (viewport: Viewport, options?: { initial?: boolean; byCanvas?: boolean }) => void;
   clearCanvasViewport: () => void;
   setCinemaSelectedShot: (nodeId: string, shotId: string | null) => void;
   clearCinemaSelectedShots: () => void;
@@ -450,7 +455,8 @@ export const useUIStore = create<UIState>((set, get) => ({
     if (![viewport.x, viewport.y, viewport.zoom].every(Number.isFinite) || viewport.zoom <= 0) return;
     const previous = get().canvasViewport;
     if (previous?.x === viewport.x && previous.y === viewport.y && previous.zoom === viewport.zoom) return;
-    set({ canvasViewport: { x: viewport.x, y: viewport.y, zoom: viewport.zoom }, canvasViewportInitial: options?.initial });
+    set({ canvasViewport: { x: viewport.x, y: viewport.y, zoom: viewport.zoom }, canvasViewportInitial: options?.initial,
+      canvasViewportByCanvas: options?.byCanvas });
   },
 
   clearCanvasViewport: () => set((state) => ({

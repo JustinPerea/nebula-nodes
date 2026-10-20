@@ -4,6 +4,7 @@ import type { NodeData } from '../../types';
 import { arrangeNewNodes, sizeSignature, type ArrangeRequest, type Box, type PlacedNode } from '../../lib/arrangeEdit';
 import { viewportRevealing, visibleFlowBox } from '../../lib/canvasFit';
 import { springViewport } from '../../lib/viewportSpring';
+import { claimCameraMove } from '../../lib/canvasCameraOwner';
 import { useArrangeStore } from '../../store/arrangeStore';
 import { completeArrange, useGraphStore } from '../../store/graphStore';
 
@@ -78,7 +79,9 @@ export function ArrangeController() {
       const target = viewportRevealing(block, viewport, size, state.minZoom);
       if (!target) return;
       stopReveal.current();
-      stopReveal.current = springViewport(viewport, target, (next) => { void setViewport(next); });
+      // The canvas's own move, every frame of it: it saves with the agent's
+      // edit rather than reading as the person's unsaved pan (canvasCameraOwner).
+      stopReveal.current = springViewport(viewport, target, (next) => { claimCameraMove(); void setViewport(next); });
     };
 
     const placed = (request: ArrangeRequest): { all: PlacedNode[]; mine: PlacedNode[]; measured: boolean } => {
