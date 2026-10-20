@@ -2,7 +2,7 @@
 
 ## 2026-10-20 — Moodboard adapters: the table, dispatcher steps 1, 2 and 8, the contract (plan PR13, A5)
 
-Branch `feat/adapter-table` (from `24123df3`; main has since moved to `6b6d763b` with #106, which touches `backend/main.py` and contract 07's changelog, so a merge is due before the PR). Not committed.
+Branch `feat/adapter-table` (from `24123df3`; merged with main through #124 before the PR, keeping both sides of AGENTS.md, MCP-SETUP, contract 07 and `test_mcp_tools.py`; §1.17's reserved-sections line now names only 1.14 and 1.15).
 
 - **What's built.** `backend/data/moodboard_adapters.json` (16 entries, sorted, plus the `census`), `moodboard_adapters_krea.json` (generated, empty), `services/moodboard_adapters.py` (load, resolve, `run_route`, the contract), `apply_to_generator` resolving the entry (`_HANDLER_READS_BOARD` retired), Krea 2's port `Any` to `Moodboard`, `GET /api/moodboard/adapters`, the card line, `scripts/moodboard-adapter-contract.mjs` in `check-node-contracts.mjs`, and the sync script's generator with `--check`.
 - **Nothing a generator receives changed.** `tests/fixtures/moodboard_dispatch_before_adapters.json` was captured on untouched main: `apply_to_generator` for 16 nodes, 7 golden boards and the wired, own-negative, no-prompt, blank-prompt, two-board and strength-0 cases (688 records); all replay equal. Live, 16 nodes on two key sets sent byte-identical bodies on main and this branch (below).
