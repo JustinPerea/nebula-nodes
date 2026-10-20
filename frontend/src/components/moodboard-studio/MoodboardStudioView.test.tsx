@@ -123,6 +123,13 @@ describe('Moodboard Studio rail', () => {
   });
 });
 
+describe('Moodboard Studio strength', () => {
+  it("says the strength is the total the board's images share on Krea 2 (Q21 b)", async () => {
+    await openStudio('g1', 'global', 'Global board');
+    expect(screen.getByText("Strength 0.70 · the total the board's images share on Krea 2")).toBeTruthy();
+  });
+});
+
 describe('Moodboard Studio private note', () => {
   it('saves the private note and keeps the analysis; a steering change clears it', async () => {
     await openStudio('g1', 'global', 'Global board');
