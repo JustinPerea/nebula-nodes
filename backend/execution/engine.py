@@ -1197,9 +1197,15 @@ async def _execute_graph(
             # field, and its Avoid list joins the prompt only for
             # instruction-following models. The handler (and the cache key)
             # get these params; the node's own params (its saved recipe)
-            # stay the person's.
-            resolved_inputs, handler_params = apply_board_to_generator(
-                node.definition_id, registered_node_def, resolved_inputs, node.params)
+            # stay the person's. What it says (a board at strength 0 isn't
+            # sent, Q36 a) joins this run's notes.
+            board_notes: list[str] = []
+            notes_token = execution_notes.set(board_notes)
+            try:
+                resolved_inputs, handler_params = apply_board_to_generator(
+                    node.definition_id, registered_node_def, resolved_inputs, node.params)
+            finally:
+                execution_notes.reset(notes_token)
             handler_node = node if handler_params is node.params else node.model_copy(
                 update={"params": dict(handler_params)})
             if (
@@ -1306,11 +1312,17 @@ async def _execute_graph(
                                     runtime = {"status": "error", "error": "Cached shot produced no image"}
                                 node._cinema_produced_outputs[shot_id] = runtime
                         await _maybe_probe_video_output(node, cached_outputs)
+                        # A board at 0 leaves the same request as no board, so
+                        # the entry may be one a run without the board left (or
+                        # this run may have no board where that one had it off):
+                        # the entry keeps only the handler's notes, and this
+                        # run's own board notes go in front.
+                        replayed = cache.get_notes(cache_key)
                         await record_outputs(nid, context, cached_outputs, effective_params, cached_withheld,
-                                             cache.get_notes(cache_key))
+                                             [*board_notes, *(n for n in replayed if n not in board_notes)])
                         return nid, True, 1
 
-            run_notes: list[str] = []
+            run_notes: list[str] = list(board_notes)
             if handler is None:
                 if node.definition_id == "text-input":
                     text_value = node.params.get("value", "")
@@ -1562,7 +1574,7 @@ async def _execute_graph(
 
             if cache_enabled and cache is not None and cache_key is not None and handler is not None:
                 cache.set(cache_key, gating.join_outputs(node_outputs, withheld),
-                          effective_params=node.params, notes=run_notes)
+                          effective_params=node.params, notes=run_notes[len(board_notes):])
 
             await record_outputs(nid, context, node_outputs, node.params, withheld, run_notes)
             return nid, True, 1

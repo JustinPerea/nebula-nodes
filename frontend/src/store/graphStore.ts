@@ -853,7 +853,7 @@ interface GraphState {
   addMoodboardNode: (
     moodboardId: string,
     position: { x: number; y: number },
-    meta?: { name?: string; thumbnail?: string; imageCount?: number; mode?: string },
+    meta?: { name?: string; thumbnail?: string; imageCount?: number; setAsideCount?: number; mode?: string },
   ) => Promise<string | null>;
 }
 
@@ -5176,6 +5176,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         name: meta.name ?? '',
         thumbnail: meta.thumbnail ?? '',
         imageCount: meta.imageCount ?? 0,
+        setAsideCount: meta.setAsideCount ?? 0,
         mode: meta.mode === 'world' || meta.mode === 'subject' ? meta.mode : 'look',
       });
     }

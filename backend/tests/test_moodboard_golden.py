@@ -88,6 +88,11 @@ before it was replaced (the review lists every path that moved):
   and every other key are as before, which
   ``test_q21b_changed_only_the_krea_style_references`` pins by a hash of the
   file before the change less that key.
+- 2026-10-20, clash reason wording (demo dry run). ``LEXICON_VERSION`` 2 to 3,
+  so every saved check runs again and no board keeps the old "allows Warm
+  for the late" reasons. On the CLI's board only ``colorCheck.basis`` (it
+  hashes the version) and ``colorCheck.checks.words.version`` moved, on all
+  7 boards. No old board clashes, so every finding list is still empty.
 
 The board images are copied into the test OUTPUT_ROOT at
 ``moodboard-golden/``, so the boards' ``/api/outputs/moodboard-golden/...``
@@ -310,13 +315,22 @@ def test_reading_an_old_board_leaves_its_file_unchanged(seeded) -> None:
 
 # The file as it stood before PR13a's deliberate update (Q21 b), less its
 # ``kreaStyleReferences``: sha256 of the canonical JSON (sorted keys, no
-# spaces), taken on main at 26572670. PR13a may change only that key.
-BEFORE_Q21B_WITHOUT_KREA_REFS = "3fbe86f869cc8c1d3de62eb95cad2e9102d88a77547bdd95ee7ec32339223ae7"
+# spaces), taken on main at 26572670. PR13a may change only that key. The
+# clash-wording change (``LEXICON_VERSION`` 3, same day) moves only the
+# lexicon's own stamps, ``cli.colorCheck.basis`` (it hashes the version) and
+# ``cli.colorCheck.checks.words.version``, so those are left out of both sides.
+BEFORE_Q21B_WITHOUT_KREA_REFS = "c97b6c2d4b073e70115d52cd93ac09324090af592d33aea2fe9821aa966e0a80"
 
 
 def _without_krea_refs(expected: dict[str, Any]) -> str:
     rest = {label: {key: value for key, value in outputs.items() if key != "kreaStyleReferences"}
             for label, outputs in expected.items()}
+    rest = json.loads(json.dumps(rest))
+    for outputs in rest.values():
+        check = (outputs.get("cli") or {}).get("colorCheck")
+        if isinstance(check, dict):
+            check.pop("basis", None)
+            ((check.get("checks") or {}).get("words") or {}).pop("version", None)
     canonical = json.dumps(rest, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 

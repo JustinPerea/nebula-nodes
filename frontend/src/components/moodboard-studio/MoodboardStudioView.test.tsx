@@ -110,6 +110,15 @@ describe('Moodboard Studio rail', () => {
     await waitFor(() => expect(tab('Project').getAttribute('aria-selected')).toBe('true'));
   });
 
+  it('counts the set-aside images beside the image count, as the node card does', async () => {
+    boards.g1 = board({ images: [
+      { id: 'i1', url: '/api/outputs/a.png', weight: 1, notes: '', privateNote: '', excluded: false },
+      { id: 'i2', url: '/api/outputs/b.png', weight: 1, notes: '', privateNote: '', excluded: true },
+    ] as Moodboard['images'] });
+    await openStudio('g1', 'global', 'Global board');
+    expect(await screen.findByText('2 images · 1 set aside · look')).toBeTruthy();
+  });
+
   it('says where the open board is when the other scope is empty', async () => {
     delete boards.p1;
     delete boards.p1b;
@@ -127,6 +136,14 @@ describe('Moodboard Studio strength', () => {
   it("says the strength is the total the board's images share on Krea 2 (Q21 b)", async () => {
     await openStudio('g1', 'global', 'Global board');
     expect(screen.getByText("Strength 0.70 · the total the board's images share on Krea 2")).toBeTruthy();
+  });
+
+  it('says the board is off at 0, and back on above it (Q36 a)', async () => {
+    boards.g1 = board({ strength: 0 });
+    await openStudio('g1', 'global', 'Global board');
+    expect(screen.getByText('Strength 0.00 · board off: wired nodes get none of it')).toBeTruthy();
+    fireEvent.change(screen.getByRole('slider', { name: /^Strength/ }), { target: { value: '0.05' } });
+    expect(screen.getByText("Strength 0.05 · the total the board's images share on Krea 2")).toBeTruthy();
   });
 });
 
