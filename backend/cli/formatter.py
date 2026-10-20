@@ -748,8 +748,10 @@ def format_proposal(view: dict[str, Any], *, created: bool = False, now_ms: floa
     return "\n".join(lines)
 
 
-def format_applied(result: dict[str, Any]) -> str:
-    """`nebula apply`'s result: what changed, then each new node's id for the next command."""
+def format_applied(result: dict[str, Any], *, undo: bool = True) -> str:
+    """`nebula apply`'s result: what changed, then each new node's id for the
+    next command, then how to undo it (a steps plan prints one undo line for
+    all its steps instead, so `undo=False` there)."""
     lines = [f"Applied: {result.get('summary') or 'no change'}."]
     refs = {node_id: ref for ref, node_id in (result.get("idMap") or {}).items()}
     for node in result.get("added") or []:
@@ -758,6 +760,29 @@ def format_applied(result: dict[str, Any]) -> str:
     arrange = result.get("arrange")
     if isinstance(arrange, dict) and arrange.get("message"):
         lines.append(f"  Arrange: {arrange['message']}")
+    token = (result.get("undo") or {}).get("token") if undo else None
+    if token:
+        minutes = int((result["undo"].get("expiresInSeconds") or 0) // 60)
+        lines.append(f"  Undo: nebula undo {token}  (for {minutes} minutes; parts changed since stay)")
+    return "\n".join(lines)
+
+
+_UNDONE_VERBS = (("removed", "removed"), ("added", "put back"), ("changed", "reset"), ("renamed", "renamed"),
+                 ("moved", "moved"))
+
+
+def format_undone(result: dict[str, Any]) -> str:
+    """`nebula undo`'s result: what went back, then each part left as it was."""
+    status = result.get("status")
+    if status == "already-undone":
+        return result.get("message") or "Already undone; nothing changed."
+    if status == "skipped":
+        lines = [result.get("message") or "Nothing went back."]
+    else:
+        done = ", ".join(f"{verb} {len(result.get(key) or [])}" for key, verb in _UNDONE_VERBS if result.get(key))
+        lines = [f"Undone: {done}." if done else (result.get("message") or "Undone: no change.")]
+    for item in result.get("skipped") or []:
+        lines.append(f"  Left as is: {item.get('message') or item.get('reason')}")
     return "\n".join(lines)
 
 

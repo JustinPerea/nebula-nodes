@@ -159,7 +159,8 @@ def test_node_errors_follow_the_card():
     assert errors.get("n1") is None
     errors.record("n2", "x" * 5000)
     assert len(errors.get("n2")["error"]) == 2000
-    errors.prune({"n1"})
+    # An undo that swaps another node in under the id forgets it.
+    errors.forget("n2")
     assert errors.get("n2") is None
 
 

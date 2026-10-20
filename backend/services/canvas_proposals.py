@@ -425,11 +425,20 @@ def summarize_cost(
     }
 
 
-def readiness_warning(cost: Mapping[str, Any]) -> str | None:
+# Where each surface's agent finds a node that runs here. The HTTP answer
+# names the route; propose_change (MCP) and `nebula propose` (CLI) word the
+# warning again from cost.notReady for their own reader.
+READY_NODES_HTTP = "GET /api/agent/nodes"
+READY_NODES_MCP = "find_nodes"
+READY_NODES_CLI = "`nebula context`"
+
+
+def readiness_warning(cost: Mapping[str, Any], *, lister: str = READY_NODES_HTTP) -> str | None:
     """One paragraph for the agent naming the run's nodes that can't run here, or None.
 
     propose_change and `nebula propose` show it, so the agent can tell the
-    person what to set up, or propose a model that runs here, before Accept."""
+    person what to set up, or propose a model that runs here, before Accept.
+    ``lister`` is what lists the nodes that run here on the caller's surface."""
     rows = [row for row in cost.get("notReady") or [] if isinstance(row, Mapping)]
     if not rows:
         return None
@@ -444,7 +453,7 @@ def readiness_warning(cost: Mapping[str, Any]) -> str | None:
     count = f"{len(rows)} node{'s' if len(rows) != 1 else ''}"
     return (f"If the person accepts, the run fails: {count} can't run here as set up. "
             f"{'; '.join(lines)}{more}. Tell the person what to set up, or propose a node that runs here "
-            "(find_nodes lists them).")
+            f"({lister} lists them).")
 
 
 # -- placement ----------------------------------------------------------------

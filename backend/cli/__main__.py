@@ -234,6 +234,20 @@ def build_parser() -> argparse.ArgumentParser:
     apply_p.add_argument("--as", dest="agent_name",
                          help="Your agent name (default: $NEBULA_AGENT_NAME; in-app agents are named automatically)")
 
+    undo_p = sub.add_parser(
+        "undo",
+        help="Undo your own `nebula apply` by the token it printed (parts changed since stay as they are)",
+        description=("Undo one of your applies with the token it printed. Each part (a node it added, a param, "
+                     "name or position it changed, a node or wire it removed) goes back unless someone changed "
+                     "it since. Several tokens are undone in the order given (a steps plan prints them newest "
+                     "first), stopping at the first one refused. Only you can use your tokens, for 60 minutes, "
+                     "while the project you edited is open."),
+    )
+    undo_p.add_argument("tokens", nargs="+", metavar="TOKEN", help="The undo token(s) `nebula apply` printed")
+    undo_p.add_argument("--json", action="store_true", help="Print the raw result JSON")
+    undo_p.add_argument("--as", dest="agent_name",
+                        help="Your agent name (default: $NEBULA_AGENT_NAME; in-app agents are named automatically)")
+
     proposal_p = sub.add_parser("proposal", help="Check (or withdraw) one of your proposals")
     proposal_p.add_argument("id_or_action", help="A proposal id (p_9a1c3e02), or 'withdraw'")
     proposal_p.add_argument("proposal_id", nargs="?", help="With 'withdraw': the proposal id")
@@ -479,6 +493,7 @@ def main() -> None:
         "pin": lambda: pins.run_pin(client, args),
         "propose": lambda: proposals.run_propose(client, args),
         "apply": lambda: apply.run_apply(client, args),
+        "undo": lambda: apply.run_undo(client, args),
         "proposal": lambda: proposals.run_proposal(client, args),
         "proposals": lambda: proposals.run_list(client),
         "save": lambda: graph.run_save(client, args.file),
