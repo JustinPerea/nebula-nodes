@@ -549,7 +549,8 @@ export function MoodboardStudioView() {
                     </select>
                   </label>
                   <label className="moodboard-field moodboard-field--grow">
-                    <span>Strength {draft.strength.toFixed(2)}</span>
+                    {/* Q21 b: Krea 2's board references share out this strength. */}
+                    <span>Strength {draft.strength.toFixed(2)} · the total the board&apos;s images share on Krea 2</span>
                     <input
                       type="range"
                       min={0}

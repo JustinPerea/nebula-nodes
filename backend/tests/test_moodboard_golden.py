@@ -76,6 +76,18 @@ before it was replaced (the review lists every path that moved):
   hash is the same. Nothing else moved: the node's bundle (the fresh analysis
   of ``prebrief_unanalyzed`` included) still carries no excluded image, in
   ``images`` or in ``analysis.images``.
+- 2026-10-20, Q21 b: Krea 2 board refs scaled to add up to the board's
+  strength; unchanged: refs, order, every other key (moodboard canvas
+  PR13a, plan section 4.8 item 7; Justin: "They should normalize for however
+  any nodes need the information"). Each board's ``kreaStyleReferences``
+  strengths go from ``strength x weight`` to ``strength x weight / sum`` over
+  the references sent, at 4 decimals by largest remainder, adding up to the
+  board's strength (``prebrief_v2_plain``: 0.7, 0.7, 0.56, 0.42, 0.21 become
+  0.1892, 0.1892, 0.1513, 0.1135, 0.0568). The diff is 29 paths, every one a
+  ``kreaStyleReferences[i].strength`` on the 7 boards; the URLs, their order
+  and every other key are as before, which
+  ``test_q21b_changed_only_the_krea_style_references`` pins by a hash of the
+  file before the change less that key.
 
 The board images are copied into the test OUTPUT_ROOT at
 ``moodboard-golden/``, so the boards' ``/api/outputs/moodboard-golden/...``
@@ -294,3 +306,37 @@ def test_reading_an_old_board_leaves_its_file_unchanged(seeded) -> None:
     root = next(iter(seeded.values())).parent.parent
     assert not (root.parent / "moodboard-backups").exists()
     assert sorted(p.name for p in root.iterdir()) == sorted({p.parent.name for p in seeded.values()})
+
+
+# The file as it stood before PR13a's deliberate update (Q21 b), less its
+# ``kreaStyleReferences``: sha256 of the canonical JSON (sorted keys, no
+# spaces), taken on main at 26572670. PR13a may change only that key.
+BEFORE_Q21B_WITHOUT_KREA_REFS = "3fbe86f869cc8c1d3de62eb95cad2e9102d88a77547bdd95ee7ec32339223ae7"
+
+
+def _without_krea_refs(expected: dict[str, Any]) -> str:
+    rest = {label: {key: value for key, value in outputs.items() if key != "kreaStyleReferences"}
+            for label, outputs in expected.items()}
+    canonical = json.dumps(rest, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def test_q21b_changed_only_the_krea_style_references() -> None:
+    expected = json.loads(EXPECTED.read_text(encoding="utf-8"))
+    assert _without_krea_refs(expected) == BEFORE_Q21B_WITHOUT_KREA_REFS
+    # Each board's references add up to its strength, at 4 decimals.
+    from decimal import Decimal
+
+    for label in labels():
+        board = json.loads((BOARDS / f"{label}.json").read_text(encoding="utf-8"))
+        refs = expected[label]["kreaStyleReferences"]
+        assert refs, label
+        total = sum((Decimal(str(ref["strength"])) for ref in refs), Decimal(0))
+        assert total == Decimal(str(board.get("strength", 0.7))), label
+
+
+def test_the_golden_docstring_records_the_q21b_change() -> None:
+    doc = __doc__ or ""
+    assert "Q21 b" in doc
+    assert ("Krea 2 board refs scaled to add up to the board's strength; unchanged: refs, order, "
+            "every other key") in " ".join(doc.split())

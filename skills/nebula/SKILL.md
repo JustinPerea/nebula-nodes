@@ -176,7 +176,12 @@ nebula moodboard delete <board>
   never steers: it isn't in the analysis or the brief. New images land
   after the last one, and `--weight` resizes the image's card. The CLI can't
   move cards yet.
-- Weights and strength run from 0 to 1. `--set-aside N` keeps an image on
+- Weights and strength run from 0 to 1. On Krea 2 the board's images
+  share out its strength: each goes at strength x its weight / the weights
+  of the images sent, so they add up to the board's strength (one image
+  goes at the full strength), and your own wired references keep theirs on
+  top. Strength 0 sends no board images to Krea 2. The run note lists what
+  went. `--set-aside N` keeps an image on
   the board with its weight, still read for its colours, but it never steers
   (no palette, brief, cues or representative image, and no generator gets
   it); `--use N` uses it again (`--exclude`/`--include` are the old names).
