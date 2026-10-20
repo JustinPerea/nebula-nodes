@@ -59,7 +59,15 @@ export async function createPreset(body: PresetCreateInput): Promise<Preset> {
   return res.json();
 }
 
+/** Move a Style to Recently deleted (backend services/preset_store.py);
+ * `restoreTrashed('style', id)` brings it back with the same id. */
 export async function deletePreset(id: string): Promise<void> {
-  const res = await apiFetch(`/api/presets/${id}`, { method: 'DELETE' });
-  if (!res.ok) throw new Error(`Delete preset failed: ${res.status}`);
+  const res = await apiFetch(`/api/presets/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (res.ok) return;
+  let detail = '';
+  try {
+    const body = await res.json() as { detail?: unknown };
+    if (typeof body?.detail === 'string') detail = body.detail;
+  } catch { /* not JSON */ }
+  throw new Error(detail || `Delete failed: ${res.status}`);
 }
