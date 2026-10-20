@@ -32,6 +32,7 @@ import { moveChoices, type MoveChoice } from '../../lib/assetMove';
 import { useStudioAssetMove } from '../../hooks/useStudioAssetMove';
 import { AssetMoveMenu } from '../asset-move/AssetMoveMenu';
 import { isSetAside, patchSteers, setAsidePatch } from './steering';
+import { moodboardImagesLabel, setAsideCount } from '../../lib/moodboardCount';
 import { BOARD_FIELD_KEYS, MoodboardVersionConflict, applyOps, imagePatchOps, queueOps, rebaseDraft,
   fieldChanges, type BoardFieldKey, type MoodboardOp } from '../../lib/moodboardEdits';
 import { TAB_ID } from '../../lib/tabId';
@@ -980,7 +981,9 @@ function MoodboardRail({
             </span>
             <span className="moodboard-rail__meta">
               <span className="moodboard-rail__name">{m.name || 'Untitled'}</span>
-              <span className="moodboard-rail__sub">{m.images.length} images · {m.mode}</span>
+              <span className="moodboard-rail__sub">
+                {moodboardImagesLabel(m.images.length, setAsideCount(m.images))} · {m.mode}
+              </span>
             </span>
           </button>
         ))}

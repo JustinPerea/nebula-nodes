@@ -10,12 +10,9 @@ export function patchSteers(patch: Partial<MoodboardImage>): boolean {
   return STEERING_KEYS.some((key) => key in patch);
 }
 
-/** Set aside: the person's switch (stored as `excluded`), or weight 0,
- *  which steers nothing either. A set-aside image is still read for its
- *  colours; it never steers. */
-export function isSetAside(image: Pick<MoodboardImage, 'excluded' | 'weight'>): boolean {
-  return image.excluded || !(image.weight > 0);
-}
+/** Set aside (the switch, or weight 0): one rule for the Studio and every
+ *  image count (lib/moodboardCount). */
+export { isSetAside } from '../../lib/moodboardCount';
 
 /** The weight an image's card shows: its largest card's (the board weight
  *  is the largest copy's), else full weight, as a weight-0 card is laid out
