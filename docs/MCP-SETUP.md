@@ -1309,6 +1309,15 @@ nebula moodboard delete <board>
   `--merge-delta-e` / `merge_delta_e` (0-50, default 5) try other colour
   thresholds for that run only; without the dry run they are refused.
   On a Nebula without the dry run it says so and analyzes nothing.
+- Strength 0 turns the board off for every node it's wired into: no brief,
+  Avoid, negatives or images, and each such node's run notes "Board
+  strength is 0: board not sent". Any other board wired into the same node
+  still goes. The Moodboard node's own outputs (Brief, Negative, Palette,
+  Images) are unchanged, since wiring one is the person's choice. `show`
+  says the brief is not sent while strength is 0. Images off with text on
+  is the node's "Send board images" switch, not strength 0; that switch
+  isn't in this version yet, and until it is, GPT Image, Nano Banana, FLUX
+  and the other content-slot nodes get the text only anyway.
 - Like Moodboard Studio, changing images, notes, mode or strength clears the
   board's analysis, so run `analyze` again; a rename and the brief fields
   keep it. `--remove` takes an image off the board; its file stays, and the
