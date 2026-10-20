@@ -103,6 +103,15 @@ let listAgain = false;
 /** Bumped by every listing this tab applies, so an older reply never
  * replaces a newer list. */
 let listingGeneration = 0;
+/** A failed listing on Projects is tried again 1, 2, 4, 8 and 16 s later,
+ * quietly; after that on focus, online or a socket reconnect. Off Projects
+ * none is scheduled and a pending one sends nothing; goHome lists again with
+ * a fresh count. */
+let relistTimer: ReturnType<typeof setTimeout> | undefined;
+let relistFailures = 0;
+function relistIfStale(): void {
+  if (listingStale && useProjectStore.getState().screen === 'home' && !paramsVersionChange) { listingStale = false; void relistProjects(); }
+}
 
 /** Persist authoring and results, excluding React Flow measurements/selection
  * and transient credential/progress presentation. JSON gives each save its
@@ -265,6 +274,9 @@ export function resetProjectStoreForTests(): void {
   paramsVersionChange = null;
   paramsHandling += 1;
   reloadingForParams = false;
+  clearTimeout(relistTimer);
+  relistFailures = 0;
+  listingStale = false;
 }
 
 /** 'reload': first time for this version, marked. 'reloaded': the mark says
@@ -345,6 +357,17 @@ function markDirty(): void {
   }, 600);
 }
 
+/** The canvas placed its own first camera (on mount: React Flow's start, or
+ * its fit of a project saved without a view). That isn't an edit: when it is
+ * all that differs from the last save, it joins what counts as saved, so a
+ * project just opened or followed reads "Saved"; the next real change saves
+ * it along. */
+function adoptCanvasCamera(before: ProjectSnapshot['viewport']): void {
+  const snapshot = captureProjectSnapshot();
+  if (lastSaved && JSON.stringify({ ...snapshot, viewport: before }) === lastSaved) lastSaved = JSON.stringify(snapshot);
+  else markDirty();
+}
+
 async function activate(action: () => Promise<api.ProjectActivation>): Promise<void> {
   const state = useProjectStore.getState();
   if (!state.initialized || state.busy) return;
@@ -397,6 +420,7 @@ async function activate(action: () => Promise<api.ProjectActivation>): Promise<v
  * open isn't refused as stale. */
 function relistProjects(): Promise<void> {
   if (listing) { listAgain = true; return listing; }
+  clearTimeout(relistTimer);
   listing = (async () => {
     try {
       do {
@@ -411,8 +435,11 @@ function relistProjects(): Promise<void> {
           ...(state.switchNotice ? { switchNotice: wayBackIn(state.switchNotice, list.projects) } : {}),
         }));
       } while (listAgain);
-    } catch { listingStale = true; /* Listed again on the next change or visit to Projects. */ }
-    finally { listing = null; }
+      relistFailures = 0;
+    } catch {
+      listingStale = true;
+      if (relistFailures < 5 && useProjectStore.getState().screen === 'home') relistTimer = setTimeout(relistIfStale, 1000 * 2 ** relistFailures++);
+    } finally { listing = null; }
   })();
   return listing;
 }
@@ -713,7 +740,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     if (get().busy) return;
     set({ screen: 'home', error: null });
     useUIStore.setState({ onboardingActive: false, isPlaying: false });
-    if (listingStale) { listingStale = false; void relistProjects(); }
+    relistFailures = 0;
+    relistIfStale();
     try { await get().flush(); } catch { /* Home keeps the canvas and visible retry. */ }
   },
   flush: async () => {
@@ -766,8 +794,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     else {
       try {
         await get().flush();
+        // Counted with the relists, so a quiet retry still out can't replace it.
+        const generation = ++listingGeneration;
         const list = await api.listProjects();
-        set({ projects: list.projects, trash: list.trash ?? [], ...(!get().activeProject ? { workspaceRevision: list.workspaceRevision } : {}) });
+        if (generation === listingGeneration) {
+          set({ projects: list.projects, trash: list.trash ?? [], ...(!get().activeProject ? { workspaceRevision: list.workspaceRevision } : {}) });
+        }
       } catch (error) { showError(error); }
     }
   },
@@ -783,7 +815,10 @@ export function subscribeProjectAutosave(): () => void {
     if (state.nodes !== previous.nodes || state.edges !== previous.edges || state.runHistory !== previous.runHistory) markDirty();
   });
   const ui = useUIStore.subscribe((state, previous) => {
-    if (state.canvasViewport !== previous.canvasViewport || state.createSessionId !== previous.createSessionId) markDirty();
+    // The mark stays until the next setCanvasViewport; a camera cleared by a
+    // graph replacement (null) is never the canvas's own.
+    if (state.canvasViewport !== previous.canvasViewport && state.canvasViewport && state.canvasViewportInitial) adoptCanvasCamera(previous.canvasViewport);
+    else if (state.canvasViewport !== previous.canvasViewport || state.createSessionId !== previous.createSessionId) markDirty();
   });
   const drafts = useCreateDraftStore.subscribe(() => markDirty());
   // First, so it sees the canvas before the graph store swaps in the new graph.
@@ -798,6 +833,8 @@ export function subscribeProjectAutosave(): () => void {
       return;
     }
     if (event.type !== 'graphSync') return;
+    // A reconnect starts with one: a listing that failed meanwhile goes again.
+    relistIfStale();
     // A sync without a version is from a backend older than the gate (0).
     const paramsVersion = backendParamsVersion((event as unknown as { paramsVersion?: unknown }).paramsVersion);
     if (paramsVersion !== GRAPH_PARAMS_VERSION) {
@@ -849,6 +886,7 @@ export function subscribeProjectAutosave(): () => void {
       : 'The active project changed in another window. Reload projects to continue.', undefined, snapshot);
   });
   const outdated = onParamsOutdated((backendVersion) => { void handleParamsVersionChange(backendVersion); });
+  for (const type of ['focus', 'online']) window.addEventListener(type, relistIfStale);
   const beforeUnload = (event: BeforeUnloadEvent) => {
     if (reloadingForParams || !useProjectStore.getState().dirty) return;
     event.preventDefault();
@@ -856,8 +894,9 @@ export function subscribeProjectAutosave(): () => void {
   };
   window.addEventListener('beforeunload', beforeUnload);
   return () => {
-    graph(); ui(); drafts(); socket(); outdated();
+    graph(); ui(); drafts(); socket(); outdated(); clearTimeout(relistTimer);
     window.removeEventListener('beforeunload', beforeUnload);
+    for (const type of ['focus', 'online']) window.removeEventListener(type, relistIfStale);
     if (saveTimer !== null) clearTimeout(saveTimer);
     saveTimer = null;
   };
