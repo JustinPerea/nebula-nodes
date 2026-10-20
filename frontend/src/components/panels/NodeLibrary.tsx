@@ -32,7 +32,6 @@ export function NodeLibrary() {
   const togglePanel = useUIStore((s) => s.togglePanel);
   const skin = useUIStore((s) => s.skin);
   const addNode = useGraphStore((s) => s.addNode);
-  const canvasNodes = useGraphStore((s) => s.nodes);
   const { screenToFlowPosition } = useReactFlow();
   const collapsed = useUIStore((s) => s.libraryCollapsed);
   const toggleCategory = useUIStore((s) => s.toggleLibraryCategory);
@@ -79,14 +78,17 @@ export function NodeLibrary() {
   // Once graph-sync materializes a rapidly-added node, its real position
   // replaces the temporary reservation. Until then the reservation prevents
   // the next click/keyboard activation from stacking in the same slot.
-  useEffect(() => {
+  // Watched with a store listener, not a subscription: the library doesn't
+  // draw the canvas, so a graph change shouldn't re-render its list.
+  useEffect(() => useGraphStore.subscribe((state, previous) => {
+    if (state.nodes === previous.nodes || reservedClickPositionsRef.current.length === 0) return;
     reservedClickPositionsRef.current = reservedClickPositionsRef.current.filter(
-      (reserved) => !canvasNodes.some((node) => (
+      (reserved) => !state.nodes.some((node) => (
         Math.abs(node.position.x - reserved.x) < 1
         && Math.abs(node.position.y - reserved.y) < 1
       )),
     );
-  }, [canvasNodes]);
+  }), []);
 
   // Collapse all categories on first mount if we haven't initialized yet.
   useEffect(() => {
