@@ -688,6 +688,43 @@ describe('WS reconnect with injected endpoint (VAL-TRANSPORT-008)', () => {
 
     wsClient.disconnect();
   });
+
+  it('says socketReconnected when a socket opens after an earlier one closed, not on the first open', async () => {
+    // Events sent while no socket was open are not replayed (backend
+    // main.py /ws), so a reader of saved boards re-reads on this signal.
+    const instances: Array<{ onopen: ((ev: Event) => void) | null; onclose: ((ev: CloseEvent) => void) | null }> = [];
+    class MockWS {
+      static OPEN = 1;
+      static CLOSED = 3;
+      readyState = 0;
+      url: string;
+      onopen: ((ev: Event) => void) | null = null;
+      onclose: ((ev: CloseEvent) => void) | null = null;
+      onmessage: ((ev: MessageEvent) => void) | null = null;
+      onerror: ((ev: Event) => void) | null = null;
+      close() { this.readyState = 3; }
+      send() {}
+      constructor(url: string) { this.url = url; instances.push(this); }
+    }
+    vi.stubGlobal('WebSocket', MockWS);
+    const { wsClient } = await import('../../src/lib/wsClient');
+    const seen: string[] = [];
+    const stop = wsClient.subscribe((event) => { seen.push(event.type); });
+    wsClient.connect();
+    await vi.advanceTimersByTimeAsync(0);
+    instances[0].onopen?.(new Event('open'));
+    expect(seen).not.toContain('socketReconnected');
+
+    instances[0].onclose?.(new CloseEvent('close'));
+    await vi.advanceTimersByTimeAsync(3000);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(instances).toHaveLength(2);
+    instances[1].onopen?.(new Event('open'));
+    expect(seen.filter((type) => type === 'socketReconnected')).toHaveLength(1);
+
+    stop();
+    wsClient.disconnect();
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -7,7 +7,10 @@ const api = vi.hoisted(() => ({ fetchMoodboards: vi.fn(), fetchCharacters: vi.fn
 vi.mock('../../lib/api', () => api);
 vi.mock('../../lib/createPresets', () => ({ fetchPresets: vi.fn().mockResolvedValue([]) }));
 vi.mock('../../lib/backend', async (importOriginal) => ({ ...(await importOriginal<object>()), backendAssetUrlSync: (url: string) => url }));
-vi.mock('../../lib/wsClient', () => ({ wsClient: { subscribe: () => () => {}, connect: () => {}, send: () => {} } }));
+const socket = vi.hoisted(() => ({ handlers: new Set<(event: unknown) => void>() }));
+vi.mock('../../lib/wsClient', () => ({ wsClient: {
+  subscribe: (handler: (event: unknown) => void) => { socket.handlers.add(handler); return () => socket.handlers.delete(handler); },
+  connect: () => {}, send: () => {} } }));
 
 import { AssetsPanel } from './AssetsPanel';
 import { useUIStore } from '../../store/uiStore';
@@ -109,6 +112,15 @@ describe('Assets panel moodboard count', () => {
   it('says "1 image" for one', async () => {
     await openTab('Moodboards');
     expect(await screen.findByText('1 image · look')).toBeTruthy();
+  });
+
+  it('lists again when the socket comes back, so a change made while it was down shows', async () => {
+    await openTab('Moodboards');
+    await screen.findByText('1 image · look');
+    // Set aside by an agent while the backend restarted: no storedAssetChanged came.
+    api.fetchMoodboards.mockResolvedValue([{ ...board, images: [{ weight: 1, excluded: false }, { weight: 1, excluded: true }] }]);
+    act(() => { for (const handler of socket.handlers) handler({ type: 'socketReconnected' }); });
+    expect(await screen.findByText('2 images · 1 set aside · look')).toBeTruthy();
   });
 });
 

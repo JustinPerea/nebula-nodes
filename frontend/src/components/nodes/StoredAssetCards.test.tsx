@@ -58,6 +58,32 @@ describe("a card for another project's asset", () => {
     expect(await screen.findByText('5 images · 1 set aside · look')).toBeTruthy();
   });
 
+  it('Moodboard: a long count keeps one line and reads whole on hover', async () => {
+    api.lookupStoredAsset.mockResolvedValue({ status: 'ready', asset: {
+      id: 'sa2', name: 'Big board', thumbnail: '/api/outputs/s.png', mode: 'subject', projectId: 'pB',
+      images: Array.from({ length: 124 }, (_, index) => ({ weight: 1, excluded: index < 112 })) } });
+    const props = { id: 'n4', data: { params: { moodboard: 'sa2' } }, selected: false } as unknown as NodeProps;
+    renderNode(<MoodboardNode {...props} />);
+
+    const meta = await screen.findByText('124 images · 112 set aside · subject');
+    // The card's line is cut with an ellipsis (moodboard-node.css) rather
+    // than wrapping, so the card keeps its height; the whole line is its title.
+    expect(meta.className).toBe('moodboard-node__meta moodboard-node__meta--count');
+    expect(meta.getAttribute('title')).toBe('124 images · 112 set aside · subject');
+  });
+
+  it('Moodboard: a missing board says why in full, wrapping, not cut to one line', async () => {
+    // Only the count is cut: "#<id> was deleted for good or never existed"
+    // is about 280 px at 11 px, and cut to one line it would lose the why.
+    api.lookupStoredAsset.mockResolvedValue({ status: 'missing' });
+    const props = { id: 'n5', data: { params: { moodboard: '3f2a9b1c4d5e' } }, selected: false } as unknown as NodeProps;
+    renderNode(<MoodboardNode {...props} />);
+
+    const meta = await screen.findByText('#3f2a9b1c4d5e was deleted for good or never existed');
+    expect(meta.className).toBe('moodboard-node__meta');
+    expect(meta.getAttribute('title')).toBeNull();
+  });
+
   it('Character: shows the Character and opens it in the Studio', async () => {
     api.lookupStoredAsset.mockResolvedValue({ status: 'ready', asset: {
       id: 'ca', name: 'Shoot A hero', thumbnail: '/api/outputs/h.png', referenceViews: ['a', 'b', 'c'], projectId: 'pA' } });
