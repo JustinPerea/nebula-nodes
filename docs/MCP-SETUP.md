@@ -126,9 +126,11 @@ The server exposes these tools for building and running (see
   force from anyone (`nebula clear --force`, or `DELETE /api/graph?force=true`);
   on an open canvas the person can undo it.
 - `moodboard_list`, `moodboard_get`, `moodboard_create`, `moodboard_add`,
-  `moodboard_update`, `moodboard_analyze`, `moodboard_move`, `moodboard_delete`: the boards in
+  `moodboard_update`, `moodboard_edit`, `moodboard_analyze`, `moodboard_move`, `moodboard_delete`: the boards in
   Moodboard Studio, with their brief (Direction, Avoid, pinned colours, a
-  hand-written brief, and the brief generators get). `moodboard_analyze`
+  hand-written brief, and the brief generators get). `moodboard_edit` moves,
+  resizes and groups a board's cards (the Studio's Board view) in one checked
+  edit, and its `undo` takes it back. `moodboard_analyze`
   with `dry_run` previews an analysis, optionally with other colour
   thresholds, and saves nothing; with `read_with="gemini-4-argon"` and
   `dry_run` it reads the references with that vision model (paid, moves
@@ -1506,6 +1508,9 @@ nebula moodboard set <board> --brief "My own brief..."   # or --clear-brief, --k
 nebula moodboard set <board> --keep-anyway "#a6392d"     # or --leave-out, --leave-out-flagged, --reset-color
 nebula moodboard set <board> --clash-mode flag           # leave-out (default), flag, no-measured, keep-all
 nebula moodboard set <board> --restore set-output.json  # undo: the `set --json` output
+nebula moodboard edit <board> --place 12=200,40 --resize 3=0.6 --in 5=Dither --link 5=Glass
+nebula moodboard edit <board> --ops ops.json --say "Moved the warm ones together"
+nebula moodboard edit <board> --undo edit-output.json   # undo: the `edit --json` output
 nebula moodboard analyze <board>
 nebula moodboard analyze <board> --dry-run --merge-delta-e 8   # preview; saves nothing
 nebula moodboard analyze <board> --read-with gemini-4-argon --estimate           # the price; reads nothing
@@ -1553,14 +1558,32 @@ nebula moodboard delete <board>
   card). The layout never steers, so it isn't in the analysis, the brief or
   the node's outputs. Images you add land after the last card, in its row
   if there is room, else in a new row; a weight you set resizes the
-  image's cards. The CLI and MCP can't move cards yet. Through the API,
-  `POST /api/moodboards/{id}/edits` takes checked edits (`place`, `resize`,
-  `link`, `frame.create` and the rest, contract 07 section 1.12): the ops
-  land together or not at all, each batch answers with an `undo`, and a
-  `baseVersion` you read that is no longer the board's is a 409 carrying
-  the board as it is now. A `PUT` keeps what it leaves out (images merge by
-  id), keeps the saved cards of images already on the board, and takes
-  `baseVersion` too.
+  image's cards. The layout view also has the board's `version`, its write
+  counter.
+- Moving cards: `nebula moodboard edit <board>` and `moodboard_edit(board,
+  ops, base_version?, say?)` send checked edits through
+  `POST /api/moodboards/{id}/edits`, the route Moodboard Studio's Board view
+  uses when the person drags a card (`place`, `resize`, `link`, `unlink`,
+  `setAside`, `weight`, `note`, `add`, `remove`, `frame.create`,
+  `frame.update`, `frame.delete`, `frame.merge`; contract 07 section 1.12).
+  The CLI's flags are those ops: `--place CARD=X,Y` (the card's top-left in
+  board pixels), `--resize CARD=WEIGHT` or `CARD=WxH` (it keeps its aspect),
+  `--in CARD=LOOK` (a loose card joins the look; a card in another look
+  moves there), `--link IMAGE=LOOK` (a copy in another look),
+  `--set-aside`, `--use`, `--note`, `--private-note`, and `--ops FILE` (or
+  `-`) for any other ops as JSON. A CARD is an image's number or id when it
+  has one card, a card id from `placements`, or `12@Dither`. The ops land
+  together or not at all, an open Studio shows them at once and keeps what
+  the person was doing, and the edit is journaled under your name with your
+  `say` (`--say`, up to 140 characters) in the Agent log. A `base_version`
+  (`--base-version`) that is no longer the board's changes nothing and says
+  the board's version: read it again. Each edit answers with `undo`
+  (`edit --json` prints it, the plain output prints the command): sent back
+  (`moodboard_edit(board, undo["ops"])`, `edit --undo FILE` or `-`), it
+  puts back only what is still as the edit left it and names the rest ("#12
+  changed since, left as is"). A `PUT` keeps what it leaves out (images
+  merge by id), keeps the saved cards of images already on the board, and
+  takes `baseVersion` too.
 - Two writers never overwrite each other: an add from the CLI or MCP is one
   `add` op, applied to the board as it is saved, and an open Moodboard
   Studio shows it without a reload and keeps its own unsaved edits (it

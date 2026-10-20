@@ -6,7 +6,7 @@ vi.mock('./backend', () => ({ apiFetch: backend.apiFetch, rewriteBackendAssetUrl
 vi.mock('./currentProject', () => ({ resolveProjectId: async () => 'p1' }));
 
 import { editMoodboard, updateMoodboard } from './api';
-import { MoodboardVersionConflict, applyOps, fieldChanges, imagePatchOps, mergeFields, queueOps, rebaseDraft,
+import { MoodboardVersionConflict, applyOps, fieldChanges, imagePatchOps, mergeFields, queueOps, rebaseDraft, sendableBatch,
   type MoodboardOp } from './moodboardEdits';
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -108,5 +108,22 @@ describe('writes sent with baseVersion', () => {
     backend.apiFetch.mockResolvedValueOnce(json(422, { detail: 'op 1 (weight): value must be 0 to 1' }));
     await expect(editMoodboard('b1', [{ op: 'weight', image: 'i1', value: 5 }])).rejects.toThrow(
       'Save failed: op 1 (weight): value must be 0 to 1');
+  });
+});
+
+describe('a batch as it is sent', () => {
+  it('ends with cover null when its last pick names an image it takes off', () => {
+    const pick: MoodboardOp = { op: 'cover', image: 'i2' };
+    const remove: MoodboardOp = { op: 'remove', images: ['i2'] };
+    expect(sendableBatch([pick, remove])).toEqual([pick, remove, { op: 'cover', image: null }]);
+  });
+
+  it('is left as it is otherwise', () => {
+    const ops: MoodboardOp[] = [{ op: 'cover', image: 'i1' }, { op: 'remove', images: ['i2'] }];
+    expect(sendableBatch(ops)).toBe(ops);
+    const cleared: MoodboardOp[] = [{ op: 'cover', image: 'i2' }, { op: 'remove', images: ['i2'] }, { op: 'cover', image: null }];
+    expect(sendableBatch(cleared)).toBe(cleared);
+    const removeOnly: MoodboardOp[] = [{ op: 'remove', images: ['i2'] }];
+    expect(sendableBatch(removeOnly)).toBe(removeOnly);
   });
 });

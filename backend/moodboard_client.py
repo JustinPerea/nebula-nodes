@@ -40,6 +40,7 @@ import asyncio
 import contextvars
 import errno
 import json
+import math
 import os
 import re
 import stat
@@ -577,6 +578,135 @@ def edit_board(api: NebulaAPI, ref: str, ops: list[dict[str, Any]], *, base_vers
         if _edits_missing(exc):
             raise MoodboardError(EDITS_UNSUPPORTED) from exc
         raise
+
+
+CARD_HELP = "CARD is an image's number or id (when it has one card), a card id, or 12@<look>"
+
+
+def _coordinate(text: str) -> int | float:
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError(text)
+    return int(value) if value.is_integer() else value
+
+
+def _place_op(item: str) -> dict[str, Any]:
+    card, sep, at = item.partition("=")
+    x, comma, y = at.partition(",")
+    try:
+        if not sep or not comma or not card.strip():
+            raise ValueError(item)
+        return {"op": "place", "placement": card.strip(), "x": _coordinate(x), "y": _coordinate(y)}
+    except ValueError:
+        raise MoodboardError(f"--place takes CARD=X,Y in board pixels, e.g. --place 12=200,40 ({CARD_HELP})") from None
+
+
+def _resize_op(item: str) -> dict[str, Any]:
+    card, sep, size = item.partition("=")
+    width, by, height = size.strip().lower().partition("x")
+    try:
+        if not sep or not card.strip():
+            raise ValueError(item)
+        if by:
+            w, h = _coordinate(width), _coordinate(height)
+            return {"op": "resize", "placement": card.strip(), "w": w, "h": h}
+        return {"op": "resize", "placement": card.strip(), "weight": float(size)}
+    except ValueError:
+        raise MoodboardError("--resize takes CARD=WEIGHT or CARD=WxH, e.g. --resize 12=0.6 or --resize 12=480x270 "
+                             f"(the card keeps its aspect; {CARD_HELP})") from None
+
+
+def _named_pair(item: str, flag: str, example: str) -> tuple[str, str]:
+    left, sep, right = item.partition("=")
+    if not sep or not left.strip() or not right.strip():
+        raise MoodboardError(f"{flag} takes {example}")
+    return left.strip(), right.strip()
+
+
+def _card_of(board: dict[str, Any], ref: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The (image, card) `ref` names, as the edits route names a card: a card
+    id, image@look, or an image (number or id) that has one card."""
+    images = [image for image in board.get("images") or [] if isinstance(image, dict)]
+    for image in images:
+        for card in image.get("placements") or []:
+            if isinstance(card, dict) and card.get("id") == ref:
+                return image, card
+    image_ref, at, frame_ref = ref.rpartition("@")
+    image = images[find_image(images, image_ref if at else ref)]
+    cards = [card for card in image.get("placements") or [] if isinstance(card, dict)]
+    number = images.index(image) + 1
+    if at:
+        frames = [frame for frame in board.get("frames") or [] if isinstance(frame, dict)]
+        frame = next((f for f in frames if f.get("id") == frame_ref), None) or next(
+            (f for f in frames if str(f.get("name", "")).casefold() == frame_ref.casefold()), None)
+        if frame is None:
+            raise MoodboardError(f"no look '{frame_ref}' on this board")
+        card = next((c for c in cards if c.get("frameId") == frame.get("id")), None)
+        if card is None:
+            raise MoodboardError(f"#{number} has no card in {frame.get('name')}")
+        return image, card
+    if len(cards) != 1:
+        raise MoodboardError(f"#{number} has {len(cards)} cards: name one as {number}@<look>")
+    return image, cards[0]
+
+
+def edit_ops(board: dict[str, Any], *, place: Iterable[str] = (), resize: Iterable[str] = (),
+             into: Iterable[str] = (), link: Iterable[str] = (), set_aside: Iterable[str] = (),
+             use: Iterable[str] = (), note: Iterable[str] = (), private_note: Iterable[str] = ()
+             ) -> list[dict[str, Any]]:
+    """`nebula moodboard edit`'s flags as board-edit ops (contract 07, 1.12),
+    the same ops moodboard_edit takes. `board` is the board as read: only
+    `into` needs it, to know whether the card is loose (it joins the look)
+    or in another look (a copy goes into the new one with the card's weight,
+    and the old card goes, in the same batch)."""
+    ops: list[dict[str, Any]] = [_place_op(item) for item in place]
+    ops += [_resize_op(item) for item in resize]
+    for item in into:
+        card_ref, frame = _named_pair(item, "--in", f"CARD=LOOK, e.g. --in 12=Dither ({CARD_HELP})")
+        image, card = _card_of(board, card_ref)
+        if card.get("frameId") is None:
+            ops.append({"op": "link", "image": str(image.get("id")), "frameId": frame})
+        else:
+            ops += [{"op": "link", "image": str(image.get("id")), "frameId": frame,
+                     "weight": card.get("weight") or 1.0},
+                    {"op": "unlink", "placement": str(card.get("id"))}]
+    for item in link:
+        image_ref, frame = _named_pair(item, "--link", "IMAGE=LOOK, e.g. --link 12=Glass (a copy in that look)")
+        ops.append({"op": "link", "image": image_ref, "frameId": frame})
+    both = sorted(set(set_aside) & set(use))
+    if both:
+        raise MoodboardError(f"--set-aside and --use both name image {', '.join(both)}: pick one")
+    ops += [{"op": "setAside", "image": str(ref).strip(), "value": True} for ref in set_aside]
+    ops += [{"op": "setAside", "image": str(ref).strip(), "value": False} for ref in use]
+    for flag, key, items in (("--note", "notes", note), ("--private-note", "privateNote", private_note)):
+        for item in items:
+            image_ref, sep, text = item.partition("=")
+            if not sep or not image_ref.strip():
+                raise MoodboardError(f"{flag} takes IMAGE=TEXT, e.g. {flag} 3=\"the orange accent\"")
+            ops.append({"op": "note", "image": image_ref.strip(), key: text})
+    return ops
+
+
+def undo_ops(data: Any) -> list[dict[str, Any]]:
+    """The ops of an undo, from what an edit printed or returned: its whole
+    answer (`edit --json`, `add --json`, moodboard_edit), its `undo`, or the
+    ops themselves."""
+    if isinstance(data, dict) and isinstance(data.get("undo"), dict):
+        data = data["undo"]
+    if isinstance(data, dict) and "ops" in data:
+        data = data["ops"]
+    if isinstance(data, list) and not data:
+        raise MoodboardError("that edit changed nothing, so there is nothing to undo")
+    if not isinstance(data, list) or not all(isinstance(op, dict) for op in data):
+        raise MoodboardError("--undo takes what `nebula moodboard edit --json` (or `add --json`) printed, "
+                             "or its `undo`")
+    return data
+
+
+def skipped_messages(result: dict[str, Any]) -> list[str]:
+    """What a restore left as it was, in the route's words ("#2 changed since, left as is")."""
+    return [str(item.get("message")) for entry in result.get("applied") or [] if isinstance(entry, dict)
+            for item in entry.get("skipped") or [] if isinstance(item, dict) and item.get("message")]
 
 
 def add_to_board(api: NebulaAPI, ref: str, sources: Iterable[str], *, headers: dict[str, str] | None = None,
@@ -1644,8 +1774,9 @@ def brief(board: dict[str, Any], *, layout: bool = False) -> dict[str, Any]:
 
     `layout` adds where the cards sit: each image's `placements` (one card
     each: x, y, w, h in board pixels, its weight, and `frameId`, the frame it
-    is in, null for none) and the board's `frames`. `nebula moodboard show
-    --json` and moodboard_get ask for it; lists and edits leave it out.
+    is in, null for none), the board's `frames` and its `version`. `nebula moodboard show
+    --json`, `nebula moodboard edit --json`, moodboard_get and moodboard_edit
+    ask for it; lists and the other edits leave it out.
 
     An image's `privateNote` is the person's own label for it, shown to
     whoever inspects the board; nothing that generates gets it, so don't put
@@ -1696,6 +1827,9 @@ def brief(board: dict[str, Any], *, layout: bool = False) -> dict[str, Any]:
         "updatedAt": board.get("updatedAt"),
     }
     if layout:
+        # The write counter: moodboard_edit's base_version (`--base-version`)
+        # refuses an edit when the board was saved since this version.
+        view["version"] = board.get("version")
         for image, shown in zip(board.get("images") or [], view["images"]):
             if isinstance(image, dict) and isinstance(image.get("placements"), list):
                 shown["placements"] = image["placements"]
