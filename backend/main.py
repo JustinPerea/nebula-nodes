@@ -2091,12 +2091,21 @@ def _refuse_agent_billing_in_run(nodes: list[GraphNode], *, on_canvas: bool = Tr
     way the canvas node it names does (_billing_choice: a route-table node's
     provider, a dual-mode Krea node's billing mode). A node that isn't on the
     canvas, or is there as another definition, starts on the defaults (Auto,
-    the API token)."""
+    the API token).
+
+    It reads the params the run runs with: the engine migrates retired params
+    before a node runs (execution/engine.py _with_current_params), and not
+    every route normalizes its nodes first (Cinema shots, /api/quick), so a
+    retired key (a Moodboard's ``_moodboardId``) can't name what the check
+    didn't see."""
     changes = []
     for node in nodes:
         live = cli_graph.nodes.get(node.id) if on_canvas else None
         before = live.get("params") or {} if live and live.get("definitionId") == node.definition_id else None
-        changes.append((node.id if on_canvas else node.definition_id, node.definition_id, before, node.params))
+        if before is not None:
+            before = migrate_params(node.definition_id, before)
+        after = migrate_params(node.definition_id, node.params)
+        changes.append((node.id if on_canvas else node.definition_id, node.definition_id, before, after))
     _refuse_agent_billing_change(changes)
 
 
