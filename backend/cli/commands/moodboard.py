@@ -1,4 +1,4 @@
-"""nebula moodboard list|show|new|add|set|analyze [--dry-run]|move|delete.
+"""nebula moodboard list|show|new|add|set|analyze [--dry-run] [--read-with MODEL]|move|delete.
 
 The boards Moodboard Studio edits, from the terminal. The work is in
 moodboard_client.py, which the MCP server's moodboard tools share; this file
@@ -315,6 +315,106 @@ def print_move(result: dict[str, Any], kind: str) -> None:
     print(f"Move it back: nebula {kind} move {result.get('id')} --to {back}")
 
 
+def _money(amount: float) -> str:
+    return f"${amount:,.2f}" if amount >= 0.01 or amount == 0 else f"${amount:.4f}"
+
+
+def _price_text(est: dict[str, Any]) -> str:
+    """"$0.04 to $0.31", or why there's no number (Q16)."""
+    if est.get("unpriced"):
+        return "No list price: the cost isn't known"
+    text = f"{_money(est['low'])} to {_money(est['high'])}"
+    if est.get("unconfirmed"):
+        text += " (no list price, may cost more)"
+    return text
+
+
+def _print_estimate(est: dict[str, Any]) -> None:
+    reader = est.get("reader") or {}
+    count, batches = est.get("count", 0), est.get("batches", 0)
+    print(f"{reader.get('name') or est.get('model')} (thinking {est.get('thinkingLevel')}): "
+          f"{count} reference{'' if count == 1 else 's'} in {batches} batch{'' if batches == 1 else 'es'}, "
+          f"{_price_text(est)}.")
+    if est.get("unreadable"):
+        print(f"  Not on this computer, so not read: {', '.join(f'#{n}' for n in est['unreadable'])}")
+    price = est.get("price") or {}
+    low = price.get("low") or {}
+    if low:
+        print(f"  Priced at ${float(low.get('inputPerMTok')):.2f} in / ${float(low.get('outputPerMTok')):.2f} out "
+              "per 1M tokens "
+              f"(output includes thinking), checked {est.get('checked')}. The high end counts one retry per batch.")
+        high = price.get("high") or {}
+        if high and high != low:
+            print(f"  The high end uses the rates from {high.get('from')} (${float(high['inputPerMTok']):.2f} in / "
+                  f"${float(high['outputPerMTok']):.2f} out), in case the read runs past midnight.")
+    if est.get("available") is False:
+        print("  Its key isn't set, so a read would be refused: add it in Settings > API keys.")
+    sys.stdout.flush()
+
+
+def _print_read_line(line: dict[str, Any]) -> None:
+    kind = line.get("kind")
+    if kind == "focus":
+        return
+    refs = line.get("refs") or []
+    if kind == "reading" and refs:
+        fit = f" ({line['fit']:.2f})" if isinstance(line.get("fit"), (int, float)) else ""
+        print(f"#{refs[0].get('number')}  {line.get('text')}{fit}")
+    elif kind == "thought":
+        print(f"    thinking: {line.get('text')}")
+    else:
+        print(line.get("text") or "")
+
+
+def _read_with(api, args, headers: dict[str, str]) -> None:
+    """`analyze --read-with MODEL`: the price, then (with --dry-run) the
+    trace as it streams. Applying the sort comes in a later version."""
+    if any(getattr(args, key) is not None for key in boards.THRESHOLD_FIELDS):
+        _fail("the colour thresholds go with the free analysis, not with --read-with")
+    est = boards.estimate_read(api, args.board, args.read_with, only=args.only, thinking_level=args.thinking_level,
+                               headers=headers)
+    if args.estimate:
+        if args.json:
+            _print_json(est)
+        else:
+            _print_estimate(est)
+        return
+    if not args.dry_run:
+        _fail("--read-with needs --dry-run in this version of Nebula: it reads and prices the references and "
+              "prints how Analyze would sort them, and moves nothing. Price it first with --estimate.")
+    if args.json:
+        def emit(line: dict[str, Any]) -> None:
+            print(json.dumps(line, ensure_ascii=False), flush=True)
+    elif args.quiet:
+        def emit(line: dict[str, Any]) -> None:
+            return None
+    else:
+        def emit(line: dict[str, Any]) -> None:
+            _print_read_line(line)
+            sys.stdout.flush()
+        _print_estimate(est)
+    result = boards.dry_read(api, args.board, args.read_with, only=args.only, thinking_level=args.thinking_level,
+                             headers=headers, on_line=emit)
+    if args.json:
+        print(json.dumps({key: value for key, value in result.items() if key != "trace"}, ensure_ascii=False))
+        return
+    if args.quiet:
+        done = [line for line in result.get("trace") or [] if line.get("kind") == "done"]
+        if done:
+            print(done[-1].get("text"))
+    spent = result.get("spent") or {}
+    if spent.get("usd") is not None:
+        print(f"Spent about {_money(spent['usd'])}: {spent.get('inputTokens', 0):,} input and "
+              f"{spent.get('outputTokens', 0) + spent.get('thoughtsTokens', 0):,} output tokens "
+              f"({spent.get('thoughtsTokens', 0):,} of them thinking) in {spent.get('requests', 0)} "
+              f"request{'' if spent.get('requests') == 1 else 's'}. Nothing was saved.")
+        unknown = int(spent.get("requestsWithoutUsage") or 0)
+        if unknown:
+            print(f"  {unknown} request{' stopped' if unknown == 1 else 's stopped'} without a token count, so "
+                  f"{'it isn' if unknown == 1 else 'they aren'}'t in this figure; Google may still bill "
+                  f"{'it' if unknown == 1 else 'them'}, so read it as a minimum.")
+
+
 def run(client: NebulaClient, args) -> None:
     api = client.api
     headers = client._identity_headers()
@@ -406,7 +506,11 @@ def run(client: NebulaClient, args) -> None:
                 print(f"  Took {url} off the board. Put it back with `nebula moodboard add {board.get('id')} {url}`.")
             if not board.get("analysis"):
                 print(f"Its analysis is out of date now: `nebula moodboard analyze {board.get('id')}`")
+        elif verb == "analyze" and args.read_with:
+            _read_with(api, args, headers)
         elif verb == "analyze":
+            if args.only or args.thinking_level or args.estimate or args.quiet:
+                _fail("--only, --thinking-level, --estimate and --quiet go with --read-with MODEL")
             thresholds = {key: getattr(args, key) for key in boards.THRESHOLD_FIELDS}
             if not args.dry_run:
                 if any(value is not None for value in thresholds.values()):
@@ -563,9 +667,12 @@ def add_parser(sub) -> None:
     set_p.add_argument("--json", action="store_true", help="Print JSON")
 
     analyze_p = msub.add_parser(
-        "analyze", help="Analyze a board (palette, accents, brief)",
+        "analyze", help="Analyze a board (palette, accents, brief), or read it with a vision model",
         description=("--dry-run shows what analyzing would give and what would change, saving nothing. "
-                     "With it, the threshold flags try other colour settings for that run only."))
+                     "With it, the threshold flags try other colour settings for that run only. "
+                     "--read-with MODEL --dry-run reads the references with a vision model (paid; the price "
+                     "shows first, and agents are held to the spending limits) and prints each reading and "
+                     "how Analyze would sort them into looks, moving nothing. --estimate prints the price only."))
     analyze_p.add_argument("board", help=board_help)
     analyze_p.add_argument("--dry-run", dest="dry_run", action="store_true",
                            help="Show the analysis, the brief and what would change; save nothing")
@@ -576,6 +683,17 @@ def add_parser(sub) -> None:
                                 "(default 10; dry run only)")
     analyze_p.add_argument("--merge-delta-e", dest="merge_delta_e", type=float, metavar="N",
                            help="Colours closer than this merge, dE00 0 to 50 (default 5; dry run only)")
+    analyze_p.add_argument("--read-with", dest="read_with", metavar="MODEL",
+                           help="Read the references with a vision model (gemini-4-argon) and print how Analyze "
+                                "would sort them into looks. Paid; with --dry-run nothing moves")
+    analyze_p.add_argument("--only", action="append", default=[], metavar="N,N",
+                           help="With --read-with: read only these images (numbers or ids, comma-separated)")
+    analyze_p.add_argument("--thinking-level", dest="thinking_level", metavar="LEVEL",
+                           help="With --read-with: low, medium or high (default: the model's own, medium)")
+    analyze_p.add_argument("--estimate", action="store_true",
+                           help="With --read-with: print the price only; read nothing")
+    analyze_p.add_argument("--quiet", action="store_true",
+                           help="With --read-with: print the summary only, not each line")
     analyze_p.add_argument("--json", action="store_true", help="Print JSON")
 
     move_p = msub.add_parser(

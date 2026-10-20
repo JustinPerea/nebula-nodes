@@ -8,7 +8,7 @@ it and exits; the MCP server raises it as the tool's error.
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import Any, Iterator
 
 import httpx
 
@@ -88,6 +88,32 @@ class NebulaAPI:
         if response.status_code >= 400:
             raise NebulaAPIError(error_detail(response), status=response.status_code)
         return response
+
+    def stream_lines(self, method: str, path: str, *, headers: dict[str, str] | None = None,
+                     **kwargs: Any) -> Iterator[str]:
+        """Each line of a streamed 2xx answer (NDJSON) as it arrives;
+        NebulaAPIError for a refusal, which comes before any line."""
+        headers = with_identity(headers)
+        kwargs.setdefault("timeout", self.timeout)
+        try:
+            if self._client is not None:
+                context = self._client.stream(method, path, headers=headers, **kwargs)
+            else:
+                context = httpx.stream(method, f"{self.base_url}{path}", headers=headers, trust_env=False, **kwargs)
+            with context as response:
+                if response.status_code >= 400:
+                    response.read()
+                    raise NebulaAPIError(error_detail(response), status=response.status_code)
+                for line in response.iter_lines():
+                    if line.strip():
+                        yield line
+        except httpx.ConnectError as exc:
+            raise NebulaAPIError(f"Nebula isn't running at {self.base_url}. Start Nebula, then retry.",
+                                 kind="connect") from exc
+        except httpx.TimeoutException as exc:
+            raise NebulaAPIError(f"Nebula didn't answer {method} {path} in time.", kind="timeout") from exc
+        except httpx.HTTPError as exc:
+            raise NebulaAPIError(f"{method} {path} failed: {exc}", kind="connect") from exc
 
     def request(self, method: str, path: str, *, binary: bool = False, **kwargs: Any) -> Any:
         response = self.send(method, path, **kwargs)

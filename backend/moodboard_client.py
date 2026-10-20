@@ -39,6 +39,7 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import errno
+import json
 import os
 import re
 import stat
@@ -1090,6 +1091,82 @@ def dry_run_board(api: NebulaAPI, ref: str, *, thresholds: dict[str, float | Non
         if exc.status == 422:
             raise MoodboardError(f"thresholds: {exc.detail}") from exc
         raise
+
+
+# -- reading references with a vision model (PR4: a dry run) -------------------------------------
+
+READ_UNSUPPORTED = ("this version of Nebula can't read references with a model, so nothing was sent or charged. "
+                    "Update Nebula to use --read-with.")
+# A read is bounded on the backend (every request has its time bounds), so
+# the client waits as long as it takes.
+READ_TIMEOUT = httpx.Timeout(30.0, read=None)
+
+
+def _read_body(board: dict[str, Any], model: str, only: Iterable[Any] | None,
+               thinking_level: str | None) -> dict[str, Any]:
+    body: dict[str, Any] = {"model": str(model)}
+    if only:
+        images = board.get("images") or []
+        refs = [part.strip() for item in only for part in str(item).split(",") if part.strip()]
+        if not refs:
+            raise MoodboardError("--only takes image numbers or ids, e.g. --only 3,5")
+        body["imageIds"] = list(dict.fromkeys(str(images[find_image(images, ref)].get("id")) for ref in refs))
+    if thinking_level:
+        body["thinkingLevel"] = thinking_level
+    return body
+
+
+def _read_refusal(exc: NebulaAPIError) -> Exception:
+    if exc.status == 405 or (exc.status == 404 and str(exc.detail).strip() == "Not Found"):
+        return MoodboardError(READ_UNSUPPORTED)
+    if exc.status in (400, 422):
+        return MoodboardError(exc.detail)
+    return exc
+
+
+def estimate_read(api: NebulaAPI, ref: str, model: str, *, only: Iterable[Any] | None = None,
+                  thinking_level: str | None = None, headers: dict[str, str] | None = None) -> dict[str, Any]:
+    """What reading the board's references with ``model`` would cost, sending
+    nothing (contract 07 section 1.13)."""
+    board = get_board(api, ref, headers)
+    try:
+        return api.request("POST", f"/api/moodboards/{board['id']}/read/estimate",
+                           json=_read_body(board, model, only, thinking_level), headers=headers)
+    except NebulaAPIError as exc:
+        raise _read_refusal(exc) from exc
+
+
+def dry_read(api: NebulaAPI, ref: str, model: str, *, only: Iterable[Any] | None = None,
+             thinking_level: str | None = None, headers: dict[str, str] | None = None,
+             on_line: Callable[[dict[str, Any]], None] | None = None) -> dict[str, Any]:
+    """Read the references with ``model`` and say how Analyze would sort them,
+    moving nothing. It is paid: agents go through the spending limits.
+
+    With ``on_line`` the trace streams (each ``moodboardReadTrace`` line as it
+    is written); the result is returned either way, with ``trace``."""
+    board = get_board(api, ref, headers)
+    body = _read_body(board, model, only, thinking_level)
+    path = f"/api/moodboards/{board['id']}/read"
+    try:
+        if on_line is None:
+            return api.request("POST", path, params={"dryRun": 1}, json=body, headers=headers, timeout=READ_TIMEOUT)
+        trace: list[dict[str, Any]] = []
+        result: dict[str, Any] | None = None
+        for raw in api.stream_lines("POST", path, params={"dryRun": 1, "stream": 1}, json=body, headers=headers,
+                                    timeout=READ_TIMEOUT):
+            row = json.loads(raw)
+            if row.get("type") == "moodboardReadError":
+                raise MoodboardError(f"{row.get('detail') or 'the read stopped'}; nothing was saved")
+            if row.get("type") == "moodboardReadResult":
+                result = row
+            else:
+                trace.append(row)
+                on_line(row)
+    except NebulaAPIError as exc:
+        raise _read_refusal(exc) from exc
+    if result is None:
+        raise MoodboardError("the read stopped before it finished; nothing was saved")
+    return {**result, "trace": trace}
 
 
 def deletes_are_restorable(api: NebulaAPI, headers: dict[str, str] | None = None) -> bool:

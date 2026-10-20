@@ -2,14 +2,14 @@
 title: Nebula Contracts — Studios and Resources (Volume 7)
 status: draft
 contract_version: 1
-updated: 2026-10-19
+updated: 2026-10-20
 ---
 
 # Studios and resources (Volume 7)
 
 Saved assets that studios edit and bridge nodes read. This volume starts with the Moodboard; Character, Cinema and the video editors are not written up yet.
 
-**Oracle:** `backend/services/moodboard_store.py`, `backend/services/moodboard_layout.py`, `backend/services/moodboard_brief.py`, `backend/services/moodboard_analysis.py`, `backend/handlers/moodboard.py`, `/api/moodboards/*` in `backend/main.py`
+**Oracle:** `backend/services/moodboard_store.py`, `backend/services/moodboard_layout.py`, `backend/services/moodboard_brief.py`, `backend/services/moodboard_analysis.py`, `backend/handlers/moodboard.py`, `backend/services/moodboard_reader.py`, `backend/services/moodboard_reader_stream.py`, `backend/data/moodboard_reader_models.json`, `/api/moodboards/*` in `backend/main.py`
 
 ---
 
@@ -223,6 +223,46 @@ Design-canvas gap 18 (Justin's calls P1-P4, 2026-10-19). Where two parts of a bo
 
 **Studio.** Under "Brief sent to generators": "Left out of the brief" (Keep anyway, or Undo for one the person left out), "Kept anyway" (Undo), "May clash" (Leave out), or in `flag` mode one "Flagged" list with Leave out all flagged, and "Pinned, so it still goes". `keep-all` shows "Clash check is off for this board." The swatches dim a left-out colour, with the reason in its tooltip. `BriefFields` has an Advanced disclosure with the four modes; under Notes, a "Send these notes to generators" switch, off. The Studio shows the backend's lists and never recomputes them.
 
+### 1.13 Reading references
+
+Plan v2.4, PR4 (§5.6, §5.6.1; Justin's calls Q11, Q16, Q17, Q29). A vision model reads the board's references and says how Analyze would sort them into looks. Only the dry run exists: it is paid, it saves nothing and moves nothing (no board write, no `version` or `updatedAt` change, `readings` untouched). PR10 adds applying it and the Studio's own confirm.
+
+**Readers.** `backend/data/moodboard_reader_models.json`, one entry per reader, checked at load (`moodboard_reader.validate_models`). Today one: `gemini-4-argon` (Google, `GOOGLE_API_KEY`, `definitionId` `gemini-chat`, streams, `thoughtSummaries` `"unconfirmed"`, `defaultThinkingLevel` `medium`). Each entry holds the thinking allowance per level (`low` 2048, `medium` 6144, `high` 16384 tokens; `allowancesUnconfirmed` until the probe), `answerTokens` `{perImage: 450, base: 300}`, `sortTokens`, `imageTokens` (1120, Google's default for an image on Gemini 4), `timeBounds` per level, dated `prices` rows (`{from, until, inputPerMTok, outputPerMTok}`, no gaps; Argon: $2.00 / $10.00 through 2026-11-30, then $4.00 / $20.00, thinking billed as output), `sources` (the pages and the quotes they hold) and `checked` (2026-10-20). `thoughtSummaries` is `true`, `false` or `"unconfirmed"`; only `true` sends `includeThoughts`.
+
+**Body** (both routes; `MoodboardReadRequest`, extra keys 422): `{model, imageIds?, thinkingLevel?}`. `model` is a reader's key, `imageIds` the images to read (all when left out; an unknown id is 422), `thinkingLevel` `low`, `medium` or `high` (the reader's default when left out).
+
+**`POST /api/moodboards/{id}/read/estimate`** sends nothing and returns:
+
+| Key | Meaning |
+|-----|---------|
+| `model`, `reader`, `thinkingLevel` | The reader and level the read would use |
+| `count`, `targets`, `unreadable` | Images that would be read; images asked for; numbers of those that aren't a file on this computer (skipped) |
+| `batches` | Requests in phase 1 (6 images each) |
+| `low`, `high` | USD. `low`: every image at `imageTokens`, prompt text at 4 characters a token, at today's input price, plus each request's output cap at today's output price. `high`: text at 3 characters a token, one split retry per batch, the sort's retry at twice its cap, at the higher of today's and the next row's prices. `null` when the reader has no price |
+| `unpriced`, `unconfirmed`, `allowancesUnconfirmed` | No price row covers today; the price is not a list price; the thinking allowances are not measured yet |
+| `price` | `{low, high, units}`: the rows used |
+| `perBatch`, `phase2` | Per request: `inputTokens [low, high]`, `maxOutputTokens`, retry tokens, `low`, `high` |
+| `shares` | The high estimate split per request (`batch:N`, `retry:N`, `sort`, `sort-retry`), which add up to `high` |
+| `sources`, `checked`, `thoughtSummaries`, `streams` | From the reader's entry |
+| `available` | Whether the reader's key is set |
+
+**`POST /api/moodboards/{id}/read?dryRun=1[&stream=1]`.** Without `dryRun` it is 422 and nothing is sent. Nothing readable is 422. A missing key is 400 and nothing is charged.
+
+- *Phase 1.* Batches of 6, at most 2 in flight, each image the longest edge 1024 px as JPEG. The images are labelled A to F in the batch; prompts never carry board numbers. Board and image notes go only when `sendNotes` is on (1.11); `privateNote` never. The answer is JSON in `generationConfig.responseFormat.text` (`{mimeType: "APPLICATION_JSON", schema}`; `responseSchema` is deprecated), one item per image with `ref` first and `reason` last. Items are parsed as the stream arrives, so each reading is a line as soon as it closes, and a reader that doesn't stream gives the same lines. A wrong or repeated `ref` is dropped (the first wins). Missing images get one retry, in two halves after `MAX_TOKENS`; a single image left can't split, so its retry goes at twice the cap (up to the model's output limit), and when the cap can't grow the retry isn't sent (the same request again) and the image is couldn't read; the same holds for the sort's retry; 400, 401, 403 and 404 are not retried. Bounds per request (first byte, quiet stretch, total): 60/60/180 s at low and medium, 120/120/300 s at high. Reasons and thought text lose image labels and `#n` (also ranges like "images A–C" or "A to C", and a bare "(B)") and are cut to 120 characters at a word.
+- *Phase 2.* One request sorts the readings into looks (the board's frames, matched ignoring case, plus new ones). Nebula enforces the rules, not the model: a best fit below 0.5 is Unsorted; at most 8 new looks; "Unsorted" is never a look; a second fit of 0.5 or more is an `alsoIn` suggestion; 3 or more images sharing the same two looks become one hybrid suggestion "A × B". If the sort fails after its retry, each image keeps its reading's own look and `sortError` says why.
+
+**Answer.** Without `stream` it returns the result with its `trace` and the `estimate`. With `stream=1` it is NDJSON: one `moodboardReadTrace` row per line as it is written, then one `moodboardReadResult` (the result without `trace`), or a `moodboardReadError` `{detail}` if it fails after the stream started.
+
+A trace line: `{type: "moodboardReadTrace", boardId, jobId, seq, kind, source, text, refs, phase, batch?, attempt?, look?, fit?, at}`. `seq` counts from 1 with no gaps; `text` is at most 200 characters; `refs` are `{imageId, number}`; `source` is `nebula` or `reader`. `kind` is one of `batch`, `focus`, `reading`, `retry`, `skipped`, `error`, `thought`, `result`, `suggestion` or `done`. Thought text from the reader is merged into lines of at least 250 ms and cleaned like reasons.
+
+The result: `{dryRun: true, applied: false, runId, boardId, reader, requestedBy, model, thinkingLevel, thoughtSummaries, results, suggestions, newLooks, readings, summary, spent, sent, sortError, ignored, trace}`. Each of `results`: `{number, id, status, look, frameId, fit, newLook, why, reason}`. `spent` (`{inputTokens, outputTokens, thoughtsTokens, requests, requestsWithoutUsage, usd}`) is the USD the usage reported comes to at today's row. It is a minimum: a request that ended without `usageMetadata` (a 5xx, a time bound) counts in `requests` and in `requestsWithoutUsage` but adds nothing to `usd`, and Google may still bill it; the CLI says so under its spent line. `sent` lists the requests that started.
+
+**Spend gate.** A read that isn't the person's goes through `agent_spend.decide` as one run of `gemini-chat` (item `_moodboard-read`), priced at `[low, high]` from the estimate, so the Gemini chat node's per-run and session limits in Settings > Agent spending apply. A refusal is 403 with the price and how to ask (raise the limit, or price it with `--estimate`). An allowed read is held at its high estimate, split into the per-request `shares`; the share of every request that never started is given back (a started one stays charged, since whether an aborted stream is billed is unconfirmed). A read with no price is refused under any USD limit. The person's own reads skip the gate.
+
+**CLI and MCP.** `nebula moodboard analyze <board> --read-with gemini-4-argon (--dry-run | --estimate) [--only 3,5] [--thinking-level L] [--quiet] [--json]` and `moodboard_analyze(board, read_with=…, dry_run=True | estimate_only=True, only=[…], thinking_level=…, include_thoughts=…)`. The CLI prints the estimate, then each line as it streams (`#21  clouds under a halftone screen → Dither (0.82)`), the done line ("Dry run: would sort N into M looks (K new) · U Unsorted · nothing moved") and what it spent; `--quiet` prints only the done and spent lines. `--read-with` without `--dry-run` or `--estimate` is refused, and so are the reader flags without `--read-with`. The MCP answer has the results, the last 20 lines that aren't `focus` or `thought`, and the thought lines only with `include_thoughts`.
+
+**Probe.** `backend/scripts/moodboard_reader_probe.py` makes the one real request the plan describes (paid; it refuses without `--yes-spend` and prints the estimate first): one batch of up to 6, once with summaries off and once with `includeThoughts`, reporting chunk times, first byte, first item, usage and whether summaries came back with the schema held. Its numbers set `thoughtSummaries` and the thinking allowances.
+
 ---
 
 ## Changelog
@@ -238,3 +278,4 @@ Design-canvas gap 18 (Justin's calls P1-P4, 2026-10-19). Where two parts of a bo
 | 2026-10-19 | Moodboard canvas, board model v2: `images[].placements`, `layoutVersion`, `frames`, `suggestions`, `readings` (1.1); `PUT` merges images by id, so a left-out key keeps its value (it used to reset to its default) and saved cards stay; layout fields refused on create and `PUT`; new images placed by the server; old boards read with a grid and save it on their first edit, and so does a board an older Nebula edited (1.5); odd layout files still list, open and save (1.1); node bundle images carry only output keys (1.4); `show --json` and `moodboard_get` list the layout (1.6) |
 | 2026-10-19 | Moodboard: the colour-word check, `clashMode`, `colorChoices`, `sendNotes`, `colorCheck`, the brief's left-out lists, notes only on opt-in, the node's `send_notes` (1.11) |
 | 2026-10-20 | Moodboard canvas, one "Set aside" switch: `excluded` now means read, never steers (1.1); analysis version 5 measures set-aside images (`images[].setAside`), with every steering output and the source hash unchanged, and the all-set-aside warning (1.3a); the bundle leaves set-aside images out of `analysis.images` too (1.4); `setAside` in the CLI and MCP view, `--set-aside`/`--use` (old `--exclude`/`--include`), `setAside` in `moodboard_update` edits (1.6) |
+| 2026-10-20 | Moodboard canvas PR4: reading references, dry run only: `POST .../read/estimate`, `POST .../read?dryRun=1` (NDJSON with `stream=1`), the readers file with dated prices, the spend gate for agents, `analyze --read-with`, `moodboard_analyze(read_with=…)`, the probe script (1.13) |

@@ -574,7 +574,7 @@ GM's mockup v5 shows Analyze as an overseer, not as an agent. There is no cursor
 
 - **The answer streams as partial JSON, keys in schema order.**
   - "The streamed chunks will be valid partial JSON strings, which can be concatenated to form the final, complete JSON object."
-  - "When using structured outputs, the model will produce outputs in the same order as the keys in the schema."
+  - "When using structured outputs, the model will produce outputs in the same order as the keys in the schema." (PR4's re-fetch on 2026-10-20: this sentence is no longer on the structured-output page, which now leads with the Interactions API. The partial-JSON sentence above is still there. So PR4's parser doesn't rely on key order: it finds `ref` and the item's end wherever they fall.)
   - REST sets the schema as `generationConfig.responseFormat.text = {mimeType: "APPLICATION_JSON", schema: <JSON Schema>}` (structured-output page: "`response_json_schema` (or `responseFormat.text.schema` in REST)"). The API reference marks `responseSchema` deprecated, and its OpenAPI form orders keys only through `propertyOrdering`. So the reader uses `responseFormat`.
   - Gemini 4 Argon is listed under structured-output model support.
   - Google sends no per-item event. Cutting out each finished item is our parser's job.
@@ -627,7 +627,7 @@ GM's mockup v5 shows Analyze as an overseer, not as an agent. There is no cursor
   - No quiet stretch longer than the same figure.
   - The whole request finishes within 300 s at `high`, 180 s otherwise.
   - The probe calibrates all of these.
-- **One retry, for what's missing.** When a stream ends with invalid JSON, a cut-off answer or missing refs, the items that closed are kept: they are real readings and were already shown. The retry asks only for the missing refs. After `finishReason: MAX_TOKENS` it goes out as two smaller batches (half the refs each), never the same request again. Whatever is still missing is "couldn't read" (Q17).
+- **One retry, for what's missing.** When a stream ends with invalid JSON, a cut-off answer or missing refs, the items that closed are kept: they are real readings and were already shown. The retry asks only for the missing refs. After `finishReason: MAX_TOKENS` it goes out as two smaller batches (half the refs each), never the same request again. A single ref left can't be halved, so its retry goes at twice the cap, bounded by the model's output limit; when the cap can't grow (a batch of one already at the limit) the retry would be the first request again, so it isn't sent and the image is "couldn't read". The sort's retry follows the same rule (built in PR4, 2026-10-20). Whatever is still missing is "couldn't read" (Q17).
 - **A reader that can't stream** (a non-streaming route, or a later non-Google reader) parses the whole answer at batch end and raises the same calls at once. Only the timing changes. `moodboard_reader_models.json` gets `streams: true|false` and `thoughtSummaries: true|false|"unconfirmed"` per model.
 - **The thought stream (Q29 c), optional per model.**
   - Only a model whose `thoughtSummaries` is `true` is asked for them (`thinkingConfig.includeThoughts: true`). `false` and `"unconfirmed"` send no `includeThoughts`, so that model's run is exactly b). PR4's probe sets Argon's value; until then it stays `"unconfirmed"`.
@@ -2169,9 +2169,9 @@ Justin answered Q18 to Q28 on 2026-10-20 (Q22 and Q23 were already answered).
 
 **Canvas (version 1, still open):**
 
-- Gemini 4 Argon's per-token price and its image token cost (PR4). The checker's fetch shows output at $10.00 through November 30, 2026 and $20.00 from December 1, 2026; PR4 records both with the units and the input price.
+- ~~Gemini 4 Argon's per-token price and its image token cost (PR4).~~ Settled by PR4 (pricing and media-resolution pages fetched 2026-10-20): Standard tier input $2.00 and output $10.00 per 1M tokens through November 30, 2026, then $4.00 and $20.00 from December 1, 2026, thinking billed as output; an image at the default resolution is 1120 tokens on Gemini 4. Both rows are in `data/moodboard_reader_models.json`.
 - The overseer (§5.6.1): bytes during thinking, time to the first item, `thoughtsTokenCount`, thought summaries alongside a schema on image batches, and whether an aborted stream is billed (PR4's probe).
-- That `estimate_run` prices a one-off `per: "request"` entry passed through `decide` with no further fields (PR4).
+- ~~That `estimate_run` prices a one-off `per: "request"` entry passed through `decide` with no further fields (PR4).~~ Settled by PR4: it does, given one row `{match: {}, price: [low, high]}` (`moodboard_reader.spend_check`; tested in `test_moodboard_reader.py`). With no entry the read counts as unpriced and any USD limit refuses it.
 - React Flow speed with 300 image cards (PR5).
 - Whether `CommandPalette`, `ContextMenu`, `KeyboardShortcuts` or `WorkspaceRail` act on keys inside the Studio (PR5).
 - Whether `resolveAnchor` in `lib/agentCursorMotion.ts` fails quietly on an unknown id (PR8).
