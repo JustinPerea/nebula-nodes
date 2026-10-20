@@ -165,7 +165,10 @@ export interface ProposalView {
   nodes: Array<{
     ref: string;
     definitionId: string;
+    /** The name the agent gave it (`rename`), or the model's name. */
     name: string;
+    /** The model's name, sent only when the agent named the node. */
+    model?: string;
     category: string;
     params: Record<string, unknown>;
     position: { x: number; y: number };

@@ -39,24 +39,32 @@ each of your edits, runs and moodboard changes under it too). `nebula apply` and
 
 ## Start here
 
-1. `nebula context`: which nodes can run here, with the keys this person set
-   up. Only use nodes it lists.
-2. `nebula projects`: saved projects; `*` is the one open on the canvas.
-   Start new work in a new project (`nebula project new "<name>"`) or open
-   the right one (`nebula project open <id>`). The person's canvas follows
-   (from their Projects screen too), names you, and offers them a button
-   back. **Never run `nebula clear` to make room**: a new project keeps their
-   work. `nebula clear` refuses on a canvas with nodes, and `--force` clears
-   it anyway. With their canvas open
-   that is one undo step for them; with none open it can't be undone yet.
-3. `nebula look`: the canvas as data (nodes, wires, outputs, selection, pins
-   the person left for you). `nebula selection` is what they have selected.
+Run `nebula context` first. One call gives you the open project and its
+canvas (nodes, wires, the selection, other agents' cursors), the pins the
+person left for you, open proposals, every moodboard (this project's,
+Global, and other projects'), the node types that run here with their
+prices, and your spending limits. Only use nodes it lists. `--json` prints
+the same as JSON. On a big canvas it shows the first nodes in full and says
+so; `nebula look` then gives every node.
+
+Projects: `nebula projects` lists them; `*` is the one open on the canvas.
+Start new work in a new project (`nebula project new "<name>"`) or open the
+right one (`nebula project open <id>`). The person's canvas follows (from
+their Projects screen too), names you, and offers them a button back.
+**Never run `nebula clear` to make room**: a new project keeps their work.
+`nebula clear` refuses on a canvas with nodes, and `--force` clears it
+anyway. With their canvas open that is one undo step for them; with none
+open it can't be undone yet. `nebula selection` is what they have selected.
+
+A mistyped command or option gets "Did you mean ...?" with that command's
+usage. MCP's names work too: `nebula find` is `nebula nodes`, `nebula
+describe` is `nebula info`.
 
 ## Find nodes
 
 | Command | What it does |
 |---|---|
-| `nebula nodes --filter upscale` | Node types by name (`--category image` and so on) |
+| `nebula nodes upscale` | Node types whose id or name has every word (`--category image` and so on) |
 | `nebula info <node-id>` | Ports, params, options, defaults and prices; on a node with a Moodboard port, what a wired board does there (`MOODBOARD:`) |
 | `nebula keys` | Which provider keys are set |
 | `nebula spend` | The spending limits you work under, and what you used |
@@ -122,12 +130,17 @@ Tell the person what to set up, or pick a node `nebula context` lists.
 ## Propose instead of doing
 
 Use `nebula propose` for paid runs over the limits and for reworking the
-person's own graph. It takes the same flags as `apply`, plus `--run`. The
-person accepts or rejects it on the canvas; you can't accept it.
+person's own graph. Its flags: `--note` (required), `--add`, `--param`,
+`--set`, `--wire`, `--at`, `--rename` for its own new nodes (`+ref=name`;
+the ghost shows the name and accepting applies it), `--run`, `--file`,
+`--wait` and `--json`. It doesn't take `apply`'s `--move`, `--remove`,
+`--unwire` or `--arrange`, or a rename of a node already on the canvas
+(use `nebula rename`). The person accepts or rejects it on the canvas; you
+can't accept it.
 
 ```bash
 nebula propose --note "Upscale the wide take" \
-  --add +up=seedvr2-upscale --wire n9:image +up:image --run +up --wait
+  --add +up=seedvr2-upscale --wire n9:image +up:image --rename +up="Wide, upscaled" --run +up --wait
 ```
 
 If a node the run needs can't run here, `nebula propose` prints a

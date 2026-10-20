@@ -7,26 +7,39 @@ from contextlib import nullcontext
 from pathlib import Path
 
 from .client import NebulaClient
+from .parser import NebulaArgumentParser
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    # NebulaArgumentParser (cli/parser.py): errors say "Did you mean ...?" and
+    # print only that command's usage; `describe` and `find` are hidden
+    # aliases of `info` and `nodes`. Every subcommand parser is one too.
+    parser = NebulaArgumentParser(
         prog="nebula",
+        usage="nebula [--url URL] <command> [options]",
         description="Nebula Nodes CLI — build and run media generation pipelines",
+        start_hint=True,
     )
     parser.add_argument("--url", default=None,
                         help="Backend URL (default: $NEBULA_URL, else the address in $NEBULA_URL_FILE, "
                              "else http://localhost:8000)")
-    sub = parser.add_subparsers(dest="command")
+    sub = parser.add_subparsers(dest="command", metavar="<command>", prog="nebula")
 
     # -- Discovery --
-    sub.add_parser("context", help="Compact summary of available nodes and keys")
+    context_p = sub.add_parser(
+        "context", help="Start here: the canvas, pins, proposals, every board, the nodes that run here with "
+                        "prices, and the spend limits, in one call")
+    context_p.add_argument("--json", action="store_true", help="Print it as JSON, as the backend sends it")
 
-    nodes_p = sub.add_parser("nodes", help="List node definitions")
-    nodes_p.add_argument("--filter", dest="query", help="Filter nodes by name")
-    nodes_p.add_argument("--category", help="Filter by category")
+    nodes_p = sub.add_parser("nodes", help="List node definitions", start_hint=True)
+    nodes_p.add_argument("words", nargs="*", metavar="WORD",
+                         help="Search: every word must be in the id or name (e.g. nebula nodes image edit)")
+    nodes_p.add_argument("--filter", dest="query", help="Search by id or name (the same as words)")
+    # MCP's word for it (find_nodes(query=...)); hidden so the help doesn't grow.
+    nodes_p.add_argument("--query", dest="query", help=argparse.SUPPRESS)
+    nodes_p.add_argument("--category", help="Only this category: an id (image-gen) or its short name (image)")
 
-    info_p = sub.add_parser("info", help="Show full detail for a node")
+    info_p = sub.add_parser("info", help="Show full detail for a node", start_hint=True)
     info_p.add_argument("node_id", help="Node definition ID")
 
     sub.add_parser("keys", help="Show configured API keys")
@@ -170,13 +183,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Propose a change for the person to accept or reject on the canvas (use before paid runs)",
         description=(
             "Builder: nebula propose --note \"Widen the take and upscale it\" --add +up=topaz-image-upscale "
-            "--param +up.upscale_factor=2 --wire n4:image +up:image --set n4.aspect_ratio=16:9 --run +up "
-            "--wait --timeout 100. "
+            "--param +up.upscale_factor=2 --wire n4:image +up:image --set n4.aspect_ratio=16:9 "
+            "--rename +up=\"Hero, upscaled\" --run +up --wait --timeout 100. "
             "New nodes use refs like +up; existing nodes use their ids (n4). Or pass --file plan.json "
-            "with {note, nodes, edges, params, run}."
+            "with {note, nodes, edges, params, run, rename}. A proposal can't move, remove, unwire or "
+            "arrange nodes, or rename existing ones: `nebula apply` does that directly."
         ),
     )
-    propose_p.add_argument("--file", help="JSON file with {note, nodes, edges, params, run}")
+    propose_p.add_argument("--file", help="JSON file with {note, nodes, edges, params, run, rename}")
     propose_p.add_argument("--note", help="One line the person reads (160 characters max): your own proposal "
                                           "only; what you noticed goes in `nebula note`")
     propose_p.add_argument("--add", action="append", default=[], metavar="+ref=definitionId",
@@ -191,6 +205,14 @@ def build_parser() -> argparse.ArgumentParser:
                            help="Run this node after the person accepts (repeatable)")
     propose_p.add_argument("--at", action="append", default=[], metavar="+ref=x,y",
                            help="Where a new node goes, e.g. --at +up=820,140")
+    propose_p.add_argument("--rename", action="append", default=[], metavar="+ref=name",
+                           help="Name a new node, e.g. --rename +g=\"Lake hero\" (accepting applies it; "
+                                "rename existing nodes with `nebula rename`)")
+    # `nebula apply`'s other options: taken here only to say propose doesn't do them.
+    propose_p.add_argument("--move", action="append", default=[], help=argparse.SUPPRESS)
+    propose_p.add_argument("--remove", action="append", default=[], help=argparse.SUPPRESS)
+    propose_p.add_argument("--unwire", action="append", nargs=2, default=[], help=argparse.SUPPRESS)
+    propose_p.add_argument("--arrange", nargs="?", const="right", default=None, help=argparse.SUPPRESS)
     propose_p.add_argument("--wait", action="store_true", help="Wait for the person to accept or reject")
     propose_p.add_argument("--timeout", type=float, default=600.0, help="With --wait, give up after this many seconds")
     propose_p.add_argument("--json", action="store_true", help="Print the raw proposal JSON")
@@ -199,6 +221,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     apply_p = sub.add_parser(
         "apply",
+        start_hint=True,
         help="Edit the canvas directly in one step, all or nothing (never runs anything)",
         description=(
             "Builder: nebula apply --add +p=text-input --param +p.value=\"a lighthouse\" "
@@ -206,7 +229,8 @@ def build_parser() -> argparse.ArgumentParser:
             "--move n3=400,120 --remove n7 --unwire n1:text n2:prompt. "
             "New nodes use refs like +img; existing nodes use their ids (n4). Or pass --file plan.json "
             "(- reads standard input) with {note, nodes, edges, params, rename, move, remove, unwire, "
-            "arrange}: the plan `nebula propose` takes, without run. If any part is refused, nothing "
+            "arrange}: the plan `nebula propose` takes (without run), plus what only a direct edit does. "
+            "If any part is refused, nothing "
             "changes. There's no limit on how much one plan adds. "
             "A file can also hold {\"steps\": [plan, plan, ...]}: each step is applied in order as its "
             "own all-or-nothing edit, and a later step can use the +refs an earlier step created. If a "
@@ -452,7 +476,7 @@ def main() -> None:
         args.url = default_url(strict=args.command != "mcp")
 
     if not args.command:
-        parser.print_help()
+        parser.print_help()  # starts with START_LINE (cli/parser.py)
         sys.exit(0)
 
     if args.command == "mcp":
@@ -474,8 +498,9 @@ def main() -> None:
         "commons": lambda: commons.run(client, args),
         "moodboard": lambda: moodboard.run(client, args),
         "character": lambda: character.run(client, args),
-        "context": lambda: context.run(client),
-        "nodes": lambda: nodes.run_list(client, query=args.query, category=args.category),
+        "context": lambda: context.run(client, as_json=args.json),
+        "nodes": lambda: nodes.run_list(client, query=" ".join([*args.words, *([args.query] if args.query else [])]),
+                                        category=args.category),
         "info": lambda: nodes.run_info(client, args.node_id),
         "keys": lambda: keys.run(client),
         "create": lambda: graph.run_create(client, args.node_id, parse_kv_list(args.param)),

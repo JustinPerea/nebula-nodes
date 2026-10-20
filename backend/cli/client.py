@@ -66,6 +66,10 @@ class NebulaClient:
         return self._request("GET", "/api/agent/context")
 
     # -- Discovery --
+    def get_start(self) -> dict[str, Any]:
+        """An agent's first call (services/agent_start.py), its hints in `nebula` words."""
+        return self._request("GET", "/api/agent/start", params={"via": "cli"})
+
     def get_nodes(self) -> dict[str, Any]:
         return self._request("GET", "/api/nodes")
 
