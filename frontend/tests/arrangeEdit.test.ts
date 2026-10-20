@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arrangeNewNodes, ARRANGE_STACK_GAP, type ArrangeRequest, type PlacedNode } from '../src/lib/arrangeEdit';
+import { arrangeNewNodes, ARRANGE_STACK_GAP, inside, type ArrangeRequest, type Box, type PlacedNode } from '../src/lib/arrangeEdit';
 
 const request = (nodeIds: string[], extra: Partial<ArrangeRequest> = {}): ArrangeRequest => ({
   id: 'a_1', nodeIds, direction: 'right', gap: 120, ...extra,
@@ -66,5 +66,45 @@ describe('arrangeNewNodes', () => {
     const nodes = [placed('n1', 0, 0, 240, 180)];
     expect(Object.keys(arrangeNewNodes(request(['n1', 'n9']), nodes, [])!)).toEqual(['n1']);
     expect(arrangeNewNodes(request(['n9']), nodes, [])).toBeNull();
+  });
+});
+
+describe('arrangeNewNodes inside the visible area', () => {
+  // What the person sees, in flow units, below the top bar and above the toolbar.
+  const view: Box = { left: 0, top: 100, right: 1200, bottom: 800 };
+  const block = (positions: Record<string, { x: number; y: number }>, nodes: PlacedNode[]): Box => ({
+    left: Math.min(...nodes.map((n) => positions[n.id].x)),
+    top: Math.min(...nodes.map((n) => positions[n.id].y)),
+    right: Math.max(...nodes.map((n) => positions[n.id].x + n.width!)),
+    bottom: Math.max(...nodes.map((n) => positions[n.id].y + n.height!)),
+  });
+
+  it('moves a block placed under the top bar down into view', () => {
+    // The agent's edit landed at y=20; the top bar covers everything above y=100.
+    const fresh = [placed('n1', 300, 20, 240, 180), placed('n2', 300, 20, 240, 180)];
+    const edges = [{ source: 'n1', target: 'n2' }];
+
+    const positions = arrangeNewNodes(request(['n1', 'n2'], { gap: 60 }), fresh, edges, view)!;
+
+    expect(inside(block(positions, fresh), view)).toBe(true);
+    expect(positions.n1).toEqual({ x: 300, y: 100 });
+  });
+
+  it('finds free room inside the view when stepping past a node would leave it', () => {
+    // Below the node it hits is the shorter way, but that is off screen.
+    const short: Box = { left: 0, top: 100, right: 1200, bottom: 600 };
+    const theirs = [placed('n1', 0, 100, 800, 300)];
+    const fresh = [placed('n2', 100, 120, 240, 180)];
+
+    const positions = arrangeNewNodes(request(['n2']), [...theirs, ...fresh], [], short)!;
+
+    expect(inside(block(positions, fresh), short)).toBe(true);
+    expect(positions.n2.x).toBeGreaterThanOrEqual(840);
+    expect(overlapping([...theirs, ...fresh], positions)).toEqual([]);
+  });
+
+  it('keeps a block too big for the view where it was placed (the canvas pans to it instead)', () => {
+    const fresh = [placed('n1', 300, 20, 1400, 900)];
+    expect(arrangeNewNodes(request(['n1']), fresh, [], view)).toEqual({ n1: { x: 300, y: 20 } });
   });
 });

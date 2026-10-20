@@ -24,6 +24,8 @@ vi.mock('@xyflow/react', async (importOriginal) => {
     }),
     useInternalNode: (id: string) => flow.internalNodes.get(id),
     useStore: () => 1,
+    // Fit view reads the canvas size to frame open proposals' ghosts (useFitCanvasView).
+    useStoreApi: () => ({ getState: () => ({ width: 1280, height: 800, minZoom: 0.1, maxZoom: 2 }) }),
   };
 });
 vi.mock('../src/components/SelectionToolbar', () => ({ SelectionToolbar: () => null }));

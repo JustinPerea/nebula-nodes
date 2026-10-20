@@ -1,7 +1,9 @@
-import { useEffect } from 'react';
-import { useStoreApi, type Node } from '@xyflow/react';
+import { useEffect, useRef } from 'react';
+import { useReactFlow, useStoreApi, type Node } from '@xyflow/react';
 import type { NodeData } from '../../types';
-import { arrangeNewNodes, sizeSignature, type ArrangeRequest, type PlacedNode } from '../../lib/arrangeEdit';
+import { arrangeNewNodes, sizeSignature, type ArrangeRequest, type Box, type PlacedNode } from '../../lib/arrangeEdit';
+import { viewportRevealing, visibleFlowBox } from '../../lib/canvasFit';
+import { springViewport } from '../../lib/viewportSpring';
 import { useArrangeStore } from '../../store/arrangeStore';
 import { completeArrange, useGraphStore } from '../../store/graphStore';
 
@@ -32,10 +34,20 @@ function imagesLoaded(nodeId: string): boolean {
  * nodes are measured, their images loaded and their sizes steady, then runs
  * arrangeNewNodes and writes the result back with completeArrange. Renders
  * nothing; lives inside <ReactFlow> to read measured sizes.
+ *
+ * The block lands inside what the person can see, clear of the top bar, the
+ * rail and the bottom toolbar, when it fits there. When it doesn't (too big
+ * at this zoom, or no free room), this tab's view springs to show it whole,
+ * so nobody has to press Fit view after an agent's edit.
  */
 export function ArrangeController() {
   const store = useStoreApi<Node<NodeData>>();
+  const { setViewport } = useReactFlow<Node<NodeData>>();
   const pending = useArrangeStore((s) => s.pending);
+  // Outlives one pending list: the sync that closes the request re-runs the effect.
+  const stopReveal = useRef<() => void>(() => {});
+
+  useEffect(() => () => stopReveal.current(), []);
 
   useEffect(() => {
     const { finished: done, markFinished } = useArrangeStore.getState();
@@ -44,6 +56,30 @@ export function ArrangeController() {
     const open = pending.filter((request) => !finished.has(request.id));
     if (open.length === 0) return undefined;
     const watches = new Map<string, Watch>();
+
+    const view = () => {
+      const { transform, width, height } = store.getState();
+      return { viewport: { x: transform[0], y: transform[1], zoom: transform[2] }, size: { width, height } };
+    };
+    // Bring the arranged block into view if it didn't land there.
+    const reveal = (positions: Record<string, { x: number; y: number }>, mine: PlacedNode[]) => {
+      const sized = mine.filter((node) => positions[node.id]);
+      if (sized.length === 0) return;
+      const block: Box = {
+        left: Math.min(...sized.map((node) => positions[node.id].x)),
+        top: Math.min(...sized.map((node) => positions[node.id].y)),
+        right: Math.max(...sized.map((node) => positions[node.id].x + (node.width ?? 0))),
+        bottom: Math.max(...sized.map((node) => positions[node.id].y + (node.height ?? 0))),
+      };
+      const { viewport, size } = view();
+      const state = store.getState();
+      // Never pull the view away from a person mid-drag.
+      if (state.nodes.some((node) => node.dragging) || state.userSelectionActive) return;
+      const target = viewportRevealing(block, viewport, size, state.minZoom);
+      if (!target) return;
+      stopReveal.current();
+      stopReveal.current = springViewport(viewport, target, (next) => { void setViewport(next); });
+    };
 
     const placed = (request: ArrangeRequest): { all: PlacedNode[]; mine: PlacedNode[]; measured: boolean } => {
       const { nodeLookup } = store.getState();
@@ -86,7 +122,9 @@ export function ArrangeController() {
           && mine.every((node) => imagesLoaded(node.id));
         if (!settled && now - watch.firstSeen < MAX_WAIT_MS) continue;
 
-        const positions = arrangeNewNodes(request, all, useGraphStore.getState().edges);
+        const { viewport, size } = view();
+        const bounds = size.width > 0 && size.height > 0 ? visibleFlowBox(viewport, size) : undefined;
+        const positions = arrangeNewNodes(request, all, useGraphStore.getState().edges, bounds);
         if (!positions) {
           finish(request.id);
           continue;
@@ -95,6 +133,7 @@ export function ArrangeController() {
         watch.attempts += 1;
         completeArrange(request.id, positions)
           .then((result) => {
+            if (result === 'arranged') reveal(positions, mine);
             if (result !== 'refused' || watch.attempts >= MAX_ATTEMPTS) finish(request.id);
           })
           .catch((error) => {
@@ -108,7 +147,7 @@ export function ArrangeController() {
     const timer = window.setInterval(check, CHECK_MS);
     check();
     return () => window.clearInterval(timer);
-  }, [pending, store]);
+  }, [pending, store, setViewport]);
 
   return null;
 }

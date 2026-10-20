@@ -93,7 +93,15 @@
   text-transform: uppercase;
 }
 
+.proposal-ghost__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .proposal-ghost__name {
+  min-width: 0;
   overflow: hidden;
   color: #eee;
   font-size: 12px;
@@ -284,13 +292,55 @@
   cursor: pointer;
 }
 
+/* The agent's note wraps to three lines; the rest is in the details. */
 .proposal-bar__note {
+  display: -webkit-box;
   overflow: hidden;
   margin: 0;
   color: #fff;
   font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.35;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.proposal-bar__note-full {
+  margin: 0;
+  color: rgb(255 255 255 / 0.85);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+/* Run nodes that can't run here, in find_nodes' words. */
+.proposal-bar__readiness {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  color: rgb(255 255 255 / 0.72);
+  font-size: 11px;
+}
+
+.proposal-bar__not-ready {
+  overflow-wrap: anywhere;
+}
+
+.proposal-bar__not-ready-mark {
+  margin-right: 5px;
+  color: #ffc107;
+}
+
+body.app-slava-restraint .proposal-bar__not-ready-mark {
+  color: var(--sr-warning);
+}
+
+.proposal-bar__not-ready--more {
+  color: rgb(255 255 255 / 0.5);
 }
 
 .proposal-bar__summary {

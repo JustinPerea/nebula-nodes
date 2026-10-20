@@ -31,6 +31,7 @@ vi.mock('../src/store/graphStore', () => {
 
 const { ProposalBar } = await import('../src/components/canvas/ProposalBar');
 const { useCanvasProposalsStore } = await import('../src/store/canvasProposalsStore');
+const { useUIStore } = await import('../src/store/uiStore');
 
 function proposal(id: string, overrides: Partial<ProposalView> = {}): ProposalView {
   return {
@@ -61,7 +62,11 @@ beforeEach(() => {
   for (const fn of [graph.state.executeNode, graph.state.executeCluster, graph.state.adoptAcceptedProposal,
     net.apiFetch, flow.fitBounds, flow.getInternalNode]) fn.mockReset();
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+  useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: false } });
+});
 
 describe('ProposalBar', () => {
   it('renders nothing without proposals', () => {
@@ -236,5 +241,68 @@ describe('ProposalBar', () => {
     expect(details.textContent).toContain(long);
     expect(details.textContent).toContain('Text (n1)');
     expect(details.textContent).toContain('a → b');
+  });
+
+  it("names the run's nodes that can't run here, and leaves Accept as the Run button is", () => {
+    const keyless = proposal('p_a', {
+      nodes: [{ ...proposal('p_a').nodes[0], ref: '+img', definitionId: 'gpt-image-2-generate', name: 'GPT Image 2' }],
+      run: ['+img'],
+    });
+    keyless.cost = { ...keyless.cost, notReady: [
+      { ref: '+img', nodeId: null, name: 'GPT Image 2', missing: 'needs OPENAI_API_KEY in Settings > Providers' },
+    ] };
+    open(keyless);
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    render(<ProposalBar />);
+    const list = screen.getByRole('list', { name: "Can't run here" });
+    expect(list.textContent).toContain('GPT Image 2 (+img) needs OPENAI_API_KEY in Settings > Providers');
+    // The canvas Run button stays enabled for a node without its key: the
+    // backend refuses that node before anything is spent. Accept does the same.
+    const accept = screen.getByRole('button', { name: 'Accept & run (1 paid)' }) as HTMLButtonElement;
+    expect(accept.disabled).toBe(false);
+
+    // The person adds the key while the proposal is open: the line goes.
+    act(() => useUIStore.setState({ settingsCache: { apiKeys: { OPENAI_API_KEY: 'set' }, loaded: true } }));
+    expect(screen.queryByRole('list', { name: "Can't run here" })).toBeNull();
+  });
+
+  it('keeps a reason the canvas cannot re-check, and moves a long list into the details', () => {
+    const many = proposal('p_a');
+    many.cost = { ...many.cost, notReady: ['+a', '+b', '+c', '+d'].map((ref) => ({
+      ref, nodeId: null, name: 'FLUX 3', missing: `FLUX 3 can't run on BFL: no BFL_API_KEY (${ref})` })) };
+    open(many);
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    render(<ProposalBar />);
+    const list = screen.getByRole('list', { name: "Can't run here" });
+    expect(list.querySelectorAll('li')).toHaveLength(4);
+    expect(list.textContent).toContain("+a: FLUX 3 can't run on BFL");
+    expect(list.textContent).toContain('and 1 more in the details');
+    fireEvent.click(screen.getByRole('button', { name: 'See what Accept writes' }));
+    expect(screen.getByLabelText('What Accept writes').textContent).toContain('(+d)');
+  });
+
+  it("wraps the agent's note and offers the rest in the details", () => {
+    // jsdom lays nothing out: the note reports more height than its three lines show.
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(private readonly report: () => void) {}
+      observe() { this.report(); }
+      disconnect() {}
+    });
+    const heights = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('proposal-bar__note') ? 120 : 0;
+    });
+    const client = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('proposal-bar__note') ? 52 : 0;
+    });
+    const note = 'Swapped GPT Image 2 for Krea 2 because the OpenAI key is not set here. '.repeat(4).trim();
+    open(proposal('p_a', { note, nodes: [], edges: [], params: [], run: [] }));
+    render(<ProposalBar />);
+    const shown = document.querySelector('.proposal-bar__note')!;
+    expect(shown.textContent).toBe(note);
+    fireEvent.click(screen.getByRole('button', { name: 'Read the whole note' }));
+    expect(screen.getByLabelText('Details').textContent).toContain(note);
+    expect(screen.getByRole('button', { name: 'Hide the note' })).toBeTruthy();
+    heights.mockRestore();
+    client.mockRestore();
   });
 });
