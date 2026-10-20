@@ -7,6 +7,8 @@ import { useUIStore } from '../../src/store/uiStore';
 vi.mock('../../src/lib/api', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../src/lib/api')>(),
   getSettings: vi.fn(async () => ({ favorites: {} })),
+  // The character node's picker lists saved characters.
+  fetchCharacters: vi.fn(async () => []),
 }));
 
 let previousGraph: ReturnType<typeof useGraphStore.getState>;

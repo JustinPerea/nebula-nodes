@@ -91,3 +91,61 @@ export function upgradeRunSnapshot<T extends UpgradableSnapshot>(snapshot: T, ve
   });
   return changed ? { ...snapshot, nodes } : snapshot;
 }
+
+/**
+ * Behaviour changes that are not params upgrades. No saved value changes
+ * meaning, so GRAPH_PARAMS_VERSION stays and the recipe replays as sent; a
+ * replay of a record from before the change says once that it can differ.
+ *
+ * Every new run record is stamped with the behaviour version its bundle runs
+ * at (`behaviourVersion`, runHistory.ts openRunRecord; missing means 0), and
+ * a change counts from the version that brought it, not from a calendar
+ * date: a record made on any build before the change shipped has a lower
+ * stamp, whenever it merges.
+ *
+ * Krea 2 board strengths (Q21 b, Justin 2026-10-20; moodboard canvas PR13a,
+ * plan section 4.8 item 7): behaviour version 1. A Nebula board's images used
+ * to go at `strength × weight` each, and now share out the board's strength.
+ * The backend can't tell a replay from a new run (POST /api/execute carries
+ * no record), so the canvas adds the line, beside the run's own notes, when
+ * the replayed node reports (graphStore's executed event). The date in the
+ * line is copy only.
+ */
+export const RUN_BEHAVIOUR_VERSION = 1;
+const KREA2_BOARD_STRENGTHS_VERSION = 1;
+export const KREA2_BOARD_STRENGTHS_CHANGED = '2026-10-20';
+export const KREA2_BOARD_STRENGTHS_REPLAY_NOTE = 'Krea 2 board strengths now add up to the board\'s strength '
+  + `(changed ${KREA2_BOARD_STRENGTHS_CHANGED}), so this replay can differ from the original.`;
+
+/** The part of a run recipe the replay lines read. */
+interface ReplayableSnapshot {
+  nodes: ReadonlyArray<{ id: string; definitionId: unknown }>;
+  edges: ReadonlyArray<{ source: string; target: string; targetHandle?: string | null }>;
+}
+
+/** Nodes that hand their input on unchanged (backend/execution/engine.py
+ * `router`, `reroute`), so a board wired through them still reaches Krea 2. */
+const PASS_THROUGH_NODES = new Set(['reroute', 'router']);
+
+/** The one-time lines a replay of a recipe first run at `behaviourVersion`
+ * (the record's stamp; missing is 0) should show, by node id. Empty when
+ * nothing it replays has changed. */
+export function runReplayNotes(snapshot: ReplayableSnapshot, behaviourVersion: number): Record<string, string[]> {
+  const notes: Record<string, string[]> = {};
+  if (!(behaviourVersion < KREA2_BOARD_STRENGTHS_VERSION)) return notes;
+  const kinds = new Map(snapshot.nodes.map((node) => [node.id, node.definitionId]));
+  const fedByBoard = (target: string, port: string, seen: Set<string>): boolean =>
+    snapshot.edges.some((edge) => {
+      if (edge.target !== target || edge.targetHandle !== port) return false;
+      const kind = kinds.get(edge.source);
+      if (kind === 'nebula-moodboard') return true;
+      if (typeof kind !== 'string' || !PASS_THROUGH_NODES.has(kind) || seen.has(edge.source)) return false;
+      seen.add(edge.source);
+      return fedByBoard(edge.source, 'input', seen);
+    });
+  for (const node of snapshot.nodes) {
+    if (node.definitionId !== 'krea-2-generate') continue;
+    if (fedByBoard(node.id, 'moodboard', new Set())) notes[node.id] = [KREA2_BOARD_STRENGTHS_REPLAY_NOTE];
+  }
+  return notes;
+}

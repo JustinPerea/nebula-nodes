@@ -557,7 +557,9 @@ def test_cli_set_flags_and_restore(app, tmp_path, capsys):
     out = json.loads(_cli(app, ["moodboard", "set", board["id"], "--clash-mode", "keep-all", "--leave-out",
                                 "#000000", "--no-send-notes", "--json"], capsys))
     previous = out["previous"]
-    assert previous["clash_mode"] == "flag" and previous["send_notes"] is False
+    # Notes were already off, so --no-send-notes changed nothing: `previous`
+    # holds only what the call changed.
+    assert previous["clash_mode"] == "flag" and "send_notes" not in previous
     path = tmp_path / "previous.json"
     path.write_text(json.dumps(out), encoding="utf-8")
     _cli(app, ["moodboard", "set", board["id"], "--restore", str(path)], capsys)

@@ -84,6 +84,10 @@ let canvasParamsVersion = GRAPH_PARAMS_VERSION;
 /** The backend's params version differs from this bundle's: the one handling
  * of it (recover once, then reload), shared by every report of it. */
 let paramsVersionChange: Promise<void> | null = null;
+/** Counts handlings of a params-version change. Retry starts a new one, so an
+ * earlier handling whose recovered copy is answered after that is stale: it
+ * must not stop, mark clean or relabel a tab Retry already moved on. */
+let paramsHandling = 0;
 /** Set when the tab reloads for a params upgrade, so the unsaved-changes
  * prompt doesn't stop a reload whose edits are already in a recovered copy. */
 let reloadingForParams = false;
@@ -156,6 +160,23 @@ function applyProject(project: SavedProject, revision: string, bootstrap = false
       setProjectContext(previous);
       throw new Error('The current canvas is still busy. Finish or stop its run before switching projects.');
     }
+    // A loaded project moves past any params-version stop, as Retry does: a
+    // stop whose recovered copy is still unanswered (the tab followed an
+    // agent's switch on a backend restarted at this version) is superseded,
+    // so its late answer can't stop, mark clean or relabel this tab, and a
+    // later version change starts a handling of its own (the stale promise
+    // would otherwise swallow it). Its copy is dropped here, after its one
+    // send has already gone out, and leaving it would make a later stop send
+    // that old canvas instead of this project's edits. The canvas it holds was
+    // saved on the way: followProjectSwitch saves it to the project it came
+    // from (or recovers it), and an Open that a stop interrupted saved it
+    // before asking (edits made while the request was out are replaced by
+    // any load, stop or not). Retry's initialize recovers it before loading.
+    if (!reloadingForParams) {
+      paramsVersionChange = null;
+      paramsHandling += 1;
+    }
+    pendingRecovery = null;
     const sessionId = snapshot.createSessionId ?? `project:${project.id}:create`;
     const draft = readDraft(snapshot.createDraft);
     if (draft) {
@@ -219,16 +240,31 @@ async function recoverPendingWork(): Promise<boolean> {
   const recovery = pendingRecovery;
   if (!recovery) return false;
   await api.recoverProject(recovery.sourceProjectId, recovery.snapshot, recovery.recoveryId, recovery.paramsVersion);
-  if (pendingRecovery === recovery) pendingRecovery = null;
+  // Another send of the same copy (Retry) already finished it, and the tab
+  // may have loaded a project since: "saved" is what that project holds now,
+  // not this older canvas, so a late answer leaves it alone.
+  if (pendingRecovery !== recovery) return true;
+  pendingRecovery = null;
   lastSaved = JSON.stringify(recovery.snapshot);
   return true;
 }
 
-/** A reload resets these in the app; tests share one module. */
-export function resetParamsVersionChangeForTests(): void {
-  paramsVersionChange = null;
-  reloadingForParams = false;
+/** A reload resets this module's state in the app; tests share one module, so
+ * each test starts from this. A handling of a params-version change still in
+ * flight from an earlier test is superseded, so its late answer writes nothing. */
+export function resetProjectStoreForTests(): void {
+  initializing = null;
+  saveQueue = Promise.resolve();
+  if (saveTimer !== null) clearTimeout(saveTimer);
+  saveTimer = null;
+  lastSaved = '';
+  applying = false;
+  projectViewport = null;
   pendingRecovery = null;
+  canvasParamsVersion = GRAPH_PARAMS_VERSION;
+  paramsVersionChange = null;
+  paramsHandling += 1;
+  reloadingForParams = false;
 }
 
 /** 'reload': first time for this version, marked. 'reloaded': the mark says
@@ -257,6 +293,8 @@ const PARAMS_UPDATED = 'Nebula was updated while this tab was open.';
  * new definitions and upgrade rules. */
 function handleParamsVersionChange(backendVersion: number | null): Promise<void> {
   if (paramsVersionChange) return paramsVersionChange;
+  const handling = ++paramsHandling;
+  const superseded = () => handling !== paramsHandling;
   paramsVersionChange = (async () => {
     // A refused Run isn't unsaved work. A backend that reported a version (or
     // refused with params_outdated: null) has the gate and refuses every start
@@ -267,11 +305,13 @@ function handleParamsVersionChange(backendVersion: number | null): Promise<void>
     try {
       recovered = await recoverPendingWork();
     } catch (error) {
+      if (superseded()) return;
       paramsVersionChange = null;
       const reason = error instanceof Error ? error.message : 'the backend did not answer';
       useProjectStore.setState({ error: `${PARAMS_UPDATED} Your unsaved edits couldn't be saved as a recovered project yet (${reason}). Try again before reloading.` });
       return;
     }
+    if (superseded()) return;
     const kept = recovered ? ' Your unsaved edits were saved as a recovered project.' : ' Your saved work is kept.';
     useProjectStore.setState({ dirty: false });
     const newer = backendVersion === null || backendVersion > GRAPH_PARAMS_VERSION;
@@ -716,8 +756,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
   retry: async () => {
     set({ error: null });
-    // A params-version stop is checked again from the listing.
-    if (!reloadingForParams) paramsVersionChange = null;
+    // A params-version stop is checked again from the listing, and the one
+    // under way (its recovered copy may still be in flight) is superseded.
+    if (!reloadingForParams) {
+      paramsVersionChange = null;
+      paramsHandling += 1;
+    }
     if (!get().initialized) await get().initialize();
     else {
       try {

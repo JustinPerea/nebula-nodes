@@ -2617,6 +2617,18 @@ class ConnectionManager:
         for conn in disconnected:
             self.disconnect(conn)
 
+    async def broadcast_others(self, data: dict[str, Any]) -> None:
+        """Send to every socket that isn't the person's canvas (CLI/MCP listeners)."""
+        message = json.dumps(data)
+        disconnected: list[WebSocket] = []
+        for connection in [c for c in self.active_connections if c not in self.browser_connections]:
+            try:
+                await connection.send_text(message)
+            except Exception:
+                disconnected.append(connection)
+        for conn in disconnected:
+            self.disconnect(conn)
+
     async def broadcast_browser(self, data: dict[str, Any]) -> None:
         """Send only to the person's canvas sockets (never to CLI/MCP listeners)."""
         message = json.dumps(data)
@@ -10732,6 +10744,19 @@ class MoodboardUpdate(BaseModel):
     readings: Any = None
     layoutVersion: Any = None
     lastRead: Any = None
+    # The board's version the client read: a different one is refused (409)
+    # with the board as it is now. Left out, the write isn't checked.
+    baseVersion: Any = None
+
+
+class MoodboardEditsBody(BaseModel):
+    """POST /api/moodboards/{id}/edits (services/moodboard_edits.py)."""
+    model_config = ConfigDict(extra="forbid")
+
+    ops: list[Any]
+    baseVersion: Any = None
+    # The agent's own words for what it did ("Moved #12 into Dither").
+    say: str | None = None
 
 
 class MoodboardThresholdsModel(BaseModel):
@@ -10870,18 +10895,38 @@ def _require_canvas_project(project_id: str | None) -> None:
 
 
 async def _broadcast_stored_asset(kind: str, asset: Mapping[str, Any] | None, asset_id: str = "",
-                                  *, deleted: bool = False, moved: bool = False) -> None:
+                                  *, deleted: bool = False, moved: bool = False,
+                                  edit: Mapping[str, Any] | None = None) -> None:
     """Tell canvases a saved moodboard or character changed, so a card that
     shows it (MoodboardNode, CharacterNode) fetches it again. A move also
     says where it lives now (``projectId``, null for Global), so a Studio
     draft kept for it this session follows (frontend assetStudioDraftStore
-    ``rehome``)."""
+    ``rehome``).
+
+    A board write says more (``edit``, plan section 5.1): the board's new
+    ``version``, ``edit`` = {actor, tab?} (_graph_edit_origin, so the tab
+    that wrote it knows its own echo), ``touched`` {images, frames, looks}
+    and ``undo`` (null for a PUT, or a batch over 200 ops). An open Studio
+    that didn't write it refetches the board and replays its own pending
+    edits on top.
+
+    Private-note text is never broadcast past the person's own tabs: an
+    ``undo`` that holds one goes whole to the person's canvas sockets only,
+    and as null to every other listener (CLI, MCP)."""
+    from services.moodboard_edits import holds_private_note
+
     message: dict[str, Any] = {"type": "storedAssetChanged", "kind": kind,
                                "id": str((asset or {}).get("id") or asset_id), "deleted": deleted}
     if moved:
         message["projectId"] = (asset or {}).get("projectId") or None
+    if edit is not None:
+        message.update({"version": (asset or {}).get("version"), "edit": _graph_edit_origin(), **edit})
     try:
-        await manager.broadcast_raw(message)
+        if holds_private_note(message.get("undo")):
+            await manager.broadcast_browser(message)
+            await manager.broadcast_others({**message, "undo": None})
+        else:
+            await manager.broadcast_raw(message)
     except Exception:  # noqa: BLE001 - the asset is saved; a card fetches it again when it next mounts
         pass
 
@@ -11026,14 +11071,57 @@ async def get_moodboard(moodboard_id: str) -> dict:
     return _moodboard_out(moodboard)
 
 
+# A board write that changed no image or frame (a Keep, an analysis saved).
+_UNTOUCHED_LAYOUT: dict[str, Any] = {"touched": {"images": [], "frames": [], "looks": []}, "undo": None}
+
+
+def _moodboard_conflict(exc: Any) -> JSONResponse:
+    """409 for a write made against an older board: the current version and
+    the board, so the caller rebases on it and sends again."""
+    return JSONResponse(status_code=409, content={
+        "detail": (f"The board changed since you read it: it is at version {exc.board.get('version')}. "
+                   "Read it again (the board is in this answer), redo your change on it and send it with "
+                   "that baseVersion."),
+        "code": "version_conflict",
+        "version": exc.board.get("version"),
+        "board": _moodboard_out(exc.board),
+    })
+
+
+def _journal_board_change(before: dict, after: dict, changes: dict, *, say: str = "") -> None:
+    """One ``board.*`` journal event for a board write (plan section 5.2):
+    an edit batch or a PUT. Tagged with the open canvas project; the board's
+    own scope is in ``data`` (a Global board is in every project). Never any
+    note text."""
+    from services.moodboard_edits import journal_entry
+
+    entry = journal_entry(changes, before, after)
+    if entry is None:
+        return
+    data = {"boardId": after.get("id"), "boardName": after.get("name"),
+            "scope": after.get("projectId") or "global", "refs": entry["refs"], "kinds": entry["kinds"]}
+    if say:
+        data["say"] = say
+    _journal(entry["kind"], data=data, summary=entry["summary"])
+
+
+def _base_version(raw: Any) -> int | None:
+    if raw is None:
+        return None
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        raise HTTPException(status_code=422, detail="baseVersion must be a whole number: the board's version you read")
+    return raw
+
+
 @app.put("/api/moodboards/{moodboard_id}")
 async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
     _refuse_moodboard_layout(body)
     store = _moodboard_store()
+    base_version = _base_version(body.baseVersion)
     updates = {
         key: value
         for key, value in body.model_dump().items()
-        if value is not None
+        if value is not None and key != "baseVersion"
     }
     if "analysis" in body.model_fields_set and body.analysis is None:
         updates["analysis"] = None
@@ -11044,19 +11132,59 @@ async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
         # (services/moodboard_store._normalize_images), so only what was sent.
         updates["images"] = [img.model_dump(exclude_unset=True) for img in body.images or []]
     updates.pop("colorCheck", None)
-    from services.moodboard_store import BriefOverrideProtected, NotesOptInProtected
+    from services.moodboard_edits import diff
+    from services.moodboard_store import BriefOverrideProtected, NotesOptInProtected, VersionConflict
     try:
-        moodboard = store.update(moodboard_id, by=_moodboard_author(), **updates)
+        before, moodboard = store.update_with_before(moodboard_id, by=_moodboard_author(),
+                                                     base_version=base_version, **updates)
     except KeyError:
         # In Recently deleted (an agent may have deleted it): say so, so the
         # Studio can tell the person to restore it and keep their edits.
         return _asset_not_found("moodboard", moodboard_id)
+    except VersionConflict as exc:
+        return _moodboard_conflict(exc)
     except (BriefOverrideProtected, NotesOptInProtected) as exc:
         _refuse_override_change(exc)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    await _broadcast_stored_asset("moodboard", moodboard)
+    # An older client edits images through PUT: its edits are journaled too.
+    changes = diff(before, moodboard)
+    _journal_board_change(before, moodboard, changes)
+    await _broadcast_stored_asset("moodboard", moodboard, edit={"touched": changes["touched"], "undo": None})
     return _moodboard_out(moodboard)
+
+
+@app.post("/api/moodboards/{moodboard_id}/edits")
+async def edit_moodboard(moodboard_id: str, body: MoodboardEditsBody) -> dict:
+    """Checked board edits (services/moodboard_edits.py, plan section 5.1):
+    the ops land together with ``version + 1``, or none do (422 naming the
+    op). ``baseVersion`` that isn't the board's is a 409 with the board as it
+    is now. The answer is ``{board, version, applied, undo}``; ``undo`` is a
+    ``restore`` that puts the board back, skipping (and reporting) what
+    changed since. Anyone may edit, agents included: every batch is undoable,
+    and journaled as one ``board.*`` event."""
+    from services.moodboard_edits import UNDO_BROADCAST_LIMIT, EditError, clean_say
+    from services.moodboard_store import VersionConflict
+
+    base_version = _base_version(body.baseVersion)
+    store = _moodboard_store()
+    try:
+        before, board, result = store.apply_edits(moodboard_id, body.ops, by=_moodboard_author(),
+                                                  base_version=base_version)
+    except KeyError:
+        return _asset_not_found("moodboard", moodboard_id)
+    except VersionConflict as exc:
+        return _moodboard_conflict(exc)
+    except ValueError as exc:  # EditError, or an id no board can have
+        if not isinstance(exc, EditError) and "moodboard id" in str(exc):
+            return _asset_not_found("moodboard", moodboard_id)
+        raise HTTPException(status_code=422, detail=str(exc))
+    if result.changed:
+        _journal_board_change(before, board, result.changes, say=clean_say(body.say))
+        undo = result.undo if len(body.ops) <= UNDO_BROADCAST_LIMIT else None
+        await _broadcast_stored_asset("moodboard", board, edit={"touched": result.touched, "undo": undo})
+    return {"board": _moodboard_out(board), "version": board.get("version"), "applied": result.applied,
+            "undo": result.undo}
 
 
 @app.post("/api/moodboards/{moodboard_id}/brief-override/keep")
@@ -11074,8 +11202,12 @@ async def keep_moodboard_brief_override(moodboard_id: str) -> dict:
         _refuse_override_change(exc)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
-    await _broadcast_stored_asset("moodboard", moodboard)
+    await _broadcast_stored_asset("moodboard", moodboard, edit=_UNTOUCHED_LAYOUT)
     return _moodboard_out(moodboard)
+
+
+# Saves Analyze tries before a board that keeps changing is a 409.
+MOODBOARD_ANALYZE_TRIES = 3
 
 
 @app.post("/api/moodboards/{moodboard_id}/analyze")
@@ -11090,15 +11222,28 @@ async def analyze_moodboard_route(moodboard_id: str) -> dict:
     if moodboard is None:
         raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
 
-    from services.moodboard_analysis import analyze_moodboard
+    from services.moodboard_analysis import analysis_is_current, analyze_moodboard
+    from services.moodboard_store import VersionConflict
 
     # It reads every image file, so it runs off the event loop.
     analysis = await asyncio.to_thread(analyze_moodboard, moodboard)
-    try:
-        moodboard = store.update(moodboard_id, analysis=analysis)
-    except (KeyError, ValueError):
-        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
-    await _broadcast_stored_asset("moodboard", moodboard)
+    # Saved against the version it read: an edit while it ran (a weight, a
+    # note) would otherwise sit beside an analysis of the board before it.
+    # On a conflict the analysis is kept when it still describes the board
+    # (a rename, a brief field), and made again from the board when not.
+    for attempt in range(1, MOODBOARD_ANALYZE_TRIES + 1):
+        try:
+            moodboard = store.update(moodboard_id, analysis=analysis, base_version=moodboard.get("version"))
+            break
+        except VersionConflict as exc:
+            if attempt == MOODBOARD_ANALYZE_TRIES:
+                return _moodboard_conflict(exc)
+            moodboard = exc.board
+            if not analysis_is_current(moodboard, analysis):
+                analysis = await asyncio.to_thread(analyze_moodboard, moodboard)
+        except (KeyError, ValueError):
+            raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+    await _broadcast_stored_asset("moodboard", moodboard, edit=_UNTOUCHED_LAYOUT)
     return _moodboard_out(moodboard)
 
 

@@ -198,6 +198,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `proposal.accepted` | the person accepted; the added nodes and wires follow as `node.added` / `edge.added` by the person | `proposalId`, `idMap`, `runNodeIds` |
 | `proposal.rejected` | the person rejected | `proposalId`, `reason` |
 | `proposal.withdrawn` / `proposal.expired` / `proposal.invalidated` | the agent took it back, 15 minutes passed, or the canvas changed under it | `proposalId`, `reason` |
+| `board.added` / `board.removed` / `board.frame` / `board.grouped` / `board.setAside` / `board.resized` / `board.noted` / `board.moved` | a moodboard edit or save changed the board: one event per write, its kind the first of these that applies (`grouped` is a card into or out of a frame, `moved` 8 px or more) | `kinds` (every kind in the write), `refs` (`{number, id}` per image), `boardId`, `boardName`, `scope`; never any note text ("private note changed") |
 
 Expiry is attributed to "Nebula" (a `system` actor), not to anyone.
 
@@ -1197,9 +1198,23 @@ nebula moodboard delete <board>
   card). The layout never steers, so it isn't in the analysis, the brief or
   the node's outputs. Images you add land after the last card, in its row
   if there is room, else in a new row; a weight you set resizes the
-  image's cards. The CLI and MCP can't move cards yet. Through the API, a
-  `PUT` keeps what it leaves out (images merge by id) and keeps the saved
-  cards of images already on the board.
+  image's cards. The CLI and MCP can't move cards yet. Through the API,
+  `POST /api/moodboards/{id}/edits` takes checked edits (`place`, `resize`,
+  `link`, `frame.create` and the rest, contract 07 section 1.12): the ops
+  land together or not at all, each batch answers with an `undo`, and a
+  `baseVersion` you read that is no longer the board's is a 409 carrying
+  the board as it is now. A `PUT` keeps what it leaves out (images merge by
+  id), keeps the saved cards of images already on the board, and takes
+  `baseVersion` too.
+- Two writers never overwrite each other: an add from the CLI or MCP is one
+  `add` op, applied to the board as it is saved, and an open Moodboard
+  Studio shows it without a reload and keeps its own unsaved edits (it
+  sends image changes as ops and only the board fields it changed). Each
+  write is journaled as a `board.*` event in the writer's name.
+- `moodboard_add` (and `add --json`) returns `addedIds` and `undo` (the
+  batch that takes them off again); the CLI prints the `nebula moodboard
+  set <id> --remove ...` line that does it. A URL already on the board is
+  skipped and counted in `duplicatesSkipped`.
 - Set aside (contract 07, sections 1.1 and 1.3a): `--set-aside N` /
   `--use N` (old names `--exclude` / `--include`), or `{"image": 5,
   "excluded": true}` in `moodboard_update` (`setAside` is the same key). A
@@ -1298,16 +1313,25 @@ nebula moodboard delete <board>
   board's analysis, so run `analyze` again; a rename and the brief fields
   keep it. `--remove` takes an image off the board; its file stays, and the
   command prints the URL to add it back.
-- `moodboard_update` (and `set --json`) returns `previous`: the settings
-  before the change, the brief fields included. Passing them back undoes it:
-  to `moodboard_update` as they are, or `nebula moodboard set <board>
-  --restore <file>` with the saved `set --json` output (or just `previous`).
-  Images the change took off aren't in `previous`; `removed` has their URLs
-  for `moodboard_add` / `nebula moodboard add`.
+- `moodboard_update` (and `set --json`) returns `previous`: what the change
+  changed, as it was before (only those settings and brief fields, and only
+  the image settings it changed), so undoing it keeps what others changed
+  since in anything else. Passing it back undoes it:
+  to `moodboard_update` as they are (`undo` included), or `nebula moodboard
+  set <board> --restore <file>` with the saved `set --json` output (or just
+  `previous`). Its `undo` goes as one checked write: a setting someone
+  changed again since is left as they set it, and the result's `skipped`
+  says so ("Direction changed since, left as is", "#2's weight changed
+  since, left as is"; the CLI prints each line). Images the change took off
+  come back with it. The other keys are what an older Nebula puts back
+  instead; a `previous` without `undo` is put back as arguments, and the
+  images it took off come back from `removed` (`moodboard_add` / `nebula
+  moodboard add`).
   It has the hand-written brief only when the change touched it, so undoing
-  anything else leaves a brief the person wrote since alone. If the person
-  replaced your brief since, the undo is refused with nothing saved: send it
-  again without `brief_override`. If Keep fails after the other changes were
+  anything else leaves a brief the person wrote since alone; if the person
+  replaced your brief since, the undo leaves theirs and says so (a
+  `previous` without `undo` is refused with nothing saved: send it again
+  without `brief_override`). If Keep fails after the other changes were
   saved (the person wrote or removed the brief while the call ran), the error
   says so and carries the `previous` that puts them back (in the MCP error
   text; on stderr from the CLI).

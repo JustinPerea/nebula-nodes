@@ -25,7 +25,7 @@ vi.mock('../src/lib/projects', async (original) => ({
   listProjects: vi.fn(), getProject: vi.fn(), saveProject: vi.fn(), recoverProject: vi.fn(), openProject: vi.fn(),
 }));
 
-import { useProjectStore, resetParamsVersionChangeForTests, subscribeProjectAutosave } from '../src/store/projectStore';
+import { useProjectStore, resetProjectStoreForTests, subscribeProjectAutosave } from '../src/store/projectStore';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useCreateDraftStore } from '../src/store/createDraftStore';
@@ -60,7 +60,7 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 let unsubscribe: (() => void) | null = null;
 beforeEach(async () => {
   vi.clearAllMocks();
-  resetParamsVersionChangeForTests();
+  resetProjectStoreForTests();
   window.sessionStorage.clear();
   setProjectContext(null);
   useGraphStore.getState().resetExecution();
@@ -338,5 +338,175 @@ describe('review round 2', () => {
       expect(error).not.toMatch(/Rebuild/);
       expect(error).toContain('Your saved work is kept.');
     } finally { getItem.mockRestore(); setItem.mockRestore(); }
+  });
+});
+
+// A params stop's recovered copy can still be in flight when the person
+// clicks Try again (the stop's error is on screen from the start). If Retry
+// finds the backend matching again (it was restarted) and loads the project,
+// the first handling's late answer must not stop, mark clean or relabel the
+// working tab. (2026-10-20, found chasing the autosave test flake.)
+describe('a params stop that Retry already moved past', () => {
+  async function stopThenRetryPast(): Promise<{ settle: (error?: Error) => void }> {
+    let settle: (error?: Error) => void = () => {};
+    vi.mocked(projects.recoverProject).mockImplementationOnce(() => new Promise((resolve, reject) => {
+      settle = (error) => (error ? reject(error) : resolve(project('recovered')));
+    }));
+    editCanvas();
+    emit({ type: 'graphSync', workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION - 1,
+      nodes: [], edges: [], empty: true });
+    await flush();
+    expect(useProjectStore.getState()).toMatchObject({ initialized: false, error: expect.stringMatching(/^Nebula was updated/) });
+    expect(projects.recoverProject).toHaveBeenCalledTimes(1);
+
+    // The backend was restarted at this bundle's version; Try again.
+    await useProjectStore.getState().retry();
+    expect(projects.recoverProject).toHaveBeenCalledTimes(2); // the same copy, idempotent
+    expect(useProjectStore.getState()).toMatchObject({ initialized: true, error: null, dirty: false });
+    editCanvas('A new edit after Retry');
+    expect(useProjectStore.getState().dirty).toBe(true);
+    return { settle: (error) => settle(error) };
+  }
+
+  it("a late failure of the first recovered copy doesn't put its error on the working tab", async () => {
+    const { settle } = await stopThenRetryPast();
+    settle(new Error('the backend restarted'));
+    await flush();
+    expect(useProjectStore.getState()).toMatchObject({ initialized: true, error: null, dirty: true });
+  });
+
+  it("a late success of the first recovered copy doesn't mark the new edit saved or stop the tab", async () => {
+    const { settle } = await stopThenRetryPast();
+    settle();
+    await flush();
+    expect(reloadPage).not.toHaveBeenCalled();
+    expect(useProjectStore.getState()).toMatchObject({ initialized: true, error: null, dirty: true });
+    const leave = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(leave);
+    expect(leave.defaultPrevented).toBe(true);
+    // Nor does it change what counts as saved: the project holds 'alpha', so
+    // going back to the edit the copy holds is still a change to save.
+    vi.mocked(projects.saveProject).mockClear();
+    editCanvas('Unsaved edit');
+    await useProjectStore.getState().flush();
+    expect(vi.mocked(projects.saveProject).mock.calls.map(([, snapshot]) => snapshot.nodes[0].data.params.value))
+      .toEqual(['Unsaved edit']);
+  });
+});
+
+// The same race without Retry: the backend comes back at this bundle's
+// version and an agent switches projects, so the stopped tab follows the
+// switch (followProjectSwitch) and loads the new project through
+// applyProject while the stop's first recovered copy is still unanswered.
+// That load moves past the stop just as Retry does. (2026-10-20, review.)
+describe('a params stop that an agent switch already moved past', () => {
+  async function stopThenFollowSwitch(): Promise<{ settle: (error?: Error) => void }> {
+    let settle: (error?: Error) => void = () => {};
+    vi.mocked(projects.recoverProject).mockImplementationOnce(() => new Promise((resolve, reject) => {
+      settle = (error) => (error ? reject(error) : resolve(project('recovered')));
+    }));
+    editCanvas();
+    emit({ type: 'graphSync', workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION - 1,
+      nodes: [], edges: [], empty: true });
+    await flush();
+    expect(useProjectStore.getState()).toMatchObject({ initialized: false, error: expect.stringMatching(/^Nebula was updated/) });
+    expect(projects.recoverProject).toHaveBeenCalledTimes(1);
+
+    // The backend restarted at this bundle's version, and an agent opened 'beta'.
+    vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project(), project('beta')], activeProjectId: 'beta',
+      workspaceRevision: 'rev-b', paramsVersion: GRAPH_PARAMS_VERSION });
+    emit({ type: 'graphSync', workspaceRevision: 'rev-b', paramsVersion: GRAPH_PARAMS_VERSION, nodes: [], edges: [], empty: true,
+      projectSwitch: { projectId: 'beta', projectName: 'beta', previousProjectId: 'alpha', previousProjectName: 'alpha',
+        previousRevision: 'rev-a', actor: { kind: 'agent', name: 'Claude' } } });
+    await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
+    await flush();
+    // The stopped canvas's edit went into 'alpha' as the switch handed off.
+    expect(vi.mocked(projects.saveProject).mock.calls.map(([id, snapshot]) => [id, snapshot.nodes[0].data.params.value]))
+      .toEqual([['alpha', 'Unsaved edit']]);
+    expect(projects.recoverProject).toHaveBeenCalledTimes(1);
+    expect(getProjectContext()).toMatchObject({ id: 'beta', revision: 'rev-b' });
+    expect(useProjectStore.getState()).toMatchObject({ initialized: true, error: null, dirty: false });
+    editCanvas('A new edit on beta');
+    expect(useProjectStore.getState().dirty).toBe(true);
+    return { settle: (error) => settle(error) };
+  }
+
+  it("a late failure of the first recovered copy doesn't put its error on the working tab", async () => {
+    const { settle } = await stopThenFollowSwitch();
+    settle(new Error('the backend restarted'));
+    await flush();
+    expect(useProjectStore.getState()).toMatchObject({ initialized: true, error: null, dirty: true });
+    expect(projects.recoverProject).toHaveBeenCalledTimes(1);
+  });
+
+  it("a late success of the first recovered copy doesn't mark the new edit saved or stop the tab", async () => {
+    const { settle } = await stopThenFollowSwitch();
+    settle();
+    await flush();
+    expect(reloadPage).not.toHaveBeenCalled();
+    expect(useProjectStore.getState()).toMatchObject({ initialized: true, error: null, dirty: true });
+    // And edits on 'beta' still save, to 'beta'.
+    vi.mocked(projects.saveProject).mockClear();
+    editCanvas('Unsaved edit');
+    await useProjectStore.getState().flush();
+    expect(vi.mocked(projects.saveProject).mock.calls.map(([id, snapshot]) => [id, snapshot.nodes[0].data.params.value]))
+      .toEqual([['beta', 'Unsaved edit']]);
+  });
+
+  it('a later params change still stops the tab that followed the switch', async () => {
+    const { settle } = await stopThenFollowSwitch();
+    emit({ type: 'graphSync', workspaceRevision: 'rev-b', paramsVersion: GRAPH_PARAMS_VERSION - 1,
+      nodes: [], edges: [], empty: true });
+    await flush();
+    expect(useProjectStore.getState()).toMatchObject({ initialized: false });
+    // The new stop sends its own copy: beta's edit, not the old stop's canvas.
+    expect(projects.recoverProject).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(projects.recoverProject).mock.calls[1][0]).toBe('beta');
+    expect(vi.mocked(projects.recoverProject).mock.calls[1][1].nodes[0].data.params.value).toBe('A new edit on beta');
+    settle();
+    await flush();
+  });
+});
+
+// The third way a load can land on a stopped tab: the person opened another
+// project, and the stop arrived while the open request was out. The open's
+// reply says the backend matches this bundle again, so the tab loads it; the
+// stop it moved past must neither act on the loaded tab late nor hold the
+// stop's promise, which would swallow every later version change and leave
+// the tab saving and running against a backend that refuses it.
+describe('a params stop that an Open moved past', () => {
+  it('loads the opened project, ignores the late copy, and still stops on the next change', async () => {
+    let reply: (activation: projects.ProjectActivation) => void = () => {};
+    vi.mocked(projects.openProject).mockImplementationOnce(() => new Promise((resolve) => { reply = resolve; }));
+    let settle: (error?: Error) => void = () => {};
+    vi.mocked(projects.recoverProject).mockImplementationOnce(() => new Promise((resolve, reject) => {
+      settle = (error) => (error ? reject(error) : resolve(project('recovered')));
+    }));
+    const opening = useProjectStore.getState().open('beta');
+    await vi.waitFor(() => expect(projects.openProject).toHaveBeenCalledTimes(1));
+    // An edit made while the open is out, then the stop.
+    editCanvas('Edit during the open');
+    emit({ type: 'graphSync', workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION - 1,
+      nodes: [], edges: [], empty: true });
+    await flush();
+    expect(projects.recoverProject).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(projects.recoverProject).mock.calls[0][1].nodes[0].data.params.value).toBe('Edit during the open');
+
+    reply({ project: project('beta'), workspaceRevision: 'rev-b', paramsVersion: GRAPH_PARAMS_VERSION });
+    await opening;
+    expect(getProjectContext()).toMatchObject({ id: 'beta', revision: 'rev-b' });
+    expect(useProjectStore.getState()).toMatchObject({ initialized: true, error: null, screen: 'workspace' });
+
+    settle(new Error('the backend restarted'));
+    await flush();
+    expect(useProjectStore.getState()).toMatchObject({ initialized: true, error: null });
+
+    // The backend moves on again: a refused save reports it, and the tab stops.
+    editCanvas('An edit on beta');
+    reportParamsOutdated(NEXT);
+    await vi.waitFor(() => expect(reloadPage).toHaveBeenCalledTimes(1));
+    expect(projects.recoverProject).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(projects.recoverProject).mock.calls[1][0]).toBe('beta');
+    expect(vi.mocked(projects.recoverProject).mock.calls[1][1].nodes[0].data.params.value).toBe('An edit on beta');
   });
 });
