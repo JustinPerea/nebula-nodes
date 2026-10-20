@@ -3515,8 +3515,7 @@ body.app-slava-restraint .react-flow__edge.selected .react-flow__edge-path {
  * overlay so the image extends behind the title gradient. Border-radius
  * matches the card's interior corners; overflow:hidden clips the image
  * (the card itself is overflow:visible to let handles escape). */
-body.app-slava-restraint .model-node__preview,
-body.app-slava-restraint .model-node__preview-placeholder {
+body.app-slava-restraint .model-node__preview {
   background: var(--sr-node-preview-bg);
   border-radius: var(--sr-radius-node);
   margin: var(--sr-node-preview-overlap) 0 0 0;  /* pull up under the absolute-positioned header */
@@ -3526,8 +3525,7 @@ body.app-slava-restraint .model-node__preview-placeholder {
 }
 /* Below a column of input ports the header isn't over the preview, and the
  * pull-up would cover the last port (FLUX 3 Video's "Keyframes +"). */
-body.app-slava-restraint .model-node__ports--input + .model-node__preview,
-body.app-slava-restraint .model-node__ports--input + .model-node__preview-placeholder {
+body.app-slava-restraint .model-node__ports--input + .model-node__preview {
   margin-top: 0;
 }
 /* Image / video preview fills the area completely. */
