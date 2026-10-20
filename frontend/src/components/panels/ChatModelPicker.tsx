@@ -176,8 +176,9 @@ export function ChatModelPicker({ agent, personalAgents = [], model, effort, cat
       </p>
       <ScrollFade className="chat-model-picker__body">
         {isPersonalAgent(agent) ? <p className="chat-model-picker__personal" role="status">
-          {personal?.note || 'It picks its own model.'} Nebula doesn&rsquo;t choose its model or effort; change those
-          in the agent&rsquo;s own settings.
+          {personal?.note || 'It picks its own model.'} Nebula doesn&rsquo;t choose its model or effort. If the agent
+          offers a choice, it shows under its name once the conversation starts; otherwise change those in the
+          agent&rsquo;s own settings.
         </p> : loading ? <p role="status">Loading models…</p> : !ready || !models.length ? <div className="chat-model-picker__unavailable">
           <p role="status">{unavailable}</p>
           <button type="button" className="chat-model-picker__retry" onClick={onRetry}>Retry model discovery</button>

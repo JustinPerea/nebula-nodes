@@ -415,6 +415,54 @@ export interface PersonalAgent {
   resolvedPath: string | null;
   note: string;
   startable: boolean;
+  /** The installed CLI's version, when Nebula checked it (Gemini, Antigravity). */
+  version?: string | null;
+  /** Gemini: hand this agent the Gemini API key saved in Settings. Off until the person turns it on. */
+  keyOption?: { enabled: boolean; keySaved: boolean; billing: string; blocked: string | null } | null;
+  /** Antigravity: Google's ACP server, downloaded pinned and SHA-256 checked. */
+  install?: {
+    state: 'unsupported' | 'missing' | 'downloading' | 'changed' | 'installed';
+    version: string; sizeBytes: number | null; message: string; source: string | null;
+    job?: PersonalAgentJob;
+  } | null;
+  /** Antigravity: the Google sign-in Google's server runs in the browser. */
+  signIn?: { state: 'signed_out' | 'waiting' | 'signed_in'; job?: PersonalAgentJob } | null;
+  /** What using this agent means for the person's own account (Antigravity's terms). */
+  termsNote?: string;
+}
+
+export interface PersonalAgentJob {
+  state: 'running' | 'done' | 'failed' | 'cancelled';
+  message: string;
+  receivedBytes?: number;
+  totalBytes?: number;
+  signInUrl?: string;
+}
+
+/** A model (or thinking level) the person may pick for one personal session. */
+export interface PersonalSessionOption {
+  id: string;
+  name: string;
+  category: string;
+  current: string | null;
+  options: Array<{ value: string; name: string }>;
+}
+
+export function parsePersonalSessionOptions(raw: unknown): PersonalSessionOption[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item): PersonalSessionOption[] => {
+    if (!item || typeof item !== 'object') return [];
+    const option = item as Record<string, unknown>;
+    if (typeof option.id !== 'string' || !Array.isArray(option.options)) return [];
+    const values = option.options.flatMap((value): Array<{ value: string; name: string }> => {
+      if (!value || typeof value !== 'object') return [];
+      const entry = value as Record<string, unknown>;
+      return typeof entry.value === 'string' ? [{ value: entry.value, name: String(entry.name ?? entry.value) }] : [];
+    });
+    if (!values.length) return [];
+    return [{ id: option.id, name: String(option.name ?? option.id), category: String(option.category ?? ''),
+      current: typeof option.current === 'string' ? option.current : null, options: values }];
+  });
 }
 
 export interface PersonalAgentList {
@@ -431,7 +479,8 @@ export function acknowledgePersonalAgentWarning(): Promise<{ warningAcknowledged
 }
 
 export function updatePersonalAgent(
-  id: string, changes: Partial<Pick<PersonalAgent, 'enabled' | 'displayName' | 'color' | 'command' | 'args'>>,
+  id: string,
+  changes: Partial<Pick<PersonalAgent, 'enabled' | 'displayName' | 'color' | 'command' | 'args'>> & { useNebulaKey?: boolean },
 ): Promise<{ agent: PersonalAgent }> {
   return agentAppsCall(`/api/personal-agents/${encodeURIComponent(id)}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changes),
@@ -448,6 +497,20 @@ export function createPersonalAgent(agent: {
 
 export function deletePersonalAgent(id: string): Promise<{ ok: boolean }> {
   return agentAppsCall(`/api/personal-agents/${encodeURIComponent(id)}`, { method: 'DELETE' }, 'Removing the agent');
+}
+
+/** Antigravity's download, sign-in and sign-out (backend services/antigravity_agent.py). */
+export function antigravityAction(
+  action: 'install' | 'remove' | 'sign-in' | 'cancel-sign-in' | 'sign-out',
+): Promise<{ agent: PersonalAgent; message?: string }> {
+  const [path, method, what] = {
+    install: ['install', 'POST', 'Starting the download'],
+    remove: ['install', 'DELETE', 'Removing the download'],
+    'sign-in': ['sign-in', 'POST', 'Starting the sign-in'],
+    'cancel-sign-in': ['sign-in', 'DELETE', 'Stopping the sign-in'],
+    'sign-out': ['sign-out', 'POST', 'Signing out'],
+  }[action];
+  return agentAppsCall(`/api/personal-agents/antigravity/${path}`, { method }, what);
 }
 
 export function chatAuthUsesProviderBilling(mode: string | null): boolean {

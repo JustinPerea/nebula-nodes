@@ -356,3 +356,32 @@ def test_startup_clears_token_files_a_dead_backend_left(isolated_app):
     (leftover / "abc.token").write_text("dead-token-from-an-old-backend")
     with TestClient(main.app):
         assert not leftover.exists()
+
+
+@pytest.mark.asyncio
+async def test_session_event_offers_models_and_the_person_can_switch(ws_env):
+    ws_env.register({"promptCapabilities": {"image": True}, "configOptions": [
+        {"id": "model", "name": "Model", "category": "model", "type": "select", "currentValue": "m1",
+         "options": [{"value": "m1", "name": "One"}, {"value": "m2", "name": "Two"}]}]})
+    socket = Socket()
+    task = asyncio.create_task(main.chat_websocket(socket))
+    send(socket)
+    session = await socket.next("session")
+    assert session["promptImages"] is True
+    assert session["options"] == [{"id": "model", "name": "Model", "category": "model", "current": "m1",
+                                   "options": [{"value": "m1", "name": "One"}, {"value": "m2", "name": "Two"}]}]
+    await socket.until_done()
+    # Only the person may switch, and only to a value the agent offered.
+    socket.put({"type": "personal_option", "sessionId": session["sessionId"], "configId": "model", "value": "m2"})
+    assert (await socket.next("error"))["code"] == "person_required"
+    socket.put({"type": "personal_option", "sessionId": session["sessionId"], "configId": "model", "value": "m9",
+                "personToken": PERSON_TOKEN})
+    refused = await socket.next("personal_options")
+    assert refused["error"] and refused["options"][0]["current"] == "m1"
+    socket.put({"type": "personal_option", "sessionId": session["sessionId"], "configId": "model", "value": "m2",
+                "personToken": PERSON_TOKEN})
+    switched = await socket.next("personal_options")
+    assert "error" not in switched and switched["options"][0]["current"] == "m2"
+    assert "session/set_config_option" in ws_env.methods()
+    socket.disconnect()
+    await asyncio.wait_for(task, 5)

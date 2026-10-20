@@ -114,7 +114,7 @@ from services.execution_runs import (
     ExecutionRunRegistry,
 )
 from services.chat_session import run_claude
-from services import personal_agents
+from services import antigravity_agent, personal_agents
 from services.acp_session import PersonalSessionError, acp_sessions
 from services.agent_profiles import (
     GrantOverlapsProtectedDir,
@@ -2896,7 +2896,10 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 return {"type": "done"}
             enqueue({"type": "session", "sessionId": host.id, "agentName": host.display_name, "color": host.color,
                      "agentInfo": {"name": str(host.agent_info.get("name") or "")[:64],
-                                   "version": str(host.agent_info.get("version") or "")[:32]}})
+                                   "version": str(host.agent_info.get("version") or "")[:32]},
+                     # The models (and thinking levels) the person may pick
+                     # for this session, and whether its prompts take images.
+                     "options": host.option_view(), "promptImages": host.prompt_images})
         # Reused or just started, Settings must still allow it before it gets
         # a prompt: switched off, removed or changed since it started.
         if host.closed or not acp_sessions.still_allowed(host, _STATE_DIR):
@@ -3130,7 +3133,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
                         "source": source,
                     })
                 continue
-            if msg_type in {"permission", "close_session"}:
+            if msg_type in {"permission", "close_session", "personal_option"}:
                 # The person's answers to a personal agent: they carry the
                 # person token, and only this socket's own sessions count.
                 if chat_marked_as_agent or not person_session.verify(payload.get("personToken")):
@@ -3142,6 +3145,24 @@ async def chat_websocket(websocket: WebSocket) -> None:
                     for host in acp_sessions.live():
                         if host.owner == connection_id:
                             host.resolve_permission(payload.get("requestId"), payload.get("decision"), connection_id)
+                    continue
+                if msg_type == "personal_option":
+                    # The person picked a model (or thinking level) for this session.
+                    target = acp_sessions.get(payload.get("sessionId"), connection_id)
+                    if target is None:
+                        await send_event({"type": "error", "code": "personal_session_ended", "message": (
+                            "This chat's agent has stopped. Send again to start a new conversation."),
+                            "source": "personal"})
+                        continue
+                    try:
+                        options = await target.set_option(payload.get("configId"), payload.get("value"))
+                    except PersonalSessionError as exc:
+                        await send_event({"type": "personal_options", "sessionId": target.id,
+                                          "options": target.option_view(), "error": exc.message,
+                                          "source": "personal"})
+                        continue
+                    await send_event({"type": "personal_options", "sessionId": target.id, "options": options,
+                                      "source": "personal"})
                     continue
                 target = acp_sessions.get(payload.get("sessionId"), connection_id)
                 if target is not None and current_task is not None and not current_task.done() \
@@ -3329,6 +3350,76 @@ async def delete_personal_agent(agent_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="No custom agent with that id")
     await acp_sessions.close_stale(_STATE_DIR)
     return {"ok": True}
+
+
+def _antigravity_signed_in(value: bool) -> None:
+    personal_agents.set_signed_in(_STATE_DIR, antigravity_agent.AGENT_ID, value)
+
+
+def _antigravity_view() -> dict[str, Any]:
+    view = personal_agents.get_agent(_STATE_DIR, antigravity_agent.AGENT_ID)
+    assert view is not None
+    return {"agent": view.as_dict()}
+
+
+def _antigravity_http_error(exc: antigravity_agent.AntigravityError) -> HTTPException:
+    return HTTPException(status_code=409 if exc.code in {"not_installed", "unsupported"} else 400, detail=exc.message)
+
+
+@app.post("/api/personal-agents/antigravity/install")
+async def install_antigravity() -> dict[str, Any]:
+    """Download Google's Antigravity ACP server, pinned and SHA-256 checked
+    (services/antigravity_agent.py). Runs in the background; GET shows progress."""
+    require_person(current_request_headers())
+    try:
+        antigravity_agent.start_install(_STATE_DIR)
+    except antigravity_agent.AntigravityError as exc:
+        raise _antigravity_http_error(exc) from exc
+    return await asyncio.to_thread(_antigravity_view)
+
+
+@app.delete("/api/personal-agents/antigravity/install")
+async def remove_antigravity() -> dict[str, Any]:
+    """Stop a download in progress, or delete the downloaded server."""
+    require_person(current_request_headers())
+    if not await antigravity_agent.cancel(_STATE_DIR, "install"):
+        await antigravity_agent.cancel(_STATE_DIR, "sign_in")
+        await asyncio.to_thread(antigravity_agent.remove, _STATE_DIR)
+    await acp_sessions.close_stale(_STATE_DIR)
+    return await asyncio.to_thread(_antigravity_view)
+
+
+@app.post("/api/personal-agents/antigravity/sign-in")
+async def sign_in_antigravity() -> dict[str, Any]:
+    """The person asked to sign in with Google. Google's server opens the
+    browser and keeps the login in the Keychain; Nebula never sees it."""
+    require_person(current_request_headers())
+    try:
+        antigravity_agent.start_sign_in(_STATE_DIR, _antigravity_signed_in)
+    except antigravity_agent.AntigravityError as exc:
+        raise _antigravity_http_error(exc) from exc
+    return await asyncio.to_thread(_antigravity_view)
+
+
+@app.delete("/api/personal-agents/antigravity/sign-in")
+async def cancel_antigravity_sign_in() -> dict[str, Any]:
+    require_person(current_request_headers())
+    await antigravity_agent.cancel(_STATE_DIR, "sign_in")
+    return await asyncio.to_thread(_antigravity_view)
+
+
+@app.post("/api/personal-agents/antigravity/sign-out")
+async def sign_out_antigravity() -> dict[str, Any]:
+    """Stop using the Google login at once (running sessions stop), then ask
+    Google's server to delete it."""
+    require_person(current_request_headers())
+    try:
+        message = await antigravity_agent.sign_out(_STATE_DIR, _antigravity_signed_in)
+    except antigravity_agent.AntigravityError as exc:
+        message = exc.message
+    finally:
+        await acp_sessions.close_stale(_STATE_DIR)
+    return {**(await asyncio.to_thread(_antigravity_view)), "message": message}
 
 
 @app.post("/api/personal-agents/acknowledge-warning")
