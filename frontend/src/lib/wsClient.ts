@@ -85,6 +85,16 @@ export interface StoredAssetChangedEvent {
   undo?: { ops: Array<Record<string, unknown>> } | null;
 }
 
+/** The saved-project list changed: a project was made, opened, saved,
+ *  renamed, given a cover, deleted, restored or deleted for good, by anyone
+ *  (backend main.py _broadcast_projects_changed). Projects lists again. */
+export interface ProjectsChangedEvent {
+  type: 'projectsChanged';
+  change: 'created' | 'opened' | 'saved' | 'renamed' | 'cover' | 'deleted' | 'restored' | 'purged' | string;
+  /** Null when several went at once (emptying Recently deleted). */
+  projectId: string | null;
+}
+
 /** The active project's pins, sent after graphSync and on every pin change. */
 export interface CanvasPinsEvent {
   type: 'canvasPins';
@@ -265,6 +275,7 @@ export type ExecutionEvent = (
   | AgentPresenceEvent
   | CanvasPinsEvent
   | StoredAssetChangedEvent
+  | ProjectsChangedEvent
   | ProposalOpenedEvent
   | ProposalSyncEvent
   | ProposalClosedEvent

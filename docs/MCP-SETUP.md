@@ -63,8 +63,11 @@ The server exposes these tools for building and running (see
 - `get_spend_limits`: the limits and what this session has used.
 - `list_projects` / `open_project` / `new_project`: list the person's saved
   projects, switch the canvas to one, or start a new, empty one. The project
-  that was open is saved as it is. The person's canvas follows, shows a note
-  naming the agent, and offers a button back to the project they had open.
+  that was open is saved as it is. The person's canvas follows (from the
+  Projects screen too, which opens the canvas), shows a note naming the
+  agent, and offers a button back to the project they had open. The Projects
+  screen also lists again whenever anyone makes, renames, deletes or restores
+  a project (the `projectsChanged` socket event).
   Start new work in a new project rather than emptying the canvas: it keeps
   the person's work. Clearing a project that has nodes needs an explicit
   force from anyone (`nebula clear --force`, or `DELETE /api/graph?force=true`);
