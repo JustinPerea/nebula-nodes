@@ -34,10 +34,10 @@
       "briefOverride": null,
       "clashMode": "leave-out",
       "colorCheck": {
-        "basis": "79fcd007bd5f3af7",
+        "basis": "e5ca1f0d4b4514fe",
         "checks": {
           "words": {
-            "version": 2
+            "version": 3
           }
         },
         "findings": [],
@@ -1079,10 +1079,10 @@
       },
       "clashMode": "leave-out",
       "colorCheck": {
-        "basis": "e3b03677f12f1062",
+        "basis": "63c55a3f8b908ad7",
         "checks": {
           "words": {
-            "version": 2
+            "version": 3
           }
         },
         "findings": [],
@@ -2294,10 +2294,10 @@
       "briefOverride": null,
       "clashMode": "leave-out",
       "colorCheck": {
-        "basis": "6a1b790a85daabd8",
+        "basis": "f759a9653e44ef57",
         "checks": {
           "words": {
-            "version": 2
+            "version": 3
           }
         },
         "findings": [],
@@ -3514,10 +3514,10 @@
       "briefOverride": null,
       "clashMode": "leave-out",
       "colorCheck": {
-        "basis": "27f8de21bae2fe12",
+        "basis": "5d1aa9a743764675",
         "checks": {
           "words": {
-            "version": 2
+            "version": 3
           }
         },
         "findings": [],
@@ -4712,10 +4712,10 @@
       },
       "clashMode": "leave-out",
       "colorCheck": {
-        "basis": "d433cd80ee8bb4dd",
+        "basis": "445eff0ef99ced33",
         "checks": {
           "words": {
-            "version": 2
+            "version": 3
           }
         },
         "findings": [],
@@ -6104,10 +6104,10 @@
       "briefOverride": null,
       "clashMode": "leave-out",
       "colorCheck": {
-        "basis": "651bc626028f2468",
+        "basis": "3455b535042600ba",
         "checks": {
           "words": {
-            "version": 2
+            "version": 3
           }
         },
         "findings": [],
@@ -7627,10 +7627,10 @@
       },
       "clashMode": "leave-out",
       "colorCheck": {
-        "basis": "dea812bd1f544180",
+        "basis": "46658320ee51ce52",
         "checks": {
           "words": {
-            "version": 2
+            "version": 3
           }
         },
         "findings": [],

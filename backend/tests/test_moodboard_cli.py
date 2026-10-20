@@ -145,6 +145,9 @@ def test_new_from_a_folder_and_a_link_then_set_analyze_and_delete(app, web, tmp_
 
     out = _cli(app, ["moodboard", "list", "--global"], capsys)
     assert board["id"] in out and "Renamed" in out
+    # The set-aside image still counts, and is named beside the count as the
+    # Studio and the node card do.
+    assert "(4 images, 1 set aside, look, analyzed" in out
 
     # This Nebula has Recently deleted, so the CLI may delete: a restore undoes it.
     out = _cli(app, ["moodboard", "delete", "Renamed"], capsys)

@@ -6,6 +6,7 @@ import { RestoreTrashedAsset } from './RestoreTrashedAsset';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { useOpenOnDoubleClick } from './useOpenOnDoubleClick';
+import { moodboardImagesLabel } from '../../lib/moodboardCount';
 import '../../styles/moodboard-node.css';
 
 // The node stores only the board's id (its `moodboard` param, which agents
@@ -32,7 +33,7 @@ export function MoodboardNode({ id, data, selected }: NodeProps) {
   const name = board?.name.trim()
     || (status === 'empty' ? 'No board chosen' : status === 'missing' ? 'Board not found' : 'Moodboard');
   const meta = board
-    ? `${board.imageCount ?? 0} ${board.imageCount === 1 ? 'image' : 'images'} · ${board.mode ?? 'look'}`
+    ? `${moodboardImagesLabel(board.imageCount ?? 0, board.setAsideCount)} · ${board.mode ?? 'look'}`
     : status === 'empty' ? 'Choose one in the Inspector'
       : status === 'missing' ? `#${boardId} was deleted for good or never existed`
         : status === 'error' ? "Couldn't load this board" : 'Loading…';

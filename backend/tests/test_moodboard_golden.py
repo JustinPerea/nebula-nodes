@@ -76,6 +76,11 @@ before it was replaced (the review lists every path that moved):
   hash is the same. Nothing else moved: the node's bundle (the fresh analysis
   of ``prebrief_unanalyzed`` included) still carries no excluded image, in
   ``images`` or in ``analysis.images``.
+- 2026-10-20, clash reason wording (demo dry run). ``LEXICON_VERSION`` 2 to 3,
+  so every saved check runs again and no board keeps the old "allows Warm
+  for the late" reasons. On the CLI's board only ``colorCheck.basis`` (it
+  hashes the version) and ``colorCheck.checks.words.version`` moved, on all
+  7 boards. No old board clashes, so every finding list is still empty.
 
 The board images are copied into the test OUTPUT_ROOT at
 ``moodboard-golden/``, so the boards' ``/api/outputs/moodboard-golden/...``
