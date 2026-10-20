@@ -132,7 +132,11 @@ function moodboardToDraft(m: Moodboard): MoodboardDraft {
  *  overwrite) the next outside edit of that field. */
 function draftOnBoard(draft: MoodboardDraft, board: Moodboard, sent?: ReadonlySet<MoodboardOp>,
   asSent?: Partial<Record<BoardFieldKey, unknown>>): MoodboardDraft {
-  return rebaseDraft(draft, board, { ...boardFieldsOf(board), ...asSent }, sent);
+  // A field the PUT sent is the person's since only if the draft moved off
+  // what was sent: an edit made while the save was out, even one back to the
+  // value last read, must not read as untouched and take the sent value.
+  const since = asSent && draft.base ? { ...draft, base: { ...draft.base, ...asSent } } : draft;
+  return rebaseDraft(since, board, { ...boardFieldsOf(board), ...asSent }, sent);
 }
 
 /** A draft's board fields with the name as it is sent (trimmed). */
@@ -272,15 +276,6 @@ export function MoodboardStudioView() {
   }, [key, revision, loaded, projectReady, projectId, moodboardEditorId, moodboardEditorScope, initialize, patch, isDraftId, isCurrent,
     enterMoodboardEditor, rememberBrief]);
 
-  // A draft kept from an earlier visit loads without a fetch; read its brief.
-  const needsBrief = loaded && Boolean(savedId) && !brief;
-  useEffect(() => {
-    if (!needsBrief || !savedId) return;
-    let cancelled = false;
-    void fetchMoodboard(savedId).then((board) => { if (!cancelled && board) rememberBrief(board); }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [needsBrief, savedId, rememberBrief]);
-
   useEffect(() => {
     if (isDraftId && loaded && savedId && isCurrent()) enterMoodboardEditor(savedId, moodboardEditorScope);
   }, [isDraftId, loaded, savedId, isCurrent, moodboardEditorScope, enterMoodboardEditor]);
@@ -306,9 +301,10 @@ export function MoodboardStudioView() {
     const board = await fetchMoodboard(entry.savedId).catch(() => null);
     const latest = useAssetStudioDraftStore.getState().entries[resolveAssetStudioDraftKey(useAssetStudioDraftStore.getState(), key)];
     if (!board || !mounted.current || !latest || latest.pendingSaveId || latest.savedId !== board.id) return;
-    if (board.version <= ((latest.draft as MoodboardDraft).version ?? 0)) return;
+    // Not newer: nothing to move, but the brief is read from it all the same.
+    if (board.version <= ((latest.draft as MoodboardDraft).version ?? 0)) { rememberBrief(board); return; }
     moveDraft(board);
-  }, [key, moveDraft]);
+  }, [key, moveDraft, rememberBrief]);
 
   useEffect(() => wsClient.subscribe((event) => {
     // Back after the socket was down: what was said meanwhile isn't replayed,
@@ -328,10 +324,11 @@ export function MoodboardStudioView() {
     void follow();
   }), [key, follow]);
 
-  // A draft kept from an earlier visit opens as it was left, and what was
-  // said while the Studio was closed isn't replayed: read the board again
-  // (follow keeps it only if it's newer, and replays the draft's own edits),
-  // so its cover, name and images match the rail. A fresh load reads it anyway.
+  // A draft kept from an earlier visit opens as it was left, without a fetch,
+  // and what was said while the Studio was closed isn't replayed: read the
+  // board once (follow keeps it only if it's newer, replays the draft's own
+  // edits, and reads the brief either way), so its cover, name, images and
+  // brief match the rail. A fresh load reads it anyway.
   const followedKey = useRef<string | null>(null);
   useEffect(() => {
     if (followedKey.current === key) return;

@@ -256,7 +256,9 @@ nebula moodboard delete <board>
   of the run counts only the 4 that steer); `--json`
   has `setAside` on each image. The analysis lists an
   image switched aside with `setAside: true` and its colours; a weight-0
-  image keeps its ordinary entry there. `--remove` takes
+  image keeps its ordinary entry there, but the summary counts neither, and
+  the Moodboard node's bundle (what an LLM node on an Any port reads) has
+  neither in `images`, `analysis.images` or `representativeImages`. `--remove` takes
   an image off the board (its file stays).
 - `--image-note` steers (the analysis reads it). `--private-note` is a label
   for whoever looks at the board, like "PAINTERLY (liked)": no analysis,
@@ -316,6 +318,12 @@ nebula moodboard delete <board>
   prints the command that moves it back. A board or Character in Recently
   deleted is refused: restore it first. MCP: `moodboard_move`,
   `character_move`.
+- An open Character Studio follows a Character you change with
+  `PUT /api/characters/{id}` (there is no MCP tool for its fields): send
+  only the fields you change, with `baseVersion` (the `version` you read)
+  so you never write over the person's edit; a 409 `version_conflict`
+  carries the Character as it is now. The person's unsaved edits stay, and
+  if you both changed one field the Studio tells them, naming you.
 - `set --json` returns `previous`: what your change changed, as it was
   before (only those settings, Direction, Avoid, pinned colours, your own
   hand-written brief, and only the image settings you changed), so undoing

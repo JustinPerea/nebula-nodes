@@ -1044,7 +1044,8 @@ def moodboard_get(board: str, ctx: Context | None = None) -> dict[str, Any]:
     `setAside` means the image doesn't steer (set aside, or weight 0). Both
     are still read for their colours and no generator gets either;
     analysis.images marks only the switched ones (`excluded`) with setAside,
-    and a weight-0 image keeps its ordinary entry there.
+    and a weight-0 image keeps its ordinary entry there; analysis.summary
+    counts neither.
     An image's `privateNote` is the person's own label for it: read it, but
     never put it in a prompt (nothing that generates gets it). `placements`
     are its cards on the board (x, y, w, h in board pixels, weight, and
