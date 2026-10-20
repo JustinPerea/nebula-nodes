@@ -90,6 +90,28 @@ describe.each([
   });
 });
 
+describe('Assets panel moodboard count', () => {
+  it('counts the set-aside images, and the card it adds or drops starts with that count', async () => {
+    api.fetchMoodboards.mockResolvedValue([{ ...board, images: [
+      { weight: 1, excluded: false }, { weight: 1, excluded: true }, { weight: 0, excluded: false }] }]);
+    await openTab('Moodboards');
+    expect(await screen.findByText('3 images · 2 set aside · look')).toBeTruthy();
+    const row = screen.getByRole('button', { name: /^Warm editorial/ });
+    fireEvent.click(row);
+    fireEvent.click(screen.getByRole('button', { name: 'Add Warm editorial to canvas' }));
+    expect(addMoodboardNode.mock.calls[0][2]).toMatchObject({ imageCount: 3, setAsideCount: 2 });
+    const setData = vi.fn();
+    fireEvent.dragStart(row, { dataTransfer: { setData, effectAllowed: '' } });
+    expect(setData).toHaveBeenCalledWith(expect.stringContaining('application/'),
+      expect.stringContaining('"imageCount":3,"setAsideCount":2'));
+  });
+
+  it('says "1 image" for one', async () => {
+    await openTab('Moodboards');
+    expect(await screen.findByText('1 image · look')).toBeTruthy();
+  });
+});
+
 describe('Assets panel Project tab', () => {
   it('lists the open canvas project and lists again when the project changes', async () => {
     const boardA = { ...board, id: 'a1', name: 'A board' } as Moodboard;

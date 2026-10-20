@@ -48,6 +48,16 @@ describe("a card for another project's asset", () => {
     expect(enterMoodboardEditor).toHaveBeenCalledWith('pa1');
   });
 
+  it('Moodboard: counts the set-aside images beside the image count', async () => {
+    api.lookupStoredAsset.mockResolvedValue({ status: 'ready', asset: {
+      id: 'sa1', name: 'Summer Light', thumbnail: '/api/outputs/s.png', mode: 'look', projectId: 'pB',
+      images: [1, 1, 1, 1].map((weight) => ({ weight, excluded: false })).concat({ weight: 1, excluded: true }) } });
+    const props = { id: 'n3', data: { params: { moodboard: 'sa1' } }, selected: false } as unknown as NodeProps;
+    renderNode(<MoodboardNode {...props} />);
+
+    expect(await screen.findByText('5 images · 1 set aside · look')).toBeTruthy();
+  });
+
   it('Character: shows the Character and opens it in the Studio', async () => {
     api.lookupStoredAsset.mockResolvedValue({ status: 'ready', asset: {
       id: 'ca', name: 'Shoot A hero', thumbnail: '/api/outputs/h.png', referenceViews: ['a', 'b', 'c'], projectId: 'pA' } });

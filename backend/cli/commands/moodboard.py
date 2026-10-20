@@ -343,7 +343,12 @@ def run(client: NebulaClient, args) -> None:
             names = boards.project_names(api, headers) if any(b.get("projectId") for b in listing) else {}
             for board in listing:
                 analyzed = "analyzed" if board.get("analysis") else "not analyzed"
-                print(f"{board.get('id')}  {board.get('name')}  ({len(board.get('images') or [])} images, "
+                images = [image for image in board.get("images") or [] if isinstance(image, dict)]
+                # Set-aside images still count; the Studio and the node card name them beside it.
+                aside = sum(1 for image in images if boards.is_set_aside(image))
+                counted = f"{len(images)} {'image' if len(images) == 1 else 'images'}" + (
+                    f", {aside} set aside" if aside else "")
+                print(f"{board.get('id')}  {board.get('name')}  ({counted}, "
                       f"{board.get('mode')}, {analyzed}, {_scope_label(board, names)})")
         elif verb == "show":
             board = boards.get_board(api, args.board, headers)

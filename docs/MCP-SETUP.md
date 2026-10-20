@@ -1224,7 +1224,10 @@ nebula moodboard delete <board>
   or weight 0), while the analysis marks only switched images with
   `setAside` (a weight-0 image keeps its ordinary entry, measured and in no
   colour's sources). Using a weight-0 image again sets the weight its card shows,
-  unless the same change gives a weight. When nothing steers, the analysis
+  unless the same change gives a weight. Set-aside images still count in a
+  board's image count, named beside it: `nebula moodboard list` reads
+  "(5 images, 1 set aside, look, ...)", and the Moodboard node card, the
+  Studio's board list and the Assets panel read "5 images · 1 set aside · look". When nothing steers, the analysis
   warns "Every reference is set aside, so none of them shapes the board."
 - Each image has `notes`, which steer (the analysis reads them), and
   `privateNote`, the person's own label (`--private-note`, or
