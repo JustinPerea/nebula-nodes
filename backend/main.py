@@ -9577,7 +9577,9 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         upgrade_project(project)
         catalog["projects"][recovery_id] = project
         project_store.commit(catalog)
-        return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
+        result = {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
+    await _broadcast_projects_changed("created", recovery_id)
+    return result
 
 
 def _switch_actor() -> dict[str, Any] | None:
@@ -9623,6 +9625,18 @@ def _switch_notice(start: dict[str, Any] | None, project: dict[str, Any], *, cre
     return {**start, "projectId": project["id"], "projectName": project["name"], "created": created}
 
 
+async def _broadcast_projects_changed(change: str, project_id: str | None = None) -> None:
+    """Tell open tabs the saved-project list changed (a project made, opened,
+    saved, renamed, given a cover, deleted, restored or deleted for good),
+    whoever changed it: an agent, the CLI, another tab. The Projects screen
+    lists again (frontend projectStore); graphSync only follows the open
+    project, and most of these don't touch it."""
+    try:
+        await manager.broadcast_raw({"type": "projectsChanged", "change": change, "projectId": project_id})
+    except Exception:  # noqa: BLE001 - the catalog is saved; a tab lists it again on its next visit to Projects
+        pass
+
+
 @app.post("/api/projects")
 async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, Any]:
     body = body or {}
@@ -9655,6 +9669,7 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
         revision = catalog["workspaceRevision"]
     await _broadcast_graph_sync(graph_replaced=True, reason="project-create",
                                 project_switch=_switch_notice(start, project, created=True))
+    await _broadcast_projects_changed("created", project["id"])
     # A bundle built for another version doesn't load it (projectStore.ts activate).
     return {"project": public_project(project), "workspaceRevision": revision, "paramsVersion": PARAMS_VERSION}
 
@@ -9681,6 +9696,7 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
         revision = catalog["workspaceRevision"]
     await _broadcast_graph_sync(graph_replaced=True, reason="project-open",
                                 project_switch=_switch_notice(start, project, created=False))
+    await _broadcast_projects_changed("opened", project_id)
     # What opening changed that the person should know (a folded Krea node's
     # dropped job-output connections); the snapshot is saved migrated, so
     # this is said once.
@@ -9690,6 +9706,13 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
 
 @app.put("/api/projects/{project_id}")
 async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    result = _save_project(project_id, body)
+    # A save moves the card up and can change its picture and node count.
+    await _broadcast_projects_changed("renamed" if "name" in body else "saved", project_id)
+    return result
+
+
+def _save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
     with project_store.transaction() as catalog:
         project = _project_id_or_404(project_id, catalog)
         handoff = catalog.get("handoff") or {}
@@ -9797,7 +9820,9 @@ async def pin_project_cover(project_id: str, body: dict[str, Any]) -> dict[str, 
             project["coverPin"] = url
         refresh_metadata(project, touch=False)
         project_store.commit(catalog)
-        return {"project": project_metadata(project)}
+        result = {"project": project_metadata(project)}
+    await _broadcast_projects_changed("cover", project_id)
+    return result
 
 
 @app.delete("/api/projects/{project_id}")
@@ -9832,6 +9857,7 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
         }
     if deleting_active:
         await _broadcast_graph_sync(graph_replaced=True, reason="project-delete")
+    await _broadcast_projects_changed("deleted", project_id)
     return result
 
 
@@ -9860,7 +9886,9 @@ async def restore_saved_project(project_id: str) -> dict[str, Any]:
         _trashed_or_404(project_id, catalog)
         project = restore_from_trash(catalog, project_id)
         project_store.commit(catalog)
-        return {"project": project_metadata(project), "workspaceRevision": catalog["workspaceRevision"]}
+        result = {"project": project_metadata(project), "workspaceRevision": catalog["workspaceRevision"]}
+    await _broadcast_projects_changed("restored", project_id)
+    return result
 
 
 @app.delete("/api/projects/trash/{project_id}")
@@ -9871,7 +9899,9 @@ async def purge_trashed_project(project_id: str) -> dict[str, Any]:
         _trashed_or_404(project_id, catalog)
         del catalog["trash"][project_id]
         project_store.commit(catalog)
-        return {"trash": _trash_listing(catalog)}
+        result = {"trash": _trash_listing(catalog)}
+    await _broadcast_projects_changed("purged", project_id)
+    return result
 
 
 @app.post("/api/projects/trash/empty")
@@ -9888,7 +9918,10 @@ async def empty_project_trash(body: dict[str, Any] | None = None) -> dict[str, A
             del trash[project_id]
         if doomed:
             project_store.commit(catalog)
-        return {"trash": _trash_listing(catalog)}
+        result = {"trash": _trash_listing(catalog)}
+    if doomed:
+        await _broadcast_projects_changed("purged")
+    return result
 
 
 def _shown_trash_ids(body: dict[str, Any] | None, key: str) -> set[str] | None:
@@ -11509,6 +11542,8 @@ async def empty_trash(kind: str | None = None, scope: str | None = None,
             if doomed:
                 purged += len(doomed)
                 project_store.commit(catalog)
+        if doomed:
+            await _broadcast_projects_changed("purged")
     return {"purged": purged}
 
 

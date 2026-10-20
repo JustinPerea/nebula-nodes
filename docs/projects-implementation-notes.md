@@ -21,7 +21,7 @@
 
 - Each card has a trash button beside rename. (Superseded the same day: see Recently deleted below.)
 - `DELETE /api/projects/{id}` requires the current `workspaceRevision`, so a stale view can't delete anything. Generated media stays in the output store; only the catalog entry goes.
-- Deleting an inactive project leaves the live canvas and revision untouched and broadcasts nothing.
+- Deleting an inactive project leaves the live canvas and revision untouched and broadcasts nothing. (Since 2026-10-20 it sends `projectsChanged` for the Projects list, still no graph sync: see below.)
 - Deleting the open project carries the same run and paid-start fences as switching. It empties the live graph (so `GET /api/projects` won't re-adopt it as a Recovered canvas), clears `activeProjectId`, issues a new revision and broadcasts `canvas.replaced` with reason `project-delete`. The browser skips the outgoing save (it's being thrown away), waits for any in-flight save, and drops that project's Creator draft.
 - Recovery no longer needs the source project to exist. A tab with unsaved edits to a project deleted in another window saves them as "Deleted project (recovered)" instead of failing on every retry.
 
@@ -41,3 +41,10 @@
 - A boot that finds the catalog or state.json saved before the current version rotates `workspaceRevision` once and writes the catalog at once, so tabs from before the restart ignore graph syncs and go to the existing conflict flow (recover if dirty, then Retry).
 - `paramsVersion` is in graphSync, `GET /api/projects` and the create and open replies; a backend that sends none predates the gate and counts as version 0. A tab that sees another version stops saving and running, recovers unsaved work once (a Run the backend refused isn't unsaved work), and reloads when the backend is newer; it reloads at most once per backend version (sessionStorage), and otherwise says to rebuild the frontend, restart the backend, or (with sessionStorage blocked) reload the tab. Details in implementation-notes.md, "Justin's answers 2026-10-17, round 2", item 3.
 - The desktop app checks the same thing at launch, before a stale bundle can open: every frontend build writes `nebula-build.json` (`{"paramsVersion": N}`), `/api/health` reports `paramsVersion`, and `desktop/frontend-build.mjs` refuses a build with no stamp or another version than the healthy sidecar's, stops the sidecar and names the rebuild command. Dev mode skips it; the in-tab gate stays as the backstop. Details in implementation-notes.md, "Desktop launch params check (2026-10-17)".
+
+## 2026-10-20 — Projects follows changes made elsewhere
+
+- Every change to the saved-project list (create, open, save or rename, cover, delete, restore, delete for good, emptying Recently deleted, a recovered copy) sends `projectsChanged` (`{change, projectId}`) over the socket after it commits, whoever made it. A refused change sends nothing. Projects lists again on it; off Projects the list is marked stale and `goHome` lists again. A tab with no project open takes the listing's workspace revision, so its next New project or Open isn't refused.
+- An agent's `new_project` / `open_project` is followed from Projects too, with or without a project loaded (with none, only from the revision the tab listed), and opens the canvas, as the tools say. A sync with a revision a no-project tab never listed (a reconnect's first sync after missed events) lists again instead.
+- The switch toast's way back follows the list: renamed, or gone once that project is deleted, on the canvas too.
+- On Projects, the person's own switch in another window, or a delete of the loaded project, no longer stops the screen with a conflict when nothing is unsaved and no run is going: the tab lets go of the loaded project and lists again. With unsaved work it's still the recover-then-Retry conflict above. Details in implementation-notes.md, 2026-10-20.
