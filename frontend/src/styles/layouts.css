@@ -34,10 +34,32 @@
 
   /* Right-column reservations: collapsed vs expanded agent log */
   --agent-h-closed: 44px;
-  --agent-h-empty: 108px;
+  --agent-h-empty: 154px; /* header row + the Slava empty state, unclipped */
   --agent-h-open:   clamp(180px, 22vh, 280px);
   --stack-gap-sm:   var(--space-2);
   --stack-gap-lg:   var(--space-6);
+
+  /* The chat launcher anchors the right column's foot. The agent log docks
+   * above it and the docked chat above the log, so nothing overlaps
+   * (Q38: the log shows with the chat closed too). Slava overrides the
+   * launcher's size and offset (slava-restraint.css). */
+  --chat-launcher-bottom: var(--space-4);
+  --chat-launcher-size: 42px;
+  /* A short, slightly underdamped spring, the undo notice's. */
+  --agent-log-spring: linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1);
+}
+
+/* Height the docked log takes, by state (read by .agent-log and the chat). */
+body {
+  --agent-log-h: var(--agent-h-closed);
+}
+
+body.agent-log-open {
+  --agent-log-h: var(--agent-h-open);
+}
+
+body.app-slava-restraint.agent-log-open.agent-log-empty {
+  --agent-log-h: var(--agent-h-empty);
 }
 
 /* =============== Toolbar: icon-only bottom-center pill =============== */
@@ -111,7 +133,7 @@
 
 .panel-launcher--chat {
   right: var(--page-gutter);
-  bottom: var(--space-4);
+  bottom: var(--chat-launcher-bottom);
 }
 
 .panel-launcher__icon {
@@ -137,23 +159,53 @@ body:not(.app-slava-restraint) .panel-launcher--active {
 /* =============== Chat panel: right column =============== */
 
 .chat-panel {
+  --chat-panel-bottom: calc(var(--chat-launcher-bottom) + var(--chat-launcher-size) + var(--stack-gap-sm));
   top: auto !important;
   right: var(--page-gutter) !important;
   left: auto !important;
-  bottom: calc(var(--space-4) + 42px + var(--space-2)) !important;
+  bottom: var(--chat-panel-bottom) !important;
   width: var(--col-right-w);
   min-width: 280px;
   max-width: 720px;
+  /* Fills the column above its bottom edge, never past the top gutter. */
   height: clamp(
     360px,
-    calc(100vh - var(--page-gutter) - var(--space-4) - 42px - var(--space-2)),
+    calc(100vh - var(--page-gutter) - var(--chat-panel-bottom)),
     760px
   );
 }
 
-/* When the user enables the agent log, reserve space for its collapsed row. */
-body.agent-log-enabled .chat-panel {
-  bottom: calc(var(--toolbar-pad) + var(--agent-h-closed) + var(--stack-gap-lg)) !important;
+/* While the agent log shows (or its "hidden" notice does), the docked chat
+ * sits above the log's spot: launcher, gap, log (collapsed, empty or open),
+ * gap, chat. */
+body.agent-log-reserved .chat-panel {
+  --chat-panel-bottom: calc(
+    var(--chat-launcher-bottom) + var(--chat-launcher-size) + var(--stack-gap-sm)
+    + var(--agent-log-h) + var(--stack-gap-sm)
+  );
+}
+
+/* The rest of the canvas keeps clear of the log's column too (Q38: it shows
+ * with the chat closed now). The minimap (canvas.css: right 16, bottom 84)
+ * sits above the log; the proposal bar and the project-switch toast, centred
+ * at the foot, stay left of it: narrower first, and below 420 px of room
+ * shifted left so Accept is never under the log. */
+body.agent-log-reserved .canvas-navigation.react-flow__panel {
+  bottom: calc(
+    var(--chat-launcher-bottom) + var(--chat-launcher-size) + var(--stack-gap-sm)
+    + var(--agent-log-h) + var(--stack-gap-sm)
+  );
+}
+
+body.agent-log-reserved .proposal-bar {
+  --proposal-bar-room: calc(100vw - 2 * (var(--page-gutter) + var(--col-right-w) + var(--stack-gap-sm)));
+  --proposal-bar-w: min(620px, calc(100vw - 32px), max(420px, var(--proposal-bar-room)));
+  width: var(--proposal-bar-w);
+  translate: min(0px, calc((var(--proposal-bar-room) - var(--proposal-bar-w)) / 2));
+}
+
+body.agent-log-reserved .project-switch-toast {
+  max-width: min(640px, calc(100vw - 32px), max(420px, calc(100vw - 2 * (var(--page-gutter) + var(--col-right-w) + var(--stack-gap-sm)))));
 }
 
 /* Once the user drags/resizes chat into an explicit position, it must escape
@@ -217,10 +269,28 @@ body.agent-log-enabled .chat-panel {
   position: fixed;
   z-index: 11;
   right: var(--page-gutter);
-  bottom: var(--toolbar-pad);
+  /* Docked above the chat launcher, clear of it. */
+  bottom: calc(var(--chat-launcher-bottom) + var(--chat-launcher-size) + var(--stack-gap-sm));
   left: auto;
   width: var(--col-right-w);
+  height: var(--agent-log-h);
   overflow: hidden;
+  box-sizing: border-box;
+  animation: agent-log-in 420ms var(--agent-log-spring) both;
+}
+
+/* Collapsed it is one row, centred: no resize grip, no 80 px floor. */
+.agent-log:not(.agent-log--open) {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+  resize: none;
+}
+
+@keyframes agent-log-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
 }
 
 body:not(.app-slava-restraint) .agent-log {
@@ -234,18 +304,129 @@ body:not(.app-slava-restraint) .agent-log {
   backdrop-filter: blur(8px);
 }
 
-/* When open, fill the full reservation so the gap above (chat-bottom)
- * stays consistent regardless of how much content is inside. */
-body.agent-log-open .agent-log {
-  height: var(--agent-h-open);
-}
-
-body.app-slava-restraint.agent-log-open.agent-log-empty .agent-log {
-  height: var(--agent-h-empty);
-}
+/* Height follows --agent-log-h (set on body by state above), so the gap
+ * to the chat stays the same however much is inside. */
 
 .agent-log__drag-row {
+  display: flex;
+  align-items: center;
   cursor: grab;
+}
+
+.agent-log__header {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Hide control: sets the same preference as Settings > Preferences. */
+.agent-log__hide {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-right: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: transform 220ms var(--agent-log-spring);
+}
+
+.agent-log__hide:active {
+  transform: scale(0.92);
+}
+
+body:not(.app-slava-restraint) .agent-log__hide {
+  color: #888;
+}
+
+body:not(.app-slava-restraint) .agent-log__hide:hover {
+  background: #252525;
+  color: #eee;
+}
+
+body:not(.app-slava-restraint) .agent-log__hide:focus-visible {
+  outline: 2px solid #7aa9ff;
+  outline-offset: 1px;
+}
+
+/* "Agent log hidden · Show again": in the log's docked spot, a few seconds. */
+.agent-log-hidden-notice {
+  position: fixed;
+  z-index: 11;
+  right: var(--page-gutter);
+  bottom: calc(var(--chat-launcher-bottom) + var(--chat-launcher-size) + var(--stack-gap-sm));
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 2 * var(--page-gutter));
+  box-sizing: border-box;
+  padding: 6px 6px 6px 12px;
+  white-space: nowrap;
+  animation: agent-log-in 420ms var(--agent-log-spring) both;
+}
+
+.agent-log-hidden-notice__icon {
+  flex-shrink: 0;
+}
+
+.agent-log-hidden-notice__action {
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 220ms var(--agent-log-spring);
+}
+
+.agent-log-hidden-notice__action:active {
+  transform: scale(0.96);
+}
+
+body:not(.app-slava-restraint) .agent-log-hidden-notice {
+  background: rgba(20, 20, 20, 0.92);
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  color: #ccc;
+  backdrop-filter: blur(8px);
+}
+
+body:not(.app-slava-restraint) .agent-log-hidden-notice__sep {
+  color: #666;
+}
+
+body:not(.app-slava-restraint) .agent-log-hidden-notice__action {
+  background: #2a2a2a;
+  color: #eee;
+}
+
+body:not(.app-slava-restraint) .agent-log-hidden-notice__action:hover {
+  background: #333;
+}
+
+body:not(.app-slava-restraint) .agent-log-hidden-notice__action:focus-visible {
+  outline: 2px solid #7aa9ff;
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-log,
+  .agent-log-hidden-notice {
+    animation: none;
+  }
+
+  .agent-log__hide,
+  .agent-log-hidden-notice__action {
+    transition: none;
+  }
 }
 
 .agent-log__drag-row:active {

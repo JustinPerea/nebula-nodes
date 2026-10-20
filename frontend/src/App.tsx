@@ -12,7 +12,9 @@ import { WorkspaceRail } from './components/WorkspaceRail';
 import { ChatLauncher } from './components/ChatLauncher';
 import { NodeInspectorPopover } from './components/panels/NodeInspectorPopover';
 import { ChatPanel } from './components/panels/ChatPanel';
-import { AgentLog } from './components/panels/AgentLog';
+// The Agent log's store collects every agent's actions from page load, even
+// before the panel mounts (store/agentLogStore.ts subscribes at import).
+import './store/agentLogStore';
 import { CommandPalette } from './components/CommandPalette';
 import { OnboardingOverlay } from './components/onboarding/OnboardingOverlay';
 import { KeyboardShortcuts } from './components/KeyboardShortcuts';
@@ -44,6 +46,11 @@ import './styles/slava-restraint.css';
 // Alternate studios carry large, view-specific dependencies (Remotion,
 // timeline editors, brand demos). Keep the canvas startup path lean and load
 // each studio only when the user opens it.
+// The Agent log panel loads with the canvas, not the entry bundle (the
+// entry's size budget, scripts/check-build-budget.mjs).
+const AgentLog = lazy(() =>
+  import('./components/panels/AgentLog').then((module) => ({ default: module.AgentLog })),
+);
 const EditorView = lazy(() =>
   import('./components/editor/EditorView').then((module) => ({ default: module.EditorView })),
 );
@@ -302,7 +309,7 @@ export default function App() {
       {isCanvas && <WorkspaceRail />}
       {isCanvas && <ChatLauncher />}
       {isCanvas && <Toolbar />}
-      {isCanvas && <AgentLog />}
+      {isCanvas && <Suspense fallback={null}><AgentLog /></Suspense>}
       {!isHome && !isBrandShowcase && !isCommons && <CommandPalette />}
       {isCanvas && <OnboardingOverlay />}
       {isCanvas && <KeyboardShortcuts />}

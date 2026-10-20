@@ -34,7 +34,7 @@ function showLog(chatVisible = true) {
 
 function openLog() {
   render(<AgentLog />);
-  fireEvent.click(screen.getByRole('button', { name: /agent log/i }));
+  fireEvent.click(screen.getByRole('button', { name: /^agent log/i }));
 }
 
 beforeEach(() => {
@@ -125,10 +125,11 @@ describe('AgentLog panel', () => {
     expect(screen.queryByText(/Running graph/)).toBeNull();
   });
 
-  it('still shows only with the chat open (the gate is kept; see implementation-notes)', () => {
+  it('shows with the chat closed too (Q38: no chat-open gate)', () => {
     emit(action('Added Moodboard'));
     showLog(false);
     const { container } = render(<AgentLog />);
-    expect(container.querySelector('.agent-log')).toBeNull();
+    expect(container.querySelector('.agent-log')).not.toBeNull();
+    expect(document.querySelector('.agent-log__count')?.textContent).toBe('1 event');
   });
 });

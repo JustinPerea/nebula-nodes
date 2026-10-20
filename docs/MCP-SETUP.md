@@ -145,8 +145,8 @@ nebula look          # the canvas as text; --json for the full snapshot
 ```
 
 Every one of these actions is also listed in the canvas's **Agent log**
-(Settings > Preferences > "Agent log", shown under the chat while it is
-open): the agent's
+(bottom right, shown by default with or without the chat; hide it from its
+own eye-off button or Settings > Preferences > "Agent log"): the agent's
 name in its cursor colour, the cursor's words ("Added Moodboard", "Running
 Krea 2", "Accepted"), and the time. Moodboard writes are listed there too
 (your edit batch's `say`, else the journal's words: "Set aside #1 on board

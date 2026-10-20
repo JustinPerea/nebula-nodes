@@ -1,18 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
-import { Activity, ChevronUp } from 'lucide-react';
+import { Activity, ChevronUp, EyeOff } from 'lucide-react';
 import { useGraphStore } from '../../store/graphStore';
 import { useUIStore } from '../../store/uiStore';
 import { useAgentLogStore } from '../../store/agentLogStore';
 import { ScrollFade } from '../ScrollFade';
-
-interface Position {
-  left: number;
-  top: number;
-  anchorX?: 'left' | 'right';
-  anchorY?: 'top' | 'bottom';
-  offsetX?: number;
-  offsetY?: number;
-}
+import {
+  AGENT_LOG_HIDDEN_NOTICE_MS,
+  clamp,
+  edgeStyle,
+  keepClearOfRect,
+  positionFromGeometry,
+  resolvePositionForViewport,
+  samePosition,
+  type Position,
+  type Rect,
+} from './agentLogLayout';
 
 const POS_STORAGE_KEY = 'nebula:agentLog:pos';
 // User has to drag this many px before we treat the gesture as a drag and
@@ -21,53 +23,19 @@ const DRAG_THRESHOLD = 4;
 const MIN_VISIBLE_WIDTH = 80;
 const MIN_VISIBLE_HEIGHT = 40;
 
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
+function chatLauncherRect(): Rect | null {
+  if (typeof document === 'undefined') return null;
+  const el = document.querySelector('.panel-launcher--chat');
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  if (r.width === 0 && r.height === 0) return null;
+  return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
 }
 
-function positionFromGeometry(
-  left: number,
-  top: number,
-  width: number,
-  height: number,
-  preferredAnchorX?: Position['anchorX'],
-  preferredAnchorY?: Position['anchorY'],
-): Position {
-  const right = window.innerWidth - left - width;
-  const bottom = window.innerHeight - top - height;
-  const anchorX = preferredAnchorX ?? (left <= right ? 'left' : 'right');
-  const anchorY = preferredAnchorY ?? (top <= bottom ? 'top' : 'bottom');
-
-  return {
-    left,
-    top,
-    anchorX,
-    anchorY,
-    offsetX: anchorX === 'left' ? left : right,
-    offsetY: anchorY === 'top' ? top : bottom,
-  };
-}
-
-function resolvePositionForViewport(position: Position, width: number, height: number): Position {
-  const anchorX = position.anchorX ?? (position.left <= window.innerWidth - position.left - width ? 'left' : 'right');
-  const anchorY = position.anchorY ?? (position.top <= window.innerHeight - position.top - height ? 'top' : 'bottom');
-  const offsetX = position.offsetX ?? (anchorX === 'left' ? position.left : window.innerWidth - position.left - width);
-  const offsetY = position.offsetY ?? (anchorY === 'top' ? position.top : window.innerHeight - position.top - height);
-  const rawLeft = anchorX === 'left' ? offsetX : window.innerWidth - width - offsetX;
-  const rawTop = anchorY === 'top' ? offsetY : window.innerHeight - height - offsetY;
-  const left = clamp(rawLeft, 0, Math.max(0, window.innerWidth - width));
-  const top = clamp(rawTop, 0, Math.max(0, window.innerHeight - height));
-
-  return positionFromGeometry(left, top, width, height, anchorX, anchorY);
-}
-
-function samePosition(a: Position, b: Position) {
-  return a.left === b.left
-    && a.top === b.top
-    && a.anchorX === b.anchorX
-    && a.anchorY === b.anchorY
-    && a.offsetX === b.offsetX
-    && a.offsetY === b.offsetY;
+/** The log's layout size, ignoring the transform its entry spring applies. */
+function layoutSize(el: HTMLElement | null): { width: number; height: number } | null {
+  if (!el) return null;
+  return { width: el.offsetWidth, height: el.offsetHeight };
 }
 
 function readInitialPosition(): Position | null {
@@ -113,10 +81,26 @@ function clearPersistedPosition() {
 export function AgentLog() {
   const isExecuting = useGraphStore((s) => s.isExecuting);
   const enabled = useUIStore((s) => s.agentLogEnabled);
-  const chatVisible = useUIStore((s) => s.panels.chat.visible);
-  // Docked under the chat since the Slava launchers (fb56e017), so it shows
-  // only with the chat open, even though MCP agents' actions are listed too.
-  const visible = enabled && chatVisible;
+  const setEnabled = useUIStore((s) => s.setAgentLogEnabled);
+  // Shown by default whether or not the chat is open (Q38, Justin 2026-10-20:
+  // "it can be toggled off to get out of the way"). It docks in the
+  // bottom-right column above the chat launcher, and the docked chat sits
+  // above it (layouts.css).
+  const visible = enabled;
+  // "Agent log hidden · Show again", only after the log's own hide control.
+  const [hiddenNotice, setHiddenNotice] = useState(false);
+  // Hover or keyboard focus inside the notice holds its timer.
+  const noticeHoldRef = useRef(false);
+  const focusNoticeRef = useRef(false);
+  const showAgainRef = useRef<HTMLButtonElement | null>(null);
+  const headerRef = useRef<HTMLButtonElement | null>(null);
+  const focusHeaderRef = useRef(false);
+  // Turned back on from anywhere (Settings too): the notice has done its job.
+  const [prevEnabled, setPrevEnabled] = useState(enabled);
+  if (prevEnabled !== enabled) {
+    setPrevEnabled(enabled);
+    if (enabled && hiddenNotice) setHiddenNotice(false);
+  }
 
   const [open, setOpen] = useState(false);
   // Every agent's actions and the chat's thinking lines, collected while
@@ -157,11 +141,11 @@ export function AgentLog() {
   useEffect(() => {
     if (!enabled || !position || (position.anchorX && position.anchorY)) return;
     const frameId = window.requestAnimationFrame(() => {
-      const rect = logRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const next = positionFromGeometry(rect.left, rect.top, rect.width, rect.height);
+      const size = layoutSize(logRef.current);
+      if (!size) return;
       setPosition((current) => {
         if (!current || (current.anchorX && current.anchorY)) return current;
+        const next = positionFromGeometry(current.left, current.top, size.width, size.height);
         persistPosition(next);
         return next;
       });
@@ -173,10 +157,15 @@ export function AgentLog() {
     function handleResize() {
       setPosition((current) => {
         if (!current) return current;
-        const rect = logRef.current?.getBoundingClientRect();
-        const width = rect?.width ?? MIN_VISIBLE_WIDTH;
-        const height = rect?.height ?? MIN_VISIBLE_HEIGHT;
-        const next = resolvePositionForViewport(current, width, height);
+        const size = layoutSize(logRef.current);
+        const width = size?.width ?? MIN_VISIBLE_WIDTH;
+        const height = size?.height ?? MIN_VISIBLE_HEIGHT;
+        const next = keepClearOfRect(
+          resolvePositionForViewport(current, width, height),
+          width,
+          height,
+          chatLauncherRect(),
+        );
         if (samePosition(current, next)) return current;
         persistPosition(next);
         return next;
@@ -190,12 +179,84 @@ export function AgentLog() {
   // space while the chat dock is actually open.
   useEffect(() => {
     document.body.classList.toggle('agent-log-enabled', visible);
+    // The docked chat keeps room above the log's spot while the log shows
+    // (dragged too: a log moved a little would otherwise sit on the chat),
+    // and while the "hidden" notice holds that spot.
+    document.body.classList.toggle('agent-log-reserved', visible || hiddenNotice);
     document.body.classList.toggle('agent-log-open', visible && open);
     document.body.classList.toggle('agent-log-empty', visible && open && entries.length === 0);
     return () => {
-      document.body.classList.remove('agent-log-enabled', 'agent-log-open', 'agent-log-empty');
+      document.body.classList.remove('agent-log-enabled', 'agent-log-reserved', 'agent-log-open', 'agent-log-empty');
     };
-  }, [visible, open, entries.length]);
+  }, [visible, open, entries.length, hiddenNotice]);
+
+  // A position saved before the log showed with the chat closed (or in a
+  // bigger window) can sit on the launcher or past the edge; once the log
+  // has a size, pull it on screen and lift it clear.
+  useEffect(() => {
+    if (!visible || !position) return;
+    const frameId = window.requestAnimationFrame(() => {
+      const size = layoutSize(logRef.current);
+      if (!size) return;
+      setPosition((current) => {
+        if (!current) return current;
+        const next = keepClearOfRect(
+          resolvePositionForViewport(current, size.width, size.height),
+          size.width,
+          size.height,
+          chatLauncherRect(),
+        );
+        if (samePosition(current, next)) return current;
+        persistPosition(next);
+        return next;
+      });
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [visible, position]);
+
+  // The notice leaves after a few seconds unless it is hovered or focused;
+  // Settings > Preferences stays the way back after that.
+  useEffect(() => {
+    if (!hiddenNotice) return;
+    let remaining = AGENT_LOG_HIDDEN_NOTICE_MS;
+    const timer = window.setInterval(() => {
+      if (noticeHoldRef.current) return;
+      remaining -= 250;
+      if (remaining <= 0) setHiddenNotice(false);
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [hiddenNotice]);
+
+  // Hidden from the keyboard: the focused control is gone, so focus moves
+  // to "Show again" instead of dropping to <body>. A mouse click leaves
+  // focus alone so the notice can time out.
+  useEffect(() => {
+    if (hiddenNotice && focusNoticeRef.current) {
+      focusNoticeRef.current = false;
+      showAgainRef.current?.focus();
+    }
+  }, [hiddenNotice]);
+
+  useEffect(() => {
+    if (visible && focusHeaderRef.current) {
+      focusHeaderRef.current = false;
+      headerRef.current?.focus();
+    }
+  }, [visible]);
+
+  function handleHide(e: React.MouseEvent<HTMLButtonElement>) {
+    // detail is 0 when Enter or Space activated the button.
+    focusNoticeRef.current = e.detail === 0;
+    noticeHoldRef.current = false;
+    setHiddenNotice(true);
+    setEnabled(false);
+  }
+
+  function handleShowAgain() {
+    focusHeaderRef.current = true;
+    setHiddenNotice(false);
+    setEnabled(true);
+  }
 
   function handleHeaderMouseDown(e: React.MouseEvent<HTMLDivElement>) {
     // Ignore right-click. Allow drag to start anywhere on the row — the
@@ -222,7 +283,12 @@ export function AgentLog() {
       d.moved = true;
       const left = clamp(d.originLeft + dx, 0, Math.max(0, window.innerWidth - d.width));
       const top = clamp(d.originTop + dy, 0, Math.max(0, window.innerHeight - d.height));
-      const next = positionFromGeometry(left, top, d.width, d.height);
+      const next = keepClearOfRect(
+        positionFromGeometry(left, top, d.width, d.height),
+        d.width,
+        d.height,
+        chatLauncherRect(),
+      );
       setPosition(next);
       persistPosition(next);
     }
@@ -257,14 +323,63 @@ export function AgentLog() {
     persistPosition(position);
   }, [position]);
 
+  // A dragged log keeps its left edge, and the bottom edge when it is
+  // anchored there, so expanding it grows upward and stays on screen.
   const containerStyle: React.CSSProperties = position
-    ? { left: position.left, top: position.top, bottom: 'auto' }
+    ? { ...edgeStyle(position), left: position.left, right: 'auto' }
     : {};
+  // "Agent log hidden" shows where the dragged log was.
+  const noticeStyle: React.CSSProperties = position ? { ...edgeStyle(position) } : {};
   const latestEntry = entries.length > 0 ? entries[entries.length - 1] : null;
   const statusLabel = isExecuting ? 'streaming' : latestEntry ? latestEntry.agent?.name ?? latestEntry.source : 'standby';
   const countLabel = `${entries.length} event${entries.length === 1 ? '' : 's'}`;
 
-  if (!visible) return null;
+  if (!visible) {
+    if (!hiddenNotice) return null;
+    return (
+      <div
+        className="agent-log-hidden-notice"
+        style={noticeStyle}
+        role="status"
+        aria-live="polite"
+        onMouseEnter={() => { noticeHoldRef.current = true; }}
+        onMouseLeave={() => { noticeHoldRef.current = false; }}
+        onFocus={() => { noticeHoldRef.current = true; }}
+        onBlur={() => { noticeHoldRef.current = false; }}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            e.stopPropagation();
+            // The notice is about to go with the focused control in it: keep
+            // keyboard focus in this corner, on the chat launcher, instead of
+            // dropping it to <body>.
+            if (e.currentTarget.contains(document.activeElement)) {
+              document.querySelector<HTMLElement>('.panel-launcher--chat')?.focus();
+            }
+            setHiddenNotice(false);
+          }
+        }}
+      >
+        <EyeOff
+          className="agent-log-hidden-notice__icon"
+          size={14}
+          strokeWidth={1.75}
+          aria-hidden="true"
+          focusable="false"
+        />
+        <span className="agent-log-hidden-notice__text">Agent log hidden</span>
+        <span className="agent-log-hidden-notice__sep" aria-hidden="true">·</span>
+        <button
+          ref={showAgainRef}
+          type="button"
+          className="agent-log-hidden-notice__action"
+          onClick={handleShowAgain}
+          title="Also in Settings > Preferences > Agent log"
+        >
+          Show again
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -284,6 +399,7 @@ export function AgentLog() {
         title="Drag to move"
       >
         <button
+          ref={headerRef}
           type="button"
           className="agent-log__header"
           onClick={handleToggleClick}
@@ -317,6 +433,16 @@ export function AgentLog() {
             aria-hidden="true"
             focusable="false"
           />
+        </button>
+        <button
+          type="button"
+          className="agent-log__hide"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={handleHide}
+          aria-label="Hide agent log"
+          title="Hide agent log (Settings > Preferences brings it back)"
+        >
+          <EyeOff size={14} strokeWidth={1.75} aria-hidden="true" focusable="false" />
         </button>
       </div>
       {open && (
