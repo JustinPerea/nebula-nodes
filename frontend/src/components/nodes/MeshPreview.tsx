@@ -12,6 +12,7 @@ import { backendAssetUrlSync } from '../../lib/backend';
 import { AssetByteLimitError, readBoundedAssetResponse } from '../../lib/boundedAsset';
 import { downloadWorldAsset, worldAssetFilename } from '../../lib/worldDownload';
 import { isSafeWorldUrl } from '../../lib/worldValue';
+import { isSplatExport, meshFormatLabel } from '../../lib/meshFormat';
 
 interface MeshPreviewProps {
   src: string;
@@ -42,20 +43,6 @@ const MODAL_FOCUSABLE_SELECTOR = [
 function currentReducedMotionPreference(): boolean {
   return typeof window !== 'undefined'
     && Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
-}
-
-function meshFormatLabel(src: string) {
-  const cleanSrc = src.split(/[?#]/)[0] ?? '';
-  const filename = cleanSrc.split('/').pop() ?? '';
-  const extension = filename.includes('.') ? filename.split('.').pop() : '';
-  if (extension && ['ply', 'spz', 'splat', 'ksplat', 'sog'].includes(extension.toLowerCase())) {
-    return `${extension.toUpperCase()} splat export`;
-  }
-  return extension ? `${extension.toUpperCase()} model` : '3D model';
-}
-
-function isSplatExport(src: string): boolean {
-  return /\.(?:ply|spz|splat|ksplat|sog)(?:[?#]|$)/i.test(src);
 }
 
 function canUseWebGL(): boolean {

@@ -5,8 +5,9 @@ import './ProjectSwitchToast.css';
 
 const VISIBLE_MS = 15000;
 
-/** Shown on the canvas and on Projects after this window followed an agent's
- * project switch. "Back to …" reopens the project that was open before. */
+/** Shown after this window followed an agent's project switch, which opens
+ * the canvas even from Projects. "Back to …" reopens the project that was
+ * open before (none when Projects had nothing open). */
 export function ProjectSwitchToast() {
   const notice = useProjectStore((state) => state.switchNotice);
   const busy = useProjectStore((state) => state.busy);

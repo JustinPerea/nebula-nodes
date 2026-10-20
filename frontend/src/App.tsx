@@ -4,7 +4,7 @@ import { Canvas } from './components/Canvas';
 import { CanvasTabs } from './components/CanvasTabs';
 import { NodeLibrary } from './components/panels/NodeLibrary';
 import { AssetsPanel } from './components/panels/AssetsPanel';
-import { RunHistoryPanel } from './components/panels/RunHistoryPanel';
+import { OnboardingOverlay, RunHistoryPanel } from './components/DeferredPanels';
 import { Settings } from './components/panels/Settings';
 import { Toolbar } from './components/panels/Toolbar';
 import { GraphFileActions } from './components/GraphFileActions';
@@ -14,12 +14,13 @@ import { NodeInspectorPopover } from './components/panels/NodeInspectorPopover';
 import { ChatPanel } from './components/panels/ChatPanel';
 import { AgentLog } from './components/panels/AgentLog';
 import { CommandPalette } from './components/CommandPalette';
-import { OnboardingOverlay } from './components/onboarding/OnboardingOverlay';
 import { KeyboardShortcuts } from './components/KeyboardShortcuts';
 import { BackendConnectionStatus } from './components/BackendConnectionStatus';
 import { PersonRequiredBanner } from './components/PersonRequiredBanner';
 import { ProviderRecoveryStatus } from './components/ProviderRecoveryStatus';
 import { startWorkingBadge } from './lib/jobNotifications';
+import { DEFERRED_PRELOADS } from './lib/deferredChunks';
+import { preloadAll, whenIdle } from './lib/lazyWithPreload';
 import { getSettings } from './lib/api';
 import { applySavedRunCostConfirm } from './lib/runCostConfirm';
 import { getKreaConnection, normalizeKreaMode, nodeKeyStatus } from './lib/kreaConnection';
@@ -95,6 +96,11 @@ export default function App() {
   const settingsCacheRequest = useRef(0);
   // List prices for the Run estimate and the cost confirm, fetched once.
   useEffect(() => { void usePricingStore.getState().load(); }, []);
+
+  // Run History, the tour, the mask painter and the node mesh / world viewers
+  // live outside the startup entry (lib/deferredChunks.ts). Fetch them once
+  // the first paint is done so a later first open never waits on the network.
+  useEffect(() => whenIdle(() => preloadAll(DEFERRED_PRELOADS)), []);
 
   // Fetch settings on mount to populate the API key cache used for warning badges
   useEffect(() => {

@@ -202,10 +202,24 @@ describe('graphSync from another workspace or version is not merged', () => {
 
   it('ignores a sync with another revision: no merge, nothing to save', async () => {
     vi.useFakeTimers();
+    // On the canvas. On Projects, a clean tab lets go of the project instead
+    // (below), which merges and saves nothing either.
+    useProjectStore.setState({ screen: 'workspace' });
     // Same version: this is main's path too (its graphStore has the same check).
     emit({ type: 'graphSync', workspaceRevision: 'rev-other', paramsVersion: GRAPH_PARAMS_VERSION,
       nodes: [backendNode], edges: [], empty: false });
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('alpha');
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(projects.saveProject).not.toHaveBeenCalled();
+    expect(projects.recoverProject).not.toHaveBeenCalled();
+  });
+
+  it('on Projects, lets go of the clean project instead: no merge, nothing to save', async () => {
+    vi.useFakeTimers();
+    emit({ type: 'graphSync', workspaceRevision: 'rev-other', paramsVersion: GRAPH_PARAMS_VERSION,
+      nodes: [backendNode], edges: [], empty: false });
+    expect(useGraphStore.getState().nodes).toEqual([]);
+    expect(useProjectStore.getState()).toMatchObject({ activeProject: null, error: null });
     await vi.advanceTimersByTimeAsync(2000);
     expect(projects.saveProject).not.toHaveBeenCalled();
     expect(projects.recoverProject).not.toHaveBeenCalled();

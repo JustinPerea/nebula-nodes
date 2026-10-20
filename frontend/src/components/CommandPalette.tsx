@@ -11,6 +11,7 @@ import {
 } from '../lib/commandPalette';
 import { findAvailableNodePosition, type NodePosition } from '../lib/nodePlacement';
 import { computeCanvasFitPadding } from '../lib/canvasFit';
+import { useFitCanvasView } from '../hooks/useFitCanvasView';
 import { canLoadGraph, canSaveGraph, requestGraphLoad, requestGraphSave } from '../lib/graphFileActions';
 import '../styles/command-palette.css';
 
@@ -29,6 +30,8 @@ export function CommandPalette() {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const { screenToFlowPosition, fitView } = useReactFlow();
+  // Fit view includes an open proposal's ghosts.
+  const fitCanvasView = useFitCanvasView();
   const addNode = useGraphStore((s) => s.addNode);
   const executeGraph = useGraphStore((s) => s.executeGraph);
   const isExecuting = useGraphStore((s) => s.isExecuting);
@@ -101,7 +104,7 @@ export function CommandPalette() {
         runGraph: () => executeGraph(),
         save: requestGraphSave,
         load: requestGraphLoad,
-        fitView: () => fitView({ padding: computeCanvasFitPadding(), duration: 300 }),
+        fitView: () => fitCanvasView(300),
         enterCreateView,
         togglePanel,
         startAgentQuery: () => {
@@ -114,7 +117,7 @@ export function CommandPalette() {
         canvasNodes,
         focusNode,
       }),
-    [addNodeAtCenter, executeGraph, fitView, enterCreateView, togglePanel, nodeCount, isExecuting, isImportingGraph, canSave, canLoad, canvasNodes, focusNode]
+    [addNodeAtCenter, executeGraph, fitCanvasView, enterCreateView, togglePanel, nodeCount, isExecuting, isImportingGraph, canSave, canLoad, canvasNodes, focusNode]
   );
 
   // Mirror `open` into a ref so the global hotkey handler stays subscribed once.

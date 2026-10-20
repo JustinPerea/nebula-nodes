@@ -49,6 +49,9 @@ def nebula(monkeypatch):
     monkeypatch.delenv("NEBULA_AGENT_TOKEN", raising=False)
     monkeypatch.delenv("NEBULA_AGENT_NAME", raising=False)
     monkeypatch.setattr(main, "execute_graph", fake_execute_graph)
+    # The fake engine never calls a provider, so these keyless runs may start;
+    # the tests of a run the pre-call check refuses put the real one back.
+    monkeypatch.setattr(main, "validate_graph", lambda *args, **kwargs: [])
     monkeypatch.setattr(main, "_krea_connector", lambda: _Krea())
     monkeypatch.setattr(main, "agent_spend_ledger", agent_spend.SpendLedger(None))
     with TestClient(main.app) as http:
@@ -279,3 +282,76 @@ def test_every_tool_is_annotated_and_the_instructions_name_real_tools():
 
     named = set(re.findall(r"\b([a-z]+(?:_[a-z]+)+)\b", mcp_server.INSTRUCTIONS))
     assert named - {"ready_only"} <= set(tools) | {"wait_seconds"}
+
+
+def test_a_run_that_fails_tells_the_agent_why_everywhere_it_looks(nebula, monkeypatch):
+    """run_nodes reports "failed" with the node's message; look_at_canvas and
+    view_output give that message instead of a bare error state or "no output yet"."""
+    import main
+    from execution.engine import validate_graph
+
+    monkeypatch.setattr(main, "validate_graph", validate_graph)
+    monkeypatch.setattr(main, "load_settings", lambda: {"apiKeys": {}})
+    built = _build()
+    image = built["idMap"]["+img"]
+    result = _text(asyncio.run(mcp_server.run_nodes(image, wait_seconds=10)))
+    assert result["status"] == "failed" and result["nodesExecuted"] == 0
+    message = result["errors"][image]
+    assert "GOOGLE_API_KEY" in message and result["error"].startswith("Nothing ran, so nothing was spent.")
+
+    looked = next(node for node in mcp_server.look_at_canvas()["nodes"] if node["id"] == image)
+    assert looked["error"] == message
+    answer = mcp_server.view_output(image)
+    assert len(answer) == 1
+    assert json.loads(answer[0]) == {"nodeId": image, "state": "error",
+                                     "error": f"{image} has no output: its last run failed: {message}"}
+
+
+def test_view_output_says_when_an_output_is_from_before_a_failed_run(nebula):
+    import main
+    from models.events import ErrorEvent
+
+    built = _build()
+    image = built["idMap"]["+img"]
+    asyncio.run(mcp_server.run_nodes(image, wait_seconds=10))
+    main.node_errors.observe(ErrorEvent(node_id=image, error="HTTP 429: rate limited"))
+    try:
+        note, picture = mcp_server.view_output(image)
+    finally:
+        main.node_errors.forget_all()
+    assert isinstance(picture, Image)
+    assert json.loads(note)["note"] == "This output is from before its last run, which failed: HTTP 429: rate limited"
+
+
+def test_view_output_says_when_a_value_is_from_before_a_failed_run(nebula):
+    """A text or data output (no picture to preview) gets the same note: the
+    live check's Moodboard node kept its old value after its board was deleted."""
+    import main
+    from models.events import ErrorEvent
+
+    built = _build("hello there")
+    prompt = built["idMap"]["+p"]
+    asyncio.run(mcp_server.run_nodes(built["idMap"]["+img"], wait_seconds=10))
+    main.node_errors.observe(ErrorEvent(node_id=prompt, error="Moodboard 'b1' is in Recently deleted."))
+    try:
+        answer = json.loads(mcp_server.view_output(prompt)[0])
+    finally:
+        main.node_errors.forget_all()
+    assert answer["note"] == "This output is from before its last run, which failed: Moodboard 'b1' is in Recently deleted."
+    assert answer["outputs"]["text"]["value"] == "hello there"
+
+
+def test_propose_change_warns_about_run_nodes_that_cannot_run(nebula, monkeypatch):
+    import main
+
+    monkeypatch.setattr(main, "load_settings", lambda: {"apiKeys": {}})
+    prompt = mcp_server.edit_canvas(nodes=[{"ref": "+p", "definitionId": "text-input", "params": {"value": "a"}}])
+    response = mcp_server.propose_change(
+        note="Make the hero image",
+        nodes=[{"ref": "+img", "definitionId": "gpt-image-2-generate"}],
+        edges=[{"source": prompt["idMap"]["+p"], "sourceHandle": "text", "target": "+img", "targetHandle": "prompt"}],
+        run=["+img"],
+    )
+    assert response["proposal"]["cost"]["notReady"][0]["missing"] == "needs OPENAI_API_KEY in Settings > Providers"
+    assert "+img (GPT Image 2) needs OPENAI_API_KEY" in response["warning"]
+    mcp_server.withdraw_proposal(response["proposal"]["id"])

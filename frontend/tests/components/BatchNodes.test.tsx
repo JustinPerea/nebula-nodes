@@ -9,6 +9,7 @@ import { useGraphStore } from '../../src/store/graphStore';
 import { useUIStore } from '../../src/store/uiStore';
 import { batchAuthoringError, batchSizeCap, parseBatchItems } from '../../src/lib/batch';
 import { cameraPoseFixture } from '../fixtures/spatialValues';
+import { DeferredMeshPreview } from '../../src/lib/deferredChunks';
 
 const transport = vi.hoisted(() => ({ apiFetch: vi.fn(), download: vi.fn() }));
 vi.mock('../../src/lib/backend', async (importOriginal) => ({
@@ -171,7 +172,7 @@ describe.each([['ModelNode', false], ['DynamicNode', true]] as const)('%s Batch 
     expect(view.container.querySelector('img[src="/api/outputs/partial.png"]')).toBeNull();
   });
 
-  it.each(['Image', 'Video', 'Audio', 'SVG', 'Mesh', 'World', 'CameraPose'] as const)('renders the selected %s snapshot with the existing media/representation path', (type) => {
+  it.each(['Image', 'Video', 'Audio', 'SVG', 'Mesh', 'World', 'CameraPose'] as const)('renders the selected %s snapshot with the existing media/representation path', async (type) => {
     const values: PortValue['value'][] = type === 'World'
       ? [{ schemaVersion: 1, provider: 'worldlabs', worldId: 'first-world', assets: {} }, { schemaVersion: 1, provider: 'worldlabs', worldId: 'second-world', assets: {} }]
       : type === 'CameraPose' ? [{ ...cameraPoseFixture, id: 'first-pose' }, { ...cameraPoseFixture, id: 'second-pose' }]
@@ -179,6 +180,9 @@ describe.each([['ModelNode', false], ['DynamicNode', true]] as const)('%s Batch 
     const results = values.map((value) => ({ result: { type, value } as PortValue }));
     useGraphStore.setState({ nodes: [node('preview', 'preview', { outputs: results[1], batchOutputs: results,
       batchVariants: [{ index: 0, label: 'first', lineage: [] }, { index: 1, label: 'second', lineage: [] }] })] });
+    // The mesh viewer is a deferred chunk; once preloaded (App does it on idle)
+    // it renders synchronously, which this fake-timer test relies on.
+    if (type === 'Mesh') await DeferredMeshPreview.preload();
     const view = render(<StoreCard dynamic={dynamic} />);
     const selectedValue = () => {
       if (['World', 'CameraPose'].includes(type)) return screen.getByTestId('representation-preview').textContent;
