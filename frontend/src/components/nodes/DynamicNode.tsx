@@ -11,7 +11,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useSlavaNodeEntranceClass } from '../../hooks/useSlavaNodeEntrance';
 import { useBatchPreview } from '../../hooks/useBatchPreview';
 import { BatchCarousel } from './BatchCarousel';
-import { MeshPreview } from './MeshPreview';
+import { MeshPreview } from './DeferredViewers';
 import { RepresentationViewer } from './RepresentationViewer';
 import { NodeError } from './NodeError';
 import { SkippedBadge } from './SkippedBadge';

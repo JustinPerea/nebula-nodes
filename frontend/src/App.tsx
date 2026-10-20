@@ -4,7 +4,7 @@ import { Canvas } from './components/Canvas';
 import { CanvasTabs } from './components/CanvasTabs';
 import { NodeLibrary } from './components/panels/NodeLibrary';
 import { AssetsPanel } from './components/panels/AssetsPanel';
-import { RunHistoryPanel } from './components/panels/RunHistoryPanel';
+import { AgentLog, OnboardingOverlay, RunHistoryPanel } from './components/DeferredPanels';
 import { Settings } from './components/panels/Settings';
 import { Toolbar } from './components/panels/Toolbar';
 import { GraphFileActions } from './components/GraphFileActions';
@@ -16,12 +16,13 @@ import { ChatPanel } from './components/panels/ChatPanel';
 // before the panel mounts (store/agentLogStore.ts subscribes at import).
 import './store/agentLogStore';
 import { CommandPalette } from './components/CommandPalette';
-import { OnboardingOverlay } from './components/onboarding/OnboardingOverlay';
 import { KeyboardShortcuts } from './components/KeyboardShortcuts';
 import { BackendConnectionStatus } from './components/BackendConnectionStatus';
 import { PersonRequiredBanner } from './components/PersonRequiredBanner';
 import { ProviderRecoveryStatus } from './components/ProviderRecoveryStatus';
 import { startWorkingBadge } from './lib/jobNotifications';
+import { DEFERRED_PRELOADS } from './lib/deferredChunks';
+import { preloadAll, whenIdle } from './lib/lazyWithPreload';
 import { getSettings } from './lib/api';
 import { applySavedRunCostConfirm } from './lib/runCostConfirm';
 import { getKreaConnection, normalizeKreaMode, nodeKeyStatus } from './lib/kreaConnection';
@@ -46,11 +47,6 @@ import './styles/slava-restraint.css';
 // Alternate studios carry large, view-specific dependencies (Remotion,
 // timeline editors, brand demos). Keep the canvas startup path lean and load
 // each studio only when the user opens it.
-// The Agent log panel loads with the canvas, not the entry bundle (the
-// entry's size budget, scripts/check-build-budget.mjs).
-const AgentLog = lazy(() =>
-  import('./components/panels/AgentLog').then((module) => ({ default: module.AgentLog })),
-);
 const EditorView = lazy(() =>
   import('./components/editor/EditorView').then((module) => ({ default: module.EditorView })),
 );
@@ -102,6 +98,11 @@ export default function App() {
   const settingsCacheRequest = useRef(0);
   // List prices for the Run estimate and the cost confirm, fetched once.
   useEffect(() => { void usePricingStore.getState().load(); }, []);
+
+  // Run History, the tour, the mask painter and the node mesh / world viewers
+  // live outside the startup entry (lib/deferredChunks.ts). Fetch them once
+  // the first paint is done so a later first open never waits on the network.
+  useEffect(() => whenIdle(() => preloadAll(DEFERRED_PRELOADS)), []);
 
   // Fetch settings on mount to populate the API key cache used for warning badges
   useEffect(() => {
@@ -309,7 +310,7 @@ export default function App() {
       {isCanvas && <WorkspaceRail />}
       {isCanvas && <ChatLauncher />}
       {isCanvas && <Toolbar />}
-      {isCanvas && <Suspense fallback={null}><AgentLog /></Suspense>}
+      {isCanvas && <AgentLog />}
       {!isHome && !isBrandShowcase && !isCommons && <CommandPalette />}
       {isCanvas && <OnboardingOverlay />}
       {isCanvas && <KeyboardShortcuts />}

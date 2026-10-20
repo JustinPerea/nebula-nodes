@@ -1,6 +1,6 @@
 import type { PortValue, NodeState } from '../../types';
 import { findStructuredRepresentation } from '../../lib/representationViewerRegistry';
-import { MeshPreview } from '../nodes/MeshPreview';
+import { MeshPreview } from '../nodes/DeferredViewers';
 import { RepresentationViewer } from '../nodes/RepresentationViewer';
 
 function urlOf(v: PortValue['value']): string | null {

@@ -95,6 +95,14 @@ let reloadingForParams = false;
  * window whose frontend build is still older after a reload stops instead of
  * reloading again. */
 const PARAMS_RELOAD_KEY = 'nebula:paramsReloadedFor';
+/** Projects lists again on every projectsChanged (another writer made,
+ * renamed, saved or deleted a project). Off Projects it waits for goHome. */
+let listingStale = false;
+let listing: Promise<void> | null = null;
+let listAgain = false;
+/** Bumped by every listing this tab applies, so an older reply never
+ * replaces a newer list. */
+let listingGeneration = 0;
 
 /** Persist authoring and results, excluding React Flow measurements/selection
  * and transient credential/progress presentation. JSON gives each save its
@@ -383,10 +391,69 @@ async function activate(action: () => Promise<api.ProjectActivation>): Promise<v
   }
 }
 
+/** List the saved projects again, keeping whatever this tab has open. One
+ * request at a time; changes that land meanwhile get one more. A tab with no
+ * project open also takes the new workspace revision, so its next create or
+ * open isn't refused as stale. */
+function relistProjects(): Promise<void> {
+  if (listing) { listAgain = true; return listing; }
+  listing = (async () => {
+    try {
+      do {
+        listAgain = false;
+        const generation = ++listingGeneration;
+        const list = await api.listProjects();
+        // The graphSync's own check handles a backend on another params version.
+        if (generation !== listingGeneration || backendParamsVersion(list.paramsVersion) !== GRAPH_PARAMS_VERSION) continue;
+        useProjectStore.setState((state) => ({
+          projects: list.projects, trash: list.trash ?? [],
+          ...(!state.activeProject && !getProjectContext() ? { workspaceRevision: list.workspaceRevision } : {}),
+          ...(state.switchNotice ? { switchNotice: wayBackIn(state.switchNotice, list.projects) } : {}),
+        }));
+      } while (listAgain);
+    } catch { listingStale = true; /* Listed again on the next change or visit to Projects. */ }
+    finally { listing = null; }
+  })();
+  return listing;
+}
+
+/** The switch toast's way back, as the list has it now: renamed, or gone
+ * when that project was deleted. */
+function wayBackIn(notice: ProjectSwitchNotice, projects: ProjectSummary[]): ProjectSwitchNotice {
+  if (!notice.previousProjectId) return notice;
+  const previous = projects.find((project) => project.id === notice.previousProjectId);
+  // The same notice when nothing changed: a new one restarts the toast's timer.
+  if (previous?.name === notice.previousProjectName) return notice;
+  return previous ? { ...notice, previousProjectName: previous.name }
+    : { ...notice, previousProjectId: null, previousProjectName: null };
+}
+
+/** Let go of the loaded project: no context, an empty canvas, no Create
+ * draft. Its saved copy is untouched; opening it again loads that. */
+function releaseLoadedProject(): void {
+  const sessionId = useUIStore.getState().createSessionId;
+  applying = true;
+  try {
+    setProjectContext(null);
+    useGraphStore.getState().loadProjectGraph([], [], []);
+    useUIStore.getState().resetPanelsForFreshCanvas();
+    projectViewport = null;
+    useUIStore.setState({ createSessionId: null, canvasViewport: null });
+  } finally { applying = false; }
+  lastSaved = '';
+  if (sessionId) useCreateDraftStore.setState((drafts) => {
+    const { [sessionId]: _removed, ...rest } = drafts.drafts;
+    void _removed;
+    return { drafts: rest };
+  });
+  useProjectStore.setState({ activeProject: null, dirty: false, saveStatus: 'saved' });
+}
+
 /** Load what the backend has open now (the listing and its active project).
  * Startup, Retry, and following an agent's switch all come through here. */
 async function loadWorkspace(): Promise<void> {
   const set = useProjectStore.setState;
+  const generation = ++listingGeneration;
   const list = await api.listProjects();
   // A listing without a version is from a backend older than the gate (0).
   const backendVersion = backendParamsVersion(list.paramsVersion);
@@ -395,7 +462,8 @@ async function loadWorkspace(): Promise<void> {
     return;
   }
   clearParamsReloadMark();
-  set({ projects: list.projects, trash: list.trash ?? [], workspaceRevision: list.workspaceRevision });
+  if (generation === listingGeneration) set({ projects: list.projects, trash: list.trash ?? [] });
+  set({ workspaceRevision: list.workspaceRevision });
   if (list.activeProjectId) {
     let project = await api.getProject(list.activeProjectId);
     // Adopt browser-only legacy run records exactly once during migration.
@@ -455,10 +523,13 @@ function switchedAwayFrom(notice: ProjectSwitch | undefined, context: { id: stri
  * store replaced the canvas; if it has changes the backend never saw (a pan,
  * a run record, a node only this tab has), they go into the project that was
  * open (the backend's handoff, open until the next switch), or into a
- * recovered copy if that fails.
- * Then the tab loads what's open now and says who switched it. */
-async function followProjectSwitch(notice: ProjectSwitch, context: { id: string; revision: string },
-  snapshot: ProjectSnapshot, unsaved: boolean): Promise<void> {
+ * recovered copy if that fails. `context` is null for a tab on Projects with
+ * no project open: nothing to save.
+ * Then the tab loads what's open now, shows its canvas (from Projects too:
+ * new_project and open_project say the person's canvas follows), and says
+ * who switched it. */
+async function followProjectSwitch(notice: ProjectSwitch, context: { id: string; revision: string } | null,
+  snapshot: ProjectSnapshot | null, unsaved: boolean): Promise<void> {
   if (saveTimer !== null) clearTimeout(saveTimer);
   saveTimer = null;
   // Nothing else may save under the old project from here on.
@@ -467,7 +538,7 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
   let keptCopy = false;
   try {
     await saveQueue.catch(() => {});
-    if (unsaved) {
+    if (unsaved && context && snapshot) {
       try {
         await api.saveProject(context.id, snapshot, context.revision);
       } catch {
@@ -479,6 +550,8 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     }
     lastSaved = '';
     await loadWorkspace();
+    // Loaded unless the backend is on another params version (that reloads).
+    if (getProjectContext()) useProjectStore.setState({ screen: 'workspace' });
     const actor = notice.actor?.kind === 'agent' && typeof notice.actor.name === 'string' ? notice.actor.name : null;
     // An agent that reopened the project this tab was showing reloaded it
     // from what was saved: there's no other project to go back to.
@@ -578,22 +651,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       if (deletingActive) {
         useGraphStore.getState().releaseGraphImport({ discardSuspended: true });
         reserved = false;
-        const sessionId = useUIStore.getState().createSessionId;
-        applying = true;
-        try {
-          setProjectContext(null);
-          useGraphStore.getState().loadProjectGraph([], [], []);
-          useUIStore.getState().resetPanelsForFreshCanvas();
-          projectViewport = null;
-          useUIStore.setState({ createSessionId: null, canvasViewport: null });
-        } finally { applying = false; }
-        lastSaved = '';
-        if (sessionId) useCreateDraftStore.setState((drafts) => {
-          const { [sessionId]: _removed, ...rest } = drafts.drafts;
-          void _removed;
-          return { drafts: rest };
-        });
-        set({ activeProject: null, dirty: false, saveStatus: 'saved' });
+        releaseLoadedProject();
       }
       set((current) => ({
         projects: current.projects.filter((project) => project.id !== id),
@@ -655,6 +713,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     if (get().busy) return;
     set({ screen: 'home', error: null });
     useUIStore.setState({ onboardingActive: false, isPlaying: false });
+    if (listingStale) { listingStale = false; void relistProjects(); }
     try { await get().flush(); } catch { /* Home keeps the canvas and visible retry. */ }
   },
   flush: async () => {
@@ -729,6 +788,15 @@ export function subscribeProjectAutosave(): () => void {
   const drafts = useCreateDraftStore.subscribe(() => markDirty());
   // First, so it sees the canvas before the graph store swaps in the new graph.
   const socket = wsClient.subscribeFirst((event) => {
+    if (event.type === 'projectsChanged') {
+      const state = useProjectStore.getState();
+      // The toast's way back shows on the canvas too: a change to that
+      // project (renamed, deleted) is listed now, not on the next visit.
+      const wayBack = state.switchNotice?.previousProjectId;
+      if ((state.screen === 'home' || (wayBack && event.projectId === wayBack)) && !paramsVersionChange) void relistProjects();
+      if (state.screen !== 'home') listingStale = true;
+      return;
+    }
     if (event.type !== 'graphSync') return;
     // A sync without a version is from a backend older than the gate (0).
     const paramsVersion = backendParamsVersion((event as unknown as { paramsVersion?: unknown }).paramsVersion);
@@ -741,12 +809,37 @@ export function subscribeProjectAutosave(): () => void {
     const revision = (event as unknown as { workspaceRevision?: string }).workspaceRevision;
     const context = getProjectContext();
     const state = useProjectStore.getState();
-    if (!revision || !context || state.busy || revision === context.revision) return;
+    if (!revision || state.busy) return;
+    if (!context) {
+      // Projects with no project open (a first run, or the open one was
+      // deleted): an agent's new_project or open_project from the workspace
+      // this tab listed opens it here too.
+      const notice = event.projectSwitch;
+      if (state.initialized && !state.activeProject && revision !== state.workspaceRevision
+        && notice && typeof notice.projectId === 'string' && typeof notice.projectName === 'string'
+        && notice.previousRevision === state.workspaceRevision) {
+        void followProjectSwitch(notice, null, null, false);
+      } else if (state.initialized && state.screen === 'home' && revision !== state.workspaceRevision) {
+        // A revision this tab never listed: the socket missed the changes
+        // (the sync a reconnect starts with), so list again.
+        void relistProjects();
+      }
+      return;
+    }
+    if (revision === context.revision) return;
     const snapshot = captureProjectSnapshot();
     const unsaved = JSON.stringify(snapshot) !== lastSaved;
     // An agent or script opened or made a project: follow it, with a way back.
     if (switchedAwayFrom(event.projectSwitch, context)) {
       void followProjectSwitch(event.projectSwitch, context, snapshot, unsaved);
+      return;
+    }
+    // On Projects with everything saved there is nothing to protect: let go
+    // of the project still loaded from before (another window opened another
+    // one, or it was deleted) instead of stopping the screen with a conflict.
+    if (state.screen === 'home' && !unsaved && useGraphStore.getState().canSwitchProject()) {
+      releaseLoadedProject();
+      void relistProjects();
       return;
     }
     // The person changed the active project in another tab. Keep our local
