@@ -229,6 +229,144 @@ restarted; run `nebula look` in both cases. Every event carries the project
 id it happened in. Param values go through the same redaction as the
 snapshot, and outputs never appear.
 
+### Claude Code channels (experiment)
+
+With `--channel`, Nebula's MCP server pushes into a running Claude Code
+session, so Claude hears your pins and edits without sitting in
+`wait_for_canvas_change`. It is built on [Claude Code
+channels](https://code.claude.com/docs/en/channels-reference), a research
+preview: the flags, the protocol and this section may change, and a Claude
+Code update can break it. The code is `backend/mcp_channel.py` (what to push
+and when) and `serve_channel` in `backend/mcp_server.py` (the wiring).
+
+It is off unless you start a session with it. Without `--channel` the server
+is exactly the one above: same capabilities, instructions and tools.
+
+**Try it.** Write a session-only MCP config, for example
+`~/.nebula-listen.mcp.json` (mode 600, outside any repo). Copy the command,
+args and env of your saved `nebula` server (`claude mcp get nebula` shows
+them) and add `--channel`; it names your token file, never the token:
+
+```json
+{
+  "mcpServers": {
+    "nebula-listen": {
+      "command": "/path/to/nebula_nodes/backend/.venv/bin/python",
+      "args": ["/path/to/nebula_nodes/backend/mcp_server.py", "--channel"],
+      "env": {
+        "NEBULA_URL": "http://127.0.0.1:8000",
+        "NEBULA_APP_TOKEN_FILE": "/path/to/your/app-token-file"
+      }
+    }
+  }
+}
+```
+
+Then, each time:
+
+```bash
+claude --mcp-config ~/.nebula-listen.mcp.json \
+  --dangerously-load-development-channels server:nebula-listen \
+  --disallowedTools "mcp__nebula__*"
+```
+
+`--disallowedTools "mcp__nebula__*"` takes the saved server's copies of the
+same tools out of the session, so `nebula-listen` serves both the tools and the
+pushes. It has to: the listener learns which proposals and runs are Claude's,
+and when a turn is under way, from the tool calls it serves. Claude
+Code first shows **WARNING: Loading development channels**; choose **I am
+using this for local development**. In the debug log (`claude --debug-file
+<file> ...`) the server then shows `Channel notifications registered`.
+
+**What the development flag does.** It lets the one server you name put text
+in front of Claude, skipping Anthropic's channel allowlist for that entry
+(Nebula isn't on it during the preview). Nebula sends only its own summaries,
+but text anyone can write on the canvas (a pin, a node or board name, another
+agent's rename) can reach Claude through it, marked as data. Use it only with
+a Nebula you run yourself. Anthropic's own warning (channels reference): "Don't
+use it to run channels from untrusted sources." Never add `--channel` to
+your saved `nebula` server: the server can't tell whether the session opted it
+in (Claude Code doesn't acknowledge a push, and the `initialize` request looks
+the same either way), so in an ordinary session it would push into nothing.
+The server doesn't offer Claude Code's permission relay
+(`claude/channel/permission`), so nobody can answer a permission prompt
+through it.
+
+**Requirements** (from Claude Code's channels pages, read 2026-10-20). Claude
+Code 2.1.234 or later (tried with 2.1.304), signed in with claude.ai or a
+Console API key: channels aren't available on Bedrock, Google Cloud or
+Foundry. On a claude.ai Team or Enterprise seat an Owner must first turn on
+Organization settings > Claude Code > Channels (`channelsEnabled`); the
+development flag doesn't get past that switch, and until then the server's
+tools work but nothing is pushed. Pro and Max accounts need nothing. It
+doesn't work with `claude -p` or the Agent SDK: Claude Code ignores the flag
+there.
+
+**What wakes Claude:**
+
+- a pin you add, at once (pins under 1 s apart go together);
+- your decision on one of its own proposals (accepted, rejected, expired or
+  invalidated), unless it is already waiting for it in `get_proposal`;
+- the end of a run it started and stopped waiting for (`run_nodes` or
+  `get_run` answered "running"), unless it is collecting it with `get_run`;
+- any change you make (nodes, params, names, wires, a new or cleared canvas, a
+  deleted pin, moodboard edits), 8 s after your last edit and 30 s at most
+  after the first. A change waits too while Claude is mid-turn (a Nebula call
+  running, or one in the last 20 s).
+
+Selections, moves, runs you start, and other agents never wake it, and
+neither do its own edits: the listener long-polls `/api/canvas/events` under
+the tools' own name and token, so Nebula leaves those out. The nodes and wires
+an accepted proposal adds are not counted as your edits. At most 20 wakes an
+hour, 30 s apart; anything past a limit arrives with the next one (`held` says
+how many waited), and past 100 waiting edits (or 100 pins) the push gives a
+count and asks for `look_at_canvas`; a pile of edits never pushes a pin out.
+After 2 hours with no activity from you (selections
+and moves count) it stops listening, and the next Nebula tool result says so;
+in Claude Code, /mcp > nebula-listen > Reconnect starts it again. If the
+listener itself fails, it stops the same way (a stderr line, and the next
+result says so) and the tools keep working.
+
+A push arrives as `<channel source="nebula-listen" wake="pin|proposal|run|change"
+count="…" cursor="…" journal="…" project_id="…">`, with `held="…"` and
+`gate="change"` when they apply. The text is written from the same events
+`wait_for_canvas_change` returns: event summaries (redacted param values never
+appear, only which params changed), the pin's text, a proposal's note and the
+reason you gave, a run's status and how many nodes ran. Nothing else is
+fetched, run outputs and errors stay in `get_run`, and moodboard events never
+carry note text. Canvas text has its angle brackets and hidden characters
+replaced, so it can't close or open a tag.
+
+**After a change** (not a pin), Claude may look, point, say something, answer
+a pin and propose. Edits, runs, project switches, board writes and any tool
+not on that list are refused for that turn, so it offers instead of editing
+under your hands. A pin turn, a proposal's decision and a run's end act like
+any turn; a decision or run end that also carries your waiting edits is a
+change turn, and it carries them only when Claude isn't mid-turn, so the gate
+never lands on a turn already running. A Nebula call still running (a
+`get_proposal` or `wait_for_canvas_change` wait) keeps the change turn open,
+however long it waits. This is the experiment's choice (plan v2.7 Q42 a). Its limits:
+Nebula can't see where a Claude Code turn ends, so the change turn lasts at
+least 60 s after the push and until Nebula has had no call for 20 s; if you
+type a request to Claude in that minute, it is refused the same way (in the
+live check Claude proposed the edit instead). It covers only this server's
+tools: Claude is told not to edit through the `nebula` CLI in that turn, but
+nothing stops it. "5 minutes per turn" can't be enforced either; after 5
+minutes a change turn's tool results say to wrap up.
+
+**Stop** by restarting Claude Code without the flag.
+
+**Nothing arrives?** Start with `claude --debug-file <file> …` and look for
+`Channel notifications registered` or `Channel notifications skipped:
+<reason>`. "blocked by org policy" means the Owner switch above. If the reason
+is "negotiated a modern protocol revision", set
+`MCP_PROTOCOL_NEGOTIATION=legacy`; with Nebula's MCP library (mcp 1.27.0,
+newest revision 2025-11-25) the connection stays on the earlier handshake and
+registers without it. The server writes a line to stderr when it starts
+listening and when it stops. `NEBULA_CHANNEL_TRACE=<file>` appends the
+client's `initialize` request to a file; the `NEBULA_CHANNEL_*` timing
+variables in `mcp_channel.Limits` exist for tests.
+
 ### Who counts as the person
 
 Some actions are the person's alone. The backend knows the person by one
