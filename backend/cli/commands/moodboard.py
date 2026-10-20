@@ -14,6 +14,7 @@ from typing import Any
 
 import moodboard_client as boards
 from nebula_api import NebulaAPIError
+from services.moodboard_brief import board_is_off
 
 from ..client import NebulaClient
 
@@ -93,7 +94,11 @@ def _print_brief(board: dict[str, Any]) -> None:
               "Open the board in Moodboard Studio to see it.")
         return
     source = _OVERRIDE_AUTHOR[override["by"]] if override else "generated"
-    print(f"  Brief sent to generators ({source}):")
+    if board_is_off(board):
+        # Q36 a: at 0 no node it's wired into gets any of it.
+        print(f"  Brief ({source}), not sent: board strength is 0, so no node it's wired into gets the board:")
+    else:
+        print(f"  Brief sent to generators ({source}):")
     if composed.get("styleBrief"):
         print(f"    {composed['styleBrief']}")
     else:
@@ -530,7 +535,7 @@ def add_parser(sub) -> None:
     set_p.add_argument("--name", help="Rename the board")
     set_p.add_argument("--notes", help="Notes for the whole board")
     set_p.add_argument("--mode", choices=boards.MODES)
-    set_p.add_argument("--strength", type=float, help="How strongly it steers, 0 to 1")
+    set_p.add_argument("--strength", type=float, help="How strongly it steers, 0 to 1 (0 turns the board off)")
     brief_g = set_p.add_argument_group(
         "the brief", "What generators get from the board. These keep the analysis.")
     brief_g.add_argument("--direction", metavar="TEXT",

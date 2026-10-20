@@ -128,6 +128,14 @@ describe('Moodboard Studio strength', () => {
     await openStudio('g1', 'global', 'Global board');
     expect(screen.getByText("Strength 0.70 · the total the board's images share on Krea 2")).toBeTruthy();
   });
+
+  it('says the board is off at 0, and back on above it (Q36 a)', async () => {
+    boards.g1 = board({ strength: 0 });
+    await openStudio('g1', 'global', 'Global board');
+    expect(screen.getByText('Strength 0.00 · board off: wired nodes get none of it')).toBeTruthy();
+    fireEvent.change(screen.getByRole('slider', { name: /^Strength/ }), { target: { value: '0.05' } });
+    expect(screen.getByText("Strength 0.05 · the total the board's images share on Krea 2")).toBeTruthy();
+  });
 });
 
 describe('Moodboard Studio private note', () => {
