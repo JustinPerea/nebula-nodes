@@ -857,7 +857,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
       )}
 
       {isStructuredSurface && (
-        <div className="model-node__preview model-node__preview--structured">
+        <div className="model-node__preview model-node__preview--structured model-node__preview--overview">
           <StructuredOutputs outputs={structuredOutputs} labels={portLabels(definition)} />
         </div>
       )}

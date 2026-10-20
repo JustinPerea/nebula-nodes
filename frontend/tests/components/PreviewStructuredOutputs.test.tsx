@@ -116,12 +116,12 @@ describe('Preview card with a Moodboard bundle', () => {
 
   it('opens the whole brief with Read all and closes it again', () => {
     renderPreview({ type: 'Moodboard', value: BUNDLE });
-    const toggle = screen.getByRole('button', { name: 'Read all' });
+    const toggle = screen.getByRole('button', { name: /^Read all/ });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(toggle);
-    expect(screen.getByRole('button', { name: 'Show less' })).toHaveAttribute('aria-expanded', 'true');
-    fireEvent.click(screen.getByRole('button', { name: 'Show less' }));
-    expect(screen.getByRole('button', { name: 'Read all' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Show less/ })).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(screen.getByRole('button', { name: /^Show less/ }));
+    expect(screen.getByRole('button', { name: /^Read all/ })).toBeInTheDocument();
   });
 
   it('says when the notes were not sent because the brief was written by hand', () => {
@@ -233,7 +233,7 @@ describe('Inspector last output', () => {
     render(<Inspector embedded />);
     const section = screen.getByRole('region', { name: 'Last output' });
     expect(within(section).getByText('Dusk Harbor')).toBeInTheDocument();
-    expect(within(section).queryByRole('button', { name: 'Read all' })).toBeNull();
+    expect(within(section).queryByRole('button', { name: /^Read all/ })).toBeNull();
     expect(within(section).getByText(/Long brief sentence/)).toBeInTheDocument();
   });
 

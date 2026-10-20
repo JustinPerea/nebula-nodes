@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 
 interface ExpandableBlockProps {
   children: ReactNode;
@@ -14,6 +14,9 @@ interface ExpandableBlockProps {
   className?: string;
   /** Tallest the open block grows before it scrolls, in px. */
   openCap?: number;
+  /** What the toggle opens ("the brief of Dusk Harbor"), so two cards'
+   *  toggles don't both read as a bare "Read all". */
+  label?: string;
 }
 
 /**
@@ -23,8 +26,9 @@ interface ExpandableBlockProps {
  * the block scrolls inside the card (nowheel) past `openCap`.
  */
 export function ExpandableBlock({
-  children, lines, contentKey, longHint, collapsible = true, className = '', openCap = 320,
+  children, lines, contentKey, longHint, collapsible = true, className = '', openCap = 320, label,
 }: ExpandableBlockProps) {
+  const bodyId = useId();
   const bodyRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [measured, setMeasured] = useState<{ key: string; overflows: boolean } | null>(null);
@@ -63,7 +67,7 @@ export function ExpandableBlock({
 
   return (
     <div className={`structured-expandable ${open ? 'structured-expandable--open' : ''} ${overflows ? 'structured-expandable--clamped' : ''} ${className}`}>
-      <div ref={bodyRef} className={`structured-expandable__body${open ? ' nodrag nowheel' : ''}`} style={style}>
+      <div ref={bodyRef} id={bodyId} className={`structured-expandable__body${open ? ' nodrag nowheel' : ''}`} style={style}>
         {children}
       </div>
       {overflows && (
@@ -71,6 +75,8 @@ export function ExpandableBlock({
           type="button"
           className="structured-expandable__toggle nodrag"
           aria-expanded={open}
+          aria-controls={bodyId}
+          aria-label={label ? `${open ? 'Show less' : 'Read all'}: ${label}` : undefined}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={toggle}
         >

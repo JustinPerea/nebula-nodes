@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { moodboardMeta, moodboardStatus, parseMoodboardBundle } from '../../lib/moodboardBundle';
+import { thumbnailLoading } from '../../lib/structuredValue';
 import { CopyValueButton, ExpandableBlock } from './ExpandableBlock';
 import { OverviewImage } from './OverviewImage';
 import '../../styles/moodboard-swatches.css';
@@ -31,7 +32,7 @@ export function MoodboardBundlePreview({ value, variant = 'card' }: { value: unk
     <div className={`structured-preview structured-preview--moodboard structured-preview--${variant}`}
       role="group" aria-label={`Moodboard ${bundle.name}`}>
       <div className="structured-preview__head">
-        <span className="structured-preview__title">{bundle.name}</span>
+        <span className="structured-preview__title" title={bundle.name}>{bundle.name}</span>
         <span className="structured-preview__meta">{moodboardMeta(bundle)}</span>
       </div>
 
@@ -40,7 +41,7 @@ export function MoodboardBundlePreview({ value, variant = 'card' }: { value: unk
           {shown.map((url, index) => (
             <span key={url} className="structured-preview__thumb">
               <OverviewImage src={backendAssetUrlSync(url)} alt={`Board image ${index + 1}`}
-                loading="lazy" draggable={false} />
+                loading={thumbnailLoading(variant)} draggable={false} />
               {more > 0 && index === shown.length - 1 && (
                 <span className="structured-preview__thumb-more" aria-label={`${more} more images`}>+{more}</span>
               )}
@@ -58,7 +59,8 @@ export function MoodboardBundlePreview({ value, variant = 'card' }: { value: unk
 
       {bundle.styleBrief ? (
         <ExpandableBlock lines={4} contentKey={bundle.styleBrief} longHint={bundle.styleBrief.length > 220}
-          collapsible={variant === 'card'} className="structured-preview__brief-block">
+          collapsible={variant === 'card'} className="structured-preview__brief-block"
+          label={`brief of ${bundle.name}`}>
           <p className="structured-preview__brief">{bundle.styleBrief}</p>
         </ExpandableBlock>
       ) : (

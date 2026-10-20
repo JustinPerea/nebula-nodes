@@ -65,23 +65,50 @@ body.app-slava-restraint .model-node__ports--input + .model-node__preview--struc
 
 .structured-preview__head {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 8px;
+  gap: 2px 8px;
   min-width: 0;
 }
 
+/* The name comes first: when it and the meta don't fit on one line, the meta
+ * wraps under it rather than squeezing the name to a few words. A name wider
+ * than the card still ends in an ellipsis (its title attribute holds it all);
+ * the Inspector wraps it whole. */
 .structured-preview__title,
 .structured-preview__type {
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.structured-preview--full .structured-preview__title {
+  overflow: visible;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .structured-preview__meta {
   flex: 0 0 auto;
   white-space: nowrap;
+}
+
+/* Zoomed out (canvas.css, data-lod='low'): the structured block counts as an
+ * overview preview, so its pictures and colours stay, the board's and a
+ * list's thumbnails switching to small ones (OverviewImage). Its text,
+ * toggles and players hide like every other card's. */
+.canvas-wrapper[data-lod='low'] .react-flow__node .model-node__preview--structured .structured-outputs,
+.canvas-wrapper[data-lod='low'] .react-flow__node .model-node__preview--structured .structured-preview__thumb video {
+  visibility: hidden;
+}
+
+.canvas-wrapper[data-lod='low'] .react-flow__node .model-node__preview--structured .structured-preview__thumbs,
+.canvas-wrapper[data-lod='low'] .react-flow__node .model-node__preview--structured .structured-preview__swatch-row {
+  visibility: visible;
 }
 
 .structured-preview__thumbs {

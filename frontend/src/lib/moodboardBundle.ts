@@ -126,11 +126,12 @@ export function moodboardMeta(bundle: MoodboardBundleView): string {
 /**
  * What the run sent besides the brief, one short phrase each. Board notes
  * reach generators inside the generated brief (services/moodboard_brief.py
- * generated_brief), so a hand-written brief leaves them out.
+ * generated_brief), so a hand-written brief leaves them out, and so does no
+ * brief at all (no analysis yet: generated_brief returns '').
  */
 export function moodboardStatus(bundle: MoodboardBundleView): string[] {
   const status: string[] = [];
-  if (bundle.notes) status.push(bundle.overrideActive ? 'Notes not sent' : 'Notes sent');
+  if (bundle.notes) status.push(bundle.overrideActive || !bundle.styleBrief ? 'Notes not sent' : 'Notes sent');
   else status.push('No notes');
   if (bundle.overrideActive) status.push(bundle.overrideStale ? 'Brief written by hand, out of date' : 'Brief written by hand');
   if (bundle.excludedColors.length > 0) status.push(`${plural(bundle.excludedColors.length, 'color')} left out`);

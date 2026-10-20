@@ -12,6 +12,9 @@ import { hasRepresentationViewer } from './representationViewerRegistry';
 export type MediaKind = 'image' | 'video' | 'audio';
 
 export interface StructuredField {
+  /** The field's own key, unique within the object (React keys use it). */
+  id: string;
+  /** The key as shown, clamped. */
   key: string;
   value: string;
 }
@@ -109,14 +112,17 @@ function recordTitle(value: Record<string, unknown>): { key: string; text: strin
 
 /** Up to `limit` image URLs from an object's own fields and its lists (one
  *  level down: ReferenceSet `items[].url`, Character `referenceViews`). */
-function recordThumbnails(value: Record<string, unknown>, limit: number): string[] {
+function recordThumbnails(value: Record<string, unknown>, keys: readonly string[], limit: number): string[] {
   const urls: string[] = [];
   const add = (candidate: unknown) => {
     const media = mediaOf(candidate);
     if (media?.kind === 'image' && !urls.includes(media.url)) urls.push(media.url);
   };
-  for (const field of Object.values(value)) {
+  // Over the caller's key list and only the first fields: Object.values on a
+  // 300,000-key object would read every value to show four thumbnails.
+  for (let index = 0; index < keys.length && index < limit * 50; index += 1) {
     if (urls.length >= limit) break;
+    const field = value[keys[index]];
     if (Array.isArray(field)) {
       for (const item of field.slice(0, limit * 4)) {
         if (urls.length >= limit) break;
@@ -125,6 +131,13 @@ function recordThumbnails(value: Record<string, unknown>, limit: number): string
     } else if (typeof field === 'string') add(field);
   }
   return urls;
+}
+
+/** Thumbnails load lazily on a card, like its other images. In the Inspector
+ *  they load at once: its masked scroll panel never starts lazy images below
+ *  the first row. */
+export function thumbnailLoading(variant: 'card' | 'full'): 'lazy' | 'eager' {
+  return variant === 'card' ? 'lazy' : 'eager';
 }
 
 /** What to draw for a value no other renderer drew. */
@@ -166,12 +179,12 @@ export function describeStructuredValue(value: unknown, limits: DescribeLimits =
     for (const key of keys) {
       if (fields.length >= limits.fields) break;
       if (title && key === title.key) continue;
-      fields.push({ key: clampText(key, 60), value: summarizeValue(value[key], limits.chars) });
+      fields.push({ id: key, key: clampText(key, 60), value: summarizeValue(value[key], limits.chars) });
     }
     return {
       kind: 'record',
       title: title ? clampText(title.text, limits.chars) : null,
-      thumbnails: recordThumbnails(value, limits.media),
+      thumbnails: recordThumbnails(value, keys, limits.media),
       fields,
       total: keys.length - (title ? 1 : 0),
     };
@@ -221,15 +234,19 @@ export function boundedJson(value: unknown, maxChars: number): { text: string; t
       }
       return write(`${close}]`);
     }
-    const entries = Object.entries(node as Record<string, unknown>).filter(([, item]) => item !== undefined);
-    if (entries.length === 0) return write('{}');
-    if (!write('{\n')) return false;
-    for (let index = 0; index < entries.length; index += 1) {
-      const [key, item] = entries[index];
+    // Values are read one at a time and the walk stops at the budget, so a
+    // wide object costs its key list, not every value (Object.entries).
+    const record = node as Record<string, unknown>;
+    const keys = Object.keys(record);
+    let wrote = 0;
+    for (const key of keys) {
+      const item = record[key];
+      if (item === undefined) continue;
+      if (!write(wrote === 0 ? '{\n' : ',\n')) return false;
       if (!write(`${pad}${JSON.stringify(key)}: `) || !walk(item, depth + 1)) return false;
-      if (!write(index < entries.length - 1 ? ',\n' : '\n')) return false;
+      wrote += 1;
     }
-    return write(`${close}}`);
+    return write(wrote === 0 ? '{}' : `\n${close}}`);
   };
 
   walk(value, 0);
