@@ -2318,6 +2318,8 @@ function foreignEditStep(
     agentName: source === 'agent' ? origin.actor?.name ?? 'An agent' : null,
     ...(origin.actor?.color ? { agentColor: origin.actor.color } : {}),
     source,
+    ...(origin.id ? { editId: origin.id } : {}),
+    ...(origin.undoes ? { undoes: origin.undoes } : {}),
     at: Date.now(),
     ...change,
   };
@@ -2429,6 +2431,7 @@ function sendRestore(
 ): Promise<void> {
   const body = restoreRequest(action, prevNodes, prevEdges, nextNodes, nextEdges);
   if (!body) return restoreQueue;
+  if (isForeignEdit(entry) && entry.editId) body.edit = entry.editId;
   const task = restoreQueue.then(async () => {
     let response: Response;
     try {

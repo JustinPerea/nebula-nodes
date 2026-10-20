@@ -82,6 +82,12 @@ It prints each new node's id. It never runs anything. Other edits:
 `--set n4.prompt=...`, `--move n4=400,120`, `--remove n7`,
 `--unwire n1:text n2:prompt`, or a whole plan with `--file plan.json`.
 
+It also prints `Undo: nebula undo <token>`. Run that to take your edit back
+(for 60 minutes, while that project is open): what you added goes, what you
+changed or removed comes back, and anything the person changed since stays
+as it is (the output lists it). A plan of steps prints one line with every
+step's token, newest first. Only your own `nebula apply` edits have tokens.
+
 Single edits also exist: `nebula create`, `connect`, `set`, `rename`, `move`,
 `delete`, `disconnect`.
 

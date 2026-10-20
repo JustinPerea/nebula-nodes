@@ -157,6 +157,9 @@ from services.person_gate import (
 )
 from services.canvas_edits import INTERNAL_OK as BILLING_PARAMS, EditSpec, parse_edit
 from services.canvas_arrange import canvas_arrange
+from services.canvas_undo import (
+    EDIT_ID_RE, CanvasUndoBook, UndoError, build_inverse, capture_before, plan_undo,
+)
 from services.agent_params import ASSET_PARAM_TYPES, asset_params, internal_keys, internal_refusal
 from services.canvas_proposals import (
     MAX_REASON,
@@ -4006,6 +4009,7 @@ def _journal(
             node_id=node_id,
             data=data,
             summary=summary,
+            edit=_canvas_edit_link.get(),
         )
     except Exception:  # noqa: BLE001 - the journal is decoration, like presence
         pass
@@ -6472,6 +6476,11 @@ def _graph_edit_origin() -> dict[str, Any]:
     # gets no echo match either; it can't be told apart from a script.
     if is_person(headers) and isinstance(tab, str) and _TAB_ID_RE.fullmatch(tab):
         origin["tab"] = tab
+    # The edit this sync carries (services/canvas_undo.py), so the canvas's
+    # undo step knows which edit it holds and its Cmd+Z can say so.
+    link = _canvas_edit_link.get()
+    if link:
+        origin.update({key: link[key] for key in ("id", "undoes", "redoes") if key in link})
     return origin
 
 
@@ -6508,6 +6517,7 @@ async def _broadcast_graph_sync(
         canvas_arrange.clear()
         if reason == "import":
             node_errors.forget_canvas()
+            _forget_canvas_undo("a graph was loaded into the project since, so its node ids started again")
     export = await export_graph_for_frontend()
     if graph_replaced:
         agent_presence.forget_graph()
@@ -7766,7 +7776,9 @@ def _require_clear_intent(force: bool) -> None:
     clear one undo step (the graphSync carries ``edit``; Undo sends the nodes,
     wires, names and outputs back through POST /api/graph/restore). The
     canvas's Clear button and chat /clear send force after the person
-    confirms; `nebula clear --force` and the MCP send it when asked to."""
+    confirms, and `nebula clear --force` sends it when asked to. No MCP tool
+    clears the canvas: MCP agents start fresh work with new_project, and
+    remove_from_canvas deletes nodes (its result's undo token puts them back)."""
     if force or not cli_graph.nodes:
         return
     count = len(cli_graph.nodes)
@@ -7790,6 +7802,7 @@ async def clear_graph(force: bool = False) -> dict:
         cli_graph.clear()
         run_approvals.clear()
     agent_presence.forget_graph()
+    _forget_canvas_undo("the canvas was cleared since")
     await _broadcast_graph_sync(edit=True)
     publish_action("Cleared the canvas")
     _journal("canvas.cleared", summary="cleared the canvas")
@@ -8223,6 +8236,7 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         for change in additions.params
     }
     labels_before = {key: _node_label(key) for key in spec.rename if not key.startswith("+")}
+    undo_before = _canvas_undo_before(spec, shown)
 
     removed: list[dict[str, Any]] = []
     with _paid_graph_mutation("edit the canvas"):
@@ -8276,6 +8290,9 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             source="agent-edit",
         )
 
+    edit_link = _canvas_edit_link.set({"id": canvas_undo_book.new_id()})
+    # Before any await: a request that lands while this one broadcasts is not part of this edit.
+    undo_after = _canvas_undo_after(undo_before, list(id_map.values()))
     # An explicit move wins over any arrange still waiting for these nodes.
     canvas_arrange.forget_nodes(moves)
     arrange = None
@@ -8350,6 +8367,8 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     if focus is not None and focus in cli_graph.nodes:
         await _show_agent({"nodeId": focus}, say=additions.note if note else summary)
     wanted = set(edge_ids)
+    undo = _canvas_undo_keep(identity, undo_after)
+    _canvas_edit_link.reset(edit_link)
     return {
         "status": "applied",
         "summary": summary,
@@ -8363,6 +8382,7 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         "removed": [gone["id"] for gone in removed],
         "unwired": [edge.as_dict() for edge in spec.unwire],
         **({"arrange": _arrange_reply(arrange)} if arrange is not None else {}),
+        "undo": undo,
     }
 
 
@@ -8433,7 +8453,39 @@ async def restore_graph_state(body: dict[str, Any]) -> dict[str, Any]:
     undoing the same step agree. Staged on a copy (unwire, remove, nodes,
     wire) with the checks single edits use, then committed at once. Never
     runs anything. Anyone can call it, agents too: it is itself undoable.
+
+    ``edit`` (an edit id, ``ed_...``) is the edit this step undoes or redoes,
+    when the canvas's step came from that edit's graphSync (its ``edit.id``).
+    From the person's canvas it links the restore to that edit: its journal
+    events say so (``edit: {id, undoes|redoes, of}``), an ``edit.undone`` or
+    ``edit.redone`` event follows, and the agent's undo token for it knows
+    the person undid it (services/canvas_undo.py). From anyone else it is
+    ignored: agents undo their own edits with POST /api/graph/apply/undo.
     """
+    link = _restore_edit_link(body)
+    if link is None:
+        return await _restore_graph(body)
+    token = _canvas_edit_link.set(link)
+    try:
+        result = await _restore_graph(body)
+        _journal_restored_edit(link, body.get("action", "undo"))
+    finally:
+        _canvas_edit_link.reset(token)
+    return result
+
+
+async def _restore_graph(
+    body: dict[str, Any],
+    *,
+    trusted: frozenset[str] = frozenset(),
+    skipped_wires: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """The restore itself, for POST /api/graph/restore and an agent's undo
+    (POST /api/graph/apply/undo). ``trusted`` are node ids whose items the
+    server wrote (an edit's kept inverse): they may carry ``_`` params, a
+    billing choice the node had, and a moodboard or character that is gone
+    since, as the node had them. With ``skipped_wires`` a wire that can't go
+    back is listed there instead of refusing the whole restore."""
     _check_workspace_revision()
     _validate_graph_ingress_complexity(body)
     action = body.get("action", "undo")
@@ -8490,13 +8542,15 @@ async def restore_graph_state(body: dict[str, Any]) -> dict[str, Any]:
             definition_id, params, position, outputs, label = _validated_ingress_node(
                 raw, index, include_outputs=current is None,
             )
-            _refuse_agent_internal_params(params, node_id)
+            if node_id not in trusted:
+                _refuse_agent_internal_params(params, node_id)
             _check_provider(definition_id, params, node_id)
             _check_krea_auth(definition_id, params, node_id)
             params = migrate_params(definition_id, params)
             if current is None:
-                _check_asset_refs(definition_id, params, node_id)
-                billing.append((node_id, definition_id, None, params))
+                _check_asset_refs(definition_id, params, node_id, must_exist=False if node_id in trusted else None)
+                if node_id not in trusted:
+                    billing.append((node_id, definition_id, None, params))
                 try:
                     candidate.add_node(definition_id, params, position=position, outputs=outputs, node_id=node_id)
                 except ValueError as exc:
@@ -8513,14 +8567,16 @@ async def restore_graph_state(body: dict[str, Any]) -> dict[str, Any]:
             # canvas leaves out params and name when the step didn't touch them.
             if "params" in raw:
                 params_before = copy.deepcopy(current.get("params") or {})
-                _check_asset_refs(definition_id, params, node_id, before=params_before)
+                _check_asset_refs(definition_id, params, node_id, before=params_before,
+                                  must_exist=False if node_id in trusted else None)
                 if definition_id == "paper-source":
                     kept = _kept_paper_source(params_before, params)
                     if kept is not None:
                         params["_paperSource"] = kept
                 _author_cinema_scene(candidate, node_id, current, params)
                 _keep_recovery_checkpoint(current, params)
-                billing.append((node_id, definition_id, params_before, params))
+                if node_id not in trusted:
+                    billing.append((node_id, definition_id, params_before, params))
                 if params != params_before:
                     candidate.set_params(node_id, params)
                     changed[node_id] = params_before
@@ -8545,7 +8601,14 @@ async def restore_graph_state(body: dict[str, Any]) -> dict[str, Any]:
                 raise HTTPException(status_code=409, detail=(
                     f"{missing} is no longer on the canvas, so its wire can't be put back. "
                     "Reload the canvas to see the current graph."))
-            _validate_connect_handles(source, source_handle, target, target_handle, graph=candidate)
+            try:
+                _validate_connect_handles(source, source_handle, target, target_handle, graph=candidate)
+            except HTTPException as exc:
+                if skipped_wires is None:
+                    raise
+                skipped_wires.append({"source": source, "sourceHandle": source_handle, "target": target,
+                                      "targetHandle": target_handle, "reason": str(exc.detail)})
+                continue
             wired.append(candidate.connect(source, source_handle, target, target_handle))
         try:
             graph_nodes, graph_edges = candidate.to_execute_format()
@@ -8630,6 +8693,239 @@ async def restore_graph_state(body: dict[str, Any]) -> dict[str, Any]:
         "wired": [_edge_data(edge) for edge in wired],
         "unwired": unwired,
     }
+
+
+# -- Undo of an agent's own edit (POST /api/graph/apply/undo) -----------------------
+# Each apply that changes something keeps its inverse in canvas_undo_book
+# (services/canvas_undo.py) and hands the agent an undo token. The undo puts
+# back each part the canvas still has as the edit left it, through the same
+# restore the canvas's Cmd+Z uses. The journal names the edit an undo reverts
+# (event ``edit``), for that undo and for the person's Cmd+Z of the edit.
+
+canvas_undo_book = CanvasUndoBook()
+# The edit the current request makes ({id}, or {id, undoes|redoes, of?}): it
+# tags the request's journal events (_journal) and its graphSync (_graph_edit_origin).
+_canvas_edit_link: ContextVar[dict[str, Any] | None] = ContextVar("canvas_edit_link", default=None)
+
+
+def _open_project_brief() -> tuple[str | None, str]:
+    catalog = project_store.read()
+    active = catalog.get("activeProjectId")
+    project = catalog["projects"].get(active) if active else None
+    return active, str((project or {}).get("name") or "")
+
+
+def _canvas_undo_before(spec: EditSpec, shown: Mapping[str, Any]) -> dict[str, Any]:
+    """The canvas as an apply is about to change it (only what the edit names)."""
+    return capture_before(
+        cli_graph.nodes, cli_graph.edges,
+        removed=list(spec.remove),
+        changed=[change.node_id for change in spec.additions.params],
+        renamed=[key for key in spec.rename if not key.startswith("+")],
+        moved=[key for key in spec.move if not key.startswith("+")],
+        shown=shown,
+    )
+
+
+def _canvas_undo_after(before: dict[str, Any], added: list[str]) -> dict[str, Any]:
+    """Right after an apply commits, before it awaits anything: its inverse
+    and the project it was made in. Built later, it would take in whatever
+    another request changed while this one was still broadcasting."""
+    project_id, project_name = _open_project_brief()
+    return {"inverse": build_inverse(before, cli_graph.nodes, cli_graph.edges, added=added),
+            "projectId": project_id, "projectName": project_name, "epoch": canvas_undo_book.epoch(project_id)}
+
+
+def _canvas_undo_keep(identity: Any, after: dict[str, Any]) -> dict[str, Any] | None:
+    """At the end of an apply: keep its inverse, and the reply's ``undo`` (None when nothing changed)."""
+    edit_id = (_canvas_edit_link.get() or {}).get("id")
+    if not edit_id or after["inverse"] is None:
+        return None
+    actor = actor_for_headers(current_request_headers())
+    canvas_undo_book.link(edit_id, kind="edit", actor=actor)
+    canvas_undo_book.note_events(edit_id, canvas_events.seqs_of_edit(edit_id))
+    return canvas_undo_book.keep(edit_id=edit_id, actor=actor, agent_id=identity.id, project_id=after["projectId"],
+                                 project_name=after["projectName"], inverse=after["inverse"], epoch=after["epoch"])
+
+
+def _forget_canvas_undo(why: str) -> None:
+    """The open project's node ids start again: its undo tokens end."""
+    try:
+        canvas_undo_book.forget_project(_workspace_context()["activeProjectId"], why)
+    except Exception:  # noqa: BLE001 - never break a clear or a load over undo bookkeeping
+        pass
+
+
+def _undo_refused_change(node_id: str, definition_id: str, before: dict[str, Any], after: dict[str, Any]) -> str | None:
+    try:
+        _refuse_agent_billing_change([(node_id, definition_id, before, after)])
+    except HTTPException as exc:
+        return str(exc.detail)
+    return None
+
+
+def _undo_cannot_remove(node_id: str, node: dict[str, Any]) -> str | None:
+    try:
+        _ensure_node_deletable(node_id, node)
+    except HTTPException as exc:
+        return str(exc.detail)
+    return None
+
+
+def _undo_owner_text(of: Mapping[str, Any] | None, *, by: Mapping[str, Any]) -> str:
+    """Whose edit an undo reverted, in a summary: "its own", "Claude Code's"."""
+    if not of:
+        return "an edit Nebula no longer knows"
+    if of.get("kind") == "agent" and of.get("id") and of.get("id") == by.get("id"):
+        return "its own edit"
+    return f"{actor_label(of)}'s edit"
+
+
+def _restore_edit_link(body: dict[str, Any]) -> dict[str, Any] | None:
+    """The link for a restore whose ``edit`` names the edit the canvas's step
+    came from: only the person's canvas links (anyone else is ignored)."""
+    raw = body.get("edit")
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or EDIT_ID_RE.fullmatch(raw) is None:
+        raise HTTPException(status_code=400, detail=(
+            "edit must be an edit id like ed_0123456789abcdef: the edit.id of the graphSync the step came from"))
+    headers = current_request_headers()
+    action = body.get("action", "undo")
+    if action not in RESTORE_ACTIONS or not is_person(headers):
+        return None
+    target = canvas_undo_book.link_of(raw)
+    link: dict[str, Any] = {"id": canvas_undo_book.new_id(), ("undoes" if action == "undo" else "redoes"): raw}
+    if target is not None:
+        link["of"] = target.actor
+    canvas_undo_book.link(link["id"], kind=action, actor=actor_for_headers(headers), target=raw)
+    return link
+
+
+def _journal_restored_edit(link: dict[str, Any], action: str) -> None:
+    """After the person's linked Cmd+Z (or redo): the edit.undone (edit.redone)
+    event, and the agent's undo token learns where its edit stands."""
+    target_id = str(link.get("undoes") or link.get("redoes"))
+    target = canvas_undo_book.link_of(target_id)
+    canvas_undo_book.note_events(link["id"], canvas_events.seqs_of_edit(link["id"]))
+    by = actor_for_headers(current_request_headers())
+    data: dict[str, Any] = {"editId": target_id, f"{action}Id": link["id"]}
+    noun = "edit"
+    if target is not None:
+        data.update({"of": target.actor, "editKind": target.kind, "events": target.events})
+        if target.kind == "undo" and target.target:
+            data["undid"] = target.target
+            noun = "undo"
+    owner = _undo_owner_text(link.get("of"), by=by)
+    if noun == "undo":
+        owner = owner.removesuffix("edit") + "undo"
+    where = "Cmd+Z on the canvas" if action == "undo" else "redo on the canvas"
+    _journal("edit.undone" if action == "undo" else "edit.redone", data=data,
+             summary=f"{'undid' if action == 'undo' else 'redid'} {owner} ({where})")
+    # Where the agent's edit stands now, for its undo token.
+    if target is None:
+        return
+    person = actor_record(by)
+    if target.kind == "edit":
+        record = canvas_undo_book.by_edit(target_id)
+        if record is not None:
+            record.state, record.undone_by = ("undone", person) if action == "undo" else ("applied", None)
+    elif target.kind == "undo" and target.target:
+        record = canvas_undo_book.by_edit(target.target)
+        if record is not None:
+            record.state, record.undone_by = (("applied", None) if action == "undo"
+                                              else ("undone", actor_record(target.actor)))
+
+
+@app.post("/api/graph/apply/undo")
+async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
+    """An agent undoes one of its own edits: ``{token}``, the ``undo.token``
+    its POST /api/graph/apply reply carried (MCP undo_canvas_edit, ``nebula undo``).
+
+    Only the agent that made the edit, while the project it was made in is
+    open, within UNDO_TTL_SECONDS. Each part (a node it added, a param,
+    name or position it changed, a node or wire it removed) goes back only
+    if the canvas still has it as the edit left it; a part someone changed
+    since stays and is listed in ``skipped``. The rest goes through one
+    restore, as the canvas's Cmd+Z does, so it lands whole or not at all.
+
+    ``status`` is ``undone``; ``skipped`` when nothing could go back (the
+    token still works, say after the person puts a part back); or
+    ``already-undone`` (by this agent, or by the person on the canvas) with
+    ``undoneBy``. The journal tags each event ``edit: {id, undoes, of}`` and
+    ends with ``edit.undone``.
+    """
+    headers = current_request_headers()
+    identity = identify_agent(headers)
+    if identity is None:
+        if is_person(headers):
+            raise HTTPException(status_code=403, detail=(
+                "This route is for agents; the canvas undoes an agent's edit with Cmd+Z or the notice's Undo"))
+        raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
+    extra = sorted(set(body) - {"token"})
+    if extra:
+        raise HTTPException(status_code=400, detail=f"Undo takes only the token; '{extra[0][:40]}' isn't part of it")
+    token = body.get("token")
+    if not isinstance(token, str) or not token:
+        raise HTTPException(status_code=400, detail="token must be the undo.token of one of your edits")
+    project_id, _ = _open_project_brief()
+    try:
+        record = canvas_undo_book.take(token.strip(), agent_id=identity.id, project_id=project_id)
+    except UndoError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+    if record.state == "undone":
+        by = record.undone_by or {}
+        who = "you" if by.get("kind") == "agent" and record.undo_id else (
+            "the person, on the canvas" if by.get("kind") == "person" else actor_label(by))
+        return {"status": "already-undone", "editId": record.edit_id, "undoId": record.undo_id,
+                "undoneBy": by, "skipped": record.last_skipped,
+                "message": f"This edit was already undone by {who}; nothing changed."}
+    plan = plan_undo(record.inverse, cli_graph.nodes, cli_graph.edges,
+                     cannot_remove=_undo_cannot_remove, refused_change=_undo_refused_change)
+    owner = record.actor
+    actor = actor_for_headers(headers)
+    if plan.empty:
+        if plan.skipped:
+            return {"status": "skipped", "editId": record.edit_id, "added": [], "removed": [], "changed": [],
+                    "renamed": [], "moved": [], "wired": [], "unwired": [], "skipped": plan.skipped,
+                    "message": ("Nothing went back: every part of this edit was changed since. The token still "
+                                "works if those parts are put back the way the edit left them.")}
+        record.state, record.undone_by, record.last_skipped = "undone", actor_record(actor), []
+        return {"status": "undone", "editId": record.edit_id, "undoId": None, "added": [], "removed": [],
+                "changed": [], "renamed": [], "moved": [], "wired": [], "unwired": [], "skipped": [],
+                "message": "The canvas already looks as it did before this edit; nothing changed."}
+    undo_id = canvas_undo_book.new_id()
+    link = {"id": undo_id, "undoes": record.edit_id, "of": owner}
+    canvas_undo_book.link(undo_id, kind="undo", actor=actor, target=record.edit_id)
+    wire_skips: list[dict[str, Any]] = []
+    context = _canvas_edit_link.set(link)
+    try:
+        result = await _restore_graph(plan.restore, trusted=plan.trusted, skipped_wires=wire_skips)
+        skipped = plan.skipped + [{
+            "part": "wire", "nodeId": wire["target"], "reason": "can't be wired now",
+            "wire": {key: wire[key] for key in ("source", "sourceHandle", "target", "targetHandle")},
+            "message": (f"the wire {wire['source']}.{wire['sourceHandle']} → {wire['target']}.{wire['targetHandle']} "
+                        f"can't come back: {wire['reason']}")} for wire in wire_skips]
+        record.state, record.undone_by, record.undo_id = "undone", actor_record(actor), undo_id
+        record.last_skipped = skipped
+        canvas_undo_book.note_events(undo_id, canvas_events.seqs_of_edit(undo_id))
+        link_entry = canvas_undo_book.link_of(record.edit_id)
+        counts = {key: len(result.get(key) or []) for key in ("added", "removed", "changed", "renamed", "moved")}
+        done = ", ".join(f"{verb} {counts[key]}" for key, verb in (
+            ("removed", "removed"), ("added", "put back"), ("changed", "reset"), ("renamed", "renamed"),
+            ("moved", "moved")) if counts[key])
+        left = f"; left {len(skipped)} part{'s' if len(skipped) != 1 else ''} as is" if skipped else ""
+        _journal("edit.undone", data={
+            "editId": record.edit_id, "undoId": undo_id, "of": owner, "editKind": "edit",
+            "events": link_entry.events if link_entry else [], "counts": counts, "skipped": len(skipped)},
+            summary=f"undid {_undo_owner_text(owner, by=actor)} ({done or 'no change'}){left}")
+    finally:
+        _canvas_edit_link.reset(context)
+    publish_action(f"{identity.name} undid its edit: {done or 'no change'}{left}")
+    return {"status": "undone", "editId": record.edit_id, "undoId": undo_id,
+            **{key: result.get(key) for key in ("added", "removed", "changed", "renamed", "moved", "wired",
+                                                 "unwired")},
+            "skipped": skipped}
 
 
 @app.get("/api/graph/node/{node_id}/path")
