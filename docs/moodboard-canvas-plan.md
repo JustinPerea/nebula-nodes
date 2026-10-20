@@ -2336,7 +2336,7 @@ Justin answered GM's three §5.9 questions on 2026-10-20, relayed by GM - Design
 
 **Version 2.4 (Q21 b, Q28 b):**
 
-- Whether the backend can see a replayed record's date, for the CLI and MCP "this replay can differ" note (PR13a; the canvas side uses `upgradeRunSnapshot`).
+- ~~Whether the backend can see a replayed record's date, for the CLI and MCP "this replay can differ" note (PR13a; the canvas side uses `upgradeRunSnapshot`).~~ Checked in PR13a (2026-10-20): it can't, and there is nothing to note. The CLI and MCP have no replay: run records live only in the canvas's `runHistory`, which the backend stores but never runs, and a canvas replay is a plain `POST /api/execute` with nodes and edges, no record. So the line is the canvas's alone: `runReplayNotes` in `savedParamsUpgrades.ts` (beside `upgradeRunSnapshot`, which returns only a recipe), added to the replayed Krea 2 node's run notes when it reports. If the CLI or MCP ever replays a record, it needs the same rule.
 - ~~The word history's retention~~ and ~~the freedom setting's default for existing installs~~: decided (Q34 a, Q33 b, 2026-10-20). Still open: how the setting PR tells an existing install from a new one (§8).
 - That every agent and reader write of a words field reaches `MoodboardStore.update` or the `/edits` commit, so the two hooks see them all (checked for the PUT, the keep route, the CLI and MCP on origin/main `77e73b45`; PR7e re-checks any route added since).
 - The read cost of a 5 MB worst-case history file on each non-person write that loses words (PR7e measures it).
