@@ -49,7 +49,7 @@ Workflow:
 Spending: the person sets limits (get_spend_limits). A run over a limit, or with a node that has no list price, is refused; send the same plan as propose_change. The person accepts or rejects it in Nebula; agents cannot accept, and get_proposal waits for the decision. Use propose_change too when the change is theirs to decide (reworking their graph, a costly run).
 
 Projects: list_projects, open_project, new_project. Start new work in a new project rather than emptying the person's canvas; they can switch back.
-Moodboards (the boards in Moodboard Studio): moodboard_create makes one from files, folders and image links, moodboard_update sets weights, notes, private notes (the person's own labels, never sent to generators), Set aside (excluded: the image stays and its colours are still read, but it never steers; weight 0 shows as set aside too) and the brief fields (Direction, Avoid, pinned colours, a hand-written brief), moodboard_analyze reads its palette (each colour lists the images it comes from; it can also preview an analysis, optionally with other colour thresholds, saving nothing). A board's `brief` is what generators get (brief.styleBrief, brief.negativePrompt, brief.palette); analysis.styleBrief is not. Only the person may change their own hand-written brief. Nebula checks the measured colours against the Direction and Avoid words: by default a clashing colour leaves the brief (brief.leftOut, each with its reason), brief.mayClash still goes, and pinned colours always go (brief.pinnedClashes). Tell the person what was left out; moodboard_update can keep one anyway. A board's notes are for the person, their team and you: generators get them only when the person turns that on (brief.notesSent).
+Moodboards (the boards in Moodboard Studio): moodboard_create makes one from files, folders and image links, moodboard_update sets weights, notes, private notes (the person's own labels, never sent to generators), Set aside (excluded: the image stays and its colours are still read, but it never steers; weight 0 shows as set aside too) and the brief fields (Direction, Avoid, pinned colours, a hand-written brief), moodboard_analyze reads its palette (each colour lists the images it comes from; it can also preview an analysis, optionally with other colour thresholds, saving nothing), and can also read the references with a vision model and say how it would sort them into looks: that is paid, a dry run for now, and held to the spending limits, so get its price first. A board's `brief` is what generators get (brief.styleBrief, brief.negativePrompt, brief.palette); analysis.styleBrief is not. Only the person may change their own hand-written brief. Nebula checks the measured colours against the Direction and Avoid words: by default a clashing colour leaves the brief (brief.leftOut, each with its reason), brief.mayClash still goes, and pinned colours always go (brief.pinnedClashes). Tell the person what was left out; moodboard_update can keep one anyway. A board's notes are for the person, their team and you: generators get them only when the person turns that on (brief.notesSent).
 A moodboard or Character is Global (every project lists it) or in one canvas project. moodboard_move and character_move move one between them ("global", "current" or a project); nodes that use it keep working everywhere, and moving it back undoes it.
 Deleted moodboards, characters and projects go to Recently deleted: list_trash shows them and restore_from_trash brings one back with the same id. Deleting for good is the person's alone.
 
@@ -1126,11 +1126,38 @@ def moodboard_update(board: str, images: list[dict] | None = None, remove: list[
     return {**boards.brief(updated), "removed": removed, "previous": previous}
 
 
-@_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True,
-                                      openWorldHint=False))
+def _read_answer(result: dict[str, Any], *, include_thoughts: bool = False) -> dict[str, Any]:
+    """A read's result for an agent: the summary, each image's result and the
+    last 20 non-thought lines; not every reading's fields or the whole trace."""
+    trace = result.get("trace") or []
+    results = []
+    for item in result.get("results") or []:
+        entry = {key: item.get(key) for key in ("number", "id", "look", "fit", "reason", "status")}
+        if item.get("status") == "sorted":
+            entry["newLook"] = bool(item.get("newLook"))
+        if item.get("why"):
+            entry["why"] = item["why"]
+        results.append(entry)
+    answer: dict[str, Any] = {
+        key: result.get(key) for key in ("dryRun", "applied", "runId", "boardId", "reader", "model", "thinkingLevel",
+                                         "summary", "suggestions", "newLooks", "spent", "estimate", "sortError")
+    }
+    answer["results"] = results
+    answer["lines"] = [line for line in trace if line.get("kind") not in ("thought", "focus")][-20:]
+    if include_thoughts:
+        answer["thoughts"] = [line.get("text") for line in trace if line.get("kind") == "thought"]
+    return answer
+
+
+# Not idempotent and open-world: with read_with each call is a paid read on Google.
+# A read takes as long as the model does, so it runs in the waits pool (#107).
+@_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False,
+                                   openWorldHint=True), waits=True)
 def moodboard_analyze(board: str, dry_run: bool = False, accent_min_chroma: float | None = None,
                       accent_separation: float | None = None, merge_delta_e: float | None = None,
-                      ctx: Context | None = None) -> dict[str, Any]:
+                      read_with: str | None = None, only: list[str | int] | None = None,
+                      thinking_level: str | None = None, estimate_only: bool = False,
+                      include_thoughts: bool = False, ctx: Context | None = None) -> dict[str, Any]:
     """Analyze a moodboard: palette, separate accent colours and keywords.
     Returns the board with its new analysis and the `brief` generators get
     now. Direction, Avoid, pinned colours and a hand-written brief stay.
@@ -1145,11 +1172,43 @@ def moodboard_analyze(board: str, dry_run: bool = False, accent_min_chroma: floa
     default 40), `accent_separation` (dE00 0-100, default 10) and
     `merge_delta_e` (dE00 0-50, default 5) try other colour thresholds for
     that run only; without `dry_run` they are refused, since nothing saves
-    custom thresholds."""
+    custom thresholds.
+
+    `read_with` (a reader model, "gemini-4-argon") reads the references with
+    that vision model and says how Analyze would sort them into looks. It is
+    paid and goes through the spending limits like a Gemini chat run; the
+    person can raise that model's per-run limit in Settings. Only
+    `dry_run=True` exists yet: nothing is saved and nothing moves, and the
+    call waits for the whole read. `estimate_only=True` returns the price
+    ({count, batches, low, high, unconfirmed, sources}) and reads nothing:
+    check it first. `only` limits the read to some images (numbers or ids);
+    `thinking_level` is low, medium or high. The answer has `summary`, each
+    image's result ({number, id, look, fit, reason, status, newLook}),
+    `suggestions` (alsoIn and hybrid), `spent`, and the last 20 trace
+    `lines` (thought summaries only with `include_thoughts`). `spent.usd`
+    is a minimum: it prices only requests that returned a token count, and
+    `spent.requestsWithoutUsage` counts the ones that didn't (cut off by a
+    time bound, say), which Google may still bill."""
     import moodboard_client as boards
 
     thresholds = {"accent_min_chroma": accent_min_chroma, "accent_separation": accent_separation,
                   "merge_delta_e": merge_delta_e}
+    if read_with:
+        if any(value is not None for value in thresholds.values()):
+            raise RuntimeError("the colour thresholds go with the free analysis, not with read_with")
+        headers = _board_headers(ctx)
+        if estimate_only:
+            return _board_call(boards.estimate_read, _api(), board, read_with, only=only,
+                               thinking_level=thinking_level, headers=headers)
+        if not dry_run:
+            raise RuntimeError("read_with needs dry_run=true in this version of Nebula: it reads and prices the "
+                               "references and says how Analyze would sort them, and moves nothing. Check the "
+                               "price first with estimate_only=true.")
+        result = _board_call(boards.dry_read, _api(), board, read_with, only=only, thinking_level=thinking_level,
+                             headers=headers)
+        return _read_answer(result, include_thoughts=include_thoughts)
+    if only or thinking_level or estimate_only or include_thoughts:
+        raise RuntimeError("only, thinking_level, estimate_only and include_thoughts go with read_with")
     if dry_run:
         return _board_call(boards.dry_run_board, _api(), board, thresholds=thresholds,
                            headers=_board_headers(ctx))

@@ -157,6 +157,8 @@ nebula moodboard set <board> --clash-mode flag           # leave-out (default), 
 nebula moodboard set <board> --restore set-output.json  # undo: the `set --json` output
 nebula moodboard analyze <board>
 nebula moodboard analyze <board> --dry-run --merge-delta-e 8   # preview; saves nothing
+nebula moodboard analyze <board> --read-with gemini-4-argon --estimate          # the price; reads nothing
+nebula moodboard analyze <board> --read-with gemini-4-argon --dry-run --only 3,5  # paid read; moves nothing
 nebula moodboard list
 nebula moodboard move <board> --to global      # or --to current, or a project's id or exact name
 nebula character move <character> --to current
@@ -174,6 +176,25 @@ nebula moodboard delete <board>
   it, `--accent-min-chroma` (0-150, default 40), `--accent-separation`
   (0-100, default 10) and `--merge-delta-e` (0-50, default 5) try other
   colour thresholds for that run only. Nothing saves custom thresholds.
+- `analyze --read-with gemini-4-argon --dry-run` reads the references with
+  a vision model and prints each reading as it streams (`#21  clouds under
+  a halftone screen → Dither (0.82)`), then how Analyze would sort them into
+  looks (`#6 Unsorted: no look fits (0.41)`, "Make a Painterly × Dither look
+  for #3, #9, #14?") and what it spent. It is paid but moves and saves
+  nothing; only the dry run exists yet. Run `--estimate` first and tell the
+  person the price: a read counts as one Gemini chat run against the
+  spending limits, so one over the per-run limit is refused (the person can
+  raise the Gemini chat limit in Settings > Agent spending). `--only 3,5`
+  reads some images, `--thinking-level low|medium|high` (default medium),
+  `--quiet` prints only the done and spent lines, `--json` one JSON line
+  per trace line. The spent line is a minimum: a request that stopped
+  without a token count isn't in it, and the CLI says so. The reader never
+  sees board numbers, and its reasons never name another image; a look
+  name it makes up that isn't plain words (at most 4, letters, digits and
+  `&-'`) is refused and those images show as Unsorted;
+  board and image notes go to Google only when the board's `sendNotes` is on,
+  private notes never. A reference that isn't a file on this computer isn't
+  read.
 - Images can be files, folders (their images in name order), http(s) image
   links, or Nebula outputs (`/api/outputs/...`). Links are downloaded on your
   machine (PNG, JPEG, GIF or WebP, up to 20 MB), then uploaded to Nebula.
