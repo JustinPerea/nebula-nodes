@@ -127,8 +127,9 @@ beforeEach(() => {
 
 async function openStudio() {
   act(() => { useUIStore.getState().enterMoodboardEditor('g1', 'global'); });
-  render(<MoodboardStudioView />);
+  const view = render(<MoodboardStudioView />);
   await screen.findByDisplayValue('Global board');
+  return view;
 }
 
 const weightSlider = (index = 0) => screen.getAllByRole('slider', { name: /^Weight/ })[index];
@@ -144,6 +145,32 @@ describe('Moodboard Studio follows edits made elsewhere', () => {
     await new Promise((resolve) => setTimeout(resolve, 800));
     expect(server.puts).toEqual([]);
     expect(server.edits).toEqual([]);
+  });
+
+  it('a write made while the socket was down shows once it comes back, in the board and the list', async () => {
+    await openStudio();
+    await screen.findByText('1 image · look');
+    // The backend restarted and Claude edited the board before this tab's
+    // socket was back: no storedAssetChanged reached it (not replayed).
+    outsideWrite((board) => ({ ...board, images: [...board.images.map((img) => ({ ...img, excluded: true })), image('cli1')] }),
+      { announce: false });
+    act(() => { for (const handler of socket.handlers) handler({ type: 'socketReconnected' }); });
+    expect(await screen.findByText('Images (2)')).toBeTruthy();
+    expect(await screen.findByText('2 images · 1 set aside · look')).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    expect(server.puts).toEqual([]);
+    expect(server.edits).toEqual([]);
+  });
+
+  it('reopening a kept draft shows what changed while the Studio was closed', async () => {
+    (await openStudio()).unmount();
+    // Claude edited the board while the Studio was closed: no Studio was
+    // listening, and the kept draft opens without a fetch.
+    outsideWrite((board) => ({ ...board, images: [...board.images, image('cli1')], notes: 'while closed' }));
+    act(() => { useUIStore.getState().enterMoodboardEditor('g1', 'global'); });
+    render(<MoodboardStudioView />);
+    expect(await screen.findByText('Images (2)')).toBeTruthy();
+    expect(screen.getByDisplayValue('while closed')).toBeTruthy();
   });
 
   it("a CLI add racing the person's weight edit keeps both", async () => {
@@ -262,6 +289,27 @@ describe('Moodboard Studio after the races reviewers found', () => {
     expect(server.puts.length).toBe(puts);
     expect(server.board.direction).toBe('cold');
     expect(server.board.name).toBe('Refs');
+  });
+
+  it('a board field put back to its saved value while its save is out stays put back', async () => {
+    // Review: the PUT's answer rebased the draft with the field "as sent"
+    // standing in for the base, so an edit made meanwhile back to the value
+    // last read looked untouched and the sent value replaced it.
+    let land: () => void = () => {};
+    const put = api.updateMoodboard.getMockImplementation()!;
+    api.updateMoodboard.mockImplementationOnce(async (...args: Parameters<typeof put>) => {
+      const answer = await put(...args);
+      await new Promise<void>((resolve) => { land = resolve; });
+      return answer;
+    });
+    await openStudio();
+    const direction = screen.getByRole('textbox', { name: 'What the board is for' });
+    fireEvent.change(direction, { target: { value: 'warm dusk' } });
+    await waitFor(() => expect(server.board.direction).toBe('warm dusk'), { timeout: 3000 });
+    fireEvent.change(direction, { target: { value: '' } });
+    await act(async () => { land(); });
+    await waitFor(() => expect(server.board.direction).toBe(''), { timeout: 3000 });
+    expect((screen.getByRole('textbox', { name: 'What the board is for' }) as HTMLTextAreaElement).value).toBe('');
   });
 
   it('a pending edit on an image someone removed is dropped, and the rest still saves', async () => {

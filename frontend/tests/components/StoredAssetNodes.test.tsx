@@ -126,6 +126,16 @@ describe('Moodboard card', () => {
     expect(screen.getByText('4 images · look')).toBeVisible();
   });
 
+  it('reads the board again when the socket comes back, so a change made while it was down shows', async () => {
+    card(MoodboardNode, { moodboard: 'gm' });
+    await screen.findByText('Good Machines');
+    // An agent set an image aside while the backend restarted: its
+    // storedAssetChanged went to no one (backend main.py /ws: not replayed).
+    boards.gm = { ...boards.gm, images: boards.gm.images.map((image, index) => ({ ...image, excluded: index === 0 })) };
+    emit({ type: 'socketReconnected' });
+    expect(await screen.findByText('3 images · 1 set aside · look')).toBeVisible();
+  });
+
   it('says a deleted board is in Recently deleted, offers Restore and no Open button', async () => {
     card(MoodboardNode, { moodboard: 'gm' }, true);
     await screen.findByText('Good Machines');

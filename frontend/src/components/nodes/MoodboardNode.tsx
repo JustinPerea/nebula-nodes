@@ -39,6 +39,8 @@ export function MoodboardNode({ id, data, selected }: NodeProps) {
         : status === 'error' ? "Couldn't load this board" : 'Loading…';
   // A board in Recently deleted keeps its name and picture here, with Restore.
   const trashed = status === 'trashed';
+  // The line is the board's count (not a status such as "Loading…").
+  const counted = Boolean(board) && !trashed;
   const canOpen = Boolean(boardId) && status !== 'missing' && !trashed;
   // Double-click opens the board, selected or not, at any zoom; the Open
   // button below shows while the node is selected.
@@ -57,7 +59,12 @@ export function MoodboardNode({ id, data, selected }: NodeProps) {
           <span>No images</span>
         )}
       </div>
-      <div className="moodboard-node__meta">{trashed ? 'In Recently deleted' : meta}</div>
+      {/* The count stays on one line, cut with an ellipsis when long ("124
+          images · 112 set aside · subject"), so the card keeps its height;
+          the whole line on hover. A status ("#id was deleted for good or
+          never existed") wraps as before, so its why is never cut. */}
+      <div className={`moodboard-node__meta${counted ? ' moodboard-node__meta--count' : ''}`}
+        title={counted ? meta : undefined}>{trashed ? 'In Recently deleted' : meta}</div>
       {trashed && <RestoreTrashedAsset kind="moodboard" id={boardId} className="moodboard-node__open" />}
       {selected && canOpen && (
         <button

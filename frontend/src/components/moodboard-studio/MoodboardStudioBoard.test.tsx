@@ -76,6 +76,7 @@ const server = {
   edits: [] as MoodboardOp[][],
   puts: [] as Record<string, unknown>[],
   before: new Map<string, MoodboardImage[]>(),
+  coverBefore: new Map<string, string | null>(),
   skip: [] as Array<Record<string, unknown>>,
 };
 
@@ -95,9 +96,11 @@ function serverEdit(current: Moodboard, op: MoodboardOp): Moodboard {
     next.images = next.images.map((img) => ({ ...img, placements: img.placements?.map((p) => (
       p.id === op.placement ? { ...p, x: op.x, y: op.y } : p)) }));
   }
+  if (op.op === 'cover') next.coverImageId = op.image;
   if (op.op === 'restore') {
     const tag = String((op.slices[0] as { tag: string }).tag);
     next.images = clone(server.before.get(tag)!);
+    next.coverImageId = server.coverBefore.get(tag) ?? null;
   }
   return next;
 }
@@ -127,6 +130,7 @@ beforeEach(() => {
   server.edits = [];
   server.puts = [];
   server.before.clear();
+  server.coverBefore.clear();
   server.skip = [];
   api.fetchMoodboard.mockImplementation(async (id: string) => (id === server.board.id ? clone(server.board) : null));
   api.fetchMoodboards.mockImplementation(async (scope: string) => (scope === 'global' ? [clone(server.board)] : []));
@@ -148,6 +152,7 @@ beforeEach(() => {
     }
     const tag = `u${server.edits.length}`;
     server.before.set(tag, clone(server.board.images));
+    server.coverBefore.set(tag, server.board.coverImageId ?? null);
     server.board = { ...ops.reduce(serverEdit, server.board), version: server.board.version + 1 };
     const restoring = ops.every((op) => op.op === 'restore');
     const applied = ops.map((op, index) => ({ index, op: op.op, status: 'applied' as const,
@@ -260,6 +265,40 @@ describe('a drag on the board', () => {
     await waitFor(() => expect(server.edits).toHaveLength(3));
     expect(server.edits[2]).toEqual([{ op: 'restore', slices: [{ part: 'tag', tag: 'u2' }] }]);
     expect(server.board.images[0].notes).toBe('the orange');
+  });
+});
+
+describe('the cover (#123) in undo', () => {
+  it('a pick is one undo step: Cmd+Z opens the board on #1 again, Shift+Cmd+Z brings the pick back', async () => {
+    await openStudio();
+    fireEvent.click(screen.getByRole('button', { name: 'Use #2 as cover' }));
+    expect(screen.getByText('Cover: #2')).toBeTruthy();
+    await waitFor(() => expect(server.edits).toEqual([[{ op: 'cover', image: 'i2' }]]), { timeout: 2000 });
+    // A pick keeps the analysis.
+    expect(server.board.analysis).not.toBeNull();
+
+    press('z', { metaKey: true });
+    await waitFor(() => expect(server.edits[1]).toEqual([{ op: 'restore', slices: [{ part: 'tag', tag: 'u1' }] }]));
+    expect(await screen.findByText('Cover: #1, the first image')).toBeTruthy();
+    expect(server.board.coverImageId).toBeNull();
+    expect(await screen.findByText(/Undid: Made #2 the cover/)).toBeTruthy();
+
+    press('z', { metaKey: true, shiftKey: true });
+    await waitFor(() => expect(server.edits[2]).toEqual([{ op: 'restore', slices: [{ part: 'tag', tag: 'u2' }] }]));
+    expect(await screen.findByText('Cover: #2')).toBeTruthy();
+  });
+
+  it('picks made before the step is sent join it: one batch, and one undo goes back to before them', async () => {
+    await openStudio();
+    fireEvent.click(screen.getByRole('button', { name: 'Use #2 as cover' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use #1 as cover' }));
+    await waitFor(() => expect(server.edits).toEqual([[{ op: 'cover', image: 'i1' }]]), { timeout: 2000 });
+    expect(Object.values(useBoardUndoStore.getState().histories).flatMap((history) => history.done)).toHaveLength(1);
+
+    press('z', { metaKey: true });
+    await waitFor(() => expect(server.edits).toHaveLength(2));
+    expect(server.board.coverImageId).toBeNull();
+    expect(await screen.findByText('Cover: #1, the first image')).toBeTruthy();
   });
 });
 

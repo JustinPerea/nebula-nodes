@@ -73,6 +73,21 @@ def test_mcp_moodboard_edit_moves_a_card_and_its_undo_puts_it_back(app, client, 
     assert _cards(boards.get_board(app.api, BOARD_ID))["pl-b"] == (504, 0)
 
 
+def test_mcp_moodboard_edit_takes_the_cover_op_with_a_move_and_one_undo_takes_both_back(app, client, root):
+    """#123's ``cover`` op goes through moodboard_edit beside PR5's ``place``:
+    one batch, the cover in the layout view, and its undo restores both."""
+    import mcp_server
+
+    write_board(root, fixture_board())
+    done = mcp_server.moodboard_edit(BOARD_ID, [{"op": "place", "placement": "pl-b", "x": 900, "y": 40},
+                                                {"op": "cover", "image": 2}])
+    assert [entry["status"] for entry in done["applied"]] == ["applied", "applied"]
+    assert done["cover"] == {"number": 2, "id": "img-b"} and _cards(done)["pl-b"] == (900, 40)
+
+    undone = mcp_server.moodboard_edit(BOARD_ID, done["undo"]["ops"])
+    assert "cover" not in undone and _cards(undone)["pl-b"] == (504, 0)
+
+
 def test_mcp_moodboard_edit_undo_skips_what_the_person_moved_since(app, client, root):
     import mcp_server
 

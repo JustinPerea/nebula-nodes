@@ -39,6 +39,7 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import errno
+import json
 import math
 import os
 import re
@@ -1117,7 +1118,7 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
                  keep_anyway: list[str] | None = None, leave_out: list[str] | None = None,
                  leave_out_flagged: bool = False, reset_colors: list[str] | None = None,
                  color_choices: dict[str, Any] | None = None, clash_mode: str | None = None,
-                 send_notes: bool | None = None, undo: dict[str, Any] | None = None,
+                 send_notes: bool | None = None, cover: Any = None, undo: dict[str, Any] | None = None,
                  headers: dict[str, str] | None = None) -> tuple[dict[str, Any], list[str], dict[str, Any]]:
     """Change a board. `images` is a list of {"image": number or id, "weight",
     "notes", "privateNote", "excluded"}; `remove` takes images off the board (their files
@@ -1166,6 +1167,13 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
     flag, no-measured or keep-all. `send_notes` False stops the board's
     notes reaching generators; True is the person's call (refused for an
     agent, before anything is saved).
+
+    `cover` picks the image the board opens on (its thumbnail on the canvas
+    card and in lists), by number ("#3" or 3) or id; "" opens it on #1
+    again. A pick, not a reorder: no image changes number, and no notes,
+    weights or analysis change. It goes in the same checked batch as the
+    image changes; an image can't be the cover and come off the board in
+    one call.
 
     `undo` (from a `previous`) makes the call an undo: see undo_board,
     which also says what it left as is. The other arguments are then what
@@ -1234,9 +1242,23 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
             target["notes"] = note_op["notes"] = str(edit["notes"])
         if note_op:
             ops.append({"op": "note", "image": image_id, **note_op})
+    # The cover, by its id (numbers as read), in the same batch as the image changes.
+    cover_id: str | None = None
+    if cover is not None:
+        if "coverImageId" not in board:
+            raise MoodboardError("this version of Nebula has no board cover: a board always opens on image #1. "
+                                 "Nothing was changed.")
+        text = str(cover).strip()
+        if text:
+            cover_id = str(current[find_image(current, text[1:] if text.startswith("#") else text)]["id"])
+        ops.append({"op": "cover", "image": cover_id})
     removed: list[str] = []
     if remove:
         drop = {find_image(current, item) for item in remove}
+        if cover_id is not None and cover_id in {str(current[index]["id"]) for index in drop}:
+            number = next(i for i, image in enumerate(current) if str(image["id"]) == cover_id) + 1
+            raise MoodboardError(f"image {number} can't be the cover and come off the board in one change: pick "
+                                 "one. Nothing was changed.")
         removed = [str(current[index]["url"]) for index in sorted(drop)]
         ops.append({"op": "remove", "images": [str(current[index]["id"]) for index in sorted(drop)]})
         current = [image for index, image in enumerate(current) if index not in drop]
@@ -1341,6 +1363,8 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
                            headers=headers)
             updated = answer["board"]
             edited = True
+            if (updated.get("coverImageId") or None) != (board.get("coverImageId") or None):
+                previous["cover"] = board.get("coverImageId") or ""
             for op in (answer.get("undo") or {}).get("ops") or []:
                 undo_slices.extend(op.get("slices") or [])
             if undo_slices:
@@ -1509,7 +1533,7 @@ def _steering(images: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # image in `images` carries its weight, notes, private note and excluded.
 # `undo` is the checked way back a change hands over too (undo_board).
 RESTORE_KEYS = ("name", "notes", "mode", "strength", "images", "direction", "avoid", "pinned_colors",
-                "brief_override", "clash_mode", "color_choices", "send_notes", "undo")
+                "brief_override", "clash_mode", "color_choices", "send_notes", "cover", "undo")
 
 
 def previous_settings(board: dict[str, Any], *, brief: bool = False, notes: bool = False,
@@ -1601,6 +1625,82 @@ def dry_run_board(api: NebulaAPI, ref: str, *, thresholds: dict[str, float | Non
         raise
 
 
+# -- reading references with a vision model (PR4: a dry run) -------------------------------------
+
+READ_UNSUPPORTED = ("this version of Nebula can't read references with a model, so nothing was sent or charged. "
+                    "Update Nebula to use --read-with.")
+# A read is bounded on the backend (every request has its time bounds), so
+# the client waits as long as it takes.
+READ_TIMEOUT = httpx.Timeout(30.0, read=None)
+
+
+def _read_body(board: dict[str, Any], model: str, only: Iterable[Any] | None,
+               thinking_level: str | None) -> dict[str, Any]:
+    body: dict[str, Any] = {"model": str(model)}
+    if only:
+        images = board.get("images") or []
+        refs = [part.strip() for item in only for part in str(item).split(",") if part.strip()]
+        if not refs:
+            raise MoodboardError("--only takes image numbers or ids, e.g. --only 3,5")
+        body["imageIds"] = list(dict.fromkeys(str(images[find_image(images, ref)].get("id")) for ref in refs))
+    if thinking_level:
+        body["thinkingLevel"] = thinking_level
+    return body
+
+
+def _read_refusal(exc: NebulaAPIError) -> Exception:
+    if exc.status == 405 or (exc.status == 404 and str(exc.detail).strip() == "Not Found"):
+        return MoodboardError(READ_UNSUPPORTED)
+    if exc.status in (400, 422):
+        return MoodboardError(exc.detail)
+    return exc
+
+
+def estimate_read(api: NebulaAPI, ref: str, model: str, *, only: Iterable[Any] | None = None,
+                  thinking_level: str | None = None, headers: dict[str, str] | None = None) -> dict[str, Any]:
+    """What reading the board's references with ``model`` would cost, sending
+    nothing (contract 07 section 1.13)."""
+    board = get_board(api, ref, headers)
+    try:
+        return api.request("POST", f"/api/moodboards/{board['id']}/read/estimate",
+                           json=_read_body(board, model, only, thinking_level), headers=headers)
+    except NebulaAPIError as exc:
+        raise _read_refusal(exc) from exc
+
+
+def dry_read(api: NebulaAPI, ref: str, model: str, *, only: Iterable[Any] | None = None,
+             thinking_level: str | None = None, headers: dict[str, str] | None = None,
+             on_line: Callable[[dict[str, Any]], None] | None = None) -> dict[str, Any]:
+    """Read the references with ``model`` and say how Analyze would sort them,
+    moving nothing. It is paid: agents go through the spending limits.
+
+    With ``on_line`` the trace streams (each ``moodboardReadTrace`` line as it
+    is written); the result is returned either way, with ``trace``."""
+    board = get_board(api, ref, headers)
+    body = _read_body(board, model, only, thinking_level)
+    path = f"/api/moodboards/{board['id']}/read"
+    try:
+        if on_line is None:
+            return api.request("POST", path, params={"dryRun": 1}, json=body, headers=headers, timeout=READ_TIMEOUT)
+        trace: list[dict[str, Any]] = []
+        result: dict[str, Any] | None = None
+        for raw in api.stream_lines("POST", path, params={"dryRun": 1, "stream": 1}, json=body, headers=headers,
+                                    timeout=READ_TIMEOUT):
+            row = json.loads(raw)
+            if row.get("type") == "moodboardReadError":
+                raise MoodboardError(f"{row.get('detail') or 'the read stopped'}; nothing was saved")
+            if row.get("type") == "moodboardReadResult":
+                result = row
+            else:
+                trace.append(row)
+                on_line(row)
+    except NebulaAPIError as exc:
+        raise _read_refusal(exc) from exc
+    if result is None:
+        raise MoodboardError("the read stopped before it finished; nothing was saved")
+    return {**result, "trace": trace}
+
+
 def deletes_are_restorable(api: NebulaAPI, headers: dict[str, str] | None = None) -> bool:
     """True when this Nebula moves a deleted board to Recently deleted
     (`/api/trash` exists), so a delete can be undone. Older backends delete
@@ -1656,6 +1756,18 @@ def _override(board: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def cover_of(board: dict[str, Any]) -> dict[str, Any] | None:
+    """The image the board opens on: `{number, id, chosen}`. `chosen` is
+    False when nobody picked one and it opens on #1; None for a board with
+    no images."""
+    images = [image for image in board.get("images") or [] if isinstance(image, dict)]
+    chosen = board.get("coverImageId")
+    for index, image in enumerate(images):
+        if chosen and str(image.get("id")) == str(chosen):
+            return {"number": index + 1, "id": image.get("id"), "chosen": True}
+    return {"number": 1, "id": images[0].get("id"), "chosen": False} if images else None
+
+
 def brief(board: dict[str, Any], *, layout: bool = False) -> dict[str, Any]:
     """A board as an agent needs it: settings, the brief fields, the brief
     generators get, numbered images, and the analysis.
@@ -1677,7 +1789,12 @@ def brief(board: dict[str, Any], *, layout: bool = False) -> dict[str, Any]:
     `brief` is the backend's composed brief as it sent it (`styleBrief` is
     the text generators get, `negativePrompt` their negatives); None when
     this Nebula doesn't send one. The analysis's own `styleBrief` leaves out
-    Direction, pinned colours and any hand-written brief, so it is not it."""
+    Direction, pinned colours and any hand-written brief, so it is not it.
+
+    `cover` ({number, id}) is the image chosen to open the board on, its
+    picture on the canvas card and in lists; with none chosen (or on a
+    Nebula without covers) there is no `cover` and the board opens on #1.
+    It is only what the board shows: no generator gets it."""
     analysis = board.get("analysis") or None
     composed = board.get("brief")
     view = {
@@ -1702,6 +1819,10 @@ def brief(board: dict[str, Any], *, layout: bool = False) -> dict[str, Any]:
              **({"privateNote": image.get("privateNote") or ""} if "privateNote" in image else {})}
             for index, image in enumerate(board.get("images") or [])
         ],
+        # Only when one is chosen, so an old board's view is as it was (the
+        # golden file pins it): no `cover` means it opens on #1.
+        **({"cover": {key: chosen[key] for key in ("number", "id")}}
+           if (chosen := cover_of(board)) and chosen["chosen"] else {}),
         "analysis": analysis,
         "updatedAt": board.get("updatedAt"),
     }

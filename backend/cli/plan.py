@@ -11,7 +11,9 @@ The CLI sends each step as its own edit, in order; each lands whole or not
 at all. A step can use the +refs earlier steps created (`+mood` in step 2
 means the node step 1 made for `+mood`): the CLI swaps in the node ids each
 apply returned in `idMap`, so the backend never holds plan state. A step may
-set `arrange` to have the canvas lay out that step's new nodes.
+set `arrange` to have the canvas lay out that step's new nodes. The checks
+and the stop-and-report rule live in backend/apply_steps.py, shared with the
+MCP server's edit_canvas(steps=...).
 """
 from __future__ import annotations
 
@@ -21,9 +23,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import apply_steps
+
 # Keys only `nebula apply` sends (a proposal can't do these).
 APPLY_ONLY = ("rename", "move", "remove", "unwire", "arrange")
-_STEP_KEYS = frozenset({"note", "steps"})
 
 
 class BuildError(ValueError):
@@ -170,97 +173,16 @@ def build_body(
     return body
 
 
-# Where a plan names a node: these may hold a +ref from an earlier step.
-def _named_nodes(step: dict[str, Any]) -> list[str]:
-    names: list[str] = []
-    for key in ("edges", "unwire"):
-        for wire in step.get(key) or []:
-            if isinstance(wire, dict):
-                names.extend(str(wire.get(end)) for end in ("source", "target") if isinstance(wire.get(end), str))
-    for change in step.get("params") or []:
-        if isinstance(change, dict) and isinstance(change.get("nodeId"), str):
-            names.append(change["nodeId"])
-    for key in ("rename", "move"):
-        if isinstance(step.get(key), dict):
-            names.extend(str(name) for name in step[key])
-    names.extend(str(item) for item in step.get("remove") or [] if isinstance(item, str))
-    return names
-
-
-def _declared(step: dict[str, Any]) -> list[str]:
-    return [str(node["ref"]) for node in step.get("nodes") or []
-            if isinstance(node, dict) and isinstance(node.get("ref"), str)]
-
-
 def check_steps(body: dict[str, Any], *, note: str | None = None) -> list[dict[str, Any]]:
-    """A steps plan's steps, checked before anything is sent.
-
-    Each step is a plan without `run`. A +ref is created once across all
-    steps, and a step may only use refs it or an earlier step creates, so a
-    typo is caught before step 1 lands. `note` (from --note) fills in steps
-    that have none, after the plan's own top-level note."""
-    unknown = sorted(set(body) - _STEP_KEYS)
-    if unknown:
-        raise BuildError(f"a plan with steps holds only note and steps; move '{unknown[0]}' into a step")
-    raw = body.get("steps")
-    if not isinstance(raw, list) or not raw:
-        raise BuildError("steps must be a non-empty list of plans")
-    default_note = note or body.get("note") or ""
-    created: dict[str, int] = {}
-    steps: list[dict[str, Any]] = []
-    for number, step in enumerate(raw, start=1):
-        if not isinstance(step, dict):
-            raise BuildError(f"step {number} must be a JSON object (a plan)")
-        if "steps" in step:
-            raise BuildError(f"step {number} has its own steps; steps don't nest")
-        if "run" in step:
-            raise BuildError(f"step {number} has run, and apply never runs anything: run the nodes with "
-                             "`nebula run` after the plan is applied")
-        if not any(step.get(key) for key in ("nodes", "edges", "params", "rename", "move", "remove", "unwire")):
-            raise BuildError(f"step {number} changes nothing; give it nodes, edges, params, rename, move, "
-                             "remove or unwire, or drop it")
-        if step.get("arrange") and not step.get("nodes"):
-            raise BuildError(f"step {number} has arrange but adds no nodes; arrange lays out the nodes its own "
-                             "step adds, so put it on the step that adds them")
-        mine = _declared(step)
-        for ref in mine:
-            if ref in created:
-                raise BuildError(f"step {number} creates {ref}, which step {created[ref]} already created; "
-                                 "a ref names one node across all steps")
-        for name in _named_nodes(step):
-            if name.startswith("+") and name not in mine and name not in created:
-                raise BuildError(f"step {number} uses {name}, which neither it nor an earlier step creates")
-        created.update({ref: number for ref in mine})
-        step = dict(step)
-        if not step.get("note"):
-            step.pop("note", None)
-            if default_note:
-                step["note"] = default_note
-        steps.append(step)
-    return steps
+    """A steps plan's steps, checked before anything is sent (apply_steps.check_steps,
+    shared with the MCP server's edit_canvas)."""
+    try:
+        return apply_steps.check_steps(body, note=note)
+    except apply_steps.PlanError as exc:
+        raise BuildError(str(exc)) from exc
 
 
-def resolve_step(step: dict[str, Any], id_map: dict[str, str]) -> dict[str, Any]:
-    """The step with +refs from earlier steps replaced by the node ids they became."""
-    own = set(_declared(step))
-
-    def swap(name: Any) -> Any:
-        return id_map.get(name, name) if isinstance(name, str) and name not in own else name
-
-    out = dict(step)
-    for key in ("edges", "unwire"):
-        if isinstance(step.get(key), list):
-            out[key] = [{**wire, "source": swap(wire.get("source")), "target": swap(wire.get("target"))}
-                        if isinstance(wire, dict) else wire for wire in step[key]]
-    if isinstance(step.get("params"), list):
-        out["params"] = [{**change, "nodeId": swap(change.get("nodeId"))} if isinstance(change, dict) else change
-                         for change in step["params"]]
-    for key in ("rename", "move"):
-        if isinstance(step.get(key), dict):
-            out[key] = {swap(name): value for name, value in step[key].items()}
-    if isinstance(step.get("remove"), list):
-        out["remove"] = [swap(item) for item in step["remove"]]
-    return out
+resolve_step = apply_steps.resolve_step
 
 
 def read_plan(source: str) -> dict[str, Any]:

@@ -2298,6 +2298,8 @@ function foreignEditStep(
     agentName: source === 'agent' ? origin.actor?.name ?? 'An agent' : null,
     ...(origin.actor?.color ? { agentColor: origin.actor.color } : {}),
     source,
+    ...(origin.id ? { editId: origin.id } : {}),
+    ...(origin.undoes ? { undoes: origin.undoes } : {}),
     at: Date.now(),
     ...change,
   };
@@ -2409,6 +2411,7 @@ function sendRestore(
 ): Promise<void> {
   const body = restoreRequest(action, prevNodes, prevEdges, nextNodes, nextEdges);
   if (!body) return restoreQueue;
+  if (isForeignEdit(entry) && entry.editId) body.edit = entry.editId;
   const task = restoreQueue.then(async () => {
     let response: Response;
     try {
@@ -2617,9 +2620,19 @@ wsClient.subscribe((event) => {
             // same outputs it must not hide what a run's events said since:
             // a failure (an agent's run ends with a sync), a skip, or a run
             // still going. New outputs do replace it.
-            state: !hasCliOutputs ? existing.data.state
-              : changedOutput || !RUN_HELD_STATES.has(existing.data.state) ? cliNode.data.state
-                : existing.data.state,
+            // The backend's "error" is the node's last run failing
+            // (services/node_errors.py): a tab that missed that run's events
+            // shows it, unless it has started the node again since.
+            state: cliNode.data.state === 'error'
+              ? (existing.data.state === 'queued' || existing.data.state === 'executing' ? existing.data.state : 'error')
+              : !hasCliOutputs ? existing.data.state
+                : changedOutput || !RUN_HELD_STATES.has(existing.data.state) ? cliNode.data.state
+                  : existing.data.state,
+            // That error comes whole: an older run's friendly line or
+            // category must not sit beside a newer message.
+            ...(cliNode.data.state === 'error' ? {
+              errorFriendly: cliNode.data.errorFriendly, errorCategory: cliNode.data.errorCategory,
+            } : {}),
             keyStatus,
             ...(changedOutput ? clearBatchPreview() : {}),
             ...(isPaperSource && paperSource ? {

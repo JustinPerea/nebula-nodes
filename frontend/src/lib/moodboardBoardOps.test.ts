@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MoodboardImage, MoodboardPlacement } from '../types';
-import { applyOps, opSteers, queueOps, rebaseDraft, type MoodboardOp } from './moodboardEdits';
+import { applyOps, opSteers, queueOps, rebaseDraft, type MoodboardOp, type QueuedDraft } from './moodboardEdits';
 import { FULL_AREA, sizeFor } from './moodboardLayout';
 
 // The Board view's ops (moodboard canvas PR5): a card moved on the canvas is
@@ -74,5 +74,24 @@ describe('an image dropped at the pointer', () => {
     expect(sizeFor(0.05, 16 / 9)).toEqual([107, 60]);
     expect(sizeFor(2, 1)).toEqual([360, 360]);
     expect(sizeFor(0, Number.NaN)).toEqual(sizeFor(0.05, 4 / 3));
+  });
+});
+
+describe('place and cover in one queue (PR5 with #123)', () => {
+  it('each keeps its own key: a later pick replaces the pick, a later move the move, and neither steers', () => {
+    const queue = queueOps([], [{ op: 'cover', image: 'i2' }, { op: 'place', placement: 'c-i1', x: 10, y: 0 }]);
+    const next = queueOps(queue, [{ op: 'cover', image: null }, { op: 'place', placement: 'c-i1', x: 20, y: 0 }]);
+    expect(next).toEqual([{ op: 'cover', image: null }, { op: 'place', placement: 'c-i1', x: 20, y: 0 }]);
+    expect(next.some(opSteers)).toBe(false);
+  });
+
+  it('a rebase keeps a pick of #1 again, drops a move of a card that left, and keeps the analysis', () => {
+    const pending: MoodboardOp[] = [{ op: 'cover', image: null }, { op: 'place', placement: 'c-i2', x: 5, y: 5 }];
+    const board = { images: [image('i1')], version: 4, coverImageId: 'i1' };
+    const draft = rebaseDraft<QueuedDraft>({ images: [image('i1'), image('i2')], pendingOps: pending, analysis: { a: 1 } },
+      board, {});
+    expect(draft.pendingOps).toEqual([{ op: 'cover', image: null }]);
+    expect(draft.coverImageId).toBeNull();
+    expect(draft.analysis).toEqual({ a: 1 });
   });
 });

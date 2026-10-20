@@ -29,6 +29,9 @@ export type MoodboardOp =
   | { op: 'note'; image: string; notes?: string; privateNote?: string }
   /** A card moved on the Board view (whole flow pixels). */
   | { op: 'place'; placement: string; x: number; y: number }
+  /** The image the board opens on (lib/moodboardCover), or null for #1. It
+   *  moves no image: `applyOps` leaves the images as they are. */
+  | { op: 'cover'; image: string | null }
   | { op: 'restore'; slices: Array<Record<string, unknown>> };
 
 /** What a board edit answers. `undo` is a `restore` that puts the board back. */
@@ -54,7 +57,8 @@ export class MoodboardVersionConflict extends Error {
 /** Whether an op changes what the analysis reads (backend `steering`):
  *  a private note doesn't. */
 export function opSteers(op: MoodboardOp): boolean {
-  if (op.op === 'place') return false;
+  // A card's place and the cover are presentation only: they keep the analysis.
+  if (op.op === 'place' || op.op === 'cover') return false;
   return op.op !== 'note' || 'notes' in op;
 }
 
@@ -103,6 +107,8 @@ export function applyOps(images: MoodboardImage[], ops: MoodboardOp[], options: 
         ? { ...image, placements: image.placements.map((card): MoodboardPlacement => (card.id === op.placement
           ? { ...card, x: op.x, y: op.y } : card)) }
         : image));
+    } else if (op.op === 'cover') {
+      // A pick, not a reorder: the draft's `coverImageId` holds it (rebaseDraft).
     } else if (op.op === 'restore') {
       // Never queued: an undo goes to the server, and the board comes back with its answer.
     } else if (op.op === 'setAside') {
@@ -118,6 +124,7 @@ export function applyOps(images: MoodboardImage[], ops: MoodboardOp[], options: 
 }
 
 export const opKey = (op: MoodboardOp): string | null => {
+  if (op.op === 'cover') return 'cover';
   if (op.op === 'weight' || op.op === 'setAside') return `${op.op}:${op.image}`;
   if (op.op === 'place') return `place:${op.placement}`;
   if (op.op === 'note') return `note:${op.image}:${'notes' in op ? 'notes' : ''}:${'privateNote' in op ? 'privateNote' : ''}`;
@@ -188,6 +195,8 @@ export function mergeFields<D extends Partial<Record<BoardFieldKey, unknown>>>(d
  *  last read (`base`), that board's `version`, and the ops not yet confirmed. */
 export interface QueuedDraft {
   images: MoodboardImage[];
+  /** The board's cover as last read, with a queued pick on top. */
+  coverImageId?: string | null;
   analysis?: unknown;
   base?: Partial<Record<BoardFieldKey, unknown>>;
   version?: number;
@@ -201,18 +210,25 @@ export interface QueuedDraft {
  *  read. A queued op on an image that is no longer there (someone removed
  *  it) is dropped: the server would refuse the whole batch for it. The
  *  analysis stays cleared while a queued op would clear it. */
-export function rebaseDraft<D extends QueuedDraft>(draft: D, board: { images: MoodboardImage[]; version?: number },
+export function rebaseDraft<D extends QueuedDraft>(draft: D,
+  board: { images: MoodboardImage[]; version?: number; coverImageId?: string | null },
   fields: Partial<Record<BoardFieldKey, unknown>>, sent: ReadonlySet<MoodboardOp> = new Set()): D {
   const pendingOps: MoodboardOp[] = [];
   let images = [...board.images];
+  // The cover is the board's, with the person's queued pick on top. Back to
+  // #1 (`image: null`) names no image, so it is never dropped.
+  let coverImageId = board.coverImageId ?? null;
   for (const op of draft.pendingOps ?? []) {
     if (sent.has(op)) continue;
-    if ('image' in op && !images.some((image) => image.id === op.image)) continue;
+    if ('image' in op && op.image !== null && !images.some((image) => image.id === op.image)) continue;
     if (op.op === 'place' && !images.some((image) => image.placements?.some((card) => card.id === op.placement))) continue;
     pendingOps.push(op);
     images = applyOps(images, [op]);
+    if (op.op === 'cover') coverImageId = op.image;
   }
+  // A queued remove that takes the cover image opens the board on #1, as the server does.
+  if (coverImageId !== null && !images.some((image) => image.id === coverImageId)) coverImageId = null;
   const merged = draft.base ? mergeFields(draft as Partial<Record<BoardFieldKey, unknown>>, draft.base, fields) as D : draft;
-  return { ...merged, images, base: fields, version: board.version, pendingOps,
+  return { ...merged, images, coverImageId, base: fields, version: board.version, pendingOps,
     ...(pendingOps.some(opSteers) ? { analysis: null } : {}) };
 }
