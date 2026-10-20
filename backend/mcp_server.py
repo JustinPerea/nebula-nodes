@@ -1020,8 +1020,8 @@ def moodboard_list(project_id: str | None = None, ctx: Context | None = None) ->
     open on the canvas, as its Project tab in the app shows; pass "none" for
     only the boards that belong to no project (Global). Each board comes as
     moodboard_get gives it: the brief fields, `brief` (what generators get),
-    numbered images and its analysis (null when it changed since the last
-    moodboard_analyze).
+    numbered images, `cover` ({number, id}) when one is chosen, and its
+    analysis (null when it changed since the last moodboard_analyze).
     """
     import moodboard_client as boards
 
@@ -1049,7 +1049,9 @@ def moodboard_get(board: str, ctx: Context | None = None) -> dict[str, Any]:
     never put it in a prompt (nothing that generates gets it). `placements`
     are its cards on the board (x, y, w, h in board pixels, weight, and
     `frameId`: the frame it is in, null for none); `frames` lists the board's
-    frames. The layout never steers generation.
+    frames. The layout never steers generation. `cover` {number, id} is the
+    image chosen to open the board on (no `cover`: it opens on #1);
+    moodboard_update(cover=...) changes it.
 
     `brief` is what generators get, as Nebula composed it: `styleBrief` (the
     hand-written brief when there is one, else the generated one),
@@ -1133,7 +1135,8 @@ def moodboard_update(board: str, images: list[dict] | None = None, remove: list[
                      leave_out: list[str] | None = None, leave_out_flagged: bool = False,
                      reset_colors: list[str] | None = None, color_choices: dict | None = None,
                      clash_mode: str | None = None, send_notes: bool | None = None,
-                     undo: dict | None = None, ctx: Context | None = None) -> dict[str, Any]:
+                     cover: str | int | None = None, undo: dict | None = None,
+                     ctx: Context | None = None) -> dict[str, Any]:
     """Change a moodboard. `images`: changes to single images, each
     {"image": its number or id, "weight": 0-1, "notes": "...", "privateNote": "...", "excluded": true}.
     `excluded` is the Set aside switch (`setAside` is the same key): a
@@ -1164,6 +1167,12 @@ def moodboard_update(board: str, images: list[dict] | None = None, remove: list[
     no-measured or keep-all. `send_notes` false keeps the notes from
     generators; true is the person's call and is refused (propose it).
 
+    `cover` picks the image the board opens on (its picture on the canvas
+    card, in the Studio and in lists), by number or id; "" opens it on #1
+    again. The result's `cover` is {number, id} (none: it opens on #1). A pick, not a
+    reorder: no image changes number, nothing that generates gets it, and
+    it keeps the analysis. Removing the cover image opens the board on #1.
+
     `previous` holds what the change changed, as it was before; pass it back
     to moodboard_update (all of it, `undo` included) to undo it. Its `undo`
     puts back, in one checked write, only what this change changed, so
@@ -1191,7 +1200,7 @@ def moodboard_update(board: str, images: list[dict] | None = None, remove: list[
             "name": name, "notes": notes, "mode": mode, "strength": strength, "images": images,
             "direction": direction, "avoid": avoid, "pinned_colors": pinned_colors,
             "brief_override": brief_override, "clash_mode": clash_mode, "color_choices": color_choices,
-            "send_notes": send_notes}.items() if value is not None}
+            "send_notes": send_notes, "cover": cover}.items() if value is not None}
         updated, removed, previous, skipped = _board_call(boards.undo_board, _api(), board, undo, fallback=fallback,
                                                           headers=_board_headers(ctx))
         return {**boards.brief(updated), "removed": removed, "previous": previous, "skipped": skipped}
@@ -1202,7 +1211,7 @@ def moodboard_update(board: str, images: list[dict] | None = None, remove: list[
         keep_out_colors=keep_out_colors, unpin_colors=unpin_colors, brief_override=brief_override,
         keep_brief=keep_brief, keep_anyway=keep_anyway, leave_out=leave_out,
         leave_out_flagged=leave_out_flagged, reset_colors=reset_colors, color_choices=color_choices,
-        clash_mode=clash_mode, send_notes=send_notes, headers=_board_headers(ctx))
+        clash_mode=clash_mode, send_notes=send_notes, cover=cover, headers=_board_headers(ctx))
     return {**boards.brief(updated), "removed": removed, "previous": previous}
 
 

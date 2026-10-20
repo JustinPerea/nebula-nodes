@@ -11378,6 +11378,9 @@ class MoodboardCreate(BaseModel):
     clashMode: Any = None
     colorChoices: Any = None
     sendNotes: Any = None
+    # The image the board opens on, by its id among ``images`` (the store
+    # checks it); left out, the board opens on #1.
+    coverImageId: Any = None
     # The saved colour check is the store's; a sent one is ignored.
     colorCheck: Any = None
     # The board's layout: never set here (see _refuse_moodboard_layout).
@@ -11412,6 +11415,10 @@ class MoodboardUpdate(BaseModel):
     clashMode: Any = None
     colorChoices: Any = None
     sendNotes: Any = None
+    # The image the board opens on: an image's id, or an explicit null for
+    # none (it opens on #1). Left out, the cover stays. A pick, not a
+    # reorder: no image changes number (services/moodboard_store.py).
+    coverImageId: Any = None
     colorCheck: Any = None
     # The board's layout: never set here (see _refuse_moodboard_layout).
     frames: Any = None
@@ -11732,6 +11739,7 @@ async def create_moodboard(body: MoodboardCreate) -> dict:
             clashMode=body.clashMode,
             colorChoices=body.colorChoices,
             sendNotes=body.sendNotes,
+            coverImageId=body.coverImageId,
             by=_moodboard_author(),
         )
     except NotesOptInProtected as exc:
@@ -11826,6 +11834,8 @@ async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
         updates["analysis"] = None
     if "briefOverride" in body.model_fields_set and body.briefOverride is None:
         updates["briefOverride"] = None
+    if "coverImageId" in body.model_fields_set and body.coverImageId is None:
+        updates["coverImageId"] = None
     if "images" in updates:
         # Images merge by id: a key an image leaves out keeps its saved value
         # (services/moodboard_store._normalize_images), so only what was sent.
