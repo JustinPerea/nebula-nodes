@@ -300,6 +300,47 @@ describe('the cover (#123) in undo', () => {
     expect(server.board.coverImageId).toBeNull();
     expect(await screen.findByText('Cover: #1, the first image')).toBeTruthy();
   });
+
+  it('a pick, then that image removed before the pick is sent: two batches, and Undo brings the image back as the cover', async () => {
+    await openStudio();
+    fireEvent.click(screen.getByRole('button', { name: 'Use #2 as cover' }));
+    fireEvent.click(document.querySelectorAll<HTMLButtonElement>('.moodboard-tile__remove')[1]);
+    expect(await screen.findByText('Cover: #1, the first image')).toBeTruthy();
+    // Never one batch: the server refuses a batch that picks an image and takes it off.
+    await waitFor(() => expect(server.edits).toEqual([[{ op: 'cover', image: 'i2' }], [{ op: 'remove', images: ['i2'] }]]));
+    expect(server.board.images.map((img) => img.id)).toEqual(['i1']);
+
+    press('z', { metaKey: true });
+    await waitFor(() => expect(server.edits[2]).toEqual([{ op: 'restore', slices: [{ part: 'tag', tag: 'u2' }] }]));
+    expect(await screen.findByText('Cover: #2')).toBeTruthy();
+    expect(server.board.coverImageId).toBe('i2');
+  });
+
+  it('an undo that put nothing back (an agent changed the cover since) leaves no redo over their pick', async () => {
+    await openStudio();
+    fireEvent.click(screen.getByRole('button', { name: 'Use #2 as cover' }));
+    await waitFor(() => expect(server.edits).toEqual([[{ op: 'cover', image: 'i2' }]]), { timeout: 2000 });
+    outsideWrite((current) => ({ ...current, coverImageId: 'i1' }));
+    expect(await screen.findByText('Cover: #1')).toBeTruthy();
+    // The server's restore finds the cover changed since: it puts nothing
+    // back, and its answer has no `undo` (nothing to redo).
+    api.editMoodboard.mockImplementationOnce(async (_id: string, ops: MoodboardOp[]) => {
+      server.edits.push(ops);
+      return { board: clone(server.board), version: server.board.version,
+        applied: [{ index: 0, op: 'restore', status: 'unchanged', removed: [],
+          skipped: [{ part: 'fields', field: 'coverImageId', reason: 'changed since', message: 'The cover changed since, left as is' }] }],
+        undo: { ops: [] } };
+    });
+    press('z', { metaKey: true });
+    expect(await screen.findByText('The cover changed since, left as is')).toBeTruthy();
+    expect(server.edits).toHaveLength(2);
+
+    press('z', { metaKey: true, shiftKey: true });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 300)); });
+    expect(server.edits).toHaveLength(2);
+    expect(server.board.coverImageId).toBe('i1');
+    expect(screen.queryByRole('button', { name: 'Redo' })).toBeNull();
+  });
 });
 
 describe('edits made elsewhere', () => {

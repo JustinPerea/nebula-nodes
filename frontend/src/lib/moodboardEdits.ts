@@ -144,6 +144,22 @@ export function queueOps(queue: MoodboardOp[] | undefined, ops: MoodboardOp[]): 
   return next;
 }
 
+/** A batch as it can be sent. The server refuses a batch whose last `cover`
+ *  pick names an image the batch takes off (a pick and that image's removal
+ *  that no undo step split: a new board's, made while its first save was
+ *  out). The draft already opens on #1 then, as the server does when a cover
+ *  image comes off on its own, so the batch ends with `cover: null`, which
+ *  says the same and is accepted (only the last pick has to stay). */
+export function sendableBatch(ops: MoodboardOp[]): MoodboardOp[] {
+  let pick: string | null = null;
+  const gone = new Set<string>();
+  for (const op of ops) {
+    if (op.op === 'cover') pick = op.image;
+    else if (op.op === 'remove') op.images.forEach((id) => gone.add(id));
+  }
+  return pick !== null && gone.has(pick) ? [...ops, { op: 'cover', image: null }] : ops;
+}
+
 /** The ops a Studio image change becomes. */
 export function imagePatchOps(id: string, patch: Partial<MoodboardImage>): MoodboardOp[] {
   const ops: MoodboardOp[] = [];

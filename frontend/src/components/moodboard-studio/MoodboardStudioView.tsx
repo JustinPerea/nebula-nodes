@@ -33,7 +33,7 @@ import { useStudioAssetMove } from '../../hooks/useStudioAssetMove';
 import { AssetMoveMenu } from '../asset-move/AssetMoveMenu';
 import { patchSteers } from './steering';
 import { moodboardImagesLabel, setAsideCount } from '../../lib/moodboardCount';
-import { BOARD_FIELD_KEYS, MoodboardVersionConflict, applyOps, imagePatchOps, opKey, opSteers, queueOps, rebaseDraft,
+import { BOARD_FIELD_KEYS, MoodboardVersionConflict, applyOps, imagePatchOps, opKey, opSteers, queueOps, rebaseDraft, sendableBatch,
   fieldChanges, type BoardFieldKey, type MoodboardEditResult, type MoodboardOp } from '../../lib/moodboardEdits';
 import { TAB_ID } from '../../lib/tabId';
 import { batchesOf, useBoardUndoStore, type BoardUndoStep } from '../../lib/boardUndo';
@@ -430,7 +430,7 @@ export function MoodboardStudioView() {
             let version = snapshot.version;
             // One batch per undo step, so each batch's `undo` is that step's.
             for (const batch of batchesOf(ops)) {
-              const edited = await editMoodboard(savedId, batch.ops, version);
+              const edited = await editMoodboard(savedId, sendableBatch(batch.ops), version);
               moveDraft(edited.board, new Set(batch.ops));
               result = edited.board;
               version = edited.board.version;
@@ -659,7 +659,9 @@ export function MoodboardStudioView() {
     const step: BoardUndoStep | null = direction === 'undo' ? undoStore.takeUndo(key, epoch, stepId) : undoStore.takeRedo(key, epoch);
     if (!step) return;
     const from = direction === 'undo' ? 'done' : 'undone';
-    const ops = direction === 'undo' ? step.undo ?? [] : step.redo ?? step.ops;
+    // Redo is only ever the undo's own checked `restore`, never the step's
+    // ops again: those would overwrite what changed since.
+    const ops = direction === 'undo' ? step.undo ?? [] : step.redo ?? [];
     const store = useAssetStudioDraftStore.getState();
     const attempt = store.beginSave(key);
     if (!attempt || ops.length === 0) {
@@ -670,12 +672,15 @@ export function MoodboardStudioView() {
       const edited = await editMoodboard(savedId, ops);
       moveDraft(edited.board);
       const next = (edited.undo?.ops ?? []) as MoodboardOp[];
-      if (direction === 'undo') undoStore.redone(key, step.id, next.length ? next : null);
-      else undoStore.reapplied(key, step.id, next.length ? next : null);
+      // Put nothing back (all of it changed since): there is nothing to redo
+      // (or undo again), so the step goes rather than wait to overwrite it.
+      if (!next.length) undoStore.forget(key, step.id);
+      else if (direction === 'undo') undoStore.redone(key, step.id, next);
+      else undoStore.reapplied(key, step.id, next);
       store.finishSave(key, attempt.id, attempt.revision, savedId, edited.board.thumbnail ?? attempt.entry.thumbnail);
       if (!isCurrent()) return;
       showToast({ text: `${direction === 'undo' ? 'Undid' : 'Redid'}: ${step.label}`, skipped: skippedLines(edited),
-        action: direction === 'undo' ? { label: 'Redo', run: () => { void runUndo('redo'); } } : undefined });
+        action: direction === 'undo' && next.length ? { label: 'Redo', run: () => { void runUndo('redo'); } } : undefined });
     } catch (err) {
       undoStore.restoreTaken(key, step, from);
       store.failSave(key, attempt.id, err instanceof Error ? err.message : `${direction === 'undo' ? 'Undo' : 'Redo'} failed.`);
