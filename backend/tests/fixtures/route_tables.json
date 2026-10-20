@@ -12135,7 +12135,8 @@
     }
    ],
    "allParamKeys": [
-    "moodboard"
+    "moodboard",
+    "send_notes"
    ]
   },
   "nous-portal-universal": {

@@ -636,6 +636,65 @@ def _new_pinned(current: dict[str, Any], pinned: dict[str, Any] | None, include:
         raise MoodboardError(f"pinned colours: {exc}{hint}") from exc
 
 
+def _matching_choice(choices: list[str], hex_value: str) -> str | None:
+    """The choice in ``choices`` that names ``hex_value``: the same hex, or
+    the nearest within dE00 5 (how the backend matches a choice to a
+    measured colour, so the hex `show` lists finds its choice)."""
+    if hex_value in choices:
+        return hex_value
+    from commons.colour import delta_e00, hex_to_lab
+    from commons.measure import MERGE_DELTA_E
+
+    near = sorted((float(delta_e00(hex_to_lab(hex_value), hex_to_lab(choice))), choice) for choice in choices)
+    return near[0][1] if near and near[0][0] < MERGE_DELTA_E else None
+
+
+def _new_choices(board: dict[str, Any], replace: dict[str, Any] | None, keep: list[str] | None,
+                 leave_out: list[str] | None, leave_out_flagged: bool, reset: list[str] | None,
+                 kept_out: list[str]) -> dict[str, list[str]]:
+    """The board's Keep anyway / Leave out lists after this call: `replace`
+    (or the board's own), then `reset` takes colours off, then `keep` and
+    `leave_out` (and the flagged colours) go on, each taken off the other
+    list. A colour pinned to keep out leaves Keep anyway (the pin is the
+    stronger choice); asking to keep one is an error."""
+    rules = _brief_rules()
+    if any(isinstance(value, str) for value in (keep, leave_out, reset)):
+        raise MoodboardError("colours go in a list, one hex each")
+    base = replace if replace is not None else board.get("colorChoices")
+    try:
+        lists = rules.normalize_color_choices(base if isinstance(base, dict) else None)
+        for colour in reset or []:
+            hex_value = rules.normalize_hex(colour)
+            found = [(key, _matching_choice(lists[key], hex_value)) for key in ("keep", "leaveOut")]
+            found = [(key, match) for key, match in found if match]
+            if not found:
+                raise MoodboardError(f"{colour} isn't kept anyway or left out on this board")
+            for key, match in found:
+                lists[key].remove(match)
+        flagged: list[str] = []
+        if leave_out_flagged:
+            composed = board.get("brief") if isinstance(board.get("brief"), dict) else {}
+            flagged = [item["hex"] for item in composed.get("mayClash") or []
+                       if isinstance(item, dict) and isinstance(item.get("hex"), str)]
+            if not flagged:
+                raise MoodboardError("no colour on this board is flagged as a possible clash")
+        for key, other, added in (("keep", "leaveOut", keep), ("leaveOut", "keep", [*(leave_out or []), *flagged])):
+            for colour in added or []:
+                hex_value = rules.normalize_hex(colour)
+                match = _matching_choice(lists[other], hex_value)
+                if match:
+                    lists[other].remove(match)
+                if hex_value not in lists[key]:
+                    lists[key].append(hex_value)
+        asked = {rules.normalize_hex(colour) for colour in keep or []}
+        lists["keep"] = [c for c in lists["keep"] if c not in kept_out or c in asked]
+        return rules.normalize_color_choices(lists, kept_out)
+    except MoodboardError:
+        raise
+    except ValueError as exc:
+        raise MoodboardError(f"colour choices: {exc}") from exc
+
+
 def _refusal(exc: NebulaAPIError) -> MoodboardError:
     """The backend's 403 for an agent touching the person's brief, as one
     plain sentence. The person gate adds how a canvas tab connects as the
@@ -652,7 +711,7 @@ def _send(api: NebulaAPI, method: str, path: str, *, person_brief: str | None = 
     person wrote the brief (they wrote it after this call read the board):
     the backend's own words are for API callers ("Leave briefOverride out
     of the request")."""
-    from services.moodboard_store import PERSON_BRIEF_REFUSED
+    from services.moodboard_store import NOTES_OPT_IN_REFUSED, PERSON_BRIEF_REFUSED
 
     try:
         return api.request(method, path, **kwargs)
@@ -660,6 +719,8 @@ def _send(api: NebulaAPI, method: str, path: str, *, person_brief: str | None = 
         if exc.status == 403:
             if person_brief and str(exc.detail).startswith(PERSON_BRIEF_REFUSED):
                 raise MoodboardError(person_brief) from exc
+            if str(exc.detail).startswith(NOTES_OPT_IN_REFUSED):
+                raise MoodboardError(_PERSON_NOTES) from exc
             raise _refusal(exc) from exc
         raise
 
@@ -672,6 +733,10 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
                  pinned_colors: dict[str, Any] | None = None, pin_colors: list[str] | None = None,
                  keep_out_colors: list[str] | None = None, unpin_colors: list[str] | None = None,
                  brief_override: str | None = None, keep_brief: bool = False,
+                 keep_anyway: list[str] | None = None, leave_out: list[str] | None = None,
+                 leave_out_flagged: bool = False, reset_colors: list[str] | None = None,
+                 color_choices: dict[str, Any] | None = None, clash_mode: str | None = None,
+                 send_notes: bool | None = None,
                  headers: dict[str, str] | None = None) -> tuple[dict[str, Any], list[str], dict[str, Any]]:
     """Change a board. `images` is a list of {"image": number or id, "weight",
     "notes", "privateNote", "excluded"}; `remove` takes images off the board (their files
@@ -687,7 +752,17 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
     generated one); `keep_brief` keeps a hand-written brief that is marked
     stale. Only the person may change or keep the person's own brief: that,
     or a Keep with no hand-written brief, stops the whole call before
-    anything is saved, as a MoodboardError (the backend refuses it too)."""
+    anything is saved, as a MoodboardError (the backend refuses it too).
+
+    Clashes between the words and the measured colours (the brief's
+    `leftOut` and `mayClash`): `keep_anyway` puts a left-out colour back
+    (without pinning it), `leave_out` takes a colour out,
+    `leave_out_flagged` takes out every colour flagged as a possible clash,
+    `reset_colors` drops either choice, `color_choices` ({"keep",
+    "leaveOut"}) replaces both lists; `clash_mode` is leave-out (default),
+    flag, no-measured or keep-all. `send_notes` False stops the board's
+    notes reaching generators; True is the person's call (refused for an
+    agent, before anything is saved)."""
     board = get_board(api, ref, headers)
     original = [dict(image) for image in board.get("images") or []]
     current = [dict(image) for image in original]
@@ -753,6 +828,25 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
     if pinned_colors is not None or pin_colors or keep_out_colors or unpin_colors:
         body["pinnedColors"] = _new_pinned(board.get("pinnedColors") or {}, pinned_colors, pin_colors,
                                            keep_out_colors, unpin_colors)
+    if clash_mode is not None:
+        if clash_mode not in rules.CLASH_MODES:
+            raise MoodboardError(f"clash mode must be one of {', '.join(rules.CLASH_MODES)}")
+        body["clashMode"] = clash_mode
+    if color_choices is not None or keep_anyway or leave_out or leave_out_flagged or reset_colors:
+        if "clashMode" not in board:
+            raise MoodboardError("this version of Nebula doesn't check colours against the board's words. "
+                                 "Nothing was changed.")
+        kept_out = (body.get("pinnedColors") or rules.board_fields(board)[2])["exclude"]
+        choices = _new_choices(board, color_choices, keep_anyway, leave_out, leave_out_flagged, reset_colors,
+                               kept_out)
+        if choices != rules.board_options(board)[1]:
+            body["colorChoices"] = choices
+    if send_notes is not None:
+        if "sendNotes" not in board:
+            raise MoodboardError("this version of Nebula always sends the board's notes to generators. "
+                                 "Nothing was changed.")
+        if bool(send_notes) != (board.get("sendNotes") is True):
+            body["sendNotes"] = bool(send_notes)
     saved_override = _override(board)
     refused_put: str | None = None
     if brief_override is not None:
@@ -783,7 +877,7 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
     if content_changed:
         body["analysis"] = None
     updated = board
-    previous = previous_settings(board, brief="briefOverride" in body,
+    previous = previous_settings(board, brief="briefOverride" in body, notes=send_notes is not None,
                                  skip={str(image.get("id")) for image in original} - {
                                      str(image.get("id")) for image in current})
     if body:
@@ -826,6 +920,12 @@ _PERSON_KEEP = ("The person wrote this board's brief by hand, so only they can k
 _NOTHING_KEPT = ("Nothing was changed: leave keep_brief (--keep-brief) out to make the other changes, or ask the "
                  "person to keep or regenerate it in Moodboard Studio.")
 _OTHERS_SAVED = "The other changes were saved; `previous` puts them back."
+# Notes are the person's words about the board; sending them to generators
+# is theirs to turn on (moodboard_store.NotesOptInProtected).
+_PERSON_NOTES = ("Only the person can send this board's notes to generators: the notes are their words about "
+                 "the board, for them, their team and agents. Nothing was changed: leave send_notes "
+                 "(--send-notes) out to make the other changes, or ask the person to turn on \"Send these notes "
+                 "to generators\" in Moodboard Studio.")
 
 
 # The backend's cap on an image's private note (services/moodboard_store.py).
@@ -847,10 +947,10 @@ def _steering(images: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # a board back (`nebula moodboard set --restore` checks against it). Each
 # image in `images` carries its weight, notes, private note and excluded.
 RESTORE_KEYS = ("name", "notes", "mode", "strength", "images", "direction", "avoid", "pinned_colors",
-                "brief_override")
+                "brief_override", "clash_mode", "color_choices", "send_notes")
 
 
-def previous_settings(board: dict[str, Any], *, brief: bool = False,
+def previous_settings(board: dict[str, Any], *, brief: bool = False, notes: bool = False,
                       skip: Iterable[str] = ()) -> dict[str, Any]:
     """What `update_board` takes to put a board back the way it was: its
     settings, each image's weight, notes, private note and excluded, by image
@@ -864,7 +964,11 @@ def previous_settings(board: dict[str, Any], *, brief: bool = False,
     `brief_override` (the agent's own text, "" for none) is there only when
     the change touched the hand-written brief (`brief`), so undoing anything
     else never touches a brief the person wrote since. An agent can only
-    change its own text, so it is never the person's."""
+    change its own text, so it is never the person's.
+
+    `clash_mode` and `color_choices` are there on a Nebula that has them;
+    `send_notes` only when the change touched it (`notes`), so undoing
+    anything else never asks to send notes the person has since turned on."""
     gone = set(skip)
     previous: dict[str, Any] = {
         "name": board.get("name"), "notes": board.get("notes"), "mode": board.get("mode"),
@@ -886,6 +990,11 @@ def previous_settings(board: dict[str, Any], *, brief: bool = False,
     if brief:
         override = _override(board)
         previous["brief_override"] = override["text"] if override else ""
+    if "clashMode" in board:
+        mode, choices, send = _brief_rules().board_options(board)
+        previous.update({"clash_mode": mode, "color_choices": choices})
+        if notes:
+            previous["send_notes"] = send
     return previous
 
 
@@ -1012,6 +1121,10 @@ def brief(board: dict[str, Any], *, layout: bool = False) -> dict[str, Any]:
         "direction": board.get("direction"),
         "avoid": board.get("avoid"),
         "pinnedColors": board.get("pinnedColors"),
+        # Gap 18 (absent on an older Nebula): what a clash does, the person's
+        # Keep anyway / Leave out, whether notes reach generators, and the
+        # colour check the brief used (its findings say what clashed and why).
+        **{key: board.get(key) for key in ("clashMode", "colorChoices", "sendNotes", "colorCheck") if key in board},
         "briefOverride": _override(board),
         "brief": composed if isinstance(composed, dict) else None,
         "images": [

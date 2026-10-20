@@ -68,6 +68,19 @@ _PALETTE_WORDS = [
     ("soft highlights", lambda l, s: l > 185),
 ]
 
+# The cues each mode adds to ``keywords``.
+_MODE_CUES = {
+    "look": ("style consistency", "visual language"),
+    "world": ("worldbuilding", "environmental continuity"),
+    "subject": ("subject continuity", "silhouette consistency"),
+}
+
+# The keywords Nebula measured or set from the mode. Every other keyword is a
+# word lifted from the board's notes, which generators get only when the
+# board or node opts in (services/moodboard_brief.py, gap 18).
+MEASURED_CUES = frozenset({"palette-led", *(cue for cues in _MODE_CUES.values() for cue in cues),
+                           *(label for label, _ in _PALETTE_WORDS)})
+
 
 @dataclass(frozen=True)
 class Thresholds:
@@ -650,12 +663,8 @@ def _keywords_from_analysis(
     keywords: list[str] = []
     if palette:
         keywords.append("palette-led")
-    if mode == "look":
-        keywords.extend(["style consistency", "visual language"])
-    elif mode == "world":
-        keywords.extend(["worldbuilding", "environmental continuity"])
-    else:
-        keywords.extend(["subject continuity", "silhouette consistency"])
+    # Anything but look or world reads as subject, as before.
+    keywords.extend(_MODE_CUES.get(mode, _MODE_CUES["subject"]))
 
     if images:
         lightness = _weighted_mean(images, lambda img: img.get("lightness", 128))

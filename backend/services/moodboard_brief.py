@@ -24,6 +24,37 @@ Nano Banana, Krea 2). Diffusion-style models read "no X" as "X", so they never
 get it in the prompt.
 
 ``migrate_board`` moves boards saved before these fields existed (B7).
+
+**Precedence (gap 18).** Where two parts of a board disagree, the higher
+wins; where the higher says nothing, the lower fills in:
+
+1. the hand-written brief (``briefOverride``), as is; no check runs on it;
+2. pinned colours: "must appear" always go, even against Avoid (the clash
+   is flagged, ``pinnedClashes``); "keep out" drops near measured colours;
+3. Direction and Avoid: the colour-word check
+   (services/moodboard_colour_words.py) compares them with the measured
+   colours, and ``clashMode`` says what happens to a clash;
+4. board notes: sent only when the board (``sendNotes``) or the node
+   (``send_notes``) opts in. Image notes and the cues lifted from the notes
+   follow the same switch;
+5. what Nebula measured: palette, accents, measured cues.
+
+More fields, all optional on old boards (read with their defaults, never
+rewritten on read):
+
+- ``clashMode``: ``leave-out`` (default: conflicts leave the brief, listed
+  with the reason), ``flag`` (nothing left out, clashes listed),
+  ``no-measured`` (with a Direction, no measured colour goes) or
+  ``keep-all`` (as before: the check runs, nothing is applied).
+- ``colorChoices``: ``{"keep": [...], "leaveOut": [...]}``, the person's
+  Keep anyway and Leave out, matched to measured colours within dE00 5.
+- ``sendNotes``: board notes to generators. Off by default. Only the person
+  may turn it on (the store refuses an agent, ``NotesOptInProtected``).
+- ``colorCheck``: the saved check, written by the store whenever its basis
+  (Direction, Avoid, pinned "must appear", the measured colours and
+  ``LEXICON_VERSION``) moves. ``compose`` uses it at its basis, else checks
+  in memory. Findings from any check carry ``foundBy``; a second check adds
+  ``checks.<name>`` and its findings under the same basis.
 """
 from __future__ import annotations
 
@@ -50,6 +81,17 @@ AVOID_ITEM_LIMIT = 200
 PINNED_LIMIT = 12
 DIRECTION_LIMIT = 4000
 OVERRIDE_LIMIT = 20000
+# Keep anyway and Leave out: at most this many colours in each list.
+COLOR_CHOICES_LIMIT = 24
+
+# What a board does when its words clash with a measured colour (gap 18, P1).
+CLASH_MODES = ("leave-out", "flag", "no-measured", "keep-all")
+DEFAULT_CLASH_MODE = "leave-out"
+# The saved check's own shape; LEXICON_VERSION (in its basis) covers the rules.
+COLOR_CHECK_VERSION = 1
+MODE_OFF_REASON = "Measured colors are off for this board"
+# What the node's ``send_notes`` param says (services/moodboard_brief.compose's send_notes).
+NODE_NOTES_CHOICES = {"board": None, "yes": True, "no": False}
 
 # What each mode asks of a generator, phrased as what to do.
 MODE_INTENTS = {
@@ -183,6 +225,68 @@ def board_fields(board: dict[str, Any]) -> tuple[str, list[str], dict[str, list[
     return direction, avoid, pinned
 
 
+def normalize_clash_mode(value: Any) -> str:
+    if value is None:
+        return DEFAULT_CLASH_MODE
+    if value not in CLASH_MODES:
+        raise ValueError(f"clashMode must be one of {', '.join(CLASH_MODES)}")
+    return str(value)
+
+
+def normalize_color_choices(value: Any, kept_out: list[str] | None = None) -> dict[str, list[str]]:
+    """``{"keep": [...], "leaveOut": [...]}``, hex normalized like pins. A
+    colour can be in one list only, and a Keep anyway colour can't be one
+    the person pinned to keep out."""
+    if value is None:
+        return {"keep": [], "leaveOut": []}
+    if not isinstance(value, dict):
+        raise ValueError("colorChoices must be an object with keep and leaveOut lists")
+    unknown = set(value) - {"keep", "leaveOut"}
+    if unknown:
+        raise ValueError(f"colorChoices has unknown keys: {', '.join(sorted(unknown))}")
+    result: dict[str, list[str]] = {}
+    for key in ("keep", "leaveOut"):
+        raw = value.get(key) or []
+        if not isinstance(raw, list):
+            raise ValueError(f"colorChoices.{key} must be a list of hex colours")
+        colours: list[str] = []
+        for item in raw:
+            hex_value = normalize_hex(item)
+            if hex_value not in colours:
+                colours.append(hex_value)
+        if len(colours) > COLOR_CHOICES_LIMIT:
+            raise ValueError(f"colorChoices.{key} holds at most {COLOR_CHOICES_LIMIT} colours")
+        result[key] = colours
+    both = set(result["keep"]) & set(result["leaveOut"])
+    if both:
+        raise ValueError(f"a colour can't be both kept and left out: {', '.join(sorted(both))}")
+    pinned_out = set(result["keep"]) & set(kept_out or [])
+    if pinned_out:
+        raise ValueError(f"a colour pinned to keep out can't be kept anyway: {', '.join(sorted(pinned_out))}. "
+                         "Unpin it first")
+    return result
+
+
+def normalize_send_notes(value: Any) -> bool:
+    if value is None:
+        return False
+    if not isinstance(value, bool):
+        raise ValueError("sendNotes must be true or false")
+    return value
+
+
+def board_options(board: dict[str, Any]) -> tuple[str, dict[str, list[str]], bool]:
+    """The board's clash mode, colour choices and notes switch, read
+    leniently: anything odd reads as the default."""
+    mode = board.get("clashMode")
+    mode = mode if mode in CLASH_MODES else DEFAULT_CLASH_MODE
+    try:
+        choices = normalize_color_choices(board.get("colorChoices"))
+    except ValueError:
+        choices = {"keep": [], "leaveOut": []}
+    return mode, choices, board.get("sendNotes") is True
+
+
 def brief_basis(board: dict[str, Any]) -> str:
     """What the brief is made from: the analysis's inputs plus the brief fields.
 
@@ -194,7 +298,20 @@ def brief_basis(board: dict[str, Any]) -> str:
     direction, avoid, pinned = board_fields(board)
     images = board.get("images")
     readable = board if isinstance(images, list) else {**board, "images": []}
-    payload = {"source": source_hash(readable), "direction": direction, "avoid": avoid, "pinned": pinned}
+    payload: dict[str, Any] = {"source": source_hash(readable), "direction": direction, "avoid": avoid,
+                               "pinned": pinned}
+    # Gap 18's fields count only when they differ from the defaults, so an
+    # override written before them keeps its basis.
+    mode, choices, send_notes = board_options(board)
+    options: dict[str, Any] = {}
+    if mode != DEFAULT_CLASH_MODE:
+        options["clashMode"] = mode
+    if choices["keep"] or choices["leaveOut"]:
+        options["colorChoices"] = choices
+    if send_notes:
+        options["sendNotes"] = True
+    if options:
+        payload["options"] = options
     encoded = json.dumps(payload, sort_keys=True, ensure_ascii=True).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()[:16]
 
@@ -222,41 +339,224 @@ def without_excluded(colours: list[str], excluded: list[str]) -> list[str]:
     return kept
 
 
-def generated_brief(board: dict[str, Any], analysis: dict[str, Any] | None,
-                    *, with_fields: bool = True) -> str:
-    """The brief Nebula writes from an analysis, plus the board's fields.
+def _choice_near(hex_value: str, choices: dict[str, list[str]]) -> str | None:
+    """Which list (``keep`` or ``leaveOut``) holds the choice nearest a
+    measured colour, within dE00 5 (Commons' "same colour", as
+    ``without_excluded``), so a choice survives a re-analysis that shifts the
+    hex a little. None when no choice is that close."""
+    import numpy as np
 
-    ``with_fields=False`` gives the analysis's own brief (what Analyze saves
-    as ``styleBrief``). Colours the person kept out are dropped from the
-    palette (within dE00 5, Commons' "same colour" rule).
-    """
+    from commons.colour import delta_e00, hex_to_lab
+    from commons.measure import MERGE_DELTA_E
+
+    best: tuple[float, str] | None = None
+    for key in ("leaveOut", "keep"):
+        if not choices[key]:
+            continue
+        try:
+            labs = np.array([hex_to_lab(choice) for choice in choices[key]])
+            distance = float(np.min(delta_e00(hex_to_lab(hex_value)[None, :], labs)))
+        except (ValueError, TypeError):
+            continue
+        if distance < MERGE_DELTA_E and (best is None or distance < best[0]):
+            best = (distance, key)
+    return best[1] if best else None
+
+
+# -- the colour-word check (gap 18) -------------------------------------------
+
+def _measured_colours(analysis: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """The colours an analysis measured: palette and accents with their role
+    and share (None when the analysis has no shares)."""
     if not isinstance(analysis, dict):
-        return ""
+        return []
+    shares: dict[tuple[str, str], float] = {}
+    for colour in analysis.get("colors") or []:
+        if isinstance(colour, dict) and isinstance(colour.get("hex"), str):
+            role = "accent" if colour.get("role") == "accent" else "palette"
+            try:
+                shares[(colour["hex"].lower(), role)] = float(colour.get("share"))
+            except (TypeError, ValueError):
+                pass
+    out: list[dict[str, Any]] = []
+    for key, role in (("palette", "palette"), ("accents", "accent")):
+        for hex_value in _str_list(analysis.get(key)):
+            out.append({"hex": hex_value.lower(), "role": role, "share": shares.get((hex_value.lower(), role))})
+    return out
+
+
+def colour_check_basis(board: dict[str, Any], analysis: dict[str, Any] | None = None) -> str:
+    """What the colour check reads: Direction, Avoid, pinned "must appear",
+    the measured colours (hex, role, share) and the lexicon's version."""
+    from services.moodboard_colour_words import LEXICON_VERSION
+
+    if analysis is None:
+        analysis = board.get("analysis") if isinstance(board.get("analysis"), dict) else None
+    direction, avoid, pinned = board_fields(board)
+    payload = {"direction": direction, "avoid": avoid, "include": pinned["include"],
+               "colours": [[c["hex"], c["role"], c["share"]] for c in _measured_colours(analysis)],
+               "lexicon": LEXICON_VERSION, "version": COLOR_CHECK_VERSION}
+    encoded = json.dumps(payload, sort_keys=True, ensure_ascii=True).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()[:16]
+
+
+def colour_check(board: dict[str, Any], analysis: dict[str, Any] | None = None) -> dict[str, Any]:
+    """The colour-word check, run now: ``{"version", "basis", "checks":
+    {"words": {"version"}}, "findings"}``. Each finding records ``foundBy``."""
+    from services.moodboard_colour_words import LEXICON_VERSION, check
+
+    if analysis is None:
+        analysis = board.get("analysis") if isinstance(board.get("analysis"), dict) else None
+    direction, avoid, pinned = board_fields(board)
+    findings = check(direction, avoid, _measured_colours(analysis), pinned["include"])
+    return {"version": COLOR_CHECK_VERSION, "basis": colour_check_basis(board, analysis),
+            "checks": {"words": {"version": LEXICON_VERSION}}, "findings": findings}
+
+
+def current_colour_check(board: dict[str, Any], analysis: dict[str, Any] | None = None) -> dict[str, Any]:
+    """The saved check when it was made from what the board holds now
+    (its basis matches), so findings another check added count; else the
+    words check run in memory, saving nothing. A stale saved check's other
+    findings wait until that check runs again."""
+    if analysis is None:
+        analysis = board.get("analysis") if isinstance(board.get("analysis"), dict) else None
+    saved = board.get("colorCheck")
+    if (isinstance(saved, dict) and isinstance(saved.get("findings"), list)
+            and saved.get("basis") == colour_check_basis(board, analysis)):
+        return saved
+    return colour_check(board, analysis)
+
+
+def refresh_colour_check(board: dict[str, Any]) -> None:
+    """Save the check on the board when what it reads has changed (the store
+    calls this on every create and update). A check that fails leaves the
+    saved one as it was: compose checks in memory when the basis moved."""
+    try:
+        analysis = board.get("analysis") if isinstance(board.get("analysis"), dict) else None
+        saved = board.get("colorCheck")
+        if isinstance(saved, dict) and saved.get("basis") == colour_check_basis(board, analysis):
+            return
+        board["colorCheck"] = colour_check(board, analysis)
+    except Exception:  # noqa: BLE001 - a board must always save
+        logger.exception("Moodboard %s: colour check not saved", board.get("id"))
+
+
+_LEVEL_ORDER = {"conflict": 0, "warning": 1}
+
+
+def _merged_findings(findings: list[Any]) -> dict[tuple[str | None, str], dict[str, Any]]:
+    """Findings per (hex, role): the worst level, every reason (conflicts
+    first, Avoid before Direction) and every check that found one."""
+    merged: dict[tuple[str | None, str], dict[str, Any]] = {}
+    ordered = sorted(
+        (f for f in findings if isinstance(f, dict) and f.get("level") in _LEVEL_ORDER),
+        key=lambda f: (_LEVEL_ORDER[f["level"]], f.get("source") != "avoid"))
+    for finding in ordered:
+        hex_value = finding.get("hex")
+        key = (hex_value.lower() if isinstance(hex_value, str) else None, str(finding.get("role") or "palette"))
+        entry = merged.setdefault(key, {"hex": key[0], "role": key[1], "share": finding.get("share"),
+                                        "level": finding["level"], "reason": "", "reasons": [], "foundBy": []})
+        reason = str(finding.get("reason") or "")
+        if reason and reason not in entry["reasons"]:
+            entry["reasons"].append(reason)
+        found_by = str(finding.get("foundBy") or "")
+        if found_by and found_by not in entry["foundBy"]:
+            entry["foundBy"].append(found_by)
+    for entry in merged.values():
+        entry["reason"] = entry["reasons"][0] if entry["reasons"] else ""
+    return merged
+
+
+def _listed(entry: dict[str, Any] | None, hex_value: str, role: str, why: str, *,
+            reason: str | None = None) -> dict[str, Any]:
+    item = {"hex": hex_value, "role": role, "share": None, "level": "off", "reason": "", "reasons": [],
+            "foundBy": []}
+    if entry is not None:
+        item.update({key: (list(value) if isinstance(value, list) else value) for key, value in entry.items()})
+        item["hex"], item["role"] = hex_value, role
+    if reason is not None:
+        item["reasons"] = [reason, *[r for r in item["reasons"] if r != reason]]
+        item["reason"] = reason
+    item["why"] = why
+    return item
+
+
+def resolve_colours(board: dict[str, Any], analysis: dict[str, Any] | None) -> dict[str, Any]:
+    """Which measured colours generators get, and the lists that say why
+    the rest don't (``clashMode``, ``colorChoices``, the check)."""
+    direction, _avoid, pinned = board_fields(board)
+    mode, choices, _notes = board_options(board)
+    palette = without_excluded(_str_list((analysis or {}).get("palette")), pinned["exclude"])
+    accents = without_excluded(_str_list((analysis or {}).get("accents")), pinned["exclude"])
+    result: dict[str, Any] = {"palette": palette, "accents": accents, "leftOut": [], "mayClash": [], "kept": [],
+                              "pinnedClashes": [], "paletteClashes": []}
+    if mode == "keep-all":
+        return result
+    check = current_colour_check(board, analysis)
+    merged = _merged_findings(check.get("findings") or [])
+    effective = "leave-out" if mode == "no-measured" and not direction else mode
+    lists = {"palette": [], "accent": []}
+    for role, hexes in (("palette", palette), ("accent", accents)):
+        for hex_value in hexes:
+            entry = merged.get((hex_value.lower(), role))
+            choice = _choice_near(hex_value, choices)
+            if effective == "no-measured":
+                if choice == "keep":
+                    result["kept"].append(_listed(entry, hex_value, role, "choice", reason=MODE_OFF_REASON))
+                    lists[role].append(hex_value)
+                else:
+                    result["leftOut"].append(_listed(entry, hex_value, role, "mode", reason=MODE_OFF_REASON))
+                continue
+            if entry is None:
+                lists[role].append(hex_value)
+                continue
+            if effective == "leave-out" and entry["level"] == "conflict":
+                if choice == "keep":
+                    result["kept"].append(_listed(entry, hex_value, role, "choice"))
+                    lists[role].append(hex_value)
+                else:
+                    result["leftOut"].append(_listed(entry, hex_value, role, "check"))
+            elif choice == "leaveOut":
+                result["leftOut"].append(_listed(entry, hex_value, role, "choice"))
+            elif effective == "flag" and choice == "keep":
+                result["kept"].append(_listed(entry, hex_value, role, "choice"))
+                lists[role].append(hex_value)
+            else:
+                result["mayClash"].append(_listed(entry, hex_value, role, "check"))
+                lists[role].append(hex_value)
+    result["palette"], result["accents"] = lists["palette"], lists["accent"]
+    for hex_value in pinned["include"]:
+        entry = merged.get((hex_value, "pinned"))
+        if entry is not None:
+            result["pinnedClashes"].append(_listed(entry, hex_value, "pinned", "check"))
+    result["paletteClashes"] = [_listed(entry, None, "palette", "check")  # type: ignore[arg-type]
+                                for key, entry in merged.items() if key[0] is None]
+    return result
+
+
+# -- the brief text ----------------------------------------------------------------
+
+def _brief_text(board: dict[str, Any], analysis: dict[str, Any], *, direction: str, include: list[str],
+                palette: list[str], accents: list[str], keywords: list[str], notes: str) -> str:
     from services.moodboard_analysis import PALETTE_SIZE
 
-    direction, _avoid, pinned = board_fields(board) if with_fields else ("", [], {"include": [], "exclude": []})
     mode = str(analysis.get("mode") or board.get("mode") or "look")
     try:
         strength = float(analysis.get("strength", board.get("strength", 0.7)))
     except (TypeError, ValueError):
         strength = 0.7
     name = str(board.get("name") or "Moodboard")
-    notes = str(board.get("notes") or "").strip()
-    palette = without_excluded(_str_list(analysis.get("palette"))[:PALETTE_SIZE], pinned["exclude"])
-    accents = without_excluded(_str_list(analysis.get("accents")), pinned["exclude"])
-    keywords = _str_list(analysis.get("keywords"))
-
     parts: list[str] = []
     if direction:
         parts.append(_sentence(direction))
     parts.append(f"Use the Nebula moodboard '{name}' as {mode} direction at strength {strength:.2f}.")
     parts.append(MODE_INTENTS.get(mode, MODE_INTENTS["look"]))
-    if palette:
-        parts.append(f"Color palette: {', '.join(palette)}.")
+    if palette[:PALETTE_SIZE]:
+        parts.append(f"Color palette: {', '.join(palette[:PALETTE_SIZE])}.")
     if accents:
         parts.append(f"Accent colors, used sparingly: {', '.join(accents)}.")
-    if pinned["include"]:
-        parts.append(f"Make sure these colors appear: {', '.join(pinned['include'])}.")
+    if include:
+        parts.append(f"Make sure these colors appear: {', '.join(include)}.")
     if keywords:
         parts.append(f"Visual cues: {', '.join(keywords[:10])}.")
     for key, label in _READER_FIELDS:
@@ -268,18 +568,73 @@ def generated_brief(board: dict[str, Any], analysis: dict[str, Any] | None,
     return " ".join(parts)
 
 
-def compose(board: dict[str, Any], analysis: dict[str, Any] | None = None) -> dict[str, Any]:
+def _brief_palette(analysis: dict[str, Any], palette: list[str]) -> list[str]:
+    """The palette the brief names: the analysis's first PALETTE_SIZE
+    colours, less the ones that don't go (cut first, as it always was, so a
+    removal never pulls a ninth colour in)."""
+    from services.moodboard_analysis import PALETTE_SIZE
+
+    top = set(_str_list(analysis.get("palette"))[:PALETTE_SIZE])
+    return [hex_value for hex_value in palette if hex_value in top]
+
+
+def generator_keywords(analysis: dict[str, Any] | None, notes_sent: bool) -> list[str]:
+    """The analysis's keywords a generator may get: all of them when notes
+    go, else only the ones Nebula measured (not the words lifted from the
+    notes, gap 5)."""
+    from services.moodboard_analysis import MEASURED_CUES
+
+    keywords = _str_list((analysis or {}).get("keywords"))
+    return keywords if notes_sent else [keyword for keyword in keywords if keyword in MEASURED_CUES]
+
+
+def generated_brief(board: dict[str, Any], analysis: dict[str, Any] | None,
+                    *, with_fields: bool = True) -> str:
+    """The brief Nebula writes from an analysis.
+
+    ``with_fields=False`` gives the analysis's own brief (what Analyze saves
+    as ``styleBrief``): every measured colour, its keywords and the board's
+    notes, as it always has. With the fields it is ``compose``'s
+    ``generatedStyleBrief``: the board's Direction and pins, minus colours
+    kept out or left out, with notes only when the board sends them.
+    """
+    if not isinstance(analysis, dict):
+        return ""
+    if with_fields:
+        return compose(board, analysis)["generatedStyleBrief"]
+    return _brief_text(board, analysis, direction="", include=[],
+                       palette=_str_list(analysis.get("palette")), accents=_str_list(analysis.get("accents")),
+                       keywords=_str_list(analysis.get("keywords")), notes=str(board.get("notes") or "").strip())
+
+
+def compose(board: dict[str, Any], analysis: dict[str, Any] | None = None, *,
+            send_notes: bool | None = None) -> dict[str, Any]:
     """Everything a generator needs from the board, as one object.
 
     ``analysis`` defaults to the board's saved one. ``styleBrief`` is the
     override when there is one, else the generated brief ("" until the board
     is analyzed). ``avoidPrompt`` is the sentence instruction-following models
-    get; ``negativePrompt`` fills a model's negative field.
+    get; ``negativePrompt`` fills a model's negative field. ``send_notes``
+    is a node's own choice (True/False); None follows the board's
+    ``sendNotes``.
+
+    ``palette``/``accents`` are what generators get. ``leftOut`` (colours
+    that don't go, each with ``reason``, ``reasons``, ``level``, ``why``:
+    check, choice or mode, and ``foundBy``), ``mayClash`` (still sent),
+    ``kept`` (Keep anyway), ``pinnedClashes`` and ``paletteClashes`` (a
+    whole-palette finding, such as a cast) say why.
     """
     if analysis is None:
         analysis = board.get("analysis") if isinstance(board.get("analysis"), dict) else None
     direction, avoid, pinned = board_fields(board)
-    generated = generated_brief(board, analysis)
+    mode, _choices, board_notes = board_options(board)
+    notes_sent = board_notes if send_notes is None else bool(send_notes)
+    colours = resolve_colours(board, analysis)
+    generated = "" if not isinstance(analysis, dict) else _brief_text(
+        board, analysis, direction=direction, include=pinned["include"],
+        palette=_brief_palette(analysis, colours["palette"]), accents=colours["accents"],
+        keywords=generator_keywords(analysis, notes_sent),
+        notes=str(board.get("notes") or "").strip() if notes_sent else "")
     override = board.get("briefOverride") if isinstance(board.get("briefOverride"), dict) else None
     override_text = str((override or {}).get("text") or "").strip()
     active = bool(override_text)
@@ -295,16 +650,86 @@ def compose(board: dict[str, Any], analysis: dict[str, Any] | None = None) -> di
         "avoidPrompt": f"Keep these out of the image: {', '.join(avoid_terms)}." if avoid_terms else "",
         "direction": direction,
         "pinnedColors": pinned,
-        # The board's colours as direction: kept-out colours removed.
-        "palette": without_excluded(_str_list((analysis or {}).get("palette")), pinned["exclude"]),
-        "accents": without_excluded(_str_list((analysis or {}).get("accents")), pinned["exclude"]),
+        # The board's colours as direction: kept-out and left-out colours removed.
+        "palette": colours["palette"],
+        "accents": colours["accents"],
+        "leftOut": colours["leftOut"],
+        "mayClash": colours["mayClash"],
+        "kept": colours["kept"],
+        "pinnedClashes": colours["pinnedClashes"],
+        "paletteClashes": colours["paletteClashes"],
+        "clashMode": mode,
+        "notesSent": notes_sent,
         "override": {"active": active, "stale": stale},
         "needsAnalysis": analysis is None,
     }
 
 
+def generator_analysis(board: dict[str, Any], analysis: dict[str, Any], brief: dict[str, Any]) -> dict[str, Any]:
+    """The analysis as a Moodboard node's bundle carries it: what a
+    generator (or an LLM node on an Any port) may read. Without the notes
+    unless ``brief`` sent them: keywords measured only, the summary without
+    its "Notes emphasize" tail, the taste profile rebuilt, no subject words
+    from the notes, image notes empty. Its colours are the brief's:
+    ``palette``, ``accents`` and ``colors`` hold only what generators get,
+    and each image's colours drop the ones near a colour left out or pinned
+    to keep out, so an LLM node reading the bundle can't put a left-out
+    colour back. The bundle's ``leftOut`` names what went, with why."""
+    from services.moodboard_analysis import _summary, _taste_profile
+
+    view = copy.deepcopy(analysis)
+    notes_sent = bool(brief.get("notesSent"))
+    notes = str(board.get("notes") or "").strip() if notes_sent else ""
+    mode = str(analysis.get("mode") or board.get("mode") or "look")
+    keywords = generator_keywords(analysis, notes_sent)
+    palette, accents = list(brief.get("palette") or []), list(brief.get("accents") or [])
+    count = len([img for img in board.get("images") or [] if isinstance(img, dict) and not img.get("excluded")])
+    view["keywords"] = keywords
+    view["summary"] = _summary(mode, count, palette, accents, notes)
+    view["tasteProfile"] = _taste_profile(mode, keywords, palette)
+    if not notes_sent:
+        view["subjectBias"] = []
+        view["images"] = [{**item, "notes": ""} if isinstance(item, dict) and "notes" in item else item
+                          for item in view.get("images") or []]
+    view["palette"], view["accents"] = palette, accents
+    sent = {("palette", h.lower()) for h in palette} | {("accent", h.lower()) for h in accents}
+    view["colors"] = [colour for colour in view.get("colors") or []
+                      if isinstance(colour, dict) and isinstance(colour.get("hex"), str)
+                      and ("accent" if colour.get("role") == "accent" else "palette", colour["hex"].lower()) in sent]
+    _, _, pinned = board_fields(board)
+    gone = _dedupe([*(str(item.get("hex")) for item in brief.get("leftOut") or []
+                      if isinstance(item, dict) and item.get("hex")), *pinned["exclude"]])
+    if gone:
+        view["images"] = [_without_colours(item, gone) for item in view.get("images") or []]
+    view["styleBrief"] = _brief_text(board, analysis, direction="", include=[],
+                                     palette=_brief_palette(analysis, palette), accents=accents,
+                                     keywords=keywords, notes=notes)
+    hints = view.get("providerHints") if isinstance(view.get("providerHints"), dict) else {}
+    if isinstance(hints.get("generic"), dict):
+        hints["generic"]["palette"] = palette
+        hints["generic"]["accents"] = accents
+    return view
+
+
+def _without_colours(image: Any, gone: list[str]) -> Any:
+    """An analysis image without its colours near any of ``gone``."""
+    if not isinstance(image, dict):
+        return image
+    item = dict(image)
+    for key in ("palette", "accents"):
+        if isinstance(item.get(key), list):
+            item[key] = without_excluded(_str_list(item[key]), gone)
+    if isinstance(item.get("colors"), list):
+        kept = set(without_excluded([c["hex"] for c in item["colors"]
+                                     if isinstance(c, dict) and isinstance(c.get("hex"), str)], gone))
+        item["colors"] = [c for c in item["colors"] if isinstance(c, dict) and c.get("hex") in kept]
+    return item
+
+
 def with_brief(board: Any) -> Any:
-    """A board as the API returns it: the stored board plus its composed ``brief``.
+    """A board as the API returns it: the stored board plus its composed
+    ``brief`` and the colour check it used (``colorCheck``: the saved one
+    at its basis, else the one run now; never saved here).
 
     A board file that isn't a board (edited by hand, or cut short) comes back
     as it is, and one whose brief can't be composed gets ``brief: None``, so
@@ -314,10 +739,13 @@ def with_brief(board: Any) -> Any:
         return board
     try:
         brief = compose(board)
+        check = current_colour_check(board)
     except Exception:  # noqa: BLE001 - one odd board must not break listing the rest
         logger.exception("Moodboard %s: brief not composed", board.get("id"))
-        brief = None
-    return {**board, "brief": brief}
+        return {**board, "brief": None}
+    mode, choices, send_notes = board_options(board)
+    return {**board, "clashMode": mode, "colorChoices": choices, "sendNotes": send_notes, "colorCheck": check,
+            "brief": brief}
 
 
 # -- reaching a generator ----------------------------------------------------
@@ -604,6 +1032,46 @@ def migrate_store(root: Path, backup_root: Path) -> dict[str, Any]:
         logger.warning(
             "Moodboard brief fields: migrated %d board(s), %d with moved negatives or an edited brief; "
             "backups and log in %s", len(report["migrated"]), len(moved), backup_dir)
+    return report
+
+
+def save_colour_checks(root: Path) -> dict[str, Any]:
+    """Save the colour check on every board file whose saved one is missing
+    or stale (a board saved before gap 18, or a ``LEXICON_VERSION`` bump),
+    so generations and API reads use the saved check instead of running it
+    each time. Only ``colorCheck`` is written: a cache of what the board
+    holds, so no backup. Boards in Recently deleted get one too. Running it
+    again does nothing."""
+    from services.asset_trash import RECORD_SUFFIX, is_trash_folder
+    from services.moodboard_store import _write_json
+
+    report: dict[str, Any] = {"saved": [], "skipped": []}
+    if not root.exists():
+        return report
+    for scope in sorted(p for p in root.iterdir() if p.is_dir()):
+        files = sorted(scope.glob("*.json"))
+        if is_trash_folder(scope):
+            files = [path for path in files if not path.name.endswith(RECORD_SUFFIX)]
+        for path in files:
+            try:
+                board = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                report["skipped"].append({"file": str(path), "reason": str(exc)})
+                continue
+            if not isinstance(board, dict):
+                continue
+            before = board.get("colorCheck")
+            refresh_colour_check(board)
+            if board.get("colorCheck") == before:
+                continue
+            try:
+                _write_json(path, board)
+            except OSError as exc:  # it is computed in memory on read until the next save
+                report["skipped"].append({"file": str(path), "reason": f"{type(exc).__name__}: {exc}"})
+                continue
+            report["saved"].append(str(path))
+    if report["saved"]:
+        logger.info("Moodboard colour check: saved on %d board(s)", len(report["saved"]))
     return report
 
 

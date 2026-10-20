@@ -49,6 +49,26 @@ What is left out, and why:
   Every other key of it, and every per-image key version 4 writes, is
   compared. Saved analyses are compared whole.
 
+Deliberate changes, each reviewed field by field against the old file
+before it was replaced (the review lists every path that moved):
+
+- 2026-10-19, gap 18 (Justin's P1-P4, contract 07 section 1.11). Notes
+  reach generators only on opt-in, so the generated brief loses its
+  "Notes:" sentence and the cues lifted from the notes; with no override
+  active that is the brief, the node's ``style_brief``, the provider hints
+  and both generators' prompts. The node's bundle carries ``notes`` and
+  ``images[].notes`` as "" and its ``analysis`` as the generator's view
+  (measured keywords only, ``summary`` and ``tasteProfile`` without notes,
+  ``subjectBias`` empty, and on ``v4_override_pinned`` its colour lists
+  without the kept-out ``#075a68``, as the brief's palette already was).
+  New keys: ``clashMode``, ``leftOut``, ``mayClash``, ``kept``,
+  ``pinnedClashes``, ``paletteClashes`` and ``notesSent`` on ``compose``,
+  the bundle and the CLI's brief; ``clashMode``, ``colorChoices``,
+  ``sendNotes`` and ``colorCheck`` on the CLI's board. No old board clashes,
+  so every list is empty. Unchanged: ``analysisIsCurrent``, ``sourceHash``,
+  ``briefBasis``, run notes, Krea style references, the brief's palette and
+  accents, negative and avoid prompts, and every hand-written override.
+
 The board images are copied into the test OUTPUT_ROOT at
 ``moodboard-golden/``, so the boards' ``/api/outputs/moodboard-golden/...``
 URLs resolve as real ones do.

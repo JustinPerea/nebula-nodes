@@ -758,3 +758,282 @@ body.app-slava-restraint .moodboard-image-colors__swatch {
 body.app-slava-restraint .moodboard-image-colors__item--accent .moodboard-image-colors__swatch {
   border-radius: 50%;
 }
+
+/* Gap 18: where the board's words clash with a measured colour
+   (MoodboardBrief.tsx BriefClashes), the clash setting behind Advanced, the
+   notes switch and a left-out swatch. Motion: the notes switch's thumb and
+   the Advanced options ride the same spring as the provider switcher
+   (k 500, c 36, about 1% overshoot over 320ms), and none under reduced
+   motion. */
+.moodboard-advanced,
+.moodboard-switch {
+  --moodboard-spring: linear(0, 0.079, 0.247, 0.434, 0.606, 0.744, 0.847, 0.919, 0.965, 0.992, 1.006, 1.013, 1.014, 1.012, 1.01, 1.007, 1);
+}
+
+body.app-slava-restraint .moodboard-clashes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+body.app-slava-restraint .moodboard-clashes__off {
+  margin: 0;
+  color: var(--sr-ink-meta);
+  font-size: 12px;
+}
+
+body.app-slava-restraint .moodboard-clashes__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+body.app-slava-restraint .moodboard-clashes__hint {
+  color: var(--sr-ink-faint);
+  font-size: 11px;
+}
+
+body.app-slava-restraint .moodboard-clashes__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+body.app-slava-restraint .moodboard-clash {
+  display: grid;
+  grid-template-columns: 14px auto auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--sr-edge);
+  border-radius: 3px;
+  padding: 4px 4px 4px 8px;
+  color: var(--sr-ink);
+  font-size: 12px;
+}
+
+/* A row that lands in a list (a colour kept, left out or flagged) enters on
+   the spring; leaving isn't animated (React drops the row at once). */
+.moodboard-clashes {
+  --moodboard-spring: linear(0, 0.079, 0.247, 0.434, 0.606, 0.744, 0.847, 0.919, 0.965, 0.992, 1.006, 1.013, 1.014, 1.012, 1.01, 1.007, 1);
+}
+
+body.app-slava-restraint .moodboard-clash {
+  animation: moodboard-advanced-in 320ms var(--moodboard-spring) both;
+  transform-origin: top left;
+}
+
+body.app-slava-restraint .moodboard-clash--conflict {
+  border-color: rgba(217, 164, 65, 0.5);
+}
+
+body.app-slava-restraint .moodboard-clash__palette {
+  width: 14px;
+  height: 14px;
+  border: 1px dashed var(--sr-edge-strong);
+  border-radius: 2px;
+}
+
+body.app-slava-restraint .moodboard-clash__hex {
+  font-variant-numeric: tabular-nums;
+}
+
+body.app-slava-restraint .moodboard-clash__role {
+  color: var(--sr-ink-faint);
+  font-size: 11px;
+}
+
+body.app-slava-restraint .moodboard-clash__reason {
+  min-width: 0;
+  color: var(--sr-ink-meta);
+  line-height: 1.35;
+}
+
+body.app-slava-restraint .moodboard-analysis .moodboard-clash__action,
+body.app-slava-restraint .moodboard-analysis .moodboard-clashes__all {
+  padding: 2px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+body.app-slava-restraint .moodboard-analysis .moodboard-clashes__all {
+  align-self: flex-start;
+  margin-top: 6px;
+}
+
+/* A measured colour the brief left out: still shown, dimmed and marked. */
+body.app-slava-restraint .moodboard-color--left-out .moodboard-color__swatch,
+body.app-slava-restraint .moodboard-palette__swatch.moodboard-color--left-out {
+  opacity: 0.4;
+  background-image: linear-gradient(135deg, transparent 46%, var(--sr-ink-meta) 46%, var(--sr-ink-meta) 54%, transparent 54%);
+}
+
+body.app-slava-restraint .moodboard-color--left-out .moodboard-color__hex {
+  color: var(--sr-ink-faint);
+  text-decoration: line-through;
+}
+
+body.app-slava-restraint .moodboard-color__flag {
+  color: #d9a441;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Advanced: the clash setting. */
+body.app-slava-restraint .moodboard-advanced {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+body.app-slava-restraint .moodboard-advanced__toggle {
+  align-self: flex-start;
+  border: none;
+  padding: 0;
+  background: none;
+  color: var(--sr-ink-meta);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .moodboard-advanced__toggle::before {
+  content: "";
+  display: inline-block;
+  width: 0;
+  height: 0;
+  margin-right: 6px;
+  border-left: 4px solid currentColor;
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  transition: transform 320ms var(--moodboard-spring);
+}
+
+body.app-slava-restraint .moodboard-advanced[data-open="true"] .moodboard-advanced__toggle::before {
+  transform: rotate(90deg);
+}
+
+body.app-slava-restraint .moodboard-advanced__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: moodboard-advanced-in 320ms var(--moodboard-spring) both;
+  transform-origin: top left;
+}
+
+@keyframes moodboard-advanced-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+body.app-slava-restraint .moodboard-advanced__title {
+  color: var(--sr-ink);
+  font-size: 12px;
+}
+
+body.app-slava-restraint .moodboard-advanced__option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 8px;
+  align-items: baseline;
+  color: var(--sr-ink);
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .moodboard-advanced__option input {
+  margin: 0;
+}
+
+body.app-slava-restraint .moodboard-advanced__default {
+  color: var(--sr-ink-faint);
+}
+
+body.app-slava-restraint .moodboard-advanced__hint {
+  grid-column: 2;
+  color: var(--sr-ink-meta);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+/* The notes switch under the Notes field. */
+body.app-slava-restraint .moodboard-switch {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+body.app-slava-restraint .moodboard-switch__control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  border: none;
+  padding: 0;
+  background: none;
+  color: var(--sr-ink);
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .moodboard-switch__track {
+  position: relative;
+  width: 26px;
+  height: 14px;
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: 7px;
+  background: var(--sr-canvas);
+  transition: background-color 160ms linear;
+}
+
+body.app-slava-restraint .moodboard-switch__thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sr-ink-meta);
+  transition: transform 320ms var(--moodboard-spring);
+}
+
+body.app-slava-restraint .moodboard-switch__control[aria-checked="true"] .moodboard-switch__track {
+  border-color: var(--sr-accent-border-strong, var(--sr-accent));
+  background: var(--sr-accent-soft, var(--sr-canvas));
+}
+
+body.app-slava-restraint .moodboard-switch__control[aria-checked="true"] .moodboard-switch__thumb {
+  background: var(--sr-accent);
+  transform: translateX(12px);
+}
+
+body.app-slava-restraint .moodboard-switch__control:focus-visible .moodboard-switch__track {
+  outline: var(--sr-focus-outline, 1px solid var(--sr-ink));
+  outline-offset: var(--sr-focus-offset, 2px);
+}
+
+body.app-slava-restraint .moodboard-switch__hint {
+  color: var(--sr-ink-faint);
+  font-size: 11px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .moodboard-advanced__toggle::before,
+  body.app-slava-restraint .moodboard-switch__track,
+  body.app-slava-restraint .moodboard-switch__thumb {
+    transition: none;
+  }
+  body.app-slava-restraint .moodboard-advanced__body,
+  body.app-slava-restraint .moodboard-clash {
+    animation: none;
+  }
+}

@@ -247,7 +247,7 @@
       ]
     ],
     "composed": {
-      "styleBrief": "quiet product shots. Use the Nebula moodboard 'Brand' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #eae3cc, #29252d, #282b2b, #789678, #ecdece, #1e285a, #f06e1e. Make sure these colors appear: #e8593c. Visual cues: palette-led, style consistency, visual language, warm, paper, accent. Notes: warm paper, one hot accent.",
+      "styleBrief": "quiet product shots. Use the Nebula moodboard 'Brand' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #eae3cc, #29252d, #282b2b, #789678, #ecdece, #1e285a, #f06e1e. Make sure these colors appear: #e8593c. Visual cues: palette-led, style consistency, visual language.",
       "negativePrompt": "blurry, low-detail artifacts, neon signage",
       "avoidPrompt": "Keep these out of the image: neon signage.",
       "palette": [
@@ -558,7 +558,7 @@
       ]
     ],
     "composed": {
-      "styleBrief": "Use the Nebula moodboard 'Busy' as subject direction at strength 0.90. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #ebe1cd, #be5f46, #28283e, #165ae6, #f06e1f, #ecdbd1, #eae7c9, #798f7b. Accent colors, used sparingly: #d91da1. Visual cues: palette-led, subject continuity, silhouette consistency, high color energy, many, colours. Notes: many colours.",
+      "styleBrief": "Use the Nebula moodboard 'Busy' as subject direction at strength 0.90. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #ebe1cd, #be5f46, #28283e, #165ae6, #f06e1f, #ecdbd1, #eae7c9, #798f7b. Accent colors, used sparingly: #d91da1. Visual cues: palette-led, subject continuity, silhouette consistency, high color energy.",
       "negativePrompt": "blurry, low-detail artifacts",
       "avoidPrompt": "Keep these out of the image: colors close to #1e285a.",
       "palette": [

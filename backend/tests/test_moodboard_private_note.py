@@ -98,8 +98,11 @@ def test_the_composed_brief_and_negative_prompt_never_carry_it(tmp_path, monkeyp
 @pytest.mark.asyncio
 async def test_the_moodboard_node_outputs_never_carry_it(tmp_path, monkeypatch):
     board = _board(tmp_path, monkeypatch)
+    # Notes sent (gap 18 sends none by default), so the image note is there
+    # beside the private one, which still never goes.
     result = await handle_moodboard_node(
-        GraphNode(id="n1", definitionId="nebula-moodboard", params={"moodboard": board["id"]}), {}, {})
+        GraphNode(id="n1", definitionId="nebula-moodboard",
+                  params={"moodboard": board["id"], "send_notes": "yes"}), {}, {})
     dumped = json.dumps(result)
     assert LABEL not in dumped
     assert "privateNote" not in dumped

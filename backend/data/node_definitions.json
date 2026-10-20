@@ -4902,6 +4902,27 @@
         "label": "Moodboard",
         "type": "moodboard",
         "required": true
+      },
+      {
+        "key": "send_notes",
+        "label": "Board notes to generators",
+        "type": "enum",
+        "required": false,
+        "default": "board",
+        "options": [
+          {
+            "label": "As the board says",
+            "value": "board"
+          },
+          {
+            "label": "Send",
+            "value": "yes"
+          },
+          {
+            "label": "Don't send",
+            "value": "no"
+          }
+        ]
       }
     ]
   },
