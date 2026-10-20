@@ -17,6 +17,7 @@ from ..client import NebulaClient
 from ..formatter import format_proposal, format_proposal_outcome
 # The plan builder is shared with `nebula apply` (cli/plan.py); re-exported here.
 from ..plan import BuildError, body_from_args, build_body  # noqa: F401
+from services.canvas_proposals import READY_NODES_CLI, readiness_warning
 
 POLL_SECONDS = 25.0
 
@@ -59,9 +60,13 @@ def outcome_code(view: dict[str, Any]) -> int:
     return EXIT_CLOSED
 
 
-def _report(view: dict[str, Any], timed_out: bool, timeout: float, *, as_json: bool, out: TextIO) -> int:
+def _report(view: dict[str, Any], timed_out: bool, timeout: float, *, as_json: bool, out: TextIO,
+            warning: str | None = None) -> int:
     if as_json:
-        print(json.dumps({"proposal": view, "timedOut": timed_out}, ensure_ascii=False), file=out)
+        # `propose --json --wait` prints only this: it keeps the readiness
+        # warning, so the agent learns why an accepted run failed.
+        print(json.dumps({"proposal": view, "timedOut": timed_out, **({"warning": warning} if warning else {})},
+                         ensure_ascii=False), file=out)
     elif timed_out:
         print(f"No decision yet after {timeout:g}s. Check again: nebula proposal {view.get('id')} --wait --timeout {timeout:g}", file=out)
     else:
@@ -85,6 +90,9 @@ def run_propose(
     response = client.propose(body, agent_name=args.agent_name)
     view = response.get("proposal") or {}
     warning = response.get("warning")
+    if warning:
+        # The backend names its HTTP route; a CLI user finds nodes with `nebula context`.
+        warning = readiness_warning(view.get("cost") or {}, lister=READY_NODES_CLI) or warning
     if args.json and not args.wait:
         print(json.dumps({"proposal": view, **({"warning": warning} if warning else {})},
                          ensure_ascii=False, indent=2), file=out)
@@ -97,7 +105,7 @@ def run_propose(
         return 0
     view, timed_out = wait_for_decision(client, view, timeout=args.timeout,
                                         agent_name=args.agent_name, clock=clock)
-    return _report(view, timed_out, args.timeout, as_json=args.json, out=out)
+    return _report(view, timed_out, args.timeout, as_json=args.json, out=out, warning=warning)
 
 
 def run_proposal(
