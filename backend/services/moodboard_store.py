@@ -168,6 +168,21 @@ def _find_moodboard_file(root: Path, moodboard_id: str) -> Path | None:
     return None
 
 
+def board_scopes(root: Path) -> list[Path]:
+    """The folders under the moodboard root that hold boards: each scope
+    (``_global`` and every project's) and the trash (``.trash``), whose
+    boards a restore brings back. Other dot folders are side files kept
+    beside the boards (``.notes``: Updates, services/agent_notes.py; later
+    ``.history`` and ``.runs``), never boards, so the start-up scans
+    (``migrate_store``, ``save_colour_checks``) never rewrite them."""
+    from services.asset_trash import TRASH_DIR
+
+    if not root.exists():
+        return []
+    return sorted(path for path in root.iterdir()
+                  if path.is_dir() and (not is_trash_folder(path) or path.name == TRASH_DIR))
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -820,6 +835,9 @@ class MoodboardStore:
         """Delete a trashed board for good. Only the person may (main.py)."""
         _validate_moodboard_id(moodboard_id)
         asset_trash.purge(_moodboard_root(), moodboard_id)
+        # Its Updates go with it (services/agent_notes.py); Recently deleted
+        # kept them, since a restore brings the same id back.
+        (_moodboard_root() / ".notes" / f"{moodboard_id}.json").unlink(missing_ok=True)
 
 
 def migrate_brief_fields() -> dict[str, Any]:

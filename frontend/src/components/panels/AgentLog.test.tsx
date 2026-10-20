@@ -219,3 +219,36 @@ describe('a dragged log (stored position)', () => {
     expect(notice.style.top).toBe('auto');
   });
 });
+
+// PR9a: "See all actions →" at the foot of the Updates list opens the log,
+// so its expanded state lives in uiStore (agentLogOpen / openAgentLog).
+describe('the expanded state lives in uiStore', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    useUIStore.setState({ agentLogEnabled: true, agentLogOpen: false });
+    useAgentLogStore.getState().clear();
+  });
+
+  it('expands when openAgentLog is called from elsewhere', () => {
+    render(<AgentLog />);
+    expect(screen.getByRole('button', { name: /agent log/i, expanded: false })).not.toBeNull();
+    act(() => { useUIStore.getState().openAgentLog(); });
+    expect(screen.getByRole('button', { name: /agent log/i, expanded: true })).not.toBeNull();
+    expect(document.body.classList.contains('agent-log-open')).toBe(true);
+  });
+
+  it('writes its own toggle to the store', () => {
+    render(<AgentLog />);
+    fireEvent.click(screen.getByRole('button', { name: /agent log/i, expanded: false }));
+    expect(useUIStore.getState().agentLogOpen).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: /agent log/i, expanded: true }));
+    expect(useUIStore.getState().agentLogOpen).toBe(false);
+  });
+
+  it('collapses again once it unmounts, as it did with local state', () => {
+    const { unmount } = render(<AgentLog />);
+    act(() => { useUIStore.getState().openAgentLog(); });
+    unmount();
+    expect(useUIStore.getState().agentLogOpen).toBe(false);
+  });
+});

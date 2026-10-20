@@ -1029,14 +1029,16 @@ def migrate_store(root: Path, backup_root: Path) -> dict[str, Any]:
     are not touched, so running it again does nothing.
     """
     from services.asset_trash import RECORD_SUFFIX, is_trash_folder
-    from services.moodboard_store import _write_json
+    from services.moodboard_store import _write_json, board_scopes
 
     report: dict[str, Any] = {"migrated": [], "skipped": [], "backupDir": None}
     if not root.exists():
         return report
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     backup_dir = backup_root / f"brief-fields-{stamp}"
-    for scope in sorted(p for p in root.iterdir() if p.is_dir()):
+    # The board folders and the trash only: other dot folders hold side files
+    # (Updates, later the word history), which are not boards.
+    for scope in board_scopes(root):
         files = sorted(scope.glob("*.json"))
         if is_trash_folder(scope):
             # Boards in Recently deleted migrate too, so a restore brings one
@@ -1092,12 +1094,12 @@ def save_colour_checks(root: Path) -> dict[str, Any]:
     holds, so no backup. Boards in Recently deleted get one too. Running it
     again does nothing."""
     from services.asset_trash import RECORD_SUFFIX, is_trash_folder
-    from services.moodboard_store import _write_json
+    from services.moodboard_store import _write_json, board_scopes
 
     report: dict[str, Any] = {"saved": [], "skipped": []}
     if not root.exists():
         return report
-    for scope in sorted(p for p in root.iterdir() if p.is_dir()):
+    for scope in board_scopes(root):
         files = sorted(scope.glob("*.json"))
         if is_trash_folder(scope):
             files = [path for path in files if not path.name.endswith(RECORD_SUFFIX)]

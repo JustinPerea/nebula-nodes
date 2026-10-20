@@ -34,7 +34,7 @@ import { PaperSourceNode } from './nodes/PaperSourceNode';
 import { BatchNode } from './nodes/BatchNode';
 import { TypedEdge } from './edges/TypedEdge';
 import { ContextMenu } from './ContextMenu';
-import { ConnectionPopup } from './DeferredPanels';
+import { AgentNoteOutlines, ConnectionPopup } from './DeferredPanels';
 import { SelectionToolbar } from './SelectionToolbar';
 import { CanvasNavigation } from './CanvasNavigation';
 import { AgentCursorLayer } from './canvas/AgentCursorLayer';
@@ -801,6 +801,7 @@ export function Canvas() {
         <CanvasViewReporter />
         <ArrangeController />
         <AgentCursorLayer />
+        <AgentNoteOutlines />
         <PinLayer />
         <ProposalLayer />
         <ProposalBar />

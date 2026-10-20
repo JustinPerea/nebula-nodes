@@ -89,6 +89,10 @@ EVENT_KINDS = frozenset({
     "board.sorted",
     "board.arranged",
     "board.suggested",
+    # Updates (services/agent_notes.py): one event per update an agent or
+    # Nebula posts, data {surface, boardId?, noteId, about, refs, text}.
+    # Marking read and dismissing aren't journaled.
+    "note.posted",
 })
 EVENT_GROUPS = frozenset(kind.split(".", 1)[0] for kind in EVENT_KINDS)
 
