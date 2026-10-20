@@ -85,6 +85,16 @@ export interface StoredAssetChangedEvent {
   undo?: { ops: Array<Record<string, unknown>> } | null;
 }
 
+/** The saved-project list changed: a project was made, opened, saved,
+ *  renamed, given a cover, deleted, restored or deleted for good, by anyone
+ *  (backend main.py _broadcast_projects_changed). Projects lists again. */
+export interface ProjectsChangedEvent {
+  type: 'projectsChanged';
+  change: 'created' | 'opened' | 'saved' | 'renamed' | 'cover' | 'deleted' | 'restored' | 'purged' | string;
+  /** Null when several went at once (emptying Recently deleted). */
+  projectId: string | null;
+}
+
 /** The active project's pins, sent after graphSync and on every pin change. */
 export interface CanvasPinsEvent {
   type: 'canvasPins';
@@ -120,6 +130,16 @@ export interface ProposalPort {
   dataType: string;
 }
 
+/** A node a proposal's run reads that can't run here: no key, no Krea sign-in, a route that can't take it. */
+export interface ProposalNotReady {
+  ref: string;
+  /** The canvas node's id; null for a node the proposal adds. */
+  nodeId: string | null;
+  name: string;
+  /** "needs OPENAI_API_KEY in Settings > Providers" (node_readiness.instance_missing). */
+  missing: string;
+}
+
 /** An agent's proposed change (backend services/canvas_proposals.ProposalBook.view). */
 export interface ProposalView {
   id: string;
@@ -151,7 +171,10 @@ export interface ProposalView {
     estimate: ProposalEstimate | null;
     upTo: boolean;
     providers: string[];
-    nodes: Array<ProposalCost & { ref: string; nodeId: string | null }>;
+    nodes: Array<ProposalCost & { ref: string; nodeId: string | null; missing?: string }>;
+    /** Run nodes that can't run here as set up, when the proposal was made
+     * (backend main._not_ready_nodes, in find_nodes' words). Accept still runs. */
+    notReady?: ProposalNotReady[];
     note: string;
   };
   references: string[];
@@ -252,6 +275,7 @@ export type ExecutionEvent = (
   | AgentPresenceEvent
   | CanvasPinsEvent
   | StoredAssetChangedEvent
+  | ProjectsChangedEvent
   | ProposalOpenedEvent
   | ProposalSyncEvent
   | ProposalClosedEvent

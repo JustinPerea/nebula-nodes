@@ -358,12 +358,17 @@ def cost_for(
 
 def summarize_cost(
     entries: list[dict[str, Any]], *, up_to: bool, estimate: dict[str, Any] | None = None,
+    not_ready: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """The proposal's run set: each entry is {ref, nodeId, kind, provider, label, price}.
+    """The proposal's run set: each entry is {ref, nodeId, kind, provider, label, price},
+    plus `missing` when that node can't run here as set up.
 
     ``estimate`` is ``model_pricing.estimate_run`` output keyed by the same
     refs; it becomes {currency, low, high, open, unpriced, plan, plus}, or
-    None when no node in the run has a list price."""
+    None when no node in the run has a list price. ``not_ready`` lists every
+    node the run reads that can't run here, cached ancestors included
+    ([{ref, nodeId, name, missing}], main._not_ready_nodes), read when the
+    proposal was made."""
     paid = sum(1 for entry in entries if entry.get("kind") == "paid")
     providers = sorted({str(entry["provider"]) for entry in entries if entry.get("kind") == "paid" and entry.get("provider")})
     summary_estimate = None
@@ -384,8 +389,31 @@ def summarize_cost(
         "upTo": up_to,
         "providers": providers,
         "nodes": entries,
+        "notReady": list(not_ready or []),
         "note": COST_NOTE,
     }
+
+
+def readiness_warning(cost: Mapping[str, Any]) -> str | None:
+    """One paragraph for the agent naming the run's nodes that can't run here, or None.
+
+    propose_change and `nebula propose` show it, so the agent can tell the
+    person what to set up, or propose a model that runs here, before Accept."""
+    rows = [row for row in cost.get("notReady") or [] if isinstance(row, Mapping)]
+    if not rows:
+        return None
+    lines = []
+    for row in rows[:6]:
+        label = str(row.get("ref") or row.get("nodeId") or "?")
+        need = str(row.get("missing") or "can't run here")
+        name = str(row.get("name") or "")
+        # Route messages already start with the node's name.
+        lines.append(f"{label}: {need}" if name and need.startswith(name) else f"{label} ({name}) {need}")
+    more = f" and {len(rows) - 6} more" if len(rows) > 6 else ""
+    count = f"{len(rows)} node{'s' if len(rows) != 1 else ''}"
+    return (f"If the person accepts, the run fails: {count} can't run here as set up. "
+            f"{'; '.join(lines)}{more}. Tell the person what to set up, or propose a node that runs here "
+            "(find_nodes lists them).")
 
 
 # -- placement ----------------------------------------------------------------

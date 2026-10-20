@@ -44,6 +44,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@xyflow/react', () => ({
   useReactFlow: () => ({ fitView: mocks.fit, zoomIn: mocks.zoomIn, zoomOut: mocks.zoomOut, zoomTo: mocks.zoomTo }),
   useStore: <T,>(selector: (state: typeof mocks.flow) => T) => selector(mocks.flow),
+  // Fit view reads the canvas size to frame open proposals' ghosts (useFitCanvasView).
+  useStoreApi: () => ({ getState: () => ({ width: 1280, height: 800, minZoom: 0.1, maxZoom: 2 }) }),
 }));
 vi.mock('../../src/store/graphStore', async () => {
   const { create } = await import('zustand');
