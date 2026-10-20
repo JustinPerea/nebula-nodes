@@ -34,7 +34,7 @@ import { PaperSourceNode } from './nodes/PaperSourceNode';
 import { BatchNode } from './nodes/BatchNode';
 import { TypedEdge } from './edges/TypedEdge';
 import { ContextMenu } from './ContextMenu';
-import { ConnectionPopup } from './ConnectionPopup';
+import { ConnectionPopup } from './DeferredPanels';
 import { SelectionToolbar } from './SelectionToolbar';
 import { CanvasNavigation } from './CanvasNavigation';
 import { AgentCursorLayer } from './canvas/AgentCursorLayer';
@@ -50,6 +50,7 @@ import { CHARACTER_DRAG_MIME, MOODBOARD_DRAG_MIME } from '../lib/dragMime';
 import { apiFetch } from '../lib/backend';
 import { CANVAS_INTERACTION_PROPS } from '../lib/canvasNavigation';
 import { CANVAS_FIT_DURATION, CANVAS_ZOOM_DURATION, computeCanvasFitPadding } from '../lib/canvasFit';
+import { useFitCanvasView } from '../hooks/useFitCanvasView';
 import { CANVAS_LOD_ZOOM } from '../lib/canvasOverview';
 import { isCanvasShortcutTarget } from '../lib/canvasShortcutScope';
 import { boundingRect, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
@@ -375,6 +376,8 @@ export function Canvas() {
 
   const reactFlow = useReactFlow();
   const { fitView, screenToFlowPosition, zoomIn, zoomOut, zoomTo } = reactFlow;
+  // Fit view includes an open proposal's ghosts.
+  const fitCanvasView = useFitCanvasView();
 
   // Dev-only window bridge for scripted UI capture (the nebula-nodes-visuals
   // skill's capture template). Exposes React Flow viewport controls
@@ -574,16 +577,17 @@ export function Canvas() {
       const moodboardPayload = event.dataTransfer.getData(MOODBOARD_DRAG_MIME);
       if (moodboardPayload) {
         try {
-          const { id, name, thumbnail, imageCount, mode } = JSON.parse(moodboardPayload) as {
+          const { id, name, thumbnail, imageCount, setAsideCount, mode } = JSON.parse(moodboardPayload) as {
             id: string;
             name?: string;
             thumbnail?: string;
             imageCount?: number;
+            setAsideCount?: number;
             mode?: string;
           };
           if (!id) return;
           const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-          void useGraphStore.getState().addMoodboardNode(id, position, { name, thumbnail, imageCount, mode });
+          void useGraphStore.getState().addMoodboardNode(id, position, { name, thumbnail, imageCount, setAsideCount, mode });
         } catch (err) {
           console.error('[nebula] moodboard drop failed to parse payload:', err);
         }
@@ -660,7 +664,7 @@ export function Canvas() {
       // because Shift turns 1 and 0 into ! and ) on most layouts.
       if (event.shiftKey && !isCtrlOrCmd && !event.altKey && (event.code === 'Digit1' || event.code === 'Digit0')) {
         event.preventDefault();
-        if (event.code === 'Digit1') void fitView({ padding: computeCanvasFitPadding(), duration: CANVAS_FIT_DURATION });
+        if (event.code === 'Digit1') fitCanvasView();
         else void zoomTo(1, { duration: CANVAS_ZOOM_DURATION });
         return;
       }
@@ -736,7 +740,7 @@ export function Canvas() {
         return;
       }
     },
-    [executeGraph, fitView, isExecuting, reactFlow, screenToFlowPosition, zoomIn, zoomOut, zoomTo]
+    [executeGraph, fitCanvasView, fitView, isExecuting, reactFlow, screenToFlowPosition, zoomIn, zoomOut, zoomTo]
   );
 
   useEffect(() => {

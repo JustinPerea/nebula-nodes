@@ -17,7 +17,8 @@ Negatives are defects only ("blurry, low-detail artifacts") plus the person's
 Avoid list; content intent goes into the brief as positive sentences.
 
 ``apply_to_generator`` is the one place a board reaches a generator's request
-(the engine calls it before any handler): the brief joins the prompt, the
+(the engine calls it before any handler). A board at strength 0 is dropped
+first, as if it weren't wired (Q36 a). Otherwise the brief joins the prompt, the
 negatives fill a ``negative_prompt`` field when the model has one, and the
 Avoid list joins the prompt only for instruction-following models (GPT Image,
 Nano Banana, Krea 2). Diffusion-style models read "no X" as "X", so they never
@@ -122,6 +123,11 @@ _INSTRUCTION_FOLLOWING_PREFIXES = (
 # handler that sends wired ports by name (Krea's catalog routes) would
 # otherwise send the bundle to the provider.
 _HANDLER_READS_BOARD = frozenset({"krea-2-generate"})
+
+# A board at strength 0 is off for every node it's wired into, text included
+# (Q36 a, Justin 2026-10-20): no brief, Avoid, negatives or images. The
+# node's "Send board images" switch is how to keep the text without images.
+BOARD_STRENGTH_ZERO_NOTE = "Board strength is 0: board not sent"
 
 _HEX_RE = re.compile(r"^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 
@@ -786,6 +792,40 @@ def board_bundles(inputs: dict[str, Any]) -> list[dict[str, Any]]:
             if isinstance(item, dict) and str(item.get("kind") or "") == "nebula_moodboard"]
 
 
+def board_is_off(bundle: dict[str, Any]) -> bool:
+    """Whether a wired board is at strength 0. A missing or unreadable
+    strength reads as the board default (0.7), as Krea 2's handler reads it."""
+    raw = bundle.get("strength")
+    if raw is None or raw == "" or isinstance(raw, bool):
+        return False
+    try:
+        return float(raw) <= 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _without_off_boards(inputs: dict[str, Any]) -> dict[str, Any]:
+    """``inputs`` with every strength-0 board taken out of the ``moodboard``
+    port, and the port dropped if nothing is left, so the node runs as it
+    would with only the other boards wired (or none)."""
+    from models.events import add_run_note
+    from models.graph import PortValueDict
+
+    port = inputs.get("moodboard")
+    value = getattr(port, "value", None)
+    items = value if isinstance(value, list) else [value]
+    off = [item for item in items if isinstance(item, dict)
+           and str(item.get("kind") or "") == "nebula_moodboard" and board_is_off(item)]
+    if not off:
+        return inputs
+    add_run_note(BOARD_STRENGTH_ZERO_NOTE)
+    kept = [item for item in items if not any(item is board for board in off)]
+    rest = {key: item for key, item in inputs.items() if key != "moodboard"}
+    if kept:
+        rest["moodboard"] = PortValueDict(type=port.type, value=kept if isinstance(value, list) else kept[0])
+    return rest
+
+
 def apply_to_generator(
     definition_id: str,
     definition: dict[str, Any] | None,
@@ -796,12 +836,15 @@ def apply_to_generator(
 
     Returns new ``inputs`` and the params to use for this call (the node's own
     params are left alone, so a saved recipe doesn't collect the board's
-    negatives). The Moodboard port itself is not passed on unless the handler
-    reads the board (``_HANDLER_READS_BOARD``). A node with no prompt, or no
-    board wired, keeps its prompt and params as they are.
+    negatives). A board at strength 0 is taken out first, with the run note
+    ``BOARD_STRENGTH_ZERO_NOTE`` (Q36 a), so none of its text, negatives or
+    images reach the node. The Moodboard port itself is not passed on unless
+    the handler reads the board (``_HANDLER_READS_BOARD``). A node with no
+    prompt, or no board wired, keeps its prompt and params as they are.
     """
     from models.graph import PortValueDict
 
+    inputs = _without_off_boards(inputs)
     bundles = board_bundles(inputs)
     prompt_port = inputs.get("prompt")
     prompt = getattr(prompt_port, "value", None)

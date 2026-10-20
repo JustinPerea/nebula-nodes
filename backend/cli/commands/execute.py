@@ -28,6 +28,9 @@ def _report(result: dict[str, Any]) -> int:
         return EXIT_RUNNING
     if status == "failed":
         print(f"error: run {run_id} failed: {result.get('error', 'unknown error')}", file=sys.stderr)
+        if result.get("errors") or result.get("results"):
+            # Each node's message (also on its card), and what the rest made.
+            print(format_run_results({**result, "duration": result.get("duration")}))
         return 1
     if status == "cancelled":
         made = format_run_results({**result, "duration": None})

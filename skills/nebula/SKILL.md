@@ -33,7 +33,8 @@ can't connect, ask the person to start Nebula; don't start a second backend
 yourself.
 
 Set `NEBULA_AGENT_NAME` (for example `export NEBULA_AGENT_NAME="Claude Code"`)
-so your cursor and edits show under your name. `nebula apply` and
+so your cursor and edits show under your name (the person's Agent log lists
+each of your edits, runs and moodboard changes under it too). `nebula apply` and
 `nebula propose` need it (or `--as NAME`).
 
 ## Start here
@@ -105,6 +106,12 @@ nebula status
 Runs spend the person's own provider credits. A run over their limits, or
 with a node that has no list price, is refused: send it as a proposal.
 
+A run where any node failed exits 1 and prints each node's error (a missing
+key refuses the whole run before anything is called or spent). The card on
+the canvas shows the same error. `nebula look` prints a failed node's error
+under it, and `nebula path` says why there is no file. Tell the person what
+to set up, or pick a node `nebula context` lists.
+
 ## Propose instead of doing
 
 Use `nebula propose` for paid runs over the limits and for reworking the
@@ -115,6 +122,10 @@ person accepts or rejects it on the canvas; you can't accept it.
 nebula propose --note "Upscale the wide take" \
   --add +up=seedvr2-upscale --wire n9:image +up:image --run +up --wait
 ```
+
+If a node the run needs can't run here, `nebula propose` prints a
+`warning:` line naming it and why; Accept would fail at that node. Say so to
+the person, or propose a node that runs here instead.
 
 `nebula proposals` lists open ones; `nebula proposal withdraw <id>` takes one
 back.
@@ -190,14 +201,19 @@ nebula moodboard delete <board>
   share out its strength: each goes at strength x its weight / the weights
   of the images sent, so they add up to the board's strength (one image
   goes at the full strength), and your own wired references keep theirs on
-  top. Strength 0 sends no board images to Krea 2. The run note lists what
-  went. `--set-aside N` keeps an image on
+  top. The run note lists what went. Strength 0 turns the board off for
+  every node it's wired into, text included: no brief, Avoid, negatives or
+  images, and the run note "Board strength is 0: board not sent". For
+  text without images, use the node's "Send board images" switch instead
+  (not in this version yet; until then GPT Image, Nano Banana, FLUX and
+  the other content-slot nodes get only the text anyway). `--set-aside N` keeps an image on
   the board with its weight, still read for its colours, but it never steers
   (no palette, brief, cues or representative image, and no generator gets
   it); `--use N` uses it again (`--exclude`/`--include` are the old names).
   Weight 0 shows as set aside too, and `--use` on a weight-0 image gives it
   the weight its card shows unless you pass `--weight`. `show` marks them
-  "set aside"; `--json` has `setAside` on each image. The analysis lists an
+  "set aside" and `list` counts them ("5 images, 1 set aside"); `--json`
+  has `setAside` on each image. The analysis lists an
   image switched aside with `setAside: true` and its colours; a weight-0
   image keeps its ordinary entry there. `--remove` takes
   an image off the board (its file stays).

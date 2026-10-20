@@ -21,6 +21,8 @@ vi.mock('@xyflow/react', async (importOriginal) => {
     }),
     useStore: <T,>(selector: (state: { transform: number[]; minZoom: number; maxZoom: number }) => T) =>
       selector({ transform: [0, 0, 1], minZoom: 0.1, maxZoom: 4 }),
+    // Fit view reads the canvas size to frame open proposals' ghosts (useFitCanvasView).
+    useStoreApi: () => ({ getState: () => ({ width: 1280, height: 800, minZoom: 0.1, maxZoom: 2 }) }),
   };
 });
 

@@ -20,7 +20,12 @@ const flow = vi.hoisted(() => ({
   onSync: null as ((event: ExecutionEvent) => void) | null,
 }));
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(),
-  subscribe: vi.fn((handler: (event: ExecutionEvent) => void) => { flow.onSync = handler; }) } }));
+  subscribe: vi.fn((handler: (event: ExecutionEvent) => void) => {
+    // Every subscriber hears each event, as with the real socket (the graph
+    // store and, since Fit view frames proposal ghosts, the proposals store).
+    const earlier = flow.onSync;
+    flow.onSync = earlier ? (event) => { earlier(event); handler(event); } : handler;
+  }) } }));
 vi.mock('@xyflow/react', async (importOriginal) => ({
   ...await importOriginal<typeof import('@xyflow/react')>(),
   ReactFlow: (props: CanvasCallbacks & { children: React.ReactNode }) => {
@@ -34,6 +39,8 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
     screenToFlowPosition: (point: unknown) => point }),
   useInternalNode: (id: string) => flow.internalNodes.get(id),
   useStore: () => 1,
+  // Fit view reads the canvas size to frame open proposals' ghosts (useFitCanvasView).
+  useStoreApi: () => ({ getState: () => ({ width: 1280, height: 800, minZoom: 0.1, maxZoom: 2 }) }),
 }));
 vi.mock('../src/components/SelectionToolbar', () => ({ SelectionToolbar: () => null }));
 vi.mock('../src/components/CanvasNavigation', () => ({ CanvasNavigation: () => null }));

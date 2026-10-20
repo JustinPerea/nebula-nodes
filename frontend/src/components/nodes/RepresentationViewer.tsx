@@ -15,7 +15,7 @@ import type {
 import type { PortDataType, PortValue } from '../../types';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { parseRepresentation, type ParsedRepresentation } from '../../lib/representationViewerRegistry';
-import { WorldPreview } from './WorldPreview';
+import { WorldPreview } from './DeferredViewers';
 import '../../styles/spatial-preview.css';
 
 interface ViewerOptions {

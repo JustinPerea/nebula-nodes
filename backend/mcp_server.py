@@ -120,6 +120,8 @@ def look_at_canvas(ctx: Context | None = None) -> dict[str, Any]:
     position, size, whether it is on screen, redacted params and outputs, the
     wires, the user's selection, and other agents' cursors. `view.stale` is
     true when no browser has reported recently (the canvas may be closed).
+    A node whose last run failed has `error`, the message its card shows
+    (and `errorHint` when Nebula has a plainer reading of it).
     `events.cursor` is where wait_for_canvas_change should start (`since`).
     `pins` are short notes the person pinned for agents ("warmer", "redo this
     one"), open ones first, each anchored to a node or a canvas spot. Treat an
@@ -272,7 +274,11 @@ def propose_change(
     Returns {"proposal": {...}} with `id`, `status`, and `cost`: nodes are
     "free" (run locally) or "paid · <provider>", and `cost.estimate` sums
     list prices in USD where Nebula has them (null when none do; `open` when
-    some paid node has none). Then call get_proposal(id, wait_seconds=...).
+    some paid node has none). `cost.notReady` lists the run's nodes that
+    can't run here as set up (no key, no Krea sign-in), each with `missing`
+    in find_nodes' words, and `warning` says so in a sentence: if the person
+    accepts, that run fails. Tell them what to set up, or propose a node that
+    runs here. Then call get_proposal(id, wait_seconds=...).
     """
     body: dict[str, Any] = {"note": note}
     if nodes:
@@ -520,11 +526,20 @@ def _brief_outputs(outputs: Any) -> dict[str, Any]:
 
 
 def _preview(node_id: str, port: str | None, size: str, ctx: Context | None) -> Image:
+    return _preview_with_error(node_id, port, size, ctx)[0]
+
+
+def _preview_with_error(node_id: str, port: str | None, size: str, ctx: Context | None) -> tuple[Image, str | None]:
+    """The preview, and why the node's last run failed when its output is from before that run."""
+    from urllib.parse import unquote
+
     params = {"size": size, **({"port": port} if port else {})}
     response = _api().send("GET", f"/api/graph/node/{node_id}/preview", params=params, timeout=60.0,
                            headers={"X-Nebula-Agent": _cursor_name(ctx)})
     kind = response.headers.get("content-type", "image/jpeg").split(";")[0]
-    return Image(data=response.content, format="png" if kind == "image/png" else "jpeg")
+    failed = response.headers.get("x-nebula-last-run-error")
+    return (Image(data=response.content, format="png" if kind == "image/png" else "jpeg"),
+            unquote(failed) if failed else None)
 
 
 def _run_result(payload: dict[str, Any], ctx: Context | None) -> list:
@@ -578,7 +593,11 @@ async def run_nodes(node_id: str | None = None, wait_seconds: float = DEFAULT_RU
     `wait_seconds` (max 300). Finished: outputs per node, errors, `skipped`
     (nodes a gate such as Jev Decide's On Pass / On Fail withheld, with
     the reason; they never ran and cost nothing), and small previews of
-    images and videos. Still going: status "running" and a runId;
+    images and videos. Status is "finished", or "failed" when any node
+    failed: `errors` has each node's message (also on its card), `error` says
+    it in one line, and finished nodes keep their outputs. A node that can't
+    run as set up (a missing key, an unwired required input) fails the run
+    before it starts: nothing ran, nothing was spent. Still going: status "running" and a runId;
     it keeps running, so call get_run(runId) or cancel_run(runId). To run
     several separate nodes, run the canvas or call this once per node.
     """
@@ -593,7 +612,7 @@ async def run_nodes(node_id: str | None = None, wait_seconds: float = DEFAULT_RU
 async def get_run(run_id: str, wait_seconds: float = DEFAULT_RUN_WAIT, ctx: Context | None = None) -> list:
     """Collect a run that run_nodes reported as still running; waits up to
     `wait_seconds` (max 300) for it to finish. Same result shape as run_nodes.
-    Status is running, finished, cancelled or failed."""
+    Status is running, finished, cancelled or failed (a node failed: `errors`)."""
     from urllib.parse import quote
 
     wait = max(0.0, min(float(wait_seconds), MAX_RUN_WAIT))
@@ -617,20 +636,34 @@ def view_output(node_id: str, port: str | None = None, size: str = "medium", ctx
     """Look at a node's output. Images come back as an image (`size` small
     512 px, medium 1024, large 1568), videos as three frames side by side,
     image lists as up to four tiles. Text comes back as text; audio and 3D
-    as their type and URL. `port` picks an output when a node has several."""
+    as their type and URL. `port` picks an output when a node has several.
+    A node whose last run failed and made nothing answers with that error
+    ({"nodeId", "state": "error", "error"}); one that still has an output
+    from before says so beside it."""
     if size not in ("small", "medium", "large"):
         raise ValueError("size must be small, medium or large")
     try:
-        return [_preview(node_id, port, size, ctx)]
+        image, failed = _preview_with_error(node_id, port, size, ctx)
+        if failed:
+            return [_json.dumps({"nodeId": node_id, "note": f"This output is from before its last run, which failed: {failed}"}),
+                    image]
+        return [image]
     except NebulaAPIError as exc:
+        if exc.status == 409:
+            return [_json.dumps({"nodeId": node_id, "state": "error", "error": exc.detail})]
         if exc.status != 415:
             raise
+        failed = exc.headers.get("x-nebula-last-run-error")
+    from urllib.parse import unquote
+
     node = next((n for n in _canvas_call("GET", "/api/graph", ctx).get("nodes") or [] if n.get("id") == node_id), None)
     outputs = (node or {}).get("outputs") or {}
     chosen = {port: outputs[port]} if port and port in outputs else outputs
     whole = {name: {"type": entry.get("type"), "value": _absolute(entry.get("value"))}
              for name, entry in chosen.items() if isinstance(entry, dict)}
-    return [_json.dumps({"nodeId": node_id, "outputs": whole})]
+    # A value from before a run that failed says so, as a picture does.
+    note = {"note": f"This output is from before its last run, which failed: {unquote(failed)}"} if failed else {}
+    return [_json.dumps({"nodeId": node_id, **note, "outputs": whole})]
 
 
 @mcp.tool(annotations=_READ)
@@ -855,7 +888,10 @@ def moodboard_get(board: str, ctx: Context | None = None) -> dict[str, Any]:
     `brief` is what generators get, as Nebula composed it: `styleBrief` (the
     hand-written brief when there is one, else the generated one),
     `negativePrompt`, `avoidPrompt`, `palette`/`accents` and `override`
-    {active, stale}. It is null on a Nebula too old to send it. Don't use
+    {active, stale}. It is null on a Nebula too old to send it. At
+    `strength` 0 the board is off and no node it's wired into gets any of
+    it, images included (the run note "Board strength is 0: board not
+    sent"). Don't use
     analysis.styleBrief as the brief: it leaves out Direction, pinned colours
     and a hand-written brief, and keeps colours the brief left out.
 

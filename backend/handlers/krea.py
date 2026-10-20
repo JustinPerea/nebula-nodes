@@ -15,6 +15,7 @@ from models.events import ExecutionEvent, ProgressEvent, add_run_note
 from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.moodboard_analysis import rank_representative_images
+from services.moodboard_brief import BOARD_STRENGTH_ZERO_NOTE
 from services.moodboard_weights import native_strengths
 from services.cancellation import schedule_detached_cancel
 from services.output import OUTPUT_ROOT, get_run_dir
@@ -369,7 +370,6 @@ def _native_moodboard_values(inputs: dict[str, PortValueDict]) -> list[dict[str,
 # Krea 2's ``image_style_references[].strength``: 0..1 in the schema Krea's
 # gateway enforces (krea-2-medium.md, krea-2-large.md), as the clamp guards.
 KREA2_STRENGTH_RANGE = (0.0, 1.0)
-BOARD_STRENGTH_ZERO_NOTE = "Board strength is 0: no board images sent"
 
 
 def _board_label(moodboard: dict[str, Any]) -> str:
@@ -417,7 +417,8 @@ async def _collect_native_moodboard_style_references(
     go (after the slot cap and dedupe), at 4 decimals adding up to exactly
     ``S``. ``wired`` (the person's own references, which took their slots
     first) keep their strengths and are named in the run note. A board at
-    strength 0 sends nothing (Q32 a)."""
+    strength 0 sends nothing (Q32 a); the engine drops it before this runs,
+    text included (Q36 a, ``services/moodboard_brief.apply_to_generator``)."""
     if remaining_slots <= 0:
         return []
 
@@ -430,6 +431,8 @@ async def _collect_native_moodboard_style_references(
             break
         strength = _float_value(moodboard.get("strength"), 0.7, 0.0, 1.0)
         if strength <= 0:
+            # The engine has already dropped it (Q36 a); this guards a
+            # direct call.
             add_run_note(BOARD_STRENGTH_ZERO_NOTE)
             continue
         analysis = moodboard.get("analysis") if isinstance(moodboard.get("analysis"), dict) else {}

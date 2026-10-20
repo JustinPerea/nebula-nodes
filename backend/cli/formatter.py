@@ -501,6 +501,10 @@ def format_snapshot(snapshot: dict[str, Any]) -> str:
             screen = " off-screen"
         model = f" ({node['model']})" if node.get("model") else ""
         lines.append(f"  {node.get('id', '?'):<6}{node.get('name', '?')}{model} [{node.get('state', '?')}] {where}{screen}")
+        if node.get("error"):
+            # Why its last run failed, as the card says it.
+            hint = f" ({node['errorHint']})" if node.get("errorHint") else ""
+            lines.append(f"        error: {_brief(node['error'], 300)}{hint}")
         params = {k: v for k, v in (node.get("params") or {}).items() if v not in (None, "", {}, [])}
         if params:
             lines.append(f"        params: {_brief(params, 110)}")
@@ -709,6 +713,12 @@ def format_proposal(view: dict[str, Any], *, created: bool = False, now_ms: floa
         lines.append(f"  runs   {', '.join(run)} — {_cost_line(view.get('cost') or {})}")
     else:
         lines.append("  runs   nothing until the person chooses")
+    if status == "open":
+        # The run's nodes that can't run here: if the person accepts, it fails at them.
+        for row in (view.get("cost") or {}).get("notReady") or []:
+            if isinstance(row, dict):
+                lines.append(f"  can't  {row.get('ref') or row.get('nodeId')}  {row.get('name') or ''}: "
+                             f"{row.get('missing') or 'not set up here'}")
     if created:
         lines.append(f"Check the outcome: nebula proposal {proposal_id} --wait")
     return "\n".join(lines)
