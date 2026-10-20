@@ -1207,7 +1207,7 @@ Justin (relayed by GM - Design, 2026-10-20): "it should have a dedicated area on
 - **Studio:** in the top bar, first in `WorkspaceHeader`'s actions slot, before the save state (`MoodboardStudioView.tsx:456-476`: save state, Retry on error, Move, Delete). v5.2's spacer, presence and `v14 ▾` are mockup-only; this plan doesn't add them.
 - **Main canvas:** its own fixed mount in the top right, level with the header pill (`top: 24px`, `CanvasTabs.css:3-12`), not inside the pill. The pill sits at the top centre, and Justin asked for "a little area in the top right". If the chat panel's rect reaches that corner (dragged up there), the chip moves left of it. That nothing else is fixed in the main canvas's top right is (u); PR9a checks it at 1440×900 and 1920×1080.
 - A pill, as v5.2 draws it: both authors' dots (the agent's orange "A", Argon's lavender "Ar", overlapped), the label "Notes", and the unread count. It is always there, so the corner reads as the notes' own place (Justin: "a dedicated area"); at 0 the count is muted, and a dot brightens while its author has unread notes.
-- On a new note the count changes and pops (scale 1.4 → 1 on a spring), and a ring shows on the chip for as long as the card is up. The ring takes the author's colour (v5.2 draws it orange for Argon too; GM to confirm (u)).
+- On a new note the count changes and pops (scale 1.4 → 1 on a spring), and a ring shows on the chip for as long as the card is up. The ring and the count take the colour of whoever wrote the newest note: orange for the agent, lavender for Argon (GM, mockup v5.2, 2026-10-20).
 
 **The card.**
 
@@ -1249,7 +1249,7 @@ Justin (relayed by GM - Design, 2026-10-20): "it should have a dedicated area on
 - **Main canvas (PR9a):** the chip in `CanvasTabs`' header, a `NoteOutlineLayer` beside `AgentCursorLayer` (`Canvas.tsx:791`) outlining nodes. `CanvasUndoNotice` and `AgentLog` are unchanged: one is an action label, the other an in-memory activity log (whether the log should merge into Notes is GM's call (u)).
 - **Studio (whichever of PR9, PR10 and PR7e lands first):** the chip in the Studio header, outlines on `BoardCanvas` placements through the shared outline layer, and the card kept clear of the chat panel as on the main canvas.
 
-**Open for GM (design, not blocking):** the ring's colour for Argon notes; the card's place while chat is open, on both surfaces; the main-canvas chip in its own top-right mount rather than in the centred header pill; whether `AgentLog` merges into Notes; the label "Notes" next to image notes, the brief's NOTES row and pins (§3.5); what an opened note and the list look like (v5.2 never opens the chip).
+**Settled with GM (2026-10-20):** the ring and count take the newest note's author colour; while chat is open the card sits left of the chat panel, on both surfaces; the main canvas gets its own top-right chip mount, not the centred header pill. **GM is taking to Justin:** whether `AgentLog` merges into Notes; the label "Notes" next to image notes, the brief's NOTES row and pins (§3.5); what an opened note and the list look like (v5.2 never opens the chip).
 
 ---
 
@@ -2104,7 +2104,7 @@ Justin answered Q18 to Q28 on 2026-10-20 (Q22 and Q23 were already answered).
 - Which graph the server checks main-canvas refs against (the one `look_at_canvas` reads) (PR9a).
 - That nothing else is fixed in the main canvas's top right where the Notes chip goes (PR9a).
 - The private-note guard's cost on main-canvas notes when a project sees many boards (cached per board `version`; PR9a measures it).
-- The card's place while chat is open (both surfaces), the main-canvas chip's own top-right mount (not the centred pill), the ring's colour for Argon notes, whether `AgentLog` merges into Notes, the label "Notes", and the opened list's design: GM's calls (v5.2 never opens the chip).
+- Whether `AgentLog` merges into Notes, the label "Notes", and the opened list's design: GM is taking them to Justin (v5.2 never opens the chip). The card's place while chat is open, the main canvas's own chip mount and the ring's colour were settled with GM on 2026-10-20 (§5.9).
 - The mockup's beat numbers after v5.2 (§8).
 
 **General:** line numbers drift; the ones here are from `12257250` unless marked. §3.5 and §5.9 are from origin/main `77e73b45`.
