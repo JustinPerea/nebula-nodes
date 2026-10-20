@@ -255,7 +255,7 @@ Design-canvas gap 18 (Justin's calls P1-P4, 2026-10-19). Where two parts of a bo
 | `frame.update` | `frame`, `name?`, `x, y, w, h` or `rect` | Rename or move/resize; a move moves its cards, and it can't shrink to cut one off |
 | `frame.delete` | `frame` | Its cards stay where they are, loose (a copy whose image has another card goes) |
 | `frame.merge` | `frame`, `into` | The cards move into `into`, which grows to hold both; where an image is in both, the heavier copy stays |
-| `cover` | `image` (number, id, or null) | Makes the image the board's cover (1.1), or with null opens the board on #1 again. Moves no image and keeps the analysis; an image not on the board is refused, and so is a batch that also takes the image it picks off the board (422 "image #2 can't be the cover and come off the board in one batch: pick one") |
+| `cover` | `image` (number, id, or null) | Makes the image the board's cover (1.1), or with null opens the board on #1 again. Moves no image and keeps the analysis; an image not on the board is refused, and so is a batch whose last `cover` op picks an image the batch takes off the board (422 "image #2 can't be the cover and come off the board in one batch: pick one"); an earlier pick that a later `cover` op replaces or clears doesn't count |
 | `restore` | `slices` | An undo (below) |
 
 `arrange`, `look.set`, `look.inherit`, `suggestion.accept`, `suggestion.dismiss` and `realPerson` are refused by name: they come with later parts of the board canvas.

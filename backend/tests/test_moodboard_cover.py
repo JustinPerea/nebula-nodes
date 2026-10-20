@@ -211,6 +211,22 @@ def test_a_batch_that_makes_an_image_the_cover_and_removes_it_is_refused(client,
     assert _digest(path) == before
 
 
+@pytest.mark.parametrize("ops, cover", [
+    # Picked, then cleared, then removed: the image isn't the cover any more.
+    ([{"op": "cover", "image": 2}, {"op": "cover", "image": None}, {"op": "remove", "images": [2]}], None),
+    # Picked, then a different pick, then removed: the second pick stands.
+    ([{"op": "cover", "image": 2}, {"op": "cover", "image": 3}, {"op": "remove", "images": [2]}], "img-c"),
+    ([{"op": "cover", "image": 2}, {"op": "remove", "images": [2]}, {"op": "cover", "image": 3}], "img-c"),
+])
+def test_only_the_batchs_last_cover_pick_has_to_stay_on_the_board(client, root, ops, cover):
+    write_board(root, three_image_board())
+    edited = _edit(client, ops, headers=PERSON)
+    assert edited.status_code == 200, edited.text
+    board = _get(client)
+    assert board["coverImageId"] == cover
+    assert [image["id"] for image in board["images"]] == ["img-a", "img-c"]
+
+
 def test_a_stale_base_version_refuses_a_cover_change(client, root):
     write_board(root, three_image_board())  # version 3
     edits = _edit(client, [{"op": "cover", "image": 2}], base=2, headers=PERSON)

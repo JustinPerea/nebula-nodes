@@ -1340,7 +1340,9 @@ def apply_edits(board: dict[str, Any], ops: Any, *, by: str, now: str | None = N
     staged["frames"] = layout.frames_of(staged)
     batch = _Batch(staged, by=by, now=now or _now_iso())
     applied: list[dict[str, Any]] = []
-    covers: list[tuple[int, str]] = []
+    # The batch's last cover pick (op index, image id or None): an earlier
+    # pick it replaced or cleared doesn't have to stay on the board.
+    last_cover: tuple[int, str | None] | None = None
     for index, op in enumerate(ops):
         name = op.get("op") if isinstance(op, dict) else None
         try:
@@ -1348,12 +1350,14 @@ def apply_edits(board: dict[str, Any], ops: Any, *, by: str, now: str | None = N
         except EditError as exc:
             raise EditError(f"ops[{index}] ({str(name)[:40]}): {exc}") from None
         applied.append({"index": index, **entry})
-        if name == "cover" and staged.get("coverImageId"):
-            covers.append((index, str(staged["coverImageId"])))
+        if name == "cover":
+            chosen = staged.get("coverImageId")
+            last_cover = (index, str(chosen) if chosen else None)
     # A batch can't both pick an image as the cover and take it off (the CLI
     # and MCP refuse the same call before sending it).
     left = {str(img.get("id")) for img in staged["images"]}
-    for index, image_id in covers:
+    if last_cover is not None and last_cover[1] is not None:
+        index, image_id = last_cover
         if image_id not in left:
             name = f"#{batch.numbers.index(image_id) + 1}" if image_id in batch.numbers else repr(image_id)
             raise EditError(f"ops[{index}] (cover): image {name} can't be the cover and come off the board "
