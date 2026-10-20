@@ -29,10 +29,12 @@ def _print_json(data: Any) -> None:
 
 def _changes_flags(args) -> bool:
     """Whether `set` was given any change besides the image edits."""
-    values = (args.name, args.notes, args.mode, args.strength, args.direction, args.brief)
-    lists = (args.avoid, args.unavoid, args.pin_color, args.keep_out_color, args.unpin_color)
+    values = (args.name, args.notes, args.mode, args.strength, args.direction, args.brief, args.clash_mode,
+              args.send_notes)
+    lists = (args.avoid, args.unavoid, args.pin_color, args.keep_out_color, args.unpin_color, args.keep_anyway,
+             args.leave_out, args.reset_color)
     return (any(value is not None for value in values) or any(lists)
-            or args.clear_avoid or args.clear_brief or args.keep_brief)
+            or args.clear_avoid or args.clear_brief or args.keep_brief or args.leave_out_flagged)
 
 
 def _read_previous(source: str) -> dict[str, Any]:
@@ -107,6 +109,51 @@ def _print_brief(board: dict[str, Any]) -> None:
         print(f"  Negative prompt: {composed['negativePrompt']}")
     if composed.get("avoidPrompt"):
         print(f"  Added to the prompt for GPT Image, Nano Banana and Krea 2: {composed['avoidPrompt']}")
+    _print_clashes(composed, board_id)
+
+
+def _clash_line(item: dict[str, Any]) -> str:
+    role = "pinned" if item.get("role") == "pinned" else ("accent" if item.get("role") == "accent" else "palette")
+    # Every reason: a colour off because the board sends no measured colours
+    # may also clash with the words.
+    reasons = [str(reason) for reason in item.get("reasons") or [] if reason] or [str(item.get("reason") or "")]
+    return f"    {item.get('hex') or 'the whole palette'} ({role}): {'; '.join(reasons)}".rstrip()
+
+
+def _print_clashes(composed: dict[str, Any], board_id: Any) -> None:
+    """Where the board's words and its measured colours disagree, and what
+    went (gap 18). Nothing on a Nebula that doesn't check."""
+    if "leftOut" not in composed:
+        return
+    target = shlex.quote(str(board_id))
+    mode = composed.get("clashMode")
+    if mode and mode != "leave-out":
+        print(f"  Clash check: {mode}")
+    for label, key, flag in (("Left out of the brief:", "leftOut", "--keep-anyway"),
+                             ("Kept anyway (your choice):", "kept", "--reset-color"),
+                             ("May clash (still sent):", "mayClash", "--leave-out")):
+        items = [item for item in composed.get(key) or [] if isinstance(item, dict)]
+        if not items:
+            continue
+        print(f"  {label}")
+        for item in items:
+            print(_clash_line(item))
+            hex_value = item.get("hex")
+            if not hex_value:
+                continue
+            verb = {"--keep-anyway": "Keep it", "--reset-color": "Undo", "--leave-out": "Leave it out"}[flag]
+            # A colour the person left out goes back with --reset-color.
+            use = "--reset-color" if key == "leftOut" and item.get("why") == "choice" else flag
+            print(f'      {verb}: nebula moodboard set {target} {use} "{hex_value}"')
+    for label, key in (("Pinned colors that clash (still sent):", "pinnedClashes"),
+                       ("The whole palette:", "paletteClashes")):
+        items = [item for item in composed.get(key) or [] if isinstance(item, dict)]
+        if items:
+            print(f"  {label}")
+            for item in items:
+                print(_clash_line(item))
+    if "notesSent" in composed:
+        print(f"  Notes: {'sent to generators' if composed['notesSent'] else 'not sent to generators'}")
 
 
 def _print_board(board: dict[str, Any], names: dict[str, tuple[str, bool]] | None = None) -> None:
@@ -344,7 +391,9 @@ def run(client: NebulaClient, args) -> None:
                     avoid=[] if args.clear_avoid else None, avoid_add=args.avoid, avoid_remove=args.unavoid,
                     pin_colors=args.pin_color, keep_out_colors=args.keep_out_color,
                     unpin_colors=args.unpin_color, brief_override="" if args.clear_brief else args.brief,
-                    keep_brief=args.keep_brief, headers=headers)
+                    keep_brief=args.keep_brief, keep_anyway=args.keep_anyway, leave_out=args.leave_out,
+                    leave_out_flagged=args.leave_out_flagged, reset_colors=args.reset_color,
+                    clash_mode=args.clash_mode, send_notes=args.send_notes, headers=headers)
             if args.json:
                 _print_json({**boards.brief(board), "removed": removed, "previous": previous})
                 return
@@ -483,6 +532,25 @@ def add_parser(sub) -> None:
                          help="Go back to the generated brief")
     brief_g.add_argument("--keep-brief", dest="keep_brief", action="store_true",
                          help="Keep a hand-written brief after the board changed (clears \"changed since\")")
+    clash_g = set_p.add_argument_group(
+        "clashes", "When the board's words clash with a colour Nebula measured. `show` lists them.")
+    clash_g.add_argument("--keep-anyway", dest="keep_anyway", action="append", default=[], metavar="HEX",
+                         help="Put a left-out colour back in the brief (it isn't pinned; repeatable)")
+    clash_g.add_argument("--leave-out", dest="leave_out", action="append", default=[], metavar="HEX",
+                         help="Take a measured colour out of the brief (repeatable)")
+    clash_g.add_argument("--leave-out-flagged", dest="leave_out_flagged", action="store_true",
+                         help="Take every colour flagged as a possible clash out of the brief")
+    clash_g.add_argument("--reset-color", dest="reset_color", action="append", default=[], metavar="HEX",
+                         help="Drop a Keep anyway or Leave out choice (repeatable)")
+    clash_g.add_argument("--clash-mode", dest="clash_mode", choices=("leave-out", "flag", "no-measured", "keep-all"),
+                         help="leave-out (default): clashing colours leave the brief; flag: list them, leave "
+                              "nothing out; no-measured: with a Direction, send no measured colour; keep-all: "
+                              "send every measured colour")
+    notes_g = clash_g.add_mutually_exclusive_group()
+    notes_g.add_argument("--send-notes", dest="send_notes", action="store_const", const=True, default=None,
+                         help="Send the board's notes to generators (only the person can turn this on)")
+    notes_g.add_argument("--no-send-notes", dest="send_notes", action="store_const", const=False,
+                         help="Keep the board's notes for people and agents only (the default)")
     set_p.add_argument("--restore", metavar="FILE",
                        help="Undo a change: the `previous` from `set --json` (or its whole output), "
                             "as a file or - for stdin")

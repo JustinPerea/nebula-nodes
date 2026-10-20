@@ -642,6 +642,39 @@ export interface MoodboardBrief {
   accents: string[];
   override: { active: boolean; stale: boolean };
   needsAnalysis: boolean;
+  /** Gap 18, from a backend that checks the words against the measured
+   *  colours (absent on an older one). Colours generators don't get, each
+   *  with why; colours that still go but may clash; the person's Keep
+   *  anyway; pinned colours that clash (they always go); whole-palette
+   *  findings (hex null). */
+  leftOut?: MoodboardClash[];
+  mayClash?: MoodboardClash[];
+  kept?: MoodboardClash[];
+  pinnedClashes?: MoodboardClash[];
+  paletteClashes?: MoodboardClash[];
+  clashMode?: MoodboardClashMode;
+  /** Whether the board's notes went to generators (off unless opted in). */
+  notesSent?: boolean;
+}
+
+/** What a board does when its words clash with a measured colour. */
+export type MoodboardClashMode = 'leave-out' | 'flag' | 'no-measured' | 'keep-all';
+
+/** One colour the brief left out or flagged (backend moodboard_brief.compose). */
+export interface MoodboardClash {
+  /** null: a finding about the whole palette, such as a cast. */
+  hex: string | null;
+  role: 'palette' | 'accent' | 'pinned';
+  share?: number | null;
+  /** 'off': left out because the board sends no measured colours. */
+  level: 'conflict' | 'warning' | 'off';
+  /** The first reason, in plain words ("Avoid: red flowers"). */
+  reason: string;
+  reasons: string[];
+  /** Left out by the check, by the person's choice, or by the clash mode. */
+  why: 'check' | 'choice' | 'mode';
+  /** Which checks found it ("words" today; a second check adds its name). */
+  foundBy: string[];
 }
 
 export interface Moodboard {
@@ -663,6 +696,13 @@ export interface Moodboard {
    *  person wrote (a missing `by` counts as the person's). */
   briefOverride?: { text: string; basis?: string; updatedAt?: string; by?: 'person' | 'agent' } | null;
   brief?: MoodboardBrief;
+  /** Gap 18 (absent on an older backend). `colorChoices` holds the person's
+   *  Keep anyway and Leave out; `sendNotes` is off unless the person turns it
+   *  on; `colorCheck` is the server's, never sent back. */
+  clashMode?: MoodboardClashMode;
+  colorChoices?: { keep: string[]; leaveOut: string[] };
+  sendNotes?: boolean;
+  colorCheck?: unknown;
   /** The board's layout. Written only by board edits and by the server
    *  placing new images, never sent back on a save (the backend refuses it). */
   layoutVersion?: number;

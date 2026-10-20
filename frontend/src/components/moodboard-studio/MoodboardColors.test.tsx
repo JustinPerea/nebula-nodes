@@ -94,3 +94,20 @@ describe('MoodboardColors', () => {
     expect(container.innerHTML).toBe('');
   });
 });
+
+describe('MoodboardColors: what the brief left out', () => {
+  it('dims a left-out swatch and gives the reason in its tooltip', () => {
+    render(<BoardSwatches label="Accents" role="accent" analysis={analysis()}
+      leftOut={[{ hex: '#f06e1e', role: 'accent', level: 'conflict', why: 'check',
+        reason: 'Avoid: orange flowers', reasons: ['Avoid: orange flowers'], foundBy: ['words'] }]} />);
+    const item = screen.getByRole('listitem');
+    expect(item.className).toContain('moodboard-color--left-out');
+    expect(item.getAttribute('title')).toBe('Left out of the brief: Avoid: orange flowers');
+    expect(item.textContent).toContain('Left out');
+  });
+
+  it('leaves the other swatches as they were', () => {
+    render(<BoardSwatches label="Palette" role="dominant" analysis={analysis()} leftOut={[]} />);
+    expect(screen.getByRole('listitem').className).not.toContain('left-out');
+  });
+});

@@ -138,3 +138,80 @@ async def test_moodboard_node_analyzes_off_the_event_loop(tmp_path, monkeypatch)
     await handle_moodboard_node(_node(board["id"]), {}, {})
 
     assert loops == [None]
+
+
+# -- gap 18: what the bundle sends (notes opt-in, left-out colours) -------------
+
+def _clash_board(tmp_path, monkeypatch, **fields):
+    """A board of orange and blue images whose Avoid list names orange, with
+    board and image notes. Analyzed and saved, so the node uses the analysis."""
+    monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path))
+    store = MoodboardStore()
+    orange, blue = _write_test_image("clash-orange.png", (240, 110, 30)), _write_test_image("clash-blue.png",
+                                                                                              (20, 60, 200))
+    board = store.create(name="Clash board", notes="liquid glass panels, quiet type",
+                         images=[{"url": orange, "notes": "the orange accent"}, {"url": blue}],
+                         avoid=["orange flowers"], **fields)
+    store.update(board["id"], analysis=analyze_moodboard(store.get(board["id"])))
+    return store.get(board["id"])
+
+
+@pytest.mark.asyncio
+async def test_the_bundle_carries_no_notes_and_no_left_out_colour(tmp_path, monkeypatch) -> None:
+    board = _clash_board(tmp_path, monkeypatch)
+    analysis = board["analysis"]
+    orange = next(c["hex"] for c in analysis["colors"] if int(c["hex"][1:3], 16) > 200)
+    result = await handle_moodboard_node(_node(board["id"]), {}, {})
+    bundle = result["moodboard"]["value"]
+
+    assert bundle["notesSent"] is False
+    assert bundle["notes"] == "" and [image["notes"] for image in bundle["images"]] == ["", ""]
+    view = bundle["analysis"]
+    assert "liquid" not in view["keywords"] and "glass" not in view["keywords"]
+    assert "Notes emphasize" not in view["summary"] and "liquid" not in view["summary"]
+    assert "liquid" not in view["tasteProfile"] and "liquid" not in view["styleBrief"]
+    assert view["subjectBias"] == [] and all(item.get("notes", "") == "" for item in view["images"])
+    # The orange the person avoids is out of everything generators read.
+    assert orange in [item["hex"] for item in bundle["leftOut"]]
+    assert orange not in bundle["palette"] and orange not in result["palette"]["value"]
+    assert bundle["providerHints"]["generic"]["palette"] == bundle["palette"]
+    assert bundle["providerHints"]["generic"]["accents"] == bundle["accents"]
+    for text in (bundle["styleBrief"], view["styleBrief"], view["summary"], view["tasteProfile"],
+                 bundle["providerHints"]["generic"]["promptSuffix"]):
+        assert orange not in text and "liquid" not in text
+    assert {"leftOut", "mayClash", "pinnedClashes", "notesSent"} <= set(bundle)
+    # Nor do the analysis's colour lists name it: an LLM node reading the
+    # bundle on an Any port can't put it back.
+    assert view["palette"] == bundle["palette"] and view["accents"] == bundle["accents"]
+    assert orange not in [c["hex"] for c in view["colors"]]
+    assert orange in [c["hex"] for c in analysis["colors"]]
+    for image in view["images"]:
+        for key in ("palette", "accents"):
+            assert orange not in image.get(key, [])
+        assert orange not in [c["hex"] for c in image.get("colors", [])]
+    assert orange not in str(view)
+    # The saved analysis is left as it was.
+    assert "liquid" in MoodboardStore().get(board["id"])["analysis"]["keywords"]
+
+
+@pytest.mark.asyncio
+async def test_the_node_can_send_notes_or_hold_them_back(tmp_path, monkeypatch) -> None:
+    board = _clash_board(tmp_path, monkeypatch)
+
+    def node(choice):
+        return GraphNode(id="n1", definitionId="nebula-moodboard",
+                         params={"moodboard": board["id"], "send_notes": choice})
+
+    sent = (await handle_moodboard_node(node("yes"), {}, {}))["moodboard"]["value"]
+    assert sent["notesSent"] is True and sent["notes"] == "liquid glass panels, quiet type"
+    assert sent["images"][0]["notes"] == "the orange accent"
+    assert "Notes: liquid glass panels, quiet type." in sent["styleBrief"]
+    assert "liquid" in sent["analysis"]["keywords"]
+
+    MoodboardStore().update(board["id"], by="person", sendNotes=True)
+    held = (await handle_moodboard_node(node("no"), {}, {}))["moodboard"]["value"]
+    assert held["notesSent"] is False and held["notes"] == "" and "Notes:" not in held["styleBrief"]
+    board_says = (await handle_moodboard_node(node("board"), {}, {}))["moodboard"]["value"]
+    assert board_says["notesSent"] is True
+    # A node saved before the param reads "board".
+    assert (await handle_moodboard_node(_node(board["id"]), {}, {}))["moodboard"]["value"]["notesSent"] is True

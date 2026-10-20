@@ -298,6 +298,40 @@ def _migrated(board: dict[str, Any], *, layout_board: bool = False) -> dict[str,
 OVERRIDE_AUTHORS = ("person", "agent")
 
 
+class NotesOptInProtected(Exception):
+    """An agent tried to send the board's notes to generators (gap 18, P4).
+
+    Notes are the person's words about the board, for them, their team and
+    agents; whether generators get them is the person's call. An agent may
+    turn sending off, never on. Same 403 as ``BriefOverrideProtected``."""
+
+
+NOTES_OPT_IN_REFUSED = ("Only the person can send this board's notes to generators. Notes stay with "
+                        "the person, their team and agents unless the person turns sending on in Studio. "
+                        "Leave sendNotes out of the request, or ask the person (propose it).")
+
+
+def _guard_send_notes(previous: bool, value: Any, by: str) -> None:
+    if by != "person" and value is True and not previous:
+        raise NotesOptInProtected(NOTES_OPT_IN_REFUSED)
+
+
+def _set_color_choices(moodboard: dict[str, Any], value: Any, *, sent: bool) -> None:
+    """Store ``colorChoices``. Sent with the request, it is checked against
+    the board's colours pinned to keep out (an error names the clash); not
+    sent, a colour pinned out since just leaves the Keep anyway list (the
+    pin is the stronger choice)."""
+    brief = _brief()
+    kept_out = moodboard["pinnedColors"]["exclude"]
+    if sent:
+        moodboard["colorChoices"] = brief.normalize_color_choices(value, kept_out)
+        return
+    _mode, choices, _notes = brief.board_options(moodboard)
+    if "colorChoices" in moodboard or choices["keep"] or choices["leaveOut"]:
+        choices["keep"] = [hex_value for hex_value in choices["keep"] if hex_value not in kept_out]
+        moodboard["colorChoices"] = choices
+
+
 class BriefOverrideProtected(Exception):
     """An agent tried to replace, clear or Keep the person's hand-written brief.
 
@@ -408,6 +442,9 @@ class MoodboardStore:
         avoid: list[str] | None = None,
         pinnedColors: dict[str, Any] | None = None,
         briefOverride: dict[str, Any] | None = None,
+        clashMode: str | None = None,
+        colorChoices: dict[str, Any] | None = None,
+        sendNotes: bool | None = None,
         by: str = "agent",
         **extra: Any,
     ) -> dict[str, Any]:
@@ -416,6 +453,7 @@ class MoodboardStore:
         ``layoutVersion``. ``by`` ("person" or "agent") stamps the cards and
         any hand-written brief."""
         brief = _brief()
+        _guard_send_notes(False, sendNotes, by)
         name = str(name or "").strip()
         if not name:
             raise ValueError("name is required")
@@ -448,6 +486,8 @@ class MoodboardStore:
             "pinnedColors": brief.normalize_pinned_colors(pinnedColors),
             "briefOverride": None,
             "briefVersion": brief.BRIEF_FIELDS_VERSION,
+            "clashMode": brief.normalize_clash_mode(clashMode),
+            "sendNotes": brief.normalize_send_notes(sendNotes),
             "layoutVersion": LAYOUT_VERSION,
             "frames": [],
             "suggestions": [],
@@ -457,7 +497,9 @@ class MoodboardStore:
             "createdAt": now,
             "updatedAt": now,
         }
+        _set_color_choices(moodboard, colorChoices, sent=True)
         _set_override(moodboard, briefOverride, previous=None, by=by)
+        brief.refresh_colour_check(moodboard)
 
         root = _moodboard_root()
         scope_dir = _scope_dir(root, projectId)
@@ -498,12 +540,15 @@ class MoodboardStore:
 
     def update(self, moodboard_id: str, *, by: str = "agent", **fields: Any) -> dict[str, Any]:
         """Change a board's fields. ``by`` is who asked ("person" only when the
-        route's person gate says so); it matters for ``briefOverride`` and
-        stamps the cards of new images (``placedBy``).
+        route's person gate says so); it matters for ``briefOverride``, for
+        turning ``sendNotes`` on (NotesOptInProtected, before anything is
+        written), and it stamps the cards of new images (``placedBy``).
 
         ``images`` merges by id (see ``_normalize_images``). The board is
         laid out before the change, so an old board's first write saves the
-        grid it read with and stamps ``layoutVersion``: nothing moves."""
+        grid it read with and stamps ``layoutVersion``: nothing moves. The
+        saved colour check (``colorCheck``) is the store's: a sent one is
+        ignored, and it is refreshed when what it reads moved."""
         if by not in OVERRIDE_AUTHORS:
             raise ValueError(f"author must be one of {OVERRIDE_AUTHORS}")
         _refuse_layout_fields(fields)
@@ -516,6 +561,10 @@ class MoodboardStore:
         immutable = {"id", "createdAt", "projectId"}
         override_sent = "briefOverride" in fields
         override_value = fields.pop("briefOverride", None)
+        if "sendNotes" in fields:
+            _guard_send_notes(moodboard.get("sendNotes") is True, fields["sendNotes"], by)
+        choices_sent = fields.get("colorChoices") is not None
+        choices_value = fields.pop("colorChoices", None)
         for key, value in fields.items():
             if key in immutable:
                 if value is not None and value != moodboard.get(key):
@@ -541,13 +590,22 @@ class MoodboardStore:
                 moodboard[key] = brief.normalize_avoid(value)
             elif key == "pinnedColors":
                 moodboard[key] = brief.normalize_pinned_colors(value)
-            elif key in {"brief", "briefVersion"}:
+            elif key == "clashMode":
+                if value is not None:
+                    moodboard[key] = brief.normalize_clash_mode(value)
+            elif key == "sendNotes":
+                if value is not None:
+                    moodboard[key] = brief.normalize_send_notes(value)
+            elif key in {"brief", "briefVersion", "colorCheck"}:
                 continue  # computed / owned by the store
             elif value is not None:
                 moodboard[key] = value
+        # After the pins, so a Keep anyway colour is checked against them.
+        _set_color_choices(moodboard, choices_value, sent=choices_sent)
         # Last, so new override text is stamped with the board as updated.
         if override_sent:
             _set_override(moodboard, override_value, previous=moodboard.get("briefOverride"), by=by)
+        brief.refresh_colour_check(moodboard)
 
         _stamp_layout(moodboard)
         moodboard["version"] = int(moodboard.get("version", 1)) + 1
@@ -656,3 +714,10 @@ def migrate_brief_fields() -> dict[str, Any]:
     """
     root = _moodboard_root()
     return _brief().migrate_store(root, root.parent / "moodboard-backups")
+
+
+def save_colour_checks() -> dict[str, Any]:
+    """Save the colour check on boards that lack a current one (gap 18):
+    boards saved before it, or after a lexicon change. Run at startup after
+    ``migrate_brief_fields``."""
+    return _brief().save_colour_checks(_moodboard_root())

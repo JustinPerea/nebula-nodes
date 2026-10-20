@@ -2301,12 +2301,18 @@ async def _personal_agents_shutdown() -> None:
 @app.on_event("startup")
 async def _moodboard_brief_fields_startup() -> None:
     """Give boards saved before Direction / Avoid / pinned colours existed those
-    fields, once, backing each file up first (services/moodboard_brief.py)."""
-    from services.moodboard_store import migrate_brief_fields
+    fields, once, backing each file up first (services/moodboard_brief.py).
+    Then save the colour check (gap 18) on boards whose saved one is missing
+    or stale, so it isn't run again on every generation and read."""
+    from services.moodboard_store import migrate_brief_fields, save_colour_checks
     try:
         await asyncio.to_thread(migrate_brief_fields)
     except Exception as exc:  # never block startup; boards still migrate in memory on read
         print(f"[main] moodboard brief migration skipped: {type(exc).__name__}: {exc}", flush=True)
+    try:
+        await asyncio.to_thread(save_colour_checks)
+    except Exception as exc:  # never block startup; the check runs in memory until a board is saved
+        print(f"[main] moodboard colour check not saved: {type(exc).__name__}: {exc}", flush=True)
 
 
 @app.on_event("startup")
@@ -7856,18 +7862,54 @@ PROVIDER_CHOICE_REFUSAL = (
 )
 
 
+NOTES_TO_GENERATORS_REFUSAL = (
+    "Sending a board's notes to generators (send_notes on a Moodboard node) is the person's call: "
+    "notes are their words about the board, for them, their team and agents. Leave send_notes as it "
+    "is (an agent may set it to no), don't point a node that sends notes at another board (set "
+    "send_notes to board or no in the same edit), and propose the change instead with propose_change "
+    "(`nebula propose`); the person accepts it on the canvas."
+)
+# How far each send_notes value opens the notes: "board" follows the board's
+# own switch, so it may send them; "yes" always does.
+_SEND_NOTES_RANK = {"no": 0, "board": 1, "yes": 2}
+
+
+def _send_notes_rank(params: Mapping[str, Any] | None) -> int:
+    value = (params or {}).get("send_notes")
+    return _SEND_NOTES_RANK.get(value if isinstance(value, str) else "board", 1)
+
+
+def _notes_opened(before: Mapping[str, Any] | None, after: Mapping[str, Any] | None) -> bool:
+    """Whether a Moodboard node edit sends notes the person didn't opt in to:
+    ``send_notes`` opened further, or a node on "yes" moved to another board."""
+    rank = _send_notes_rank(after)
+    if rank > _send_notes_rank(before):
+        return True
+    return (before is not None and rank == _SEND_NOTES_RANK["yes"]
+            and (before or {}).get("moodboard") != (after or {}).get("moodboard"))
+
+
 def _refuse_agent_billing_change(changes: Iterable[tuple[str, str, Mapping[str, Any] | None, Mapping[str, Any]]]) -> None:
     """403 when an edit that isn't the person's would change who bills a
     node's run: a route-table node's ``_provider``, or a Krea node's billing
     mode (_billing_choice). ``changes`` are (label, definitionId, params
     before or None for a new node, params after). A new node counts as
     changed unless it starts on Auto and the default mode (the API token).
-    The person's own edits and accepted proposals always pass."""
+    The person's own edits and accepted proposals always pass.
+
+    The same gate keeps a Moodboard node's ``send_notes`` (gap 18, P4): an
+    agent may close it (toward "no"), never open it (a new node may start on
+    "board", which follows the board's own switch). The person's "yes" is
+    for the board it was set on: an agent pointing a "yes" node at another
+    board would send that board's notes, so it is refused too."""
     if _is_person_request():
         return
     provider_switched: list[str] = []
     mode_switched: list[str] = []
+    notes_opened: list[str] = []
     for label, definition_id, before, after in changes:
+        if definition_id == "nebula-moodboard" and _notes_opened(before, after):
+            notes_opened.append(label)
         choice = _billing_choice(definition_id, after)
         if choice is None:
             continue
@@ -7880,6 +7922,8 @@ def _refuse_agent_billing_change(changes: Iterable[tuple[str, str, Mapping[str, 
         raise HTTPException(status_code=403, detail=f"{_listed(provider_switched, 4)}: {PROVIDER_CHOICE_REFUSAL}")
     if mode_switched:
         raise HTTPException(status_code=403, detail=f"{_listed(mode_switched, 4)}: {KREA_BILLING_REFUSAL}")
+    if notes_opened:
+        raise HTTPException(status_code=403, detail=f"{_listed(notes_opened, 4)}: {NOTES_TO_GENERATORS_REFUSAL}")
 
 
 def _check_krea_auth(definition_id: str, params: dict[str, Any], label: str) -> None:
@@ -10608,6 +10652,14 @@ class MoodboardCreate(BaseModel):
     avoid: list[str] = Field(default_factory=list)
     pinnedColors: MoodboardPinnedColorsModel | None = None
     briefOverride: MoodboardBriefOverrideModel | None = None
+    # What happens when the words clash with a measured colour, the person's
+    # Keep anyway / Leave out, and whether notes reach generators (gap 18).
+    # Any, so the store checks the raw value ("yes" isn't true).
+    clashMode: Any = None
+    colorChoices: Any = None
+    sendNotes: Any = None
+    # The saved colour check is the store's; a sent one is ignored.
+    colorCheck: Any = None
     # The board's layout: never set here (see _refuse_moodboard_layout).
     frames: Any = None
     suggestions: Any = None
@@ -10636,6 +10688,11 @@ class MoodboardUpdate(BaseModel):
     # {"text": ...} sets a hand-written brief; an explicit null removes it
     # (the board goes back to the generated brief).
     briefOverride: MoodboardBriefOverrideModel | None = None
+    # Gap 18 (see MoodboardCreate). Turning sendNotes on is the person's call.
+    clashMode: Any = None
+    colorChoices: Any = None
+    sendNotes: Any = None
+    colorCheck: Any = None
     # The board's layout: never set here (see _refuse_moodboard_layout).
     frames: Any = None
     suggestions: Any = None
@@ -10714,7 +10771,7 @@ def _moodboard_author() -> str:
 
 
 def _refuse_override_change(exc: Exception) -> NoReturn:
-    """Turn the store's BriefOverrideProtected into the person gate's refusal
+    """Turn the store's BriefOverrideProtected (or NotesOptInProtected) into the person gate's refusal
     (403, ``agent_refused`` or ``person_required``) with the store's reason."""
     try:
         require_person(current_request_headers())
@@ -10890,6 +10947,7 @@ async def list_moodboards(scope: str = "global", projectId: str | None = None) -
 @app.post("/api/moodboards")
 async def create_moodboard(body: MoodboardCreate) -> dict:
     _refuse_moodboard_layout(body)
+    from services.moodboard_store import NotesOptInProtected
     _require_canvas_project(body.projectId)
     store = _moodboard_store()
     try:
@@ -10907,8 +10965,13 @@ async def create_moodboard(body: MoodboardCreate) -> dict:
             avoid=body.avoid,
             pinnedColors=body.pinnedColors.model_dump() if body.pinnedColors else None,
             briefOverride=body.briefOverride.model_dump() if body.briefOverride else None,
+            clashMode=body.clashMode,
+            colorChoices=body.colorChoices,
+            sendNotes=body.sendNotes,
             by=_moodboard_author(),
         )
+    except NotesOptInProtected as exc:
+        _refuse_override_change(exc)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     await _broadcast_stored_asset("moodboard", moodboard)
@@ -10947,14 +11010,15 @@ async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
         # Images merge by id: a key an image leaves out keeps its saved value
         # (services/moodboard_store._normalize_images), so only what was sent.
         updates["images"] = [img.model_dump(exclude_unset=True) for img in body.images or []]
-    from services.moodboard_store import BriefOverrideProtected
+    updates.pop("colorCheck", None)
+    from services.moodboard_store import BriefOverrideProtected, NotesOptInProtected
     try:
         moodboard = store.update(moodboard_id, by=_moodboard_author(), **updates)
     except KeyError:
         # In Recently deleted (an agent may have deleted it): say so, so the
         # Studio can tell the person to restore it and keep their edits.
         return _asset_not_found("moodboard", moodboard_id)
-    except BriefOverrideProtected as exc:
+    except (BriefOverrideProtected, NotesOptInProtected) as exc:
         _refuse_override_change(exc)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))

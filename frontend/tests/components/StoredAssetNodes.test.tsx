@@ -209,14 +209,14 @@ describe('Character card', () => {
 });
 
 describe('adding a node from the Assets panel', () => {
-  it('writes only the board id and shows the panel copy until the fetch lands', async () => {
+  it('writes the board id and the notes default, and shows the panel copy until the fetch lands', async () => {
     useGraphStore.setState({ nodes: [{ id: 'n1', position: { x: 0, y: 0 },
       data: { definitionId: 'text-input', label: 'Text', params: {}, outputs: {}, state: 'idle' } }],
     edges: [], backendFreshStartPending: false });
     await useGraphStore.getState().addMoodboardNode('gm', { x: 10, y: 20 },
       { name: 'Good Machines', thumbnail: '/api/outputs/gm.png', imageCount: 3, mode: 'look' });
     expect(posted).toEqual([{ path: '/api/graph/node',
-      body: { definitionId: 'nebula-moodboard', params: { moodboard: 'gm' }, position: { x: 10, y: 20 } } }]);
+      body: { definitionId: 'nebula-moodboard', params: { moodboard: 'gm', send_notes: 'board' }, position: { x: 10, y: 20 } } }]);
     expect(useStoredAssetsStore.getState().entries['moodboard:gm']?.summary?.name).toBe('Good Machines');
   });
 });

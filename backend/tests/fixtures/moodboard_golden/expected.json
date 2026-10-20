@@ -9,15 +9,22 @@
         "accents": [],
         "avoid": [],
         "avoidPrompt": "",
+        "clashMode": "leave-out",
         "direction": "",
         "generatedStyleBrief": "",
+        "kept": [],
+        "leftOut": [],
+        "mayClash": [],
         "needsAnalysis": true,
         "negativePrompt": "blurry, low-detail artifacts",
+        "notesSent": false,
         "override": {
           "active": false,
           "stale": false
         },
         "palette": [],
+        "paletteClashes": [],
+        "pinnedClashes": [],
         "pinnedColors": {
           "exclude": [],
           "include": []
@@ -25,6 +32,21 @@
         "styleBrief": ""
       },
       "briefOverride": null,
+      "clashMode": "leave-out",
+      "colorCheck": {
+        "basis": "79fcd007bd5f3af7",
+        "checks": {
+          "words": {
+            "version": 2
+          }
+        },
+        "findings": [],
+        "version": 1
+      },
+      "colorChoices": {
+        "keep": [],
+        "leaveOut": []
+      },
       "direction": "",
       "id": "c47a9e21f05b",
       "images": [
@@ -73,6 +95,7 @@
         "include": []
       },
       "projectId": null,
+      "sendNotes": false,
       "strength": 0.6,
       "updatedAt": "2026-10-18T19:20:03.640118+00:00"
     },
@@ -80,15 +103,22 @@
       "accents": [],
       "avoid": [],
       "avoidPrompt": "",
+      "clashMode": "leave-out",
       "direction": "",
       "generatedStyleBrief": "",
+      "kept": [],
+      "leftOut": [],
+      "mayClash": [],
       "needsAnalysis": true,
       "negativePrompt": "blurry, low-detail artifacts",
+      "notesSent": false,
       "override": {
         "active": false,
         "stale": false
       },
       "palette": [],
+      "paletteClashes": [],
+      "pinnedClashes": [],
       "pinnedColors": {
         "exclude": [],
         "include": []
@@ -371,7 +401,7 @@
                 "height": 64,
                 "id": "f3c2a7e4b024",
                 "lightness": 199.714,
-                "notes": "background tone",
+                "notes": "",
                 "number": 4,
                 "palette": [
                   "#cfc4b1",
@@ -451,6 +481,7 @@
             "active": false,
             "stale": false
           },
+          "clashMode": "leave-out",
           "direction": "",
           "images": [
             {
@@ -470,17 +501,21 @@
             {
               "excluded": false,
               "id": "f3c2a7e4b024",
-              "notes": "background tone",
+              "notes": "",
               "url": "/api/outputs/moodboard-golden/paper-studio-1x1.png",
               "weight": 0.4
             }
           ],
+          "kept": [],
           "kind": "nebula_moodboard",
+          "leftOut": [],
+          "mayClash": [],
           "mode": "subject",
           "moodboardId": "c47a9e21f05b",
           "name": "Portrait studies",
           "negativePrompt": "blurry, low-detail artifacts",
           "notes": "",
+          "notesSent": false,
           "palette": [
             "#6a311b",
             "#4e2516",
@@ -489,6 +524,8 @@
             "#e2d9c8",
             "#813c21"
           ],
+          "paletteClashes": [],
+          "pinnedClashes": [],
           "pinnedColors": {
             "exclude": [],
             "include": []
@@ -999,10 +1036,15 @@
           "lens flare"
         ],
         "avoidPrompt": "Keep these out of the image: text overlays, lens flare.",
+        "clashMode": "leave-out",
         "direction": "",
-        "generatedStyleBrief": "Use the Nebula moodboard 'Overcast concrete' as world direction at strength 0.85. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #404045, #5a5a60, #88adcb, #075a68, #a5c8e1, #28282c, #7198b9, #94853e. Accent colors, used sparingly: #ff7800, #e61e1e, #ffe600, #c8003c. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy, brutalist, concrete, overcast. Notes: brutalist concrete, overcast.",
+        "generatedStyleBrief": "Use the Nebula moodboard 'Overcast concrete' as world direction at strength 0.85. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #404045, #5a5a60, #88adcb, #075a68, #a5c8e1, #28282c, #7198b9, #94853e. Accent colors, used sparingly: #ff7800, #e61e1e, #ffe600, #c8003c. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy.",
+        "kept": [],
+        "leftOut": [],
+        "mayClash": [],
         "needsAnalysis": false,
         "negativePrompt": "blurry, low-detail artifacts, text overlays, lens flare",
+        "notesSent": false,
         "override": {
           "active": true,
           "stale": false
@@ -1017,6 +1059,8 @@
           "#7198b9",
           "#94853e"
         ],
+        "paletteClashes": [],
+        "pinnedClashes": [],
         "pinnedColors": {
           "exclude": [],
           "include": []
@@ -1028,6 +1072,21 @@
         "stale": false,
         "text": "Raw board-formed concrete under a flat overcast sky. Cold blue-grey light, wet surfaces, no sun. Keep the architecture monumental and empty.",
         "updatedAt": "<time of the read>"
+      },
+      "clashMode": "leave-out",
+      "colorCheck": {
+        "basis": "e3b03677f12f1062",
+        "checks": {
+          "words": {
+            "version": 2
+          }
+        },
+        "findings": [],
+        "version": 1
+      },
+      "colorChoices": {
+        "keep": [],
+        "leaveOut": []
       },
       "direction": "",
       "id": "8d2e6b0c4a17",
@@ -1095,6 +1154,7 @@
         "include": []
       },
       "projectId": "proj-golden",
+      "sendNotes": false,
       "strength": 0.85,
       "updatedAt": "2026-10-18T18:40:27.551982+00:00"
     },
@@ -1110,10 +1170,15 @@
         "lens flare"
       ],
       "avoidPrompt": "Keep these out of the image: text overlays, lens flare.",
+      "clashMode": "leave-out",
       "direction": "",
-      "generatedStyleBrief": "Use the Nebula moodboard 'Overcast concrete' as world direction at strength 0.85. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #404045, #5a5a60, #88adcb, #075a68, #a5c8e1, #28282c, #7198b9, #94853e. Accent colors, used sparingly: #ff7800, #e61e1e, #ffe600, #c8003c. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy, brutalist, concrete, overcast. Notes: brutalist concrete, overcast.",
+      "generatedStyleBrief": "Use the Nebula moodboard 'Overcast concrete' as world direction at strength 0.85. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #404045, #5a5a60, #88adcb, #075a68, #a5c8e1, #28282c, #7198b9, #94853e. Accent colors, used sparingly: #ff7800, #e61e1e, #ffe600, #c8003c. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy.",
+      "kept": [],
+      "leftOut": [],
+      "mayClash": [],
       "needsAnalysis": false,
       "negativePrompt": "blurry, low-detail artifacts, text overlays, lens flare",
+      "notesSent": false,
       "override": {
         "active": true,
         "stale": false
@@ -1128,6 +1193,8 @@
         "#7198b9",
         "#94853e"
       ],
+      "paletteClashes": [],
+      "pinnedClashes": [],
       "pinnedColors": {
         "exclude": [],
         "include": []
@@ -1406,7 +1473,7 @@
                 "height": 64,
                 "id": "e2b1f6d3a013",
                 "lightness": 76.971,
-                "notes": "this concrete",
+                "notes": "",
                 "palette": [
                   "#404045",
                   "#5a5a60",
@@ -1526,10 +1593,7 @@
               "palette-led",
               "worldbuilding",
               "environmental continuity",
-              "high color energy",
-              "brutalist",
-              "concrete",
-              "overcast"
+              "high color energy"
             ],
             "lighting": "balanced mid-key lighting",
             "materials": [],
@@ -1589,10 +1653,10 @@
             ],
             "sourceHash": "4a3c36f18971268b",
             "strength": 0.85,
-            "styleBrief": "Raw board-formed concrete under a flat overcast sky. Cold blue-grey light, wet surfaces, no sun. Keep the architecture monumental and empty.",
+            "styleBrief": "Use the Nebula moodboard 'Overcast concrete' as world direction at strength 0.85. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #404045, #5a5a60, #88adcb, #075a68, #a5c8e1, #28282c, #7198b9, #94853e. Accent colors, used sparingly: #ff7800, #e61e1e, #ffe600, #c8003c. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy.",
             "subjectBias": [],
-            "summary": "6 reference image(s) analyzed as world. Palette: #404045, #5a5a60, #88adcb, #075a68, #a5c8e1. Accents: #ff7800, #e61e1e, #ffe600, #c8003c. Notes emphasize: brutalist concrete, overcast",
-            "tasteProfile": "world, materials, environment, and production design; cues: palette-led, worldbuilding, environmental continuity, high color energy, brutalist, concrete; colors: #404045, #5a5a60, #88adcb, #075a68.",
+            "summary": "6 reference image(s) analyzed as world. Palette: #404045, #5a5a60, #88adcb, #075a68, #a5c8e1. Accents: #ff7800, #e61e1e, #ffe600, #c8003c.",
+            "tasteProfile": "world, materials, environment, and production design; cues: palette-led, worldbuilding, environmental continuity, high color energy; colors: #404045, #5a5a60, #88adcb, #075a68.",
             "textures": [],
             "version": 2,
             "warnings": [
@@ -1608,6 +1672,7 @@
             "active": true,
             "stale": false
           },
+          "clashMode": "leave-out",
           "direction": "",
           "images": [
             {
@@ -1627,7 +1692,7 @@
             {
               "excluded": false,
               "id": "e2b1f6d3a013",
-              "notes": "this concrete",
+              "notes": "",
               "url": "/api/outputs/moodboard-golden/ink-wash-1x1.png",
               "weight": 1.0
             },
@@ -1653,12 +1718,16 @@
               "weight": 0.7
             }
           ],
+          "kept": [],
           "kind": "nebula_moodboard",
+          "leftOut": [],
+          "mayClash": [],
           "mode": "world",
           "moodboardId": "8d2e6b0c4a17",
           "name": "Overcast concrete",
           "negativePrompt": "blurry, low-detail artifacts, text overlays, lens flare",
-          "notes": "brutalist concrete, overcast",
+          "notes": "",
+          "notesSent": false,
           "palette": [
             "#404045",
             "#5a5a60",
@@ -1669,6 +1738,8 @@
             "#7198b9",
             "#94853e"
           ],
+          "paletteClashes": [],
+          "pinnedClashes": [],
           "pinnedColors": {
             "exclude": [],
             "include": []
@@ -2179,10 +2250,15 @@
         ],
         "avoid": [],
         "avoidPrompt": "",
+        "clashMode": "leave-out",
         "direction": "",
-        "generatedStyleBrief": "Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy, quiet, coastal, evenings, film, grain. Notes: quiet coastal evenings, film grain.",
+        "generatedStyleBrief": "Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy.",
+        "kept": [],
+        "leftOut": [],
+        "mayClash": [],
         "needsAnalysis": false,
         "negativePrompt": "blurry, low-detail artifacts",
+        "notesSent": false,
         "override": {
           "active": false,
           "stale": false
@@ -2197,13 +2273,30 @@
           "#6a4849",
           "#845447"
         ],
+        "paletteClashes": [],
+        "pinnedClashes": [],
         "pinnedColors": {
           "exclude": [],
           "include": []
         },
-        "styleBrief": "Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy, quiet, coastal, evenings, film, grain. Notes: quiet coastal evenings, film grain."
+        "styleBrief": "Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy."
       },
       "briefOverride": null,
+      "clashMode": "leave-out",
+      "colorCheck": {
+        "basis": "6a1b790a85daabd8",
+        "checks": {
+          "words": {
+            "version": 2
+          }
+        },
+        "findings": [],
+        "version": 1
+      },
+      "colorChoices": {
+        "keep": [],
+        "leaveOut": []
+      },
       "direction": "",
       "id": "3f9c1a7e2b40",
       "images": [
@@ -2261,6 +2354,7 @@
         "include": []
       },
       "projectId": null,
+      "sendNotes": false,
       "strength": 0.7,
       "updatedAt": "2026-10-18T17:05:09.771530+00:00"
     },
@@ -2273,10 +2367,15 @@
       ],
       "avoid": [],
       "avoidPrompt": "",
+      "clashMode": "leave-out",
       "direction": "",
-      "generatedStyleBrief": "Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy, quiet, coastal, evenings, film, grain. Notes: quiet coastal evenings, film grain.",
+      "generatedStyleBrief": "Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy.",
+      "kept": [],
+      "leftOut": [],
+      "mayClash": [],
       "needsAnalysis": false,
       "negativePrompt": "blurry, low-detail artifacts",
+      "notesSent": false,
       "override": {
         "active": false,
         "stale": false
@@ -2291,11 +2390,13 @@
         "#6a4849",
         "#845447"
       ],
+      "paletteClashes": [],
+      "pinnedClashes": [],
       "pinnedColors": {
         "exclude": [],
         "include": []
       },
-      "styleBrief": "Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy, quiet, coastal, evenings, film, grain. Notes: quiet coastal evenings, film grain."
+      "styleBrief": "Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy."
     },
     "generators": {
       "diffusion": {
@@ -2305,14 +2406,14 @@
         "params": {
           "negative_prompt": "blurry, low-detail artifacts"
         },
-        "prompt": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy, quiet, coastal, evenings, film, grain. Notes: quiet coastal evenings, film grain."
+        "prompt": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy."
       },
       "instruction": {
         "inputs": [
           "prompt"
         ],
         "params": {},
-        "prompt": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy, quiet, coastal, evenings, film, grain. Notes: quiet coastal evenings, film grain."
+        "prompt": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy."
       }
     },
     "id": "3f9c1a7e2b40",
@@ -2488,7 +2589,7 @@
                 "height": 54,
                 "id": "d1a0e5c2f901",
                 "lightness": 90.307,
-                "notes": "the light we want",
+                "notes": "",
                 "palette": [
                   "#6a4849",
                   "#845447",
@@ -2626,7 +2727,7 @@
                 "height": 80,
                 "id": "d1a0e5c2f904",
                 "lightness": 58.613,
-                "notes": "texture only",
+                "notes": "",
                 "palette": [
                   "#6a311b",
                   "#4e2516",
@@ -2685,12 +2786,7 @@
               "palette-led",
               "style consistency",
               "visual language",
-              "high color energy",
-              "quiet",
-              "coastal",
-              "evenings",
-              "film",
-              "grain"
+              "high color energy"
             ],
             "lighting": "balanced mid-key lighting",
             "materials": [],
@@ -2728,7 +2824,7 @@
                   "#6a4849",
                   "#845447"
                 ],
-                "promptSuffix": "Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy, quiet, coastal, evenings, film, grain. Notes: quiet coastal evenings, film grain."
+                "promptSuffix": "Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy."
               },
               "krea": {
                 "representativeImages": [
@@ -2740,7 +2836,7 @@
                 ],
                 "strategy": "image_style_references",
                 "strength": 0.7,
-                "styleBrief": "Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy, quiet, coastal, evenings, film, grain. Notes: quiet coastal evenings, film grain."
+                "styleBrief": "Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy."
               }
             },
             "representativeImages": [
@@ -2752,10 +2848,10 @@
             ],
             "sourceHash": "42b1fceff34a38b9",
             "strength": 0.7,
-            "styleBrief": "Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Visual style only; avoid copying specific subjects or identities. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy, quiet, coastal, evenings, film, grain. User notes: quiet coastal evenings, film grain",
+            "styleBrief": "Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy.",
             "subjectBias": [],
-            "summary": "5 reference image(s) analyzed as look. Palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846. Accents: #ff285a, #145ae6, #00ffa0, #fad214. Notes emphasize: quiet coastal evenings, film grain",
-            "tasteProfile": "visual style only; avoid copying specific subjects or identities; cues: palette-led, style consistency, visual language, high color energy, quiet, coastal; colors: #cfc4b1, #2c1046, #e2d9c8, #190e2e.",
+            "summary": "5 reference image(s) analyzed as look. Palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846. Accents: #ff285a, #145ae6, #00ffa0, #fad214.",
+            "tasteProfile": "visual style only; the subject comes from the prompt; cues: palette-led, style consistency, visual language, high color energy; colors: #cfc4b1, #2c1046, #e2d9c8, #190e2e.",
             "textures": [],
             "version": 2,
             "warnings": []
@@ -2766,12 +2862,13 @@
             "active": false,
             "stale": false
           },
+          "clashMode": "leave-out",
           "direction": "",
           "images": [
             {
               "excluded": false,
               "id": "d1a0e5c2f901",
-              "notes": "the light we want",
+              "notes": "",
               "url": "/api/outputs/moodboard-golden/dusk-harbour-16x9.png",
               "weight": 1.0
             },
@@ -2792,7 +2889,7 @@
             {
               "excluded": false,
               "id": "d1a0e5c2f904",
-              "notes": "texture only",
+              "notes": "",
               "url": "/api/outputs/moodboard-golden/rust-portrait-3x4.png",
               "weight": 0.3
             },
@@ -2804,12 +2901,16 @@
               "weight": 0.8
             }
           ],
+          "kept": [],
           "kind": "nebula_moodboard",
+          "leftOut": [],
+          "mayClash": [],
           "mode": "look",
           "moodboardId": "3f9c1a7e2b40",
           "name": "Coastal evenings",
           "negativePrompt": "blurry, low-detail artifacts",
-          "notes": "quiet coastal evenings, film grain",
+          "notes": "",
+          "notesSent": false,
           "palette": [
             "#cfc4b1",
             "#2c1046",
@@ -2820,6 +2921,8 @@
             "#6a4849",
             "#845447"
           ],
+          "paletteClashes": [],
+          "pinnedClashes": [],
           "pinnedColors": {
             "exclude": [],
             "include": []
@@ -2844,7 +2947,7 @@
                 "#6a4849",
                 "#845447"
               ],
-              "promptSuffix": "Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy, quiet, coastal, evenings, film, grain. Notes: quiet coastal evenings, film grain."
+              "promptSuffix": "Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy."
             },
             "krea": {
               "representativeImages": [
@@ -2856,7 +2959,7 @@
               ],
               "strategy": "image_style_references",
               "strength": 0.7,
-              "styleBrief": "Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy, quiet, coastal, evenings, film, grain. Notes: quiet coastal evenings, film grain."
+              "styleBrief": "Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy."
             }
           },
           "representativeImages": [
@@ -2867,7 +2970,7 @@
             "/api/outputs/moodboard-golden/rust-portrait-3x4.png"
           ],
           "strength": 0.7,
-          "styleBrief": "Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy, quiet, coastal, evenings, film, grain. Notes: quiet coastal evenings, film grain."
+          "styleBrief": "Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy."
         }
       },
       "negative_prompt": {
@@ -2899,7 +3002,7 @@
       },
       "style_brief": {
         "type": "Text",
-        "value": "Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy, quiet, coastal, evenings, film, grain. Notes: quiet coastal evenings, film grain."
+        "value": "Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy."
       }
     },
     "runNotes": [],
@@ -3362,10 +3465,15 @@
           "crowds"
         ],
         "avoidPrompt": "Keep these out of the image: crowds.",
+        "clashMode": "leave-out",
         "direction": "Moody street portraits at night.",
-        "generatedStyleBrief": "Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy, lone, figure, raincoat. Notes: a lone figure in a raincoat.",
+        "generatedStyleBrief": "Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy.",
+        "kept": [],
+        "leftOut": [],
+        "mayClash": [],
         "needsAnalysis": false,
         "negativePrompt": "blurry, low-detail artifacts, crowds",
+        "notesSent": false,
         "override": {
           "active": false,
           "stale": false
@@ -3380,13 +3488,30 @@
           "#4e2516",
           "#37304b"
         ],
+        "paletteClashes": [],
+        "pinnedClashes": [],
         "pinnedColors": {
           "exclude": [],
           "include": []
         },
-        "styleBrief": "Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy, lone, figure, raincoat. Notes: a lone figure in a raincoat."
+        "styleBrief": "Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy."
       },
       "briefOverride": null,
+      "clashMode": "leave-out",
+      "colorCheck": {
+        "basis": "27f8de21bae2fe12",
+        "checks": {
+          "words": {
+            "version": 2
+          }
+        },
+        "findings": [],
+        "version": 1
+      },
+      "colorChoices": {
+        "keep": [],
+        "leaveOut": []
+      },
       "direction": "Moody street portraits at night.",
       "id": "5b80d3f6a9c2",
       "images": [
@@ -3462,6 +3587,7 @@
         "include": []
       },
       "projectId": null,
+      "sendNotes": false,
       "strength": 0.65,
       "updatedAt": "2026-10-18T22:44:50.118263+00:00"
     },
@@ -3476,10 +3602,15 @@
         "crowds"
       ],
       "avoidPrompt": "Keep these out of the image: crowds.",
+      "clashMode": "leave-out",
       "direction": "Moody street portraits at night.",
-      "generatedStyleBrief": "Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy, lone, figure, raincoat. Notes: a lone figure in a raincoat.",
+      "generatedStyleBrief": "Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy.",
+      "kept": [],
+      "leftOut": [],
+      "mayClash": [],
       "needsAnalysis": false,
       "negativePrompt": "blurry, low-detail artifacts, crowds",
+      "notesSent": false,
       "override": {
         "active": false,
         "stale": false
@@ -3494,11 +3625,13 @@
         "#4e2516",
         "#37304b"
       ],
+      "paletteClashes": [],
+      "pinnedClashes": [],
       "pinnedColors": {
         "exclude": [],
         "include": []
       },
-      "styleBrief": "Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy, lone, figure, raincoat. Notes: a lone figure in a raincoat."
+      "styleBrief": "Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy."
     },
     "generators": {
       "diffusion": {
@@ -3508,14 +3641,14 @@
         "params": {
           "negative_prompt": "blurry, low-detail artifacts, crowds"
         },
-        "prompt": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy, lone, figure, raincoat. Notes: a lone figure in a raincoat."
+        "prompt": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy."
       },
       "instruction": {
         "inputs": [
           "prompt"
         ],
         "params": {},
-        "prompt": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy, lone, figure, raincoat. Notes: a lone figure in a raincoat.\n\nKeep these out of the image: crowds."
+        "prompt": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy.\n\nKeep these out of the image: crowds."
       }
     },
     "id": "5b80d3f6a9c2",
@@ -3794,7 +3927,7 @@
                 "height": 80,
                 "id": "a4d3b8f5c035",
                 "lightness": 58.613,
-                "notes": "warm rust",
+                "notes": "",
                 "palette": [
                   "#6a311b",
                   "#4e2516",
@@ -3907,10 +4040,7 @@
               "subject continuity",
               "silhouette consistency",
               "deep shadows",
-              "high color energy",
-              "lone",
-              "figure",
-              "raincoat"
+              "high color energy"
             ],
             "lighting": "low-key, shadow-forward lighting",
             "materials": [],
@@ -3948,7 +4078,7 @@
                   "#4e2516",
                   "#37304b"
                 ],
-                "promptSuffix": "Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy, lone, figure, raincoat. Notes: a lone figure in a raincoat."
+                "promptSuffix": "Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy."
               },
               "krea": {
                 "representativeImages": [
@@ -3959,7 +4089,7 @@
                 ],
                 "strategy": "image_style_references",
                 "strength": 0.65,
-                "styleBrief": "Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy, lone, figure, raincoat. Notes: a lone figure in a raincoat."
+                "styleBrief": "Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy."
               }
             },
             "representativeImages": [
@@ -3970,14 +4100,10 @@
             ],
             "sourceHash": "1118cd16a5513eeb",
             "strength": 0.65,
-            "styleBrief": "Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy, lone, figure, raincoat. Notes: a lone figure in a raincoat.",
-            "subjectBias": [
-              "lone",
-              "figure",
-              "raincoat"
-            ],
-            "summary": "6 reference image(s) analyzed as subject. Palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447. Accents: #ff285a, #00ffa0, #28c8be, #ffe600. Notes emphasize: a lone figure in a raincoat",
-            "tasteProfile": "subject, silhouette, costume, and identity-adjacent visual cues; cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy, lone; colors: #2c1046, #190e2e, #6a311b, #6a4849.",
+            "styleBrief": "Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy.",
+            "subjectBias": [],
+            "summary": "6 reference image(s) analyzed as subject. Palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447. Accents: #ff285a, #00ffa0, #28c8be, #ffe600.",
+            "tasteProfile": "subject, silhouette, costume, and identity-adjacent visual cues; cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy; colors: #2c1046, #190e2e, #6a311b, #6a4849.",
             "textures": [],
             "version": 3,
             "warnings": [
@@ -3992,6 +4118,7 @@
             "active": false,
             "stale": false
           },
+          "clashMode": "leave-out",
           "direction": "Moody street portraits at night.",
           "images": [
             {
@@ -4018,7 +4145,7 @@
             {
               "excluded": false,
               "id": "a4d3b8f5c035",
-              "notes": "warm rust",
+              "notes": "",
               "url": "/api/outputs/moodboard-golden/rust-portrait-3x4.png",
               "weight": 0.5
             },
@@ -4037,12 +4164,16 @@
               "weight": 0.25
             }
           ],
+          "kept": [],
           "kind": "nebula_moodboard",
+          "leftOut": [],
+          "mayClash": [],
           "mode": "subject",
           "moodboardId": "5b80d3f6a9c2",
           "name": "Rain street",
           "negativePrompt": "blurry, low-detail artifacts, crowds",
-          "notes": "a lone figure in a raincoat",
+          "notes": "",
+          "notesSent": false,
           "palette": [
             "#2c1046",
             "#190e2e",
@@ -4053,6 +4184,8 @@
             "#4e2516",
             "#37304b"
           ],
+          "paletteClashes": [],
+          "pinnedClashes": [],
           "pinnedColors": {
             "exclude": [],
             "include": []
@@ -4077,7 +4210,7 @@
                 "#4e2516",
                 "#37304b"
               ],
-              "promptSuffix": "Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy, lone, figure, raincoat. Notes: a lone figure in a raincoat."
+              "promptSuffix": "Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy."
             },
             "krea": {
               "representativeImages": [
@@ -4088,7 +4221,7 @@
               ],
               "strategy": "image_style_references",
               "strength": 0.65,
-              "styleBrief": "Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy, lone, figure, raincoat. Notes: a lone figure in a raincoat."
+              "styleBrief": "Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy."
             }
           },
           "representativeImages": [
@@ -4098,7 +4231,7 @@
             "/api/outputs/moodboard-golden/teal-pool-9x16.png"
           ],
           "strength": 0.65,
-          "styleBrief": "Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy, lone, figure, raincoat. Notes: a lone figure in a raincoat."
+          "styleBrief": "Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy."
         }
       },
       "negative_prompt": {
@@ -4129,7 +4262,7 @@
       },
       "style_brief": {
         "type": "Text",
-        "value": "Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy, lone, figure, raincoat. Notes: a lone figure in a raincoat."
+        "value": "Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy."
       }
     },
     "runNotes": [],
@@ -4518,10 +4651,15 @@
           "logos"
         ],
         "avoidPrompt": "Keep these out of the image: logos.",
+        "clashMode": "leave-out",
         "direction": "Busy market colour, sun-bleached.",
-        "generatedStyleBrief": "Busy market colour, sun-bleached. Use the Nebula moodboard 'Noon market' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #94853e, #88adcb, #ad964b, #7a712f, #a5c8e1, #404045, #5a5a60, #075a68. Accent colors, used sparingly: #ff7800, #c8003c, #e61e1e, #ffe600. Visual cues: palette-led, style consistency, visual language, high color energy, market, stalls, noon. Notes: market stalls at noon.",
+        "generatedStyleBrief": "Busy market colour, sun-bleached. Use the Nebula moodboard 'Noon market' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #94853e, #88adcb, #ad964b, #7a712f, #a5c8e1, #404045, #5a5a60, #075a68. Accent colors, used sparingly: #ff7800, #c8003c, #e61e1e, #ffe600. Visual cues: palette-led, style consistency, visual language, high color energy.",
+        "kept": [],
+        "leftOut": [],
+        "mayClash": [],
         "needsAnalysis": false,
         "negativePrompt": "blurry, low-detail artifacts, logos",
+        "notesSent": false,
         "override": {
           "active": true,
           "stale": true
@@ -4536,6 +4674,8 @@
           "#5a5a60",
           "#075a68"
         ],
+        "paletteClashes": [],
+        "pinnedClashes": [],
         "pinnedColors": {
           "exclude": [],
           "include": []
@@ -4547,6 +4687,21 @@
         "stale": true,
         "text": "Sun-bleached market awnings in olive and teal, hard noon shadows, dense stalls.",
         "updatedAt": "2026-10-18T21:49:02.381559+00:00"
+      },
+      "clashMode": "leave-out",
+      "colorCheck": {
+        "basis": "d433cd80ee8bb4dd",
+        "checks": {
+          "words": {
+            "version": 2
+          }
+        },
+        "findings": [],
+        "version": 1
+      },
+      "colorChoices": {
+        "keep": [],
+        "leaveOut": []
       },
       "direction": "Busy market colour, sun-bleached.",
       "id": "e1d74b2a9f36",
@@ -4596,6 +4751,7 @@
         "include": []
       },
       "projectId": "proj-golden",
+      "sendNotes": false,
       "strength": 0.7,
       "updatedAt": "2026-10-18T21:58:31.660472+00:00"
     },
@@ -4610,10 +4766,15 @@
         "logos"
       ],
       "avoidPrompt": "Keep these out of the image: logos.",
+      "clashMode": "leave-out",
       "direction": "Busy market colour, sun-bleached.",
-      "generatedStyleBrief": "Busy market colour, sun-bleached. Use the Nebula moodboard 'Noon market' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #94853e, #88adcb, #ad964b, #7a712f, #a5c8e1, #404045, #5a5a60, #075a68. Accent colors, used sparingly: #ff7800, #c8003c, #e61e1e, #ffe600. Visual cues: palette-led, style consistency, visual language, high color energy, market, stalls, noon. Notes: market stalls at noon.",
+      "generatedStyleBrief": "Busy market colour, sun-bleached. Use the Nebula moodboard 'Noon market' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #94853e, #88adcb, #ad964b, #7a712f, #a5c8e1, #404045, #5a5a60, #075a68. Accent colors, used sparingly: #ff7800, #c8003c, #e61e1e, #ffe600. Visual cues: palette-led, style consistency, visual language, high color energy.",
+      "kept": [],
+      "leftOut": [],
+      "mayClash": [],
       "needsAnalysis": false,
       "negativePrompt": "blurry, low-detail artifacts, logos",
+      "notesSent": false,
       "override": {
         "active": true,
         "stale": true
@@ -4628,6 +4789,8 @@
         "#5a5a60",
         "#075a68"
       ],
+      "paletteClashes": [],
+      "pinnedClashes": [],
       "pinnedColors": {
         "exclude": [],
         "include": []
@@ -5073,10 +5236,7 @@
               "palette-led",
               "style consistency",
               "visual language",
-              "high color energy",
-              "market",
-              "stalls",
-              "noon"
+              "high color energy"
             ],
             "lighting": "balanced mid-key lighting",
             "materials": [],
@@ -5136,10 +5296,10 @@
             ],
             "sourceHash": "ea6de433436405e2",
             "strength": 0.7,
-            "styleBrief": "Use the Nebula moodboard 'Noon market' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #94853e, #88adcb, #ad964b, #7a712f, #a5c8e1, #075a68, #7198b9, #6087ab. Accent colors, used sparingly: #ff7800, #c8003c, #ffe600, #e61e1e. Visual cues: palette-led, style consistency, visual language, high color energy, market, stalls, noon. Notes: market stalls at noon.",
+            "styleBrief": "Use the Nebula moodboard 'Noon market' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #94853e, #88adcb, #ad964b, #7a712f, #a5c8e1, #075a68, #7198b9, #6087ab. Accent colors, used sparingly: #ff7800, #c8003c, #ffe600, #e61e1e. Visual cues: palette-led, style consistency, visual language, high color energy.",
             "subjectBias": [],
-            "summary": "4 reference image(s) analyzed as look. Palette: #94853e, #88adcb, #ad964b, #7a712f, #a5c8e1. Accents: #ff7800, #c8003c, #ffe600, #e61e1e. Notes emphasize: market stalls at noon",
-            "tasteProfile": "visual style only; the subject comes from the prompt; cues: palette-led, style consistency, visual language, high color energy, market, stalls; colors: #94853e, #88adcb, #ad964b, #7a712f.",
+            "summary": "4 reference image(s) analyzed as look. Palette: #94853e, #88adcb, #ad964b, #7a712f, #a5c8e1. Accents: #ff7800, #c8003c, #ffe600, #e61e1e.",
+            "tasteProfile": "visual style only; the subject comes from the prompt; cues: palette-led, style consistency, visual language, high color energy; colors: #94853e, #88adcb, #ad964b, #7a712f.",
             "textures": [],
             "warnings": [
               "The board changed after its saved analysis, so this run analyzed it again. Analyze it in Moodboard Studio to save the new analysis."
@@ -5153,6 +5313,7 @@
             "active": true,
             "stale": true
           },
+          "clashMode": "leave-out",
           "direction": "Busy market colour, sun-bleached.",
           "images": [
             {
@@ -5184,12 +5345,16 @@
               "weight": 0.5
             }
           ],
+          "kept": [],
           "kind": "nebula_moodboard",
+          "leftOut": [],
+          "mayClash": [],
           "mode": "look",
           "moodboardId": "e1d74b2a9f36",
           "name": "Noon market",
           "negativePrompt": "blurry, low-detail artifacts, logos",
-          "notes": "market stalls at noon",
+          "notes": "",
+          "notesSent": false,
           "palette": [
             "#94853e",
             "#88adcb",
@@ -5200,6 +5365,8 @@
             "#7198b9",
             "#6087ab"
           ],
+          "paletteClashes": [],
+          "pinnedClashes": [],
           "pinnedColors": {
             "exclude": [],
             "include": []
@@ -5877,10 +6044,15 @@
         ],
         "avoid": [],
         "avoidPrompt": "",
+        "clashMode": "leave-out",
         "direction": "",
-        "generatedStyleBrief": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy, harbour, town. Notes: rain-soaked harbour town.",
+        "generatedStyleBrief": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy.",
+        "kept": [],
+        "leftOut": [],
+        "mayClash": [],
         "needsAnalysis": false,
         "negativePrompt": "blurry, low-detail artifacts",
+        "notesSent": false,
         "override": {
           "active": false,
           "stale": false
@@ -5895,13 +6067,30 @@
           "#190e2e",
           "#6a4849"
         ],
+        "paletteClashes": [],
+        "pinnedClashes": [],
         "pinnedColors": {
           "exclude": [],
           "include": []
         },
-        "styleBrief": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy, harbour, town. Notes: rain-soaked harbour town."
+        "styleBrief": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy."
       },
       "briefOverride": null,
+      "clashMode": "leave-out",
+      "colorCheck": {
+        "basis": "651bc626028f2468",
+        "checks": {
+          "words": {
+            "version": 2
+          }
+        },
+        "findings": [],
+        "version": 1
+      },
+      "colorChoices": {
+        "keep": [],
+        "leaveOut": []
+      },
       "direction": "",
       "id": "a92f5c08e3d1",
       "images": [
@@ -5986,6 +6175,7 @@
         "include": []
       },
       "projectId": null,
+      "sendNotes": false,
       "strength": 0.75,
       "updatedAt": "2026-10-19T16:02:37.019844+00:00"
     },
@@ -5998,10 +6188,15 @@
       ],
       "avoid": [],
       "avoidPrompt": "",
+      "clashMode": "leave-out",
       "direction": "",
-      "generatedStyleBrief": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy, harbour, town. Notes: rain-soaked harbour town.",
+      "generatedStyleBrief": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy.",
+      "kept": [],
+      "leftOut": [],
+      "mayClash": [],
       "needsAnalysis": false,
       "negativePrompt": "blurry, low-detail artifacts",
+      "notesSent": false,
       "override": {
         "active": false,
         "stale": false
@@ -6016,11 +6211,13 @@
         "#190e2e",
         "#6a4849"
       ],
+      "paletteClashes": [],
+      "pinnedClashes": [],
       "pinnedColors": {
         "exclude": [],
         "include": []
       },
-      "styleBrief": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy, harbour, town. Notes: rain-soaked harbour town."
+      "styleBrief": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy."
     },
     "generators": {
       "diffusion": {
@@ -6030,14 +6227,14 @@
         "params": {
           "negative_prompt": "blurry, low-detail artifacts"
         },
-        "prompt": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy, harbour, town. Notes: rain-soaked harbour town."
+        "prompt": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy."
       },
       "instruction": {
         "inputs": [
           "prompt"
         ],
         "params": {},
-        "prompt": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy, harbour, town. Notes: rain-soaked harbour town."
+        "prompt": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy."
       }
     },
     "id": "a92f5c08e3d1",
@@ -6516,7 +6713,7 @@
                 "height": 96,
                 "id": "c6f5daa7e057",
                 "lightness": 39.165,
-                "notes": "neon edge light",
+                "notes": "",
                 "number": 7,
                 "palette": [
                   "#2c1046",
@@ -6576,9 +6773,7 @@
               "palette-led",
               "worldbuilding",
               "environmental continuity",
-              "high color energy",
-              "harbour",
-              "town"
+              "high color energy"
             ],
             "lighting": "balanced mid-key lighting",
             "materials": [],
@@ -6616,7 +6811,7 @@
                   "#190e2e",
                   "#6a4849"
                 ],
-                "promptSuffix": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy, harbour, town. Notes: rain-soaked harbour town."
+                "promptSuffix": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy."
               },
               "krea": {
                 "representativeImages": [
@@ -6628,7 +6823,7 @@
                 ],
                 "strategy": "image_style_references",
                 "strength": 0.75,
-                "styleBrief": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy, harbour, town. Notes: rain-soaked harbour town."
+                "styleBrief": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy."
               }
             },
             "representativeImages": [
@@ -6640,10 +6835,10 @@
             ],
             "sourceHash": "99159f1bcb568810",
             "strength": 0.75,
-            "styleBrief": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy, harbour, town. Notes: rain-soaked harbour town.",
+            "styleBrief": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy.",
             "subjectBias": [],
-            "summary": "7 reference image(s) analyzed as world. Palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1. Accents: #ff285a, #3c1ea0, #ff7800, #00ffa0. Notes emphasize: rain-soaked harbour town",
-            "tasteProfile": "world, materials, environment, and production design; cues: palette-led, worldbuilding, environmental continuity, high color energy, harbour, town; colors: #e5b49c, #d39d87, #2c1046, #88adcb.",
+            "summary": "7 reference image(s) analyzed as world. Palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1. Accents: #ff285a, #3c1ea0, #ff7800, #00ffa0.",
+            "tasteProfile": "world, materials, environment, and production design; cues: palette-led, worldbuilding, environmental continuity, high color energy; colors: #e5b49c, #d39d87, #2c1046, #88adcb.",
             "textures": [],
             "version": 4,
             "warnings": [
@@ -6656,6 +6851,7 @@
             "active": false,
             "stale": false
           },
+          "clashMode": "leave-out",
           "direction": "",
           "images": [
             {
@@ -6696,7 +6892,7 @@
             {
               "excluded": false,
               "id": "c6f5daa7e057",
-              "notes": "neon edge light",
+              "notes": "",
               "url": "/api/outputs/moodboard-golden/neon-alley-9x16.png",
               "weight": 0.6
             },
@@ -6708,12 +6904,16 @@
               "weight": 1.0
             }
           ],
+          "kept": [],
           "kind": "nebula_moodboard",
+          "leftOut": [],
+          "mayClash": [],
           "mode": "world",
           "moodboardId": "a92f5c08e3d1",
           "name": "Harbour town",
           "negativePrompt": "blurry, low-detail artifacts",
-          "notes": "rain-soaked harbour town",
+          "notes": "",
+          "notesSent": false,
           "palette": [
             "#e5b49c",
             "#d39d87",
@@ -6724,6 +6924,8 @@
             "#190e2e",
             "#6a4849"
           ],
+          "paletteClashes": [],
+          "pinnedClashes": [],
           "pinnedColors": {
             "exclude": [],
             "include": []
@@ -6748,7 +6950,7 @@
                 "#190e2e",
                 "#6a4849"
               ],
-              "promptSuffix": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy, harbour, town. Notes: rain-soaked harbour town."
+              "promptSuffix": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy."
             },
             "krea": {
               "representativeImages": [
@@ -6760,7 +6962,7 @@
               ],
               "strategy": "image_style_references",
               "strength": 0.75,
-              "styleBrief": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy, harbour, town. Notes: rain-soaked harbour town."
+              "styleBrief": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy."
             }
           },
           "representativeImages": [
@@ -6771,7 +6973,7 @@
             "/api/outputs/moodboard-golden/rust-portrait-3x4.png"
           ],
           "strength": 0.75,
-          "styleBrief": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy, harbour, town. Notes: rain-soaked harbour town."
+          "styleBrief": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy."
         }
       },
       "negative_prompt": {
@@ -6803,7 +7005,7 @@
       },
       "style_brief": {
         "type": "Text",
-        "value": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy, harbour, town. Notes: rain-soaked harbour town."
+        "value": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy."
       }
     },
     "runNotes": [],
@@ -7349,10 +7551,15 @@
           "extra fingers"
         ],
         "avoidPrompt": "Keep these out of the image: watermarks, extra fingers, colors close to #075a68.",
+        "clashMode": "leave-out",
         "direction": "A sunlit 1970s pool club, glossy and calm.",
-        "generatedStyleBrief": "A sunlit 1970s pool club, glossy and calm. Use the Nebula moodboard 'Pool club' as look direction at strength 0.80. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #e5b49c, #d39d87, #404045, #5a5a60, #076e7a, #c38a75, #073144. Accent colors, used sparingly: #ffe600, #3c1ea0, #e61e1e, #c8003c. Make sure these colors appear: #ff3366. Visual cues: palette-led, style consistency, visual language, high color energy, pool, club. Notes: members-only pool club, 1970s.",
+        "generatedStyleBrief": "A sunlit 1970s pool club, glossy and calm. Use the Nebula moodboard 'Pool club' as look direction at strength 0.80. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #e5b49c, #d39d87, #404045, #5a5a60, #076e7a, #c38a75, #073144. Accent colors, used sparingly: #ffe600, #3c1ea0, #e61e1e, #c8003c. Make sure these colors appear: #ff3366. Visual cues: palette-led, style consistency, visual language, high color energy.",
+        "kept": [],
+        "leftOut": [],
+        "mayClash": [],
         "needsAnalysis": false,
         "negativePrompt": "blurry, low-detail artifacts, watermarks, extra fingers",
+        "notesSent": false,
         "override": {
           "active": true,
           "stale": false
@@ -7366,6 +7573,8 @@
           "#c38a75",
           "#073144"
         ],
+        "paletteClashes": [],
+        "pinnedClashes": [],
         "pinnedColors": {
           "exclude": [
             "#075a68"
@@ -7381,6 +7590,21 @@
         "stale": false,
         "text": "Glossy 1970s pool club at midday: teal water, peach tile, deep ink shade. Calm, sunlit, members only.",
         "updatedAt": "2026-10-19T16:31:48.402276+00:00"
+      },
+      "clashMode": "leave-out",
+      "colorCheck": {
+        "basis": "dea812bd1f544180",
+        "checks": {
+          "words": {
+            "version": 2
+          }
+        },
+        "findings": [],
+        "version": 1
+      },
+      "colorChoices": {
+        "keep": [],
+        "leaveOut": []
       },
       "direction": "A sunlit 1970s pool club, glossy and calm.",
       "id": "6c3b9e7d1a58",
@@ -7443,6 +7667,7 @@
         ]
       },
       "projectId": "proj-golden",
+      "sendNotes": false,
       "strength": 0.8,
       "updatedAt": "2026-10-19T16:31:48.402276+00:00"
     },
@@ -7458,10 +7683,15 @@
         "extra fingers"
       ],
       "avoidPrompt": "Keep these out of the image: watermarks, extra fingers, colors close to #075a68.",
+      "clashMode": "leave-out",
       "direction": "A sunlit 1970s pool club, glossy and calm.",
-      "generatedStyleBrief": "A sunlit 1970s pool club, glossy and calm. Use the Nebula moodboard 'Pool club' as look direction at strength 0.80. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #e5b49c, #d39d87, #404045, #5a5a60, #076e7a, #c38a75, #073144. Accent colors, used sparingly: #ffe600, #3c1ea0, #e61e1e, #c8003c. Make sure these colors appear: #ff3366. Visual cues: palette-led, style consistency, visual language, high color energy, pool, club. Notes: members-only pool club, 1970s.",
+      "generatedStyleBrief": "A sunlit 1970s pool club, glossy and calm. Use the Nebula moodboard 'Pool club' as look direction at strength 0.80. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #e5b49c, #d39d87, #404045, #5a5a60, #076e7a, #c38a75, #073144. Accent colors, used sparingly: #ffe600, #3c1ea0, #e61e1e, #c8003c. Make sure these colors appear: #ff3366. Visual cues: palette-led, style consistency, visual language, high color energy.",
+      "kept": [],
+      "leftOut": [],
+      "mayClash": [],
       "needsAnalysis": false,
       "negativePrompt": "blurry, low-detail artifacts, watermarks, extra fingers",
+      "notesSent": false,
       "override": {
         "active": true,
         "stale": false
@@ -7475,6 +7705,8 @@
         "#c38a75",
         "#073144"
       ],
+      "paletteClashes": [],
+      "pinnedClashes": [],
       "pinnedColors": {
         "exclude": [
           "#075a68"
@@ -7559,20 +7791,6 @@
                     "id": "d7a6ebb8f064",
                     "number": 4,
                     "share": 0.426
-                  }
-                ]
-              },
-              {
-                "hex": "#075a68",
-                "images": 1,
-                "role": "dominant",
-                "share": 0.0996,
-                "sources": [
-                  {
-                    "contribution": 0.0996,
-                    "id": "d7a6ebb8f061",
-                    "number": 1,
-                    "share": 0.3584
                   }
                 ]
               },
@@ -7726,11 +7944,6 @@
                 "colors": [
                   {
                     "accent": false,
-                    "hex": "#075a68",
-                    "share": 0.3584
-                  },
-                  {
-                    "accent": false,
                     "hex": "#076e7a",
                     "share": 0.1971
                   },
@@ -7761,7 +7974,6 @@
                 "notes": "",
                 "number": 1,
                 "palette": [
-                  "#075a68",
                   "#076e7a",
                   "#073144",
                   "#074354",
@@ -7855,7 +8067,7 @@
                 "height": 60,
                 "id": "d7a6ebb8f063",
                 "lightness": 108.421,
-                "notes": "awning stripes",
+                "notes": "",
                 "number": 3,
                 "palette": [
                   "#94853e",
@@ -7982,9 +8194,7 @@
               "palette-led",
               "style consistency",
               "visual language",
-              "high color energy",
-              "pool",
-              "club"
+              "high color energy"
             ],
             "lighting": "balanced mid-key lighting",
             "materials": [],
@@ -7994,7 +8204,6 @@
             "negativePrompt": "blurry, low-detail artifacts",
             "palette": [
               "#e5b49c",
-              "#075a68",
               "#d39d87",
               "#404045",
               "#5a5a60",
@@ -8014,7 +8223,6 @@
                 "negativePrompt": "blurry, low-detail artifacts, watermarks, extra fingers",
                 "palette": [
                   "#e5b49c",
-                  "#075a68",
                   "#d39d87",
                   "#404045",
                   "#5a5a60",
@@ -8046,10 +8254,10 @@
             ],
             "sourceHash": "a8184511906460b7",
             "strength": 0.8,
-            "styleBrief": "Use the Nebula moodboard 'Pool club' as look direction at strength 0.80. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #e5b49c, #075a68, #d39d87, #404045, #5a5a60, #076e7a, #c38a75, #073144. Accent colors, used sparingly: #ffe600, #3c1ea0, #e61e1e, #c8003c. Visual cues: palette-led, style consistency, visual language, high color energy, pool, club. Notes: members-only pool club, 1970s.",
+            "styleBrief": "Use the Nebula moodboard 'Pool club' as look direction at strength 0.80. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #e5b49c, #d39d87, #404045, #5a5a60, #076e7a, #c38a75, #073144. Accent colors, used sparingly: #ffe600, #3c1ea0, #e61e1e, #c8003c. Visual cues: palette-led, style consistency, visual language, high color energy.",
             "subjectBias": [],
-            "summary": "5 reference image(s) analyzed as look. Palette: #e5b49c, #075a68, #d39d87, #404045, #5a5a60. Accents: #ffe600, #3c1ea0, #e61e1e, #c8003c. Notes emphasize: members-only pool club, 1970s",
-            "tasteProfile": "visual style only; the subject comes from the prompt; cues: palette-led, style consistency, visual language, high color energy, pool, club; colors: #e5b49c, #075a68, #d39d87, #404045.",
+            "summary": "5 reference image(s) analyzed as look. Palette: #e5b49c, #d39d87, #404045, #5a5a60, #076e7a. Accents: #ffe600, #3c1ea0, #e61e1e, #c8003c.",
+            "tasteProfile": "visual style only; the subject comes from the prompt; cues: palette-led, style consistency, visual language, high color energy; colors: #e5b49c, #d39d87, #404045, #5a5a60.",
             "textures": [],
             "version": 4,
             "warnings": []
@@ -8063,6 +8271,7 @@
             "active": true,
             "stale": false
           },
+          "clashMode": "leave-out",
           "direction": "A sunlit 1970s pool club, glossy and calm.",
           "images": [
             {
@@ -8082,7 +8291,7 @@
             {
               "excluded": false,
               "id": "d7a6ebb8f063",
-              "notes": "awning stripes",
+              "notes": "",
               "url": "/api/outputs/moodboard-golden/olive-market-4x3.png",
               "weight": 0.5
             },
@@ -8101,12 +8310,16 @@
               "weight": 0.3
             }
           ],
+          "kept": [],
           "kind": "nebula_moodboard",
+          "leftOut": [],
+          "mayClash": [],
           "mode": "look",
           "moodboardId": "6c3b9e7d1a58",
           "name": "Pool club",
           "negativePrompt": "blurry, low-detail artifacts, watermarks, extra fingers",
-          "notes": "members-only pool club, 1970s",
+          "notes": "",
+          "notesSent": false,
           "palette": [
             "#e5b49c",
             "#d39d87",
@@ -8116,6 +8329,8 @@
             "#c38a75",
             "#073144"
           ],
+          "paletteClashes": [],
+          "pinnedClashes": [],
           "pinnedColors": {
             "exclude": [
               "#075a68"
@@ -8136,7 +8351,6 @@
               "negativePrompt": "blurry, low-detail artifacts, watermarks, extra fingers",
               "palette": [
                 "#e5b49c",
-                "#075a68",
                 "#d39d87",
                 "#404045",
                 "#5a5a60",

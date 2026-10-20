@@ -1153,6 +1153,8 @@ nebula moodboard set <board> --private-note 2="PAINTERLY (liked)"   # a label, n
 nebula moodboard set <board> --direction "quiet coastal mornings" --avoid "neon signage" --pin-color "#E8593C"
 nebula moodboard set <board> --unavoid "neon signage" --keep-out-color "#0000FF" --unpin-color "#E8593C"
 nebula moodboard set <board> --brief "My own brief..."   # or --clear-brief, --keep-brief
+nebula moodboard set <board> --keep-anyway "#a6392d"     # or --leave-out, --leave-out-flagged, --reset-color
+nebula moodboard set <board> --clash-mode flag           # leave-out (default), flag, no-measured, keep-all
 nebula moodboard set <board> --restore set-output.json  # undo: the `set --json` output
 nebula moodboard analyze <board>
 nebula moodboard analyze <board> --dry-run --merge-delta-e 8   # preview; saves nothing
@@ -1237,6 +1239,28 @@ nebula moodboard delete <board>
   anything is sent, and never cut short. Only the person may change or Keep
   the person's own hand-written brief; the refusal says so in a sentence,
   and nothing in that call is saved.
+- Clashes (contract 07, section 1.11): Nebula checks the measured colours
+  against the words in Direction and Avoid. `brief.leftOut` lists the
+  colours generators don't get, each with `reason`, `reasons`, `level`
+  (conflict or warning), `why` (check, choice or mode) and `foundBy` (the
+  check that found it: `words` today; a check that looks at the images can
+  add findings later). `brief.mayClash` still goes, `brief.kept` holds the
+  person's Keep anyway, and `brief.pinnedClashes` lists pinned colours that
+  clash (they always go). `show` prints each list with the command that
+  changes it. `--keep-anyway` / `keep_anyway` puts a colour back without
+  pinning it, `--leave-out` / `leave_out` takes one out,
+  `--leave-out-flagged` / `leave_out_flagged` takes out every flagged one,
+  `--reset-color` / `reset_colors` drops either choice, and `--clash-mode`
+  / `clash_mode` picks `leave-out` (default), `flag`, `no-measured` or
+  `keep-all`. `colorCheck` is the saved check and its findings.
+- Notes: a board's notes and its images' notes are for the person, their
+  team and agents. Generators get them only when the person turns on "Send
+  these notes to generators" (`sendNotes`; `brief.notesSent` says whether
+  they went), or a Moodboard node's `send_notes` is `yes`. `--no-send-notes`
+  / `send_notes=False` turns it off; turning it on is the person's call, so
+  an agent's `--send-notes` / `send_notes=True` is refused and nothing in
+  that call is saved. `previous` has `clash_mode` and `color_choices`, and
+  `send_notes` when the change touched it.
 - Each colour in `analysis.colors` lists `sources`: the images it comes
   from, by `number` (as `show` numbers them, excluded images counted) and
   `id`, with `share` (the colour's share of that image) and `contribution`

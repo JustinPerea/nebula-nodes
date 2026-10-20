@@ -44,7 +44,7 @@ Workflow:
 Spending: the person sets limits (get_spend_limits). A run over a limit, or with a node that has no list price, is refused; send the same plan as propose_change. The person accepts or rejects it in Nebula; agents cannot accept, and get_proposal waits for the decision. Use propose_change too when the change is theirs to decide (reworking their graph, a costly run).
 
 Projects: list_projects, open_project, new_project. Start new work in a new project rather than emptying the person's canvas; they can switch back.
-Moodboards (the boards in Moodboard Studio): moodboard_create makes one from files, folders and image links, moodboard_update sets weights, notes, private notes (the person's own labels, never sent to generators) and the brief fields (Direction, Avoid, pinned colours, a hand-written brief), moodboard_analyze reads its palette (each colour lists the images it comes from; it can also preview an analysis, optionally with other colour thresholds, saving nothing). A board's `brief` is what generators get (brief.styleBrief, brief.negativePrompt); analysis.styleBrief is not. Only the person may change their own hand-written brief.
+Moodboards (the boards in Moodboard Studio): moodboard_create makes one from files, folders and image links, moodboard_update sets weights, notes, private notes (the person's own labels, never sent to generators) and the brief fields (Direction, Avoid, pinned colours, a hand-written brief), moodboard_analyze reads its palette (each colour lists the images it comes from; it can also preview an analysis, optionally with other colour thresholds, saving nothing). A board's `brief` is what generators get (brief.styleBrief, brief.negativePrompt, brief.palette); analysis.styleBrief is not. Only the person may change their own hand-written brief. Nebula checks the measured colours against the Direction and Avoid words: by default a clashing colour leaves the brief (brief.leftOut, each with its reason), brief.mayClash still goes, and pinned colours always go (brief.pinnedClashes). Tell the person what was left out; moodboard_update can keep one anyway. A board's notes are for the person, their team and you: generators get them only when the person turns that on (brief.notesSent).
 A moodboard or Character is Global (every project lists it) or in one canvas project. moodboard_move and character_move move one between them ("global", "current" or a project); nodes that use it keep working everywhere, and moving it back undoes it.
 Deleted moodboards, characters and projects go to Recently deleted: list_trash shows them and restore_from_trash brings one back with the same id. Deleting for good is the person's alone.
 
@@ -850,9 +850,20 @@ def moodboard_get(board: str, ctx: Context | None = None) -> dict[str, Any]:
 
     `brief` is what generators get, as Nebula composed it: `styleBrief` (the
     hand-written brief when there is one, else the generated one),
-    `negativePrompt`, `avoidPrompt` and `override` {active, stale}. It is
-    null on a Nebula too old to send it. Don't use analysis.styleBrief as the
-    brief: it leaves out Direction, pinned colours and a hand-written brief."""
+    `negativePrompt`, `avoidPrompt`, `palette`/`accents` and `override`
+    {active, stale}. It is null on a Nebula too old to send it. Don't use
+    analysis.styleBrief as the brief: it leaves out Direction, pinned colours
+    and a hand-written brief, and keeps colours the brief left out.
+
+    Where the words and the measured colours disagree: `brief.leftOut`
+    (colours generators don't get, each with `reason`, `reasons`, `level`
+    conflict or warning, `why` check, choice or mode, and `foundBy`),
+    `brief.mayClash` (still sent), `brief.kept` (the person's Keep anyway),
+    `brief.pinnedClashes` (pinned colours always go) and
+    `brief.paletteClashes` (the whole palette, e.g. a cast). `clashMode`,
+    `colorChoices` and `colorCheck` (the check's findings) are the board's.
+    `sendNotes` / `brief.notesSent`: whether generators get the notes (off
+    unless the person turns it on); you always read them."""
     import moodboard_client as boards
 
     return boards.brief(_board_call(boards.get_board, _api(), board, _board_headers(ctx)), layout=True)
@@ -905,7 +916,11 @@ def moodboard_update(board: str, images: list[dict] | None = None, remove: list[
                      avoid_remove: list[str] | None = None, pinned_colors: dict | None = None,
                      pin_colors: list[str] | None = None, keep_out_colors: list[str] | None = None,
                      unpin_colors: list[str] | None = None, brief_override: str | None = None,
-                     keep_brief: bool = False, ctx: Context | None = None) -> dict[str, Any]:
+                     keep_brief: bool = False, keep_anyway: list[str] | None = None,
+                     leave_out: list[str] | None = None, leave_out_flagged: bool = False,
+                     reset_colors: list[str] | None = None, color_choices: dict | None = None,
+                     clash_mode: str | None = None, send_notes: bool | None = None,
+                     ctx: Context | None = None) -> dict[str, Any]:
     """Change a moodboard. `images`: changes to single images, each
     {"image": its number or id, "weight": 0-1, "notes": "...", "privateNote": "...", "excluded": true}
     (excluded images stay on the board but stop steering). `privateNote` is
@@ -925,6 +940,14 @@ def moodboard_update(board: str, images: list[dict] | None = None, remove: list[
     hand-written brief is theirs: changing or keeping it is refused, and
     nothing in that call is saved.
 
+    Clashes (brief.leftOut, brief.mayClash): `keep_anyway` puts a left-out
+    hex back in the brief (it isn't pinned), `leave_out` takes a measured
+    hex out, `leave_out_flagged` takes out every flagged one,
+    `reset_colors` drops either choice, `color_choices` {"keep",
+    "leaveOut"} replaces both. `clash_mode`: leave-out (default), flag,
+    no-measured or keep-all. `send_notes` false keeps the notes from
+    generators; true is the person's call and is refused (propose it).
+
     `previous` holds the settings before the change; pass them back to
     moodboard_update to undo it (it has `brief_override` only when the change
     touched the brief). Changing images, notes, mode or strength
@@ -937,7 +960,9 @@ def moodboard_update(board: str, images: list[dict] | None = None, remove: list[
         images=images, remove=remove, direction=direction, avoid=avoid, avoid_add=avoid_add,
         avoid_remove=avoid_remove, pinned_colors=pinned_colors, pin_colors=pin_colors,
         keep_out_colors=keep_out_colors, unpin_colors=unpin_colors, brief_override=brief_override,
-        keep_brief=keep_brief, headers=_board_headers(ctx))
+        keep_brief=keep_brief, keep_anyway=keep_anyway, leave_out=leave_out,
+        leave_out_flagged=leave_out_flagged, reset_colors=reset_colors, color_choices=color_choices,
+        clash_mode=clash_mode, send_notes=send_notes, headers=_board_headers(ctx))
     return {**boards.brief(updated), "removed": removed, "previous": previous}
 
 

@@ -8,7 +8,7 @@ from typing import Any, Awaitable, Callable
 from models.events import ExecutionEvent, add_run_note
 from models.graph import GraphNode, PortValueDict
 from services.moodboard_analysis import analysis_is_current, analyze_moodboard, rank_representative_images
-from services.moodboard_brief import compose
+from services.moodboard_brief import NODE_NOTES_CHOICES, compose, generator_analysis
 from services.moodboard_store import MoodboardStore, output_image
 
 
@@ -58,16 +58,27 @@ async def handle_moodboard_node(
                 "Analyze it in Moodboard Studio to save the new analysis.",
             ]
 
+    # The node's own say on the board's notes ("board", the default, follows
+    # the board's sendNotes; a node saved before the param reads "board").
+    choice = (node.params or {}).get("send_notes")
+    send_notes = NODE_NOTES_CHOICES.get(choice if isinstance(choice, str) else "board")
+    # The brief generators get: the analysis joined with the person's
+    # Direction, Avoid and pinned colours, or their hand-written override.
+    brief = compose(moodboard, analysis, send_notes=send_notes)
+    notes_sent = bool(brief["notesSent"])
     # Only the keys generators read: never the person's private notes, which
     # never leave the board, or the layout (placements), which steers nothing.
+    # Image notes go only when the board's notes do (gap 18, P4).
     images = [
-        output_image(img) for img in moodboard.get("images", [])
+        output_image(img) if notes_sent else {**output_image(img), "notes": ""}
+        for img in moodboard.get("images", [])
         if isinstance(img, dict) and not bool(img.get("excluded"))
     ]
     representative = analysis.get("representativeImages") or rank_representative_images(images)
-    # The brief generators get: the analysis joined with the person's
-    # Direction, Avoid and pinned colours, or their hand-written override.
-    brief = compose(moodboard, analysis)
+    # What a generator (or an LLM on an Any port) may read of the analysis:
+    # no notes unless sent, and colour sentences without left-out colours.
+    # The saved analysis is left as it was.
+    analysis = generator_analysis(moodboard, analysis, brief)
     if brief["override"]["stale"]:
         add_run_note(f"Moodboard '{moodboard.get('name')}' changed after its brief was edited by hand; "
                      "this run used the edited brief. Keep or Regenerate it in Moodboard Studio.")
@@ -85,7 +96,8 @@ async def handle_moodboard_node(
         "mode": moodboard.get("mode", "look"),
         "strength": moodboard.get("strength", 0.7),
         "images": images,
-        "notes": moodboard.get("notes", ""),
+        "notes": moodboard.get("notes", "") if notes_sent else "",
+        "notesSent": notes_sent,
         "analysis": {**analysis, "providerHints": hints},
         "styleBrief": brief["styleBrief"],
         "negativePrompt": brief["negativePrompt"],
@@ -96,6 +108,14 @@ async def handle_moodboard_node(
         "briefOverride": brief["override"],
         "palette": brief["palette"],
         "accents": brief["accents"],
+        # Why some measured colours aren't in palette/accents, and the ones
+        # that still go but may clash (services/moodboard_brief.compose).
+        "leftOut": brief["leftOut"],
+        "mayClash": brief["mayClash"],
+        "kept": brief["kept"],
+        "pinnedClashes": brief["pinnedClashes"],
+        "paletteClashes": brief["paletteClashes"],
+        "clashMode": brief["clashMode"],
         "representativeImages": representative,
         "providerHints": hints,
     }
