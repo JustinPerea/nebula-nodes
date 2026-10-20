@@ -462,6 +462,29 @@ def _resolve_check(name: str, check: ProviderCheck) -> _ResolvedCheck | None:
 _USE_NORMAL_RESOLUTION = object()
 
 
+def _probe_error_detail(exc: Exception, headers: dict[str, str]) -> str:
+    """Why a probe couldn't be sent, never with the credential in it.
+
+    A key saved with a line break or a space (pasted from a file) can't go in
+    a header, and httpx's error then quotes the whole header, key and all;
+    this detail reaches the Settings panel and agents (MCP provider_status).
+    """
+    text = f"{type(exc).__name__}: {exc}"
+    if isinstance(exc, (httpx.LocalProtocolError, UnicodeEncodeError)) or _quotes_credential(text, headers):
+        return (f"{type(exc).__name__}: the saved key can't be sent as it is (it may hold a line break, "
+                "a space or another character a request header can't carry); paste it again in Settings")
+    return text[:200]
+
+
+def _quotes_credential(text: str, headers: dict[str, str]) -> bool:
+    """True when `text` holds 8 characters in a row of any header value's words."""
+    for value in headers.values():
+        for word in str(value).split():
+            if len(word) >= 8 and any(word[start:start + 8] in text for start in range(len(word) - 7)):
+                return True
+    return False
+
+
 async def _check_one(
     client: httpx.AsyncClient,
     name: str,
@@ -522,7 +545,7 @@ async def _check_one(
             "configured": True,
             "status": PROVIDER_STATUS_ERROR,
             "last_checked": _utc_now_iso(),
-            "detail": f"{type(exc).__name__}: {exc}"[:200],
+            "detail": _probe_error_detail(exc, resolved.headers),
         }
 
     result: dict[str, Any] = {

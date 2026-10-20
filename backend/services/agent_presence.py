@@ -402,26 +402,8 @@ class AgentPresence:
             definition_id = str(node.get("definitionId", ""))
             definition = definitions.get(definition_id, {}) if isinstance(definitions, dict) else {}
             reported = view_nodes.get(node_id)
-            entry: dict[str, Any] = {
-                "id": node_id,
-                "definitionId": definition_id,
-                # The person's (or an agent's) name for it, else the model's.
-                "name": node.get("label") or definition.get("displayName") or definition_id,
-                "state": (reported or {}).get("state", "unknown" if reported is None else "idle"),
-                "params": safe_value(node.get("params") or {}, key="params"),
-                # Like the selection surface: what exists, never the values
-                # (they can be signed URLs). `nebula path` / `nebula graph` fetch them.
-                "outputs": {
-                    str(port): {
-                        "type": value.get("type") if isinstance(value, dict) else None,
-                        "available": bool(value.get("value") if isinstance(value, dict) else value),
-                    }
-                    for port, value in (node.get("outputs") or {}).items()
-                },
-                "inputsFrom": incoming.get(node_id, []),
-            }
-            if node.get("label"):
-                entry["model"] = definition.get("displayName") or definition_id
+            entry = redacted_node(node_id, node, definition, incoming.get(node_id, []))
+            entry["state"] = (reported or {}).get("state", "unknown" if reported is None else "idle")
             if reported is not None:
                 entry["position"] = {"x": round(reported["x"], 1), "y": round(reported["y"], 1)}
                 if "width" in reported:
@@ -456,6 +438,39 @@ class AgentPresence:
             "selection": [node_id for node_id in (selected_ids or []) if node_id in graph_nodes],
             "agents": self.active(),
         }
+
+
+def output_availability(outputs: Any) -> dict[str, Any]:
+    """Like the selection surface: what exists, never the values (they can be
+    signed URLs). `nebula path` / `nebula graph` fetch them."""
+    return {
+        str(port): {
+            "type": value.get("type") if isinstance(value, dict) else None,
+            "available": bool(value.get("value") if isinstance(value, dict) else value),
+        }
+        for port, value in (outputs if isinstance(outputs, Mapping) else {}).items()
+    }
+
+
+def redacted_node(node_id: str, node: Mapping[str, Any], definition: Mapping[str, Any],
+                  inputs_from: list[str]) -> dict[str, Any]:
+    """One node as agents read it (look_at_canvas, and get_project for a saved
+    project): its name, redacted params, which outputs exist, and its wires in.
+    `node` is a canvas node: definitionId, params, outputs and the label the
+    person or an agent gave it (none when it goes by the model's name)."""
+    definition_id = str(node.get("definitionId", ""))
+    entry: dict[str, Any] = {
+        "id": node_id,
+        "definitionId": definition_id,
+        # The person's (or an agent's) name for it, else the model's.
+        "name": node.get("label") or definition.get("displayName") or definition_id,
+        "params": safe_value(node.get("params") or {}, key="params"),
+        "outputs": output_availability(node.get("outputs") or {}),
+        "inputsFrom": inputs_from,
+    }
+    if node.get("label"):
+        entry["model"] = definition.get("displayName") or definition_id
+    return entry
 
 
 def _overlaps(node: Mapping[str, Any], area: Mapping[str, float]) -> bool:

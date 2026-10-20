@@ -89,6 +89,15 @@ EVENT_KINDS = frozenset({
     "board.sorted",
     "board.arranged",
     "board.suggested",
+    # Saved projects (main.py, next to _broadcast_projects_changed), whoever
+    # changed them: data {projectId, name; from/to for a rename; wasOpen}.
+    "project.created",
+    "project.renamed",
+    "project.deleted",
+    "project.restored",
+    # A paid start Nebula holds (World Labs recovery checkpoints and starts it
+    # couldn't confirm) and its clearing: data {hold, change, runId, ...}.
+    "provider.hold",
 })
 EVENT_GROUPS = frozenset(kind.split(".", 1)[0] for kind in EVENT_KINDS)
 

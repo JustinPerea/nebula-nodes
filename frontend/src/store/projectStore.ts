@@ -429,11 +429,16 @@ function relistProjects(): Promise<void> {
         const list = await api.listProjects();
         // The graphSync's own check handles a backend on another params version.
         if (generation !== listingGeneration || backendParamsVersion(list.paramsVersion) !== GRAPH_PARAMS_VERSION) continue;
-        useProjectStore.setState((state) => ({
-          projects: list.projects, trash: list.trash ?? [],
-          ...(!state.activeProject && !getProjectContext() ? { workspaceRevision: list.workspaceRevision } : {}),
-          ...(state.switchNotice ? { switchNotice: wayBackIn(state.switchNotice, list.projects) } : {}),
-        }));
+        useProjectStore.setState((state) => {
+          // The open project's card as listed now (a rename made elsewhere).
+          const open = state.activeProject ? list.projects.find((project) => project.id === state.activeProject?.id) : undefined;
+          return {
+            projects: list.projects, trash: list.trash ?? [],
+            ...(open ? { activeProject: open } : {}),
+            ...(!state.activeProject && !getProjectContext() ? { workspaceRevision: list.workspaceRevision } : {}),
+            ...(state.switchNotice ? { switchNotice: wayBackIn(state.switchNotice, list.projects) } : {}),
+          };
+        });
       } while (listAgain);
       relistFailures = 0;
     } catch {
@@ -828,7 +833,10 @@ export function subscribeProjectAutosave(): () => void {
       // The toast's way back shows on the canvas too: a change to that
       // project (renamed, deleted) is listed now, not on the next visit.
       const wayBack = state.switchNotice?.previousProjectId;
-      if ((state.screen === 'home' || (wayBack && event.projectId === wayBack)) && !paramsVersionChange) void relistProjects();
+      // The open project renamed elsewhere (an agent's rename_project, another
+      // tab): the canvas header follows now.
+      const openRenamed = event.change === 'renamed' && !!event.projectId && event.projectId === state.activeProject?.id;
+      if ((state.screen === 'home' || (wayBack && event.projectId === wayBack) || openRenamed) && !paramsVersionChange) void relistProjects();
       if (state.screen !== 'home') listingStale = true;
       return;
     }
