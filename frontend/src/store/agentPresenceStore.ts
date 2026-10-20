@@ -44,7 +44,9 @@ export const useAgentPresenceStore = create<AgentPresenceState>((set) => ({
   agents: {},
   apply: (event, now = Date.now()) => {
     const agent = event.agent;
-    if (!agent || typeof agent.id !== 'string' || typeof agent.name !== 'string' || !isAnchor(event.target)) return;
+    // No target: an action with no place on the canvas, for the Agent log only (agentLogStore).
+    const target = event.target;
+    if (!agent || typeof agent.id !== 'string' || typeof agent.name !== 'string' || !isAnchor(target)) return;
     set((state) => {
       const previous = state.agents[agent.id];
       return {
@@ -55,7 +57,7 @@ export const useAgentPresenceStore = create<AgentPresenceState>((set) => ({
             name: agent.name,
             color: SAFE_COLOR.test(agent.color) ? agent.color : '#E8825A',
             verified: Boolean(agent.verified),
-            target: event.target,
+            target,
             from: isAnchor(event.from) ? event.from : undefined,
             action: event.action,
             say: typeof event.say === 'string' ? event.say : '',
