@@ -2091,12 +2091,21 @@ def _refuse_agent_billing_in_run(nodes: list[GraphNode], *, on_canvas: bool = Tr
     way the canvas node it names does (_billing_choice: a route-table node's
     provider, a dual-mode Krea node's billing mode). A node that isn't on the
     canvas, or is there as another definition, starts on the defaults (Auto,
-    the API token)."""
+    the API token).
+
+    It reads the params the run runs with: the engine migrates retired params
+    before a node runs (execution/engine.py _with_current_params), and not
+    every route normalizes its nodes first (Cinema shots, /api/quick), so a
+    retired key (a Moodboard's ``_moodboardId``) can't name what the check
+    didn't see."""
     changes = []
     for node in nodes:
         live = cli_graph.nodes.get(node.id) if on_canvas else None
         before = live.get("params") or {} if live and live.get("definitionId") == node.definition_id else None
-        changes.append((node.id if on_canvas else node.definition_id, node.definition_id, before, node.params))
+        if before is not None:
+            before = migrate_params(node.definition_id, before)
+        after = migrate_params(node.definition_id, node.params)
+        changes.append((node.id if on_canvas else node.definition_id, node.definition_id, before, after))
     _refuse_agent_billing_change(changes)
 
 
@@ -8818,6 +8827,14 @@ def _graph_ingress_items(body: dict[str, Any], key: str) -> list[dict[str, Any]]
 def _validate_graph_ingress_complexity(value: Any) -> None:
     """Bound and reject non-finite values on every mutable graph ingress."""
     _check_workspace_revision()
+    _check_graph_ingress_values(value)
+
+
+def _check_graph_ingress_values(value: Any) -> None:
+    """The walk behind _validate_graph_ingress_complexity: bounds, finite
+    numbers and protected file references (validate_file_references). Reads
+    nothing but the value, the filesystem and the request's context, so it can
+    run in a worker thread (_ingress_verdict)."""
     stack: list[tuple[Any, int]] = [(value, 0)]
     value_count = 0
     while stack:
@@ -8834,6 +8851,62 @@ def _validate_graph_ingress_complexity(value: Any) -> None:
         elif isinstance(current, list):
             stack.extend((item, depth + 1) for item in current)
     validate_file_references(value)
+
+
+class _IngressVerdict:
+    """What checking one whole graph value off the event loop found
+    (_ingress_verdict): the value checked and the refusal, if any.
+
+    The check walks every string in a project (its run records repeat the
+    graph) and stats each distinct one as a path, seconds on a large project.
+    On the event loop that held up every request and canvas event, so the
+    routes that check a whole snapshot (project save, open and recover, graph
+    import) run it in a worker thread before their transaction, and apply the
+    verdict with ``require`` where the check used to run: its refusal keeps
+    its place behind the route's own (a missing project, a stale revision),
+    and the revision check still runs there, on the loop.
+    """
+
+    __slots__ = ("value", "error")
+
+    def __init__(self, value: Any, error: BaseException | None) -> None:
+        self.value = value
+        self.error = error
+
+    def require(self, current: Any) -> None:
+        """Refuse ``current`` as the check did, or pass it. ``current`` must be
+        what is committed: the same object (a request's own body, which nothing
+        else holds) or, read again inside the transaction, equal to what was
+        checked. Anything else changed after the check (another writer saved
+        the project in between), so it is checked again, here."""
+        _check_workspace_revision()
+        if current is not self.value and current != self.value:
+            _check_graph_ingress_values(current)
+            return
+        if self.error is not None:
+            raise self.error
+
+    def part(self, key: str) -> "_IngressVerdict":
+        """The verdict for ``value[key]`` (a recovery body's snapshot), which
+        the check of the whole value covered. Only after ``require`` passed."""
+        assert self.error is None, "require() refuses before a part is used"
+        return _IngressVerdict(self.value.get(key) if isinstance(self.value, dict) else None, None)
+
+
+def _ingress_verdict(value: Any) -> _IngressVerdict:
+    """Check a whole graph value (in a worker thread) and keep the refusal
+    for _IngressVerdict.require instead of raising it here."""
+    try:
+        _check_graph_ingress_values(value)
+    except Exception as exc:  # noqa: BLE001 - re-raised by require(), where the check ran before
+        return _IngressVerdict(value, exc)
+    return _IngressVerdict(value, None)
+
+
+async def _ingress_verdict_off_loop(value: Any) -> _IngressVerdict:
+    # asyncio.to_thread runs it in a copy of this request's context, so the
+    # agent workspace the path check reads (agent_workspaces) is the caller's.
+    return await asyncio.to_thread(_ingress_verdict, value)
 
 
 def _migrate_ingress(
@@ -9060,8 +9133,11 @@ async def import_graph(body: dict[str, Any]) -> dict:
     short IDs so the rest of the system treats the loaded graph like any other
     CLI-created graph — including Claude's `nebula graph` view.
     """
+    # A whole graph file: checked in a worker thread (_IngressVerdict). The
+    # rest stays synchronous from the revision check to the commit, as before.
+    verdict = await _ingress_verdict_off_loop(body)
     _check_workspace_revision()
-    _validate_graph_ingress_complexity(body)
+    verdict.require(body)
     candidate = CLIGraph()
     raw_nodes = _graph_ingress_items(body, "nodes")
     raw_edges = _graph_ingress_items(body, "edges")
@@ -9408,20 +9484,22 @@ def _migrate_rf_graph(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) 
 
 def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None = None,
                             warnings: list[str] | None = None,
-                            ingress_checked: bool = False) -> tuple[dict[str, Any], CLIGraph]:
+                            ingress: _IngressVerdict | None = None) -> tuple[dict[str, Any], CLIGraph]:
     """Validate a saved RF graph with canonical definitions, retaining its IDs.
 
     A removed definition can still be viewed when it was already in this
     project's history or live canvas. It cannot acquire execution authority
     from a frontend-supplied definition object. A folded Krea node loads as
     its new node (_migrate_rf_graph); what that dropped goes in ``warnings``.
-    ``ingress_checked``: the caller already ran _validate_graph_ingress_complexity
-    on this same object (save_project does, off the event loop).
+    ``ingress``: the check already ran on this snapshot in a worker thread
+    (the project routes do); without it, it runs here.
     """
     if not isinstance(snapshot, dict):
         raise HTTPException(status_code=400, detail="Project snapshot must be an object")
-    if not ingress_checked:
+    if ingress is None:
         _validate_graph_ingress_complexity(snapshot)
+    else:
+        ingress.require(snapshot)
     if len(json.dumps(snapshot, allow_nan=False, ensure_ascii=False).encode("utf-8")) > MAX_PROJECT_BYTES:
         raise HTTPException(status_code=413, detail="Project snapshot exceeds the 16 MiB limit")
     nodes = _graph_ingress_items(snapshot, "nodes")
@@ -9704,6 +9782,9 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         params_version = request_version(body, 0)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # The tab's whole snapshot: checked in a worker thread, refused (if it
+    # is) below where the check ran before (_IngressVerdict).
+    verdict = await _ingress_verdict_off_loop(body)
     with project_store.transaction() as catalog:
         source_id = body.get("sourceProjectId")
         try:
@@ -9717,14 +9798,16 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         }
         # Hash the submitted JSON, before canonical coercion. A retry of the
         # same request remains idempotent even if source metadata changes.
-        _validate_graph_ingress_complexity(body)
+        verdict.require(body)
         fingerprint = hashlib.sha256(json.dumps({"sourceProjectId": source["id"], "snapshot": body.get("snapshot"), "name": body.get("name")}, sort_keys=True, allow_nan=False, ensure_ascii=False).encode("utf-8")).hexdigest()
         if existing := catalog["projects"].get(recovery_id):
             if existing.get("_recoveryFingerprint") != fingerprint:
                 raise HTTPException(status_code=409, detail="Recovery ID already belongs to a different snapshot")
             return {"project": public_project(existing), "workspaceRevision": catalog["workspaceRevision"]}
         historical = {node["id"]: node.get("data", {}).get("definitionId") for node in source["snapshot"]["nodes"]}
-        snapshot, candidate = _stage_project_snapshot(body.get("snapshot"), historical=historical)
+        # The body's check covered its snapshot; staging doesn't walk it twice.
+        snapshot, candidate = _stage_project_snapshot(body.get("snapshot"), historical=historical,
+                                                      ingress=verdict.part("snapshot"))
         _refuse_agent_billing_in_project(
             candidate, *([cli_graph.nodes] if catalog["activeProjectId"] == source["id"] else []),
             _snapshot_nodes(source["snapshot"]))
@@ -9838,8 +9921,63 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
     return {"project": public_project(project), "workspaceRevision": revision, "paramsVersion": PARAMS_VERSION}
 
 
+async def _open_ingress_verdict_off_loop(project_id: str, body: dict[str, Any]) -> _IngressVerdict | None:
+    """Check the snapshot an open will stage, in a worker thread, before the
+    open's transaction. None when it can't be known ahead (no such project,
+    an unreadable catalog) or the open is going to be refused anyway (a stale
+    revision, an active run): the open then answers its own 404, 409 or
+    storage error at once, as before, and checks inline if it gets past
+    them after all."""
+    live = None
+    try:
+        workspace = project_store.workspace()
+        # The transaction's own refusals, ahead of time: what it then holds
+        # decides, so this only spares a refused open the check's wait.
+        _project_revision(body, workspace)
+        _project_replacement_guard()
+    except (ProjectStoreError, HTTPException):
+        return None
+    reopening = workspace["activeProjectId"] == project_id
+    if reopening:
+        # Reopening the open project stages it with the live canvas merged in
+        # (_overlay_live_project), so the thread checks that merge. A copy:
+        # the export shares nested values with the live graph, which requests
+        # on the loop can change while the thread reads.
+        live = copy.deepcopy(await _projects_live_export())
+    return await asyncio.to_thread(_open_ingress_verdict, project_id, live)
+
+
+def _open_ingress_verdict(project_id: str, live: dict[str, Any] | None) -> _IngressVerdict | None:
+    # No catalog lock: the loop takes it, and a thread holding it would stall
+    # the loop. Commits replace catalog.json whole (os.replace), so this reads
+    # one complete version; the open compares what it stages inside its
+    # transaction with what was checked here (_IngressVerdict.require).
+    # Anything else that fails here (an unreadable catalog, a saved project
+    # the merge can't read) leaves the check to the open, which then fails
+    # where it always did, after its own refusals.
+    try:
+        catalog = project_store.read_unlocked()
+        project = catalog["projects"].get(project_id)
+        if project is None:
+            return None
+        if catalog.get("activeProjectId") == project_id:
+            if live is None:
+                return None
+            _overlay_live_project(project, live)
+        snapshot = project["snapshot"]
+    except Exception:  # noqa: BLE001 - see above
+        return None
+    return _ingress_verdict(snapshot)
+
+
 @app.post("/api/projects/{project_id}/open")
 async def open_saved_project(project_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    # The saved snapshot's check (seconds on a large project) runs in a worker
+    # thread first. From the live export to the commit the open stays
+    # synchronous on the loop, as before: no edit lands between the export
+    # and the overlay. If the project changed after the check (another writer
+    # saved it), staging checks it again, inline (_IngressVerdict.require).
+    verdict = await _open_ingress_verdict_off_loop(project_id, body or {})
     exported = await _projects_live_export()
     actor = _switch_actor()
     with project_store.transaction() as catalog, _paid_graph_mutation("open a project"):
@@ -9850,7 +9988,8 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
             _overlay_live_project(catalog["projects"][active], exported)
         historical = {node["id"]: node.get("data", {}).get("definitionId") for node in project["snapshot"]["nodes"]}
         warnings: list[str] = []
-        project["snapshot"], candidate = _stage_project_snapshot(project["snapshot"], historical=historical, warnings=warnings)
+        project["snapshot"], candidate = _stage_project_snapshot(project["snapshot"], historical=historical, warnings=warnings,
+                                                                 ingress=verdict)
         candidate._counter = max(candidate._counter, project.get("_nodeCounter", 0))
         project["lastOpenedAt"] = project_now()
         start = _begin_switch(catalog, actor)
@@ -9870,23 +10009,24 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
 
 @app.put("/api/projects/{project_id}")
 async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
-    checked = isinstance(body.get("snapshot"), dict)
-    if checked:
+    verdict = None
+    if isinstance(body.get("snapshot"), dict):
         # The canvas autosaves after every edit, and the check walks every
         # string in the project (run records repeat the graph) and stats file
         # paths. On the event loop it held up every request and canvas event
         # for seconds (an Accept's run waited 24 s), so it runs in a worker
         # thread, before the catalog lock, which other requests take to read.
-        await asyncio.to_thread(_validate_graph_ingress_complexity, body["snapshot"])
-    result = _save_project(project_id, body, checked=checked)
+        # Its refusal comes where the check ran before (_IngressVerdict).
+        verdict = await _ingress_verdict_off_loop(body["snapshot"])
+    result = _save_project(project_id, body, ingress=verdict)
     # A save moves the card up and can change its picture and node count.
     await _broadcast_projects_changed("renamed" if "name" in body else "saved", project_id)
     return result
 
 
-def _save_project(project_id: str, body: dict[str, Any], *, checked: bool = False) -> dict[str, Any]:
-    """The save itself. ``checked``: the snapshot's file references were
-    already validated (in a worker thread, by the route)."""
+def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVerdict | None = None) -> dict[str, Any]:
+    """The save itself. ``ingress``: the snapshot's check, already run (in a
+    worker thread, by the route)."""
     with project_store.transaction() as catalog:
         project = _project_id_or_404(project_id, catalog)
         handoff = catalog.get("handoff") or {}
@@ -9897,7 +10037,7 @@ def _save_project(project_id: str, body: dict[str, Any], *, checked: bool = Fals
             # The next switch (anyone's) ends the handoff. The project may
             # be the open one again: an agent reopened the project the tab
             # was showing, which reloads it from what was saved.
-            _save_handoff(project, body["snapshot"], ingress_checked=checked)
+            _save_handoff(project, body["snapshot"], ingress=ingress)
             refresh_metadata(project)
             project_store.commit(catalog)
             return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"],
@@ -9908,7 +10048,7 @@ def _save_project(project_id: str, body: dict[str, Any], *, checked: bool = Fals
                 raise HTTPException(status_code=409, detail="Only the currently open project can autosave its canvas")
             historical = {node["id"]: node.get("data", {}).get("definitionId") for node in project["snapshot"]["nodes"]}
             historical.update({node_id: node["definitionId"] for node_id, node in cli_graph.nodes.items()})
-            staged, candidate = _stage_project_snapshot(body["snapshot"], historical=historical, ingress_checked=checked)
+            staged, candidate = _stage_project_snapshot(body["snapshot"], historical=historical, ingress=ingress)
             _refuse_agent_billing_in_project(candidate, cli_graph.nodes, _snapshot_nodes(project["snapshot"]))
             _keep_person_viewport(staged, project["snapshot"])
             project["snapshot"] = staged
@@ -9938,7 +10078,7 @@ def _keep_person_viewport(staged: dict[str, Any], stored: dict[str, Any]) -> Non
         staged["viewport"] = copy.deepcopy(stored.get("viewport"))
 
 
-def _save_handoff(project: dict[str, Any], raw: Any, *, ingress_checked: bool = False) -> None:
+def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict | None = None) -> None:
     """The last save from a tab whose project an agent switched away from.
 
     The switch already merged the live canvas into this project
@@ -9948,7 +10088,7 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress_checked: bool = 
     """
     stored = project["snapshot"]
     historical = {node["id"]: node.get("data", {}).get("definitionId") for node in stored["nodes"]}
-    staged, candidate = _stage_project_snapshot(raw, historical=historical, ingress_checked=ingress_checked)
+    staged, candidate = _stage_project_snapshot(raw, historical=historical, ingress=ingress)
     _refuse_agent_billing_in_project(candidate, _snapshot_nodes(stored))
     _keep_person_viewport(staged, stored)
     backend_nodes = set(project.get("_backendNodeIds") or [])
