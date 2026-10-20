@@ -36,7 +36,9 @@ import json
 import logging
 import os
 import re
+import threading
 from collections import deque
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -63,7 +65,50 @@ OUTPUT_IMAGE_KEYS = ("id", "url", "weight", "notes", "excluded")
 LAYOUT_VERSION = 1
 LAYOUT_BOARD_KEYS = ("frames", "suggestions", "readings", "layoutVersion", "lastRead")
 LAYOUT_REFUSED = ("can't be set with PUT or when making a board: a board's layout is written only by board "
-                  "edits, and new images are placed by Nebula (or where their placements ask)")
+                  "edits (POST /api/moodboards/{id}/edits), and new images are placed by Nebula (or where "
+                  "their placements ask)")
+
+# One lock per board: a write reads the file, changes it and writes it back
+# as one step, whichever thread it runs on.
+_LOCKS: dict[str, threading.RLock] = {}
+_LOCKS_GUARD = threading.Lock()
+
+
+@contextmanager
+def _board_lock(moodboard_id: str):
+    with _LOCKS_GUARD:
+        lock = _LOCKS.setdefault(moodboard_id, threading.RLock())
+    with lock:
+        yield
+
+
+class VersionConflict(Exception):
+    """A write sent ``baseVersion`` and the board has moved on since: someone
+    else saved it. ``board`` is the board as it is now (laid out), so the
+    caller can rebase its change on it and send it again."""
+
+    def __init__(self, board: dict[str, Any]) -> None:
+        super().__init__(f"the board changed since you read it (it is at version {board.get('version')})")
+        self.board = board
+
+
+def _read_for_write(path: Path, moodboard_id: str) -> dict[str, Any]:
+    """The board a write starts from, laid out. KeyError when its file went
+    (moved to Recently deleted) after it was found."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise KeyError(f"Moodboard '{moodboard_id}' not found") from None
+    return _migrated(json.loads(text), layout_board=True)
+
+
+def _check_base_version(moodboard: dict[str, Any], base_version: Any) -> None:
+    if base_version is None:
+        return
+    if isinstance(base_version, bool) or not isinstance(base_version, int):
+        raise ValueError("baseVersion must be a whole number: the board's version you read")
+    if int(moodboard.get("version", 1)) != base_version:
+        raise VersionConflict(moodboard)
 
 
 def _private_note(raw: Any, index: int) -> str:
@@ -403,6 +448,64 @@ def _set_override(moodboard: dict[str, Any], value: Any, *, previous: Any, by: s
                                   "by": by}
 
 
+def apply_fields(moodboard: dict[str, Any], fields: dict[str, Any], *, by: str) -> None:
+    """Set a board's own fields (a PUT's, and a ``restore``'s ``fields``
+    slice, services/moodboard_edits.py) on ``moodboard`` in place, checked
+    and normalized. ``by`` matters for ``briefOverride`` and for turning
+    ``sendNotes`` on (BriefOverrideProtected, NotesOptInProtected); other
+    bad values are a ValueError. The caller refreshes the colour check and
+    stamps the version."""
+    brief = _brief()
+    fields = dict(fields)
+    immutable = {"id", "createdAt", "projectId"}
+    override_sent = "briefOverride" in fields
+    override_value = fields.pop("briefOverride", None)
+    if "sendNotes" in fields:
+        _guard_send_notes(moodboard.get("sendNotes") is True, fields["sendNotes"], by)
+    choices_sent = fields.get("colorChoices") is not None
+    choices_value = fields.pop("colorChoices", None)
+    for key, value in fields.items():
+        if key in immutable:
+            if value is not None and value != moodboard.get(key):
+                if key == "projectId":
+                    raise ValueError("projectId can't change in an edit: move the board with "
+                                     f"POST /api/moodboards/{moodboard.get('id')}/move")
+                raise ValueError(f"{key} can't change")
+            continue
+        if key == "images":
+            moodboard[key] = _normalize_images(value, stored=moodboard.get("images"), board=moodboard, by=by)
+            moodboard["thumbnail"] = moodboard[key][0]["url"] if moodboard[key] else ""
+        elif key == "mode":
+            if value not in _VALID_MODES:
+                raise ValueError(f"invalid moodboard mode: {value!r}")
+            moodboard[key] = value
+        elif key == "strength":
+            moodboard[key] = max(0.0, min(1.0, float(value)))
+        elif key == "analysis":
+            moodboard[key] = _normalize_analysis(value)
+        elif key == "direction":
+            moodboard[key] = brief.normalize_direction(value)
+        elif key == "avoid":
+            moodboard[key] = brief.normalize_avoid(value)
+        elif key == "pinnedColors":
+            moodboard[key] = brief.normalize_pinned_colors(value)
+        elif key == "clashMode":
+            if value is not None:
+                moodboard[key] = brief.normalize_clash_mode(value)
+        elif key == "sendNotes":
+            if value is not None:
+                moodboard[key] = brief.normalize_send_notes(value)
+        elif key in {"brief", "briefVersion", "colorCheck"}:
+            continue  # computed / owned by the store
+        elif value is not None:
+            moodboard[key] = value
+    # After the pins, so a Keep anyway colour is checked against them.
+    _set_color_choices(moodboard, choices_value, sent=choices_sent)
+    # Last, so new override text is stamped with the board as updated.
+    if override_sent:
+        _set_override(moodboard, override_value, previous=moodboard.get("briefOverride"), by=by)
+
+
 def _stamp_layout(moodboard: dict[str, Any]) -> None:
     """Stamp ``layoutVersion`` on a board a write is about to save, but only
     when every image has a card: if laying the board out failed in memory,
@@ -538,80 +641,90 @@ class MoodboardStore:
                 continue
         return results
 
-    def update(self, moodboard_id: str, *, by: str = "agent", **fields: Any) -> dict[str, Any]:
+    def update(self, moodboard_id: str, *, by: str = "agent", base_version: int | None = None,
+               **fields: Any) -> dict[str, Any]:
         """Change a board's fields. ``by`` is who asked ("person" only when the
         route's person gate says so); it matters for ``briefOverride``, for
         turning ``sendNotes`` on (NotesOptInProtected, before anything is
         written), and it stamps the cards of new images (``placedBy``).
+        ``base_version``: the version the caller read; any other refuses the
+        write (VersionConflict).
 
         ``images`` merges by id (see ``_normalize_images``). The board is
         laid out before the change, so an old board's first write saves the
         grid it read with and stamps ``layoutVersion``: nothing moves. The
         saved colour check (``colorCheck``) is the store's: a sent one is
         ignored, and it is refreshed when what it reads moved."""
+        return self.update_with_before(moodboard_id, by=by, base_version=base_version, **fields)[1]
+
+    def update_with_before(self, moodboard_id: str, *, by: str = "agent", base_version: int | None = None,
+                           **fields: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+        """``update``, returning the board before the change too (laid out,
+        as it was read), so the route can journal what changed."""
         if by not in OVERRIDE_AUTHORS:
             raise ValueError(f"author must be one of {OVERRIDE_AUTHORS}")
         _refuse_layout_fields(fields)
         path = _find_moodboard_file(_moodboard_root(), moodboard_id)
         if path is None:
             raise KeyError(f"Moodboard '{moodboard_id}' not found")
-        moodboard = _migrated(json.loads(path.read_text(encoding="utf-8")), layout_board=True)
-        brief = _brief()
+        with _board_lock(moodboard_id):
+            return self._update(path, by=by, base_version=base_version, fields=fields)
 
-        immutable = {"id", "createdAt", "projectId"}
-        override_sent = "briefOverride" in fields
-        override_value = fields.pop("briefOverride", None)
-        if "sendNotes" in fields:
-            _guard_send_notes(moodboard.get("sendNotes") is True, fields["sendNotes"], by)
-        choices_sent = fields.get("colorChoices") is not None
-        choices_value = fields.pop("colorChoices", None)
-        for key, value in fields.items():
-            if key in immutable:
-                if value is not None and value != moodboard.get(key):
-                    if key == "projectId":
-                        raise ValueError("projectId can't change in an edit: move the board with "
-                                         f"POST /api/moodboards/{moodboard_id}/move")
-                    raise ValueError(f"{key} can't change")
-                continue
-            if key == "images":
-                moodboard[key] = _normalize_images(value, stored=moodboard.get("images"), board=moodboard, by=by)
-                moodboard["thumbnail"] = moodboard[key][0]["url"] if moodboard[key] else ""
-            elif key == "mode":
-                if value not in _VALID_MODES:
-                    raise ValueError(f"invalid moodboard mode: {value!r}")
-                moodboard[key] = value
-            elif key == "strength":
-                moodboard[key] = max(0.0, min(1.0, float(value)))
-            elif key == "analysis":
-                moodboard[key] = _normalize_analysis(value)
-            elif key == "direction":
-                moodboard[key] = brief.normalize_direction(value)
-            elif key == "avoid":
-                moodboard[key] = brief.normalize_avoid(value)
-            elif key == "pinnedColors":
-                moodboard[key] = brief.normalize_pinned_colors(value)
-            elif key == "clashMode":
-                if value is not None:
-                    moodboard[key] = brief.normalize_clash_mode(value)
-            elif key == "sendNotes":
-                if value is not None:
-                    moodboard[key] = brief.normalize_send_notes(value)
-            elif key in {"brief", "briefVersion", "colorCheck"}:
-                continue  # computed / owned by the store
-            elif value is not None:
-                moodboard[key] = value
-        # After the pins, so a Keep anyway colour is checked against them.
-        _set_color_choices(moodboard, choices_value, sent=choices_sent)
-        # Last, so new override text is stamped with the board as updated.
-        if override_sent:
-            _set_override(moodboard, override_value, previous=moodboard.get("briefOverride"), by=by)
-        brief.refresh_colour_check(moodboard)
+    def _update(self, path: Path, *, by: str, base_version: int | None,
+                fields: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+        moodboard_id = path.stem
+        moodboard = _read_for_write(path, moodboard_id)
+        _check_base_version(moodboard, base_version)
+        before = json.loads(json.dumps(moodboard))
+        apply_fields(moodboard, fields, by=by)
+        _brief().refresh_colour_check(moodboard)
 
         _stamp_layout(moodboard)
         moodboard["version"] = int(moodboard.get("version", 1)) + 1
         moodboard["updatedAt"] = _now_iso()
         _write_json(path, moodboard)
-        return moodboard
+        return before, moodboard
+
+    def apply_edits(self, moodboard_id: str, ops: Any, *, by: str = "agent",
+                    base_version: int | None = None) -> tuple[dict[str, Any], dict[str, Any], Any]:
+        """Apply a batch of board edits (services/moodboard_edits.py) and save
+        it once with ``version + 1``: every op lands, or none does
+        (moodboard_edits.EditError, nothing written). Returns ``(before,
+        after, result)``; ``result`` has ``applied``, ``undo``, ``touched``
+        and the journal's ``changes``.
+
+        A batch that changes nothing (sent again, or a ``restore`` of
+        slices that all changed since) writes nothing and keeps the
+        version, so an old board's file keeps its bytes. ``by`` ("person",
+        "agent" or "analyze") stamps new cards and frames. KeyError: no live
+        board; VersionConflict: ``base_version`` isn't the board's."""
+        from services import moodboard_edits
+
+        if by not in (*OVERRIDE_AUTHORS, "analyze"):
+            raise ValueError(f"author must be one of {OVERRIDE_AUTHORS} or analyze")
+        moodboard_edits.parse_ops(ops)  # a bad batch is refused before the board is read
+        path = _find_moodboard_file(_moodboard_root(), moodboard_id)
+        if path is None:
+            raise KeyError(f"Moodboard '{moodboard_id}' not found")
+        with _board_lock(moodboard_id):
+            moodboard = _read_for_write(path, moodboard_id)
+            _check_base_version(moodboard, base_version)
+            try:
+                result = moodboard_edits.apply_edits(moodboard, ops, by=by)
+            except KeyError as exc:
+                # A bug in an op, not a missing board: the route mustn't say "not found".
+                raise RuntimeError(f"a board edit failed: {exc!r}") from exc
+            if not result.changed:
+                return moodboard, moodboard, result
+            board = result.board
+            # The colour check reads the analysis, which a steering edit cleared.
+            _brief().refresh_colour_check(board)
+            _stamp_layout(board)
+            board["version"] = int(moodboard.get("version", 1)) + 1
+            board["updatedAt"] = _now_iso()
+            _write_json(path, board)
+            result.board = board
+            return moodboard, board, result
 
     def keep_brief_override(self, moodboard_id: str, *, by: str = "agent") -> dict[str, Any]:
         """Keep the hand-written brief for the board as it is now: the
@@ -627,6 +740,10 @@ class MoodboardStore:
             raise KeyError(f"Moodboard '{moodboard_id}' not found") from None
         if path is None:
             raise KeyError(f"Moodboard '{moodboard_id}' not found")
+        with _board_lock(moodboard_id):
+            return self._keep_brief_override(path, by=by)
+
+    def _keep_brief_override(self, path: Path, *, by: str) -> dict[str, Any]:
         moodboard = _migrated(json.loads(path.read_text(encoding="utf-8")), layout_board=True)
         override = moodboard.get("briefOverride")
         if not isinstance(override, dict) or not str(override.get("text") or "").strip():

@@ -76,6 +76,19 @@ EVENT_KINDS = frozenset({
     "proposal.withdrawn",
     "proposal.expired",
     "proposal.invalidated",
+    # Moodboards (services/moodboard_edits.py): one event per board edit
+    # batch or PUT, with data {boardId, boardName, scope, refs, kinds}.
+    "board.added",
+    "board.removed",
+    "board.moved",
+    "board.resized",
+    "board.grouped",
+    "board.setAside",
+    "board.noted",
+    "board.frame",
+    "board.sorted",
+    "board.arranged",
+    "board.suggested",
 })
 EVENT_GROUPS = frozenset(kind.split(".", 1)[0] for kind in EVENT_KINDS)
 

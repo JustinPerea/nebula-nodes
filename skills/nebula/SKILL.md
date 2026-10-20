@@ -176,6 +176,15 @@ nebula moodboard delete <board>
   never steers: it isn't in the analysis or the brief. New images land
   after the last one, and `--weight` resizes the image's card. The CLI can't
   move cards yet.
+- Your changes never overwrite the person's: `add` lands on the board as it
+  is saved, and an open Moodboard Studio shows it at once and keeps what the
+  person was typing. If a write says the board changed since you read it,
+  read it again (`show`) and redo your change. `set` resends its own fields
+  when the person saved something else meanwhile, but if they changed a
+  field `set` is setting (say Direction), it stops, writes nothing more and
+  names the field: read their value before you run it again. `add` prints how to take the
+  images off again; `add --json` (and MCP `moodboard_add`) gives
+  `addedIds` and `undo`.
 - Weights and strength run from 0 to 1. On Krea 2 the board's images
   share out its strength: each goes at strength x its weight / the weights
   of the images sent, so they add up to the board's strength (one image
@@ -249,13 +258,17 @@ nebula moodboard delete <board>
   prints the command that moves it back. A board or Character in Recently
   deleted is refused: restore it first. MCP: `moodboard_move`,
   `character_move`.
-- `set --json` returns `previous`, the settings before your change
-  (including Direction, Avoid, pinned colours and your own hand-written
-  brief). To undo it, save that output and run
+- `set --json` returns `previous`: what your change changed, as it was
+  before (only those settings, Direction, Avoid, pinned colours, your own
+  hand-written brief, and only the image settings you changed), so undoing
+  it keeps what others changed since in anything else. To undo it, save that output and run
   `nebula moodboard set <board> --restore <file>` (`-` reads stdin), or
-  pass `previous` to the MCP tool `moodboard_update` as it is. Images you
-  took off with `--remove` aren't in it: add them back from `removed`
-  (`nebula moodboard add <board> <url>`). If a `--keep-brief` fails after
+  pass `previous` to the MCP tool `moodboard_update` as it is (`undo`
+  included). Its `undo` is one checked write: anything someone changed
+  again since is left as they set it, and the result says so in `skipped`
+  ("Direction changed since, left as is"). Images you took off with
+  `--remove` come back with it (an older Nebula's `previous` has no `undo`:
+  add them back from `removed` with `nebula moodboard add <board> <url>`). If a `--keep-brief` fails after
   the other changes were saved, the error prints the `previous` that puts
   them back.
 - `delete` moves a board to Recently deleted, and

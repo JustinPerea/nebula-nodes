@@ -2,6 +2,7 @@ import { apiFetch, rewriteBackendAssetUrls } from './backend';
 import { resolveProjectId } from './currentProject';
 import type { Character, Moodboard } from '../types';
 import { actorLabel, type TrashedItem } from './trash';
+import { MoodboardVersionConflict, type MoodboardEditResult, type MoodboardOp } from './moodboardEdits';
 import type {
   ProviderRecoveryCheckpoint,
   ProviderStartAmbiguity,
@@ -717,13 +718,40 @@ export async function createMoodboard(body: MoodboardCreateInput): Promise<Moodb
   return response.json();
 }
 
-export async function updateMoodboard(id: string, body: MoodboardUpdateInput): Promise<Moodboard> {
+/** A 409 from a write sent with `baseVersion`: someone else saved the board
+ *  since it was read. The answer carries the board as it is now. */
+async function moodboardConflict(response: Response): Promise<MoodboardVersionConflict | null> {
+  if (response.status !== 409) return null;
+  try {
+    const body = await response.clone().json() as { code?: string; board?: Moodboard };
+    return body.code === 'version_conflict' && body.board ? new MoodboardVersionConflict(body.board) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Board fields only (the Studio sends images as checked edits, below).
+ *  With `baseVersion`, a board saved elsewhere since is a
+ *  MoodboardVersionConflict, not an overwrite. */
+export async function updateMoodboard(id: string, body: MoodboardUpdateInput & { baseVersion?: number }): Promise<Moodboard> {
   const response = await apiFetch(`/api/moodboards/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!response.ok) throw await moodboardWriteError(response, 'Save');
+  if (!response.ok) throw await moodboardConflict(response) ?? await moodboardWriteError(response, 'Save');
+  return response.json();
+}
+
+/** Checked board edits (`POST /api/moodboards/{id}/edits`): the ops land
+ *  together, or none do. */
+export async function editMoodboard(id: string, ops: MoodboardOp[], baseVersion?: number): Promise<MoodboardEditResult> {
+  const response = await apiFetch(`/api/moodboards/${encodeURIComponent(id)}/edits`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(baseVersion === undefined ? { ops } : { ops, baseVersion }),
+  });
+  if (!response.ok) throw await moodboardConflict(response) ?? await moodboardWriteError(response, 'Save');
   return response.json();
 }
 

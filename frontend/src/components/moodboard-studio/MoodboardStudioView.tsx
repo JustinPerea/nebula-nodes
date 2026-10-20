@@ -4,6 +4,7 @@ import { useUIStore } from '../../store/uiStore';
 import {
   analyzeMoodboard,
   createMoodboard,
+  editMoodboard,
   fetchMoodboard,
   fetchMoodboards,
   keepMoodboardBriefOverride,
@@ -31,6 +32,9 @@ import { moveChoices, type MoveChoice } from '../../lib/assetMove';
 import { useStudioAssetMove } from '../../hooks/useStudioAssetMove';
 import { AssetMoveMenu } from '../asset-move/AssetMoveMenu';
 import { isSetAside, patchSteers, setAsidePatch } from './steering';
+import { BOARD_FIELD_KEYS, MoodboardVersionConflict, applyOps, imagePatchOps, queueOps, rebaseDraft,
+  fieldChanges, type BoardFieldKey, type MoodboardOp } from '../../lib/moodboardEdits';
+import { TAB_ID } from '../../lib/tabId';
 import '../../styles/moodboard-studio.css';
 
 interface MoodboardDraft {
@@ -54,6 +58,12 @@ interface MoodboardDraft {
   colorChoices?: { keep: string[]; leaveOut: string[] };
   sendNotes?: boolean;
   projectId?: string;
+  // A saved board's checked edits (lib/moodboardEdits): its board fields as
+  // last read, that board's version, and the image ops not yet confirmed.
+  // Never sent as they are.
+  base?: Partial<Record<BoardFieldKey, unknown>>;
+  version?: number;
+  pendingOps?: MoodboardOp[];
 }
 
 function emptyDraft(): MoodboardDraft {
@@ -76,8 +86,8 @@ function emptyDraft(): MoodboardDraft {
 
 // Board fields only: the layout (frames, layoutVersion, ...) is never sent
 // back, since the backend refuses it on a save. Images keep their
-// placements, which a save may send back: the backend keeps the saved ones.
-function moodboardToDraft(m: Moodboard): MoodboardDraft {
+// placements, which a new board's first save sends.
+function moodboardFields(m: Moodboard): Omit<MoodboardDraft, 'base' | 'version' | 'pendingOps'> {
   return {
     name: m.name,
     images: [...m.images],
@@ -94,6 +104,42 @@ function moodboardToDraft(m: Moodboard): MoodboardDraft {
     sendNotes: m.sendNotes === true,
     projectId: m.projectId,
   };
+}
+
+/** The board fields of a board as a draft holds them, to compare with one. */
+function boardFieldsOf(m: Moodboard): Partial<Record<BoardFieldKey, unknown>> {
+  const fields = moodboardFields(m) as Record<string, unknown>;
+  return Object.fromEntries(BOARD_FIELD_KEYS.map((key) => [key, fields[key]]));
+}
+
+function moodboardToDraft(m: Moodboard): MoodboardDraft {
+  return { ...moodboardFields(m), base: boardFieldsOf(m), version: m.version, pendingOps: [] };
+}
+
+/** `draft` moved onto `board` (see rebaseDraft): `sent` are the ops `board`
+ *  already has. `asSent`: the board fields a PUT just saved, as the draft
+ *  held them when it sent them. They stand in for the board's values in the
+ *  base, since the server may have cleaned them (a trimmed name or
+ *  Direction, lowercased colours): otherwise the draft would differ from
+ *  the base for good, read as the person's change, and hide (then
+ *  overwrite) the next outside edit of that field. */
+function draftOnBoard(draft: MoodboardDraft, board: Moodboard, sent?: ReadonlySet<MoodboardOp>,
+  asSent?: Partial<Record<BoardFieldKey, unknown>>): MoodboardDraft {
+  return rebaseDraft(draft, board, { ...boardFieldsOf(board), ...asSent }, sent);
+}
+
+/** A draft's board fields with the name as it is sent (trimmed). */
+function trimmedName<D extends Partial<Record<BoardFieldKey, unknown>>>(fields: D): D {
+  return typeof fields.name === 'string' ? { ...fields, name: fields.name.trim() } : fields;
+}
+
+/** A new board's first save: everything but the checked-edit bookkeeping. */
+function createBody(draft: MoodboardDraft) {
+  const body: MoodboardDraft = { ...withBriefFields(draft), name: draft.name.trim() };
+  delete body.base;
+  delete body.version;
+  delete body.pendingOps;
+  return body;
 }
 
 /** The person's Keep anyway / Leave out after one choice: a colour is in
@@ -232,6 +278,43 @@ export function MoodboardStudioView() {
     if (isDraftId && loaded && savedId && isCurrent()) enterMoodboardEditor(savedId, moodboardEditorScope);
   }, [isDraftId, loaded, savedId, isCurrent, moodboardEditorScope, enterMoodboardEditor]);
 
+  // The newest version someone else announced for the open board, so a save
+  // in flight when it came reads the board again once it lands.
+  const announced = useRef(0);
+  const draftNow = useCallback(() => useAssetStudioDraftStore.getState().entries[resolveAssetStudioDraftKey(
+    useAssetStudioDraftStore.getState(), key)]?.draft as MoodboardDraft | undefined, [key]);
+  const moveDraft = useCallback((board: Moodboard, sent?: ReadonlySet<MoodboardOp>,
+    asSent?: Partial<Record<BoardFieldKey, unknown>>) => {
+    const store = useAssetStudioDraftStore.getState();
+    const current = draftNow();
+    if (current) store.patch(key, { draft: draftOnBoard(current, board, sent, asSent), thumbnail: board.thumbnail });
+    rememberBrief(board);
+  }, [key, draftNow, rememberBrief]);
+
+  /** Read the open board again after someone else saved it, and replay the
+   *  draft's own edits on top. Not mid-save: the save does it when it lands. */
+  const follow = useCallback(async () => {
+    const entry = useAssetStudioDraftStore.getState().entries[resolveAssetStudioDraftKey(useAssetStudioDraftStore.getState(), key)];
+    if (!entry?.loaded || !entry.savedId || entry.pendingSaveId) return;
+    const board = await fetchMoodboard(entry.savedId).catch(() => null);
+    const latest = useAssetStudioDraftStore.getState().entries[resolveAssetStudioDraftKey(useAssetStudioDraftStore.getState(), key)];
+    if (!board || !mounted.current || !latest || latest.pendingSaveId || latest.savedId !== board.id) return;
+    if (board.version <= ((latest.draft as MoodboardDraft).version ?? 0)) return;
+    moveDraft(board);
+  }, [key, moveDraft]);
+
+  useEffect(() => wsClient.subscribe((event) => {
+    if (event.type !== 'storedAssetChanged' || event.kind !== 'moodboard' || event.deleted) return;
+    // The echo of this tab's own write.
+    if (event.edit?.tab && event.edit.tab === TAB_ID) return;
+    const entry = useAssetStudioDraftStore.getState().entries[resolveAssetStudioDraftKey(useAssetStudioDraftStore.getState(), key)];
+    if (!entry?.loaded || entry.savedId !== event.id) return;
+    const known = (entry.draft as MoodboardDraft).version ?? 0;
+    if (typeof event.version === 'number' && event.version <= known) return;
+    announced.current = Math.max(announced.current, event.version ?? known + 1);
+    void follow();
+  }), [key, follow]);
+
   const persist = useCallback(async () => {
     if (!isCurrent() || !await verifyProject() || !isCurrent()) return null;
     const store = useAssetStudioDraftStore.getState();
@@ -241,12 +324,53 @@ export function MoodboardStudioView() {
     const attempt = store.beginSave(key);
     if (!attempt) return null;
     try {
-      const body = { ...withBriefFields(currentDraft), name: currentDraft.name.trim() };
-      const result = attempt.entry.savedId
-        ? await updateMoodboard(attempt.entry.savedId, body) : await createMoodboard(body);
-      rememberBrief(result);
-      if (!store.finishSave(key, attempt.id, attempt.revision, result.id, result.thumbnail)) return null;
-      if (!attempt.entry.savedId) {
+      const savedId = attempt.entry.savedId;
+      let result: Moodboard | null = null;
+      if (!savedId) {
+        const sent = new Set(currentDraft.pendingOps ?? []);
+        result = await createMoodboard(createBody(currentDraft));
+        const drafted = currentDraft as Partial<Record<BoardFieldKey, unknown>>;
+        moveDraft(result, sent, Object.fromEntries(BOARD_FIELD_KEYS.filter((field) => field !== 'analysis' && field in drafted)
+          .map((field) => [field, drafted[field]])));
+      } else {
+        // Image edits go as checked edits, then the board fields the person
+        // changed go on a PUT; both with the version last read. Someone else
+        // saved since (409): take the board as it is, replay, send again.
+        for (let tries = 0; ; tries += 1) {
+          const snapshot = draftNow();
+          if (!snapshot) return null;
+          try {
+            const ops = snapshot.pendingOps ?? [];
+            let version = snapshot.version;
+            if (ops.length) {
+              const edited = await editMoodboard(savedId, ops, version);
+              moveDraft(edited.board, new Set(ops));
+              result = edited.board;
+              version = edited.board.version;
+            }
+            const after = draftNow() ?? snapshot;
+            const drafted = snapshot as Partial<Record<BoardFieldKey, unknown>>;
+            const fields = after.base ? fieldChanges(trimmedName(after.base), trimmedName(drafted)) : createBody(snapshot);
+            delete (fields as { images?: unknown }).images;
+            if (Object.keys(fields).length) {
+              result = await updateMoodboard(savedId, { ...(fields as Parameters<typeof updateMoodboard>[1]),
+                ...(snapshot.projectId ? { projectId: snapshot.projectId } : {}),
+                ...(version === undefined ? {} : { baseVersion: version }) });
+              const asSent = Object.fromEntries(Object.keys(fields).filter((field) => field !== 'analysis')
+                .map((field) => [field, drafted[field as BoardFieldKey]]));
+              moveDraft(result, undefined, asSent);
+            }
+            break;
+          } catch (err) {
+            if (!(err instanceof MoodboardVersionConflict) || tries >= 2) throw err;
+            moveDraft(err.board);
+          }
+        }
+      }
+      const thumbnail = result?.thumbnail ?? attempt.entry.thumbnail;
+      const id = result?.id ?? savedId!;
+      if (!store.finishSave(key, attempt.id, attempt.revision, id, thumbnail)) return null;
+      if (!savedId && result) {
         const createdScope: AssetScope = result.projectId ? 'project' : 'global';
         const selectedAtCompletion = isCurrent();
         store.copyTo(key, assetStudioDraftKey('moodboard', createdScope, result.id, result.projectId));
@@ -255,12 +379,19 @@ export function MoodboardStudioView() {
           enterMoodboardEditor(result.id, createdScope);
         }
       }
-      return result.id;
+      if (announced.current > (draftNow()?.version ?? 0)) void follow();
+      return id;
     } catch (err) {
       store.failSave(key, attempt.id, err instanceof Error ? err.message : 'Save failed. Retry?');
       return null;
     }
-  }, [key, isCurrent, verifyProject, enterMoodboardEditor, rememberBrief]);
+  }, [key, isCurrent, verifyProject, enterMoodboardEditor, moveDraft, draftNow, follow]);
+
+  /** Text sends 600 ms after the last key, or when it loses focus. */
+  const sendNow = () => {
+    const entry = useAssetStudioDraftStore.getState().entries[resolveAssetStudioDraftKey(useAssetStudioDraftStore.getState(), key)];
+    if (entry?.dirty && !entry.pendingSaveId && canSave) void persist();
+  };
 
   useEffect(() => {
     if (!loaded || !dirty || !canSave || pendingSaveId || saveState === 'error') return;
@@ -270,10 +401,12 @@ export function MoodboardStudioView() {
 
   const addImageUrls = (urls: string[]) => {
     if (urls.length === 0 || !isCurrent()) return;
+    const add: MoodboardOp = { op: 'add', images: urls.map(createDraftImage).map(({ id, url }) => ({ id, url })) };
     setDraft((current) => ({
       ...current,
       analysis: null,
-      images: [...current.images, ...urls.map(createDraftImage)],
+      images: applyOps(current.images, [add]),
+      pendingOps: queueOps(current.pendingOps, [add]),
     }));
   };
 
@@ -310,14 +443,17 @@ export function MoodboardStudioView() {
       ...current,
       analysis: steers ? null : current.analysis,
       images: current.images.map((img) => (img.id === id ? { ...img, ...patch } : img)),
+      pendingOps: queueOps(current.pendingOps, imagePatchOps(id, patch)),
     }));
   };
 
   const removeImage = (id: string) => {
+    const remove: MoodboardOp = { op: 'remove', images: [id] };
     setDraft((current) => ({
       ...current,
       analysis: null,
-      images: current.images.filter((img) => img.id !== id),
+      images: applyOps(current.images, [remove]),
+      pendingOps: queueOps(current.pendingOps, [remove]),
     }));
   };
 
@@ -388,7 +524,10 @@ export function MoodboardStudioView() {
     const id = dirty || !savedId ? await persist() : savedId;
     if (!id || !isCurrent()) return;
     try {
-      rememberBrief(await keepMoodboardBriefOverride(id));
+      const kept = await keepMoodboardBriefOverride(id);
+      // Keep writes the board (a new version): the draft follows, so its next save isn't a 409.
+      if (isCurrent() && !useAssetStudioDraftStore.getState().entries[key]?.pendingSaveId) moveDraft(kept);
+      else rememberBrief(kept);
     } catch (err) {
       if (isCurrent()) patch({ saveError: err instanceof Error ? err.message : 'Keep failed.' });
     }
@@ -533,7 +672,8 @@ export function MoodboardStudioView() {
                   <span>Name</span>
                   <input
                     value={draft.name}
-                    onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+                    onChange={(event) => { const name = event.target.value; setDraft((current) => ({ ...current, name })); }}
+                    onBlur={sendNow}
                   />
                 </label>
                 <div className="moodboard-def__row">
@@ -541,7 +681,7 @@ export function MoodboardStudioView() {
                     <span>Mode</span>
                     <select
                       value={draft.mode}
-                      onChange={(event) => setDraft({ ...draft, analysis: null, mode: event.target.value as Moodboard['mode'] })}
+                      onChange={(event) => { const mode = event.target.value as Moodboard['mode']; setDraft((current) => ({ ...current, analysis: null, mode })); }}
                     >
                       <option value="look">Look</option>
                       <option value="world">World</option>
@@ -557,7 +697,7 @@ export function MoodboardStudioView() {
                       max={1}
                       step={0.05}
                       value={draft.strength}
-                      onChange={(event) => setDraft({ ...draft, analysis: null, strength: Number(event.target.value) })}
+                      onChange={(event) => { const strength = Number(event.target.value); setDraft((current) => ({ ...current, analysis: null, strength })); }}
                     />
                   </label>
                 </div>
@@ -566,7 +706,8 @@ export function MoodboardStudioView() {
                   <AutoGrowTextarea
                     rows={3}
                     value={draft.notes}
-                    onChange={(event) => setDraft({ ...draft, analysis: null, notes: event.target.value })}
+                    onChange={(event) => { const notes = event.target.value; setDraft((current) => ({ ...current, analysis: null, notes })); }}
+                    onBlur={sendNow}
                     placeholder="Anything about the board, in your words."
                   />
                 </label>
@@ -641,6 +782,7 @@ export function MoodboardStudioView() {
                           value={img.notes}
                           placeholder="What to take from this image"
                           onChange={(event) => updateImage(img.id, { notes: event.target.value })}
+                          onBlur={sendNow}
                         />
                       </label>
                       <div className="moodboard-tile__note moodboard-tile__note--private">
@@ -653,6 +795,7 @@ export function MoodboardStudioView() {
                             placeholder="A label for you, like Liked"
                             aria-describedby={`private-note-hint-${img.id}`}
                             onChange={(event) => updateImage(img.id, { privateNote: event.target.value })}
+                            onBlur={sendNow}
                           />
                         </label>
                         <span id={`private-note-hint-${img.id}`} className="moodboard-tile__note-hint">
