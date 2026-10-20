@@ -99,10 +99,10 @@ describe('asset studio workspace continuity', () => {
     useUIStore.getState().enterCharacterEditor('character-a'); render(<CharacterStudioView />); await settle();
     expect(screen.getByLabelText('Name')).toHaveValue('New name before debounce');
     await act(async () => { vi.advanceTimersByTime(600); }); await settle();
-    expect(api.updateCharacter).toHaveBeenCalledExactlyOnceWith('character-a', expect.objectContaining({
-      name: 'New name before debounce', frozenTraitString: 'Verbatim traits', seed: 14,
-      referenceViews: ['/one.png', '/two.png', '/three.png'],
-    }));
+    // Only what the person changed goes, checked against the version read
+    // (contract 07, 2.1); the rest of the recipe stays as saved.
+    expect(api.updateCharacter).toHaveBeenCalledExactlyOnceWith('character-a',
+      { name: 'New name before debounce', baseVersion: 1 });
   });
 
   it('records a pending create under its original draft without navigating away from a newer Character', async () => {

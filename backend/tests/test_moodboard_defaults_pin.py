@@ -15,6 +15,11 @@ Analysis version 5 (moodboard canvas PR2, Q7) measures set-aside images: the
 ``setAside: true`` and its colours. The steering view below leaves those
 entries out, so its fixture is unchanged; ``fixtures/moodboard_set_aside_pin.json``
 pins the set-aside images' colours on their own.
+
+Re-pinned 2026-10-20 (weight 0 out of the summary's count, plan section
+4.4): one path moved, ``brand.summary`` "4 reference image(s)" to "3", since
+its image 5 is at weight 0. Its colours, brief, negatives, keywords and
+per-image colours are as they were.
 """
 from __future__ import annotations
 
