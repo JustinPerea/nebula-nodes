@@ -56,6 +56,7 @@ What changed from version 1:
   - **The board cover** (Justin approved it on 2026-10-20): new PR3b, being built on `feat/moodboard-cover`, with a follow-up that makes a cover the person chose count as pinned.
   - **PR29a is built** on `feat/mcp-channel-experiment`, and its live check ran (PR29a "As built"). It differs from the design in several places, and it is changed to match Justin's Q50 and Q51 answers before it merges. Q52 is rewritten now that the live check is done, and Q64 is new: how the listening gate tells a change-woken turn from one the person started (§7.6).
   - **Sizes.** PR29's cut for Q40 c is corrected (it had removed its whole `--listen` item, not only the recent-work set), PR29a's row is its as-built size, and Q64 c is booked on PR29. §9 is re-totalled from 39 rows: about 37,050 + 22,750 lines and 119.25 agent-days. The canvas critical path becomes 32.25 days, the agents lane 13.5 and the adapter lane 14.75 (§9).
+- **v2.7: PR26 measured (2026-10-20).** PR26 merged as #125 and was measured with Justin's OK on the spend. It missed its target on all three arms (§10.9). PR26b, a follow-up inside PR26's scope, fixes what the runs showed (PR26). No new row in §9.
 
 ---
 
@@ -2494,7 +2495,7 @@ Decided: Justin chose Q24 a (2026-10-20). Recraft's own API becomes the direct r
 
 ### PR26: First-turn context (agents lane; version 2.7) — new
 
-Planned with Justin's agreement through GM (2026-10-20); not started until he approves building.
+Planned with Justin's agreement through GM (2026-10-20). Built with his OK ("A, B, and C") and merged as #125 (`466235b2`) on 2026-10-20. Measured the same day: **it missed its target** (§10.9). PR26b, a follow-up inside PR26's scope, fixes what the runs showed.
 
 - **Goal.** An agent's first turn gets what it needs in one call, the instructions fit what Claude Code shows, and the CLI points to the right option. Orientation falls from GM's 8 of 16 turns to at most 3, with no usage error, and no help read where the prompt doesn't ask for one (§5.10.1).
 - **Scope** (§5.10.1).
@@ -2513,6 +2514,16 @@ Planned with Justin's agreement through GM (2026-10-20); not started until he ap
 - **Depends on.** Nothing in this plan. The AgentLog-gate branch (Q38) merged as #104, so PR26 starts on top of it. PR29a's branch also edits `mcp_server.py` and `docs/MCP-SETUP.md`, so whichever of the two lands second rebases.
 - **Docs.** `docs/MCP-SETUP.md` (`start_here` first, proposals with names); `skills/nebula/SKILL.md`; `docs/PERSONAL-AGENTS.md`; the contract 07 changelog (proposals' `rename`); `implementation-notes.md` (the before and after counts); `docs/agent-runs/` (the new runs' sanitized records, beside GM's).
 - **Risks.** An agent that skips the instructions still orients by hand; the measurement shows it. Budgets that are too small send the agent to `look_at_canvas` anyway; the count shows that too, and the budgets are constants.
+- **Measured (2026-10-20, §10.9).** Medians: CLI 2 orientation turns on main and 5 on the branch, 3 with the swapped prompt; MCP 5 on main and 2 on the branch. It missed on every arm:
+  - The CLI arms read `nebula apply --help` every time.
+  - Two of three MCP runs called `start_here` before loading any tool schema, then guessed argument names (three usage errors each).
+- **PR26b (follow-up, same scope).**
+  - `start_here` and `nebula context` give each next call with its exact argument names, `apply`'s flags and how to put a board on the canvas.
+  - A wrong argument gets one line naming the right ones.
+  - `point_at(say=...)` and `nebula point --say` work without a target.
+  - The turn counter counts ToolSearch and argument failures as orientation.
+  - Then B, C and E run again, after Justin's OK on that spend (merge-oks Q94).
+  - It is not a new row in §9: it stays inside PR26's size.
 
 ### PR27: Narration while it thinks (agents lane; version 2.7) — new
 
@@ -3167,6 +3178,27 @@ On 2026-10-20 Justin agreed, through GM - Design ("Agree with the suggestions yo
 - **Asked:** Q52 rewritten (Channels for the Good Machines Team org; a) recommended) and Q64 (where the listening gate lives; c) recommended), both in §7.6.
 - **Sizes (§9, 39 rows):** 37,050 + 22,750 (59,800) lines and 119.25 days (was 35,000 + 21,050 and 114.5): PR3b new, the agent-support additions, PR29 corrected plus Q64 c, PR29a as built. The canvas critical path is 32.25 days; the agents lane 13.5; the adapter lane 14.75 (PR13 → PR14 → PR15 → PR24, a chain earlier versions missed); about 34.5 to 36.5 days in all.
 - **Sources.** All read only: origin/main `e304301b` (`git log`, `gh pr view` for #104 to #111, `mcp_server.py:90-165` and `:1285`, and #104's and #106's plan changes); `feat/mcp-channel-experiment` at `6fd7a33b` (`backend/mcp_channel.py`, `mcp_server.py`'s diff and `implementation-notes.md`); `chore/agent-surface-guard` (`backend/agent_surface.py`'s header and the new `AGENTS.md` lines); `feat/moodboard-cover` (its contract 07, CLI and MCP diff lines and its diff size); `feat/google-agent-presets` (its `implementation-notes.md` and `docs/PERSONAL-AGENTS.md` diff lines); Antigravity's FAQ (https://antigravity.google/docs/faq, fetched 2026-10-20). No backend Python was run, no agent or Claude session was started by this edit, and no paid API was called.
+
+### 10.9 PR26's measurement (2026-10-20)
+
+Justin OK'd the spend for the fifteen runs in §5.10.1 ("You have my okay on the spend"), and a $5 stop cap was set. The runs came to $4.18. The method, every run's table and the isolation checks are in `docs/agent-runs/2026-10-20-pr26-first-turn-measurement.md` (#131).
+
+| Arm | Orientation, median (range) | Usage errors, median | Help reads, median |
+|---|---|---|---|
+| A. Main, CLI | 2 (1 to 5) | 1 | 1 |
+| B. Branch, CLI | 5 (2 to 5) | 0 | 2 |
+| C. Branch, CLI, prompt names `nebula context` | 3 (1 to 3) | 0 | 1 |
+| D. Main, MCP | 5 (3 to 6) | 0 | 0 |
+| E. Branch, MCP | 2 (1 to 3) | 3 | 0 |
+
+- **The target was missed on B, C and E.** The target (§5.10.1) is at most 3 orientation turns, no usage error, and no help read on C and E.
+- **A didn't reproduce GM's 8 of 16.** GM ran on Justin's dev Nebula: many boards, an analyzed one, and that morning's CLI. These runs start from one fresh board, on a CLI with #118 and #123.
+- **The causes are in PR26 (above), and PR26b fixes them:**
+  - `nebula context` doesn't give `apply`'s flags.
+  - `start_here` takes no arguments. So Claude Code agents call it before loading any tool schema, and then guess argument names: `id` where a tool takes `board` or `definition_id`. PR26's own hint said `describe_node(id)`.
+  - `say` needs a target.
+  - The counter counts ToolSearch and argument failures as needed calls.
+- **Two runs bypassed the guard and were rerun.** The login PATH put another `nebula` ahead of GM's guard, so the first C1 and C2 ran old code. They reached the isolated backend only. The kit now sets `CLAUDE_ENV_FILE` and checks a per-call guard log; the doc's commands carry the fix.
 
 ### Not verified (check in the PR that needs it)
 
