@@ -183,6 +183,10 @@ def client(monkeypatch, person):
 
     monkeypatch.setattr(main.model_pricing, "load_pricing", lambda path=None: PRICES)
     monkeypatch.setattr(main, "execute_graph", AsyncMock(side_effect=every_node_calls_its_provider))
+    # These runs have no keys and leave inputs unwired; the fake engine never
+    # calls a provider. The pre-call check that refuses such a run before the
+    # spend check is tested in test_cli_run_errors.py.
+    monkeypatch.setattr(main, "validate_graph", lambda *args, **kwargs: [])
     monkeypatch.setattr(main, "agent_spend_ledger", agent_spend.SpendLedger(None))
     test_client = TestClient(main.app)
     test_client.delete("/api/graph?force=true")
@@ -294,9 +298,12 @@ def test_quick_points_at_the_canvas(client):
 def test_canvas_run_endpoints_hold_other_callers_to_it(client, monkeypatch):
     import main
 
+    from execution.engine import validate_graph
+
     price(3.0)
     node = {"id": "n1", "definitionId": PAID, "params": {}}
     # This graph has no prompt or key, so it can't run: that comes first, not its cost.
+    monkeypatch.setattr(main, "validate_graph", validate_graph)
     invalid = client.post("/api/execute", json={"nodes": [node], "edges": []})
     assert invalid.status_code == 200 and invalid.json()["status"] == "validation_error"
     monkeypatch.setattr(main, "validate_graph", lambda *args, **kwargs: [])

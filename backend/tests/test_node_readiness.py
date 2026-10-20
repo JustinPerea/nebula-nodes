@@ -384,3 +384,40 @@ def test_keys_needed_names_only_the_explicit_route():
     assert krea[0]["envKeyName"] == ["KREA_API_TOKEN"]
     assert node_readiness.krea_modes(krea[0]) == ["api-token", "mcp"]
     assert node_readiness.keys_needed(ROUTE_TABLE, {"_provider": "nope"}, DEFINITIONS) is None
+
+
+# -- one node with its own params (proposals: what Accept would run) ---------------
+
+def test_instance_missing_reads_a_krea_nodes_own_billing_choice():
+    krea = DEFINITIONS["krea-2-generate"]
+    # Signed in, but this node bills the API token (the default for a new node).
+    assert node_readiness.instance_missing(krea, {}, set(), krea_signed_in=True) == (
+        "needs KREA_API_TOKEN in Settings > Providers")
+    assert node_readiness.node_access(krea, set(), True) == node_readiness.KREA  # the type can run
+    assert node_readiness.instance_missing(krea, {}, {"KREA_API_TOKEN"}) is None
+    assert node_readiness.instance_missing(krea, {"_kreaAuth": "mcp"}, set(), krea_signed_in=True) is None
+    assert node_readiness.instance_missing(krea, {"_kreaAuth": "mcp"}, set()) == node_readiness.KREA_SIGN_IN
+
+
+def test_instance_missing_speaks_like_find_nodes():
+    gpt = DEFINITIONS["gpt-image-2-generate"]
+    assert node_readiness.instance_missing(gpt, {}, set()) == node_readiness.missing(gpt, False, DEFINITIONS)
+    assert node_readiness.instance_missing(gpt, {}, {"OPENAI_API_KEY"}) is None
+    assert node_readiness.instance_missing(DEFINITIONS["text-input"], {}, set()) is None
+    # A local node that calls a provider needs the key its value picks.
+    qc = DEFINITIONS["qc-frame-review"]
+    assert node_readiness.instance_missing(qc, {}, set()) is None
+    assert "ANTHROPIC_API_KEY" in node_readiness.instance_missing(qc, {"mode": "vision-llm"}, set())
+    assert node_readiness.instance_missing(CINEMA, scene("nano-banana"), {"GOOGLE_API_KEY"}, definitions=DEFINITIONS) is None
+    assert "FAL_KEY" in node_readiness.instance_missing(CINEMA, scene("seedream-4-5"), {"GOOGLE_API_KEY"},
+                                                        definitions=DEFINITIONS)
+
+
+def test_instance_missing_on_a_route_table_node_is_the_routers_message():
+    from services import node_route
+
+    flux = DEFINITIONS["flux-3-image"]
+    expected = node_route.route_unavailable(flux, {}, {})["message"]
+    assert node_readiness.instance_missing(flux, {}, set()) == expected
+    keys = {key for route in node_route.routes_of(flux) for key in route.get("keys") or []}
+    assert node_readiness.instance_missing(flux, {}, keys) is None

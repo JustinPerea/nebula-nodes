@@ -27,6 +27,7 @@ import { displayKey } from '../../lib/keyboardShortcuts';
 import { describeRunScope, runChipLabel, summarizeRunScope } from '../../lib/runScope';
 import { usePricingStore } from '../../store/pricingStore';
 import type { NodeData } from '../../types';
+import { useFitCanvasView } from '../../hooks/useFitCanvasView';
 import type { Edge, Node } from '@xyflow/react';
 import '../../styles/panels.css';
 import '../../styles/canvas-toolbar.css';
@@ -34,6 +35,8 @@ import '../../styles/canvas-toolbar.css';
 
 export function Toolbar() {
   const { fitView, zoomIn, zoomOut, zoomTo } = useReactFlow();
+  // Fit view includes an open proposal's ghosts.
+  const fitCanvasView = useFitCanvasView();
   const zoom = useStore((s) => s.transform[2]);
   const minZoom = useStore((s) => s.minZoom);
   const maxZoom = useStore((s) => s.maxZoom);
@@ -335,7 +338,7 @@ export function Toolbar() {
         </button>
         <button type="button" className="toolbar__button toolbar__button--icon"
           aria-label="Fit view" title={`Fit view (${displayKey('Shift')}1)`} aria-keyshortcuts="Shift+1"
-          onClick={() => void fitView({ padding: computeCanvasFitPadding(), duration: CANVAS_FIT_DURATION })}>
+          onClick={() => fitCanvasView()}>
           <Maximize className="toolbar__icon" size={14} strokeWidth={1.6} aria-hidden="true" />
         </button>
       </div>

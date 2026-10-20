@@ -574,6 +574,8 @@ async def test_graph_run_participates_in_paid_admission(monkeypatch) -> None:
         await release.wait()
 
     monkeypatch.setattr(main_module, "execute_graph", fake_execute_graph)
+    # No World Labs key here; the pre-call check would refuse the run first.
+    monkeypatch.setattr(main_module, "validate_graph", lambda *args, **kwargs: [])
     request = Request({"type": "http", "method": "POST", "path": "/api/graph/run", "headers": []})
     first = asyncio.create_task(main_module.run_graph(request, {}))
     await asyncio.wait_for(started.wait(), timeout=1)

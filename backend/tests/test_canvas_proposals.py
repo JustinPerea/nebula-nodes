@@ -286,6 +286,36 @@ def test_cost_counts_paid_free_and_ancestors_without_outputs(api):
     assert cached["upTo"] is False and [node["ref"] for node in cached["nodes"]] == ["+img"]
 
 
+def test_a_proposal_names_the_run_nodes_that_cannot_run_here(api, monkeypatch):
+    """A missing key shows before Accept: in the cost the canvas draws from,
+    and as a warning the agent gets back, in find_nodes' words."""
+    keys: dict = {}
+    monkeypatch.setattr(api.main, "load_settings", lambda: {"apiKeys": dict(keys)})
+    n1 = api.graph.add_node("text-input", {"value": "a dune"})
+    body = {"note": "Hero shot", "nodes": [{"ref": "+img", "definitionId": "gpt-image-2-generate"}],
+            "edges": [{"source": n1, "sourceHandle": "text", "target": "+img", "targetHandle": "prompt"}],
+            "run": ["+img"]}
+    response = _propose(api, body).json()
+    cost = response["proposal"]["cost"]
+    need = "needs OPENAI_API_KEY in Settings > Providers"
+    assert cost["notReady"] == [{"ref": "+img", "nodeId": None, "name": "GPT Image 2", "missing": need}]
+    assert {node["ref"]: node.get("missing") for node in cost["nodes"]} == {"+img": need, n1: None}
+    assert response["warning"] == (
+        "If the person accepts, the run fails: 1 node can't run here as set up. "
+        f"+img (GPT Image 2) {need}. Tell the person what to set up, or propose a node that runs here "
+        "(find_nodes lists them).")
+    # The person's canvas gets the same cost, so the bar can say it too.
+    opened = [m for m in api.browser if m["type"] == "proposalOpened"][-1]
+    assert opened["proposal"]["cost"]["notReady"] == cost["notReady"]
+    assert "can't  +img  GPT Image 2: " + need in format_proposal(response["proposal"])
+
+    keys["OPENAI_API_KEY"] = "sk-test"
+    ready = _propose(api, body).json()
+    assert ready["proposal"]["cost"]["notReady"] == [] and "warning" not in ready
+    nothing_runs = _propose(api, {**body, "run": []}).json()
+    assert nothing_runs["proposal"]["cost"]["notReady"] == [] and "warning" not in nothing_runs
+
+
 def test_a_vision_llm_qc_run_is_paid_and_unpriced_on_the_card_and_in_the_view(api):
     body = {"note": "check the loop", "nodes": [{"ref": "+qc", "definitionId": "qc-loop-safety",
                                                   "params": {"mode": "vision-llm"}}], "run": ["+qc"]}
@@ -979,6 +1009,19 @@ def test_cli_propose_wait_times_out():
     out = io.StringIO()
     code = proposals_cmd.run_propose(client, _propose_args(timeout=50.0), out=out, clock=lambda: next(times))
     assert code == 2 and "No decision yet" in out.getvalue()
+
+
+def test_cli_propose_prints_the_readiness_warning():
+    class Warned(FakeClient):
+        def propose(self, body, agent_name=None):
+            return {**super().propose(body, agent_name), "warning": "If the person accepts, the run fails: ..."}
+
+    out = io.StringIO()
+    assert proposals_cmd.run_propose(Warned([]), _propose_args(wait=False), out=out) == 0
+    assert "warning: If the person accepts, the run fails: ..." in out.getvalue()
+    out = io.StringIO()
+    proposals_cmd.run_propose(Warned([]), _propose_args(wait=False, json=True), out=out)
+    assert json.loads(out.getvalue())["warning"].startswith("If the person accepts")
 
 
 def test_cli_proposal_json_and_formatting():

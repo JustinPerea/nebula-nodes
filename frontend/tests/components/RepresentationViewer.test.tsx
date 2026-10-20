@@ -61,10 +61,11 @@ describe('representation viewer registry', () => {
     expect(hasRepresentationViewer('Image')).toBe(false);
   });
 
-  it('keeps a legacy World v1 on the existing interactive WorldPreview path', () => {
+  it('keeps a legacy World v1 on the existing interactive WorldPreview path', async () => {
     render(<RepresentationViewer type="World" value={worldV1Fixture} compact />);
 
-    expect(screen.getByTestId('legacy-world-preview')).toHaveAttribute('data-compact', 'true');
+    // WorldPreview is a deferred chunk (lib/deferredChunks.ts); it arrives after one load.
+    expect(await screen.findByTestId('legacy-world-preview')).toHaveAttribute('data-compact', 'true');
     expect(screen.queryByText(/contract v2/i)).not.toBeInTheDocument();
   });
 

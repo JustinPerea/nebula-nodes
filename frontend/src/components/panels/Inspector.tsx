@@ -13,7 +13,8 @@ import type { NodeData, DynamicNodeData, DynamicParamDefinition, ParamDefinition
 import { fetchOpenRouterModels, fetchNousModels, fetchQuiverModels, getSettings, updateSettings, type OpenRouterModel, type QuiverModel } from '../../lib/api';
 import { apiFetch, backendAssetUrlSync } from '../../lib/backend';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
-import { MaskPainterModal } from './MaskPainterModal';
+import { MaskPainterModal } from '../DeferredPanels';
+import { DeferredMaskPainterModal } from '../../lib/deferredChunks';
 import { JevResultDetails } from './JevResultDetails';
 import { StructuredOutputs } from '../nodes/StructuredValuePreview';
 import { structuredOutputEntries } from '../../lib/structuredValue';
@@ -1199,6 +1200,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
                   type="button"
                   className="mask-painter__paint-btn"
                   onClick={() => setMaskPainterOpen(true)}
+                  onPointerEnter={() => void DeferredMaskPainterModal.preload().catch(() => {})}
+                  onFocus={() => void DeferredMaskPainterModal.preload().catch(() => {})}
                 >
                   <Brush size={13} /> {maskData ? 'Edit Mask' : 'Paint Mask'}
                 </button>
