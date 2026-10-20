@@ -15,6 +15,9 @@ Identity-correctness contract:
   - referenceViews order is stored and returned verbatim (never sorted/reordered)
   - frozenTraitString is stored and returned byte-identical (never normalized)
   - version is bumped deterministically on every update call
+  - an update given ``base_version`` (the version the caller read) is
+    refused with CharacterVersionConflict when the Character has moved on,
+    so a Studio can't overwrite an edit made elsewhere since it read it
 
 No external dependencies: stdlib plus services/asset_trash.py (Recently deleted).
 """
@@ -23,6 +26,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -123,6 +128,30 @@ def _find_char_file(char_root: Path, char_id: str) -> Path | None:
         if candidate.exists():
             return candidate
     return None
+
+
+# One lock per Character: an update reads the file, checks its version,
+# changes it and writes it back as one step, whichever thread it runs on.
+_LOCKS: dict[str, threading.RLock] = {}
+_LOCKS_GUARD = threading.Lock()
+
+
+@contextmanager
+def _char_lock(char_id: str):
+    with _LOCKS_GUARD:
+        lock = _LOCKS.setdefault(char_id, threading.RLock())
+    with lock:
+        yield
+
+
+class CharacterVersionConflict(Exception):
+    """An update sent ``base_version`` and the Character has moved on since:
+    someone else saved it. ``character`` is the Character as it is now, so
+    the caller can rebase its change on it and send it again."""
+
+    def __init__(self, character: dict) -> None:
+        super().__init__(f"the Character changed since you read it (it is at version {character.get('version')})")
+        self.character = character
 
 
 def _now_iso() -> str:
@@ -249,21 +278,32 @@ class CharacterStore:
     # update
     # ------------------------------------------------------------------
 
-    def update(self, char_id: str, **fields) -> dict:
+    def update(self, char_id: str, *, base_version: int | None = None, **fields) -> dict:
         """Update mutable fields on a Character, bump version, refresh updatedAt.
 
         Raises KeyError if the character doesn't exist.
         Immutable fields (id, createdAt, projectId) are silently ignored
         in *fields* even if passed — they cannot be changed after creation.
+        ``base_version``: the version the caller read; any other raises
+        CharacterVersionConflict and writes nothing. None skips the check.
 
         Returns the updated Character dict.
         """
+        with _char_lock(_validate_char_id(char_id)):
+            return self._update(char_id, base_version, fields)
+
+    def _update(self, char_id: str, base_version: int | None, fields: dict) -> dict:
         root = _char_root()
         path = _find_char_file(root, char_id)
         if path is None:
             raise KeyError(f"Character '{char_id}' not found")
 
-        char = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            char = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:  # moved to Recently deleted after it was found
+            raise KeyError(f"Character '{char_id}' not found") from None
+        if base_version is not None and int(char.get("version", 1)) != base_version:
+            raise CharacterVersionConflict(char)
 
         # Immutable fields — never allow update
         _immutable = {"id", "createdAt", "projectId"}

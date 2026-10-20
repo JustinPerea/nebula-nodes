@@ -39,25 +39,33 @@ each of your edits, runs and moodboard changes under it too). `nebula apply` and
 
 ## Start here
 
-1. `nebula context`: which nodes can run here, with the keys this person set
-   up. Only use nodes it lists.
-2. `nebula projects`: saved projects; `*` is the one open on the canvas.
-   Start new work in a new project (`nebula project new "<name>"`) or open
-   the right one (`nebula project open <id>`). The person's canvas follows
-   (from their Projects screen too), names you, and offers them a button
-   back. **Never run `nebula clear` to make room**: a new project keeps their
-   work. `nebula clear` refuses on a canvas with nodes, and `--force` clears
-   it anyway. With their canvas open
-   that is one undo step for them; with none open it can't be undone yet.
-3. `nebula look`: the canvas as data (nodes, wires, outputs, selection, pins
-   the person left for you). `nebula selection` is what they have selected.
+Run `nebula context` first. One call gives you the open project and its
+canvas (nodes, wires, the selection, other agents' cursors), the pins the
+person left for you, open proposals, every moodboard (this project's,
+Global, and other projects'), the node types that run here with their
+prices, and your spending limits. Only use nodes it lists. `--json` prints
+the same as JSON. On a big canvas it shows the first nodes in full and says
+so; `nebula look` then gives every node.
+
+Projects: `nebula projects` lists them; `*` is the one open on the canvas.
+Start new work in a new project (`nebula project new "<name>"`) or open the
+right one (`nebula project open <id>`). The person's canvas follows (from
+their Projects screen too), names you, and offers them a button back.
+**Never run `nebula clear` to make room**: a new project keeps their work.
+`nebula clear` refuses on a canvas with nodes, and `--force` clears it
+anyway. With their canvas open that is one undo step for them; with none
+open it can't be undone yet. `nebula selection` is what they have selected.
+
+A mistyped command or option gets "Did you mean ...?" with that command's
+usage. MCP's names work too: `nebula find` is `nebula nodes`, `nebula
+describe` is `nebula info`.
 
 ## Find nodes
 
 | Command | What it does |
 |---|---|
-| `nebula nodes --filter upscale` | Node types by name (`--category image` and so on) |
-| `nebula info <node-id>` | Ports, params, options, defaults and prices |
+| `nebula nodes upscale` | Node types whose id or name has every word (`--category image` and so on) |
+| `nebula info <node-id>` | Ports, params, options, defaults and prices; on a node with a Moodboard port, what a wired board does there (`MOODBOARD:`) |
 | `nebula keys` | Which provider keys are set |
 | `nebula spend` | The spending limits you work under, and what you used |
 
@@ -81,6 +89,12 @@ nebula apply --note "Lighthouse, two takes" \
 It prints each new node's id. It never runs anything. Other edits:
 `--set n4.prompt=...`, `--move n4=400,120`, `--remove n7`,
 `--unwire n1:text n2:prompt`, or a whole plan with `--file plan.json`.
+
+It also prints `Undo: nebula undo <token>`. Run that to take your edit back
+(for 60 minutes, while that project is open): what you added goes, what you
+changed or removed comes back, and anything the person changed since stays
+as it is (the output lists it). A plan of steps prints one line with every
+step's token, newest first. Only your own `nebula apply` edits have tokens.
 
 Single edits also exist: `nebula create`, `connect`, `set`, `rename`, `move`,
 `delete`, `disconnect`.
@@ -120,12 +134,17 @@ Tell the person what to set up, or pick a node `nebula context` lists.
 ## Propose instead of doing
 
 Use `nebula propose` for paid runs over the limits and for reworking the
-person's own graph. It takes the same flags as `apply`, plus `--run`. The
-person accepts or rejects it on the canvas; you can't accept it.
+person's own graph. Its flags: `--note` (required), `--add`, `--param`,
+`--set`, `--wire`, `--at`, `--rename` for its own new nodes (`+ref=name`;
+the ghost shows the name and accepting applies it), `--run`, `--file`,
+`--wait` and `--json`. It doesn't take `apply`'s `--move`, `--remove`,
+`--unwire` or `--arrange`, or a rename of a node already on the canvas
+(use `nebula rename`). The person accepts or rejects it on the canvas; you
+can't accept it.
 
 ```bash
 nebula propose --note "Upscale the wide take" \
-  --add +up=seedvr2-upscale --wire n9:image +up:image --run +up --wait
+  --add +up=seedvr2-upscale --wire n9:image +up:image --rename +up="Wide, upscaled" --run +up --wait
 ```
 
 If a node the run needs can't run here, `nebula propose` prints a
@@ -158,6 +177,7 @@ nebula moodboard set <board> --direction "quiet coastal mornings" --avoid "neon 
   --pin-color "#E8593C" --keep-out-color "#0000FF"
 nebula moodboard set <board> --unavoid "neon signage" --unpin-color "#0000FF"
 nebula moodboard set <board> --brief "My own brief..."   # or --clear-brief, --keep-brief
+nebula moodboard set <board> --cover 3                  # the image the board opens on; --clear-cover: #1 again
 nebula moodboard set <board> --keep-anyway "#a6392d"     # put a left-out colour back (not pinned)
 nebula moodboard set <board> --leave-out "#1c70f2"       # or --leave-out-flagged, --reset-color HEX
 nebula moodboard set <board> --clash-mode flag           # leave-out (default), flag, no-measured, keep-all
@@ -171,6 +191,13 @@ nebula moodboard move <board> --to global      # or --to current, or a project's
 nebula character move <character> --to current
 nebula moodboard delete <board>
 ```
+
+- Before wiring a board into a generator's `moodboard` port, `nebula info
+  <node-id>` says what that node takes from it: the `MOODBOARD:` line is the
+  card's ("Board images: on · up to 10 to Image Style Refs", or the brief as
+  text only), with `(on <route>)` after it on a node with more than one
+  route, then the channel, weights, ports the board never fills, and the
+  models or routes that change it.
 
 - `show` lists each palette and accent colour with its share of the board
   and the images it comes from (`#4 0.35%, #5 0.26%`: image number from
@@ -209,6 +236,15 @@ nebula moodboard delete <board>
   other than 80 and 443. For those, save the image and add the file.
 - Name a board by its id or exact name, and an image by its number or id
   from `show`.
+- `--cover` picks the image a board opens on: its card on the canvas, its
+  thumbnail in lists and Studio, `show` ("Cover: #3"). Without one it is #1,
+  as before. It is a pick, not a reorder: #n stays the same image, and the
+  cover never changes what generators get (images, weights, brief or
+  analysis). A set-aside image can be the cover. Taking the cover image off
+  the board opens it on #1 again, and undoing that brings both back.
+  `--clear-cover` goes back to #1. MCP: `moodboard_update(cover=3)`, or
+  `cover=""` to clear; `moodboard_get` lists `cover` (number, id) when one
+  is chosen.
 - `show --json` (and MCP `moodboard_get`) also lists where each image's
   card sits on the board: `placements` (x, y, w, h in board pixels, its
   weight, and `frameId`, the frame it is in or null) and the board's
@@ -244,7 +280,9 @@ nebula moodboard delete <board>
   of the run counts only the 4 that steer); `--json`
   has `setAside` on each image. The analysis lists an
   image switched aside with `setAside: true` and its colours; a weight-0
-  image keeps its ordinary entry there. `--remove` takes
+  image keeps its ordinary entry there, but the summary counts neither, and
+  the Moodboard node's bundle (what an LLM node on an Any port reads) has
+  neither in `images`, `analysis.images` or `representativeImages`. `--remove` takes
   an image off the board (its file stays).
 - `--image-note` steers (the analysis reads it). `--private-note` is a label
   for whoever looks at the board, like "PAINTERLY (liked)": no analysis,
@@ -304,6 +342,12 @@ nebula moodboard delete <board>
   prints the command that moves it back. A board or Character in Recently
   deleted is refused: restore it first. MCP: `moodboard_move`,
   `character_move`.
+- An open Character Studio follows a Character you change with
+  `PUT /api/characters/{id}` (there is no MCP tool for its fields): send
+  only the fields you change, with `baseVersion` (the `version` you read)
+  so you never write over the person's edit; a 409 `version_conflict`
+  carries the Character as it is now. The person's unsaved edits stay, and
+  if you both changed one field the Studio tells them, naming you.
 - `set --json` returns `previous`: what your change changed, as it was
   before (only those settings, Direction, Avoid, pinned colours, your own
   hand-written brief, and only the image settings you changed), so undoing
@@ -330,7 +374,16 @@ nebula watch --once            # wait for the next change on the canvas
 nebula pins                    # notes the person pinned for agents
 nebula pin resolve <pin-id> --say "Warmed the grade on n7"
 nebula point n4 --say "Trying a tighter crop here"
+nebula note "n4 and n7 use different seeds; I'll match them" --node n4 --node n7
+nebula notes --unread          # your updates the person hasn't opened
 ```
+
+`--say` (on `point`, `pin resolve`) and `--note` (on `apply`, `propose`) are
+for your own action. What you noticed, a report or a suggestion goes in
+`nebula note`: the person reads it under Updates in the top right, saved with
+the project (`--board <name>` for a moodboard's, where `#12` names image 12).
+One plain line, 240 characters, at most 6 a minute; never quote a private
+note; `--since-last-turn` for what they changed since your last turn.
 
 ## Save and load
 

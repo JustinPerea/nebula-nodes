@@ -167,6 +167,8 @@ CI expectation: all parity tests pass on PRs touching handlers or fixtures.
 | `docs/contracts/README.md` | Link new exemplar if notable |
 | `docs/contracts/02-handler-patterns.md` §9 | Add exemplar to pattern table if new pattern |
 
+A generator with a prompt (image, video or audio) also needs a moodboard adapter entry, or a line in that table's `census`: see "Adding a moodboard adapter entry" in `docs/PROVIDER-ROUTES.md` and contract 07 section 1.16.
+
 Regenerate if needed:
 
 ```bash
@@ -226,3 +228,4 @@ Contract wave: <family or node id>
 | Date | Change |
 |------|--------|
 | 2026-07-01 | Initial pipeline doc + `scripts/contract-inventory.mjs` |
+| 2026-10-20 | §8: a generator with a prompt needs a moodboard adapter entry or a `census` line (contract 07 §1.16) |

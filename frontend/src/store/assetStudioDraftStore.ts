@@ -111,7 +111,13 @@ export const useAssetStudioDraftStore = create<AssetStudioDraftState>((set, get)
     if (!entry || source === destination) return;
     set((state) => {
       const entries = { ...state.entries, [destination]: { ...entry } }; delete entries[source];
-      return { entries, aliases: { ...state.aliases, [source]: destination, [key]: destination } };
+      // The destination holds the draft now, so it is no alias any more: an
+      // asset moved there and back would otherwise leave the two keys
+      // pointing at each other and the open Studio reading neither.
+      const aliases = Object.fromEntries(Object.entries(state.aliases)
+        .filter(([from]) => from !== destination)
+        .map(([from, to]) => [from, to === source ? destination : to]));
+      return { entries, aliases: { ...aliases, [source]: destination, [key]: destination } };
     });
   },
   rehome: (kind, id, projectId) => {

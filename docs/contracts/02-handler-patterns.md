@@ -194,7 +194,7 @@ Before any handler runs, the engine folds a wired Nebula moodboard (a `nebula_mo
 | Avoid in the prompt | Only for instruction-following models (ids starting `gpt-image-`, `nano-banana`, `krea-2-`, and the Krea catalog copies of GPT Image, Nano Banana and Krea 2): the bundle's `avoidPrompt` is added as one more paragraph. Diffusion-style models never get it there, since "no X" in their prompt pulls X in |
 | Negative field | A node with a `negative_prompt` param gets the board's `negativePrompt` merged after its own terms (case-insensitive de-duplication) |
 | Params | The handler gets a copy of the params; the node's saved params stay the person's. The cache key uses the params the handler got |
-| Port | The `moodboard` input is not passed on to the handler, except for nodes whose handler reads the board itself (`krea-2-generate`, which turns its images into style references) |
+| Port | The `moodboard` input is not passed on to the handler, except for nodes whose moodboard adapter entry says `handler: "reads-board"` (`krea-2-generate`, which turns its images into style references). The entry (`backend/data/moodboard_adapters.json`, contract 07 section 1.16) also names the port the text goes to (`textSlot`); a node with a Moodboard port and no entry gets the text with a run note |
 
 A node with no prompt text keeps its prompt and params as they are.
 
@@ -232,3 +232,4 @@ Golden files under `contracts/fixtures/` — web pytest is oracle; Swift/TS port
 | 2026-10-14 | `skipped` event and gate withholding |
 | 2026-10-18 | Moodboard fold (engine adds a board's brief, Avoid list and negatives) |
 | 2026-10-20 | Moodboard fold: a board at strength 0 is not sent, text included (Q36 a) |
+| 2026-10-20 | Moodboard fold: the port drop and the text slot come from the node's moodboard adapter entry (contract 07 section 1.16) |

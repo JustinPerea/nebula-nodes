@@ -39,9 +39,10 @@ NEBULA_MCP_ENV_VARS = ("NEBULA_AGENT_TOKEN", "NEBULA_URL")
 # doesn't import the MCP package; test_agent_mcp_registration checks it
 # against the server's own tool manager, so a new tool can't go unlisted.
 NEBULA_MCP_TOOLS = (
-    "get_selected_nodes", "look_at_canvas", "resolve_pin", "point_at", "wait_for_canvas_change",
+    "start_here", "get_selected_nodes", "look_at_canvas", "resolve_pin", "post_note", "list_notes", "point_at",
+    "wait_for_canvas_change",
     "propose_change", "get_proposal", "withdraw_proposal",
-    "find_nodes", "describe_node", "edit_canvas", "remove_from_canvas",
+    "find_nodes", "describe_node", "edit_canvas", "remove_from_canvas", "undo_canvas_edit",
     "run_nodes", "get_run", "cancel_run", "view_output", "get_spend_limits",
     "list_projects", "open_project", "new_project",
     "list_trash", "restore_from_trash",

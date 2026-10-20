@@ -1,0 +1,657 @@
+/* Updates: the chip, the card and the list (PR9a), and the node outlines.
+ *
+ * Layout and motion first, then each skin's visuals as tokens on
+ * .agent-notes-root (Slava restraint is the shipped skin; the default skin
+ * keeps the app's older dark panel look). Motion runs on the tuned springs
+ * from lib/springs.ts, passed in as --spring-pop / --spring-soft; reduced
+ * motion keeps only the opacity change. */
+
+.agent-notes-root {
+  display: contents;
+
+  --an-top-chip: var(--agent-notes-chip-top, 24px);
+  --an-top: calc(var(--an-top-chip) + var(--agent-notes-chip-h, 40px) + var(--stack-gap-sm, 8px));
+  --an-panel: rgba(20, 20, 20, 0.94);
+  --an-raised: rgba(32, 32, 32, 0.96);
+  --an-edge: #2a2a2a;
+  --an-edge-strong: #3a3a3a;
+  --an-ink: #e8e8e6;
+  --an-ink-bold: #ffffff;
+  --an-muted: #a8aaae;
+  --an-faint: #6e7075;
+  --an-hover: rgba(255, 255, 255, 0.04);
+  --an-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --an-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --an-radius: 12px;
+  --an-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+  --an-blur: blur(8px);
+  --an-on-dot: #111111;
+}
+
+body.app-slava-restraint .agent-notes-root {
+  --an-panel: var(--sr-glass-strong);
+  --an-raised: var(--sr-glass-raised);
+  --an-edge: var(--sr-edge);
+  --an-edge-strong: var(--sr-edge-strong);
+  --an-ink: var(--sr-ink);
+  --an-ink-bold: var(--sr-ink-bold);
+  --an-muted: var(--sr-ink-light);
+  --an-faint: var(--sr-ink-meta);
+  --an-hover: rgba(255, 255, 255, 0.035);
+  --an-ui: var(--sr-ui);
+  --an-mono: var(--sr-mono);
+  --an-radius: var(--sr-radius-panel);
+  --an-shadow: var(--sr-shadow-popover);
+  --an-blur: var(--sr-blur-panel);
+  --an-on-dot: var(--sr-on-accent);
+}
+
+/* =============== The chip: its own spot in the top right =============== */
+
+.agent-notes-chip {
+  position: fixed;
+  top: var(--an-chip-top, var(--an-top-chip));
+  right: var(--an-right, var(--page-gutter));
+  z-index: 46;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--agent-notes-chip-h, 40px);
+  padding: 0 8px 0 7px;
+  box-sizing: border-box;
+  border: 1px solid var(--an-edge-strong);
+  border-radius: 999px;
+  background: var(--an-raised);
+  backdrop-filter: var(--an-blur);
+  -webkit-backdrop-filter: var(--an-blur);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
+  color: var(--an-muted);
+  font: 500 13px/1 var(--an-ui);
+  cursor: pointer;
+  transition:
+    right var(--spring-pop-ms) var(--spring-pop),
+    color 160ms var(--spring-soft),
+    border-color 160ms var(--spring-soft);
+}
+
+.agent-notes-chip:hover,
+.agent-notes-chip[aria-expanded='true'] {
+  color: var(--an-ink);
+  border-color: color-mix(in srgb, var(--an-ink) 22%, transparent);
+}
+
+.agent-notes-chip:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--an-ink) 55%, transparent);
+  outline-offset: 2px;
+}
+
+/* The ring shows for as long as a card is up, in the newest author's colour. */
+.agent-notes-chip::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border: 2px solid var(--an-newest);
+  border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--spring-soft-ms) var(--spring-soft);
+}
+
+.agent-notes-chip--ringed::after {
+  opacity: 1;
+  transition: opacity var(--spring-pop-ms) var(--spring-pop);
+}
+
+.agent-notes-chip__dots {
+  display: inline-flex;
+  align-items: center;
+}
+
+.agent-notes-chip__dots .agent-notes-dot + .agent-notes-dot {
+  margin-left: -6px;
+  box-shadow: 0 0 0 2px var(--an-raised);
+}
+
+.agent-notes-chip__label {
+  white-space: nowrap;
+}
+
+.agent-notes-chip__count {
+  min-width: 22px;
+  box-sizing: border-box;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: var(--an-newest);
+  color: var(--an-on-dot);
+  font: 700 11px/1 var(--an-mono);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-notes-chip__count[data-muted='true'] {
+  background: transparent;
+  color: var(--an-faint);
+  box-shadow: inset 0 0 0 1px var(--an-edge-strong);
+}
+
+.agent-notes-chip__count[data-pop='true'] {
+  animation: agent-notes-count-pop var(--spring-pop-ms) var(--spring-pop) both;
+}
+
+@keyframes agent-notes-count-pop {
+  from { transform: scale(1.4); }
+  to { transform: scale(1); }
+}
+
+/* =============== Author dots =============== */
+
+.agent-notes-dot {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--an-dot);
+  color: var(--an-on-dot);
+  font: 700 10px/1 var(--an-ui);
+  letter-spacing: -0.01em;
+}
+
+/* In the chip a dot brightens while its author has unread updates. */
+.agent-notes-dot[data-lit='false'] {
+  opacity: 0.42;
+  filter: saturate(0.5);
+}
+
+.agent-notes-dot[data-lit] {
+  transition:
+    opacity var(--spring-soft-ms) var(--spring-soft),
+    filter var(--spring-soft-ms) var(--spring-soft);
+}
+
+/* =============== The card =============== */
+
+.agent-note-card {
+  position: fixed;
+  top: var(--an-drop-top, var(--an-top));
+  right: var(--an-right, var(--page-gutter));
+  z-index: 46;
+  width: min(360px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 14px 16px 14px;
+  border: 1px solid color-mix(in srgb, var(--an-author) 55%, transparent);
+  border-radius: var(--an-radius);
+  background: var(--an-panel);
+  backdrop-filter: var(--an-blur);
+  -webkit-backdrop-filter: var(--an-blur);
+  box-shadow: var(--an-shadow);
+  color: var(--an-ink);
+  font-family: var(--an-ui);
+  max-height: var(--an-max-h, none);
+  overflow-y: auto;
+  transform-origin: 85% 0;
+  animation: agent-notes-drop-in var(--spring-pop-ms) var(--spring-pop) both;
+  transition: right var(--spring-pop-ms) var(--spring-pop);
+}
+
+.agent-note-card[data-leaving='true'] {
+  pointer-events: none;
+  animation: agent-notes-drop-out var(--spring-soft-ms) var(--spring-soft) both;
+}
+
+.agent-note-card__who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.agent-note-card__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--an-ink-bold);
+  font: 600 13px/1.2 var(--an-ui);
+}
+
+.agent-note-card__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--an-muted);
+  font: 400 11px/1.2 var(--an-mono);
+}
+
+.agent-note-card__close {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  margin: -4px -6px -4px auto;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--an-faint);
+  cursor: pointer;
+}
+
+.agent-note-card__close:hover {
+  background: var(--an-hover);
+  color: var(--an-ink);
+}
+
+.agent-note-card__close:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--an-ink) 55%, transparent);
+  outline-offset: 1px;
+}
+
+.agent-note-card__text {
+  margin: 10px 0 0;
+  color: var(--an-ink);
+  font: 400 14px/1.4 var(--an-ui);
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.agent-note-card--summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 10px 16px;
+}
+
+.agent-note-card__summary {
+  flex: 1 1 auto;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--an-ink-bold);
+  font: 600 14px/1.3 var(--an-ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+.agent-note-card__summary:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--an-ink) 55%, transparent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.agent-note-card--summary .agent-note-card__close {
+  margin: 0;
+}
+
+/* =============== The list (GM's still) =============== */
+
+.agent-notes-panel {
+  position: fixed;
+  top: var(--an-drop-top, var(--an-top));
+  right: var(--an-right, var(--page-gutter));
+  z-index: 46;
+  display: flex;
+  flex-direction: column;
+  width: min(clamp(360px, 29vw, 460px), calc(100vw - 32px));
+  /* Down to the nearest thing below that shares its columns (measured:
+   * the proposal bar, the Agent log, the launcher, the toolbar); before the
+   * first measure, clear of the Agent log's spot above the chat launcher. */
+  max-height: var(--an-max-h, calc(
+    100vh - var(--an-drop-top, var(--an-top)) - var(--chat-launcher-bottom) - var(--chat-launcher-size)
+    - var(--agent-log-h, 44px) - 3 * var(--stack-gap-sm, 8px)
+  ));
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px solid var(--an-edge-strong);
+  border-radius: var(--an-radius);
+  background: var(--an-panel);
+  backdrop-filter: var(--an-blur);
+  -webkit-backdrop-filter: var(--an-blur);
+  box-shadow: var(--an-shadow);
+  color: var(--an-ink);
+  font-family: var(--an-ui);
+  transform-origin: 85% 0;
+  animation: agent-notes-drop-in var(--spring-pop-ms) var(--spring-pop) both;
+  transition: right var(--spring-pop-ms) var(--spring-pop);
+}
+
+.agent-notes-panel:focus {
+  outline: none;
+}
+
+.agent-notes-panel:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--an-ink) 40%, transparent);
+  outline-offset: 2px;
+}
+
+.agent-notes-panel__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex: 0 0 auto;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--an-edge);
+}
+
+.agent-notes-panel__title {
+  color: var(--an-ink-bold);
+  font: 600 15px/1 var(--an-ui);
+}
+
+.agent-notes-panel__count {
+  color: var(--an-muted);
+  font: 400 11px/1 var(--an-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-notes-panel__kept {
+  margin-left: auto;
+  color: var(--an-muted);
+  font: 400 12px/1 var(--an-ui);
+  white-space: nowrap;
+}
+
+.agent-notes-panel__list {
+  flex: 1 1 auto;
+  min-height: 0;
+  /* About eight entries, then the entries scroll and the header and footer stay put. */
+  max-height: 640px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+.agent-notes-panel__empty {
+  display: grid;
+  gap: 6px;
+  padding: 22px 16px 24px;
+}
+
+.agent-notes-panel__empty-title {
+  color: var(--an-ink);
+  font: 500 13px/1.3 var(--an-ui);
+}
+
+.agent-notes-panel__empty-hint {
+  color: var(--an-muted);
+  font: 400 12px/1.4 var(--an-ui);
+}
+
+.agent-notes-panel__error {
+  flex: 0 0 auto;
+  padding: 8px 16px;
+  border-top: 1px solid var(--an-edge);
+  color: var(--an-ink);
+  font: 400 12px/1.4 var(--an-ui);
+}
+
+.agent-notes-panel__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding: 11px 16px 12px;
+  border-top: 1px solid var(--an-edge);
+  color: var(--an-muted);
+  font: 400 12px/1.3 var(--an-ui);
+}
+
+.agent-notes-panel__see-all {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 0 0 1px;
+  border: 0;
+  border-bottom: 1px solid var(--an-edge-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--an-ink);
+  font: 500 12px/1.3 var(--an-ui);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.agent-notes-panel__see-all:hover {
+  border-bottom-color: var(--an-ink);
+}
+
+.agent-notes-panel__see-all:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--an-ink) 55%, transparent);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* One update: a 4 px stripe in its author's colour (70%, as in the still). */
+.agent-notes-entry {
+  position: relative;
+  padding: 12px 16px 13px 18px;
+  border-bottom: 1px solid var(--an-edge);
+  box-shadow: inset 4px 0 0 color-mix(in srgb, var(--an-author) 70%, transparent);
+  transition: background-color 160ms var(--spring-soft);
+}
+
+.agent-notes-entry:last-child {
+  border-bottom: 0;
+}
+
+.agent-notes-entry[data-showable='true'] {
+  cursor: pointer;
+}
+
+.agent-notes-entry[data-showable='true']:hover {
+  background: var(--an-hover);
+}
+
+.agent-notes-entry:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--an-ink) 45%, transparent);
+  outline-offset: -2px;
+}
+
+/* Dismissed or acted on: greyed. Show stays. */
+.agent-notes-entry[data-state='done'] .agent-notes-entry__who,
+.agent-notes-entry[data-state='done'] .agent-notes-entry__text {
+  opacity: 0.5;
+}
+
+.agent-notes-entry[data-state='done'] {
+  box-shadow: inset 4px 0 0 color-mix(in srgb, var(--an-author) 30%, transparent);
+}
+
+.agent-notes-entry__who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.agent-notes-entry__who .agent-notes-dot {
+  width: 18px;
+  height: 18px;
+  font-size: 9px;
+}
+
+.agent-notes-entry__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--an-ink-bold);
+  font: 600 13px/1.2 var(--an-ui);
+}
+
+.agent-notes-entry__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--an-muted);
+  font: 400 11px/1.2 var(--an-mono);
+}
+
+.agent-notes-entry__time {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--an-muted);
+  font: 400 11px/1.2 var(--an-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-notes-entry__text {
+  margin: 8px 0 0;
+  color: var(--an-ink);
+  font: 400 13.5px/1.42 var(--an-ui);
+  overflow-wrap: anywhere;
+}
+
+/* =============== Buttons (the card's and the list's) =============== */
+
+.agent-notes-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.agent-notes-acts__state {
+  color: var(--an-muted);
+  font: 400 11px/1 var(--an-mono);
+  margin-right: 4px;
+}
+
+.agent-notes-btn {
+  padding: 6px 10px;
+  border: 1px solid var(--an-edge-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--an-ink);
+  font: 500 12px/1 var(--an-ui);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 160ms var(--spring-soft),
+    border-color 160ms var(--spring-soft),
+    transform var(--spring-pop-ms) var(--spring-pop);
+}
+
+.agent-notes-btn:hover {
+  background: var(--an-hover);
+  border-color: color-mix(in srgb, var(--an-ink) 30%, transparent);
+}
+
+.agent-notes-btn:active {
+  transform: scale(0.97);
+}
+
+.agent-notes-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--an-ink) 55%, transparent);
+  outline-offset: 1px;
+}
+
+.agent-notes-btn--primary {
+  border-color: var(--an-ink);
+  background: var(--an-ink);
+  color: var(--an-on-dot);
+}
+
+.agent-notes-btn--primary:hover {
+  background: var(--an-ink-bold);
+  border-color: var(--an-ink-bold);
+}
+
+/* =============== Node outlines (inside React Flow's viewport) =============== */
+
+.agent-note-outlines {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+
+.agent-note-outline {
+  position: absolute;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* Mockup v5.2: inset −6 px, 3 px, radius 15, kept the same on screen at any zoom. */
+.agent-note-outline::before {
+  content: '';
+  position: absolute;
+  inset: calc(-6px / var(--an-zoom, 1));
+  border: calc(2.5px / var(--an-zoom, 1)) solid var(--an-outline);
+  border-radius: calc(15px / var(--an-zoom, 1));
+  box-shadow: 0 0 calc(16px / var(--an-zoom, 1)) color-mix(in srgb, var(--an-outline) 28%, transparent);
+  opacity: 0;
+  animation: agent-notes-outline-in var(--spring-pop-ms) var(--spring-pop) var(--an-delay, 0ms) both;
+}
+
+.agent-note-outlines[data-leaving='true'] .agent-note-outline::before {
+  animation: agent-notes-outline-out var(--spring-soft-ms) var(--spring-soft) both;
+}
+
+@keyframes agent-notes-outline-in {
+  from { opacity: 0; transform: scale(1.015); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes agent-notes-outline-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes agent-notes-drop-in {
+  from { opacity: 0; transform: translateY(-12px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes agent-notes-drop-out {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(-10px) scale(0.97); }
+}
+
+@keyframes agent-notes-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes agent-notes-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* Reduced motion: no drop, no scale, no pop, no stagger; opacity only. */
+@media (prefers-reduced-motion: reduce) {
+  .agent-note-card,
+  .agent-notes-panel {
+    animation-name: agent-notes-fade-in;
+    transition: none;
+  }
+
+  .agent-note-card[data-leaving='true'] {
+    animation-name: agent-notes-fade-out;
+  }
+
+  .agent-notes-chip {
+    transition: none;
+  }
+
+  .agent-notes-chip__count[data-pop='true'] {
+    animation: none;
+  }
+
+  .agent-notes-btn:active {
+    transform: none;
+  }
+
+  .agent-note-outline::before {
+    animation-name: agent-notes-fade-in;
+    animation-delay: 0ms;
+  }
+
+  .agent-note-outlines[data-leaving='true'] .agent-note-outline::before {
+    animation-name: agent-notes-fade-out;
+  }
+}
