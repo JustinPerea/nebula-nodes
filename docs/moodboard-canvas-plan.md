@@ -17,26 +17,32 @@ What changed from version 1:
 - Version 2.1 (same day) fixes what a critic found in version 2: §10.3 lists each point and what changed.
 - Version 2.2 (2026-10-20) adds Analyze as an overseer (GM's mockup v5): the reader's trace (§5.6.1), Q29 (§7.3), the new PR10b, and a checker's corrections (§10.4).
 - Version 2.3 (same day) records Justin's Q29 answer, c): the readings plus a dimmer "thinking (summary)" stream, optional per model, which falls back to b) when a model gives no summaries.
+- Version 2.4 (same day) records Justin's Q18 to Q28 answers (§7.2). He chose a) everywhere except Q21 and Q28, where he changed the recommendation to b):
+  - **Q21 b:** board strengths are scaled so they add up to the board's strength, on every node that takes weights, each in the form it needs. That gives a `normalize` field on every entry's `weight` (§5.7.2, §5.7.4) and a new small PR13a for Krea 2.
+  - **Q28 b:** under "Act directly", agents and Analyze may delete or merge a look that holds words, and the delete can be undone from anywhere. That gives a server-side word history (§5.8) and a new PR7e.
+  - It also adds Q30 (§7.4) and records the research and the corrections found along the way (§10.5).
+  - **Notes (same day).** Justin's design change, relayed by GM - Design with mockup v5.2: what an agent or the reader *noticed* goes to a "Notes" corner in the top right, not to text at its cursor. The agent's own action labels stay at the cursor. Notes are saved with the board (or the project), the chip counts unread, and the main canvas uses the same component. That gives §5.9, the new PR9a, changes to PR7e, PR9, PR10, PR10b and PR11, and the short confirmations Q31 to Q35 (§7.4). §10.5 lists what changed.
+  - **Q30 to Q35 answered (2026-10-20).** Q30 c widens the word history to every words field an agent or Analyze replaces or clears, on the board and on each look (§5.8, PR7e); Q31 to Q35 confirm what was built.
 
 ---
 
 ## 1. Summary
 
-Moodboard Studio's image grid becomes a second React Flow canvas (C1), with a List view that keeps today's grid (C6). Each reference is a card whose size is its weight (C2). One "Set aside" switch dims a card: it is still read for colours but never steers (C3). Looks are frames that you draw and name (C4). One image can sit in several frames as linked copies, each with its own weight (C13). Numbers stay in add order (C7). New references land in free space (C8). Agents see and edit the board the way they see and edit the main canvas: a view report, a picture, checked edits with a cursor, and your recent edits before each turn (C9). An Analyze button reads references with a vision model you pick, shows the price first, and sorts them into frames as a first draft you then edit (C10 to C13).
+Moodboard Studio's image grid becomes a second React Flow canvas (C1), with a List view that keeps today's grid (C6). Each reference is a card whose size is its weight (C2). One "Set aside" switch dims a card: it is still read for colours but never steers (C3). Looks are frames that you draw and name (C4). One image can sit in several frames as linked copies, each with its own weight (C13). Numbers stay in add order (C7). New references land in free space (C8). Agents see and edit the board the way they see and edit the main canvas: a view report, a picture, checked edits with a cursor, and your recent edits before each turn (C9). What an agent or the reader notices goes to a Notes corner in the top right, saved with the board; only an agent's own action shows at its cursor (§5.9). An Analyze button reads references with a vision model you pick, shows the price first, and sorts them into frames as a first draft you then edit (C10 to C13).
 
 Two things join the plan:
 
 - **One brief per look (A4).** Each look gets its own analysis and brief, measured from its own cards at their own sizes. A Moodboard node sends one look: its images and its brief. "Whole board" stays an option, and it is exactly today's output. A look can use the board's Direction and Avoid or have its own.
-- **Moodboard adapters (A1 to A5, B1 to B4).** One table says, for every node, how it takes a board: which input gets images, how many, in what order, what the prompt says about them, and what never gets them (a first frame, an image being edited, 3D views). Style slots (Krea 2, Ideogram style references, Runway gen4 untagged images, and the Krea `style_images` fields a source shows are style-only: Seedream 4, Ideogram 3, Runway gen-4) get board images by default. Content slots (GPT Image, Gemini, FLUX, Seedream, Krea 3, and every Krea field whose meaning is unverified) get the text brief by default, with a "Send board images" switch that warns about copying. Video reference slots get images; first frames never do, though you can pick a board image as one. Lyria gets images and a short music direction (and no visual brief). Text-only music and text-to-video nodes get text. 3D gets text, and Meshy gets one texture image. Then palette as data, Avoid into negative-prompt fields, and an aspect from the references. A contract test refuses a Moodboard port without an entry.
+- **Moodboard adapters (A1 to A5, B1 to B4).** One table says, for every node, how it takes a board: which input gets images, how many, in what order, what the prompt says about them, and what never gets them (a first frame, an image being edited, 3D views). Style slots (Krea 2, Ideogram style references, Runway gen4 untagged images, and Krea's Ideogram 3 `style_images`, the one Krea field a source shows is style-only) get board images by default. Where a node takes a weight per image, the board's images share out the board's strength (Q21 b). Content slots (GPT Image, Gemini, FLUX, Seedream, Krea 3, and every Krea field whose meaning is unverified, Seedream 4's included) get the text brief by default, with a "Send board images" switch that warns about copying. Video reference slots get images; first frames never do, though you can pick a board image as one. Lyria gets images and a short music direction (and no visual brief). Text-only music and text-to-video nodes get text. 3D gets text, and Meshy gets one texture image. Then palette as data, Avoid into negative-prompt fields, and an aspect from the references. A contract test refuses a Moodboard port without an entry.
 
-The plan does this in 27 PRs, in three lanes:
+The plan does this in 31 PRs, in three lanes (version 2.4 adds PR7e, PR13a and PR9a, the Notes corner):
 
 - **Canvas (PR1 to PR12).** The first four retire the riskiest unknowns before any canvas UI exists:
   - **Old boards and lost writes (PR1, PR3).** Today every save replaces the whole `images` list, last write wins. PR1 makes writes lossless and gives old boards a layout without rewriting them. PR3 adds checked, atomic board edits, so a person's drag and an agent's add can't overwrite each other.
   - **What set aside does to the analysis (PR2).** It's small and pinned by tests, so it goes early.
   - **Model quality and price (PR4).** This is a dry run Justin can try on his real board from the CLI before any Analyze UI is built.
-- **Looks (PR7b, PR7c, PR7d)**, after frames exist (PR7) and #18 has merged.
-- **Adapters (PR13 to PR24)**, after #18 merges, beside the canvas lane. PR13 and PR14 build all the shared machinery; PR15 to PR21 then mostly add table entries and ports. Adapters read `bundle.images` and never need to know about looks, so they don't wait for PR7d. Once PR7d lands, every adapter gets one look's images with no change of its own.
+- **Looks (PR7b, PR7c, PR7d, PR7e)**, after frames exist (PR7) and #18 has merged. PR7e keeps a removed look's words on the server, so an agent's delete can be undone from anywhere (Q28 b), and the old value of every words field an agent or Analyze replaces or clears (Q30 c).
+- **Adapters (PR13a, PR13 to PR24)**, after #18 merges, beside the canvas lane. PR13a, first and small, makes Krea 2's board strengths add up to the board's strength (Q21 b). PR13 and PR14 build all the shared machinery; PR15 to PR21 then mostly add table entries and ports. Adapters read `bundle.images` and never need to know about looks, so they don't wait for PR7d. Once PR7d lands, every adapter gets one look's images with no change of its own.
 
 A usable canvas arrives with PR6. Board images reach GPT Image edits and Nano Banana (behind the switch) with PR14, and style slots by default with PR15. Main stays releasable after every PR: each one either changes nothing you can see, or ships a complete feature.
 
@@ -58,7 +64,7 @@ Out of scope: Avoid as an area on the canvas (C5), the reading feeding the visua
 | C6 | Badges on the card; side panel for the selected reference; List view for bulk edits | Badges: `#n · w`, a dot per note, and a set-aside dim. The side panel holds the steering note, the private note, `ImageColors` and, from PR10, the reading. Today's grid (`MoodboardStudioView.tsx:554-610`) moves unchanged into `MoodboardListView`. |
 | C7 | Numbered in add order; moving never renumbers | `#n` stays `index + 1` in `images[]`. **No canvas operation ever reorders `images[]`**: drag, frames, arrange, Analyze and undo all leave it alone. Removing a reference still renumbers the ones after it; the decision page's C7 "why" says so ("as today. Ids work everywhere for anything that has to be exact"). So there is no number field and no counter. Undoing a removal puts the image back at its old index, which restores its number. A look keeps the board's numbers (§4.11). |
 | C8 | Free space next to the view, else after the last; `--at`, `--in`, `--size`; `arrange --by look\|colour\|weight` | `moodboard_layout.place()` runs on the server only, so the CLI, MCP and Studio drops all land the same way. The view report (PR8) says what's in view. Arrange is a server-computed layout applied as one op batch (PR12). |
-| C9 | The canvas agent model on the board | `GET /api/moodboards/{id}/look`, `GET …/picture`, `POST …/edits` (checked, atomic, with a cursor), `board.*` journal kinds, and a "Since your last turn" block in each runner. |
+| C9 | The canvas agent model on the board | `GET /api/moodboards/{id}/look`, `GET …/picture`, `POST …/edits` (checked, atomic, with a cursor), `board.*` journal kinds, and a "Since your last turn" block in each runner. The cursor's `say` carries only the agent's own action; notices go to the Notes corner (`POST …/agent-notes`, §5.9). |
 | C10 | Analyze sorts the selection, or the whole board; the result is an editable draft; your edits are signals; the price shows first | A new reader, `services/moodboard_reader.py`, works in two phases: per-image reading, then one sort call. Its result is applied as one edit batch from the reader (actor kind `reader`, with the model's name and colour, and `requestedBy`; §5.6.1). Gating: the person confirms above `runCostConfirmUsd`, and agents go through `agent_spend.decide`. |
 | C11 | Nothing selected: keep what you placed or renamed, and sort only new and Unsorted. A selection: read those again | Decided by `placedBy` on each placement, `namedBy` on each frame, and `readings[imageId].url`. |
 | C12 | b) A re-analyze may move a reference you placed, if you selected it; one Undo puts it back | When an image is selected, the sort may move its placement even if `placedBy` is `"person"`. The whole run is one undo step. |
@@ -70,15 +76,16 @@ Answered 2026-10-19, all a).
 
 | Call | Justin's answer | What it means in code |
 |---|---|---|
-| A1 | Style-slot models get board images by default. Content-slot models get the text brief by default, with a per-node "Send board images" switch that warns about copying. | Each adapter entry has `default: "images" \| "text" \| "never"`. A hidden param `_boardImages` (`on` / `off`; absent = the entry's default) overrides it per node (§5.7.8). **Style slots, images by default:** Krea 2 (and its Krea catalog variants), Ideogram v3 `style_reference_images`, Runway gen4 image (untagged = style (r)), and the Krea catalog style fields a source shows are style-only: Seedream 4 `style_images` (native strength (r)), Ideogram 3 `style_images`, Runway gen-4 `reference_images`. **Content slots, text by default:** GPT Image, Gemini (Nano Banana), FLUX 3, Seedream, Krea 3, the Krea copies of these, and every other Krea `style_images` field (Seedream 5, Flux dev, Kontext dev, Qwen, Z Image, UNI-1, Muse, Grok Imagine 2). Krea calling a field `style_images` doesn't show the model treats it as style, and A1 names FLUX and Seedream as content. An entry moves to images by default only when a source, or a mocked run followed by one paid run Justin approves, shows the field is style-only. Recraft has no image slot in Nebula today (Q24). |
-| A2 | On models without a weight: the heaviest images fill the cap after any image you wired in; they go in weight order; the prompt names each image's role and strength. | One planner, `plan_board_fill` (§5.7.4): wired values first, then the scope's steering images that its analysis could read, heaviest first (board number on ties), up to the slot's limit for the active route and model, minus wired. One legend line in the model's own syntax ("Image 3: style reference, strong"). An entry with no legend must say why (`syntaxReason`): Runway gen4, where naming an image means tagging it, which makes it a subject; Krea 2 and Krea Seedream 4, whose weights are native. Image notes never go in the legend unless notes are opted in (#18). |
+| A1 | Style-slot models get board images by default. Content-slot models get the text brief by default, with a per-node "Send board images" switch that warns about copying. | Each adapter entry has `default: "images" \| "text" \| "never"`. A hidden param `_boardImages` (`on` / `off`; absent = the entry's default) overrides it per node (§5.7.8). **Style slots, images by default:** Krea 2 (and its Krea catalog variants), Ideogram v3 `style_reference_images`, Runway gen4 image (untagged = style (r)), and the one Krea catalog style field a source shows is style-only: Ideogram 3 `style_images`. Seedream 4 left this list in version 2.4: Krea's page shows only that `strength` is required (r), and its description, "Image prompts to use for the generation" (https://www.krea.ai/docs/api-reference/image/seedream-4.md), is word for word the same as every other Krea `style_images` field. Krea's Runway gen-4 `reference_images` left this list in version 2.4: Krea requires a tag on every image, so "untagged = style" can't happen there (§5.7.1). **Content slots, text by default:** GPT Image, Gemini (Nano Banana), FLUX 3, Seedream, Krea 3, the Krea copies of these, and every other Krea `style_images` field (Seedream 4, Seedream 5, Flux dev, Kontext dev, Qwen, Z Image, UNI-1, Muse, Grok Imagine 2). Krea calling a field `style_images` doesn't show the model treats it as style, and A1 names FLUX and Seedream as content. An entry moves to images by default only when a source, or a mocked run followed by one paid run Justin approves, shows the field is style-only. Recraft has no image slot in Nebula today; PR24 adds Recraft's own API as a route that takes a style made from the board (Q24 a). |
+| A2 | On models without a weight: the heaviest images fill the cap after any image you wired in; they go in weight order; the prompt names each image's role and strength. | One planner, `plan_board_fill` (§5.7.4): wired values first, then the scope's steering images that its analysis could read, heaviest first (board number on ties), up to the slot's limit for the active route and model, minus wired. One legend line in the model's own syntax ("Image 3: style reference, strong"). An entry with no legend must say why (`syntaxReason`): Runway gen4, where naming an image means tagging it, which makes it a subject; Krea 2 and the Krea `style_images` fields, whose weights are native (from Q21 b they share out the board's strength, §5.7.4). Image notes never go in the legend unless notes are opted in (#18). |
 | A3 | "Combine into one image" is an adapter option only where the single input is a reference: top 6 to 9 images, tile area by weight, a minimum tile size, neutral gutters, one look per collage, a "don't copy the layout" line. Not a default until the paid comparison. | `collage: true` is allowed only on an entry whose slot has `max: 1` and is a reference (never in `never`, never an edit target or frame). The contract test enforces it. Candidates: `flux-1-1-ultra` `image`, Krea Z Image and Flux Kontext dev `style_images` (limit 1), the future Meshy texture image. PR23 builds it as a per-node option. No entry sets it as the default. GM's paid comparison (2026-10-19, Justin approved, about $1.01) found separate references better than a collage (§8). |
-| A4 | One look per node, picked on the node, defaulting to the heaviest look; images and its own brief come from that look only; "Whole board" stays an option. | Per-look analysis and brief (§4.11, PR7b). The Moodboard node gets a `look` param (Q18, Q19; PR7d). The bundle for a look carries only that look's images, at their card weights, and that look's brief. Adapters read the bundle and stay unaware of looks. |
+| A4 | One look per node, picked on the node, defaulting to the heaviest look; images and its own brief come from that look only; "Whole board" stays an option. | Per-look analysis and brief (§4.11, PR7b). The Moodboard node gets a `look` param (Q18 a, Q19 a; PR7d). The bundle for a look carries only that look's images, at their card weights, and that look's brief. Adapters read the bundle and stay unaware of looks. |
 | A5 | A node can't have a Moodboard port without an adapter entry; a contract test enforces it; "text only" is a valid explicit entry. | `backend/data/moodboard_adapters.json` (hand-written) plus `moodboard_adapters_krea.json` (written by `scripts/sync-krea-catalog.py`). `scripts/check-node-contracts.mjs` and `backend/tests/test_moodboard_adapters.py` check both ways (§5.7.10), including that every image input of a node with an entry is classified. PR13 declares every existing Moodboard-port node. |
 | B1 | Lyria gets the look's top images, plus a short music direction the reader writes from the look, shown on the node and editable. | `lyria-3` gets a Moodboard port and a `music` entry. Its text is the music direction only: no visual brief, Avoid or negatives (a hex palette means nothing to a music model). The music direction is stored once per scope (`lookFields[F].musicDirection`, or the board's `musicDirection` for Whole board), shown and editable on the Lyria node. A plain legend says which image sets the main mood. The reader drafts it on request (Q25, PR19), from the scope's images, readings and Direction, with notes only when notes are opted in. It is the one reader output that reaches a generator. Text-only music nodes (`elevenlabs-music`, `stable-audio-25`, `ace-step`, the Krea ElevenLabs Music and Seed Audio nodes) get a port and the music direction as text. |
 | B2 | Video reference slots get the look's top images; a first frame is never filled from the board automatically. | Every Image or Any input of a video node is classified in its entry as a slot, `never` or `needsWired`; the contract test fails if one is left out. Reference slots (`reference_images`, `style_references`, Kling O3 `images`, Seedance R2V `images`, Krea Veo 3.1 `reference_images`) get images by default, as decided, including Veo's "asset" references with the 8 s rule and a face warning. "Use #n as the first frame" on the node's Moodboard row is the "pick one" half: it adds a wired Image Input, an undoable graph edit, never an automatic fill. Text-to-video nodes get the brief and negatives. |
-| B3 | 3D never takes board images as geometry views; only Meshy's texture input gets a style image; palette and materials go in as text. | Multi-view inputs get `channel: "views"` with no fill. Meshy gets a new `texture_image` port (no node has one today). The palette and materials sentence goes to `texture_prompt` where the route has one (`textSlot`). |
-| B4 | After images: palette as data for models with a colour control, and Avoid into negative-prompt fields; then an aspect default from the references. A trained style (LoRA) per look is a later, separate project. | PR14 builds the hooks: the negative field resolved from the active route's params (`has_negative_field` reads `definition["params"]` only today) and a palette-param step. PR21 declares them on real nodes: Avoid into `negative_prompt` wherever a route has one, and the scope's palette into Recraft's `colors` / `background_color`. PR22: an aspect from the references, written into the node's aspect param as a graph edit when a board is wired or its look changes, never at run time (Q27). LoRA per look is out of scope (§8). |
+| B3 | 3D never takes board images as geometry views; only Meshy's texture input gets a style image; palette and materials go in as text. | Multi-view inputs get `channel: "views"` with no fill. Meshy gets a new `texture_image` port (no node has one today). The palette and materials sentence goes to `texture_prompt` where the route has one (`textSlot`), but only when no texture image goes: Meshy takes one or the other (`textUnless`, §5.7.11 D). |
+| B4 | After images: palette as data for models with a colour control, and Avoid into negative-prompt fields; then an aspect default from the references. A trained style (LoRA) per look is a later, separate project. | PR14 builds the hooks: the negative field resolved from the active route's params (`has_negative_field` reads `definition["params"]` only today) and a palette-param step. PR21 declares them on real nodes: Avoid into `negative_prompt` wherever a route has one, and the scope's palette into Recraft's `colors` / `background_color`. PR22: an aspect from the references, written into the node's aspect param as a graph edit when a board is wired or its look changes, never at run time (Q27 a). LoRA per look is out of scope (§8). |
+| (Q21 b) | Board strengths add up to the board's strength (Justin, 2026-10-20: "They should normalize for however any nodes need the information.") | Every entry's `weight` says how it takes weights (`normalize`, §5.7.2). One shared helper scales them; every node reads the form it needs (§5.7.4). Krea 2 first, in PR13a. |
 
 ---
 
@@ -106,19 +113,19 @@ These were checked in the code. Some of them correct the subsystem maps, the rea
 - **React Flow 12.10.2** ships `NodeResizer`/`NodeResizeControl` and `onlyRenderVisibleElements`, and its viewport moves take an `ease` function (`@xyflow/system` `types/general.d.ts:140, 182`).
 - **Uploads already get thumbnails.** Studio and CLI uploads land at `/api/outputs/chat-uploads/…` (`main.py:2432`), and `serve_output(rel, thumb)` serves 512 px thumbnails (`main.py:11565`, `output_thumbnail.py:26`).
 - **The tab echo rule can be reused as is.** `_graph_edit_origin` (`main.py:6304`) gives `{actor, tab}` and trusts the tab only with the person token. The Studio's `apiFetch` already sends `X-Nebula-Tab` on every write (`lib/backend.ts:321`).
-- **`FORjustin.md` is gitignored** (`.gitignore:60`) and lives in the main checkout, where the coordinating session appends to it after each PR. Builders never create it in the repo. `implementation-notes.md` exists at the root. Contract 07 (`docs/contracts/07-studios-and-resources.md`) uses sections 1.1 to 1.10 on main, and #18 adds §1.11 ("When the words and the measured colours disagree, and board notes"). This plan's new sections start at §1.12, one per subject: §1.12 board edits (PR3), §1.13 reading references (PR4, PR10), §1.14 the canvas: size, weight, frames (PR6, PR7), §1.15 looks (PR7b to PR7d), §1.16 moodboard adapters (PR13 to PR24).
+- **`FORjustin.md` is gitignored** (`.gitignore:60`) and lives in the main checkout, where the coordinating session appends to it after each PR. Builders never create it in the repo. `implementation-notes.md` exists at the root. Contract 07 (`docs/contracts/07-studios-and-resources.md`) uses sections 1.1 to 1.10 on main, and #18 adds §1.11 ("When the words and the measured colours disagree, and board notes"). This plan's new sections start at §1.12, one per subject: §1.12 board edits (PR3), §1.13 reading references (PR4, PR10), §1.14 the canvas: size, weight, frames (PR6, PR7), §1.15 looks (PR7b to PR7d), §1.16 moodboard adapters (PR13 to PR24), §1.17 Notes (PR9a).
 
 ### 3.2 Looks (new)
 
 - **Images are numbered by their place in the list.** `analyze_moodboard` numbers each image by its position among all images (`moodboard_analysis.py:140-143`), reads `img.weight` (`:162`) and hashes the whole `images[]` list (`source_hash`, `:448-472`). A look's analysis must keep the board's numbers, use `placement.weight`, and must not change the whole-board hash payload, or the golden file breaks.
-- **Krea 2 reads three places in the bundle.** It takes `analysis.providerHints.krea.representativeImages` first, then `representativeImages`, then ranks `images` itself (`handlers/krea.py:381-386`). It looks each URL's weight up in `images` and uses **1.0 for a URL it can't find** (`:387-391`). Strength = `board.strength × weight`, clamped to 0..1, filling `10 − wired`. So a look bundle makes Krea's strengths follow the look with no Krea handler change **only if all three places hold the look's images**: a whole-board `providerHints` left in a look bundle would send the whole board's top 10, mostly at full strength (§4.11.8).
+- **Krea 2 reads three places in the bundle.** It takes `analysis.providerHints.krea.representativeImages` first, then `representativeImages`, then ranks `images` itself (`handlers/krea.py:381-386`). It looks each URL's weight up in `images` and uses **1.0 for a URL it can't find** (`:387-391`). Strength = `board.strength × weight`, clamped to 0..1, filling `10 − wired` (`krea.py:399`; no step scales the sum, which PR13a adds for Q21 b). So a look bundle makes Krea's strengths follow the look with no Krea handler change **only if all three places hold the look's images**: a whole-board `providerHints` left in a look bundle would send the whole board's top 10, mostly at full strength (§4.11.8).
 - **The Moodboard node has two settings after #18.** `nebula-moodboard` has `moodboard`, picked through `StoredAssetPicker` (`Inspector.tsx:631`, which handles only `moodboard` and `character`), and #18's `send_notes` (board / yes / no, `NODE_NOTES_CHOICES`). Its plain outputs (`style_brief`, `palette`, `representative_images`) can each describe only one scope.
 - **#18's bundle carries a generator view of the analysis.** `handlers/moodboard.py` (on `e457b51d`) sets `analysis = generator_analysis(board, analysis, brief)`: keywords and summary without notes unless sent, colour sentences without left-out colours. It counts every non-excluded board image for the summary. The bundle then carries `analysis: {**analysis, providerHints}` and `providerHints` at the top level.
 - **#18's colour check keeps itself current by basis.** `colour_check_basis` hashes Direction, Avoid, the "must appear" pins, the measured colours and the lexicon version. `refresh_colour_check` runs on every store create and update and saves a new check when the basis moved; `current_colour_check` checks in memory when the saved one is stale. The check does not wait for Measure.
 - **Its output is never cached.** `nebula-moodboard` is in `_READS_SAVED_RECORD` (`engine.py:273`), so every run reads the board again and can refresh a stale analysis in memory (`handlers/moodboard.py:50-60`).
 - **Measurement is cached per file, 256 entries** (`_measure_file`, `functools.lru_cache(maxsize=256)`). Measuring the whole board and then each look one after the other would thrash it on a large board.
 - **`with_brief` composes the brief for every board in `list()`.** Composing every look's brief there would multiply the cost of the board rail.
-- **The hand-written brief has a person gate.** `_guard_override` (`moodboard_store.py:197`) refuses an agent's replace or remove of text the person wrote, because "the board keeps no history".
+- **The hand-written brief has a person gate.** `_guard_override` (`moodboard_store.py:355-366`) refuses an agent's replace or remove of text the person wrote, because "the board keeps no history". Q30 c (Justin, 2026-10-20) opens it under "Act directly": from PR7e the old brief goes into the word history and restores from anywhere; "Keep" stays the person's (§5.8).
 
 ### 3.3 Generators and the board (new)
 
@@ -140,6 +147,37 @@ These were checked in the code. Some of them correct the subsystem maps, the rea
 - **Node definitions drift.** The TS file and the JSON mirror are compared by id only (`check-node-contracts.mjs:556-565`); four nodes carry JSON-only fixes (AGENTS.md), two of them video targets (`veo-3`, `gemini-omni-flash`). Krea catalog nodes are generated by `scripts/sync-krea-catalog.py`, which also writes their pricing entries.
 - **Two board readers already exist outside generators.** `lyria-3` sends images as inline parts with no count check (`google_gemini.py:414-447`). Seedance on BytePlus treats first frame, first+last frame and references as mutually exclusive (`maker_routes_byteplus_seedance.py:33-36`).
 
+### 3.4 Undo and history (new in version 2.4, for Q28 b)
+
+Checked on origin/main as of 2026-10-20 (line numbers from it).
+
+- **Every board write overwrites the file in place** (`_write_json`, `moodboard_store.py:130-133`). `version` goes up by one, and no earlier copy is kept.
+- **Only the hand-written brief is guarded.** `_guard_override` (`moodboard_store.py:355-366`) refuses an agent's replace or remove of the person's `briefOverride`, and also an agent's "keep", which loses nothing. The board's `direction`, `avoid` and `pinnedColors` have no guard and no author stamp: an agent PUT overwrites them for good. Only `briefOverride` carries `by`. **Closed by PR7e (Q30 c):** every agent or reader write that replaces or clears one of them, or the brief, writes a word-history entry first (§5.8). On origin/main `77e73b45` these lines are `update` at `moodboard_store.py:541`, the unguarded sets at `:587-592` and `_guard_override` at `:355-366`.
+- **The journal can't be the history.** It lives in memory and is lost on restart, holds 500 events, caps each at 4 KB and cuts every string to 160 characters (`canvas_events.py`).
+- **Recently deleted is the model to copy** (`asset_trash.py`): durable, no purge timer, crash-safe (the record first, then the file), anyone may restore, only the person may purge. The CLI has `nebula trash`, MCP has `list_trash` and `restore_from_trash`. An agent can already delete a whole board, `briefOverride` included, undoably, through it.
+- **The Studio's undo lives in one tab.** It is gone when the tab closes, and a batch over 200 ops can be undone only from the tab that made it (§5.1).
+- **The "Act directly" / "Ask first" setting is not in the code** (no key in `backend/`, `frontend/src` or `settings.example.json`), and proposals cover the graph only (`canvas_proposals.py:64`, in memory, 900 s). Until the setting exists, every agent acts directly.
+
+### 3.5 Cursor text and notices (new in version 2.4, for Notes)
+
+Checked on origin/main `77e73b45` (after #87 to #91). Line numbers in §3.5 and §5.9 are from it, not from this worktree's HEAD (`01aa49b8`).
+
+- **The cursor's `say` is in memory and short.** `MAX_SAY_CHARS = 140` (`agent_presence.py:35`); `_clean_say` (`:207-213`) only collapses whitespace and cuts. Cursors expire after 120 s (`:33`). Nothing is saved. The main canvas's cursor layer shows it beside the cursor for 6 s (`AGENT_SAY_MS`, `agentPresenceStore.ts:8`; `AgentCursorLayer.tsx:39-55`, `:171`; mounted only in `Canvas.tsx`). The Studio has no cursor layer yet; PR8 adds one.
+- **Two kinds of cursor text.**
+  - **Nebula's templates** name the agent's own op: "Added X", "Wiring a → b", "Set …", "Removed X", "Running X", "Accepted", an apply's summary (`main.py:7034`, `:7067`, `:7196-7199`, `:7478`, `:7831`, `:8200`, `:8639`, `:10054`, `:4800`).
+  - **Free text the agent writes**, also shown at the cursor: an apply's `note` (`main.py:8200`; `edit_canvas`'s `note`, `mcp_server.py:412`; CLI `apply --note`, "shown with your cursor", `cli/__main__.py:187`), a proposal's `note` (`main.py:4574`; `propose_change`, `mcp_server.py:263`; CLI `propose --note`, `cli/__main__.py:148`) and a pin's reply (`main.py:4232`; `resolve_pin`, `mcp_server.py:132-139`).
+  - Both stay at the cursor. The free ones each describe the agent's own edit, proposal or reply, but nothing stops an agent from writing a notice in them; §5.9 gives them the same "your own action only" docs as `say`.
+- **The widest door for notices is the free `say`** of `POST /api/canvas/cursor` (`main.py:4004-4031`), and the MCP tool invites it: `point_at`'s docstring says "use this to narrate, to point while explaining" (`mcp_server.py:161-165`). `skills/nebula/SKILL.md:257-262` and `docs/MCP-SETUP.md:91-93`, `:137-143` say the same. Nothing tells an agent to put "I noticed X" anywhere else.
+- **Pins are the model for saved notes on a project.** They live on the catalog record, `catalog["projects"][id]["pins"]`, next to `snapshot`, so the browser's autosave can't drop them (`canvas_pins.py:7-12`). They are written in one `store.transaction()` (`:165-182`), capped at 280 characters and 200 pins (`:30-35`), and broadcast as `canvasPins` (`main.py:4119-4125`). Trash moves a project "pins and all": `move_to_trash` pops the whole record into the trash and `restore_from_trash` puts the same record back (`project_store.py:105-125`).
+- **The board file can't hold read state.** Every board write bumps `version`, the compare-and-set token (§4.7), and triggers the Studio's refetch and rebase (§5.3). §4.8 item 3 promises that opening a board writes nothing, and every live check byte-checks it (§6.0).
+- **No saved agent-to-person list exists.** `CanvasUndoNotice.tsx` (6 s, bottom-centre, "Claude changed the canvas", `lib/canvasUndo.ts:83-85`) is an action label. `AgentLog.tsx` keeps the last 50 activity entries in memory (`:235-243`), docked bottom-right. `ProjectSwitchToast.tsx` pauses on hover and focus (`:10-25`).
+- **Where a chip fits.**
+  - The main canvas header is a pill fixed at the top centre (`CanvasTabs.css:3-12`: `top: 24px; left: 50%`). Its `WorkspaceHeader` gets no children (`CanvasTabs.tsx:54-58`), so it renders no actions slot (`WorkspaceHeader.tsx:31`). A chip there would sit mid-screen, not in the top right, so the main canvas gets its own top-right mount (§5.9).
+  - The Studio's header is a full-width bar. Its actions slot holds the save state, Retry (on error), the Move menu and Delete (`MoodboardStudioView.tsx:456-476`). There is no Save button, and no spacer, presence or version element; those are v5.2's.
+  - The chat panel is docked to the **bottom** right: `layouts.css:139-151` overrides `panels.css:1138-1142` with `top: auto; bottom: …`, width `--col-right-w` (`clamp(340px, 26vw, 460px)`, `layouts.css:33`) and a height up to 760 px. At 1440×900 its top is about 74 px from the top. Dragged or resized, it takes `--chat-panel-left/top/width` (`.chat-panel--free`, `layouts.css:162-168`). `uiStore.panels.chat.width` is ignored until `chatResized` flips (`uiStore.ts:94-96`, `:242-245`). `ChatPanel` mounts in the Studio too (`App.tsx:296-299`).
+- **"Since your last turn" isn't in the code.** The main canvas's per-turn context is the selection only (`main.py:3190-3195`, `chat_session.py:231-232`). Agents learn of edits by pulling (`wait_for_canvas_change`, `mcp_server.py:184-205`).
+- **"Notes" already means three things.** Image `notes` and `privateNote` on every board image, the brief's notes row, and pins ("short notes", `canvas_pins.py:1`). The corner's code name is therefore `agentNotes` (§5.9); "Notes" is only the label on screen.
+
 ---
 
 ## 4. The board data model
@@ -160,9 +198,13 @@ These were checked in the code. Some of them correct the subsystem maps, the rea
 
 The look keys and `musicDirection` are written only when used. A board with no looks and no music direction never gets them, and nothing is written on read.
 
+The word history (PR7e) lives beside the board, not in it: `MOODBOARD_ROOT/.history/<boardId>.json` (§5.8).
+
+The board's Notes (PR9a) live beside it too: `MOODBOARD_ROOT/.notes/<boardId>.json` (§5.9). Posting a note or marking one read never writes the board file, never bumps `version` and never makes the Studio rebase.
+
 ### 4.2 Image fields
 
-Unchanged: `id, url, weight, notes, privateNote, excluded`. New: `placements[]` (PR1), and `realPerson` (PR17, if Q26 a).
+Unchanged: `id, url, weight, notes, privateNote, excluded`. New: `placements[]` (PR1), and `realPerson` (PR17, Q26 a).
 
 ```
 placements: [{id, frameId: str|null, x, y, w, h, weight, placedBy: "person"|"agent"|"analyze", placedAt}]
@@ -226,8 +268,9 @@ Placement rules:
 - **Deleting a frame** keeps its cards where they are:
   - A card whose image has no other copy becomes loose.
   - A card whose image has another copy is removed.
-  - From PR7b: the look's `lookFields[F]` and `lookAnalyses[F]` go in the same batch, and the undo slice carries them. Nodes saved on that look stop with a clear message (§4.11.7). If the look holds words the person wrote, an agent's or Analyze's delete is refused (Q28), and the person's Undo toast adds "Dither's own brief goes with it".
-- **Merging** moves the copies into the target frame. Where an image is in both frames, the heavier copy is kept. From PR7b: the target keeps its own `lookFields`; the merged look's are dropped (kept in the undo slice), and `lookAliases[F] = G` is added. The same person-words rule applies.
+  - From PR7b: the look's `lookFields[F]` and `lookAnalyses[F]` go in the same batch, and the undo slice carries them. Nodes saved on that look stop with a clear message (§4.11.7). The person's own delete keeps the Undo toast, which adds "Dither's own brief goes with it".
+  - **An agent's or Analyze's delete of a look that holds words (Q28 b).** Under "Act directly" it is allowed. From PR7e, the look's frame and words go into the board's word history, which can restore them from the Studio, the CLI or MCP, with the Studio open or closed (§5.8). Under "Ask first" it becomes a proposal. Until PR7e merges, PR7b refuses it, so no words can be lost in between.
+- **Merging** moves the copies into the target frame. Where an image is in both frames, the heavier copy is kept. From PR7b: the target keeps its own `lookFields`; the merged look's are dropped (kept in the undo slice), and `lookAliases[F] = G` is added. The same rule applies to an agent's or Analyze's merge: from PR7e the absorbed look's words, alias and member slices go into a history entry, and a restore splits the look back out with the same id. Words are never copied into the target on their own.
 - **Splitting ("New look from these")** makes a frame with no look fields, so it uses the board's words.
 - **Unsorted** is a frame with `kind: "unsorted"`: dashed, tab "Unsorted · N", never a look. It disappears when emptied (Q14).
 - **"Also in Dither" chip.** It lists the other placements of the same image.
@@ -253,15 +296,19 @@ Placement rules:
    - `placedBy: "person"`, since the order was theirs.
 3. **The first write saves that layout and stamps `layoutVersion: 1`.** Since the layout is deterministic, nothing moves. Opening a board without editing it writes nothing, because `initialize` loads with `dirty: false`.
 4. **`frames`, `suggestions` and `readings` read as empty.** There is no Unsorted frame until Analyze runs or the person makes one.
-5. **The brief and Krea outputs for every old board stay identical.** This is pinned by a golden file captured on main before PR1 (`8e14de37` on the branch). #18 changes it once on purpose (no notes in generator output); "unchanged" in this plan means the file as it stands after #18 is reconciled.
+5. **The brief and Krea outputs for every old board stay identical.** This is pinned by a golden file captured on main before PR1 (`8e14de37` on the branch). #18 changes it once on purpose (no notes in generator output), and PR13a changes Krea 2's strengths once on purpose (Q21 b, item 7); "unchanged" in this plan means the file as it stands after those two are reconciled. The golden file is a test fixture, not a runtime lock: no board is "pinned" when it runs.
 6. **No look keys.** A board with no `look` frames has no `lookFields`, `lookAnalyses` or `lookAliases`. `source_hash`, `brief_basis`, `compose`, `analysis_is_current`, the CLI `brief()` view, the bundle and `apply_to_generator` are unchanged for it, and every old node's missing `look` param reads as Whole board.
-7. **Adapters keep old outputs.** For every node that existed before PR13, a frameless board on Whole board sends what it sends today: text-only and content-slot entries default to text, and Krea 2's references and strengths are unchanged (unless Justin picks a change in Q21, which would be one deliberate golden-file update).
+7. **Adapters keep old outputs.** For every node that existed before PR13, a frameless board on Whole board sends what it sends today: text-only and content-slot entries default to text, and Krea 2's references and their order are unchanged. Krea 2's strengths change once, on purpose (Q21 b), in PR13a:
+   - **The one deliberate golden update,** made the way #18 made its own: only `kreaStyleReferences` in `expected.json` changes; a dated entry goes under "Deliberate changes" in the golden docstring ("Q21 b: Krea 2 board refs scaled to add up to the board's strength; unchanged: refs, order, every other key"); the diff is reviewed path by path and touches no other path. It lands after #18 (open as PR #90), so the file is reconciled once per change.
+   - **Example:** `prebrief_v2_plain` (strength 0.7) sends 0.7, 0.7, 0.56, 0.42, 0.21 today (sum 2.59), and about 0.189, 0.189, 0.151, 0.114, 0.057 after (sum 0.7).
+   - **Old recipes.** Run records are never rewritten (`saved_graph_upgrades.py:35-43`), and no saved param changes meaning, so there is no `PARAMS_VERSION` bump and no legacy mode. A replay sends the new strengths, so its image can differ. The person is told twice: a run note on every run that sends board strengths ("Board 'Dusk' sent 5 images; their strengths add up to the board's 0.70 (#1 0.19, #2 0.19, #3 0.15, #4 0.11, #5 0.06)"), and a one-time line on a replay of a record made before the change: "Krea 2 board strengths now add up to the board's strength (changed <date>), so this replay can differ from the original."
 
 ### 4.9 Who writes what
 
 - **Layout is written only through checked edits** (`POST …/edits`, PR3) and through server placement of new images.
   - **PUT.** It merges images by id: a key a client leaves out keeps its stored value. Incoming `placements` on images already on the board are ignored, so a stale tab or an echoing CLI can never undo a layout edit. On a new image, `placements` are validated and used as the requested placement.
   - **Board-level layout fields.** `frames`, `suggestions`, `readings` and `layoutVersion` are refused on PUT with a 422 that names `/edits`.
+- **Notes.** A board PUT that carries `agentNotes` gets a 422 that names `/agent-notes`, so no client thinks it saved them. Notes are written only by `POST …/agent-notes` and by Nebula (§5.9).
 - **Look fields too.** `lookFields`, `lookAnalyses` and `lookAliases` are refused on PUT, like layout. `lookFields` changes only through `look.*` ops; the other two are written by the store.
 - **After PR3, the Studio sends board fields only on PUT** (name, notes, mode, strength, the brief fields, `musicDirection`) with `baseVersion`. Every image change goes through `/edits`. PUT keeps accepting `images` for the CLI, MCP and API callers.
 
@@ -279,6 +326,8 @@ Placement rules:
 | Look fields | one entry per look frame; Direction and the hand-written brief use the board's own limits; music direction ≤ 600 characters | store |
 | Look aliases | ≤ 200; chains ≤ 8 | store |
 | Undo steps | 50 per board (graph `UNDO_CAP` is also 50) | Studio |
+| Word history (PR7e) | 50 open entries per board, removed looks and changed words together, no timer (Q34 a); restored entries pruned to the last 20; one entry per scope per write, about 70 KB at most (33 KB for a removed look) | `moodboard_history.py` (§5.8) |
+| Notes (PR9a) | text ≤ 240 characters; ≤ 12 refs and ≤ 2 actions per note; 100 notes per board, 200 per project; over the cap the oldest read note goes first, then the oldest unread; 6 posts a minute per author per surface, for agent-written notes only | `agent_notes.py` (§5.9) |
 | Journal | one event per batch; `data` ≤ 4 KB (the journal's own cap) | `canvas_events.py` |
 | Reader trace | ≤ 400 lines and ≤ 64 KB per job, ≤ 200 characters a line; in memory with the job, kept 15 minutes after it ends | reader job (§5.6.1) |
 | Board images per node run | the entry's slot limit for the active route and model, minus wired | adapter planner |
@@ -328,13 +377,13 @@ Placement rules:
 Maps keyed by frame id (`lookFields`, `lookAnalyses`, `lookAliases`), not fields on `frames[]`.
 
 - Frames are layout. They are refused on PUT and written by `/edits` with restore slices and the undo stack. Putting the analysis and the person's text on them would carry both through every frame move's undo slice and journal data, and grow the `look` and `picture` reports.
-- `lookFields` changes through checked ops `look.set {frame, field, value}` and `look.inherit {frame, field}`, with undo. The hand-written-brief person gate (`_guard_override`) and #18's notes gate apply inside the op.
+- `lookFields` changes through checked ops `look.set {frame, field, value}` and `look.inherit {frame, field}`, with undo. The person gate (`_guard_override`) applies inside the op until PR7e; from PR7e an agent's replace or clear writes a word-history entry instead, and Keep stays the person's (§5.8). #18's notes gate applies inside the op.
 - `lookAnalyses` is derived and ignored if a client sends it (the treatment #18 gives `colorCheck`). Its `analysis` is written on Measure and Analyze; its `colorCheck` is also refreshed on every write that moves its basis (§4.11.3).
 - Cleanup happens in the same atomic batch as the frame op (§4.6).
 
 #### 4.11.5 The board's words and a look's words (Q20)
 
-Recommended (Q20 a): the board's words are the default; each look can replace or add, field by field.
+Decided (Q20 a, Justin 2026-10-20): the board's words are the default; each look can replace or add, field by field.
 
 | Field | Rule | Why |
 |---|---|---|
@@ -362,11 +411,11 @@ An old `briefOverride` keeps sending exactly as today for Whole board, with its 
 
 #### 4.11.7 The node's look
 
-Recommended (Q18 a): the **Moodboard source node** (`nebula-moodboard`) holds the pick. Every output port (brief, palette, images, bundle) then describes one scope, and a run measures one look. Two looks in one graph means two Moodboard nodes on the same board; dragging a look's tab from the Studio onto the canvas creates one with the look set (`addMoodboardNode(..., meta)`, drag type `application/nebula-moodboard`).
+Decided (Q18 a, Justin 2026-10-20): the **Moodboard source node** (`nebula-moodboard`) holds the pick. Every output port (brief, palette, images, bundle) then describes one scope, and a run measures one look. Two looks in one graph means two Moodboard nodes on the same board; dragging a look's tab from the Studio onto the canvas creates one with the look set (`addMoodboardNode(..., meta)`, drag type `application/nebula-moodboard`).
 
 - **Param:** `look: "whole" | "<12-hex frame id>"`, type `moodboard-look`, rendered by the Inspector from the board the `moodboard` param names (a new branch next to `Inspector.tsx:631`). It sits beside `moodboard` and #18's `send_notes`. A hidden `_lookName` keeps the last name the canvas saw, used only in error messages after a delete. **Nobody sends `_lookName`:** the server writes it whenever `look` is set (graph apply, proposals, the Inspector's save), so agents never need to write a `_` param. The card shows the current name read from the board (`storedAssetsStore`), so a rename shows at once with no write.
 - **Agents** may pass a look name. `agent_params` and `canvas_proposals` resolve it to the id against the board when the edit is applied, and refuse an unknown or ambiguous name, or Unsorted. Setting `look` spends nothing and is undoable.
-- **Default (Q19 a, stamped):** when a board is chosen in the Inspector, a node is created with a board, or an agent sets `moodboard` without `look`, the heaviest look's id is written into `look`. With no looks, `whole` is written. Old saved nodes have no `look` and read as `whole`. When a board gains looks while a node is on Whole board, the card hints "This board has 3 looks · Pick one" and never switches on its own.
+- **Default (Q19 a, decided; stamped):** when a board is chosen in the Inspector, a node is created with a board, or an agent sets `moodboard` without `look`, the heaviest look's id is written into `look`. With no looks, `whole` is written. Old saved nodes have no `look` and read as `whole`. When a board gains looks, the card hints (on Whole board: "This board has 3 looks · Pick one"; on a look: "2 new looks on this board") and never switches on its own.
 
 When the look changes under a node (checked in the handler at run time):
 
@@ -374,7 +423,7 @@ When the look changes under a node (checked in the handler at run time):
 |---|---|
 | Renamed | Same id; the card shows the new name. |
 | Merged into another look | Follows `lookAliases`. Run note: "Dither was merged into Painterly; this run used Painterly." The Inspector offers to save the new id. |
-| Deleted | The run stops: "The look 'Dither' is no longer on board X. Pick a look on the Moodboard node." It never falls back to Whole board. Undoing the delete restores the same id. |
+| Deleted | The run stops: "The look 'Dither' is no longer on board X. Pick a look on the Moodboard node." It never falls back to Whole board. Undoing the delete restores the same id. From PR7e, when an agent or Analyze deleted it, the message adds "Deleted by Claude · Restore (`nebula moodboard restore X <id>`)", and a restore brings the same id back, so the node runs again. |
 | Empty, or every member set aside | The run stops: "Dither has no references that steer. Add some, use one again, or pick another look." |
 | Board in trash or missing | As today. |
 
@@ -395,8 +444,8 @@ When the look changes under a node (checked in the handler at run time):
 
 - **Measure** (free; the `/analyze` route, CLI `analyze`, MCP, and Q9's automatic Measure) writes `analysis` and `lookAnalyses[F]` for every look in one pass: one measurement per image, then one roll-up per scope. The automatic Measure re-rolls only scopes whose hash moved.
 - **At run time** the Moodboard handler measures in memory only the scope it sends (today's stale-board warning, worded per look). It never measures every look.
-- **Analyze (PR10):** readings are per image, so per-look results cost nothing extra. After the sort is applied, Measure runs per look in the same run. New looks it creates get no `lookFields`. It never deletes or merges a frame that holds words the person wrote.
-- **The one per-look reader cost** is B1's music direction: one short text call per look, on request (Q25), priced and gated like Analyze (PR19).
+- **Analyze (PR10):** readings are per image, so per-look results cost nothing extra. After the sort is applied, Measure runs per look in the same run. New looks it creates get no `lookFields`. From PR7e it may delete or merge a frame that holds words (Q28 b), and each one is listed under "Recently changed words" and restores from anywhere (§5.8). Before PR7e it never does.
+- **The one per-look reader cost** is B1's music direction: one short text call per look, only on request (Q25 a), priced and gated like Analyze (PR19).
 
 #### 4.11.10 Old boards
 
@@ -415,25 +464,26 @@ See §4.8 items 6 and 7. A board with frames whose node is on Whole board gives 
   - Cards: `place` (placement or image, x, y, `frameId?`), `resize` (`weight`, or `w×h` with the aspect kept), `link` (image → frame), `unlink`.
   - Image settings: `setAside` (image, bool), `weight` (image, value; scales copies), `note` (image, `notes` or `privateNote`), and from PR17 `realPerson` (image, bool).
   - Frames: `frame.create` (rect or `around: [placements]`, name), `frame.update` (name or rect; a move moves members), `frame.delete`, `frame.merge`.
-  - Suggestions: `suggestion.accept`, `suggestion.dismiss`.
-  - Looks (PR7b): `look.set {frame, field, value}` and `look.inherit {frame, field}` for the fields in §4.11.5. The person gate applies to `briefOverride` and `musicDirection` written by the person, as `_guard_override` does today.
+  - Suggestions: `suggestion.accept`, `suggestion.dismiss`, each taking one id or a list (a note's "Add copies" accepts a run's `alsoIn` set in one batch, §5.9). `accept` also takes a dismissed suggestion.
+  - Looks (PR7b): `look.set {frame, field, value}` and `look.inherit {frame, field}` for the fields in §4.11.5. Until PR7e, the person gate applies to `briefOverride` and `musicDirection` written by the person, as `_guard_override` does today. From PR7e (Q30 c) an agent's or the reader's `look.set` or `look.inherit` that replaces or clears a look's words writes a word-history entry instead (§5.8).
   - Later PRs: `arrange` (PR12), `restore`.
 - **Naming.** Images are named by number or id, frames and looks by id or name, and placements by id or `image@frame`.
 - **Effect on the analysis.**
   - Whole board: steering ops (`add`, `remove`, `setAside`, a `note` on `notes`, `weight`, a `resize` that changes the image's weight) null the whole-board analysis, as the CLI does today. Layout ops keep it.
   - Looks: nothing is nulled. Each look is judged current or stale by `look_source_hash` (§4.11.3).
 - **`restore`** carries before-slices, each with an `expect` after-slice. A slice that changed since is skipped and reported, so one stale reference doesn't block undoing twenty moves.
-- **Response:** `{board, version, applied, undo: {ops}}`.
-- **Broadcast:** `storedAssetChanged` gains `version`, `edit: {actor, tab}` (from `_graph_edit_origin`), `touched: {images, frames, looks}` and `undo`. `undo` is null when a batch is over 200 ops; the Studio then refetches, and the step can be undone only from the tab that made it.
+- **Response:** `{board, version, applied, undo: {ops}}`. From PR7e, `undo.historyIds` lists the word-history entries the batch wrote, if any (§5.8).
+- **Broadcast:** `storedAssetChanged` gains `version`, `edit: {actor, tab}` (from `_graph_edit_origin`), `touched: {images, frames, looks}` and `undo`. `undo` is null when a batch is over 200 ops; the Studio then refetches, and the step can be undone only from the tab that made it. A removed look in such a batch is still restorable from the word history's list (§5.8).
 - **As built (PR3).** `restore` came in PR3 (every batch's `undo` needs it). `add` also takes `images` (full image objects, ids kept) and `unique` (skip a url already on the board; an id already there is always skipped), which `add_to_board` uses. Numbers name images as the board was before the batch. `link` on an image whose only card is loose moves that card into the frame instead of making a copy. `unlink` and `link` leave `image.weight` as it is; `resize` sets it to the largest card's. A `frame.create` rectangle takes only loose cards wholly inside it; `frame.merge` grows the target to hold both frames. In-frame placement is a simple left-to-right, top-to-bottom finder, growing the frame when full. A `PUT` is journaled from the same diff as a batch, so board notes are `board.noted`; a rename and the brief fields aren't journaled. The Analyze route saves its analysis with the `baseVersion` it read; on a conflict it keeps the analysis when it still describes the board (a rename, a brief field) and analyses the new board again when not, at most 3 saves, then a 409 (it broadcasts `version` and `edit`, nothing touched). A `restore` checks what it puts back as the ops do, and grows each frame it touched to hold its cards. A broadcast `undo` holding private-note text goes only to the person's canvas sockets (`undo: null` for CLI/MCP listeners). `update_board` (`set`, `remove`, `moodboard_update`) sends image changes as ops, board fields on a `PUT` with `baseVersion`; on a 409 it rereads and resends (3 tries), and refuses to send a field given outright that someone else changed since its read. Its `previous` holds only what the call changed (those fields, and those settings of those images), and an op on an image someone else removed since its read stops the call with that image's number. `previous` also carries `undo`, as the spec says ("`previous` comes from the route's `undo`"): the batch's own `undo` plus a `fields` slice for every field the `PUT` changed (its side effects too, such as Keep anyway losing a colour pinned out), expecting what the call wrote, sent back (`set --restore`, `moodboard_update(**previous)`, `undo_board`) as one checked `restore`, so the §5.4 rule holds for CLI and MCP undo too: a setting changed since is left and reported ("Direction changed since, left as is", "#2's weight changed since, left as is"). For that, `restore` grew a `fields` slice (board fields, one by one, set as a `PUT` sets them, last in the restore; one whose going back would undo a colour choice made since is left and reported) and puts image settings back one by one; the other keys of `previous` stay as the older-backend fallback. Contract 07 section 1.12 is the as-built reference.
 
 ### 5.2 Journal
 
-- **New kinds** in `EVENT_KINDS` (`canvas_events.py:53`): `board.added`, `board.removed`, `board.moved`, `board.resized`, `board.grouped`, `board.setAside`, `board.noted`, `board.frame`, `board.sorted`, `board.arranged`, `board.suggested`, and from PR7b `board.look` (a look's words changed; text of a hand-written brief is not journaled, only "Dither's brief edited").
+- **New kinds** in `EVENT_KINDS` (`canvas_events.py:53`): `board.added`, `board.removed`, `board.moved`, `board.resized`, `board.grouped`, `board.setAside`, `board.noted`, `board.frame`, `board.sorted`, `board.arranged`, `board.suggested`, from PR7b `board.look` (a look's words changed; text of a hand-written brief is not journaled, only "Dither's brief edited"), and from PR7e `board.words` (a word-history entry written or restored; no text, only fields).
 - **One event per batch**, with `data: {boardId, boardName, scope, refs: [{number, id}]}`. A move counts only above 8 px, as on the canvas.
 - **Private notes.** A private-note change is journaled as "private note changed" without its text.
 - **Project tag.** The journal is tagged with the open canvas project (`set_project`, `:259`) while boards can be Global, so the board's own scope goes in `data`.
 - **Sources.** Events come from `/edits` and from Analyze. They also come from PUT diffs, so old clients' edits show up.
+- **Notes (PR9a).** A new kind `note.posted`, one event per note, with `data: {surface, boardId?, noteId, about, refs}` and the text cut by the journal to 160 characters. So `wait_for_canvas_change` sees other agents' and the reader's notes. Marking read and dismissing are not journaled.
 
 ### 5.3 The Studio's edit queue and rebase
 
@@ -448,7 +498,10 @@ See §4.8 items 6 and 7. A board with frames whose node is on Whole board gives 
 - **The stack.** It is per board, keyed by the draft key, capped at 50, and cleared on an epoch change, a board switch or a delete. Each step is `{label, origin: self|agent|analyze, actorName, ops, undo}`.
 - **What makes one step.** A drag end or a resize end; a frame op; a set-aside toggle; a note (on blur or after 600 ms); a look field (on blur or after 600 ms); a whole Analyze run; a whole agent batch.
 - **Undo and redo.** Undo sends `restore` with `expect`; redo resends the ops. Skipped slices show a notice: "#12 changed since, left as is".
-- **Foreign steps.** Agent and Analyze batches arrive with `edit.actor` and `undo`, and become one foreign step with a notice: "Claude moved #12 into Dither · Undo". An Analyze step names the reader and who asked: "Gemini 4 Argon sorted 19 into 4 looks (asked by Claude) · Undo". This follows `ForeignEdit` (`lib/canvasUndo.ts:50`).
+- **Foreign steps.** Agent and Analyze batches arrive with `edit.actor` and `undo`, and become one foreign step with an undo notice: "Claude moved #12 into Dither · Undo". An Analyze step names the reader and who asked: "Gemini 4 Argon sorted 19 into 4 looks (asked by Claude) · Undo". This follows `ForeignEdit` (`lib/canvasUndo.ts:50`).
+  - These are **action labels**, not notes (§5.9). The agent's label ("Moved #12 into Dither") shows at its cursor. The Undo stays where the main canvas has it, the bottom-centre undo notice (`CanvasUndoNotice`), and in Cmd+Z.
+  - The reader has no cursor, so its action label goes beside the card it moved, as in mockup v5.2: "Moved by Analyze · Undo" (PR10b). Only a card the person had placed gets one (C12 b); the rest are summed up on the Analyze bar's last line.
+- **Foreign steps that removed a look's words or changed words (PR7e).** The step keeps `undo.historyIds`. Its Undo sends `restore` plus `historyIds`, and the server marks each entry by what the undo actually put back, in the same write. A fully applied entry becomes `restored`. An entry with a skipped field ("Direction changed since, left as is") stays open with `restoredFields`, and its row offers "Restore anyway". A restore made elsewhere (the list, the CLI, MCP) broadcasts `history.status = restored`, and the Studio drops that step with no redo. A tab that missed the broadcast gets `alreadyRestored` on Undo, so nothing is applied twice (§5.8).
 - **The analysis.** Undo never brings an analysis back. With Q9, Measure reruns on its own.
 - **Keys.** Studio-scoped Cmd+Z, Shift+Cmd+Z and Cmd+S, all skipped inside text fields. Cmd+S calls `preventDefault`, so `GraphFileActions` (which yields on `defaultPrevented`, `GraphFileActions.tsx:129`) never opens the graph save.
 - **Delete.** React Flow's `deleteKeyCode` is `null`. Delete removes the selected references with an Undo toast (Q15).
@@ -461,9 +514,10 @@ See §4.8 items 6 and 7. A board with frames whose node is on Whole board gives 
 | `look_at_canvas` | `GET /api/moodboards/{id}/look` (shape below). MCP `moodboard_look`, CLI `nebula moodboard look`. `look_at_canvas` adds `studio: {boardId}` when a board is open, and shows a Moodboard node as `board X · look Dither` (or "Whole board · board has 3 looks") from PR7d. |
 | `view_output` | `GET /api/moodboards/{id}/picture?area=view\|board&size=small\|medium\|large` (512, 1024 or 1568 px), a Pillow composite of the 512 px thumbnails at placement positions: frame outlines and tabs, `#n · w` badges, set-aside cards dimmed, the selection outlined. It needs no browser. MCP `moodboard_picture` returns an `Image`. CLI `nebula moodboard picture -o FILE`. |
 | `edit_canvas` | MCP `moodboard_edit` (the ops in §5.1). CLI `nebula moodboard edit <board> --place 12=x,y --resize 12=0.6 --in 12=Dither --link 12=Glass --set-aside 12 --note 12=…`. |
-| Agent cursor | `agent_presence.point(target={surface: "moodboard", boardId, placementId} or {…, x, y}, say)` after each batch (`agent_presence.py:226`). The Studio mounts its own cursor layer and reuses `agentCursorMotion`. The main `AgentCursorLayer` ignores targets that carry `surface`. |
+| Agent cursor | `agent_presence.point(target={surface: "moodboard", boardId, placementId} or {…, x, y}, say)` after each batch (`agent_presence.py:226`). The Studio mounts its own cursor layer and reuses `agentCursorMotion`. The main `AgentCursorLayer` ignores targets that carry `surface`. `say` is the agent's own action only ("Moved #12 into Dither"). What it noticed goes to Notes, never `say` (§5.9). |
+| Notes | MCP `post_note(text, board?, refs?, about?)` and `list_notes(board?, unread?)`; CLI `nebula note "…" [--board X] [--ref 12]` and `nebula notes [--board X]`; `POST /api/moodboards/{id}/agent-notes` and `POST /api/canvas/agent-notes` (§5.9). The cursor doesn't move to deliver a note. |
 | Journal and `wait_for_canvas_change` | The `board.*` kinds. `wait_for_canvas_change kinds=board` works through `EVENT_GROUPS`. |
-| Per-turn context | The chat payload carries `studio: {kind: "moodboard", boardId, selectedImageIds}`. Next to `selection_prompt_context` (`main.py:3184`), the runner adds a board block: looks with counts (and, from PR7b, whether each look's analysis is current and has its own words), plus the selected references' structure (never private-note text). It also adds **"Since your last turn"**: the person's `board.*` events after a cursor kept per chat session, read with `exclude_actor_id` (`canvas_events.py:316`), at most 20 lines. All three runners take it through their existing `selection_context` argument (`chat_session.py:231`, `codex_session.py:364`, `acp_session.py:510`). |
+| Per-turn context | The chat payload carries `studio: {kind: "moodboard", boardId, selectedImageIds}`. Next to `selection_prompt_context` (`main.py:3184`), the runner adds a board block: looks with counts (and, from PR7b, whether each look's analysis is current and has its own words), plus the selected references' structure (never private-note text). It also adds **"Since your last turn"**: the person's `board.*` events after a cursor kept per chat session, read with `exclude_actor_id` (`canvas_events.py:316`), at most 20 lines. All three runners take it through their existing `selection_context` argument (`chat_session.py:231`, `codex_session.py:364`, `acp_session.py:510`). The agent reads this block in its prompt and may post **one** note about it (`about: "sinceLastTurn"`, shown as "since its last turn"). Nebula never posts that note itself. |
 
 `look` returns:
 
@@ -493,10 +547,10 @@ With nobody looking, or a stale report, `look` describes the whole board.
   - A response schema for Gemini, sent as `generationConfig.responseFormat.text = {mimeType: "APPLICATION_JSON", schema}` (`responseSchema` is deprecated, and key order is documented for this form; §5.6.1), plus the Argon settings `GEMINI_CHAT_NO_SAMPLING`, `GEMINI_CHAT_THINKING_LEVELS` and `GEMINI_CHAT_MAX_OUTPUT` (`handlers/google_gemini.py:32-45`). Output is capped per batch by `maxOutputTokens`, which counts thinking too.
   - Images go in under batch-local labels (`Image A` to `F`), never board numbers (§5.6.1).
   - `usageMetadata` is captured.
-- **Phase 1 (per image):** medium, style, light, motifs, and candidate looks with a fit score. Existing frame names go into the prompt so the model reuses them. Notes follow #18's opt-in in both phases, as for the music call below: board notes, image notes and note-derived keywords only when `sendNotes` is on; private notes never. From PR17, if Q26 a, also `people: "none" | "drawn" | "photo"`, which the face policy reads.
+- **Phase 1 (per image):** medium, style, light, motifs, and candidate looks with a fit score. Existing frame names go into the prompt so the model reuses them. Notes follow #18's opt-in in both phases, as for the music call below: board notes, image notes and note-derived keywords only when `sendNotes` is on; private notes never. From PR17 (Q26 a), also `people: "none" | "drawn" | "photo"`, which the face policy reads.
 - **Phase 2 (one text-only sort):** assignments, Unsorted, `alsoIn` and hybrids.
-- **Python enforces the rules afterwards:** only targets move (C11, C12); frames you named are never renamed or deleted; frames holding words you wrote are never deleted or merged; at most 8 new frames per run; a fit below 0.5, or a failed read, goes to Unsorted (Q17); each image goes to its best frame only, and a second fit becomes an `alsoIn` suggestion; when 3 or more references share a pair, one `hybrid` suggestion replaces their `alsoIn` suggestions (Q10).
-- **The music direction (B1, PR19)** is a separate call, not part of the sort: one request per scope (Q25). It returns at most 3 sentences: instruments, tempo or energy, texture and mood. No colour-to-key mapping. It is priced through the same model file, shown first, and gated like Analyze.
+- **Python enforces the rules afterwards:** only targets move (C11, C12); frames you named are never renamed or deleted; a frame holding words may be deleted or merged only once PR7e is in, and each one writes a word-history entry (Q28 b, §5.8; before PR7e, never); at most 8 new frames per run; a fit below 0.5, or a failed read, goes to Unsorted (Q17); each image goes to its best frame only, and a second fit becomes an `alsoIn` suggestion; when 3 or more references share a pair, one `hybrid` suggestion replaces their `alsoIn` suggestions (Q10).
+- **The music direction (B1, PR19)** is a separate call, not part of the sort: one request per scope, only when asked (Q25 a). It returns at most 3 sentences: instruments, tempo or energy, texture and mood. No colour-to-key mapping. It is priced through the same model file, shown first, and gated like Analyze.
   - **What goes into the drafting prompt:** the scope's top 4 steering images at 512 px; the scope's stored readings when there are any (after PR10; before it, images alone); and the scope's effective Direction.
   - **Notes follow #18's opt-in.** Board notes, image notes and note-derived keywords go in only when the board's `sendNotes` is on or the Lyria node's Moodboard source has `send_notes: yes`. Private notes never go. Avoid, pins and the measured palette don't go: they are visual rules.
   - So a draft can never carry note text to Google that the person hasn't opted in to send.
@@ -516,7 +570,7 @@ With nobody looking, or a stale report, `look` describes the whole board.
 
 ### 5.6.1 The reader's trace: Analyze as an overseer (Q29: Justin chose c)
 
-GM's mockup v5 shows Analyze as an overseer, not as an agent. There is no cursor. The canvas ripples outward from the pile, or from each selected card on a selection pass. A panel drops from the Analyze bar and streams short lines such as "#21 clouds under a halftone screen → Dither". Each card a line names gets a lavender outline, while orange stays the agent's. Results ("couldn't place", the Painterly × Dither suggestion) are voiced by Gemini 4 Argon. This section is what the reader must give for that. Q29 (§7.3) asked where the lines come from. Justin chose c): the readings and Nebula's own lines (b), plus the reader's thought summaries as a second, dimmer stream that never outlines cards. His note: "If argon, or whatever model doesn't stream its thoughts then we just fallback to B."
+GM's mockup v5 shows Analyze as an overseer, not as an agent. There is no cursor. The canvas ripples outward from the pile, or from each selected card on a selection pass. A panel drops from the Analyze bar and streams short lines such as "#21 clouds under a halftone screen → Dither". Each card a line names gets a lavender outline, while orange stays the agent's. Results that need the person ("#37 I couldn't place", the Painterly × Dither suggestion with Make frame / Not now) are voiced by Gemini 4 Argon **as notes in the top-right corner** (mockup v5.2, §5.9), not as bubbles or chips on the canvas. The panel's streaming lines below are unchanged. This section is what the reader must give for that. Q29 (§7.3) asked where the lines come from. Justin chose c): the readings and Nebula's own lines (b), plus the reader's thought summaries as a second, dimmer stream that never outlines cards. His note: "If argon, or whatever model doesn't stream its thoughts then we just fallback to B."
 
 **What Google documents** (fetched 2026-10-19, rechecked 2026-10-20):
 
@@ -583,8 +637,11 @@ GM's mockup v5 shows Analyze as an overseer, not as an agent. There is no cursor
   - At run time Google may still return no summaries for a batch ("only when available"). Then nothing is shown for it: no empty heading, no placeholder, no error and no warning. The "thinking (summary)" rule appears only when the run's first `thought` line arrives.
   - Thought text is display only. It is never parsed for refs, never outlines or pulses a card, never moves anything and is never saved. Batch labels and `#n` tokens are stripped from it, as from reasons, so a summary names no cards.
   - A later reader from another maker fills `thoughtSummaries` from its own probe, and a reader that can't stream sends its summaries at batch end, or none.
-- **Phase 2 lines come from what was applied.** They are written after Python enforces §5.6's rules, never from the model's raw proposal. A refused merge reads "Kept Grain: it holds your words" (Q28), never as done.
-- **Notes follow #18's opt-in, in both phases and the retry,** as for the music call: board notes, image notes and note-derived keywords go in only when the board's `sendNotes` is on. Private notes never go. The prompt says "describe images; never identify people", and no line echoes `people` (Q26).
+- **Phase 2 lines come from what was applied.** They are written after Python enforces §5.6's rules, never from the model's raw proposal. Under Q28 b:
+  - **Applied** (the person asked for Analyze, or an agent did under "Act directly"): a merge or delete of a look with words is a `result` line that says where the words went: "Merged Grain into Painterly · Grain's own brief is under Recently changed words".
+  - **"Ask first"** (an agent asked, once the setting exists): the whole sort batch becomes one board proposal and nothing moves. The last line is `proposed`: "Sorted 19 into 4 looks · waiting for your OK (it merges Grain, which has its own brief)". The proposal reaches the person as a note with Accept / Reject (§5.9).
+  - **Refused:** only when the history is full ("Kept Grain: Recently changed words is full"), or when PR10 lands before PR7e ("Kept Grain: it holds your words"). A refusal is a `kept` line, never shown as done.
+- **Notes follow #18's opt-in, in both phases and the retry,** as for the music call: board notes, image notes and note-derived keywords go in only when the board's `sendNotes` is on. Private notes never go. The prompt says "describe images; never identify people", and no line echoes `people` (Q26 a).
 
 **The reader's identity (the "overseer"):**
 
@@ -595,7 +652,8 @@ GM's mockup v5 shows Analyze as an overseer, not as an agent. There is no cursor
 - **Who asked.** Every run records `requestedBy`, the actor from `actor_for_headers` (`canvas_events.py:96`): person, agent or anonymous.
 - **Journal.** `canvas_events` gets the actor kind `reader`. `actor_label` returns its name, and `actor_record` keeps `reader` instead of folding it to `anonymous`. The frontend unions in `lib/trash.ts` and `lib/wsClient.ts`, and `asset_trash.py`, add it. `board.sorted` and `board.suggested` take the reader as actor, with `data.requestedBy: {kind, name}`, inside the 4 KB cap.
 - **Undo notice (§5.4):** "Gemini 4 Argon sorted 19 into 4 looks · Undo", or "… (asked by Claude) · Undo".
-- **Suggestions gain `model`** (the reader id, for example `gemini-4-argon`). A chip then says "Gemini 4 Argon suggests …" for suggestions from older runs too; `lastRead` only knows the latest run.
+- **Notes (§5.9).** The reader's identity is the note's `author` (kind `reader`), so its chip dot and outlines use its colour. Its notes are written by Nebula from `refs` and the applied result, never from model text.
+- **Suggestions gain `model`** (the reader id, for example `gemini-4-argon`). A suggestion's note then reads "Gemini 4 Argon · Analyze" in its header for suggestions from older runs too; `lastRead` only knows the latest run.
 - **No cursor for the reader.** It never calls `agent_presence.point()`. An agent that starts Analyze keeps its own orange cursor.
 
 **Events on the socket.**
@@ -622,7 +680,7 @@ GM's mockup v5 shows Analyze as an overseer, not as an agent. There is no cursor
 ```
 {type: "moodboardReadTrace", boardId, jobId, seq,
  kind: "batch" | "focus" | "reading" | "retry" | "skipped" | "result"
-     | "suggestion" | "kept" | "error" | "cancelled" | "done"
+     | "suggestion" | "kept" | "proposed" | "error" | "cancelled" | "done"
      | "thought",            // c) only
  source: "nebula" | "reader",  // who wrote `text`
  text,                         // ≤ 200 characters; empty for "focus"
@@ -645,13 +703,16 @@ GM's mockup v5 shows Analyze as an overseer, not as an agent. There is no cursor
 | `skipped` | nebula | "Ignored an answer for an image not in this batch" | none | A grey line |
 | `error` | nebula | "Couldn't read #6: Google returned 503" | one | A "couldn't read" dot |
 | `result` | nebula | "#21 → Dither", "#6 Unsorted: no look fits (0.41)" | one or more | The card springs into its frame (PR6 springs) |
-| `suggestion` | nebula | "Make a Painterly × Dither look for #3, #9, #14?" | the members | A chip (PR11) |
-| `kept` | nebula | "Kept Grain: it holds your words" | none | A grey line |
-| `cancelled` / `done` | nebula | "Cancelled · nothing moved" / "Sorted 19 into 4 looks · 1 Unsorted" | none | The panel closes into the bar's last line |
+| `suggestion` | nebula | "Make a Painterly × Dither look for #3, #9, #14?" | the members | The panel line stays. The person gets an Argon note with Make frame / Not now (PR11, §5.9) |
+| `result` (look with words) | nebula | "Merged Grain into Painterly · Grain's own brief is under Recently changed words" | the moved members | As `result`. The Restore goes in the run's end note, with a Restore action on the history entry (PR7e, §5.9) |
+| `kept` | nebula | "Kept Grain: Recently changed words is full" (or, before PR7e, "Kept Grain: it holds your words") | none | A grey line, repeated in the run's end note |
+| `proposed` | nebula | "Sorted 19 into 4 looks · waiting for your OK (it merges Grain, which has its own brief)" | none | The board proposal arrives as a note with Accept / Reject ("Ask first" only, §5.8, §5.9) |
+| `cancelled` / `done` | nebula | "Cancelled · nothing moved" / "Sorted 19 into 4 looks · 1 Unsorted" | none | The panel closes into the bar's last line. When the run leaves something for the person, Argon's end note drops into the corner (§5.9) |
 | `thought` | reader, only when the model's `thoughtSummaries` is `true` and summaries arrive | summary text, labels and `#n` stripped, merged into chunks of at least 250 ms | always empty | Dim italic under a dashed rule labelled "thinking (summary)"; never an outline |
 
 - **The panel's title** reads "Gemini 4 Argon · reading", because every line that outlines a card is a reading. The `thought` lines sit below a dashed rule labelled "thinking (summary)", which appears with the first of them. With no summaries the panel is b)'s panel, line for line.
 - **Linked copies (C13).** A ref outlines each placement of that image inside the run's targets, or all its placements when none is in the targets.
+- **The panel is not Notes.** Its lines stream while the run is live and leave with the job (15 minutes). Notes are the few results that need the person, and they are saved. One run posts at most its end note, one note per hybrid suggestion, and one note for all its `alsoIn` suggestions (§5.9).
 
 **Job routes and catching up (PR10):**
 
@@ -670,7 +731,8 @@ GM's mockup v5 shows Analyze as an overseer, not as an agent. There is no cursor
 
 - `nebula moodboard analyze <board> --read-with gemini-4-argon` prints lines as they arrive, polling `afterSeq` every second, for example `#21  clouds under a halftone screen → Dither (0.82)`. `--quiet` prints the summary only, `--json` prints one JSON line per trace line, and `--dry-run` prints the same lines and applies nothing.
 - MCP `moodboard_analyze` waits up to 60 s. It returns the summary, each image's result (`{number, id, look, fit, reason}`) and the last 20 non-thought lines, or the `jobId` if the run is still going. A new `moodboard_read_status(board, job_id, after_seq)` returns later lines. `thought` lines come only with `include_thoughts`.
-- `wait_for_canvas_change kinds=board` still sees one `board.sorted`.
+- `wait_for_canvas_change kinds=board` still sees one `board.sorted`; `kinds=note` sees the run's notes (`note.posted`).
+- `list_notes(board)` and `nebula notes --board X` show Argon's notes after the run, like any other notes (§5.9).
 
 **Price (Q11, Q16).**
 
@@ -694,11 +756,12 @@ GM's mockup v5 shows Analyze as an overseer, not as an agent. There is no cursor
 - Two batches interleave and order within each holds.
 - Cancel mid-stream: nothing after `cancelled`, unstarted batches given back, nothing moves, closed readings saved.
 - `afterSeq` returns exactly the missing lines; a job past its 15 minutes returns 404.
-- A merge the rules refused gives `kept`, never `result`.
+- A merge of a look with words gives a `result` line naming Recently changed words and a history entry (PR7e); a refused one (history full, or before PR7e) gives `kept`, never `result`; under "Ask first" the run ends with `proposed` and nothing moves.
 - An image removed mid-run keeps its `imageId`, and the Studio shows "removed".
 - A stream quiet past its bound fails that batch, and its images go to the retry.
 - `test_reader_prompt_has_no_notes_unless_opted_in` and `test_reader_prompt_never_has_private_notes`, for both phases and the retry.
 - `actor_record` keeps `reader`; the undo notice names the reader and who asked.
+- A run with an Unsorted image posts one end note whose refs are exactly the Unsorted and couldn't-read images; a clean run asked for by the person posts none; no note text comes from model output.
 - Studio: outlines on target placements; reduced motion turns the pulse and ripple into a static tint; PR5's 300-card budget (p95 below 20 ms) holds with the ripple and 12 outlines on.
 
 ### 5.7 Moodboard adapters (A1 to A5, B1 to B4)
@@ -709,7 +772,7 @@ GM's mockup v5 shows Analyze as an overseer, not as an agent. There is no cursor
 - **How a node takes a board lives in one backend table**, not in the definitions:
   - `backend/data/moodboard_adapters.json`: hand-written entries, each with `sources`, `checked` and `unconfirmed`, like pricing.
   - `backend/data/moodboard_adapters_krea.json`: written by `sync-krea-catalog.py` from the catalog's port names, marked `generatedBy`, never edited by hand. `reference_images`, `style_references`, `style_images`, `image_style_references` and `image_urls` become slots; `start_image`, `end_image`, `start_video`, `edit_video`, `keyframes`, `image_url` (edit target), `mask_url` and `element_references` / `character_reference_images` become `never`. Every other Image port the catalog adds fails `--check` until the script classifies it.
-  - **Defaults in the generated file.** Every generated entry gets `default: "text"` unless its model is on a short allow-list in the script, `STYLE_VERIFIED`, each line with a source: Krea 2 (`image_style_references`, Krea's style-transfer page), Seedream 4 (`style_images[].strength`, Krea's Seedream 4 page), Ideogram 3 (`style_images`, Ideogram's style references), Runway gen-4 image (`reference_images` untagged = style, Runway's API page). Video reference slots (`reference_images`, `style_references`) are `images` by default under B2. A model joins `STYLE_VERIFIED` only with a source, or after a mocked run and one paid run Justin approves.
+  - **Defaults in the generated file.** Every generated entry gets `default: "text"` unless its model is on a short allow-list in the script, `STYLE_VERIFIED`, each line with a source: Krea 2 (`image_style_references`, Krea's style-transfer page), Ideogram 3 (`style_images`, Ideogram's style references). Seedream 4 left the list in version 2.4: Krea's page shows a required `strength`, not a style meaning; its description, "Image prompts to use for the generation" (https://www.krea.ai/docs/api-reference/image/seedream-4.md), matches every other Krea `style_images` field, and A1 names Seedream as content. It defaults to text until a source or an approved paid run shows the field is style-only (u). Runway gen-4 image left the list in version 2.4: its source was "untagged = style" on Runway's own API, where the tag is optional (`required: ['uri']`, https://docs.dev.runwayml.com/openapi.json), but Krea's schema requires `[url, tag]` on every image (https://www.krea.ai/docs/api-reference/image/runway-gen-4-image.md), so no image is untagged there. It defaults to text until a source or an approved run shows that a tag the prompt never names still acts as style on Krea (u). Video reference slots (`reference_images`, `style_references`) are `images` by default under B2. A model joins `STYLE_VERIFIED` only with a source, or after a mocked run and one paid run Justin approves.
   - `services/moodboard_adapters.py` loads both, refuses an id in both, resolves an entry for `(node, params, route)`, and serves `GET /api/moodboard/adapters` (like `GET /api/pricing` → `store/pricingStore.ts:30`). The Inspector, the node card and `wiredPorts` read it from there.
 - **Why not a field in the definitions:**
   - The TS and JSON registries already drift and are compared by id only, so a field written in both places would drift silently.
@@ -730,10 +793,15 @@ GM's mockup v5 shows Analyze as an overseer, not as an agent. There is no cursor
   "never": ["mask", "image", "end_image", ...],   # first/last frames, edit targets, views, identity
   "exclusive"?: ["start_image", "end_image"],     # wiring one of these means no board references (per route via byRoute)
   "textSlot": {"port": "prompt"} | {"param": "prompt"} | {"param": "texture_prompt"},  # a port, else a param
+  "textUnless"?: "texture_image",                 # the text slot is used only when this port gets no image (Meshy: one or the other)
   "text": "brief" | "music-direction",            # what text goes; music entries never get the visual brief
   "negativeField"?: "auto",                       # resolved from the active route's params (PR14)
   "paletteParam"?: {"param": "colors", "format": "recraft-rgb"},   # B4 palette as data (PR21)
-  "weight": {"mode": "native", "range": [-2, 2], "sum"?: 1} | {"mode": "select"} | {"mode": "at-creation"},
+  "weight":                                       # Q21 b: how this node takes weights (§5.7.4)
+      {"mode": "native", "field": "strength", "range": [0, 1], "normalize": "sum-to-strength", "precision": 0.0001}
+    | {"mode": "at-creation", "field": "image_weights", "normalize": "sum-to-one"}
+    | {"mode": "global", "param": "image_prompt_strength", "range": [0, 1], "source": "person"}
+    | {"mode": "select", "normalize": "rank"},
   "order": "weight",
   "syntax": "Image {n}" | "image {n}" | "@image_{n}" | "[Image {n}]" | "plain" | null,
   "syntaxReason"?: "...",                         # required when syntax is null
@@ -750,6 +818,8 @@ GM's mockup v5 shows Analyze as an overseer, not as an agent. There is no cursor
 
 - `channel` says what the slot is for. `weighted-style` and `style-object` take look; `refs` and `role-slots` take content; `views` never take a board; `texture-style` takes one style image for a surface; `music` takes images "for inspiration"; `text-only` takes text.
 - `default` is A1's call per entry: verified style channels `images`, content channels and unverified style fields `text`, `views` and edit-only nodes `never`.
+- `weight.normalize` says which form of the board's weights the node needs (Justin's Q21 note: "They should normalize for however any nodes need the information"). `sum-to-strength` (native per-image strengths that share out the board's strength), `sum-to-one` (shares, for a weight list made once, such as Recraft's `image_weights`), `rank` (order and legend words only) and `none` (the raw `strength × weight`, the pre-Q21 behaviour, allowed in test fixtures only). `range` comes from the vendor's schema. `global` is a single strength that stays the person's param. The old `sum` key is gone.
+- `textUnless` names a port whose image replaces the text slot: Meshy says "Only one of `texture_image_url` or `texture_prompt` may be used to guide the texturing process" (https://docs.meshy.ai/en/api/image-to-3d), and the prompt wins when both are sent.
 - `textSlot` names an input port, or a param when the node has no such port or the person typed the prompt into the param. Text for a param goes into the run's params copy, never the saved node (as negatives do today).
 - `syntax: "plain"` writes a legend in ordinary words with no image numbers ("The first image sets the main mood; the third is a light hint"). It is for models that read images but have no reference syntax: Lyria, Ideogram v3 style references.
 - `costPerRef`:
@@ -770,11 +840,11 @@ GM's mockup v5 shows Analyze as an overseer, not as an agent. There is no cursor
    - What goes: for `text: "brief"`, the brief as today, Avoid into the prompt for instruction-following models, and #18's rules on notes. For `text: "music-direction"`, only the scope's music direction (and the plain image legend); no brief, Avoid or negatives. With no music direction set, no text goes.
    - Negatives: into the field named by the active route's params (`params`, `sharedParams`, `falParams`, `directParams`, `routes[].params`), not only `definition["params"]`.
 4. **Images**, when the resolved switch is on (§5.7.8):
-   - `plan = plan_board_fill(entry, bundles, wired, params, route)` (§5.7.4), a pure function that returns `{port: [image]}`, a legend, and what was left out and why. It applies `exclusive` (no board references when a listed port is wired on that route), `needsWired`, the face policy and `requires`.
+   - `plan = plan_board_fill(entry, bundles, wired, params, route)` (§5.7.4), a pure function that returns `{port: [image]}`, a legend, and what was left out and why. Each image it sends carries one normalized view, worked out after every cut: `w` (its raw weight in the scope), `share` (`w / Σw` over the images sent) and `rel` (`w / max(w)`). Entries read the form they need, so no adapter does its own maths (Q21 b). It applies `exclusive` (no board references when a listed port is wired on that route), `needsWired`, the face policy and `requires`.
    - Then `prepare_board_image` for each (§5.7.6), in a worker thread (the engine call at `engine.py:1201` is awaited through `asyncio.to_thread`), then `local_media_ref` (`output.py:448`) because `_local_media_inputs` has already run.
    - Board images are appended after wired values in the slot port, as `PortValueDict` lists of local paths. Each handler uploads them exactly as it uploads wired images.
-5. **Native weights** (Krea 2): until PR15, the handler reads the bundle as today (`handler: "reads-board"`). From PR15, the planner selects and the handler only maps `{url, strength}` (§5.7.4).
-6. **Palette as data:** where the entry has `paletteParam`, the scope's palette goes into that param in the run's params copy, only while the person's own value is empty, with a run note. That is the only data step. The aspect is **not** set here: PR22 writes it into the saved node as a graph edit before any run (Q27), so a run never changes its own shape or price.
+5. **Native weights** (Krea 2): until PR15, the handler reads the bundle as today (`handler: "reads-board"`), with strengths from PR13a's shared helper. From PR15, the planner selects, the same helper scales, and the handler only maps `{url, strength}` (§5.7.4), so the move changes no number.
+6. **Palette as data:** where the entry has `paletteParam`, the scope's palette goes into that param in the run's params copy, only while the person's own value is empty, with a run note. That is the only data step. The aspect is **not** set here: PR22 writes it into the saved node as a graph edit before any run (Q27 a), so a run never changes its own shape or price.
 7. **Run note:** "Sent board images #3, #7, #12 (look Dither) to `images`; left out #4 (Seedance blocks real faces)", through `add_run_note`, as `handlers/moodboard.py:70` already does.
 8. The Moodboard port is dropped before the handler (as today, `moodboard_brief.py:76-82`, so Krea's by-name sender never sees it), except for `handler: "reads-board"`.
 
@@ -791,17 +861,28 @@ GM's mockup v5 shows Analyze as an overseer, not as an agent. There is no cursor
 - **Wording**, one legend line in the entry's syntax, numbered by the image's real position:
   - "Image 3: style reference (colour, light, texture), strong. Image 4: style reference, light hint. Use palette, light, brushwork and texture only; do not copy subjects, UI, text, logos or layout."
   - **The guard sentence** ("Use palette, light, brushwork and texture only; do not copy subjects, UI, text, logos or layout.") is the default closing line of every legend, and of the copy note on entries that skip the legend. It held in GM's comparison on 2026-10-19: none of 12 images copied the references' UI, text, logos or grid, on two content-slot Gemini models, with four of five references being text-heavy UI screenshots. One image per cell and no seed, so directional.
-  - Strength words from the weight: 0.75 and up "strong", 0.4 to 0.75 "medium", below 0.4 "light hint". This is wording, not a vendor weight; the paid comparison tests whether it helps.
+  - Strength words from `rel` (the image's weight over the heaviest one sent): 0.75 and up "strong", 0.4 to 0.75 "medium", below 0.4 "light hint". Never from a scaled strength, or every image on a big board would read "light hint". Version 2.4 moved this from the raw weight to `rel` under Justin's Q21 note, so the words agree with the native nodes: on a board of only light cards, the heaviest still reads "strong". This is wording, not a vendor weight; the paid comparison tests whether it helps.
   - The role comes from the board's mode: `look` "style reference (colour, light, texture)", `world` "world reference (materials, setting)", `subject` "subject reference". FLUX 3 uses its own role words (Subject, Product, Setting, Style) (r).
   - Image notes never go in the legend unless notes are opted in (#18's `sendNotes` / `send_notes`).
   - **A2 asks for a legend on every model without a weight.** An entry may skip it only with a `syntaxReason`, which the contract test requires:
     - Runway gen4 image (and Krea's Runway gen-4): naming an image in the prompt means tagging it (`@tag`), and a tagged image becomes a subject (r). The order and the selection still follow weight.
-    - Krea 2 and Krea Seedream 4: the weight is native (`strength`), so A2 doesn't apply.
+    - Krea 2 (`strength` optional, default 0.5, 0..1) and every Krea `style_images` field (`strength` required, −2..2): the weight is native, so A2 doesn't apply. Nebula always sends a strength.
   - **Plain legends** (`syntax: "plain"`), where a model reads images but has no reference syntax:
     - Lyria: "The first image sets the main mood; the second and third add to it; the fourth is a light hint." Music is "inspired by" the images, with no weights (r).
     - Ideogram v3 style references: "The style references are in order of importance; the first sets the main look." Whether Ideogram reads this is (u); the paid comparison can test it.
   - Cinema's `append_reference_guidance` (`cinema/art_direction.py:108`) becomes a thin caller of the same legend writer, with its output pinned byte for byte by its existing tests. `reference_cap_for` moves into the adapter table's `byModel` limits, and Cinema reads them from there.
-- **Native weights (Krea 2, Krea Seedream 4 `style_images[].strength`):** strength = `board.strength × weight`, clamped to the entry's range. Whether the strengths are scaled so they add up to about 1, as Krea advises, is Q21.
+- **Native weights (`normalize: "sum-to-strength"`; Q21 b, Justin 2026-10-20).** Krea 2 `image_style_references[].strength` and every Krea catalog `style_images[].strength` (Seedream 4 and the rest):
+  - **The rule:** `s_i = S × w_i / Σw`, where `S` is `board.strength` (0 to 1, default 0.7), `w_i` is the image's weight in its scope (`image.weight` on Whole board, the card's weight in a look) and `Σw` sums the board images actually sent. The sent strengths add up to the board's strength.
+  - **Why:** Krea's guide says "The references blend additively — start with strengths that sum near `1.0` and tune from there." (https://www.krea.ai/docs/developers/krea-2/style-transfer.md, rechecked 2026-10-20). Today ten images at 0.7 add up to 7. Krea states the advice for Krea 2 only; using it for the other `style_images` fields is Nebula's choice (u). With the default `S` = 0.7 the sum is 0.7, below Krea's "near `1.0`" start, and a single image goes at 0.7, above the guide's "~0.6 — balanced starting point". Keeping 0.7 is Nebula's choice, to leave room for wired references (u); the paid comparison's Krea 2 arm can check it.
+  - **After every cut.** The sum is worked out over the images that go: after the slot limit minus wired, set aside, weight 0, unreadable images, the face block and dedupe. Scaling before the cut would leave the sum below `S`.
+  - **Wired references keep their own strengths.** The person's `image_style_references`, `style_images` and `krea-image-style-reference` inputs, and Krea's own `moodboards` and `styles`, are outside `Σw`; they still take slots first, so the total can pass 1. The run note says so: "Your 2 references add 1.0 on top of the board's 0.7".
+  - **One image** goes at `S`, whatever its weight (today a 0.5-weight image goes at 0.35). Card size now sets shares, and `S` is the one absolute control.
+  - **Rounding:** 4 decimals, by largest remainder, so the sum is exactly `S` and the cache key is stable. An image that rounds to 0 is left out ("#9 too light to steer at this board strength"), since Krea reads 0 as "no style influence".
+  - **Clamp** to the entry's `range` as a guard only. With `S ≤ 1` and positive weights it never triggers; if it does, a run note says so.
+  - **Strength 0** on a `native` entry sends no board images, with the run note "Board strength is 0: no board images sent" (Q32 a, Justin 2026-10-20). Zero-strength images would steer nothing and still add Krea 2's $0.005 per generation with references. `select` and `at-creation` entries are unaffected; `_boardImages` stays the on/off switch.
+  - **No negatives.** A card size can't be negative, and Krea 2's enforced schema has a minimum of 0. A future "push away" list would be separate and signed (§8).
+  - **One helper,** `native_strengths(S, weights, *, normalize, range, precision)` in `services/moodboard_weights.py` (PR13a). The Krea handler calls it from PR13a, the planner from PR15. `sum-to-one` and `rank` read `share` and `rel` from the same view.
+- **Other weight forms.** `at-creation` (Recraft, PR24): `image_weights` are the shares, rounded the same way and sent once when the style is made; a changed weight changes the scope's hash, so a new style is made. `global` (`flux-1-1-ultra`): the heaviest image goes, and `image_prompt_strength` (0 to 1, default 0.1, https://docs.bfl.ml/api-reference/models/generate-an-image-with-flux11-[pro]-ultra-mode.md) stays the person's; writing `S` into it would turn BFL's 0.1 into 0.7. `select` (every other node): order, selection and legend words only.
 
 #### 5.7.5 Slots kept free for wired images
 
@@ -892,6 +973,7 @@ In `scripts/check-node-contracts.mjs` and `backend/tests/test_moodboard_adapters
 10. `moodboard_adapters_krea.json` equals what `sync-krea-catalog.py --check` would write, and no generated entry defaults to `images` on a style field unless its model is in `STYLE_VERIFIED`.
 11. Every maker route that refuses a start image plus references has a matching `exclusive` for that route (§5.7.5).
 12. **Census** (PR16, PR17, PR18 each extend it): every node in `image-gen`, `video-gen` and `audio-gen` with a prompt port or param has a Moodboard port and an entry, except an explicit list with a reason per node (speech, transcription, translation, dubbing, voice change, isolation, stem splitting, sound effects, lip sync).
+13. **Weights (Q21 b).** `native` needs `sum-to-strength` (or `none` in fixtures only), `at-creation` needs `sum-to-one`, `select` needs `rank`, and `range` matches the vendor schema recorded in `provider_schemas`. Every Krea catalog field whose items have `strength` in `required` must be `native`; `sync-krea-catalog.py` derives this from Krea's schema, so a bare list of URLs can never be planned for a field Krea's gateway would refuse.
 
 `docs/contracts/08-model-contract-pipeline.md` (the add-a-model steps) and `docs/PROVIDER-ROUTES.md` gain "Add a moodboard adapter entry".
 
@@ -918,22 +1000,22 @@ Checked against main `12257250` and the TS mirror (16 `dataType: 'Moodboard'` po
 
 | Node | Slot for the board | Channel | Default | Limit | Notes |
 |---|---|---|---|---|---|
-| `krea-2-generate` | `image_style_references` | weighted-style | images | 10 − wired (Nebula's number; Krea's (u)) | Native −2..2 (r); today clamped 0..1, no sum scaling (Q21); +$0.005 per generation (r); no price row. Port `Any` → `Moodboard`. `syntax: null` (native weights). |
-| `krea-image-krea-krea-2-{medium,large,medium-turbo}` (generated) | `image_style_references` | weighted-style | images | 10 | `STYLE_VERIFIED`; no price rows |
-| `krea-image-bytedance-seedream-4` (generated) | `style_images` | weighted-style | images | (u) | `STYLE_VERIFIED`: `strength` −2..2 on Krea (r); whether Nebula's param carries it (u); if it doesn't, `select` with a plain legend |
-| `krea-image-ideogram-ideogram-3` | `style_images` | weighted-style (select) | images | (u) | `STYLE_VERIFIED` (Ideogram 3 style references (r)); `character_reference_images` never |
-| `krea-image-runway-gen-4-image` | `reference_images` | weighted-style (select) | images | 3 | `STYLE_VERIFIED`: untagged = style (r); face warn; `syntax: null` (naming = tagging) |
-| `krea-image-bytedance-seedream-5-lite`, `-5-pro` | `style_images` | weighted-style (select) | **text** | 14 / 10 | Seedream is a content model under A1; what Krea does with `style_images` here is (u); strength (u) |
-| `krea-image-meta-muse-image`, `alibaba-qwen-image-3`, `-2-1`, `luma-uni-1`, `z-image-z-image`, `bfl-flux-1-dev`, `bfl-flux-1-kontext-dev` | `style_images` | weighted-style (select) | **text** | 10, 3, (u), 9, 1, none, 1 | behaviour of each (u): none researched, and FLUX is a content model under A1. Z Image and Kontext dev take 1: A3 candidates; `image_url` is never. Qwen 3, UNI-1 and Z Image have no price row. |
-| `krea-image-xai-grok-imagine-2` | `style_images` | weighted-style (select) | **text** | 3 | (u) |
-| `ideogram-remix`, `ideogram-reframe`, `ideogram-replace-background`, `ideogram-edit` | `images` (role style → `style_reference_images`) | weighted-style (select) | images | 10 (r), not enforced | `image` is the target (never); can't combine with `style_preset` (r); remix has `negative_prompt` in `falParams`; plain legend; no price rows |
-| `ideogram-character` | `images` (style) | weighted-style (select) | images | 10 (r) | `reference_images` / `character` never; `negative_prompt` in `sharedParams`; no price row |
+| `krea-2-generate` | `image_style_references` | weighted-style (native, `sum-to-strength`) | images | 10 − wired (Krea's schema: `maxItems: 10` (r)) | `strength` 0..1, default 0.5: "(0 = no style influence, 1 = maximum)" in the schema Krea's gateway enforces (https://www.krea.ai/docs/api-reference/image/krea-2-medium.md; same on `krea-2-large.md`). Krea's guide says −2..2 (`…/krea-2/style-transfer.md`): a conflict, and Nebula uses the enforced 0..1, as `krea.py:399` clamps today. Strengths add up to the board's (Q21 b, PR13a). +$0.005 per generation (r); no price row. Port `Any` → `Moodboard`. `syntax: null` (native weights). |
+| `krea-image-krea-krea-2-{medium,large,medium-turbo}` (generated) | `image_style_references` | weighted-style (native, `sum-to-strength`) | images | 10 (r) | `STYLE_VERIFIED`; range 0..1 as above; no price rows |
+| `krea-image-bytedance-seedream-4` (generated) | `style_images` | weighted-style (native, `sum-to-strength`) | text (since v2.4) | no `maxItems` in Krea's schema; Nebula's limit (u) | Left `STYLE_VERIFIED` in v2.4: the description, "Image prompts to use for the generation", is the same as every other Krea `style_images` field, so no source shows a style meaning (§5.7.1). `strength` −2..2 and **required** (https://www.krea.ai/docs/api-reference/image/seedream-4.md). Nebula's stored schema requires it too and the gateway refuses bare URLs, so the old "(u) whether Nebula's param carries it" is answered: it does. The BytePlus direct route already keeps `style_images` runs on Krea (`maker_routes_byteplus.py:176-185`). |
+| `krea-image-ideogram-ideogram-3` | `style_images` | weighted-style (native, `sum-to-strength`) | images | (u) | `STYLE_VERIFIED` (Ideogram 3 style references (r)); `strength` −2..2 required (`…/ideogram-30.md`); `character_reference_images` never |
+| `krea-image-runway-gen-4-image` | `reference_images` (`{url, tag}`, 1 to 3) | weighted-style (select, `rank`) | **text** (out of `STYLE_VERIFIED` in v2.4) | 3 (r) | Krea requires `[url, tag]` (`…/runway-gen-4-image.md`), so "untagged = style" can't happen here; whether a tag the prompt never names still counts as a subject is (u). No weight field. Face warn; `syntax: null` (naming = tagging). |
+| `krea-image-bytedance-seedream-5-lite`, `-5-pro` | `style_images` | weighted-style (native, `sum-to-strength`) | **text** | 14 / 10 | Seedream is a content model under A1; what Krea does with `style_images` here is (u). `strength` −2..2 required (`…/seedream-5-lite.md`). |
+| `krea-image-meta-muse-image`, `alibaba-qwen-image-3`, `-2-1`, `luma-uni-1`, `z-image-z-image`, `bfl-flux-1-dev`, `bfl-flux-1-kontext-dev` | `style_images` (Flux dev also `image_style_references`) | weighted-style (native, `sum-to-strength`) | **text** | 10, 3, 3, 9, 1, none, 1 | `strength` −2..2 required on each (`…/muse-image.md`, `…/qwen-image-21.md`, `…/luma-uni-1.md`, `…/z-image.md`, `…/flux1-dev.md`), so a bare list fails Krea's gateway: they are `native`, never `select`. What each model does with the strength is (u): none researched, and FLUX is a content model under A1. Z Image and Kontext dev take 1: A3 candidates; `image_url` is never. Qwen 3, UNI-1 and Z Image have no price row. |
+| `krea-image-xai-grok-imagine-2` | `style_images` | weighted-style (native, `sum-to-strength`) | **text** | 3 | `strength` −2..2 required (`…/grok-imagine-20.md`); behaviour (u) |
+| `ideogram-remix`, `ideogram-reframe`, `ideogram-replace-background`, `ideogram-edit` | `images` (role style → `style_reference_images`) | weighted-style (select, `rank`) | images | 10: "max 10, max 25MB each; JPEG, PNG, or WEBP" (https://developer.ideogram.ai/v2/api-reference/images/generate/ideogram-3.md), not enforced | no weight field on the page | `image` is the target (never); can't combine with `style_preset` (r); remix has `negative_prompt` in `falParams`; plain legend; no price rows |
+| `ideogram-character` | `images` (style) | weighted-style (select, `rank`) | images | 10 (r) | `reference_images` / `character` never; `negative_prompt` in `sharedParams`; no price row |
 | `ideogram-edit-prompt` | `images` (role unset) | refs | text | (u) | treat as content until verified |
-| `runway-image`, model `gen4_image` / `gen4_image_turbo` | `images` (sent untagged = style (r)) | weighted-style (select) | images | 3 − wired | face warn; `syntax: null` (naming = tagging). The port badge says "subject"; fix in PR15. |
+| `runway-image`, model `gen4_image` / `gen4_image_turbo` | `images` (sent untagged = style (r)) | weighted-style (select, `rank`) | images | 3 − wired | "An array of up to three images"; no strength or weight field anywhere in Runway's OpenAPI file, and the tag is optional (https://docs.dev.runwayml.com/openapi.json); face warn; `syntax: null` (naming = tagging). The port badge says "subject"; fix in PR15. |
 | `runway-image`, other models (`gemini_image3_pro` 14, `gpt_image_2` 16, `gemini_2.5_flash` 3, `seedream5_pro` 10, `seedream5_lite` 14) | `images` | refs | text | per model | `byModel` |
 | `krea-3` | `images` | refs | text | 8 − wired (route rules) | `style_urls` returns 422 (r); +$0.02 per ref at 1K, +$0.07 at 2K on Krea (r), fal (u); fal route has `negative_prompt` |
 | `flux-3-image`, `flux-3-image-klein`, `flux-3-image-klein-base` | `images` | refs | text | 10 − wired, every route | Subject/Product/Setting/Style roles (r); aspect `auto` follows image 1 (r); BFL bills per input MP, rate (u) |
-| `flux-1-1-ultra` | `image` (an image prompt) + `image_prompt_strength` | refs | text | 1 | **A3 candidate**; the weight sets which image, and the global strength stays the person's |
+| `flux-1-1-ultra` | `image` (an image prompt) + `image_prompt_strength` | refs (`weight: global`) | text | 1 | **A3 candidate**; the weight sets which image, and the global strength (0..1, default 0.1, BFL's page) stays the person's |
 | `seedream-4-5` | `images` | refs | text | min(10, 15 − outputs) − wired (enforced on BytePlus) | ModelArk "up to 14" in a code comment (u) |
 | `grok-imagine-image-edit` | `images` | refs | text | 5 on xAI direct; fal (u) | needsWired |
 | `krea-image-ideogram-ideogram-4-5` | `image_urls` | refs | text | 5 | role (u) |
@@ -944,7 +1026,7 @@ Checked against main `12257250` and the TS mirror (16 `dataType: 'Moodboard'` po
 | `krea-image-google-nano-banana{,-2,-2-1,-pro,-flash-lite}` | `image_urls` | refs | text | Gemini's (r); lite 14 | |
 | `quiver-arrow-generate` | `references` | refs | text | 16 on arrow-1.1-max, 4 on arrow-1 / 1.1 | style vs content (u) |
 | `meshy-image-to-image` | `images` (required) | refs | text | (u) | |
-| `recraft-v4-raster`, `recraft-v4-svg` | none (no image input) | text-only | — | — | palette as data into `colors` / `background_color` (PR21). Style objects need a new path (Q24). |
+| `recraft-v4-raster`, `recraft-v4-svg` | none (no image input) until PR24, then a style made on Recraft from the scope's images | text-only, then style-object (PR24, Q24 a) | — then images | — then 10 per style | palette as data into `colors` / `background_color` (PR21). From PR24: `weight: at-creation`, `image_weights` = the shares (`sum-to-one`), sent as `style_id` on the Recraft route (§5.7.4). |
 | `ideogram-v4`, `krea-image-recraft-recraft-v4-1-flash`, `meshy-text-to-image`, `grok-imagine-image`, `flux-schnell`, `krea-image-qwen-2512` (`negative_prompt`), `ideogram-transparent` (`negative_prompt`), other Krea text-to-image nodes | none | text-only | — | — | reason: text-to-image |
 | `flux-kontext`, `flux-fill-inpaint`, `krea-image-bytedance-seededit` | none free (edit targets) | text-only | — | — | A3 no |
 
@@ -952,9 +1034,9 @@ Checked against main `12257250` and the TS mirror (16 `dataType: 'Moodboard'` po
 
 | Node | Slot for the board | Channel | Default | Limit | Notes |
 |---|---|---|---|---|---|
-| `kling-o3-ref` (fal) | `images` → `image_urls` | role-slots | images | 7 − wired − frames (r) | "@image_N" (r; fal (u)); min 300 px (r); refer_image vs element on fal (u); `image`, `end_image` never |
+| `kling-o3-ref` (fal) | `images` → `image_urls` | role-slots | images | 7 − wired − frames (r); on fal: "Maximum 4 total (elements + reference images) when using video." | `@Image{n}` on fal: "Reference in prompt as @Image1, @Image2, etc." (https://fal.ai/models/fal-ai/kling-video/o3/standard/reference-to-video/api); min 300 px (r); "Reference images for style/appearance.", no weight field (https://fal.ai/models/fal-ai/kling-video/o3/standard/reference-to-video/api); refer_image vs element on fal (u); `image`, `end_image` never |
 | `krea-video-kling-kling-o1` | `style_references` | role-slots | images | (u) | `element_references`, frames, `video_reference` never |
-| `seedance-2-r2v` (fal, BytePlus) | `images` (required) | role-slots | images | 9 − wired (BytePlus enforced; fal not) | "[Image N]" (r); face **block**; the board alone can fill the required port |
+| `seedance-2-r2v` (fal, BytePlus) | `images` (required) | role-slots | images | 9 − wired (BytePlus enforced; fal "Up to 9 images.", not enforced) | Syntax per route (`byRoute`): `@Image1` on fal, whose page names images "@Image1, @Image2, etc." (https://fal.ai/models/bytedance/seedance-2.0/reference-to-video/api); "[Image N]" on BytePlus (r; its page didn't load in 2026-10-20's check, (u)). No weight field. Face **block**; the board alone can fill the required port |
 | `krea-video-bytedance-seedance-2`, `-2-fast`, `-2-mini` | `reference_images` | role-slots | images | 9 | `exclusive` with start/end; face block |
 | `krea-video-bytedance-seedance-2-5` | `reference_images` | role-slots | images | 30 | face block; Runway charges nothing for 2.5 refs (r), Krea and BytePlus (u) |
 | `krea-video-bytedance-seedance-1-0-pro` | `reference_images` | role-slots | images | 4 | face policy (u) |
@@ -964,7 +1046,7 @@ Checked against main `12257250` and the TS mirror (16 `dataType: 'Moodboard'` po
 | `krea-video-google-gemini-omni-flash` (1.0) | `reference_images` | role-slots | images | 10 | Krea only on main; `exclusive: [start_image]` until verified; no price row |
 | `krea-video-alibaba-wan-3-0`, `krea-video-xai-grok-video` | `reference_images` | role-slots | images | 10, 7 | behaviour (u); Grok's price row keys on `reference_images` |
 | `gemini-omni-flash` (Google) | `images` | role-slots | images, only when `task` is `reference_to_video` | (u) | Under `task: auto` one image can be read as image-to-video (`gemini_omni.py:200-230`), so no fill there. JSON-only fixes node. No price row. |
-| `krea-video-google-veo-3-1`, `-3-1-fast` | `reference_images` | role-slots | images (B2, as decided) | 3 (Vertex enforced) | "asset" = one person, character or product (r), so the face **warn** and a node line: "Veo treats each reference as a subject to show." Refs need 8 s and 16:9 or 9:16 (r): the 8 s rule blocks with a message, never a silent change. `costPerRef: free` (r). |
+| `krea-video-google-veo-3-1`, `-3-1-fast` | `reference_images` | role-slots | images (B2, as decided) | 3 (Vertex enforced; "Veo 3.1 now accepts up to 3 reference images", https://ai.google.dev/gemini-api/docs/veo, no weight field) | "asset" = one person, character or product (r), so the face **warn** and a node line: "Veo treats each reference as a subject to show." Refs need 8 s and 16:9 or 9:16 (r; the 8 s rule rechecked on the same page): the 8 s rule blocks with a message, never a silent change. `costPerRef: free` (r). |
 | `veo-3` (Veo 3.1) | none (`referenceImages` removed, `veo.py:127-132`) | text-only | — | — | `image` = first frame; `negative_prompt` in `falParams` |
 | `runway-video` | none (`promptImage` only) | text-only | — | — | `image` is the first frame though its badge says style |
 | `luma-ray2-flash-modify` | `image` (role style) | text-only until verified | — | — | A3 candidate only if it's a reference (u) |
@@ -976,11 +1058,11 @@ Checked against main `12257250` and the TS mirror (16 `dataType: 'Moodboard'` po
 
 | Node | Slot | Channel | Default | Limit | Notes |
 |---|---|---|---|---|---|
-| `lyria-3` (`lyria-3-clip-preview`, `lyria-3-pro-preview`) | `images` | music | images | 10 (r, stated for Lyria 3.5 Interactions, which Nebula doesn't run); request 20 MB (r) | `text: "music-direction"`: only the scope's music direction plus a plain legend, never the visual brief; Clip image support (u); no price row |
+| `lyria-3` (`lyria-3-clip-preview`, `lyria-3-pro-preview`) | `images` | music | images | 10 (r, stated for Lyria 3.5 Interactions, which Nebula doesn't run); request 20 MB (r) | `text: "music-direction"`: only the scope's music direction plus a plain legend, never the visual brief; "the model will compose music inspired by the visual content", no weight field (https://ai.google.dev/gemini-api/docs/music-generation, which shows image input only for `lyria-3.5`); Clip image support (u); no price row |
 | Text-only music nodes: `elevenlabs-music`, `stable-audio-25`, `ace-step`, `krea-audio-elevenlabs-music`, `-v2`, `-v2-5`, `krea-audio-bytedance-seed-audio-1-0` | none | text-only | — | — | `text: "music-direction"`: the scope's music direction as text; with none set, nothing goes and the row says "No music direction yet". Never the visual brief. |
 | `mmaudio-v2` (sound for a video) | none | text-only | — | — | `text: "music-direction"` as above. Its `negative_prompt` gets nothing from the board: Avoid items are visual ("no text, no logos") and mean nothing to a sound model. |
-| `meshy-image-to-3d` | new `texture_image` port | texture-style | images | 1 (1 to 4 on Meshy 7.1 (r)) | `image` (geometry) never; no prompt port, so `textSlot: {param: texture_prompt}` (a fal-only param today; on the direct route the sentence has nowhere to go and the row says so); A3 candidate (u); no price row |
-| `meshy-text-to-3d` | new `texture_image` port, if refine takes `texture_image_url` (u) | texture-style, else text-only | images | 1 | `textSlot: {param: texture_prompt}` where the route sends it, so the palette and materials sentence leaves the shape prompt alone; no price row |
+| `meshy-image-to-3d` | new `texture_image` port | texture-style | images | 1 (1 to 4 on Meshy 7.1 (r)) | `image` (geometry) never; no prompt port, so `textSlot: {param: texture_prompt}` (a fal-only param today; on the direct route the sentence has nowhere to go and the row says so) with `textUnless: texture_image`: "Only one of `texture_image_url` or `texture_prompt` may be used" (https://docs.meshy.ai/en/api/image-to-3d), and the prompt wins if both go. So a board texture image means no palette sentence; a `texture_prompt` the person typed means no board texture image, and the node says so; with board images off, the sentence goes. A3 candidate (u); no price row |
+| `meshy-text-to-3d` | new `texture_image` port, if refine takes `texture_image_url` (u) | texture-style, else text-only | images | 1 | `textSlot: {param: texture_prompt}` where the route sends it, so the palette and materials sentence leaves the shape prompt alone; `textUnless: texture_image` as above if refine has the same rule (u); no price row |
 | `meshy-retexture` | `image_style_url` (field name (u)) | texture-style, if verified | images | 1 | "Style Prompt" port takes the text |
 | `meshy-multi-image-to-3d`, `hunyuan3d-image-to-3d`, `worldlabs-environment`, every `krea-3d-*` | views | views | never | 0 | text where the node has a prompt |
 
@@ -1001,6 +1083,268 @@ If one ever gets a port, the contract test makes it declare an entry.
 - **Colour controls usable as palette data:** `recraft-v4-raster` and `recraft-v4-svg` (`colors` as a JSON string of `[{"r","g","b"}]`, `background_color`). Not palette targets: Krea enhance `rescale_color` / `color_preservation` (booleans), `meshy-3d-print` `max_colors` (a count), sticky-note `color`. `cinema-color`'s `palette` is a grade on an existing image, not a generator: out of scope.
 - **Aspect params** (134 nodes): `aspect_ratio` enums (most), fal `image_size` presets, OpenAI `size`, Runway `ratio` pixel pairs, `aspectRatio` (`veo-3`), Ideogram `1x1` style. Nodes with `auto` or `adaptive` follow the input image; the board never replaces `auto` when an image is wired. Veo with references allows only 16:9 or 9:16 (r).
 
+### 5.8 The board's word history (PR7e; Q28 b, Q30 c)
+
+Justin chose Q28 b (2026-10-20): under "Act directly", agents and Analyze may delete or merge a look that holds words, undoable from the Studio. Today that undo lives only in one open Studio tab (§3.4), so a delete made while the Studio is closed would lose the words for good. That would break "agents may do anything undoable". This history fixes it: a removed look's frame, words and the batch's inverse are kept on disk, and anyone can restore them from the Studio, the CLI or MCP, whether or not the Studio was open.
+
+Justin then chose Q30 c (2026-10-20): "b), and the same history for every words field an agent or Analyze replaces or clears: the board's and each look's Direction, Avoid, "must appear" and "keep out" colours, and music direction. Under "Ask first", each becomes a proposal." So the history keeps two kinds of entry in one list, **removed looks** and **changed words**, with one store, one restore route, one set of limits and one name on screen: **"Recently changed words"**.
+
+**The fields (Q30 c).** On the board and, from PR7b, on each look (`lookFields[F]`):
+
+| Words field | Board | Look | Kind |
+|---|---|---|---|
+| Hand-written brief | `briefOverride` | `briefOverride` | text (the whole record: `text`, `basis`, `by`, `updatedAt`) |
+| Direction | `direction` | `direction` | text |
+| Avoid | `avoid` | `avoid` | list |
+| "Must appear" colours | `pinnedColors.include` | `pins.mustAppear` | list |
+| "Keep out" colours | `pinnedColors.exclude` | `pins.keepOut` | list |
+| Music direction (PR18) | `musicDirection` | `musicDirection` | text (the whole record) |
+
+- Not in Q30 c's list, so not kept: `colorChoices`, `clashMode`, `sendNotes`, mode, strength and the name (settings, not words), and the board's `notes`, image `notes` and `privateNote` (words, but not named). §8 lists the second group as a gap for Justin; each is one row in this table if he wants it.
+
+**Where agents write these fields today** (origin/main `77e73b45`):
+
+- **Store.** `MoodboardStore.update` (`moodboard_store.py:541`) sets `direction`, `avoid` and `pinnedColors` with no guard (`:587-592`). `briefOverride` goes through `_set_override` (`:369-403`), whose `_guard_override` (`:355-366`) refuses an agent's replace or remove of the person's text because "the board keeps no history". `keep_brief_override` (`:616-641`) refuses an agent's Keep (`:635`).
+- **Route.** `PUT /api/moodboards/{id}` (`main.py:10996-11026`) passes `by=_moodboard_author()` (`:10767-10770`), which is only "person" or "agent", with no name. `_refuse_override_change` (`:10773-10781`) turns a refusal into the person gate's 403. Keep has its own route (`:11029-11045`).
+- **CLI and MCP client.** `moodboard_client.update_board` (`backend/moodboard_client.py:728`) builds Direction (`:821-825`), Avoid (`:826-827`), the pins (`:828-830`) and the brief (`:852-861`), and refuses the person's brief before any PUT (`:859-860`). Its `previous` (`previous_settings`, `:953`) gives the agent a way back. The person gets none.
+- **MCP** `moodboard_update` (`mcp_server.py:912-966`). Its docstring says "The person's own hand-written brief is theirs: changing or keeping it is refused" (`:940`), and `INSTRUCTIONS` says "Only the person may change their own hand-written brief" (`:47`). The agent's name reaches the backend as `X-Nebula-Agent` (`_board_headers`, `:798-799`).
+- **CLI** `nebula moodboard set` (`cli/commands/moodboard.py:366`; `--direction`, `--avoid`, `--pin-color`, `--keep-out-color` and `--brief` at `:515-529`).
+- **Planned in this plan:** `look.set` and `look.inherit` (PR7b, §5.1), the board's `musicDirection` on PUT (PR18), and the reader's music draft (PR19).
+
+Every one of these ends in `MoodboardStore.update` or the `/edits` commit. PR7e hooks those two places, so no client needs to know about the history. The PUT route also gets `actor_record` from the request headers (as `/edits` does from PR3), so an entry names "Claude", not just "agent".
+
+**The brief's gate opens (Q30 b, part of c).** Under "Act directly", `_guard_override` stops refusing an agent's replace or remove of the person's brief. The old record goes into the history, and the person can restore it from anywhere.
+
+- **"Keep" stays the person's.** It answers the person's own "changed since you edited this" notice and loses nothing, so the refusal at `:357-361` stays, and so do the client's (`:873`) and the keep route's.
+- `BriefOverrideProtected` keeps only the Keep case. The client's early refusal (`:859-860`), the MCP docstring line (`:940`), the `INSTRUCTIONS` line (`:47`), `skills/nebula/SKILL.md` and `docs/MCP-SETUP.md` change to "an agent's change to the person's words is kept in Recently changed words, and the person can restore it".
+- The same opening applies to PR7b's gate inside `look.set`, PR18's music-direction gate and PR19's "never overwrites one the person wrote". Each keeps its refusal until PR7e merges, and loses it in PR7e (or in its own PR, if it lands after PR7e).
+
+**Where it is stored.** `MOODBOARD_ROOT/.history/<boardId>.json`, as `{boardId, entries: [...]}`.
+
+- A dot folder is skipped by `_find_moodboard_file` (`moodboard_store.py:118`), `list`'s glob, the project re-home and `asset_trash.restore`, but not by the two start-up scans. `migrate_store` (`moodboard_brief.py:990-995`) and #90's `save_colour_checks` (`:1051-1075`) both walk every dot folder so they can reach the trash (`is_trash_folder` is true for any dot folder, `asset_trash.py:172-174`). Both run at every backend start, in a thread (`main.py:2307-2313`).
+  - A history file has no `briefVersion`, so the migration would rewrite it.
+  - `save_colour_checks` calls `refresh_colour_check` on any JSON object, which adds a `colorCheck` (`:430-441`), and writes the file back.
+  - PR7e gives both scans one helper, `board_scopes(root)`, that yields the board folders and `.trash` only and skips other dot folders. PR7e tests each scan. Whichever of PR7e and PR9a lands first carries it (§5.9).
+- Keyed by board id, so it survives a board move and a trash and restore (same id).
+- Not inside the board file: a worst-case removed-look entry is about 33 KB (Direction 4,000 characters, Avoid 40 × 200, a hand-written brief 20,000, music 600), and a changed-words entry, which keeps before and after, about 70 KB. Either would bloat every `get` and `list`.
+- Purging a board deletes its history file too.
+
+**A removed-look entry:** `{id: "h_<12hex>", kind: "look", op: "look.delete" | "look.merge", batchId, boardVersion, at, by: actor_record(...), requestedBy?, frame, lookFields, aliasAdded?, restore: {ops}, status: "open" | "restored", restoredAt?, restoredBy?}`.
+
+- `frame` is the frame record, with its id.
+- `lookFields` is that look's whole map: Direction, Avoid, pins, the hand-written brief with its basis and `by`, `colorChoices`, `musicDirection`.
+- `restore.ops` is the inverse `/edits` already builds (§5.1), with PR7b's look slices. The new code only saves it.
+- No `lookAnalyses`: they are derived, and undo never brings an analysis back (§5.4); Measure reruns for free.
+
+**When a removed-look entry is written.** Any `frame.delete` or `frame.merge` by a writer that isn't the person (an agent, the reader, anonymous) on a look with any non-empty `lookFields`. It is checked with `by != "person"`, as `_guard_override` does. No author stamps are needed: every non-person loss of words is kept, whoever wrote them. The person's own deletes keep §4.6's Studio toast and write no entry.
+
+- Copy: "Claude deleted Grain and its own Direction and brief · Restore". "Your words" is said only of a hand-written brief, the one field that carries `by`; other fields say "its own words".
+- **Where the person sees it (Notes).** The delete is the agent's own action, so its label ("Deleted Grain") shows at its cursor. Because it costs the person words, Nebula also posts a **Restore note** on the board, in the agent's name, with a Restore action (`about: "removedLook"`, §5.9; one note per write, below). Analyze's removals go in its run's end note instead.
+- On a merge, the target keeps its own words (§4.6). The absorbed look's words, alias and member slices go into the entry.
+- Journal: `board.frame` with `{historyId, action: "removed" | "restored"}`.
+
+**A changed-words entry (Q30 c):** `{id: "h_<12hex>", kind: "words", batchId, boardVersion, at, by: actor_record(...), requestedBy?, scope: "board" | {frameId, name}, changes: [{field, before, after}], supersedes?: [id], status: "open" | "restored", restoredFields?: [field], restoredAt?, restoredBy?}`.
+
+- `field` is a name from the table above (`direction`, `avoid`, `mustAppear`, `keepOut`, `briefOverride`, `musicDirection`). `before` and `after` are the stored values. For the brief and the music direction that is the whole record, so a restore also brings back its `basis` and `by`, and "changed since you edited this" shows exactly when it should.
+- On a look, `null` means "uses the board's". `look.inherit` over a look's own value gives `after: null`.
+- `by`, `requestedBy` and `at` belong to the write; every change in the entry shares them.
+
+**When a changed-words entry is written.**
+
+- A write by anyone but the person (`by != "person"`: an agent, the reader, anonymous; Justin's own CLI counts here too, since the person gate doesn't treat it as the person) that **loses words** in a field from the table:
+  - a text field whose old value was not empty and is now different, or empty;
+  - a list field that lost at least one old item.
+- A pure add (an Avoid item, a pinned colour, a look's own Direction over an inherited one) loses nothing and writes no entry. Removing the item undoes it, and add-only entries would fill the cap of 50 for nothing. The agent's own `previous` still covers it.
+- The person's own edits never write an entry, as with looks.
+- **One entry per scope per write.** A PUT or an `/edits` batch that changes five fields on the board writes one entry with five changes. A batch that changes the board and two looks writes three entries, sharing one `batchId`. Splitting by scope keeps an entry under about 70 KB (the brief 20,000 characters twice, Direction 4,000 twice, Avoid 40 × 200 twice, music 600 twice, the pins).
+- **Chains fold.** An agent may write Direction ten times in a turn. If an agent's write changes a field whose current value came from that same agent's still-open entry (same actor id, same scope and field, and that entry's `after` equals the current value), the new entry starts from the old entry's `before` and lists the old entry in `supersedes`. Folding stays within one scope. The new entry also carries over every change of the old entry that hasn't been restored, in any field, with its `before`, `after` and `restoredFields`, not only the field being folded: an agent that wrote Direction and Avoid, then Direction again, leaves one entry whose Restore brings back both. The old entry is hidden once the new one is committed, and a restore that names it (an old note, a stale `historyIds`) resolves to the entry that superseded it. So Restore gives back the person's words, not the agent's first draft, and ten edits use one slot. A change that ends where the chain began is dropped. Nothing is rewritten in place: if the write fails, the folding entry is uncommitted and ignored, and the old entry is still there.
+- Journal: `board.words` with `{historyId, scope, fields, action: "changed" | "restored"}`.
+
+**Crash safety.** The entries are written first, marked `pending` with the write's `batchId`, then the board. The board write saves that id as `historyBatch`. A version number is not the marker: the person's writes, Keep (`moodboard_store.py:637`) and the Analyze save (`main.py:11065`, through `update` at `:611`) all raise `version` without reading the history, so after a crash the next one of them would make an orphan entry look committed.
+
+- On read, a `pending` entry counts only when its `batchId` equals the board's `historyBatch`. Any other `pending` entry is an orphan: hidden on read, dropped on the next write that writes entries.
+- That next write first marks the matching `pending` entries committed (clears `pending`), drops the orphans, and drops every entry superseded by a committed one. That is safe by then: the folding entry's `before` holds everything the old one had.
+- No other write path reads or writes the history. A person's PUT, Keep or Analyze save leaves `historyBatch` as it is, so an orphan stays hidden.
+
+**How long entries stay (Q34 a, Justin 2026-10-20).** No timer, like the board trash. The limits count both kinds together.
+
+- At most 50 open entries per board. A superseded entry doesn't count, and it is dropped on the next write that writes entries (crash safety, above), so ten folded edits leave one entry on disk.
+- Restored entries are pruned first, keeping the last 20. Open entries are never dropped on their own.
+- A write that would need more entries than are left is refused whole (the batch is atomic): 409 `board_history_full` ("Clear Recently changed words in the Studio first"). That is the only refusal left. The person's own writes write no entry, so they are never refused.
+- Worst case, a file of 50 open and 20 restored entries at about 70 KB each is about 5 MB. Only non-person writes that lose words read it; the person's writes and every `get` never do.
+
+**Restoring.** `POST /api/moodboards/{id}/history/{hid}/restore` (or `{historyIds}` for a whole write's entries, as a note's Restore sends). Anyone may call it, as with a trash restore. A removed look runs as one atomic `/edits` batch:
+
+1. Recreate the frame with **the same id**, so nodes saved on that look run again (§4.11.7).
+2. Write `lookFields[F]` back. The words always come back; they are the point.
+3. Run `restore.ops`. A slice that changed since is skipped and reported: "#12 moved since, left as is" (§5.1).
+4. On a merge, also remove `lookAliases[G]` and move G's former members back out of the target where they are unchanged. The lighter copies dropped at the merge come back.
+5. Mark the entry `restored`, broadcast `storedAssetChanged` with `history: {id, status}`, and journal it.
+
+- A new "Grain" in the meantime: the restored look is "Grain (restored)" (names are unique ignoring case, §4.1).
+- 100 frames already, or the board in Recently deleted: 409 (`in_trash` for the second, like the move route).
+- An image deleted since: skipped and reported.
+- Restoring twice: 200 with `alreadyRestored`, nothing applied.
+- Nodes' saved `look` params are never touched (Q27 a: nothing changes at run time).
+
+**Restoring changed words.** One atomic write, field by field, as the person or the caller:
+
+- **A text field** (Direction, the brief, music direction) goes back only if its current value still equals the entry's `after` (the `expect` of §5.1). If someone changed it since, the field is skipped and reported: "The board's Direction changed since Claude's edit, left as is". The list then offers **"Restore anyway"** (`{force: ["direction"]}`), which puts `before` back over the newer text.
+  - **Skip, not refuse the whole entry:** as with `restore` slices (§5.1), one changed field shouldn't block the other four.
+  - **Never overwrite on its own:** the newer text may be the person's, written after the agent's. The person's edits write no entry, so a silent overwrite would lose their newest words for good.
+  - **But offer "anyway":** the old words are the point. A person who wants them back over the newer text gets them in one click. Their restore is a person edit and writes no entry. An agent that forces is a non-person write that loses words, so it writes its own entry. Either way nothing is lost.
+- **A list field** (Avoid, "must appear", "keep out") has no `expect`. Restore puts back the items the change removed and takes out the items it added, where they are still there. Items added since stay. A re-added item goes back at its old place where it can, else at the end.
+  - Removals first, then re-adds, across both pin lists in one pass, so a colour the agent moved from "keep out" to "must appear" goes back cleanly. The result goes through the same `normalize_pinned_colors` and `_set_color_choices` as `update` (`moodboard_brief.py:192-197`, `moodboard_store.py:318-331`, called at `:599`).
+  - An item that can't go back is skipped and reported: Avoid is at 40 items, a pin list is at `PINNED_LIMIT`, or a colour is now on the other list ("#E8593C is kept out now, left as is").
+  - Not given back: a "Keep anyway" choice that the agent's keep-out add pruned from `colorChoices.keep`. `colorChoices` is a setting outside the table above (`:318-331`), so the person makes that choice again.
+  - An item the agent added, then the person removed and added again, is taken out too: person edits write no entry, so the history can't tell. Restore names every item it takes out ("Took out #E8593C from must appear").
+- **A look deleted since:** its fields are skipped with "Grain is no longer on this board". The look's own removal entry, if it has one, is named.
+- **Partly restored:** the entry stays open, with `restoredFields`, until every field is back or the person removes it, so "Restore anyway" still works from the list. Fully restored: `restored`, as for looks. A second restore of a restored entry: 200 with `alreadyRestored`, nothing applied.
+- A restored brief whose `basis` no longer matches the board shows "changed since you edited this" again, as it did before the agent's change.
+- Broadcast `storedAssetChanged` with `history: {ids, status}`, and journal `board.words` with `action: "restored"`.
+
+**The list, the CLI and MCP: "Recently changed words".** One list for both kinds, newest first:
+
+- **Studio** (PR9's half): in the Whole-board panel. Rows: "Claude deleted Grain, which held your brief · Restore", "Claude replaced the board's Direction and Avoid · Restore", "Gemini 4 Argon rewrote Painterly's music direction (asked by Claude) · Restore". A row opens to show the old words. A partly restored row reads "Direction changed since · Restore anyway".
+- **Routes:** `GET /api/moodboards/{id}/history` (`?kind=look|words`) lists entries; `DELETE …/history/{hid}` removes one for good, person only (`require_person`).
+- **CLI:** `nebula moodboard history <board> [--kind look|words] [--json]` and `nebula moodboard restore <board> <hid> [--anyway FIELD …]`.
+- **MCP:** `moodboard_history(board, kind?)` and `moodboard_restore(board, history_id, force?)`.
+- `nebula trash list` and the Studio rail keep their removed-looks line only ("2 removed looks on GM board"). Changed words aren't a deleted thing, so they stay in the board's list.
+
+**One Restore note per write.** Every entry a write makes (one `batchId`) gets one Restore note in the actor's name, never one per field or per look:
+
+- "Claude replaced the board's Direction and Avoid · Restore". "Claude deleted Grain and Dusk and their own words · Restore". "Claude changed Painterly's brief and the board's Direction · Restore". "Your" is said only of a brief the person wrote (`by: "person"`).
+- Its action is `history.restore {boardId, historyIds}`, every entry of the write. The list keeps each entry for one at a time.
+- `about: "removedLook"` when the write only removed looks, else `about: "changedWords"`. Both show the label "Restore".
+- A folding write (above) replaces its chain's Restore note only while that note is unread and every one of its `historyIds` is superseded by this write, like a "since its last turn" note (§5.9), so ten edits of Direction leave one note. Otherwise (the note was read, or it also covers a look or scope this write didn't fold) the fold posts a new one, and the old note's Restore still works for its other entries; a superseded id in it resolves to the new entry.
+- Restore notes are Nebula's template notes (`source: "nebula"`), so they skip the 6-a-minute rate limit (§5.9). The 50-entry cap and the 100-note cap bound them. A note pruned from Notes leaves its entries in the list.
+- An Analyze sort puts its removals in the run's end note, with the same Restore action. The reader's music-direction rewrite (PR19) is not a sort run, so it posts its own Restore note.
+
+**Seen with the Studio closed.** The Moodboard node's stop message for a deleted look adds "Deleted by Claude · Restore" (§4.11.7). When no Studio has the board in view (no fresh `BoardViewBook` slot), the Restore note is also posted to the open project's main-canvas Notes, saved with the project (§5.9); both copies carry the same `historyIds`, so a restore from either marks both "Restored". There is no canvas toast. The Studio's Whole-board panel keeps the list, "Recently changed words".
+
+**With the Studio's own undo** (one step, never restored twice): see §5.4. The batch response and broadcast carry `undo.historyIds`; a Studio Undo marks each entry by what it actually put back in the same write (fully applied: `restored`; a field skipped as changed since: open with `restoredFields`, so "Restore anyway" still works); a restore from elsewhere drops the Studio's step; undoing out of order works because restore goes through `expect` slices. An agent's PUT makes no Studio undo step, so its changes come back through the note or the list.
+
+**Under "Ask first".** With the setting on "ask", an agent's write that would write an entry, of either kind, becomes a **board proposal** `{boardId, baseVersion, ops | fields, note}`: `ops` from `/edits`, `fields` from a PUT. The whole write becomes one proposal, never split. The PUT answers 202 with `{proposalId}`, and the CLI and MCP say "Proposed: waiting for the person's OK". So each agent change to the person's words is a proposal (Q30 c). It is held like the graph's `ProposalBook` (the same caps and 900 s life, accepted only through the person's `accept_key`) and shown as a note in the corner: "Claude wants to delete Grain (it has its own brief) · Accept / Reject" or "Claude wants to replace the board's Direction · Accept / Reject" (§5.9). After 900 s the note stays in the list with its actions off ("Expired"). The graph's own proposals keep `ProposalBar`, unchanged. On accept the batch runs with `actor = agent, approvedBy = person`, and the entry is still written. Neither the setting nor board proposals exist today (§3.4), so this part waits on the separate setting PR (§8). Until then everyone is on "Act directly", and with this history every such delete or change is undoable.
+
+**Analyze** (actor kind `reader`, with `requestedBy`) is always a non-person writer, so each merge or delete of a look with words writes an entry, and so does any words field it replaces. In this plan that is the music direction it rewrites on request (PR19); the sort itself writes no words (new looks get no `lookFields`, §4.11.9). Asked for by the person, it acts directly whatever the setting: one undo step plus the entries. Asked for by an agent under "Ask first", the whole sort batch becomes one board proposal, never split, because its placements depend on the merge (§5.6.1). The same holds for a music-direction rewrite (PR19) an agent asks for through `agent_spend.decide` under "Ask first": when it would replace a music direction, it becomes one board proposal with `fields: {musicDirection}`.
+
+### 5.9 Notes: the agent's and the reader's notices (PR9a; Justin's change, mockup v5.2)
+
+Justin (relayed by GM - Design, 2026-10-20): "it should have a dedicated area on the canvas so it's out of the way and we are not seeing text at it's cursor everytime it notices something. Like maybe little area in the top right." His follow-ups: an agent's own actions stay at the cursor; notes persist; Argon's results go into notes; the main canvas uses the same component. Count = unread was GM's recommendation; Justin confirmed it (Q31 a, 2026-10-20).
+
+**The rule: action label or note.**
+
+- **Action label (stays at the cursor).** What the agent itself just did: "Moved #12 into Dither", "Added X", "Wiring a → b", "Deleted Grain". Every template `say` Nebula writes today is one; the agent's own free `note` and `reply` texts are allowed exceptions (§3.5). Short, in memory, gone in 6 s. Unchanged.
+- **Note (goes to the corner).** Anything an agent or the reader *noticed*, *reports* or *suggests*: "You added the lake to Painterly and made the meadow the heaviest", "#37 I couldn't place", "Start a Painterly × Dither frame?".
+- **The reader's results that need the person become notes:** its end-of-run note (couldn't place, couldn't read, kept, removed looks' words), each hybrid suggestion, one note for a run's `alsoIn` suggestions, and an "Ask first" board proposal (§5.8). The overseer panel's streaming lines stay as they are (§5.6.1).
+  - **The end note** is a template: "Sorted 20 into four looks by what they share. #37 I couldn't place." Its refs are the Unsorted and couldn't-read images, plus a Restore action when the run removed a look's words. It is posted when the run leaves something for the person, or when an agent asked for the run (the person may not have watched). A clean run the person asked for posts none; the bar's last line is enough.
+  - **The `alsoIn` note** sums up ("#3 and #9 also fit Dither") with "Add copies" (accepts all of them in one batch, one undo step) and "Not now" (dismisses all). One at a time: the selected reference's side panel shows "Also fits Dither · Add copy" (PR11).
+- **The cursor never moves to deliver a note.** Nebula can't check what an agent means, so the split rests on the tools and their docs. `say` is capped at 140. `say`, `edit_canvas`'s and `propose_change`'s `note` and `resolve_pin`'s `reply` are all documented as "your own action only" (§3.5). `post_note` is the documented place for what you noticed. The three free fields stay at the cursor as allowed exceptions, because each describes the agent's own edit, proposal or reply.
+
+**The record.** `services/agent_notes.py` (code name `agentNotes`, because "notes" already means image notes and pins, §3.5):
+
+```
+{id: "an_<12hex>",
+ author: {kind: "agent" | "reader", id, name, color},  // the agent's header identity, or the reader's fixed identity (§5.6.1)
+ source: "agent" | "nebula",         // who wrote `text`: the agent, or Nebula from a template
+ requestedBy?: {kind, name},         // reader notes: who asked for the run
+ about: "sinceLastTurn" | "analyze" | "suggestion" | "removedLook" | "changedWords" | "proposal" | "other",
+ at, text,                           // text ≤ 240 characters, plain, whitespace collapsed
+ refs: [imageId] (board) | [nodeId] (main canvas),   // ≤ 12
+ actions?: [{label, op}],            // ≤ 2; Nebula-written notes only
+ readAt?, dismissedAt?, actedAt?, actedBy?}
+```
+
+- **The header** is Nebula's: the author's name, then a muted label from `about` ("since its last turn", "Analyze", "Restore", "waiting for your OK"). Agents never write header text.
+- **Actions** are a closed set, each with a fixed label: `suggestion.accept {suggestionIds}` ("Make frame" for a hybrid, "Add copies" for a run's `alsoIn`), `suggestion.dismiss {suggestionIds}` ("Not now"), `history.restore {boardId, historyIds}` ("Restore": every entry of one write, §5.8), `proposal.accept` / `proposal.reject {proposalId}` ("Accept", "Reject"). Agent-posted notes carry none in this plan: an agent that wants something done does it ("Act directly") or proposes it ("Ask first").
+- **A note points at the record it is about** (`suggestionIds`, `historyIds`, `proposalId`) and never copies it. `suggestions[]` stays the source of truth for suggestions (§4.1).
+
+**Refs are checked, never guessed.**
+
+- Board refs are image ids; main-canvas refs are node ids, checked against the graph the server holds for the active project (the one `look_at_canvas` reads (u)). Unknown ids are dropped and listed in the response's `dropped`. Nothing is ever outlined from a guess.
+- **Board numbers are drawn by Nebula**, as in the reader trace (§5.6.1). An agent may write `#12` in its text; at post time the server turns each `#n` into a stored image id token and draws it with the image's current number ("removed" once it's gone). A `#n` that isn't on the board refuses the note (422: "#45 isn't on this board"), so a note never names the wrong card. Each `#n` also joins `refs`.
+- Template notes are built from ids only, like trace lines.
+
+**Private notes are never quoted.**
+
+- An agent can read private notes (`moodboard_get` flags them "never put in a prompt", §5.5), so a note could quote one. The server refuses an agent note (422 `note_quotes_private_note`) when its text, normalized (NFKC, case-folded, whitespace collapsed, punctuation dropped), contains a whole private note of 12 or more normalized characters, or any 32-character run of a longer one.
+- Board notes check that board. Main-canvas notes check every board the project can see: its own and the Global ones, cached per board `version` (u: cost on many boards).
+- A private note under 12 characters can't be checked without false hits; this is documented, not hidden.
+- Template notes contain no note text by construction.
+
+**Where notes are saved.**
+
+- **Board:** `MOODBOARD_ROOT/.notes/<boardId>.json`, `{boardId, notes: [...]}`, written atomically like `_write_json` (`moodboard_store.py:130-133`). It is a side file, as the word history is (§5.8), because marking read must not touch the board file (§3.5). Keyed by id, so it survives a board move and a trash restore; purged with the board. Global boards keep their notes with the board, not with a project.
+  - The dot folder needs the `board_scopes` change (§5.8). Both start-up scans, `migrate_store` and `save_colour_checks` (`moodboard_brief.py:990`, `:1051`; run at `main.py:2307-2313`), walk every dot folder. `save_colour_checks` would add a `colorCheck` to `{boardId, notes}` and write it back at every start. Whichever of PR9a and PR7e lands first carries the change, and the test that a `.notes` and a `.history` file stay byte for byte after both scans.
+- **Main canvas:** on the project record, `catalog["projects"][id]["agentNotes"]`, next to `pins` and outside `snapshot`, written in one `store.transaction()`, like pins (`canvas_pins.py:7-12`, `:165-182`). Autosave never drops them; switching projects brings each project's notes; trash moves them with the project (`move_to_trash` pops the whole record, `project_store.py:109`, and `restore_from_trash` puts it back, `:121-124`; PR9a keeps the test). With no project open, posting is refused like a pin ("Open or create a project first").
+- **Limits (§4.10):** 240 characters, 12 refs, 2 actions; 100 notes per board and 200 per project, oldest read note pruned first, then oldest unread, so an agent can't grow the file; 6 posts a minute per author per surface (429 `notes_rate_limited`).
+  - The rate limit covers `source: "agent"` notes only. Notes Nebula writes from a template (`source: "nebula"`: Restore, end-of-run, suggestion and proposal notes) skip it, because each follows from one write already made. A Restore note covers one whole write (§5.8): a batch that removes seven looks with words, or a PUT that replaces five words fields, posts one Restore note and loses none. The caps still apply.
+- **One "since its last turn" note at a time.** A new `sinceLastTurn` note from the same author on the same surface replaces its previous one while that one is still unread, so the count doesn't climb turn after turn.
+
+**Unread and the list.**
+
+- The chip counts **unread** notes: no `readAt` and no `dismissedAt` (Q31 a, Justin 2026-10-20: "the chip counts notes you haven't opened; opening the list clears it; the list keeps everything").
+- **Opening the list marks every note in it read** (`POST …/agent-notes/read {upTo: noteId}`). The count clears; the full list stays.
+- A card that drops and dismisses itself doesn't mark its note read: the person may not have looked. Clicking it, or one of its actions, does.
+- × or "Not now" sets `dismissedAt`. A dismissed note stays in the list, greyed. "Clear" in the list removes read notes for good (person only).
+- Read, dismiss and clear are **person only** (`require_person`), so an agent can't hide a note from the person. Agents post and list.
+- There is one reader of the corner, the person, so read state is per board or per project, not per viewer. Every tab follows it through the socket.
+
+**Outlines.**
+
+- When a note's card is up, and while its row is hovered in the list, each card it names gets an outline in the author's colour: orange for agents (the author's `color`, drawn as `--agent-color`, `agentCursor.css:54`), lavender for the reader (`--reader-color`, §5.6.1). Mockup v5.2: inset −6 px, 3 px, radius 15; lavender adds a soft glow.
+- Board refs outline every placement of the image (linked copies, C13), as v5.2's `nt-2` outlines both copies of #12. Main-canvas refs outline the node.
+- One outline layer serves Notes and the reader trace (PR10b), so the two never stack.
+
+**The chip.**
+
+- **Studio:** in the top bar, first in `WorkspaceHeader`'s actions slot, before the save state (`MoodboardStudioView.tsx:456-476`: save state, Retry on error, Move, Delete). v5.2's spacer, presence and `v14 ▾` are mockup-only; this plan doesn't add them.
+- **Main canvas:** its own fixed mount in the top right, level with the header pill (`top: 24px`, `CanvasTabs.css:3-12`), not inside the pill. The pill sits at the top centre, and Justin asked for "a little area in the top right". If the chat panel's rect reaches that corner (dragged up there), the chip moves left of it. That nothing else is fixed in the main canvas's top right is (u); PR9a checks it at 1440×900 and 1920×1080.
+- A pill, as v5.2 draws it: both authors' dots (the agent's orange "A", Argon's lavender "Ar", overlapped), the label "Notes", and the unread count. It is always there, so the corner reads as the notes' own place (Justin: "a dedicated area"); at 0 the count is muted, and a dot brightens while its author has unread notes.
+- On a new note the count changes and pops (scale 1.4 → 1 on a spring), and a ring shows on the chip for as long as the card is up. The ring and the count take the colour of whoever wrote the newest note: orange for the agent, lavender for Argon (GM, mockup v5.2, 2026-10-20).
+
+**The card.**
+
+- Drops from the chip into the top-right corner, just under the bar (v5.2: right 22 px, top 82 px, 430 px wide, `transform-origin` under the chip). Header: dot, author name, muted label. Text at reading size, numbers drawn from refs. Actions, if any, below.
+- **Keeping clear of chat, on both surfaces.** The chat panel is docked bottom right, and at 1440×900 its top is about 74 px from the top (§3.5), so v5.2's card (top 82 px, right 22 px) would cover it. `NotesCorner` measures the rendered `.chat-panel` rect (a `ResizeObserver` plus window resize, which also covers the dragged, free position) and never reads `uiStore.panels.chat.width`. While the card's rect would meet the chat's, the card drops just left of the chat's left edge. The Studio mount does the same, since `ChatPanel` mounts there too (`App.tsx:296-299`). GM to confirm the place (u).
+- **Motion, tuned springs:** in from opacity 0, y −12, scale 0.97 on the mockup's spring (response 0.42 s, damping 0.85, sampled by `lib/springs.ts`, which PR9a creates; PR6 adds its tokens to it, or creates it if it lands first); out to opacity 0, y −10, scale 0.97 on a soft spring (the mockup's `power2.in` is replaced, per Nebula's motion rule). Outlines fade in 0.8 s after the card, 0.25 s apart, and fade out with it.
+- **About 4 s, then it leaves by itself** (v5.2 holds cards 2.6 to 3.8 s). Hover or focus pauses the timer, as `ProjectSwitchToast` does (`:10-25`). The note stays in the list.
+- **One card at a time.** Notes that arrive together drop one after another; four or more at once become one card, "4 new notes", that opens the list.
+- **No drop when nobody is looking:** a hidden tab, or the Studio on another board. The count still rises.
+- **Reduced motion:** no drop or scale, an opacity change only; outlines appear without a stagger; the count changes without the pop.
+
+**The list.**
+
+- Clicking the chip drops a panel from it: newest first, each row with its author dot, name, label, time ago, text and actions. A dismissed or acted note shows its state ("Not now", "Restored", "Frame made", "Expired"). Clicking a row selects and frames its cards.
+- Esc or a click outside closes it. It scrolls past about 8 rows.
+
+**Actions run as normal edits.**
+
+- An action runs as the person, through the same route the button would use elsewhere: `/edits` for suggestions, the history restore route (§5.8), the proposal accept and reject routes. So it is undoable (one Studio undo step), journaled and attributed (`actor = person`, and for a proposal `approvedBy = person`).
+- The note gets `actedAt`, `actedBy` and is marked read.
+- **"Not now"** runs `suggestion.dismiss` (each suggestion is kept as dismissed and never suggested again, §4.1; Q35 a, Justin 2026-10-20: "Dismiss it for good") and dismisses the note. From the list, "Make frame" stays on a dismissed suggestion while its members are unchanged (`suggestion.accept` takes a dismissed suggestion too). On a note with no suggestion, × just dismisses.
+- A stale action (suggestion no longer open, entry already restored, proposal expired) is shown off with its reason, never run.
+
+**How an agent posts a note.**
+
+- **Routes:** `POST /api/moodboards/{id}/agent-notes` and `POST /api/canvas/agent-notes` (the active project, like pins), body `{text, refs?, about?}`. `GET` on both lists notes (`?unread=1`). `POST …/agent-notes/read`, `POST …/agent-notes/{nid}/dismiss` and `DELETE …/agent-notes?read=1` are person only. Agents may set `about` to `sinceLastTurn` or `other` only; the other values are Nebula's.
+- **MCP:** `post_note(text, board?, refs?, about?)` and `list_notes(board?, unread?)`, added to `NEBULA_MCP_TOOLS` (`krea_agent_mcp.py:38`) and the allow-list (`agent_profiles.py:70`).
+- **CLI:** `nebula note "…" [--board X] [--ref 12 …] [--node n7 …] [--since-last-turn]` and `nebula notes [--board X] [--unread] [--json]`.
+- **Instructions:** a line in `INSTRUCTIONS` (`mcp_server.py:34-52`): "Your cursor's `say` is for your own action. What you noticed, a report or a suggestion goes in `post_note`; the person reads notes in a corner, not at your cursor." `point_at`'s docstring loses "narrate" (`:161-165`). `edit_canvas`'s `note` (`:412`), `propose_change`'s `note` (`:263`) and `resolve_pin`'s `reply` (`:136-138`) stay at the cursor. Each docstring gains "your own edit (proposal, reply) only; what you noticed goes in `post_note`", and so does the CLI help for `apply --note` and `propose --note` (`cli/__main__.py:187`, `:148`) and `pin resolve --say`. `skills/nebula/SKILL.md:257-262` and `docs/MCP-SETUP.md:91-93`, `:137-143` say the same. The instructions test (`test_mcp_tools.py`) checks that the tool names are real.
+
+**On the socket.** `{type: "agentNotes", surface: "board" | "canvas", boardId? | projectId, op: "added" | "read" | "dismissed" | "acted" | "cleared", note?, ids?, unread, at}`, broadcast like `canvasPins` (`main.py:4119-4125`). A tab that reconnects refetches the list.
+
+**"Since your last turn."** The block (§5.5, PR9) is context in the agent's prompt, not a note. The agent may post one note about it (`about: "sinceLastTurn"`), as v5.2's `nt-1` shows: "You added the lake to Painterly and made the meadow the heaviest. Reading both now." Nebula never posts it on its own. The main canvas gets no "since" block in this plan (§8): an agent there posts notes about whatever it sees.
+
+**The shared component.** One component, two mounts:
+
+- `frontend/src/components/notes/`: `NotesCorner.tsx` (chip, card queue and list), `NoteCard.tsx`, `NotesList.tsx`, `notes.css`; `store/agentNotesStore.ts` keyed by surface (`canvas:<projectId>`, `board:<boardId>`); `lib/agentNotes.ts` (drawing refs, running actions).
+- Each surface passes an adapter: `numberFor(ref)` (the board's `#n`, or nothing on the main canvas), `outline(refs, color)`, `focus(refs)` and `runAction(action)`.
+- **Main canvas (PR9a):** the chip in `CanvasTabs`' header, a `NoteOutlineLayer` beside `AgentCursorLayer` (`Canvas.tsx:791`) outlining nodes. `CanvasUndoNotice` and `AgentLog` are unchanged: one is an action label, the other an in-memory activity log (whether the log should merge into Notes is GM's call (u)).
+- **Studio (whichever of PR9, PR10 and PR7e lands first):** the chip in the Studio header, outlines on `BoardCanvas` placements through the shared outline layer, and the card kept clear of the chat panel as on the main canvas.
+
+**Settled with GM (2026-10-20):** the ring and count take the newest note's author colour; while chat is open the card sits left of the chat panel, on both surfaces; the main canvas gets its own top-right chip mount, not the centred header pill. **GM is taking to Justin:** whether `AgentLog` merges into Notes; the label "Notes" next to image notes, the brief's NOTES row and pins (§3.5); what an opened note and the list look like (v5.2 never opens the chip).
+
 ---
 
 ## 6. PR sequence
@@ -1012,13 +1356,16 @@ PR1 to PR12 keep their numbers and order. The look PRs slot in after PR7 as PR7b
 | Lane | PRs, in order | Starts when |
 |---|---|---|
 | Canvas | PR1 → PR3 → PR5 → PR6 → PR7 → PR7b → PR10 → {PR10b, PR11} (either order); PR2 and PR4 early beside it | now (PR1 merged as #87) |
-| Canvas side | PR8 → PR9; PR12; PR7c and PR7d after PR7b | PR5 (PR8), PR7 (PR12) |
-| Adapters | PR13 → PR14 → {PR15, PR16, PR17, PR18, PR20 in parallel} → PR21 (after PR15, PR16, PR17) and PR23 (after PR15, PR16; PR20 for Meshy); PR22 after PR14 and PR7d; PR19 after PR4 and PR18 (works from images until PR10 lands); PR24 after PR15 and PR7b | #18 has merged |
+| Canvas side | PR9a (Notes) any time, before PR7e, PR9, PR10 and PR11; PR8 → PR9; PR12; PR7c, PR7d and PR7e after PR7b (PR7e before PR10 lets Analyze remove looks with words) | now (PR9a), PR5 (PR8), PR7 (PR12) |
+| Adapters | PR13a first and beside PR13 (before PR14); PR13 → PR14 → {PR15, PR16, PR17, PR18, PR20 in parallel} → PR21 (after PR15, PR16, PR17) and PR23 (after PR15, PR16; PR20 for Meshy); PR22 after PR14 and PR7d; PR19 after PR4 and PR18 (works from images until PR10 lands); PR24 after PR15 and PR7b | #18 has merged |
 
 - **Hard dependencies.**
   - Anything that edits `services/moodboard_brief.py` (`compose`, the bundle, `apply_to_generator`) comes after #18 merges: PR7b and PR13 onward.
   - Per-look work comes after frames: PR7b after PR7.
-  - The node's look picker (PR7d) after PR7b.
+  - The node's look picker (PR7d) and the word history (PR7e) after PR7b.
+  - Notes (PR9a) before PR7e, PR9, PR10 and PR11, which post notes. PR9a needs nothing from the board lane (it creates `lib/springs.ts` itself), so it can start now. Whichever of PR9a and PR7e lands first carries the start-up scan change (`board_scopes` for `migrate_store` and `save_colour_checks`, §5.8, §5.9).
+  - The first of PR7e, PR9 and PR10 to land carries the Studio mount of Notes, so a board note always has somewhere to show.
+  - PR13a after #18 merges (it updates the golden file #18 reconciles), and before PR14 and PR15.
 - **Adapters don't wait for looks.** They read `bundle.images` and `representativeImages`. Before PR7d those are the Whole board's; after it, one look's. No adapter changes when PR7d lands. A test in PR7d runs the adapter suite on a look bundle.
 - **PR14 finishes the dispatcher.** Every hook later PRs need is in PR14 and tested there on fixture entries: `exclusive` per route, `textSlot` as a port or a param, the music-direction text, the negative field resolved from the active route, the palette-param step, the face policy and `requires`. After PR14 no adapter PR changes `apply_to_generator` or the planner; they add entries, ports and tests. A PR that finds it needs a dispatcher change stops and lands that change on its own first, serialized.
 - **Running in parallel.** PR15, PR16, PR17, PR18 and PR20 each add their own family's entries and ports. Entries in `moodboard_adapters.json` are kept sorted by node id, and each PR touches only its own nodes, so merges stay mechanical. PR15, PR16 and PR17 all touch `sync-krea-catalog.py`; land them in that order or rebase.
@@ -1051,7 +1398,7 @@ Status: merged as #87 (`e5072eb2`, 2026-10-19). On Justin's own GM board (4df26f
 - **What the person sees.** Nothing. `nebula moodboard show --json` lists placements.
 - **Tests that fail on main first.** `test_put_keeps_private_note_when_omitted`, `test_put_keeps_placements_from_a_stale_client`, `test_cli_set_on_a_board_with_placements`, `test_cli_layout_change_keeps_analysis`, `test_bundle_images_have_only_output_keys`.
 - **New tests.** An old board reads with a grid and the same `source_hash` and `brief_basis`; opening without an edit leaves the bytes unchanged; a new image lands after the last one, with no overlap; the layout is deterministic across two reads.
-- **Golden file**, captured on main before any change: `brief`, `analysis_is_current` and the handler outputs for boards before the brief fields, before `privateNote`, with a version 3 and a version 4 analysis, weight 0, excluded, and an unresolvable URL. It must stay identical after every later PR (after #18's one deliberate change).
+- **Golden file**, captured on main before any change: `brief`, `analysis_is_current` and the handler outputs for boards before the brief fields, before `privateNote`, with a version 3 and a version 4 analysis, weight 0, excluded, and an unresolvable URL. It must stay identical after every later PR (after #18's deliberate change, and PR13a's to `kreaStyleReferences` only, §4.8 item 7).
 - **Live check.** The byte check. `nebula moodboard add` on an old board saves the grid with the new image last. An open Studio still edits and autosaves the grid.
 - **Docs.** Contract 07 §1.1, §1.5. `implementation-notes.md` (the PUT merge change).
 - **Risks.** Image header reads on a large board's GET (cached; `list` skips them). Changing PUT semantics for API callers who relied on "omitted = default" (pinned by tests; the contract says so).
@@ -1102,7 +1449,7 @@ Runs alongside PR3 and PR5.
 ### PR6: Size is weight (C2), badges, motion; Board becomes the default
 
 - **Goal.** Feature parity with the grid, so the canvas can be the default view.
-- **Scope.** Corner `NodeResizeControl` with `keepAspectRatio`; the weight readout pops on each 0.05 step; one `resize` op on `onResizeEnd`; capped at full weight. Badges `#n · w`, note dots, set-aside dim. The List view slider resizes the card. **Measure follows steering edits (Q9)** 1.5 s after the last one; once PR7b lands it re-rolls only the scopes whose hash moved. Motion tokens in `moodboard-canvas.css` sampled by `lib/springs.ts` as `linear()` curves: `--mb-spring-move` (k 380, c 34, about 420 ms), `--mb-spring-pop` (k 500, c 36, 320 ms), `--mb-spring-soft` (k 220, c 28, about 520 ms). Drag lift 1.04 on a spring. Programmatic moves staggered 18 ms by number, capped at 500 ms. Camera moves eased by the sampled spring. Reduced motion sets durations to 0. Board becomes the default view.
+- **Scope.** Corner `NodeResizeControl` with `keepAspectRatio`; the weight readout pops on each 0.05 step; one `resize` op on `onResizeEnd`; capped at full weight. Badges `#n · w`, note dots, set-aside dim. The List view slider resizes the card. **Measure follows steering edits (Q9)** 1.5 s after the last one; once PR7b lands it re-rolls only the scopes whose hash moved. Motion tokens in `moodboard-canvas.css` sampled as `linear()` curves by `lib/springs.ts` (PR9a creates it; PR6 creates it if it lands first): `--mb-spring-move` (k 380, c 34, about 420 ms), `--mb-spring-pop` (k 500, c 36, 320 ms), `--mb-spring-soft` (k 220, c 28, about 520 ms). Drag lift 1.04 on a spring. Programmatic moves staggered 18 ms by number, capped at 500 ms. Camera moves eased by the sampled spring. Reduced motion sets durations to 0. Board becomes the default view.
 - **What the person sees.** A big card counts more, and the weight shows while he resizes. The board opens as a canvas.
 - **Tests.** Badge maths match the server's rounding; resizing one card never changes another's badge; the cap; a vitest fails if `moodboard*.css` contains `ease-in-out` or bare `ease`.
 - **Live check.** Screenshots during a resize. A real resize changes the palette shares after Measure.
@@ -1122,10 +1469,10 @@ Runs alongside PR3 and PR5.
 - **Goal.** Each look has its own analysis, its own brief and its own words, and Whole board stays exactly today's.
 - **Scope.**
   - `measure_board` / `roll_up_scope` split in `moodboard_analysis.py` (§4.11.2); `look_source_hash`, `look_analysis_is_current` (§4.11.3).
-  - `compose(board, look=None|F)`, `look_brief_basis` and the field rules of Q20 in `moodboard_brief.py`; #18's `colorCheck` per scope with its own basis (`look_colour_check_basis`), refreshed in the same write as `look.set`, `look.inherit` and board-word PUTs, and checked in memory by `compose` when stale (§4.11.3).
+  - `compose(board, look=None|F)`, `look_brief_basis` and the field rules of Q20 a in `moodboard_brief.py`; #18's `colorCheck` per scope with its own basis (`look_colour_check_basis`), refreshed in the same write as `look.set`, `look.inherit` and board-word PUTs, and checked in memory by `compose` when stale (§4.11.3).
   - Store: `lookFields`, `lookAnalyses`, `lookAliases` (§4.1), refused on PUT; `lookAnalyses` written by Measure; the slot for `musicDirection` in `lookFields` reserved for PR18.
   - Ops `look.set` and `look.inherit` with undo, the person gate and #18's notes gate. Journal kind `board.look`.
-  - Frame-op cleanup: `frame.delete` and `frame.merge` carry look maps in their undo slices, merge adds an alias, and Q28's rule refuses an agent's or Analyze's delete or merge of a look holding the person's words.
+  - Frame-op cleanup: `frame.delete` and `frame.merge` carry look maps in their undo slices, and merge adds an alias. Under Q28 b an agent's or Analyze's delete or merge of a look holding words is allowed under "Act directly", undoable from anywhere through PR7e's word history (§5.8). Until PR7e merges, PR7b refuses it as an interim guard, so no words are lost in between; PR7e removes the refusal.
   - The heaviest look (§4.11.6) as a shared function.
   - `look` report and the per-turn board block gain per-look lines (if PR8 and PR9 are in; else they add them).
   - CLI `nebula moodboard show <board> [--look NAME]` (a "Looks" section only when the board has looks), `set <board> --look Dither --direction …|--avoid …|--pin …|--keep-out …|--keep-anyway …|--brief-override …|--inherit direction`, `analyze` prints the looks. MCP `moodboard_get(look=)`, `moodboard_update(look=, …)`.
@@ -1134,9 +1481,9 @@ Runs alongside PR3 and PR5.
   - `test_look_analysis_uses_card_weights_and_board_numbers`.
   - `test_look_hash_ignores_layout_and_tracks_membership`.
   - `test_look_brief_basis_follows_board_direction_when_inherited`.
-  - `test_avoid_adds_and_direction_replaces` (Q20).
+  - `test_avoid_adds_and_direction_replaces` (Q20 a).
   - `test_frame_delete_carries_look_fields_in_undo`, `test_merge_adds_alias`.
-  - `test_agent_cannot_delete_look_with_person_words` (Q28).
+  - `test_agent_cannot_delete_look_with_person_words`: the interim guard only. PR7e replaces it with `test_agent_delete_of_look_with_words_restores_with_studio_closed` (Q28 b).
   - `test_board_direction_edit_updates_inheriting_look_left_out`: a board Direction PUT changes an inheriting look's `leftOut` in the same write, and a look with its own Direction keeps its list.
   - `test_look_set_refreshes_look_colour_check`.
 - **New tests.** A frameless board writes no look keys and its golden outputs are unchanged; Measure measures each image once (counted) and rolls up per look; speed at 300 images in 20 frames, with the number in the PR.
@@ -1162,8 +1509,8 @@ Runs alongside PR3 and PR5.
 - **Scope.**
   - Param `look` (type `moodboard-look`) and hidden `_lookName` on `nebula-moodboard`, beside `moodboard` and #18's `send_notes`, in `nodeDefinitions.ts` and by hand in `node_definitions.json` (no kept `export-node-defs.ts` run); regenerate `docs/MODEL_REFERENCE.md`. The server writes `_lookName` whenever `look` is set.
   - Inspector `moodboard-look` picker (a new branch beside `Inspector.tsx:631`), heaviest first.
-  - Stamping the heaviest look when a board is picked, a node is created with a board, or an agent sets `moodboard` without `look` (Q19), in the frontend and in `agent_params` / `canvas_proposals`, which also resolve a look name to its id.
-  - The card shows "board X · look Dither" and the "This board has 3 looks · Pick one" hint.
+  - Stamping the heaviest look when a board is picked, a node is created with a board, or an agent sets `moodboard` without `look` (Q19 a), in the frontend and in `agent_params` / `canvas_proposals`, which also resolve a look name to its id.
+  - The card shows "board X · look Dither" and, when the board gains looks, the hint on every node: "This board has 3 looks · Pick one" on Whole board, "2 new looks on this board" on a look.
   - Handler: the look bundle (§4.11.8), including the look's generator view of the analysis and `providerHints` rebuilt from the look; alias following with a run note; the stop messages for a deleted or empty look.
   - Dragging a look's tab from the Studio onto the canvas makes a Moodboard node set to that look.
   - `describe_node` and `look_at_canvas` lines.
@@ -1174,10 +1521,52 @@ Runs alongside PR3 and PR5.
   - `test_look_bundle_has_no_non_member_url` (walks every string in the bundle, `analysis` and `providerHints` included).
   - `test_old_node_without_look_reads_whole_board` with a golden bundle.
   - `test_deleted_look_stops_the_run`.
-- **New tests.** Stamping in each of the three paths; merge alias run note; the adapter suite run on a look bundle; the look name resolver refuses Unsorted and ambiguous names.
+- **New tests.** Stamping in each of the three paths; the new-looks hint on a Whole-board node and on a node set to a look, with `look` unchanged; merge alias run note; the adapter suite run on a look bundle; the look name resolver refuses Unsorted and ambiguous names.
 - **Live check.** Mocked Krea: two Moodboard nodes on one board, each set to a different look, wired to two Krea 2 nodes; assert the two request bodies. Screenshots of the picker and the hint.
-- **Depends on.** PR7b. Q18 and Q19.
+- **Depends on.** PR7b. (Q18 a and Q19 a are decided.)
 - **Docs.** Contract 07 §1.15 (the node); `skills/nebula/SKILL.md`; `docs/MCP-SETUP.md`; `MODEL_REFERENCE.md`.
+
+### PR7e: The board's word history: agents' look deletes and word changes undoable from anywhere (Q28 b, Q30 c) — new
+
+- **Goal.** When an agent or Analyze deletes or merges a look that holds words, or replaces or clears any words field on the board or a look, the person can get the words back from anywhere, even if the Studio was closed. That makes Q28 b and Q30 c consistent with "agents may do anything undoable".
+- **Scope** (§5.8).
+  - New `services/moodboard_history.py`: the `.history/<boardId>.json` store, both kinds of entry (`look` and `words`), `batchId`, the crash-safe write order, folding chains (`supersedes`), retention for both kinds together (Q34 a: restored entries pruned to 20; 50 open entries → 409 `board_history_full`), and the purge hook in `moodboard_store.py`.
+  - Hooks in the store and `/edits`: a `frame.delete` or `frame.merge` by a non-person writer on a look with words writes a look entry. **Q30 c:** `record_word_changes(before, after, actor)` runs in `MoodboardStore.update` (`moodboard_store.py:541`, the unguarded sets at `:587-592` and `_set_override` at `:369-403`) and in the `/edits` commit, and writes one words entry per scope when a non-person write loses words in a field from §5.8's table. In `/edits` it diffs the whole staged board for every committed batch, whatever the ops (`look.set`, `look.inherit`, an agent's `restore`, anything else), and leaves out the `lookFields` of frames the same batch records as removed-look entries, so a `frame.delete` writes one look entry, not a words entry too. `undo.historyIds` in the response and broadcast; a `restore` with `historyIds` marks each entry by what it put back (fully applied: `restored`; a skipped field: open with `restoredFields`).
+  - Crash safety (§5.8): entries written `pending` with the `batchId`, the board saves `historyBatch`, and the next write that writes entries commits the matching ones and drops orphans and superseded entries. No other write path touches the history.
+  - **The gates open (Q30 b, part of c).** `_guard_override` (`:355-366`) no longer refuses an agent's replace or remove of the person's brief; Keep stays person only (`:357-361`, `:635`, the keep route `main.py:11029-11045`). `BriefOverrideProtected` keeps only the Keep case. The PUT route records `actor_record` for the entry (`main.py:10996-11026`; `_moodboard_author`, `:10767-10770`, still decides person or not). In `moodboard_client.update_board` the early refusal of the person's brief goes (`backend/moodboard_client.py:859-860`); the Keep refusal (`:873`) stays. PR7b's gate in `look.set` opens the same way, and PR18's and PR19's music-direction gates open in PR7e or in their own PR, whichever lands later.
+  - Restoring changed words (§5.8): `expect` on text fields, with skipped fields reported and `force` for "Restore anyway"; set-difference restore for list fields; partly restored entries stay open with `restoredFields`.
+  - Routes: `GET …/history` (`?kind=look|words`), `POST …/history/{hid}/restore` and `POST …/history/restore {historyIds, force?}` (anyone), `DELETE …/history/{hid}` (person only). Journal `board.frame` and `board.words` with `historyId`.
+  - CLI `nebula moodboard history [--kind]` and `restore [--anyway FIELD]`; MCP `moodboard_history` and `moodboard_restore(…, force?)` (added to `NEBULA_MCP_TOOLS` and the allow-list); the "removed looks" line in `nebula trash list` (removed looks only).
+  - The Moodboard node's stop message for a deleted look gains "Deleted by Claude · Restore" (§4.11.7).
+  - Removes PR7b's interim refusal. From here Analyze (PR10) may merge or delete looks with words, each with an entry.
+  - **The Restore note** (§5.8, §5.9): one note per write, in the actor's name, covering every entry the write made (looks and fields), with a Restore action on all of them (`historyIds`); a folding write replaces its unread note; with no Studio on the board, a copy goes to the open project's main-canvas Notes. Both carry the `historyIds`, and a restore from anywhere marks them "Restored". This uses PR9a's service. If PR9a isn't in yet, PR7e waits for it: there is no canvas toast to fall back on. If neither PR9 nor PR10 has landed, PR7e carries the Studio mount of Notes (§5.9), so a Restore note posted while the Studio is open has somewhere to show; the mount's size moves with it.
+  - The `board_scopes` change (both start-up scans, `migrate_store` and `save_colour_checks`, walk `.trash` only among the dot folders), unless PR9a has already made it.
+  - The Studio half (the "Recently changed words" list with both kinds of row and "Restore anyway", `historyIds` on foreign steps, dropping a step restored elsewhere) belongs to PR9, which owns the foreign undo step. If PR9 has already merged, PR7e carries it.
+  - "Ask first": board proposals for qualifying writes (`ops` from `/edits`, `fields` from a PUT, 202 with `proposalId`), built only once the separate freedom-setting PR exists (§8). Until then everyone is on "Act directly".
+  - Docs and tool text that say the person's brief is refused: the MCP docstring (`mcp_server.py:940`), `INSTRUCTIONS` (`:47`), `skills/nebula/SKILL.md`, `docs/MCP-SETUP.md`, the CLI help for `--brief`.
+- **What the person sees.** "Claude deleted Grain and its own Direction and brief · Restore" or "Claude replaced the board's Direction and Avoid · Restore" as a note in the corner (the Studio's, or the main canvas's when the Studio was closed), on the Moodboard node that used Grain, and in `nebula moodboard history`. Restore brings Grain back with the same id and its words, and the nodes on it run again; it puts the board's old Direction and Avoid items back, or says which field changed since and offers "Restore anyway".
+- **Tests that fail on main first.**
+  - `test_agent_delete_of_look_with_words_restores_with_studio_closed` (replaces PR7b's `test_agent_cannot_delete_look_with_person_words`).
+  - `test_agent_replaces_person_brief_and_restore_brings_back_record` (replaces the agent-refusal tests of `_guard_override` for replace and remove; the Keep refusal test stays).
+  - `test_agent_put_of_direction_avoid_pins_writes_one_entry` (five fields, one entry, one note).
+  - `test_restore_text_field_changed_since_is_skipped_then_forced`.
+  - `test_restore_avoid_keeps_items_added_since`.
+  - `test_merge_restore_splits_back_same_id`.
+  - `test_studio_undo_and_history_restore_never_double_apply`.
+  - `test_uncommitted_entry_ignored_after_crash`.
+  - `test_orphan_entry_stays_hidden_after_person_put` (crash after the entries are written, then a person PUT; the orphan stays hidden).
+  - `test_fold_carries_other_fields` (an agent writes Direction and Avoid, then Direction again; Restore brings back both).
+  - `test_ten_folded_edits_leave_one_entry_on_disk`.
+  - `test_studio_undo_skipping_changed_direction_leaves_entry_open`.
+  - `test_agent_restore_op_clearing_look_direction_writes_one_words_entry` and `test_frame_delete_of_look_with_words_writes_only_look_entry`.
+  - `test_restore_moved_colour_between_pin_lists` (keep out → must appear in one PUT, restored back).
+  - `test_history_survives_board_move_and_trash_restore`.
+  - `test_purge_entry_person_only`.
+- **New tests.** The person's own delete writes no entry and posts no note; an agent's posts one Restore note, plus the main-canvas copy only when no Studio has the board in view; restoring from one copy marks both "Restored"; a name clash restores as "Grain (restored)"; 409 at 100 frames, in trash and at 50 open entries; an image deleted since is skipped and reported; a second restore returns `alreadyRestored`; a batch over 200 ops (`undo: null`) is still restorable from the list; nodes' saved `look` params are untouched; every board scan skips `.history`; `test_history_file_survives_both_startup_scans_byte_for_byte` (`migrate_store` and `save_colour_checks`); a batch that removes seven looks with words posts one Restore note for all seven, not refused by the rate limit; purging a board removes its history; `test_reader_asked_by_agent_under_ask_first_becomes_proposal` once the setting exists. Q30 c: the person's own PUT of every field writes no entry; a pure add (an Avoid item, a pin) writes none; an agent's Keep is still refused; a batch over the board and two looks writes three entries with one `batchId` and one note; ten agent edits of Direction fold into one entry and one unread note, and Restore gives the person's original; a fold whose write fails leaves the old entry; `look.inherit` over a look's own Direction writes an entry with `after: null`; a restored brief keeps its old `basis` and `by`; a colour now on the other list, or a pin list at `PINNED_LIMIT`, is skipped and reported; a field on a look deleted since is skipped; partly restored entries stay open; the 50 cap counts both kinds and refuses the whole write; an agent's forced restore writes its own entry; the CLI's and MCP's `previous` still work; `test_agent_put_under_ask_first_becomes_proposal` once the setting exists.
+- **Live check.** Isolated stack, Studio closed: through the CLI as an agent, delete a look that has its own brief, and run `nebula moodboard set` with `--direction`, `--avoid` and `--brief` over the person's words; restart the backend; `nebula moodboard history` lists both; restore both from the CLI; open the Studio and check the look, its id and every field. Then change Direction as the person in the Studio and check that a second restore skips it and `--anyway` puts it back. Run a mocked Moodboard node set to the look. Byte check on boards that never had an entry.
+- **Depends on.** PR3 (`restore` and the inverse), PR7, PR7b, PR9a (the Restore note). Carries the Studio mount of Notes if PR9 and PR10 aren't in. Must merge before PR10 lets Analyze remove looks with words; if it's late, PR10 ships with the refusal. Q30 c (Justin, 2026-10-20) is decided: it covers the board's hand-written brief and every words field.
+- **Docs.** Contract 07 §1.12 (`historyIds`) and §1.15 (removed looks, changed words and restoring); `skills/nebula/SKILL.md`; `docs/MCP-SETUP.md`; the MCP `INSTRUCTIONS` paragraph (only real tool names, per the instructions test); `implementation-notes.md` (the retention choice, Q34 a, and the field list).
+- **Risks.** Two writes per qualifying write (entries, then board), covered by the crash test. A history file can reach about 5 MB on a board with 50 open and 20 restored worst-case entries; only non-person writes that lose words read it. An agent can now change the person's brief under "Act directly"; the note and the list are how the person finds out, so the live check looks at both.
 
 ### PR8: Agents see the board, and placement next to the view (C8, read half of C9)
 
@@ -1188,23 +1577,46 @@ Runs alongside PR3 and PR5.
 - **Live check.** An agent adds three references while the Studio is panned to one corner: they land in view.
 - **Docs.** `INSTRUCTIONS`, `skills/nebula/SKILL.md`, `docs/MCP-SETUP.md`, contract 07.
 
+### PR9a: Notes, the shared corner, on the main canvas (Justin's change; mockup v5.2) — new
+
+- **Goal.** What an agent notices lands in a quiet corner in the top right, saved, instead of as text at its cursor. One component, used first on the main canvas.
+- **Scope** (§5.9).
+  - **Backend.** New `services/agent_notes.py`: the record, the checks (refs dropped when unknown, `#n` turned into ids, the private-note guard, `about` limited for agents), limits, pruning, the rate limit and the "since its last turn" replace rule. Storage for both surfaces: the board side file `MOODBOARD_ROOT/.notes/<boardId>.json` (purged with the board; skipped by every board scan) and `catalog["projects"][id]["agentNotes"]` beside `pins`. The `board_scopes` change: both start-up scans, `migrate_store` and `save_colour_checks`, walk `.trash` only among the dot folders (§5.8), unless PR7e has made it. Routes for both surfaces (`POST`/`GET …/agent-notes`, `…/read`, `…/{nid}/dismiss`, `DELETE …?read=1`; read, dismiss and clear person only). The board PUT refuses `agentNotes`. The `agentNotes` socket message. Journal kind `note.posted`. A service call Nebula itself uses for template notes, with actions (later PRs add the ones they need).
+  - **Agents.** MCP `post_note` and `list_notes` (in `NEBULA_MCP_TOOLS` and the allow-list); CLI `nebula note` and `nebula notes`; the `INSTRUCTIONS` line, `point_at`'s docstring without "narrate", the "your own action only" line on `edit_canvas`'s and `propose_change`'s `note`, `resolve_pin`'s `reply` and the CLI's `--note` and `pin resolve --say` help, `skills/nebula/SKILL.md` and `docs/MCP-SETUP.md` ("`say` is for your own action; what you noticed goes in a note").
+  - **Frontend.** `components/notes/` (`NotesCorner`, `NoteCard`, `NotesList`, `notes.css`), `store/agentNotesStore.ts`, `lib/agentNotes.ts`, and the surface adapter. Main-canvas mount: the chip in its own fixed top-right mount, level with the header pill, and the card queue under it; both keep clear of the measured `.chat-panel` rect, docked or dragged. Node outlines in a `NoteOutlineLayer` beside `AgentCursorLayer`. `lib/springs.ts` (new here: the spring sampler PR6 also uses); reduced motion.
+  - **Not here.** The Studio mount (whichever of PR9, PR10 and PR7e lands first), reader notes (PR10), suggestion notes (PR11), the Restore note (PR7e).
+- **What the person sees.** On the main canvas, an agent says "The two portrait branches use different seeds; I'll match them" as a card that drops from a "Notes" chip in the top right, outlines the two nodes in orange, and leaves after about 4 s. The chip shows the agent's dot and "1". Opening it lists the note and clears the count. The note is still there after a reload or a project switch and back.
+- **Tests that fail on main first.**
+  - `test_post_note_saves_with_project_and_survives_autosave` (an autosave PUT of `snapshot` keeps `agentNotes`).
+  - `test_board_note_never_writes_the_board_file` (posting and marking read leave the board's bytes and `version` unchanged).
+  - `test_note_quoting_a_private_note_is_refused`.
+  - `test_note_ref_unknown_id_is_dropped_never_outlined`.
+  - `test_point_at_docstring_has_no_narrate` and the instructions test with the new tool names.
+- **New tests.** `#n` becomes an id and draws the current number, and "removed" after a delete; a `#n` not on the board refuses the note; the 100 and 200 caps prune oldest read first; the rate limit, which Nebula's template notes skip; a second unread "since its last turn" note replaces the first; read, dismiss and clear refuse agents; agents can't set `about` to Nebula's values or send actions; trash and restore of a project keep its notes; a board move and trash restore keep its notes; purging a board removes its notes file; both start-up scans (`migrate_store`, `save_colour_checks`) leave a `.notes` and a `.history` file byte for byte; `note.posted` in the journal; `test_agent_mcp_registration.py`; the CLI help verbs. Frontend: unread count and clearing on open; a self-dismissed card leaves the note unread; hover pauses the timer; four notes at once give one "4 new notes" card; no drop in a hidden tab; outlines only on known nodes, in the author's colour; reduced motion; the card and the chip never overlap the chat panel, docked or dragged.
+- **Live check.** Isolated stack: an agent posts three notes through the CLI with the main canvas open; screenshots of the drop, the outlines and the open list at 1440×900 and 1920×1080, with chat docked, dragged and closed (the card never covers it); reload and switch projects; byte check on every board file.
+- **Depends on.** Nothing in this plan; it can start now (it creates `lib/springs.ts` rather than waiting for PR6). Must merge before PR7e, PR9, PR10 and PR11.
+- **Docs.** Contract 07 new §1.17 "Notes", for both surfaces (no contract covers the main canvas's pins or cursor today, so the canvas half goes there too); `skills/nebula/SKILL.md`; `docs/MCP-SETUP.md`; `INSTRUCTIONS`; `implementation-notes.md` (the code name `agentNotes`, the side file, the limits).
+- **Risks.** Agents keep narrating in `say` out of habit; the docstrings and instructions are the only lever, so the live check looks for it. Each main-canvas note rewrites the catalog, as pins do; the rate limit bounds it.
+
 ### PR9: Agents edit the board, recent edits, undo credit (write half of C9)
 
 - **Goal.** Agents change the board the way they change the canvas.
-- **Scope.** MCP `moodboard_edit` and CLI `nebula moodboard edit`; the cursor follows each batch. The "Since your last turn" block (with `board.look` events once PR7b is in) and the board context for all three runners. The chat payload's `studio` field. The foreign undo step and notice in the Studio.
-- **What the person sees.** "Claude moved #12 into Dither · Undo". The agent knows what he moved since its last turn.
-- **Tests that fail on main first.** An agent's edit undoes as one step in the Studio; the next turn lists the person's moves.
-- **New tests.** A private note never appears in the per-turn block; canvas chat behaviour is unchanged; an agent can't spoof a tab.
-- **Risks.** Boards can be Global while the journal is project-tagged (§5.2). Test reading a Global board's events from inside a project.
+- **Scope.** MCP `moodboard_edit` and CLI `nebula moodboard edit`; the cursor follows each batch, and its `say` is the agent's own action only. The "Since your last turn" block (with `board.look` events once PR7b is in) and the board context for all three runners; the agent may post one note about it (§5.9). The chat payload's `studio` field. The foreign undo step and its undo notice in the Studio (§5.4). **The Studio mount of Notes** (unless PR10 or PR7e landed first): the chip in the Studio header, cards in the top right kept clear of the chat panel (it mounts in the Studio too), orange outlines on every placement a note names, a list row that selects and frames its cards. Once PR7e's backend is in: the Studio half of the word history (the "Recently changed words" list in the Whole-board panel, with removed-look rows and, for Q30 c, changed-words rows that open to the old words and offer "Restore anyway" on a field changed since; `historyIds` on foreign steps; dropping a step restored elsewhere; §5.4, §5.8). The canvas toast with Restore is gone: PR7e posts a Restore note instead.
+- **What the person sees.** The agent's cursor says "Moved #12 into Dither", with Undo in the undo notice. A "since its last turn" note drops from the Notes chip: "You added the lake to Painterly and made the meadow the heaviest. Reading both now.", with the two cards outlined in orange (mockup v5.2's `nt-1`). The cursor doesn't move for it.
+- **Tests that fail on main first.** An agent's edit undoes as one step in the Studio; the next turn lists the person's moves; a board note outlines every placement of its image and no other card.
+- **New tests.** A private note never appears in the per-turn block; canvas chat behaviour is unchanged; an agent can't spoof a tab; Nebula never posts a "since its last turn" note on its own; no Nebula-written `say` on the board is a notice (each built-in `say` names the agent's own op). Word-history half: the Recently changed words list restores a removed look and a changed-words entry; a field changed since shows "Restore anyway" and restores on click; the Restore note marks it restored; a step restored from the CLI is dropped with no redo; Undo on a missed broadcast gets `alreadyRestored`.
+- **Risks.** Boards can be Global while the journal is project-tagged (§5.2). Test reading a Global board's events from inside a project. Agents edit boards directly here; once that setting exists, new installs default to "Ask first" and existing installs stay on "Act directly" (Q33 b), so every agent board edit, not only Q28's, will then need the board proposals in §5.8 (a gap, §8).
+- **Live check.** Isolated stack: an agent edits the board through the CLI and posts a "since its last turn" note with the Studio open; screenshots at 1440×900 and 1920×1080 with chat docked, dragged and closed; the card never covers the chat.
+- **Depends on.** PR8, PR9a; PR7e's backend for the word-history half.
 
 ### PR10: Analyze sorts into looks (C10, C11, C12)
 
 - **Goal.** One button turns a pile into an editable first draft.
-- **Scope.** The bar ("20 new references · not analyzed", "Analyze ▾"). The menu with prices, cancel and progress ("Analyzing with Gemini 4 Argon · 7 of 20", "Read with Gemini 4 Argon · sorting into looks", "Sorted 19 into 4 looks · 1 Unsorted · Undo"). One in-memory job per board, WS `moodboardRead` and `moodboardReadTrace` (§5.6.1), `GET …/read`, `GET …/read/{job}?afterSeq`, `DELETE …/read/{job}` with §5.6.1's cancel rules, and the job's trace ring. Targets per C11. One edit batch from the reader (actor kind `reader` in `canvas_events`, with `requestedBy`; `lastRead.requestedBy` and `summary`), journaled `board.sorted`, one undo step; C12 b). Unsorted in free space. Cards spring into frames. **Measure runs per look in the same run** (free). Analyze never deletes or merges a frame that holds words the person wrote. The music direction is not part of the sort (PR19). CLI and MCP without `--dry-run`: the CLI prints lines live (`--quiet`, `--json`), MCP adds `moodboard_read_status`. The bar shows the counter strings; the overseer panel and ripple are PR10b. The side panel shows the reading, read-only (Q12). If Q26 a, phase 1 also returns `people`.
-- **What the person sees.** The full flow from GM's video, frames 2 to 2b, and each new look's own brief right after.
-- **Tests.** The C11 rule matrix; C12 b) with one Undo; a named frame is never renamed; a frame with person words is never deleted or merged; partial failure lands in Unsorted with a "couldn't read" dot; cancel gives back unstarted batches; the button waits for the estimate; an agent-run Analyze goes through the gate; per-look analyses are current after the run.
-- **Live check.** Mocked provider for the flow and screenshots. One real run only with Justin's approval.
-- **Depends on.** PR4, PR7, PR7b.
+- **Scope.** The bar ("20 new references · not analyzed", "Analyze ▾"). The menu with prices, cancel and progress ("Analyzing with Gemini 4 Argon · 7 of 20", "Read with Gemini 4 Argon · sorting into looks", "Sorted 19 into 4 looks · 1 Unsorted · Undo"). One in-memory job per board, WS `moodboardRead` and `moodboardReadTrace` (§5.6.1), `GET …/read`, `GET …/read/{job}?afterSeq`, `DELETE …/read/{job}` with §5.6.1's cancel rules, and the job's trace ring. Targets per C11. One edit batch from the reader (actor kind `reader` in `canvas_events`, with `requestedBy`; `lastRead.requestedBy` and `summary`), journaled `board.sorted`, one undo step; C12 b). Unsorted in free space. Cards spring into frames. **Measure runs per look in the same run** (free). With PR7e in, Analyze may delete or merge a frame that holds words (Q28 b), and each one writes a word-history entry and a `result` line naming "Recently changed words"; asked by an agent under "Ask first", the sort becomes one board proposal (§5.8). If PR7e isn't in yet, PR10 ships with the refusal and its `kept` line. The music direction is not part of the sort (PR19, Q25 a). CLI and MCP without `--dry-run`: the CLI prints lines live (`--quiet`, `--json`), MCP adds `moodboard_read_status`. The bar shows the counter strings; the overseer panel and ripple are PR10b. The side panel shows the reading, read-only (Q12). Phase 1 also returns `people` (Q26 a). **Argon's notes (§5.9):** the end note ("Sorted 20 into four looks by what they share. #37 I couldn't place."), from a template, with the Unsorted and couldn't-read images as refs and lavender outlines, and a Restore action when the run removed a look's words; posted when the run leaves something for the person or an agent asked for it. Under "Ask first", the board proposal as a note with Accept / Reject. If neither PR9 nor PR7e has landed, PR10 carries the Studio mount of Notes.
+- **What the person sees.** The full flow from GM's video, frames 2 to 2b, and each new look's own brief right after. When the run ends, Argon's note drops into the top-right corner and #37 is outlined in lavender (mockup v5.2's `nt-0`).
+- **Tests.** The C11 rule matrix; C12 b) with one Undo; a named frame is never renamed; a merge or delete of a frame with words writes a history entry and restores with the same id (before PR7e: refused, with `kept`); partial failure lands in Unsorted with a "couldn't read" dot; cancel gives back unstarted batches; the button waits for the estimate; an agent-run Analyze goes through the gate; per-look analyses are current after the run. Notes: the end note's refs are exactly the Unsorted and couldn't-read images; a clean run the person asked for posts none, and one an agent asked for posts one; the note's author is the reader with `requestedBy`; nothing in a note comes from model text; a cancelled run posts nothing; the reader never calls `agent_presence.point()`.
+- **Live check.** Mocked provider for the flow and screenshots, including the end note. One real run only with Justin's approval.
+- **Depends on.** PR4, PR7, PR7b, PR9a; PR7e for removing looks with words (else it ships with the refusal).
 - **Docs.** Contract 07 §1.13. `skills/nebula/SKILL.md`, `docs/MCP-SETUP.md`.
 
 ### PR10b: Analyze as an overseer in the Studio (GM's mockup v5; Q29) — new
@@ -1218,8 +1630,10 @@ Runs alongside PR3 and PR5.
   - Catching up through `afterSeq` on open, reconnect and a `seq` gap.
   - The dim "thinking (summary)" stream (Q29 c): italic, below a dashed rule that appears with the first `thought` line, never outlining a card. Absent for a model that gives no summaries.
   - Reduced motion: a static tint, no ripple.
-- **What the person sees.** Mockup v5 on his own board.
-- **Tests.** Outlines on the right placements; nothing outlined from a `thought` line; no dashed rule or heading when a run has no `thought` lines; a gap in `seq` fetches the missing lines; reduced motion.
+  - One outline layer for the trace and for Notes (§5.9), so a lavender note outline and a trace outline on the same card never stack.
+  - The reader's action label beside a card it moved that the person had placed (C12 b): "Moved by Analyze · Undo", a small chip that pops on a spring and leaves with the panel (mockup v5.2). The rest of the run's moves are summed up on the bar.
+- **What the person sees.** Mockups v5 and v5.2 on his own board.
+- **Tests.** Outlines on the right placements; nothing outlined from a `thought` line; no dashed rule or heading when a run has no `thought` lines; a gap in `seq` fetches the missing lines; reduced motion; a note outline and a trace outline on one card draw once; "Moved by Analyze · Undo" appears only on cards the person had placed, and its Undo undoes the whole run (one step, C12).
 - **Speed check.** PR5's 300 references with the ripple and 12 outlines on: rAF frame p95 under 20 ms.
 - **Live check.** A mocked stream; screenshots at 1440×900 and 1920×1080 mid-run and at the end.
 - **Depends on.** PR10. The thought stream shows only once PR4's probe sets Argon's `thoughtSummaries` to `true`; with it `false`, PR10b ships as b) and the stream code stays for the next model that gives summaries. Q29 c is built as the mockup shows it: visible, not collapsed, and with no Settings switch.
@@ -1227,8 +1641,18 @@ Runs alongside PR3 and PR5.
 
 ### PR11: Second-look and hybrid suggestions (C13 from Analyze)
 
-- **Scope.** "Fits Dither too?" chips with accept or dismiss, voiced "Gemini 4 Argon suggests …" from `suggestions[].model`; accepting creates a linked copy in free space in that frame, at the same weight. The hybrid suggestion ("Make a 'Painterly × Pixel' look for #3, #9, #14?"); accepting creates the frame, moves those references in (Q10), replaces their `alsoIn` suggestions; one Undo. CLI `nebula moodboard suggestions [--accept ID|--dismiss ID]`; suggestions in `moodboard_look`. An accepted suggestion makes the target look stale by hash; Measure re-rolls it.
-- **Tests.** A second frame is never added without an accept; a hybrid replaces the pair suggestions; a dismissed suggestion never comes back.
+- **Goal.** What Analyze suggests reaches the person as a note he can act on in one click, and nothing new is drawn on the canvas.
+- **Scope.** Suggestions reach the person as **notes, not chips** (§5.9), authored by the reader named in `suggestions[].model` ("Gemini 4 Argon · Analyze").
+  - **Hybrid:** one note each, "#12 reads as painterly and pixel. Start a Painterly × Dither frame?" with **Make frame** / **Not now** and lavender outlines on its members (every linked copy, as v5.2's `nt-2`). Make frame creates the frame, moves those references in (Q10) and replaces their `alsoIn` suggestions; one Undo.
+  - **`alsoIn`:** one note per run, "#3 and #9 also fit Dither", with Add copies / Not now. Accepting creates a linked copy in free space in that frame, at the same weight. One at a time: "Also fits Dither · Add copy" in the selected reference's side panel.
+  - "Not now" dismisses for good (kept as `dismissed`, never suggested again; Q35 a, Justin 2026-10-20: "Dismiss it for good. It's kept as dismissed and never offered again; the list still lets you make the frame later"). Make frame stays in the list while the members are unchanged.
+  - The actions call `suggestion.accept` / `suggestion.dismiss` with lists (§5.1). CLI `nebula moodboard suggestions [--accept ID|--dismiss ID]`; suggestions in `moodboard_look`. An accepted suggestion makes the target look stale by hash; Measure re-rolls it.
+- **What the person sees.** After Analyze, "Start a Painterly × Dither frame?" drops into the corner with Make frame / Not now, and #12's two copies light up in lavender. No chips on the canvas.
+- **Tests.** A second frame is never added without an accept; a hybrid replaces the pair suggestions; a dismissed suggestion never comes back; Make frame from a note is one undo step, journaled with the person as actor; a note whose suggestion was accepted elsewhere shows "Frame made" and runs nothing; no chip is rendered on the canvas.
+- **Live check.** Mocked Analyze on an isolated stack: screenshots of the hybrid note and the `alsoIn` note, their lavender outlines on both copies of #12, and Make frame undone in one step.
+- **Depends on.** PR10, PR9a.
+- **Docs.** Contract 07 §1.13 (suggestions from Analyze) and §1.17 (suggestion notes and their actions); `skills/nebula/SKILL.md` and `docs/MCP-SETUP.md` for `nebula moodboard suggestions` and the list-taking `suggestion.accept` / `suggestion.dismiss`.
+- **Risks.** A run with many suggestions floods the corner; one card at a time and "4 new notes" (§5.9) bound it. A note can go stale when the person moves a member by hand; the action then shows its reason and runs nothing.
 
 ### PR12: Arrange (C8)
 
@@ -1237,11 +1661,35 @@ Runs alongside PR9 to PR11.
 - **Scope.** An `arrange(by, scope)` op computed on the server. CLI `nebula moodboard arrange <board> --by look|colour|weight [--only …]`, MCP `moodboard_arrange`, a "Tidy ▾" menu. By look: frames packed in a grid, cards inside them. By colour: dominant hue from `analysis.images` (measures first if stale). By weight: heaviest first. It never changes sizes, memberships or `images[]` order, so no look goes stale. One Undo.
 - **Tests.** No overlap; numbers unchanged; idempotent; look hashes unchanged.
 
+### PR13a: Krea 2's board strengths add up to the board's strength (Q21 b) — new
+
+- **Goal.** Krea 2's board references share out the board's strength instead of each taking it in full (Justin, 2026-10-20: Q21 b). It goes out on its own, before PR15, so PR15's move onto the planner stays a refactor the golden file can prove changes nothing.
+- **Scope.**
+  - New `services/moodboard_weights.py` with the pure `native_strengths(S, weights, *, normalize, range, precision)` (§5.7.4): `sum-to-strength` over the images sent, 4 decimals by largest remainder, clamp as a guard, nothing sent at strength 0 (Q32 a: the run note "Board strength is 0: no board images sent"), an image rounding to 0 left out with a note.
+  - `handlers/krea.py` `_collect_native_moodboard_style_references` (`:368-403`) calls it after ranking, dedupe and the `remaining_slots` cap. Wired references, Krea `moodboards` ids and `styles` keep their own strengths. The account route (`run_gateway`) sends the same body.
+  - The run note through `add_run_note` (new import in `krea.py`): "Board 'Dusk' sent 5 images; their strengths add up to the board's 0.70 (#1 0.19, …)", plus "Your 2 references add 1.0 on top" when wired references are there.
+  - The one-time replay line (§4.8 item 7), in `upgradeRunSnapshot` (`frontend/src/lib/savedParamsUpgrades.ts`) for canvas replays, and as a backend run note for CLI and MCP replays if the backend can see the record's date (u: checked here). No `PARAMS_VERSION` bump, no legacy mode.
+  - The deliberate golden update (§4.8 item 7): `kreaStyleReferences` only, with the dated "Deliberate changes" entry.
+  - Copy: the Studio slider (`MoodboardStudioView.tsx:508`) reads "Strength 0.70 · the total the board's images share on Krea 2".
+- **What the person sees.** The same references in the same order, at strengths that add up to the board's; the run note lists them. Replaying an old Krea 2 recipe says it can differ.
+- **Tests that fail on main first.**
+  - `test_board_strengths_add_up_to_board_strength` (1, 2, 5 and 10 images; each 4 decimals; sum exactly `S`).
+  - `test_board_scaling_covers_only_images_sent` (7 wired refs: the 3 board images sent add up to `S`, wired refs unchanged).
+  - `test_single_board_image_goes_at_board_strength` (a lone 0.4-weight image at `S`).
+  - `test_board_strength_zero_sends_no_board_refs`, with its note.
+  - `test_account_route_sends_scaled_body`.
+  - `test_krea_board_run_note_lists_strengths`.
+- **Existing tests changed on purpose.** `test_moodboard_golden.py` (`kreaStyleReferences` in `expected.json`, 7 boards); `test_krea_handler.py` `test_generate_adapts_native_nebula_moodboard_to_krea_style_refs` (0.3 / 0.6 become 0.2 / 0.4) and `test_an_unanalyzed_native_moodboard_sends_its_heaviest_images_first` (1.0 / 0.5 become 0.6667 / 0.3333; heaviest first stays).
+- **New tests.** A check that `expected.json` minus `kreaStyleReferences` equals the old file; the golden docstring has the Q21 b entry; weight 0 and set-aside images are still never sent.
+- **Live check.** Mocked Krea on the isolated stack: one board with 5 images, the request body's strengths add up to the board's. No paid run.
+- **Depends on.** #18 merged (open as PR #90; the golden file is reconciled once per change). Beside PR13; before PR15.
+- **Docs.** `skills/nebula/SKILL.md` (`:176`, weights now share out the strength); `.agents/skills/krea/SKILL.md` (the bundle section); contract 07's moodboard bundle section (§1.16 once PR13 adds it); `implementation-notes.md`.
+
 ### PR13: Adapter table, dispatcher and contract test (A5) — new
 
 - **Goal.** Every node that can take a board says how, in one table, and a test refuses a Moodboard port without an entry. Nothing a generator receives changes.
 - **Scope.**
-  - `backend/data/moodboard_adapters.json` with the 15 existing Moodboard-port nodes and `krea-2-generate` declared truthfully (§5.7.11 A): text-only, or `refs` with `default: "text"`, or Krea 2's `weighted-style` with `handler: "reads-board"`.
+  - `backend/data/moodboard_adapters.json` with the 15 existing Moodboard-port nodes and `krea-2-generate` declared truthfully (§5.7.11 A): text-only, or `refs` with `default: "text"`, or Krea 2's `weighted-style` with `handler: "reads-board"` and `weight: {mode: native, range: [0, 1], normalize: sum-to-strength}` (PR13a's behaviour, declared from the start).
   - `services/moodboard_adapters.py`: load, validate (dated sources, `unconfirmed`), resolve per model and route.
   - `apply_to_generator` resolves the entry and sends today's text fold through it unchanged, early return included (§5.7.3 steps 1, 2 and 8). `_HANDLER_READS_BOARD` retired.
   - Krea 2's `moodboard` port: `Any` → `Moodboard` (TS and JSON by hand; `MODEL_REFERENCE.md` regenerated).
@@ -1254,6 +1702,7 @@ Runs alongside PR9 to PR11.
   - `test_krea2_moodboard_port_is_a_board_port` (`has_board_port` is false on main).
   - `test_every_image_input_is_classified` (a fixture entry that leaves `runway-video.image`, labelled just "Image", out of `never` must fail).
   - `test_syntax_null_needs_a_reason`.
+  - `test_weight_normalize_matches_mode` (§5.7.10 rule 13: a `native` entry without `sum-to-strength`, or a `range` that isn't the vendor's, fails).
 - **New tests.** The golden file unchanged; `apply_to_generator` output equal to main's for every existing Moodboard node and board shape in the golden set; a missing entry at run time falls back to text with a run note; `--check` passes.
 - **Live check.** Isolated stack: wire a board into each of the 15 nodes and Krea 2, run them with mocked providers, and diff the request bodies against main's (identical). Screenshot of the card line.
 - **Depends on.** #18 merged.
@@ -1265,7 +1714,7 @@ Runs alongside PR9 to PR11.
 - **Goal.** Board images can reach GPT Image edits and Nano Banana, by the person's choice, heaviest first, with each image named in the prompt, and priced.
 - **Scope.**
   - **The whole dispatcher (§5.7.3 steps 3 to 7)**, so later PRs only add entries: the early return on a missing prompt goes; `textSlot` as a port or a param; `text: "music-direction"`; the negative field resolved from the active route's params; the palette-param step; `exclusive` per route; `needsWired`; `requires`; the face policy hook (the detector itself is PR17). Each is tested here on fixture entries.
-  - `plan_board_fill` (§5.7.4) with candidates limited to images the scope's analysis read, `prepare_board_image` (§5.7.6), the legend writer with `plain` legends and `syntaxReason` (Cinema's `append_reference_guidance` becomes its caller), `local_media_ref` after `_local_media_inputs`, the async engine call.
+  - `plan_board_fill` (§5.7.4) with candidates limited to images the scope's analysis read, and one normalized view per image sent (`w`, `share`, `rel`, after every cut; §5.7.3 step 4) through PR13a's helper; legend words from `rel`. A `native` entry at board strength 0 gets no board images, with the run note "Board strength is 0: no board images sent" (Q32 a); a test pins it for the planner as PR13a's does for Krea 2. The `textUnless` hook (Meshy's image-or-text rule). `prepare_board_image` (§5.7.6), the legend writer with `plain` legends and `syntaxReason` (Cinema's `append_reference_guidance` becomes its caller), `local_media_ref` after `_local_media_inputs`, the async engine call.
   - The generic `_boardImages` and `_boardSendAnyway` params, the switch on the card and in the Inspector, and the copying warning (§5.7.8). `AGENT_WRITABLE_INTERNAL` in `agent_params.py` so agents can set both; `describe_node` and `nebula info` list them.
   - `board_fill` in `wired_counts` and `wiredPorts`; `pricing_cases.json` cases; `costPerRef` (`plus` note, `unknown` = unpriced while board images go).
   - Run notes and the fill report; a test that the real fill never exceeds `board_fill`.
@@ -1284,26 +1733,29 @@ Runs alongside PR9 to PR11.
   - `test_music_entry_gets_music_direction_not_brief`.
   - `test_agent_can_set_board_images_switch` (refused on main by `internal_keys`).
   - `test_unreadable_board_image_left_out_with_note` (an external https image is never sent).
+  - `test_normalized_view_is_computed_after_every_cut` (shares add up to 1 over the images sent, not the candidates).
+  - `test_legend_words_follow_rel_not_raw_weight` (a board of only light cards: the heaviest reads "strong").
+  - `test_text_unless_skips_text_slot_when_port_gets_image` (fixture modelled on Meshy).
 - **New tests.** Order and dedupe by URL; per-model limits for `nano-banana`; 2.1 sends the brief only, with the node line, and the run doesn't fail; the request byte budget; content-addressed copies keep the cache key across two runs; Cinema's legend unchanged byte for byte; the switch off sends exactly today's output; `costPerRef: unknown` makes the node unpriced only while the switch is on; the golden set gains a board whose only heavy image is an external URL, and the planner's choice equals `representativeImages`.
 - **Live check.** Mocked OpenAI and Google: assert multipart image order and the legend text. Screenshots of the switch, the warning and the run note. One real `gpt-image-2-edit` run with three board images only with Justin's OK and the price shown.
-- **Depends on.** PR13.
+- **Depends on.** PR13, PR13a (its `native_strengths` helper and the normalized view).
 - **Docs.** Contract 07 §1.16 (selection, order, wording, switch, dispatcher); `skills/nebula/SKILL.md` and `docs/MCP-SETUP.md` (`_boardImages`); the GPT Image and Gemini `.agents/skills` notes on board images.
 
 ### PR15: Style slots by default (A1) — new
 
 - **Goal.** Style-slot models take the board's images without being asked.
 - **Scope.**
-  - Krea 2 moves onto the planner (`handler: "reads-board"` removed; the handler only maps `{url, strength}`), with the golden file proving identical refs and strengths unless Q21 says otherwise.
+  - Krea 2 moves onto the planner (`handler: "reads-board"` removed; the handler only maps `{url, strength}`, strengths from PR13a's helper), with the golden file, as PR13a left it, proving identical refs and strengths. Q21 b's behaviour change is already in (PR13a), so this PR changes no number.
   - Moodboard ports and entries for the Ideogram v3 style nodes (`ideogram-remix`, `-reframe`, `-replace-background`, `-edit`, `-character`), with plain legends, and `runway-image` (`byModel`: gen4 style slot with `syntaxReason`, others content).
-  - Every Krea catalog `style_images` / `image_style_references` node through `sync-krea-catalog.py`. **Images by default only for `STYLE_VERIFIED`** (Krea 2 variants, Seedream 4 with native strength if Nebula's param carries it, Ideogram 3, Runway gen-4 image); every other one (Seedream 5, Flux dev, Kontext dev, Qwen, Z Image, UNI-1, Muse, Grok Imagine 2) defaults to text behind the switch and its copying warning.
+  - Every Krea catalog `style_images` / `image_style_references` node through `sync-krea-catalog.py`, as `weight: native, sum-to-strength`: Krea's schema requires a `strength` on every `style_images` item (Krea 2's `image_style_references` makes it optional, default 0.5); Nebula always sends one, and the script reads the field from the schema (§5.7.10 rule 13), and the Krea catalog handler sends `{url, strength}` items from the shared helper. **Images by default only for `STYLE_VERIFIED`** (Krea 2 variants, Ideogram 3); every other one (Seedream 4, Seedream 5, Flux dev, Kontext dev, Qwen, Z Image, UNI-1, Muse, Grok Imagine 2) defaults to text behind the switch and its copying warning. Krea's Runway gen-4 image (`select`, a tag required on every image) also defaults to text until a tag the prompt never names is shown to act as style there (§5.7.1).
   - Runway's face warning on the card. The wrong "subject" badge on `runway-image.images` is corrected.
   - Price rows: for each default-images node here with none (`krea-2-generate` and its variants, the five Ideogram v3 nodes), add a verified row or show "No list price · board references may add cost" (§5.7.9), and say which in the PR.
-  - Recraft: text-only entries now (Q24 decides PR24).
+  - Recraft: text-only entries now; PR24 adds Recraft's own route and the board style (Q24 a).
 - **What the person sees.** Wiring a board into Ideogram Remix or Runway gen4 Image sends its images as style references by default, with "Board images: on · up to 10 to Style references" and a switch to turn them off.
-- **Tests that fail on main first.** `test_ideogram_remix_gets_board_style_images_by_default`; `test_runway_image_gen4_board_images_untagged_other_models_text`; `test_krea_catalog_style_nodes_have_board_ports`; `test_unverified_krea_style_fields_default_to_text` (Seedream 5, Flux dev).
-- **New tests.** Krea 2 golden unchanged, including the golden boards with an external or unreadable image (the planner leaves out exactly what `representativeImages` leaves out); Ideogram `style_preset` and board style images can't both go (the node says which wins); `sync-krea-catalog.py --check`.
+- **Tests that fail on main first.** `test_ideogram_remix_gets_board_style_images_by_default`; `test_runway_image_gen4_board_images_untagged_other_models_text`; `test_krea_catalog_style_nodes_have_board_ports`; `test_unverified_krea_style_fields_default_to_text` (Seedream 4, Seedream 5, Flux dev, Krea Runway gen-4); `test_krea_style_images_send_required_strength` (a switched-on Seedream 4 and Seedream 5: every item has a strength, and they add up to the board's).
+- **New tests.** Krea 2 golden unchanged after PR13a's update (the planner's `{url, strength}` equals PR13a's values), including the golden boards with an external or unreadable image (the planner leaves out exactly what `representativeImages` leaves out); Ideogram `style_preset` and board style images can't both go (the node says which wins); `sync-krea-catalog.py --check`.
 - **Live check.** Mocked Ideogram, Runway and Krea. One real run per family only with Justin's OK.
-- **Depends on.** PR14. Q21.
+- **Depends on.** PR14, PR13a (Q21 b settled).
 - **Docs.** Contract 07 §1.16; `.agents/skills` notes for Krea, Ideogram, Runway; `MODEL_REFERENCE.md`.
 
 ### PR16: A board port on every other image generator — new
@@ -1326,13 +1778,13 @@ Runs alongside PR9 to PR11.
   - "Use a board image as the first frame ▾" on the Moodboard row of nodes with a first-frame port (§5.7.8): adds a wired Image Input as one undoable graph edit.
   - The census check extended to `video-gen`.
   - Price rows or the marker (§5.7.9) for the default-images nodes here with none: `kling-o3-ref`, `krea-video-kling-kling-o1`, `krea-video-minimax-h3-max`, `gemini-omni-flash`, `krea-video-google-gemini-omni-flash`. The MiniMax route of Hailuo 3 gains its per-image terms (first 5 free, $0.04 after).
-  - The face policy (§5.7.7, Q26): the `realPerson` image field and `realPerson` op, the side panel mark, the local face check, "Send anyway", the BytePlus error naming the board images.
+  - The face policy (§5.7.7, Q26 a): the `realPerson` image field and `realPerson` op, the side panel mark, the local face check, "Send anyway", the BytePlus error naming the board images.
   - Port badge fixes: `runway-video.image`, `veo-3.image`, and the Kling first-frame ports say "first frame", not style or subject.
 - **What the person sees.** Wiring a board into Seedance R2V fills its references; a photo with a face shows "left out · Send anyway". A first frame never changes by itself; "Use a board image as the first frame" sets one in a click. On Krea Veo 3.1, board references go in with "Veo treats each reference as a subject to show" and the 8 s message when the clip is shorter.
 - **Tests that fail on main first.** `test_first_frame_never_filled_from_board` over every video entry; `test_seedance_byteplus_no_board_refs_when_start_image_wired`; `test_hailuo3_minimax_route_no_board_refs_when_start_image_wired`; `test_omni_1_1_google_route_no_board_refs_with_start_image`; `test_seedance_face_block_leaves_out_marked_image`; `test_veo_refs_without_8s_stop_with_message`; `test_use_board_image_as_first_frame_adds_wired_input` (one undo step); `test_every_video_generator_has_a_board_port`.
 - **New tests.** `realPerson` survives every write (PR1 merge); the board alone fills a required references port and the preflight counts it; `gemini-omni-flash` under `auto` gets none.
 - **Live check.** Mocked fal, BytePlus, Krea and Google. One real Seedance R2V run only with Justin's OK.
-- **Depends on.** PR14. Q26.
+- **Depends on.** PR14. (Q26 a is decided.)
 - **Docs.** Contract 07 §1.16; `.agents/skills` for Kling, Seedance, Veo; `MODEL_REFERENCE.md`; a gap note for Runway video references (§8).
 
 ### PR18: Lyria: board images and a music direction you write (B1) — new
@@ -1340,14 +1792,14 @@ Runs alongside PR9 to PR11.
 - **Goal.** Lyria hears the board: its top images plus a short written direction.
 - **Scope.**
   - A Moodboard port and a `music` entry on `lyria-3` (images up to 10, a 20 MB request budget, downscaled), with `text: "music-direction"`: Lyria's text is the music direction and a plain image legend only, never the visual brief, Avoid or negatives.
-  - The board-level `musicDirection` field (PUT, person gate) and `lookFields[F].musicDirection` (`look.set`) once PR7b is in. The bundle carries the scope's `musicDirection` only when set.
+  - The board-level `musicDirection` field (PUT; the person gate until PR7e, then a word-history entry when an agent replaces or clears it, Q30 c) and `lookFields[F].musicDirection` (`look.set`) once PR7b is in. The bundle carries the scope's `musicDirection` only when set.
   - The Lyria node shows it and edits it in place; with none it says "No music direction yet. Write one, or ask the reader to draft one." Never a colour-to-key mapping.
   - Ports and `text: "music-direction"` text-only entries on the text-only music nodes (`elevenlabs-music`, `stable-audio-25`, `ace-step`, `krea-audio-elevenlabs-music`, `-v2`, `-v2-5`, `krea-audio-bytedance-seed-audio-1-0`) and `mmaudio-v2`; with no music direction, nothing goes.
   - The census check extended to `audio-gen`, with the exclusion list in §5.7.11 E.
   - `lyria-3` price: a verified row if Google's page lists one, else the marker.
 - **What the person sees.** A Moodboard input on Lyria, the look's images going in, and a music direction field on the node.
 - **Tests that fail on main first.** `test_lyria_gets_board_images_and_music_direction`; `test_lyria_prompt_has_no_visual_brief_or_hex`; `test_music_direction_outside_source_hash_and_brief_basis`; `test_every_music_generator_has_a_board_port`.
-- **New tests.** The byte budget; an agent can't replace a direction the person wrote; the bundle has no `musicDirection` key when none is set (golden).
+- **New tests.** The byte budget; an agent can't replace a direction the person wrote before PR7e, and from PR7e its replace writes an entry that restores the old record (Q30 c); the bundle has no `musicDirection` key when none is set (golden).
 - **Live check.** Mocked Google. One real Lyria Clip run only with Justin's OK; it also settles whether Clip takes images (u), and its price row if Google's page lists one.
 - **Depends on.** PR14 (and PR7b for per-look storage; before it, the board-level field only).
 - **Docs.** Contract 07 §1.16; `.agents/skills` for Gemini.
@@ -1355,19 +1807,19 @@ Runs alongside PR9 to PR11.
 ### PR19: The reader drafts the music direction (B1) — new
 
 - **Goal.** One click writes a music direction from a look.
-- **Scope.** The reader's text call (§5.6): the scope's top 4 steering images at 512 px, its stored readings when there are any, and its effective Direction. Board notes, image notes and note-derived keywords only when `sendNotes` or the source node's `send_notes: yes` is on; private notes never; no Avoid, pins or palette. Before PR10 lands it works from images and Direction alone. A "Write music direction" button on the Lyria node and in the look panel, with the price shown first; agents through `agent_spend.decide`; `by: "reader"`, `basis` = the scope's hash, "changed since written" when the look changes; it never overwrites one the person wrote. Q25 decides whether Analyze also drafts one.
+- **Scope.** The reader's text call (§5.6): the scope's top 4 steering images at 512 px, its stored readings when there are any, and its effective Direction. Board notes, image notes and note-derived keywords only when `sendNotes` or the source node's `send_notes: yes` is on; private notes never; no Avoid, pins or palette. Before PR10 lands it works from images and Direction alone. A "Write music direction" button on the Lyria node and in the look panel, with the price shown first; agents through `agent_spend.decide`; `by: "reader"`, `basis` = the scope's hash, "changed since written" when the look changes. With one already set, the button reads "Rewrite music direction". The reader is a non-person writer, so from PR7e its rewrite puts the old direction, the person's or not, into the word history with a Restore note (Q30 c, §5.8); before PR7e it never overwrites one the person wrote. Asked for by an agent under "Ask first", a rewrite that would replace a music direction becomes one board proposal with `fields: {musicDirection}` (§5.8); test `test_agent_asked_music_rewrite_under_ask_first_becomes_proposal`, gated on the setting PR (§8). Analyze never drafts one: only this button does (Q25 a).
 - **What the person sees.** "Write music direction · about $0.002" (u) on the Lyria node; the text appears, editable.
-- **Tests that fail on main first.** `test_music_direction_draft_is_priced_before_the_call`; `test_reader_never_overwrites_person_music_direction`; `test_music_draft_prompt_has_no_notes_unless_opted_in` (board notes, image notes, note keywords); `test_music_draft_prompt_never_has_private_notes`; `test_music_draft_works_without_readings`.
+- **Tests that fail on main first.** `test_music_direction_draft_is_priced_before_the_call`; `test_reader_never_overwrites_person_music_direction` before PR7e, which becomes `test_reader_rewrite_keeps_old_music_direction_in_history` once PR7e is in; `test_music_draft_prompt_has_no_notes_unless_opted_in` (board notes, image notes, note keywords); `test_music_draft_prompt_never_has_private_notes`; `test_music_draft_works_without_readings`.
 - **Live check.** Mocked provider. One real Argon call only with Justin's OK.
-- **Depends on.** PR4, PR18 (PR7b for per look; PR10 for readings, which it uses when present). Q25.
+- **Depends on.** PR4, PR18 (PR7b for per look; PR10 for readings, which it uses when present). (Q25 a is decided.)
 - **Docs.** Contract 07 §1.13 (the reader's music call) and §1.16 (music entries).
 
 ### PR20: 3D: Meshy's texture image, palette and materials as text (B3) — new
 
 - **Goal.** 3D gets the look's surface, never its images as views.
-- **Scope.** First, fetch Meshy's API pages and record the fields in `provider_schemas` (`texture_image_url` on image-to-3D; whether refine takes it; the retexture field). Then a `texture_image` port on the Meshy nodes that take one, with a `texture-style` entry (limit 1); `textSlot: texture_prompt` for the palette and materials sentence (on routes that send it); `views` entries for multi-view nodes (no fill). A3 stays off here until PR23.
-- **What the person sees.** A texture image input on Meshy Image to 3D that the board fills with its heaviest image; the board's palette in the texture prompt.
-- **Tests that fail on main first.** `test_meshy_image_to_3d_sends_texture_image_url`; `test_views_nodes_never_get_board_images`; `test_palette_sentence_goes_to_texture_prompt`; `test_meshy_image_to_3d_without_prompt_port_still_gets_board` (no prompt port: the texture image and `texture_prompt` still go). Price rows for the Meshy nodes, or the marker (§5.7.9).
+- **Scope.** First, fetch Meshy's API pages and record the fields in `provider_schemas` (`texture_image_url` on image-to-3D; whether refine takes it; the retexture field). Then a `texture_image` port on the Meshy nodes that take one, with a `texture-style` entry (limit 1); `textSlot: texture_prompt` for the palette and materials sentence (on routes that send it), with `textUnless: texture_image`, since Meshy takes a texture image or a texture prompt, not both (§5.7.11 D); `views` entries for multi-view nodes (no fill). A3 stays off here until PR23.
+- **What the person sees.** A texture image input on Meshy Image to 3D that the board fills with its heaviest image; with board images off, the board's palette in the texture prompt instead.
+- **Tests that fail on main first.** `test_meshy_image_to_3d_sends_texture_image_url`; `test_views_nodes_never_get_board_images`; `test_palette_sentence_goes_to_texture_prompt_only_without_texture_image`; `test_person_texture_prompt_means_no_board_texture_image` (with the node line); `test_meshy_image_to_3d_without_prompt_port_still_gets_board` (no prompt port: the texture image still goes, and `texture_prompt` is left alone). Price rows for the Meshy nodes, or the marker (§5.7.9).
 - **Live check.** Mocked Meshy. One real run only with Justin's OK.
 - **Depends on.** PR14.
 - **Docs.** `.agents/skills` for Meshy; `MODEL_REFERENCE.md`.
@@ -1390,7 +1842,7 @@ Runs alongside PR9 to PR11.
 - **What the person sees.** Wire a portrait board, and the node switches to 4:5, saying so.
 - **Tests that fail on main first.** `test_aspect_from_references_snaps_to_node_options`; `test_aspect_never_replaces_auto_with_wired_image`; `test_aspect_written_on_wire_is_one_undo_step`; `test_run_never_changes_aspect`.
 - **Live check.** Screenshots of the card line and its undo.
-- **Depends on.** PR14, PR7d (to follow look changes). Q27.
+- **Depends on.** PR14, PR7d (to follow look changes). (Q27 a is decided.)
 - **Docs.** Contract 07 §1.16 (aspect); `skills/nebula/SKILL.md`.
 
 ### PR23: Combine into one image (A3, an option) — new
@@ -1404,26 +1856,30 @@ Runs alongside PR9 to PR11.
 - **Depends on.** PR14, PR15 (Krea Z Image and Kontext dev ports), PR16 (`flux-1-1-ultra`'s port); PR20 for the Meshy texture case.
 - **Docs.** Contract 07 §1.16 (collage); the research note's open question stays open until the comparison.
 
-### PR24: Recraft style objects (A1 for Recraft; how is Q24) — new
+### PR24: Recraft style objects (A1 for Recraft; Q24 a: Recraft's own API as the direct route) — new
+
+Decided: Justin chose Q24 a (2026-10-20). Recraft's own API becomes the direct route of the two Recraft V4 nodes, his Recraft key first, else fal.
 
 - **Goal.** Recraft gets the look's images the way it takes them: as a style made from weighted images (A1 counts "Recraft styles" as a style slot).
 - **Scope (Q24 a).**
-  - Verify first: fetch Recraft's `POST /v1/styles` page (1 to 10 images with `image_weights` (r)) and its generation schema into `provider_schemas`, and check whether fal's Recraft V4 endpoints accept a style id made on Recraft's API (u).
-  - A Recraft key in Settings, and Recraft's own API as the direct route of `recraft-v4-raster` and `recraft-v4-svg`, through the existing dual-route mechanism (`node_route.py` / `directRoute`, as the fal Seedance and GPT Image copies have). The maker's key goes first. These nodes stay dual-route; no `routes` table (AGENTS.md: only new nodes use routes).
-  - A style made per scope from its images and weights, remade when the scope's hash changes, cached per `(board, scope, sourceHash)`, and sent as `style_id`. On the fal route it is sent only if the check above passes; otherwise fal runs get palette and text, and the node says "Board style needs your Recraft key".
-  - **Cost:** style creation (about $0.005 per style (r)) is its own line in `estimate_node`, counted only when the scope's style isn't cached, and its own item in `agent_spend.decide`, so a remade style is never a hidden charge. The run note says when one was made.
+  - Verify first: fetch Recraft's `POST /v1/styles` page and its generation schema into `provider_schemas`, and the exact `model` ids. fal's Recraft V4 schemas take no `style_id` (input properties: `prompt`, `image_size`, `colors`, `background_color`, `enable_safety_checker`; https://fal.ai/models/fal-ai/recraft/v4/text-to-image/api and https://fal.ai/models/fal-ai/recraft/v4/text-to-vector/api, checked 2026-10-20), so under Q24 a fal runs get palette and text; re-check at build time. What 2026-10-20's check read (WebFetch summaries, quotes capped at 125 characters, so re-read in full here): `image_weights` are "Per-image weights; the number of weights must match the number of uploaded images." (https://www.recraft.ai/docs/api-reference/endpoints), 1 to 10 images; "Create style also accepts image_weights, one per image, to bias the style toward specific references." (https://www.recraft.ai/docs/api-reference/models/recraft-v4-styles); `match` is `flexible` (default) or `precise`; `style_id` works on "All models except V4.1 Flash"; generation-time `style_reference_urls` take no weights and "can't combine with `style_id`". Whether weights are relative or absolute is not said (u).
+  - **Weights (Q21 b):** `weight: at-creation, sum-to-one`: `image_weights` are the scope's shares, rounded like native strengths, sent once per style. A changed weight changes the scope's hash, so a new style is made. `match` stays Recraft's default; mapping board strength to `precise` would be Nebula's own invention and is not built (Justin's call if he wants it).
+  - **The key:** Justin adds his Recraft key in Settings himself. It is never pasted into a chat or a prompt, and no agent writes it.
+  - Recraft's own API as the direct route of `recraft-v4-raster` and `recraft-v4-svg`, through the existing dual-route mechanism (`node_route.py` / `directRoute`, as the fal Seedance and GPT Image copies have). The maker's key goes first. These nodes stay dual-route; no `routes` table (AGENTS.md: only new nodes use routes).
+  - A style made per scope from its images and weights, created with `model` set to the node's Recraft model (raster or vector), remade when the scope's hash changes, cached per `(board, scope, sourceHash, recraftModel)`, and sent as `style_id`. Recraft: "A style must be used with a matching model: the `model` it was created with (Create style defaults to `recraftv4_styles`)." (https://www.recraft.ai/docs/api-reference/models/recraft-v4-styles). The page names `recraftv4_styles` (raster) and `recraftv4_styles_vector` (SVG), plus `_pro` variants; which id each node uses is set in the verify step (u). So a raster and a vector node on one look make two styles. fal runs get palette and text (fal takes no `style_id`, above), and the node says "Board style needs your Recraft key".
+  - **Cost:** style creation (about $0.005 per style (r)) is its own line in `estimate_node`, counted only when the scope's style isn't cached for that node's model (one creation per model), and its own item in `agent_spend.decide`, so a remade style is never a hidden charge. The run note says when one was made.
 - **What the person sees.** A Recraft key in Settings; on Recraft nodes, "Board style: made from Dither's 8 images" and a run note when the style is remade, with its cost in the run estimate.
 - **Tests that fail on main first.** `test_recraft_gets_style_id_from_board_scope`; `test_recraft_style_remade_when_scope_hash_changes`; `test_recraft_style_creation_is_in_the_estimate_only_when_not_cached`; `test_agent_spend_counts_style_creation`.
-- **New tests.** The style is cached per scope and hash (no second creation for the same look); weights map to `image_weights`; a missing key or an unconfirmed price falls back to palette and text with a node message; the direct route is chosen by the same rule as the other dual-route nodes.
-- **Live check.** Mocked Recraft. One real style creation and one generation only with Justin's OK.
-- **Depends on.** PR15, PR7b. Q24.
+- **New tests.** The style is cached per scope and hash (no second creation for the same look); `test_recraft_style_created_per_model_raster_and_vector` (a raster and a vector node on one look make two styles, each sent only to its own model); weights map to `image_weights`; a missing key or an unconfirmed price falls back to palette and text with a node message; the direct route is chosen by the same rule as the other dual-route nodes.
+- **Live check.** Mocked Recraft. One real style creation and one generation only after Justin has added his key in Settings and OK'd the spend, with the price shown first (style creation about $0.005 (r), plus the generation).
+- **Depends on.** PR15, PR7b. Justin's Recraft key for the live check only.
 - **Docs.** Settings docs for the new key; `.agents/skills` note for Recraft; contract 07 §1.16; `docs/PROVIDER-ROUTES.md` (the new direct route); `MODEL_REFERENCE.md`.
 
 ---
 
 ## 7. Open questions for Justin
 
-Each question has a recommended answer. The plan builds the recommendation unless he says otherwise.
+Each question has a recommended answer. The plan builds the recommendation unless he says otherwise. Justin answered Q30 to Q35 (§7.4) on 2026-10-20, each as recommended: c) for Q30, and a confirmation of what was built for Q31 to Q35.
 
 ### 7.1 Canvas (Q1 to Q17)
 
@@ -1449,21 +1905,21 @@ Each question has a recommended answer. The plan builds the recommendation unles
 
 ### 7.2 New calls the nine answers leave open (Q18 to Q28)
 
-Q22 and Q23 stay listed so their numbers don't move, but they are already answered.
+Q22 and Q23 stay listed so their numbers don't move, but they are already answered. Justin answered the rest on 2026-10-20: a) for each, except Q21 and Q28, where he chose b).
 
 | # | Question | Options | Recommendation and why | Gates |
 |---|---|---|---|---|
-| Q18 | Where do you pick the look? | a) On the Moodboard node. For two looks, add a second Moodboard node (dragging a look's tab onto the canvas makes one). b) On each generator node. c) On the Moodboard node, with an override on each generator. | **a).** Everything the Moodboard node puts out (brief, palette, images) then describes one look, so what you see on it is what generators get. On the generator, each run would have to measure every look, and the brief and palette outputs could still show only one. | PR7d |
-| Q19 | Does a node keep its look, or follow whichever look is heaviest right now? | a) It keeps the look it was given. When you pick a board, Nebula picks the heaviest look and saves it on the node; later changes never switch it, and the node tells you when a board gains looks. b) A live "Auto" that picks the heaviest look again on every run. | **a).** With a live Auto, resizing one card in the Studio, or drawing a first small frame, would silently change what every node sends, and a saved recipe would stop giving the same result. | PR7d |
-| Q20 | Do looks share the board's Direction and Avoid? | a) The board's words are the starting point. A look can replace its Direction and "must appear" colours, and add to Avoid and "keep out". A hand-written brief belongs to one look only. b) One set of words for the whole board. c) Each look starts empty. | **a),** with "must appear" replacing (not adding), and Keep anyway / Leave out choices carrying over only while the look uses the board's words. Directions differ between looks, which is why A4 exists, while Avoid items like "no text" usually hold everywhere. b) keeps the clashes A4 removes; c) means retyping "no text" in every look, and an old board's Avoid would quietly stop applying. | PR7b |
-| Q21 | Krea 2's strengths add up. Each board image goes at the board's strength times its weight, so ten images at 0.7 add up to 7. Krea's guide says to keep the total near 1. | a) Keep today's strengths until the paid comparison adds a "scaled to the board's strength" arm, then decide. b) Scale them now so they add up to the board's strength. c) Leave them as they are. | **a).** Krea's advice is clear, but nobody has tried it on a ten-image board, and changing it changes the result of every Krea 2 recipe you've already run. It adds a few runs to GM's comparison, which GM prices before asking you. | PR15; the paid comparison's scope |
+| Q18 | Where do you pick the look? | a) On the Moodboard node. For two looks, add a second Moodboard node (dragging a look's tab onto the canvas makes one). b) On each generator node. c) On the Moodboard node, with an override on each generator. | **a).** Everything the Moodboard node puts out (brief, palette, images) then describes one look, so what you see on it is what generators get. On the generator, each run would have to measure every look, and the brief and palette outputs could still show only one. **Justin (2026-10-20): a).** | PR7d |
+| Q19 | Does a node keep its look, or follow whichever look is heaviest right now? | a) It keeps the look it was given. When you pick a board, Nebula picks the heaviest look and saves it on the node; later changes never switch it, and the node tells you when a board gains looks. b) A live "Auto" that picks the heaviest look again on every run. | **a).** With a live Auto, resizing one card in the Studio, or drawing a first small frame, would silently change what every node sends, and a saved recipe would stop giving the same result. **Justin (2026-10-20): a).** | PR7d |
+| Q20 | Do looks share the board's Direction and Avoid? | a) The board's words are the starting point. A look can replace its Direction and "must appear" colours, and add to Avoid and "keep out". A hand-written brief belongs to one look only. b) One set of words for the whole board. c) Each look starts empty. | **a),** with "must appear" replacing (not adding), and Keep anyway / Leave out choices carrying over only while the look uses the board's words. Directions differ between looks, which is why A4 exists, while Avoid items like "no text" usually hold everywhere. b) keeps the clashes A4 removes; c) means retyping "no text" in every look, and an old board's Avoid would quietly stop applying. **Justin (2026-10-20): a).** | PR7b |
+| Q21 | Krea 2's strengths add up. Each board image goes at the board's strength times its weight, so ten images at 0.7 add up to 7. Krea's guide says to keep the total near 1 ("start with strengths that sum near `1.0`", https://www.krea.ai/docs/developers/krea-2/style-transfer.md, quoted 2026-10-20). | a) Keep today's strengths until the paid comparison adds a "scaled to the board's strength" arm, then decide. b) Scale them now so they add up to the board's strength. c) Leave them as they are. | **a).** Krea's advice is clear, but nobody has tried it on a ten-image board, and changing it changes the result of every Krea 2 recipe you've already run. It adds a few runs to GM's comparison, which GM prices before asking you. **Justin (2026-10-20): b), changed from the recommendation.** His note: "They should normalize for however any nodes need the information." What changed: every node that takes weights gets them in the form it needs, through one `normalize` field per entry (§5.7.2, §5.7.4), not a Krea special case. Krea 2 goes first in the new PR13a: the board images sent share out the board's strength, wired references keep theirs, and the golden file gets its one deliberate update (§4.8 item 7). Old recipes replay at the new strengths and say so. The paid comparison no longer needs a "scaled" arm; its Krea 2 arm now only checks whether a ten-image board at about 0.07 each still steers. | PR13a (new), PR14, PR15, PR24. No longer gates the paid comparison. |
 | Q22 | ~~Can agents turn "Send board images" on or off?~~ | — | **Answered by your agent-freedom rule** (agents may do anything undoable; per-user setting, new installs "Ask first"). Agents get the switch and the copying warning; PR14 adds the exception that lets them write it (§5.7.8). | — |
 | Q23 | ~~Veo 3.1 references on by default?~~ | — | **Answered by B2 a)**, whose page named Veo ("Veo references force 8s"). Built as decided: Krea Veo 3.1 references on by default, the 8 s rule blocks with a message, and a face warning. Flagged, not asked: Veo reads each reference as "one person, character or product" (r), so a style board can put its subjects in the shot. If you want Veo behind the switch instead, say so and PR17 flips one entry default. | — |
-| Q24 | Recraft. A1 counts Recraft styles as a style slot, but Nebula's Recraft V4 nodes run on fal and take no images. Recraft makes a "style" from up to 10 weighted images on its own API (about $0.005 per style, research note) and then generates with it. This needs a Recraft API key. How should the style reach Recraft? | a) Add Recraft's own API as the direct route of the two Recraft V4 nodes, the way the fal Seedance and GPT Image nodes already have a maker route: your Recraft key first, else fal. The style is made on Recraft and sent as `style_id`; fal runs get it too only if fal accepts a style made on Recraft, otherwise palette and text. b) Keep the fal-only nodes; make the style on Recraft's API only if fal accepts its id, and if it doesn't, come back to you. c) Not now: Recraft gets palette and text only, and Recraft styles are logged as a gap. This defers A1 for Recraft. | **a).** It follows your "maker's own API first" rule and the existing two-route pattern, and it works whatever fal turns out to accept. b) hangs on an unverified fal behaviour. c) leaves A1 unbuilt for Recraft. Either a) or b) needs a Recraft key from you; the style's cost is shown in each run's estimate. | PR24 |
-| Q25 | When does the reader write a music direction for Lyria? | a) Only when asked: a "Write music direction" button on the Lyria node and in the look panel, price shown first. b) Every Analyze writes one per look (a small extra charge on each Analyze). | **a).** Most boards never feed music. Asking keeps Analyze's price about sorting, and you can always type one yourself for free. | PR19 |
-| Q26 | Seedance refuses references that show real people. How should Nebula decide which board images to leave out? | a) Your "Real person" mark on an image first, then Analyze's reading if there is one, then a free check on this computer that looks for a face. A left-out image shows "#4 left out: Seedance blocks real faces · Send anyway". b) Your mark only; everything else goes, and if Seedance refuses, its error names the board images. c) Analyze's reading only (paid). | **a).** A refused video run wastes time. The free check catches most photos; it also catches painted faces, which "Send anyway" fixes in one click. | PR17 (and PR10's reading field) |
-| Q27 | The aspect from the references (B4). How does it reach a node? | a) Written into the node's aspect once, when you wire a board or change its look, shown on the card ("4:5 from the board") and undoable. Never changed at run time. b) Decided at each run while the aspect is still at its default. c) Only a suggestion on the card that you click. | **a).** You see it before you run, the price shown is right, and a saved recipe repeats. b) could change a run's shape without you noticing. | PR22 |
-| Q28 | Can agents (and Analyze) delete or merge a look that holds words you wrote: its own Direction, Avoid or hand-written brief? | a) Not yet. They're refused, as agents are with your hand-written brief today, until boards keep a history you can undo from anywhere. b) Yes under "Act directly", undoable from the Studio. | **a).** Today the only undo is the Studio's, and only while it's open, so a delete made while it's closed would lose your words. Once boards keep a server-side history, which your "everything agents do is undoable" rule calls for, this opens up. | PR7b |
+| Q24 | Recraft. A1 counts Recraft styles as a style slot, but Nebula's Recraft V4 nodes run on fal and take no images. Recraft makes a "style" from up to 10 weighted images on its own API (about $0.005 per style, research note) and then generates with it. This needs a Recraft API key. How should the style reach Recraft? | a) Add Recraft's own API as the direct route of the two Recraft V4 nodes, the way the fal Seedance and GPT Image nodes already have a maker route: your Recraft key first, else fal. The style is made on Recraft and sent as `style_id`; fal runs get it too only if fal accepts a style made on Recraft, otherwise palette and text. b) Keep the fal-only nodes; make the style on Recraft's API only if fal accepts its id, and if it doesn't, come back to you. c) Not now: Recraft gets palette and text only, and Recraft styles are logged as a gap. This defers A1 for Recraft. | **a).** It follows your "maker's own API first" rule and the existing two-route pattern, and it works whatever fal turns out to accept. b) hangs on an unverified fal behaviour. c) leaves A1 unbuilt for Recraft. Either a) or b) needs a Recraft key from you; the style's cost is shown in each run's estimate. **Justin (2026-10-20): a).** PR24 is decided. Checked 2026-10-20: fal's Recraft V4 schemas take no `style_id`, so fal runs get palette and text. You add the Recraft key in Settings yourself (never in a chat), and the one real style creation waits for your spend OK. | PR24 |
+| Q25 | When does the reader write a music direction for Lyria? | a) Only when asked: a "Write music direction" button on the Lyria node and in the look panel, price shown first. b) Every Analyze writes one per look (a small extra charge on each Analyze). | **a).** Most boards never feed music. Asking keeps Analyze's price about sorting, and you can always type one yourself for free. **Justin (2026-10-20): a).** | PR19 |
+| Q26 | Seedance refuses references that show real people. How should Nebula decide which board images to leave out? | a) Your "Real person" mark on an image first, then Analyze's reading if there is one, then a free check on this computer that looks for a face. A left-out image shows "#4 left out: Seedance blocks real faces · Send anyway". b) Your mark only; everything else goes, and if Seedance refuses, its error names the board images. c) Analyze's reading only (paid). | **a).** A refused video run wastes time. The free check catches most photos; it also catches painted faces, which "Send anyway" fixes in one click. **Justin (2026-10-20): a).** | PR17 (and PR10's reading field) |
+| Q27 | The aspect from the references (B4). How does it reach a node? | a) Written into the node's aspect once, when you wire a board or change its look, shown on the card ("4:5 from the board") and undoable. Never changed at run time. b) Decided at each run while the aspect is still at its default. c) Only a suggestion on the card that you click. | **a).** You see it before you run, the price shown is right, and a saved recipe repeats. b) could change a run's shape without you noticing. **Justin (2026-10-20): a).** | PR22 |
+| Q28 | Can agents (and Analyze) delete or merge a look that holds words you wrote: its own Direction, Avoid or hand-written brief? | a) Not yet. They're refused, as agents are with your hand-written brief today, until boards keep a history you can undo from anywhere. b) Yes under "Act directly", undoable from the Studio. | **a).** Today the only undo is the Studio's, and only while it's open, so a delete made while it's closed would lose your words. Once boards keep a server-side history, which your "everything agents do is undoable" rule calls for, this opens up. **Justin (2026-10-20): b), changed from the recommendation.** What changed: the plan now builds that server-side history for looks (§5.8, new PR7e), so a delete stays undoable even with the Studio closed. Under "Act directly", an agent's or Analyze's delete or merge of a look with words goes through, and the look's frame and words can be restored from the Studio, the CLI or MCP ("Claude deleted Grain and its own Direction and brief · Restore"). Under "Ask first", it becomes a proposal you accept or reject. PR7b keeps the refusal only until PR7e merges. Whether the same opens up for the board's own hand-written brief was the new Q30 (§7.4); Justin chose c). | PR7e (new), PR7b, PR10 |
 
 ---
 
@@ -1473,18 +1929,41 @@ Q22 and Q23 stay listed so their numbers don't move, but they are already answer
 |---|---|---|---|---|
 | Q29 | GM's mockup v5 shows Analyze as an overseer: a panel streams the reader's lines and outlines each card a line names. Where do the lines come from? | a) Argon's own thought summaries, shown as they stream. b) The readings themselves: each image's reading streams back as soon as the model finishes it, and its short reason becomes that image's line. Nebula adds its own plainly marked lines ("Reading #1–#6", "Asking again for #10–#12", "Cancelled"), and results come from what Nebula actually applied. c) b), plus Argon's thought summaries as a second, dimmer stream labelled "thinking (summary)" that never outlines cards. | **b) now, and decide c) after PR4's one approved Argon probe.** In b) each line is the model's actual reading of that image, the same text the side panel shows afterwards, and Nebula ties every line to an image it sent, so an outline never rests on the model's guess about a number. It costs nothing beyond the plan's existing retry, works with a mocked provider, and works with a reader that can't stream (its lines then come at the end of each batch). a) can't drive outlines: Google says summaries come back "only when available" and that image analysis "might not produce text summaries", so the panel could stay empty on exactly this job. c) fills the quiet while Argon thinks, but no Google page shows summaries and a response schema in one request, so the probe checks that first. Under b) the panel reads "Gemini 4 Argon · reading", not "· thinking". **Justin (2026-10-20): c).** "If argon, or whatever model doesn't stream its thoughts then we just fallback to B." So the summary stream is optional per model and absent when a model returns none (§5.6.1). | PR4, PR10, PR10b |
 
+### 7.4 The board's own words (Q30), and short confirmations (Q31 to Q35)
+
+All six answered on 2026-10-20, each as recommended.
+
+| # | Question | Options | Recommendation and why | Gates |
+|---|---|---|---|---|
+| Q30 | Your Q28 b) means boards now keep a history of removed looks' words (PR7e). Today agents are refused when they try to replace or remove the board's own hand-written brief, because "the board keeps no history". Should that open up too? | a) Keep it. Agents stay refused on the board's hand-written brief, and the history covers removed looks only. b) Under "Act directly", an agent may replace or remove the board's hand-written brief; the old text goes into the history and you can restore it from anywhere. "Keep" stays yours alone, since it answers your own notice and loses nothing. c) b), plus the same history for every words field an agent or Analyze replaces or clears: the board's and each look's Direction, Avoid, "must appear" and "keep out" colours, and music direction. Under "Ask first", each of these becomes a proposal. | **c).** Today an agent can already overwrite the board's Direction, Avoid and pinned colours with no guard and no way back (`moodboard_store.py:538-543`). That breaks "everything agents do is undoable" more than the guarded brief does, and b) alone would leave that hole open. c) needs no author stamps (the history keeps every non-person change) and costs about 200 lines of code, 200 of tests and 0.75 of a day, inside PR7e. **Justin (2026-10-20): c).** His words: "b), and the same history for every words field an agent or Analyze replaces or clears: the board's and each look's Direction, Avoid, "must appear" and "keep out" colours, and music direction. Under "Ask first", each becomes a proposal." What changed: the word history keeps a changed-words entry, one per scope per write, whenever an agent or Analyze loses words in one of those fields or the brief; `_guard_override` opens for replace and remove, and Keep stays yours; one list, "Recently changed words", and one Restore note per write (§5.8, PR7e). The lines cited above are `:587-592` on origin/main `77e73b45`. The design came to about 350 lines of code, 300 of tests and 1 day in PR7e, plus 50, 50 and 0.25 in PR9's Studio list (§9). | PR7e (decided: grows by about 350 + 300 and 1 day), PR9 (+50, +50, 0.25), PR18, PR19 |
+
+**Short confirmations.** Each was already built one way in this plan; a word from Justin would confirm it or flip one setting. He confirmed all five on 2026-10-20.
+
+| # | Question | Options | Recommendation | Gates |
+|---|---|---|---|---|
+| Q31 | Should the Notes count show unread notes, clearing when you open the list? (GM recommended it; you didn't object.) | a) Unread: the chip counts notes you haven't opened; opening the list clears it; the list keeps everything. b) Open: the chip counts every note you haven't dismissed. c) No number, only the author dots. | **a).** It matches the mockup (the count only rises until you look), and the list still keeps every note. b) would keep a number up for notes you've already read. **Justin (2026-10-20): a), confirmed.** | PR9a |
+| Q32 | What should board strength 0 do on a node that takes a weight per image (Krea 2 and the Krea style fields)? | a) Send no board images, with a run note "Board strength is 0: no board images sent". b) Send the images at strength 0. c) Strength 0 turns board images off on every node, weights or not. | **a).** Zero-strength images steer nothing and still add Krea 2's $0.005 per run. c) is one line in the helper if you want 0 to mean "off" everywhere (§5.7.4). **Justin (2026-10-20): a), confirmed.** | PR13a, PR14 |
+| Q33 | What should the agent-freedom setting default to on installs that already exist? (New installs get "Ask first", your rule.) | a) "Ask first" for everyone, existing installs included. b) "Act directly" on existing installs, which is how they work today, with a one-time line in Settings > Agents: "Agents act directly here. New installs ask first. Change". | **b).** Nothing changes under you on an update, and the line tells you where to switch. a) would suddenly turn every agent edit into a proposal on your own machine. **Justin (2026-10-20): b), confirmed.** | The freedom-setting PR (§8); the "Ask first" paths in PR7e, PR9 and PR10 |
+| Q34 | How long should removed looks' words be kept (PR7e)? | a) No timer: 50 open entries per board, restored ones pruned to the last 20, like Recently deleted. b) 30 days, as projects are purged. | **a).** Words you never restored stay until you clear them, and the cap stops a runaway agent. b) is one setting if you prefer it. **Justin (2026-10-20): a), confirmed.** With Q30 c the same limits cover changed-words entries too, counted together with removed looks. | PR7e |
+| Q35 | Should "Not now" on an Argon suggestion note dismiss it for good? | a) Dismiss for good: the suggestion is kept as dismissed and never offered again; the list still lets you make the frame later. b) Snooze: the note goes, and the next Analyze may suggest it again. | **a).** It is what "dismissed" already means (§4.1), and a re-analyze won't nag. **Justin (2026-10-20): a), confirmed.** | PR11 |
+
 ## 8. Out of scope, and what this waits on
 
 - **C5 Avoid area.** The brief-conflicts calls (#18) are answered, so it is unblocked; it goes with frames (PR7) or after. A frame `kind: "avoid"` is cheap to add later, and nothing here prevents it.
 - **Analysis option 1 (a reader that describes images and feeds the visual brief).** Still unpicked. Readings are stored and shown, but never enter `source_hash`, `brief_basis`, `compose`, the node bundle or any generator. **The one exception is B1's music direction:** a separate, visible, editable field sent only to music entries.
-- **Collage as a default anywhere (A3).** PR23 builds it as an option. GM's paid comparison ran on 2026-10-19 (Justin approved, about $1.01; 12 images, Gemini 3 Pro Image and Nano Banana 2.1, text only vs five separate references vs one collage; results in `~/Developer/brand/good-machines/explorations/2026-10-19-moodboard-image-test/`). Separate references won: real brushwork, ochre and peach notes and motifs from the references; the collage drifted pale and empty. Text alone already gets the basic look when the look sentence is specific. So separate references are the default (A2), and the collage stays an off-by-default option. Tiles from a painted region need region marks (GM's later idea) or an automatic crop. The Krea 2 (style-slot) arm waits on a Krea token and the Krea 2 price fix. **A1 evidence for later:** no image copied anything with the guard sentence on content-slot models; A1 stays as Justin decided (text by default, with the switch).
+- **Collage as a default anywhere (A3).** PR23 builds it as an option. GM's paid comparison ran on 2026-10-19 (Justin approved, about $1.01; 12 images, Gemini 3 Pro Image and Nano Banana 2.1, text only vs five separate references vs one collage; results in `~/Developer/brand/good-machines/explorations/2026-10-19-moodboard-image-test/`). Separate references won: real brushwork, ochre and peach notes and motifs from the references; the collage drifted pale and empty. Text alone already gets the basic look when the look sentence is specific. So separate references are the default (A2), and the collage stays an off-by-default option. Tiles from a painted region need region marks (GM's later idea) or an automatic crop. The Krea 2 (style-slot) arm waits on a Krea token and the Krea 2 price fix. Since Q21 b it runs scaled strengths only (no "scaled vs today" arm) and checks one thing: whether a ten-image board at about 0.07 each still steers, or whether fewer, stronger references would do better. It informs a later tweak; it gates nothing. **A1 evidence for later:** no image copied anything with the guard sentence on content-slot models; A1 stays as Justin decided (text by default, with the switch).
 - **A trained style (LoRA) per look (B4).** A later, separate project. It would use `krea-style-train` or `ideogram-train-model`, a training run per look, and its own design.
 - **The reader-based clash check for #18.** Justin's call is pending. #18 leaves room for it (`colorCheck.checks.<name>`), and §4.11.2's per-scope `colorCheck` keeps that room per look.
 - **Per-look mode and strength** (one look "subject", another "look"). Later; mode and strength stay per board.
 - **"Used by 2 nodes" in the Studio.** It needs a scan of every project's graphs. Later.
-- **A board history kept on the server.** Needed before Q28 can open up. Not in this plan.
-- **Analyze mockups before v5** that show an agent cursor sweeping over the cards are out of scope. Mockup v5 (the overseer) is in scope through PR10b.
-- **GM video beats 5 to 12:** marking a region, a correctable reading, comments and approvals, test images and reactions, liked vs decided, "more like this", and board history.
+- **A board history kept on the server.** Version 2.4 scopes this (Q28 b):
+  - **In the plan:** the word history (PR7e, §5.8). It keeps a deleted or merged look's frame, words and the batch's inverse when an agent or Analyze removes it, and, from Q30 c (Justin, 2026-10-20), the old value of every words field an agent or Analyze replaces or clears: the board's and each look's hand-written brief, Direction, Avoid, "must appear" and "keep out" colours, and music direction. Anyone restores them from the Studio, the CLI or MCP.
+  - **Words not in Q30 c's list (a gap for Justin):** the board's `notes`, image `notes` and `privateNote`. Agents may still change them with no history (the agent's `previous` is its only way back). Each is one row in §5.8's table if he wants them kept too.
+  - **Still out:** a full history of every board edit that you can step back through (GM's video "board history" beat, below); history for the person's own deletes beyond the Studio's undo; and the "Act directly" / "Ask first" setting itself, with board proposals for every agent board edit. That setting is a separate cross-cutting PR (Settings > Agents, person-only, proposed key `agents.freedom: "act" | "ask"`, new installs "ask" (Justin's rule); existing installs "act", which is how they work today, with a one-time line in Settings > Agents: "Agents act directly here. New installs ask first. Change" (Q33 b, Justin 2026-10-20); how the setting PR tells an existing install from a new one is for it to check (u); about 900 lines of code, 550 of tests, 3 days, not counted in §9). PR7e's and PR9's "Ask first" paths wait on it. Until it lands, every agent acts directly, and with PR7e every look delete and every change to the words in §5.8's table is undoable.
+- **Analyze mockups before v5** that show an agent cursor sweeping over the cards are out of scope. Mockup v5 (the overseer) is in scope through PR10b. **Mockup v5.2** is in scope for the Notes corner (the chip, the three cards `nt-0` to `nt-2`, their outlines and timings) and the "Moved by Analyze · Undo" chip, through PR9a, PR9, PR10, PR10b and PR11. What v5.2 never shows (the opened list, a clicked action) is designed in PR9a from §5.9 and checked with GM.
+- **GM video beats after the overseer:** marking a region, a correctable reading, comments and approvals, test images and reactions, liked vs decided, "more like this", and board history. v5.2 renumbers its beats (the selection Analyze is now beat 12, node routing 13), so this list goes by subject, not number (u).
+- **A "since your last turn" block on the main canvas.** Notes work there from PR9a, but the per-turn block stays board-only (PR9). Main-canvas agents keep pulling edits (`wait_for_canvas_change`).
+- **Merging `AgentLog` into Notes.** The log is in memory and lists actions; Notes are saved notices. GM's call; nothing here merges them.
 - **A board picture captured from the browser.** The server composite covers C9.
 - **A hard cap on images per board.** None exists today. PR5 measures speed at 300 images.
 - **Node gaps found while planning (not moodboard work; each PR that meets one notes it in `implementation-notes.md`, and in `docs/flora-gap-audit.md` only if Flora has it):**
@@ -1493,7 +1972,8 @@ Q22 and Q23 stay listed so their numbers don't move, but they are already answer
   - `runway-video` doesn't expose Runway's Seedance 2 / 2.5 or Hailuo3 references.
   - Lyria 3.5 and the Interactions API aren't in Nebula.
   - No Meshy node has a texture image port (PR20 adds one where verified).
-- **Krea style fields whose meaning is unverified** (Seedream 5, Flux dev, Kontext dev, Qwen, Z Image, UNI-1, Muse, Grok Imagine 2) default to text until a source, or a mocked run plus one paid run Justin approves, shows they are style-only. Each one then moves into `STYLE_VERIFIED` in its own small change.
+- **"Push away" images** (negative strengths, for example from Avoid). Krea's `style_images` fields allow −2..2, but board weights are never negative; a signed list outside the positive sum would be its own design.
+- **Krea style fields whose meaning is unverified** (Seedream 4 since version 2.4, Seedream 5, Flux dev, Kontext dev, Qwen, Z Image, UNI-1, Muse, Grok Imagine 2, and Runway gen-4 on Krea since version 2.4) default to text until a source, or a mocked run plus one paid run Justin approves, shows they are style-only. Each one then moves into `STYLE_VERIFIED` in its own small change.
 - **Fixes alongside, owned by the PR that touches the code:** wrong port badges on first-frame ports (PR15, PR17); `_to_fal_url` has no size check (PR14 budgets board images only; the general fix is separate); the unpriced nodes that get board images by default (§5.7.9) get a verified row or a visible marker in PR15, PR16, PR17, PR18 and PR20.
 
 ---
@@ -1512,15 +1992,18 @@ Q22 and Q23 stay listed so their numbers don't move, but they are already answer
 | 7b Per-look analysis and brief | ~1,000 | ~700 | 3.5 | 7, 3, 2, #18 |
 | 7c Look panel | ~900 | ~350 | 2.5 | 7b, 6 |
 | 7d The node picks a look | ~700 | ~400 | 2 | 7b |
+| 7e Word history: removed looks and changed words (new) | ~1,000 | ~800 | 3 | 3, 7, 7b, 9a (carries the Studio Notes mount if 9 and 10 aren't in) |
 | 8 Agents see + placement | ~1,300 | ~500 | 3.5 | 5 |
-| 9 Agents edit + recent edits | ~1,000 | ~400 | 3 | 8 |
-| 10 Analyze sorts + trace events | ~1,950 | ~900 | 6.25 | 4, 7, 7b |
-| 10b The overseer in the Studio | ~550 | ~300 | 3.75 | 10 |
-| 11 Suggestions | ~800 | ~350 | 2.75 | 10 |
+| 9a Notes: shared corner, main canvas, store and tools (new) | ~1,150 | ~700 | 3.5 | — |
+| 9 Agents edit + recent edits + word-history Studio half + Notes in the Studio | ~1,550 | ~750 | 5 | 8, 9a (7e for the history half) |
+| 10 Analyze sorts + trace events + Argon's notes | ~2,050 | ~1,000 | 6.5 | 4, 7, 7b, 9a (7e for removing looks with words) |
+| 10b The overseer in the Studio + "Moved by Analyze" chip | ~650 | ~350 | 4 | 10 |
+| 11 Suggestions as notes | ~650 | ~300 | 2.5 | 10, 9a |
 | 12 Arrange | ~700 | ~300 | 2 | 7 |
-| 13 Adapter table + contract test | ~900 | ~700 | 3 | #18 |
-| 14 Board images on content slots + the whole dispatcher | ~1,800 | ~1,100 | 5 | 13 |
-| 15 Style slots by default | ~1,000 | ~650 | 3 | 14 |
+| 13a Krea 2 strengths add up (new) | ~150 | ~250 | 1 | #18 |
+| 13 Adapter table + contract test | ~950 | ~750 | 3 | #18 |
+| 14 Board images on content slots + the whole dispatcher | ~1,900 | ~1,200 | 5.25 | 13, 13a |
+| 15 Style slots by default | ~1,150 | ~750 | 3.5 | 14, 13a |
 | 16 Board port on every image generator | ~600 | ~400 | 2 | 14 |
 | 17 Video references, face policy, first-frame pick | ~1,300 | ~800 | 4 | 14 |
 | 18 Lyria, music nodes, music direction | ~750 | ~450 | 2.5 | 14 (7b) |
@@ -1529,12 +2012,12 @@ Q22 and Q23 stay listed so their numbers don't move, but they are already answer
 | 21 Palette as data + negatives (entries) | ~300 | ~350 | 1 | 14, 15, 16, 17 |
 | 22 Aspect from references (graph edit) | ~550 | ~400 | 1.5 | 14, 7d |
 | 23 Combine into one image | ~700 | ~400 | 2 | 14, 15, 16 (20) |
-| 24 Recraft style objects | ~1,000 | ~500 | 3 | 15, 7b; Q24 |
+| 24 Recraft style objects | ~1,000 | ~500 | 3 | 15, 7b |
 
-- **Total:** about 25,800 lines of code and 14,150 lines of tests (about 39,950), about 82 agent-days in sequence. Canvas 43.75, looks 8, adapters 30.5. Version 2.2's overseer adds about 2,300 lines and 6.75 days (PR4, PR5, PR10, PR10b, PR11); version 2.3's thought stream (Q29 c) adds about 250 lines and 1 day (PR10, PR10b).
-- **Critical path (canvas and looks):** PR1 → PR3 → PR5 → PR6 → PR7 → PR7b → PR10 → PR10b, about 30 days (v2.2 was 29, v2.1 was 26.5, v1 was 23). PR7c and PR7d run beside PR10.
-- **Adapter lane:** #18 → PR13 → PR14 → PR17 → PR21 is about 13 days of work after #18 merges, with PR15, PR16, PR18 and PR20 beside PR17, and PR23 after PR15 and PR16. PR22 waits for PR7d, PR19 for PR4 (and uses PR10's readings once they exist), PR24 for Q24. With three lanes the whole plan fits in about 32 to 34 days.
-- **When Justin gets something:** a priced CLI dry run of the sort after PR4 (about 6 days); a usable canvas after PR6 (about 12 days); board images on GPT Image edits and Nano Banana after PR14 (about 8 days after #18 merges); style slots by default after PR15 (about 11 days after #18); one brief per look on a node after PR7d (about 21.5 days).
+- **Total (version 2.4 with Notes and Q30 c, recomputed from the 31 rows above):** about 28,950 lines of code and 16,600 lines of tests (about 45,550), 92.75 agent-days in sequence. Canvas 49.5 (PR1 to PR12, PR9a, PR10b; 14 rows, 14,900 + 7,400), looks 11 (PR7b to PR7e; 3,600 + 2,250), adapters 32.25 (PR13a, PR13 to PR24; 13 rows, 10,450 + 6,950); 49.5 + 11 + 32.25 = 92.75. **Q30 c adds 400 lines of code, 350 of tests and 1.25 days:** PR7e (+350, +300, +1; 650 + 500 and 2 days become 1,000 + 800 and 3) and PR9's Studio list (+50, +50, +0.25; 1,500 + 700 and 4.75 become 1,550 + 750 and 5). That is more than the 200 + 200 and 0.75 days estimated in Q30's row, because the design needs four things the estimate didn't count: the PUT path's actor record and its hook beside `/edits`; folding chains with `supersedes`, so ten agent edits don't fill the cap or give back the agent's first draft; two restore rules (`expect` plus "Restore anyway" for text, set difference for lists); and the Studio's changed-words rows. PR18's and PR19's gate changes are test swaps inside their sizes. Before Q30 c the rows summed to 28,550 + 16,250 (44,800) and 91.5 days. Notes add 1,500 lines of code, 1,000 of tests and 4.5 days: PR9a (+1,150, +700, 3.5; +50 and +50 of it from the checkers' pass: the shared `board_scopes` helper for both start-up scans, the measured chat rect, the top-right mount and `lib/springs.ts`), PR9's Studio mount (+250, +150, 0.75), PR10's Argon notes (+100, +100, 0.25), PR10b's shared outline layer and "Moved by Analyze" chip (+100, +50, 0.25), PR7e's Restore note (+50, +50, 0), and PR11, whose chips become notes (−150, −50, −0.25). Before Notes, version 2.4's rows summed to 27,050 + 15,250 (42,300) and 87 days. Version 2.3's line said about 25,800 + 14,150 and 82 days; its rows actually summed to 25,750 + 14,150 (39,900) and 82.25. Version 2.4's answers (before Notes) added 1,300 lines of code, 1,100 of tests and 4.75 days: PR7e (+600, +450, 2), PR9's history half (+250, +150, 1), PR13a (+150, +250, 1), PR13 (+50, +50, 0), PR14 (+100, +100, 0.25), PR15 (+150, +100, 0.5). The freedom-setting PR (§8) is not counted. Version 2.2's overseer adds about 2,300 lines and 6.75 days (PR4, PR5, PR10, PR10b, PR11); version 2.3's thought stream (Q29 c) adds about 250 lines and 1 day (PR10, PR10b).
+- **Critical path (canvas and looks):** PR1 → PR3 → PR5 → PR6 → PR7 → PR7b → PR10 → PR10b, about 30 days (30.25: Notes add 0.25 to PR10 and 0.25 to PR10b; it was 29.75 before Notes, v2.2 29, v2.1 26.5, v1 23). PR9a (3.5 days) starts now, off the path, and must merge before PR10 (about 20 days in). PR7c, PR7d and PR7e run beside PR10; PR7e (3 days since Q30 c, was 2) must merge before PR10 removes looks with words, which still fits inside PR10's 6.5. PR9 (5 days, was 4.75) is off the path. So Q30 c moves neither the critical path nor the three-lane estimate below.
+- **Adapter lane:** #18 → PR13 → PR14 → PR17 → PR21 is about 13.25 days of work after #18 merges (3 + 5.25 + 4 + 1; was 13), with PR13a (1 day) beside PR13, PR15, PR16, PR18 and PR20 beside PR17, and PR23 after PR15 and PR16. PR22 waits for PR7d, PR19 for PR4 (and uses PR10's readings once they exist), PR24 for PR15 and PR7b (its live check for Justin's Recraft key). With three lanes the whole plan fits in about 32.5 to 34.5 days (was 32 to 34 before Notes; unchanged by Q30 c).
+- **When Justin gets something:** a priced CLI dry run of the sort after PR4 (about 6 days); Krea 2 strengths that add up to the board's after PR13a (about 1 day after #18 merges); a usable canvas after PR6 (about 12 days); board images on GPT Image edits and Nano Banana after PR14 (about 8.25 days after #18 merges); style slots by default after PR15 (about 11.75 days after #18; was 11); one brief per look on a node after PR7d (about 21.5 days); agents' look deletes and word changes restorable from anywhere after PR7e (about 22.75 days: PR7b ends near 19.75, plus PR7e's 3; was 21.5); Notes on the main canvas after PR9a (about 3.5 days, from now).
 
 ---
 
@@ -1556,15 +2039,15 @@ Q22 and Q23 stay listed so their numbers don't move, but they are already answer
 ### 10.2 Version 2: three readers' notes on A1 to A5 and B1 to B4
 
 - **Music direction storage.** One reader put it on `frames[].music`, another in `lookFields`. This plan uses `lookFields[F].musicDirection` (and a board field for Whole board), because frames are layout and carry undo slices and journal data; the person's text belongs with the look's other words.
-- **When the reader writes it.** One reader had Analyze draft one per look; this plan asks (Q25) and recommends on request only.
-- **Where the look is picked.** Both readers who raised it recommended the Moodboard source node; it is Q18 because A4 says only "on the node".
+- **When the reader writes it.** One reader had Analyze draft one per look; this plan asks (Q25) and recommends on request only. Justin chose that (Q25 a, 2026-10-20).
+- **Where the look is picked.** Both readers who raised it recommended the Moodboard source node; it is Q18 because A4 says only "on the node". Justin chose it (Q18 a, 2026-10-20).
 - **Where adapter entries live.** A separate table (one reader's recommendation), checked against both definition files, with a generated Krea part, not a field in 308 definitions.
 - **Adapters vs looks order.** One reader wanted adapters after PR7d; this plan runs them in parallel, because adapters read `bundle.images` and need nothing about looks. PR7d's test runs the adapter suite on a look bundle.
 - **Board fill and routes.** The fill is clamped to the active route's limit, so a board never rules a route out or makes Auto stop (AGENTS.md: Auto never switches provider because of a setting).
 - **Content-addressed board copies**, added in this plan, so the generator cache still hits on a second run with the same board.
 - **Edit nodes.** `needsWired`, added in this plan: without it, a board image would become image 1, the image being edited.
 - **Image notes in the legend** follow #18's notes opt-in, added in this plan.
-- **Agents and person words.** The per-look reader proposed refusing agents; given Justin's "agents may do anything undoable", this is Q28, with the reason it can't open up yet.
+- **Agents and person words.** The per-look reader proposed refusing agents; given Justin's "agents may do anything undoable", this is Q28, with the reason it can't open up yet. Justin chose b) on 2026-10-20; PR7e builds the history that makes it undoable (§10.5).
 
 ### 10.3 Version 2.1: the critic's review
 
@@ -1572,7 +2055,7 @@ Each point was checked against the code (main `12257250`, `e457b51d` on #18, `fe
 
 | # | Point | Verdict | What changed |
 |---|---|---|---|
-| 1 | Krea `style_images` on content models defaulted to images | Holds. Only Krea's Seedream 4 page shows a style meaning (with strength); A1 names FLUX and Seedream as content. | Text by default unless the model is in `STYLE_VERIFIED` (Krea 2, Seedream 4, Ideogram 3, Runway gen-4); §2.2, §5.7.1, §5.7.11 B, PR15, §8. |
+| 1 | Krea `style_images` on content models defaulted to images | Holds. Krea's Seedream 4 page shows a required strength, not a style meaning: its description, "Image prompts to use for the generation", matches every other Krea `style_images` field (rechecked 2026-10-20). A1 names FLUX and Seedream as content. | Text by default unless the model is in `STYLE_VERIFIED` (Krea 2, Ideogram 3; Seedream 4 and Krea's Runway gen-4 left in v2.4, §5.7.1); §2.2, §5.7.1, §5.7.11 B, PR15, §8. |
 | 2 | A look bundle kept the whole board's `analysis` and `providerHints` | Holds (`handlers/krea.py:381-391`; #18's bundle). | §3.2, §4.11.8: the look's generator view and hints rebuilt from the look; PR7d asserts no non-member URL. |
 | 3 | `exclusive` missing on Hailuo 3, H3 Max, Gemini Omni; H3 Max limit | Holds for Hailuo 3's MiniMax route (`minimax_v2.py:99-101`) and Omni 1.1's Google route (`maker_routes_google.py:369-373`). **Partly rejected:** on main, H3 Max and Omni 1.0 have no maker route (no `directRoute` in `node_definitions.json`), so there is no MiniMax cap of 9 to clamp H3 Max to today. | `exclusive` per route where the code refuses, and on Krea until verified; H3 Max keeps Krea's 12 and clamps to 9 if a MiniMax route is added; a contract check that every refusing maker route has `exclusive` (§5.7.5, §5.7.10 rule 11). |
 | 4 | Rule 5 found frames by name and missed most | Holds (labels checked). | Rule 4 is now an allow-list: every Image or Any input classified; the name rule stays as an extra check; the false claim is gone. |
@@ -1611,6 +2094,79 @@ GM - Design relayed Justin's "overseer" idea and mockup v5, and asked what it ne
 | 12 | "Skip by url" after a cancel contradicted C11 for a selection | Skips only with nothing selected |
 | 13 | The stream may be silent while Argon thinks | Longer first-byte and quiet bounds at `high`, calibrated by the probe |
 
+### 10.5 Version 2.4: Justin's Q18-Q28 answers, and Notes
+
+Justin answered Q18 to Q28 on 2026-10-20 (Q22 and Q23 were already answered).
+
+**Recorded as built (a), no design change):** Q18, Q19, Q20, Q25, Q26, Q27. Hedges are gone: "if Q26 a" (§4.2, §5.6, PR10), "Q25 decides" (PR19), "Recommended" (§4.11.5, §4.11.7), and the "Depends on Q…" lines of PR7d, PR17, PR19 and PR22.
+
+**Q24 a:** PR24 is decided and keeps its scope. Added: Justin adds the Recraft key in Settings himself, never in a chat; the one real style creation waits for his spend OK; `image_weights` are the scope's shares (Q21 b); `match` stays Recraft's default.
+
+**Q21 b (changed from a):**
+- A general rule, not a Krea special case: `weight.normalize` on every entry (`sum-to-strength`, `sum-to-one`, `rank`, `none` for fixtures), one normalized view per run (`w`, `share`, `rel`) worked out after every cut, and one helper (§5.7.2, §5.7.3, §5.7.4). Contract rule 13 checks it.
+- New PR13a ships Krea 2's change on its own, after #18 (PR #90) and before PR15, so PR15 stays a refactor the golden file can prove.
+- Pins: the golden file is a test fixture, not a runtime lock. It gets one deliberate update, to `kreaStyleReferences` only, as §4.8 item 7 had reserved. Old recipes replay at the new strengths, with a run note every time and a one-time "can differ" line.
+- The paid comparison loses its "scaled" arm; its Krea 2 arm only checks whether many light references still steer (§8).
+- Legend words now come from `rel`, so they agree with the native nodes.
+
+**Q28 b (changed from a):**
+- New §5.8 and PR7e: a server-side word history for removed looks, restorable from the Studio, the CLI or MCP, with the Studio open or closed. PR7b keeps its refusal only until PR7e merges.
+- Analyze's lines: applied merges say where the words went; "Ask first" ends in a `proposed` line; `kept` is left only for a full history or a PR10 that lands before PR7e (§5.6.1).
+- §8 now says what is in (looks' words) and what stays out (a full board history, the freedom setting and board proposals).
+- New Q30 (§7.4) asks whether the board's own words open up too (answered c), below).
+
+**Corrections found along the way (vendor pages, 2026-10-20):**
+- Krea 2 `image_style_references[].strength` is 0..1 in the enforced schema, with `maxItems: 10`. Krea's guide says −2..2, a conflict noted in the row; the old "Native −2..2 (r)" was wrong. Krea's "sum near 1.0" sentence is now quoted with its URL (rechecked by WebFetch while editing).
+- Every Krea catalog `style_images` field requires a `strength` per item, so they are `native`, not `select`. A bare list would fail Krea's gateway. Seedream 4's "(u) whether Nebula's param carries it" is answered: it does.
+- Seedream 4 leaves `STYLE_VERIFIED` too: Krea's page shows a required `strength`, and its description matches every other `style_images` field, so it defaults to text until checked (§5.7.1).
+- Recraft styles must be used with the model they were made with, so PR24 makes one per node model; fal's Recraft V4 schemas take no `style_id`, so fal runs get palette and text. fal's Kling O3 legend is `@Image1`, with "Maximum 4 total" when using video.
+- The brief migration and #90's `save_colour_checks` both walk every dot folder under the moodboard root, so the first of PR7e and PR9a limits both to `.trash` (`board_scopes`) before `.history` or `.notes` is written.
+- Krea's Runway gen-4 requires a tag on every image, so "untagged = style" can't happen there. It leaves `STYLE_VERIFIED` and defaults to text until checked (§5.7.1). This narrows A1's style list by one Krea node; Runway's own `runway-image` gen4 is unchanged.
+- Meshy takes a texture image or a texture prompt, not both; `textUnless` and PR20's tests follow.
+- fal's Seedance R2V names images `@Image1`, not `[Image N]`.
+- Ideogram v3's "max 10" style references and Veo 3.1's "up to 3" references are now quoted. Runway, Ideogram, Veo, fal Seedance, fal Kling O3 and Lyria have no weight field.
+
+**Choices made where the research notes differed:**
+- The `normalize` field (one note) over a `sum: "board"` flag (the other), because it covers Recraft and the rank-only nodes too.
+- 4 decimals (one note) with largest remainder (the other), so the sum is exactly the board's strength.
+- Strength 0 on a native entry sends no board images, rather than zero-strength images that still cost $0.005. It was Q32 (§7.4) in case Justin wanted it to turn images off on every channel; he confirmed a).
+- Legend words from `rel`, not the raw weight.
+
+**Research and checks.** Three research notes, all read-only:
+- **A, vendor weight semantics.** Pages fetched 2026-10-20 from krea.ai (Krea 2 guide and schemas; Seedream 4, Ideogram 3, Runway gen-4 and the other `style_images` schemas), recraft.ai (WebFetch summaries capped at 125 characters, so PR24 re-reads them), Runway's OpenAPI file, BFL, Ideogram, Google (Veo, music generation), fal (Seedance R2V, Kling O3) and Meshy.
+- **B, the strength code and the pins.** `handlers/krea.py:368-403`, `handlers/moodboard.py`, `moodboard_analysis.py`, `moodboard_brief.py:82`, the golden test and its fixtures, and `saved_graph_upgrades.py`, on this worktree and #90's.
+- **C, undo and history.** `moodboard_store.py`, `canvas_events.py`, `asset_trash.py`, `canvas_proposals.py`, the trash routes in `main.py`, `lib/canvasUndo.ts`, and a search for the freedom setting (none).
+- **Spot-checked while editing** (on the base before #90; on origin/main `77e73b45` `_guard_override` is at `moodboard_store.py:355`): `_guard_override` at `moodboard_store.py:321`, `_write_json` at `:130`, `krea.py:399`, `_HANDLER_READS_BOARD` at `moodboard_brief.py:82`, no `moodboard_history` or `moodboard_weights` module yet, no freedom-setting key, and Krea's style-transfer guide (both quotes).
+- No backend Python was run and no paid API was called.
+
+**PR count:** 31 (PR7e, PR13a and PR9a are new). Sizes in §9 are recomputed from the rows.
+
+**Notes (Justin's change, relayed by GM - Design with mockup v5.2, 2026-10-20).** His words: "it should have a dedicated area on the canvas so it's out of the way and we are not seeing text at it's cursor everytime it notices something. Like maybe little area in the top right." His follow-ups: the agent's own actions stay at the cursor; notes persist; Argon's results go into notes; the main canvas uses the same component. Count = unread was GM's recommendation and is Q31 (confirmed a), below).
+- **New:** §3.5 (the code facts: `say`, pins, the board file, the chip slots, the name clash) and §5.9 (the rule, the record, refs, the private-note guard, storage, unread, outlines, the chip, the card, the list, actions, routes and tools, the socket, "since your last turn", the shared component). New PR9a builds the store, the tools and the component, and mounts it on the main canvas.
+- **The rule:** an agent's own action keeps its cursor label; what it noticed, reports or suggests goes to Notes. The reader's results that need the person (the end note with "couldn't place", hybrid and `alsoIn` suggestions, an "Ask first" proposal) become notes. The overseer panel's lines are unchanged.
+- **Data model:** notes live beside the board in `MOODBOARD_ROOT/.notes/<boardId>.json`, because marking read must not bump the board's `version` (§4.1, §4.9); on the main canvas, beside `pins` on the project record. Limits in §4.10. Journal kind `note.posted` (§5.2). The code name is `agentNotes`, since "notes" already means image notes and pins.
+- **PR changes:** PR7e posts a Restore note instead of a canvas toast and needs PR9a. PR9 mounts Notes in the Studio and lets the agent post one "since its last turn" note. PR10 posts Argon's end note and the "Ask first" proposal as a note. PR10b shares one outline layer with Notes and adds the "Moved by Analyze · Undo" chip from v5.2. PR11's chips become notes with Make frame / Not now (and Add copies for `alsoIn`), and `suggestion.accept` / `dismiss` take lists (§5.1).
+- **Text changed:** §1, §2.1 C9, §5.4 (foreign steps: label at the cursor, Undo in the undo notice; the reader's label beside the card), §5.5 (cursor and per-turn rows, a Notes row), §5.6.1 (intro, identity, the `suggestion`, `result`, `kept`, `proposed` and `done` rows, the CLI and MCP lines, a test), §5.8 (the Restore note, no canvas toast, proposals as notes), §6.0, §8 (v5.2 in scope; the main canvas's "since" block and `AgentLog` stay out), §9.
+- **Decided here, not asked:** template text for the reader's notes (never model text); agent notes carry no actions; `#n` in agent text becomes ids at post time, and an unknown `#n` refuses the note; read, dismiss and clear are person only; a "since its last turn" note replaces its unread predecessor; at most one card at a time, four or more as one; the card moves left of the chat panel, measured from its rendered rect, on both surfaces; the main-canvas chip gets its own top-right mount instead of the centred pill; the chip is always shown, as v5.2 draws it (both dots, a muted "0"); Nebula's template notes skip the rate limit; `edit_canvas`'s and `propose_change`'s `note` and `resolve_pin`'s `reply` stay at the cursor as documented exceptions; PR9a creates `lib/springs.ts`; the first of PR7e, PR9 and PR10 carries the Studio mount.
+- **Collected into §7.4 as short confirmations:** Q31 (count = unread), Q32 (strength 0 on a native entry, flagged in the previous pass), Q33 (the freedom setting's default on existing installs, flagged in the previous pass), Q34 (the word history's retention, flagged in the previous pass), Q35 ("Not now" dismisses for good).
+- **Sources:** a read-only research pass over `agent_presence.py`, `main.py`'s `say` call sites, `mcp_server.py`, `canvas_pins.py`, `project_store.py`, `moodboard_store.py`, `canvas_events.py`, the cursor, undo-notice, toast and log components, and mockup v5.2's markup and timeline (read only). Spot-checked while editing: `MAX_SAY_CHARS` and `_clean_say` (`agent_presence.py:35`, `:207-213`), `point_at`'s docstring (`mcp_server.py:161-165`), the pin limits (`canvas_pins.py:30-35`), the `canvasPins` message (`main.py:4119-4125`), the chat panel's position (`layouts.css:139-168`, overriding `panels.css:1138-1142`), `--agent-color` (`agentCursor.css:54`) and the Studio header (`MoodboardStudioView.tsx:456-476`). A checkers' pass found the first numbers were from the worktree's HEAD (`01aa49b8`); they are rechecked on origin/main `77e73b45`, with `save_colour_checks` (`moodboard_brief.py:1038-1075`), the chip's place (`CanvasTabs.css:3-12`), `uiStore.ts:94-96`, `App.tsx:296-299` and `project_store.py:105-125` added. No backend Python was run and no paid API was called.
+
+**Q30 to Q35 (Justin's answers, 2026-10-20).** All six as recommended.
+
+- **Q30 c, the design change.** The word history keeps a second kind of entry, changed words (§5.8): one per scope per write, whenever an agent or Analyze loses words in the brief, Direction, Avoid, "must appear", "keep out" or music direction, on the board or a look. Pure adds write none. `_guard_override` opens for replace and remove under "Act directly"; Keep stays the person's. PR7b's, PR18's and PR19's gates open once PR7e is in.
+- **Decided here, not asked:**
+  - Restore of a text field changed since: skip and report, then "Restore anyway". Skip, because a silent overwrite could lose the person's newer words, which have no entry. Anyway, because the old words are the point, and an agent's forced restore writes its own entry.
+  - Lists restore by set difference, so they never conflict.
+  - Agent chains fold (`supersedes`), so Restore gives back the person's original and ten edits use one slot.
+  - One list for both kinds, "Recently changed words" (it was "Recently removed looks"), in the Studio, `nebula moodboard history [--kind]` and `moodboard_history(kind?)`; `nebula trash list` keeps removed looks only.
+  - One Restore note per write, covering every entry it made. This also changes removed looks: seven in one batch now post one note, not seven. `history.restore` and `undo` carry `historyIds`.
+  - Under "Ask first", a PUT's word changes become one proposal with `fields`, answered 202.
+- **Code facts cited** (origin/main `77e73b45`, read with `git show`): `MoodboardStore.update` (`moodboard_store.py:541`, `:587-592`), `_guard_override` (`:355-366`, Keep at `:357-361`), `_set_override` (`:369-403`), `keep_brief_override` (`:616-641`); `main.py` PUT (`:10996-11026`), `_moodboard_author` (`:10767-10770`), `_refuse_override_change` (`:10773-10781`), the keep route (`:11029-11045`); `moodboard_client.update_board` (`:728`, `:821-861`, the early refusal `:859-860`, Keep `:873`), `previous_settings` (`:953`); `mcp_server.py` `moodboard_update` (`:912-966`, docstring `:940`), `INSTRUCTIONS` (`:47`), `_board_headers` (`:798-799`); `cli/commands/moodboard.py` `set` (`:366`, flags `:515-529`). §3.4's "an agent PUT overwrites them for good" is marked closed by PR7e; Q30's own `:538-543` (from main `12257250`) is `:587-592` now.
+- **Sizes:** Q30 c came to 400 + 350 lines and 1.25 days (PR7e +350, +300, +1; PR9 +50, +50, +0.25), not the row's 200 + 200 and 0.75; §9 says why. Totals recomputed from the 31 rows: 28,950 + 16,600 (45,550) and 92.75 days; canvas 49.5, looks 11, adapters 32.25. Critical path (30.25) and the three-lane estimate are unchanged; PR7e lands about 22.75 days in.
+- **Q31 a, Q32 a, Q33 b, Q34 a, Q35 a** are now stated as decided where they are built: §5.9 and PR9a (unread), §5.7.4, PR13a and PR14 (the strength 0 run note "Board strength is 0: no board images sent"), §8 and PR9 (existing installs on "Act directly", with the Settings > Agents line "Agents act directly here. New installs ask first. Change"), §4.10, §5.8 and PR7e (the limits, now over both kinds), §5.9 and PR11 ("Not now" dismisses for good).
+- **New gap in §8:** the board's `notes`, image `notes` and `privateNote` are words but not in Q30 c's list, so they have no history.
+- No backend Python was run and no paid API was called.
+
 ### Not verified (check in the PR that needs it)
 
 **Canvas (version 1, still open):**
@@ -1633,21 +2189,24 @@ GM - Design relayed Justin's "overseer" idea and mockup v5, and asked what it ne
 
 **Adapters (vendor facts are from the research note; WebFetch summaries, re-check quotes before a spec):**
 
-- Krea 2's real reference limit (Nebula's 10 is its own number) and the effect of strength sums above 1 (PR15, Q21).
-- Reference limits on fal for Kling O3 Ref, `gpt-image-1-5-edit` and the fal GPT Image copies, `nano-banana-fal-edit`, Ideogram v3 style count, `meshy-image-to-image`, Quiver per model, and the Krea Gemini Omni, Wan 3.0 and Grok video references.
+- ~~Krea 2's real reference limit and the effect of strength sums above 1 (PR15, Q21).~~ Version 2.4: the limit of 10 is in Krea's schema (`maxItems: 10`), and Q21 b scales the board's strengths to add up to the board's (PR13a). Still open: whether a ten-image board at about 0.07 each still steers (the paid comparison's Krea 2 arm).
+- Krea 2's strength range: the enforced schema says 0..1, the guide says −2..2. Nebula uses 0..1; if Krea's gateway ever accepts more, nothing here uses it.
+- Whether Krea's "sum near 1.0" advice, stated for Krea 2, suits Seedream 4 and the other `style_images` fields; applying it there is Nebula's choice (PR15).
+- Reference limits on fal for Kling O3 Ref, `gpt-image-1-5-edit` and the fal GPT Image copies, `nano-banana-fal-edit`, `meshy-image-to-image`, Quiver per model, and the Krea Gemini Omni, Wan 3.0 and Grok video references.
 - Nano Banana 2.1's image limits: the note's line likely joins it with 3.1 Flash; Nebula sends it text only until Google's page is re-read (PR14).
   GM's 2026-10-19 comparison sent five separate references to `gemini-nano-banana-2.1` through `/api/quick` and all runs succeeded, so 2.1 does take images; its limit is still unconfirmed.
 - Which of Google's per-role counts limits board images on Gemini 3 Pro Image (6 object, 5 character, 3 style (r)). Board images in `look` mode are style references by meaning, which would cap them at 3, but Gemini has no role field, and the same comparison sent five to Gemini 3 Pro Image with no error. PR14 settles it from Google's page and states the cap it uses.
-- What every Krea `style_images` model does with the images, except Seedream 4 (they default to text until verified); whether Nebula's Krea Seedream 4 param carries `strength`; Ideogram 3 and Runway gen-4 style meaning **on Krea's gateway** (verified on the makers' own APIs only).
+- What every Krea `style_images` model does with the images and their strengths, Seedream 4 included since version 2.4 (they default to text until verified); Ideogram 3 style meaning **on Krea's gateway** (verified on the maker's own API only). Answered in v2.4: Nebula's Krea Seedream 4 param does carry a required `strength`.
+- Whether Krea's Runway gen-4 treats a tagged reference that the prompt never names as style or as a subject (Krea requires the tag; PR15 keeps it on text until checked).
 - Whether Krea's routes refuse a start frame plus references on Hailuo 3, H3 Max and Gemini Omni (treated as refusing until checked, PR17).
 - Whether Ideogram v3 reads a plain "first style reference matters most" line (paid comparison).
 - Price per reference everywhere except OpenAI, Gemini 3 Pro, Krea 2, Krea 3, Recraft, Veo and Runway's Seedance 2.5 and Hailuo3.
-- Prompt syntax for Gemini, Krea 3, Seedream and Lyria; whether fal's Kling O3 `image_urls` count as refer_image or element.
+- Prompt syntax for Gemini, Krea 3, Seedream, Lyria, and Seedance R2V on BytePlus (`[Image N]` (r); BytePlus's page didn't load on 2026-10-20; fal's is `@Image1`); whether fal's Kling O3 `image_urls` count as refer_image or element.
 - Lyria: image count and Clip image support on `generateContent`; a price row.
-- Meshy `texture_image_url` on image-to-3D (direct and fal v6), on text-to-3D refine, and the retexture style-image field.
+- Meshy `texture_image_url` on fal v6, on text-to-3D refine (and whether the image-or-prompt rule holds there), and the retexture style-image field. Verified on Meshy's own image-to-3D page: `texture_image_url` exists, and only one of it and `texture_prompt` may be used.
 - Veo `referenceImages` on Vertex `veo-3.1-generate-001` and on fal's reference-to-video.
 - What fal's Luma Ray2 flash modify does with its "Reference Image".
-- Whether a Recraft style id made on Recraft's API works through fal's Recraft nodes, and Recraft's style and generation schema (PR24).
+- Recraft's style and generation schema, and which `model` id each Recraft node creates its style with (PR24). Answered in v2.4: fal's Recraft V4 schemas take no `style_id` (re-check at build time). Whether `image_weights` are relative or absolute (Recraft's pages don't say), and the exact wording of its pages (2026-10-20's read was a WebFetch summary).
 - Whether `ideogram-edit-prompt`'s `images` are style or content.
 - Whether Seedance's real-face rule is enforced by fal and Krea themselves, and how many false positives the local face check gives on painted references (PR17).
 - Whether each handler's HTTP calls can be captured on the isolated stack for live checks, or only through the unit-test harness (PR13).
@@ -1657,4 +2216,21 @@ GM - Design relayed Justin's "overseer" idea and mockup v5, and asked what it ne
 - Whether text-to-music nodes read a music direction well (no source; mocked in PR18).
 - Price rows for the default-images nodes listed in §5.7.9: each PR adds a verified row or the marker.
 
-**General:** line numbers drift; the ones here are from `12257250`.
+**Version 2.4 (Q21 b, Q28 b):**
+
+- Whether the backend can see a replayed record's date, for the CLI and MCP "this replay can differ" note (PR13a; the canvas side uses `upgradeRunSnapshot`).
+- ~~The word history's retention~~ and ~~the freedom setting's default for existing installs~~: decided (Q34 a, Q33 b, 2026-10-20). Still open: how the setting PR tells an existing install from a new one (§8).
+- That every agent and reader write of a words field reaches `MoodboardStore.update` or the `/edits` commit, so the two hooks see them all (checked for the PUT, the keep route, the CLI and MCP on origin/main `77e73b45`; PR7e re-checks any route added since).
+- The read cost of a 5 MB worst-case history file on each non-person write that loses words (PR7e measures it).
+- The "Act directly" / "Ask first" setting and board proposals don't exist in the code; their shape in §5.8 is a design, not checked against a PR (the separate setting PR).
+- That every other board scan skips a dot folder under `MOODBOARD_ROOT` (the research note lists five; the two start-up scans, `migrate_store` and #90's `save_colour_checks`, do not, checked on origin/main `77e73b45`; the first of PR7e and PR9a changes both and tests each).
+
+**Notes (§5.9):**
+
+- Which graph the server checks main-canvas refs against (the one `look_at_canvas` reads) (PR9a).
+- That nothing else is fixed in the main canvas's top right where the Notes chip goes (PR9a).
+- The private-note guard's cost on main-canvas notes when a project sees many boards (cached per board `version`; PR9a measures it).
+- Whether `AgentLog` merges into Notes, the label "Notes", and the opened list's design: GM is taking them to Justin (v5.2 never opens the chip). The card's place while chat is open, the main canvas's own chip mount and the ring's colour were settled with GM on 2026-10-20 (§5.9).
+- The mockup's beat numbers after v5.2 (§8).
+
+**General:** line numbers drift; the ones here are from `12257250` unless marked. §3.5 and §5.9 are from origin/main `77e73b45`.
