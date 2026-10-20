@@ -86,7 +86,7 @@ from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
 from services import output_thumbnail
-from services.node_errors import node_errors
+from services.node_errors import NodeErrors
 from services import project_cover
 from services.cli_graph import SHORT_ID_RE, CLIGraph
 from services.retired_nodes import folded_entry, migrate_graph, migrate_node, migrate_param_update, migrate_params, retired_message
@@ -287,6 +287,22 @@ if not _live_graph_load_failed:
 provider_recovery_store = ProviderRecoveryStore(
     _STATE_DIR / "provider-recoveries.json" if _STATE_PATH is not None else None
 )
+# Each node's last run error, per project, kept across restarts (services/node_errors.py).
+node_errors = NodeErrors(_STATE_DIR / "node-errors.json" if _STATE_PATH is not None else None)
+
+
+def _restore_node_errors() -> None:
+    """Boot: point the saved errors at the open project and drop projects deleted for good."""
+    try:
+        catalog = project_store.read()
+    except ProjectStoreError as exc:
+        print(f"[main] node errors: project catalog unreadable ({exc}); keeping them all", flush=True)
+        return
+    node_errors.use_project(catalog.get("activeProjectId"))
+    node_errors.keep_projects(set(catalog.get("projects") or {}) | set(catalog.get("trash") or {}))
+
+
+_restore_node_errors()
 provider_start_guard = ProviderStartGuard(
     _STATE_DIR / "provider-start-ambiguities.json" if _STATE_PATH is not None else None
 )
@@ -487,10 +503,12 @@ async def project_storage_error(request, exc: ProjectStoreError):
 
 
 def _workspace_context() -> dict[str, Any]:
-    catalog = project_store.read()
+    # Read on every canvas event: only these two fields, never a copy of every
+    # project (ProjectStore.workspace).
+    workspace = project_store.workspace()
     # paramsVersion: a tab built for another version reloads (graphSync,
     # GET /api/projects; services/saved_graph_upgrades.py).
-    return {"activeProjectId": catalog["activeProjectId"], "workspaceRevision": catalog["workspaceRevision"],
+    return {"activeProjectId": workspace["activeProjectId"], "workspaceRevision": workspace["workspaceRevision"],
             "paramsVersion": PARAMS_VERSION}
 
 
@@ -4196,7 +4214,6 @@ async def get_canvas_snapshot() -> dict[str, Any]:
     selected = selection_context.snapshot(cli_graph, node_registry).get("selectedNodeIds", [])
     snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=selected)
     # Why a node's last run failed, as its card says it (services/node_errors.py).
-    node_errors.prune(cli_graph.nodes)
     for node in snapshot.get("nodes") or []:
         failed = node_errors.get(node["id"])
         if failed:
@@ -6567,9 +6584,12 @@ async def _broadcast_graph_sync(
     """
     if graph_replaced:
         # Node ids restart with another project; no open arrange can apply to
-        # it, and no node's last run error is about the new one's nodes.
+        # it. Node errors are kept per project (export points them at the one
+        # open now); a graph loaded over this project replaces its nodes, so
+        # their errors go.
         canvas_arrange.clear()
-        node_errors.forget_all()
+        if reason == "import":
+            node_errors.forget_canvas()
     export = await export_graph_for_frontend()
     if graph_replaced:
         agent_presence.forget_graph()
@@ -8624,6 +8644,10 @@ async def restore_graph_state(body: dict[str, Any]) -> dict[str, Any]:
             [candidate.nodes[node_id] for node_id in touched],
             source="restore",
         )
+    # A swapped id now holds another node, which never failed here. A node
+    # put back under its own id keeps its error, as the canvas's undo does.
+    for node_id in {gone["id"] for gone in removed} & set(added):
+        node_errors.forget(node_id)
 
     await _broadcast_graph_sync(edit=True, moved=moved)
     for edge in unwired:
@@ -9363,6 +9387,11 @@ def _cli_node_to_rf(n: dict[str, Any], position: dict[str, float], all_defs: dic
         "state": node_state,
         "outputs": outputs,
     }
+    # Its last run failed: the card says so after a reload or a project
+    # switch, over any older output, until it runs again (services/node_errors.py).
+    failed = node_errors.card(str(n.get("id") or ""))
+    if failed:
+        data.update(failed)
     if is_dynamic_node:
         data.update({
             "isDynamic": True,
@@ -9469,17 +9498,21 @@ def _migrate_rf_graph(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) 
 
 
 def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None = None,
-                            warnings: list[str] | None = None) -> tuple[dict[str, Any], CLIGraph]:
+                            warnings: list[str] | None = None,
+                            ingress_checked: bool = False) -> tuple[dict[str, Any], CLIGraph]:
     """Validate a saved RF graph with canonical definitions, retaining its IDs.
 
     A removed definition can still be viewed when it was already in this
     project's history or live canvas. It cannot acquire execution authority
     from a frontend-supplied definition object. A folded Krea node loads as
     its new node (_migrate_rf_graph); what that dropped goes in ``warnings``.
+    ``ingress_checked``: the caller already ran _validate_graph_ingress_complexity
+    on this same object (save_project does, off the event loop).
     """
     if not isinstance(snapshot, dict):
         raise HTTPException(status_code=400, detail="Project snapshot must be an object")
-    _validate_graph_ingress_complexity(snapshot)
+    if not ingress_checked:
+        _validate_graph_ingress_complexity(snapshot)
     if len(json.dumps(snapshot, allow_nan=False, ensure_ascii=False).encode("utf-8")) > MAX_PROJECT_BYTES:
         raise HTTPException(status_code=413, detail="Project snapshot exceeds the 16 MiB limit")
     nodes = _graph_ingress_items(snapshot, "nodes")
@@ -9693,6 +9726,8 @@ def _commit_project_workspace(catalog: dict[str, Any], candidate: CLIGraph) -> N
     cli_graph.nodes = copy.deepcopy(candidate.nodes)
     cli_graph.edges = copy.deepcopy(candidate.edges)
     cli_graph._counter = candidate._counter
+    # The incoming project's nodes' last run errors, kept while it was closed.
+    node_errors.use_project(catalog["activeProjectId"])
 
 
 @app.get("/api/projects")
@@ -9926,13 +9961,23 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
 
 @app.put("/api/projects/{project_id}")
 async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
-    result = _save_project(project_id, body)
+    checked = isinstance(body.get("snapshot"), dict)
+    if checked:
+        # The canvas autosaves after every edit, and the check walks every
+        # string in the project (run records repeat the graph) and stats file
+        # paths. On the event loop it held up every request and canvas event
+        # for seconds (an Accept's run waited 24 s), so it runs in a worker
+        # thread, before the catalog lock, which other requests take to read.
+        await asyncio.to_thread(_validate_graph_ingress_complexity, body["snapshot"])
+    result = _save_project(project_id, body, checked=checked)
     # A save moves the card up and can change its picture and node count.
     await _broadcast_projects_changed("renamed" if "name" in body else "saved", project_id)
     return result
 
 
-def _save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
+def _save_project(project_id: str, body: dict[str, Any], *, checked: bool = False) -> dict[str, Any]:
+    """The save itself. ``checked``: the snapshot's file references were
+    already validated (in a worker thread, by the route)."""
     with project_store.transaction() as catalog:
         project = _project_id_or_404(project_id, catalog)
         handoff = catalog.get("handoff") or {}
@@ -9943,7 +9988,7 @@ def _save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
             # The next switch (anyone's) ends the handoff. The project may
             # be the open one again: an agent reopened the project the tab
             # was showing, which reloads it from what was saved.
-            _save_handoff(project, body["snapshot"])
+            _save_handoff(project, body["snapshot"], ingress_checked=checked)
             refresh_metadata(project)
             project_store.commit(catalog)
             return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"],
@@ -9954,7 +9999,7 @@ def _save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
                 raise HTTPException(status_code=409, detail="Only the currently open project can autosave its canvas")
             historical = {node["id"]: node.get("data", {}).get("definitionId") for node in project["snapshot"]["nodes"]}
             historical.update({node_id: node["definitionId"] for node_id, node in cli_graph.nodes.items()})
-            staged, candidate = _stage_project_snapshot(body["snapshot"], historical=historical)
+            staged, candidate = _stage_project_snapshot(body["snapshot"], historical=historical, ingress_checked=checked)
             _refuse_agent_billing_in_project(candidate, cli_graph.nodes, _snapshot_nodes(project["snapshot"]))
             _keep_person_viewport(staged, project["snapshot"])
             project["snapshot"] = staged
@@ -9984,7 +10029,7 @@ def _keep_person_viewport(staged: dict[str, Any], stored: dict[str, Any]) -> Non
         staged["viewport"] = copy.deepcopy(stored.get("viewport"))
 
 
-def _save_handoff(project: dict[str, Any], raw: Any) -> None:
+def _save_handoff(project: dict[str, Any], raw: Any, *, ingress_checked: bool = False) -> None:
     """The last save from a tab whose project an agent switched away from.
 
     The switch already merged the live canvas into this project
@@ -9994,7 +10039,7 @@ def _save_handoff(project: dict[str, Any], raw: Any) -> None:
     """
     stored = project["snapshot"]
     historical = {node["id"]: node.get("data", {}).get("definitionId") for node in stored["nodes"]}
-    staged, candidate = _stage_project_snapshot(raw, historical=historical)
+    staged, candidate = _stage_project_snapshot(raw, historical=historical, ingress_checked=ingress_checked)
     _refuse_agent_billing_in_project(candidate, _snapshot_nodes(stored))
     _keep_person_viewport(staged, stored)
     backend_nodes = set(project.get("_backendNodeIds") or [])
@@ -10119,6 +10164,7 @@ async def purge_trashed_project(project_id: str) -> dict[str, Any]:
         _trashed_or_404(project_id, catalog)
         del catalog["trash"][project_id]
         project_store.commit(catalog)
+        node_errors.keep_projects(set(catalog["projects"]) | set(catalog.get("trash") or {}))
         result = {"trash": _trash_listing(catalog)}
     await _broadcast_projects_changed("purged", project_id)
     return result
@@ -10138,6 +10184,7 @@ async def empty_project_trash(body: dict[str, Any] | None = None) -> dict[str, A
             del trash[project_id]
         if doomed:
             project_store.commit(catalog)
+            node_errors.keep_projects(set(catalog["projects"]) | set(trash))
         result = {"trash": _trash_listing(catalog)}
     if doomed:
         await _broadcast_projects_changed("purged")
@@ -10198,13 +10245,19 @@ async def export_graph_for_frontend() -> dict:
     # rewritten. Idempotent — does no work when no migration is needed.
     _normalize_cli_graph_output_refs()
     state = cli_graph.get_state()
+    workspace = _workspace_context()
+    # The open project's nodes' last errors (ids restart in each project).
+    node_errors.use_project(workspace["activeProjectId"])
     if not state["nodes"]:
-        # A cleared canvas restarts node ids, so an open arrange can't apply,
-        # and an old node's last run error must not reach a new one.
+        # No open arrange can apply to an empty canvas. A cleared one
+        # (CLIGraph.clear) restarts node ids, so an old node's last run error
+        # must not reach a new one; one emptied node by node keeps its errors
+        # for the undo that puts the nodes back (services/node_errors.py).
         canvas_arrange.clear()
-        node_errors.forget_all()
+        if cli_graph._counter == 0:
+            node_errors.forget_canvas()
         return {
-            **_workspace_context(),
+            **workspace,
             "nodes": [],
             "edges": [],
             "empty": True,
@@ -10251,7 +10304,7 @@ async def export_graph_for_frontend() -> dict:
         })
 
     return {
-        **_workspace_context(),
+        **workspace,
         "nodes": rf_nodes,
         "edges": rf_edges,
         "empty": False,
@@ -11067,6 +11120,17 @@ class MoodboardDryRunRequest(BaseModel):
     thresholds: MoodboardThresholdsModel | None = None
 
 
+class MoodboardReadRequest(BaseModel):
+    """The body of POST /api/moodboards/{id}/read/estimate and /read: the
+    reader (a key of data/moodboard_reader_models.json), the images to read
+    (all of them when left out) and the thinking level (the model's default)."""
+    model_config = ConfigDict(extra="forbid")
+
+    model: str
+    imageIds: list[str] | None = None
+    thinkingLevel: str | None = None
+
+
 class PresetCreate(BaseModel):
     name: str
     category: str = "Style"
@@ -11584,6 +11648,187 @@ async def dry_run_moodboard_analysis(moodboard_id: str, body: MoodboardDryRunReq
         raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
     # It reads every image file, so it runs off the event loop.
     return await asyncio.to_thread(dry_run, moodboard, thresholds)
+
+
+# ---------- Moodboards: reading references with a vision model (PR4, dry run) ----------
+# docs/moodboard-canvas-plan.md sections 5.6 and 5.6.1, contract 07 section 1.13.
+
+# Tests point the reader's requests at a mock transport (an httpx.AsyncBaseTransport);
+# None is the real network.
+_moodboard_reader_transport: Any = None
+
+
+def _reader_board(moodboard_id: str) -> dict:
+    try:
+        board = _moodboard_store().get(moodboard_id, laid_out=False)  # a read never writes the board
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+    if board is None:
+        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+    return board
+
+
+def _reader_plan(moodboard_id: str, body: MoodboardReadRequest) -> tuple[dict, dict, Any, list, dict]:
+    """The board, the reader's entry, its reading source (no key yet), the
+    targets and the estimate, or 404/422. A source Nebula doesn't pay for gets
+    no estimate maths (moodboard_reader.read_estimate)."""
+    from services import moodboard_reader as reader
+
+    board = _reader_board(moodboard_id)
+    try:
+        entry = reader.reader_entry(body.model)
+        targets = reader.select_targets(board, body.imageIds)
+        source = reader.model_source(entry, level=body.thinkingLevel)
+        estimate = reader.read_estimate(source, board, targets)
+    except reader.ReaderError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return board, entry, source, targets, estimate
+
+
+def _reader_spend_hold(source: Any, estimate: dict, settings: Mapping[str, Any], board_ref: str) -> _SpendHold | None:
+    """Refuse a read that isn't the person's when it breaks a spending limit,
+    and count it at its high estimate when it doesn't (Q11: as one Gemini
+    chat run, so the chat model's own limits in Settings apply). The hold is
+    split per request, so requests that never start are given back.
+    The person's reads pass: the Studio asks them itself (PR10). A source
+    Nebula doesn't pay for (``source.priced`` false) has nothing to gate or
+    hold; an Argon entry with no list price is still priced, and refused
+    under any USD limit."""
+    from services import moodboard_reader as reader
+
+    if _is_person_request():
+        return None
+    gate = reader.gate_items(source, estimate)
+    if gate is None:
+        return None
+    items, pricing = gate
+    name, key_id = source.identity["name"], reader.reader_key(source.identity)
+    ask = (f"To let agents read it, the person can raise the per-run limit for {name} "
+           f"(the Gemini chat node) in Settings > Agent spending. Price it first: "
+           f"`nebula moodboard analyze {board_ref} --read-with {key_id} --estimate` "
+           "(MCP: moodboard_analyze with estimate_only).")
+    key, label = _spend_session(current_request_headers())
+    decision = agent_spend.decide(items, [], settings=settings, pricing=pricing, definitions=node_registry.get_all(),
+                                  budgets=_spend_budgets(key, settings), how_to_ask=ask)
+    if decision.refusal:
+        raise HTTPException(status_code=403, detail=decision.refusal)
+    at = agent_spend_ledger.record(key, label, decision.charge, decision.plan_charge)
+    node = str(items[0]["definitionId"])
+    shares = {part: (node, amount) for part, amount in (estimate.get("shares") or {}).items()}
+    if not decision.charge or not shares:
+        return None
+    # The shares add up to the charge; any rounding left over rides on the first request.
+    left = round(sum(decision.charge.values()) - sum(amount for _, amount in shares.values()), 6)
+    first = next(iter(shares))
+    shares[first] = (shares[first][0], round(shares[first][1] + left, 6))
+    return _SpendHold(key, shares, {}, at)
+
+
+def _settle_reader_hold(hold: _SpendHold | None, sent: Iterable[str] | None) -> None:
+    """Give back the share of every request that never started. A request
+    that started stays charged at its high estimate, even if its stream was
+    closed: whether an aborted stream is billed is unconfirmed."""
+    if hold is None:
+        return
+    started = set(sent or [])
+    try:
+        hold.give_back(*hold.take([part for part in list(hold.per_node) if part not in started]))
+    except Exception:  # noqa: BLE001 - bookkeeping must not break a read
+        pass
+
+
+@app.post("/api/moodboards/{moodboard_id}/read/estimate")
+async def estimate_moodboard_read(moodboard_id: str, body: MoodboardReadRequest) -> dict:
+    """What reading these references would cost (C10, Q16), sending nothing:
+    ``{count, batches, low, high, unconfirmed, sources}`` and the parts behind
+    them. ``available`` says whether the reader's key is set."""
+    _, entry, _, _, estimate = _reader_plan(moodboard_id, body)
+    keys = node_readiness.configured_keys(load_settings())
+    return {**estimate, "available": str(entry["keyName"]) in keys}
+
+
+@app.post("/api/moodboards/{moodboard_id}/read")
+async def read_moodboard(moodboard_id: str, body: MoodboardReadRequest, dryRun: bool = False,
+                         stream: bool = False) -> Any:
+    """Read references with the vision model the caller names, and say how
+    Analyze would sort them. Only a dry run exists yet (``dryRun=1``): it
+    pays for the read, saves nothing and moves nothing; PR10 applies the sort.
+
+    Agents go through the spending limits first (the high estimate is held,
+    unstarted requests are given back). ``stream=1`` answers as NDJSON: one
+    ``moodboardReadTrace`` line per trace line as it is written, then one
+    ``moodboardReadResult``. Without it the result comes whole, with its trace."""
+    import httpx
+
+    from services import moodboard_reader as reader
+
+    if not dryRun:
+        raise HTTPException(status_code=422, detail=(
+            "Reading references can only be a dry run in this version of Nebula: send dryRun=1. "
+            "It reads and prices them and says how Analyze would sort them, and moves nothing."))
+    board, entry, source, targets, estimate = _reader_plan(moodboard_id, body)
+    if not estimate["count"]:
+        raise HTTPException(status_code=422, detail=(
+            "Nothing to read: none of these references is a file on this computer."
+            if targets else "Nothing to read: the board has no references."))
+    settings = load_settings()
+    hold = _reader_spend_hold(source, estimate, settings, str(board.get("id")))
+    requested_by = actor_record(actor_for_headers(current_request_headers()))
+    lines: asyncio.Queue | None = asyncio.Queue() if stream else None
+    client = httpx.AsyncClient(transport=_moodboard_reader_transport, timeout=httpx.Timeout(30.0, read=None)) \
+        if _moodboard_reader_transport is not None else None
+    try:
+        run_source = reader.model_source(entry, reader.check_key(entry, settings.get("apiKeys") or {}),
+                                         level=source.level, client=client)
+        run = reader.MoodboardRead(board, source=run_source, targets=targets, requested_by=requested_by,
+                                   sink=lines.put_nowait if lines is not None else None)
+    except reader.NoReaderKeyError as exc:
+        _settle_reader_hold(hold, [])
+        if client is not None:
+            await client.aclose()
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    async def finish() -> dict:
+        result: dict | None = None
+        try:
+            result = await run.run()
+            return {**result, "estimate": estimate}
+        finally:
+            # Cancelled mid-read (the caller left): what started stays charged.
+            _settle_reader_hold(hold, result["sent"] if result else run.sent_so_far())
+            if client is not None:
+                await client.aclose()
+
+    if lines is None:
+        return await finish()
+
+    async def ndjson():
+        task = asyncio.create_task(finish())
+        try:
+            while True:
+                getter = asyncio.ensure_future(lines.get())
+                done, _ = await asyncio.wait({getter, task}, return_when=asyncio.FIRST_COMPLETED)
+                if getter in done:
+                    yield json.dumps(getter.result(), ensure_ascii=False) + "\n"
+                    continue
+                getter.cancel()
+                while not lines.empty():
+                    yield json.dumps(lines.get_nowait(), ensure_ascii=False) + "\n"
+                try:
+                    result = task.result()
+                except Exception as exc:  # noqa: BLE001 - the stream has started, so say it in the stream
+                    logging.getLogger("nebula.moodboard_reader").exception("Moodboard read %s failed", run.run_id)
+                    yield json.dumps({"type": "moodboardReadError", "detail": f"The read stopped: {exc}"}) + "\n"
+                    return
+                yield json.dumps({"type": "moodboardReadResult", **{k: v for k, v in result.items() if k != "trace"}},
+                                 ensure_ascii=False) + "\n"
+                return
+        finally:
+            if not task.done():
+                task.cancel()
+
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(ndjson(), media_type="application/x-ndjson")
 
 
 @app.delete("/api/moodboards/{moodboard_id}")

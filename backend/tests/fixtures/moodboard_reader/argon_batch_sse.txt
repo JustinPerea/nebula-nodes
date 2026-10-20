@@ -1,0 +1,32 @@
+data: {"candidates": [{"content": {"role": "model", "parts": [{"text": "Looking at the six images, Image A and #3 share a screen pattern.", "thought": true}]}, "index": 0}], "usageMetadata": {"promptTokenCount": 3550, "totalTokenCount": 3550}, "modelVersion": "gemini-4-argon"}
+
+data: {"candidates": [{"content": {"role": "model", "parts": [{"text": "{\"readi"}]}, "index": 0}], "usageMetadata": {"promptTokenCount": 3550, "candidatesTokenCount": 40, "thoughtsTokenCount": 812, "totalTokenCount": 4400}, "modelVersion": "gemini-4-argon"}
+
+data: {"candidates": [{"content": {"role": "model", "parts": [{"text": "ngs\": [{\"ref\": \""}]}, "index": 0}], "usageMetadata": {"promptTokenCount": 3550, "candidatesTokenCount": 60, "thoughtsTokenCount": 812, "totalTokenCount": 4420}, "modelVersion": "gemini-4-argon"}
+
+data: {"candidates": [{"content": {"role": "model", "parts": [{"text": "A"}]}, "index": 0}], "usageMetadata": {"promptTokenCount": 3550, "candidatesTokenCount": 80, "thoughtsTokenCount": 812, "totalTokenCount": 4440}, "modelVersion": "gemini-4-argon"}
+
+data: {"candidates": [{"content": {"role": "model", "parts": [{"text": "\", \"medium\": \"phot"}, {"text": "weighing glass vs dither", "thought": true}, {"text": "ograph\", \"style\": \""}]}, "index": 0}], "usageMetadata": {"promptTokenCount": 3550, "candidatesTokenCount": 100, "thoughtsTokenCount": 812, "totalTokenCount": 4460}, "modelVersion": "gemini-4-argon"}
+
+data: {"candidates": [{"content": {"role": "model", "parts": [{"text": "halftone print\", \"light\": \"flat overcast\", \"motifs\": [\"clouds\", \"dots\"], \"looks"}]}, "index": 0}], "usageMetadata": {"promptTokenCount": 3550, "candidatesTokenCount": 120, "thoughtsTokenCount": 812, "totalTokenCount": 4480}, "modelVersion": "gemini-4-argon"}
+
+data: {"candidates": [{"content": {"role": "model", "parts": [{"text": "\""}]}, "index": 0}], "usageMetadata": {"promptTokenCount": 3550, "candidatesTokenCount": 140, "thoughtsTokenCount": 812, "totalTokenCount": 4500}, "modelVersion": "gemini-4-argon"}
+
+data: {"candidates": [{"content": {"role": "model", "parts": [{"text": ": [{\"name\": \"Dither\", \"fit\": 0.82}, {\"name\": \"Glass\", \"fit"}]}, "index": 0}], "usageMetadata": {"promptTokenCount": 3550, "candidatesTokenCount": 160, "thoughtsTokenCount": 812, "totalTokenCount": 4520}, "modelVersion": "gemini-4-argon"}
+
+data: {"candidates": [{"content": {"role": "model", "parts": [{"text": "\": 0.31}], \"reason\": \"Clouds under a halftone screen, like Im"}]}, "index": 0}], "usageMetadata": {"promptTokenCount": 3550, "candidatesTokenCount": 180, "thoughtsTokenCount": 812, "totalTokenCount": 4540}, "modelVersion": "gemini-4-argon"}
+
+data: {"candidates": [{"content": {"role": "model", "parts": [{"text": "age B but softer\"}, {\"ref\": \"B\", \"medium\": \"digital render\", \"style\": \"gl"}]}, "index": 0}], "usageMetadata": {"promptTokenCount": 3550, "candidatesTokenCount": 200, "thoughtsTokenCount": 812, "totalTokenCount": 4560}, "modelVersion": "gemini-4-argon"}
+
+data: {"candidates": [{"content": {"role": "model", "parts": [{"text": "assy, refractive\", \"light\": \"hard rim light\", \"motifs\": [\"prism\", \"caustics\"], \"looks\":"}]}, "index": 0}], "usageMetadata": {"promptTokenCount": 3550, "candidatesTokenCount": 220, "thoughtsTokenCount": 812, "totalTokenCount": 4580}, "modelVersion": "gemini-4-argon"}
+
+data: {"candidates": [{"content": {"role": "model", "parts": [{"text": " "}]}, "index": 0}], "usageMetadata": {"promptTokenCount": 3550, "candidatesTokenCount": 240, "thoughtsTokenCount": 812, "totalTokenCount": 4600}, "modelVersion": "gemini-4-argon"}
+
+data: {"candidates": [{"content": {"role": "model", "parts": [{"text": "[{\"name\": \"Glass\", \"fit\": 0.9}], \"reason\": \"A prism throwing caustics across a "}]}, "index": 0}], "usageMetadata": {"promptTokenCount": 3550, "candidatesTokenCount": 260, "thoughtsTokenCount": 812, "totalTokenCount": 4620}, "modelVersion": "gemini-4-argon"}
+
+data: {"candidates": [{"content": {"role": "model", "parts": [{"text": "dark floor; the café light — “warm” \\\\ cool\"}, {\"ref\": \"C\", \"medium\": \"oil painting\", \"sty"}]}, "index": 0}], "usageMetadata": {"promptTokenCount": 3550, "candidatesTokenCount": 280, "thoughtsTokenCount": 812, "totalTokenCount": 4640}, "modelVersion": "gemini-4-argon"}
+
+data: {"candidates": [{"content": {"role": "model", "parts": [{"text": "le\": \"thick impasto\", \"light\": \"low warm sun\", \"mo"}]}, "index": 0}], "usageMetadata": {"promptTokenCount": 3550, "candidatesTokenCount": 300, "thoughtsTokenCount": 812, "totalTokenCount": 4660}, "modelVersion": "gemini-4-argon"}
+
+data: {"candidates": [{"content": {"role": "model", "parts": [{"text": "tifs\": [\"field\", \"haystack\"], \"looks\": [{\"name\": \"Painterly\", \"fit\": 0.74}, {\"name\": \"Dither\", \"fit\": 0.55}], \"reason\": \"Heavy brushstrokes over a field at dusk, the haystack echoing #18\"}]}"}]}, "index": 0, "finishReason": "STOP"}], "usageMetadata": {"promptTokenCount": 3550, "candidatesTokenCount": 402, "thoughtsTokenCount": 812, "totalTokenCount": 4764}, "modelVersion": "gemini-4-argon"}
+
