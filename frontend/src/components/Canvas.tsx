@@ -34,7 +34,7 @@ import { PaperSourceNode } from './nodes/PaperSourceNode';
 import { BatchNode } from './nodes/BatchNode';
 import { TypedEdge } from './edges/TypedEdge';
 import { ContextMenu } from './ContextMenu';
-import { ConnectionPopup } from './ConnectionPopup';
+import { ConnectionPopup } from './DeferredPanels';
 import { SelectionToolbar } from './SelectionToolbar';
 import { CanvasNavigation } from './CanvasNavigation';
 import { AgentCursorLayer } from './canvas/AgentCursorLayer';
@@ -313,10 +313,16 @@ export function Canvas() {
     canvasMounted.current = true;
     return () => { canvasMounted.current = false; };
   }, []);
-  const rememberViewport = useCallback((viewport: Viewport) => {
+  // The camera this mount places itself (onInit's start, or the first fit of
+  // a graph with no saved view) isn't the person's move, so opening a
+  // project doesn't read as an unsaved change (projectStore adoptCanvasCamera).
+  // The fitView prop's fit waits for nodes: on a canvas that mounted empty it
+  // runs when a followed project's graph arrives, and is still the canvas's own.
+  const initialFit = useRef(initialCanvasState.fitEnabled);
+  const rememberViewport = useCallback((viewport: Viewport, initial?: boolean) => {
     const ui = useUIStore.getState();
     const canvasActive = ui.viewMode === 'canvas' || (ui.viewMode === 'commons' && !ui.commonsEnabled);
-    if (canvasMounted.current && canvasActive) ui.setCanvasViewport(viewport);
+    if (canvasMounted.current && canvasActive) ui.setCanvasViewport(viewport, { initial });
   }, []);
   const onViewportInitialized = useCallback((instance: { getViewport: () => Viewport }) => {
     // React Flow schedules onInit. An import can replace the graph before that
@@ -326,10 +332,12 @@ export function Canvas() {
     // still be waiting for node measurements. A quick studio visit must not
     // turn that temporary origin camera into a restored, never-fitted viewport.
     if (initialCanvasState.fitEnabled && useGraphStore.getState().nodes.length > 0) return;
-    rememberViewport(instance.getViewport());
+    rememberViewport(instance.getViewport(), true);
   }, [initialCanvasState.fitEnabled, initialCanvasState.viewportRevision, rememberViewport]);
-  const onViewportMove = useCallback((_event: MouseEvent | TouchEvent | null, viewport: Viewport) => {
-    rememberViewport(viewport);
+  const onViewportMove = useCallback((event: MouseEvent | TouchEvent | null, viewport: Viewport) => {
+    // The first fit has no input event; the person's pan or zoom ends it.
+    rememberViewport(viewport, !event && initialFit.current);
+    initialFit.current = false;
   }, [rememberViewport]);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const showContextMenu = useUIStore((s) => s.showContextMenu);
@@ -569,16 +577,17 @@ export function Canvas() {
       const moodboardPayload = event.dataTransfer.getData(MOODBOARD_DRAG_MIME);
       if (moodboardPayload) {
         try {
-          const { id, name, thumbnail, imageCount, mode } = JSON.parse(moodboardPayload) as {
+          const { id, name, thumbnail, imageCount, setAsideCount, mode } = JSON.parse(moodboardPayload) as {
             id: string;
             name?: string;
             thumbnail?: string;
             imageCount?: number;
+            setAsideCount?: number;
             mode?: string;
           };
           if (!id) return;
           const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-          void useGraphStore.getState().addMoodboardNode(id, position, { name, thumbnail, imageCount, mode });
+          void useGraphStore.getState().addMoodboardNode(id, position, { name, thumbnail, imageCount, setAsideCount, mode });
         } catch (err) {
           console.error('[nebula] moodboard drop failed to parse payload:', err);
         }

@@ -63,8 +63,11 @@ The server exposes these tools for building and running (see
 - `get_spend_limits`: the limits and what this session has used.
 - `list_projects` / `open_project` / `new_project`: list the person's saved
   projects, switch the canvas to one, or start a new, empty one. The project
-  that was open is saved as it is. The person's canvas follows, shows a note
-  naming the agent, and offers a button back to the project they had open.
+  that was open is saved as it is. The person's canvas follows (from the
+  Projects screen too, which opens the canvas), shows a note naming the
+  agent, and offers a button back to the project they had open. The Projects
+  screen also lists again whenever anyone makes, renames, deletes or restores
+  a project (the `projectsChanged` socket event).
   Start new work in a new project rather than emptying the canvas: it keeps
   the person's work. Clearing a project that has nodes needs an explicit
   force from anyone (`nebula clear --force`, or `DELETE /api/graph?force=true`);
@@ -103,7 +106,13 @@ And these canvas tools:
   your own edits. If you also use the `nebula` CLI, set `NEBULA_AGENT_NAME`
   so both share one name; otherwise your CLI edits arrive as `anonymous`
   (the result then carries a `note`). Pass the returned `cursor` back as `since`; see
-  [Watching for changes](#watching-for-changes).
+  [Watching for changes](#watching-for-changes). The wait holds only its own
+  call: other calls on the same server, such as the main agent's while a
+  Claude Code subagent waits (subagents share the parent's connection) or
+  parallel tool calls, answer meanwhile. Every tool runs off the server's
+  event loop; up to 32 long calls (waits, runs, link downloads) run at once,
+  and the short calls have 16 threads of their own. A wait the client
+  cancels stops at its next poll (within 25 s).
 - `resolve_pin`: answers one of the person's pinned notes (from
   `look_at_canvas` `pins`) with a one-line reply, which marks it resolved and
   moves the agent's cursor to it. See [Pins](#pins).
@@ -152,6 +161,17 @@ NEBULA_AGENT_NAME="Claude Code" nebula point n2 --say "Checking this prompt"
 nebula point n2.prompt --from n1.text --say "Wiring the prompt in"
 nebula look          # the canvas as text; --json for the full snapshot
 ```
+
+Every one of these actions is also listed in the canvas's **Agent log**
+(bottom right, shown by default with or without the chat; hide it from its
+own eye-off button or Settings > Preferences > "Agent log"): the agent's
+name in its cursor colour, the cursor's words ("Added Moodboard", "Running
+Krea 2", "Accepted"), and the time. Moodboard writes are listed there too
+(your edit batch's `say`, else the journal's words: "Set aside #1 on board
+Dusk"; "Analyzed board Dusk"), and so is a run of the
+whole canvas ("Running 4 nodes"); neither has one place on the canvas, so
+they move no cursor. The log is in the browser's memory only: the last 50
+entries, gone on reload.
 
 The REST surface is `POST /api/canvas/cursor`, `GET /api/canvas/snapshot`, and
 `POST /api/canvas/view` (the browser's own report of viewport, node bounds and
@@ -1281,7 +1301,10 @@ nebula moodboard delete <board>
   or weight 0), while the analysis marks only switched images with
   `setAside` (a weight-0 image keeps its ordinary entry, measured and in no
   colour's sources). Using a weight-0 image again sets the weight its card shows,
-  unless the same change gives a weight. When nothing steers, the analysis
+  unless the same change gives a weight. Set-aside images still count in a
+  board's image count, named beside it: `nebula moodboard list` reads
+  "(5 images, 1 set aside, look, ...)", and the Moodboard node card, the
+  Studio's board list and the Assets panel read "5 images · 1 set aside · look". When nothing steers, the analysis
   warns "Every reference is set aside, so none of them shapes the board."
 - Each image has `notes`, which steer (the analysis reads them), and
   `privateNote`, the person's own label (`--private-note`, or
@@ -1363,6 +1386,15 @@ nebula moodboard delete <board>
   `--merge-delta-e` / `merge_delta_e` (0-50, default 5) try other colour
   thresholds for that run only; without the dry run they are refused.
   On a Nebula without the dry run it says so and analyzes nothing.
+- Strength 0 turns the board off for every node it's wired into: no brief,
+  Avoid, negatives or images, and each such node's run notes "Board
+  strength is 0: board not sent". Any other board wired into the same node
+  still goes. The Moodboard node's own outputs (Brief, Negative, Palette,
+  Images) are unchanged, since wiring one is the person's choice. `show`
+  says the brief is not sent while strength is 0. Images off with text on
+  is the node's "Send board images" switch, not strength 0; that switch
+  isn't in this version yet, and until it is, GPT Image, Nano Banana, FLUX
+  and the other content-slot nodes get the text only anyway.
 - Like Moodboard Studio, changing images, notes, mode or strength clears the
   board's analysis, so run `analyze` again; a rename and the brief fields
   keep it. `--remove` takes an image off the board; its file stays, and the

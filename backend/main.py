@@ -124,6 +124,7 @@ from services.agent_profiles import (
 from services.local_guard import LocalRequestGuard
 from services.agent_workspaces import AgentWorkspaceContext, WorkspaceSessions, WorkspaceSessionError, workspace_scope
 from services.chat_actions import publish_action
+from services import moodboard_actions
 from services.agent_presence import (
     PresenceError,
     RequestHeadersContext,
@@ -3953,6 +3954,23 @@ async def _show_agent(
         event = agent_presence.point(identity, target=target, origin=origin, action=action, say=say)
         await manager.broadcast_raw(event)
     except Exception:  # noqa: BLE001 - decoration must not break graph edits
+        pass
+
+
+async def _say_agent_action(say: str) -> None:
+    """Tell open canvases what the calling agent did where no cursor can go
+    (a moodboard write, a run of the whole canvas). It is the cursor's own
+    event without a target, so the Agent log lists it under the agent's name
+    and colour and no cursor moves (frontend store/agentLogStore.ts). A no-op
+    for the browser's own requests; like _show_agent, it never fails the
+    route that called it.
+    """
+    identity = identify_agent(current_request_headers())
+    if identity is None:
+        return
+    try:
+        await manager.broadcast_raw(agent_presence.point(identity, target=None, action="click", say=say))
+    except Exception:  # noqa: BLE001 - decoration must not break a saved write
         pass
 
 
@@ -9723,7 +9741,9 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         upgrade_project(project)
         catalog["projects"][recovery_id] = project
         project_store.commit(catalog)
-        return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
+        result = {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
+    await _broadcast_projects_changed("created", recovery_id)
+    return result
 
 
 def _switch_actor() -> dict[str, Any] | None:
@@ -9769,6 +9789,18 @@ def _switch_notice(start: dict[str, Any] | None, project: dict[str, Any], *, cre
     return {**start, "projectId": project["id"], "projectName": project["name"], "created": created}
 
 
+async def _broadcast_projects_changed(change: str, project_id: str | None = None) -> None:
+    """Tell open tabs the saved-project list changed (a project made, opened,
+    saved, renamed, given a cover, deleted, restored or deleted for good),
+    whoever changed it: an agent, the CLI, another tab. The Projects screen
+    lists again (frontend projectStore); graphSync only follows the open
+    project, and most of these don't touch it."""
+    try:
+        await manager.broadcast_raw({"type": "projectsChanged", "change": change, "projectId": project_id})
+    except Exception:  # noqa: BLE001 - the catalog is saved; a tab lists it again on its next visit to Projects
+        pass
+
+
 @app.post("/api/projects")
 async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, Any]:
     body = body or {}
@@ -9801,6 +9833,7 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
         revision = catalog["workspaceRevision"]
     await _broadcast_graph_sync(graph_replaced=True, reason="project-create",
                                 project_switch=_switch_notice(start, project, created=True))
+    await _broadcast_projects_changed("created", project["id"])
     # A bundle built for another version doesn't load it (projectStore.ts activate).
     return {"project": public_project(project), "workspaceRevision": revision, "paramsVersion": PARAMS_VERSION}
 
@@ -9827,6 +9860,7 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
         revision = catalog["workspaceRevision"]
     await _broadcast_graph_sync(graph_replaced=True, reason="project-open",
                                 project_switch=_switch_notice(start, project, created=False))
+    await _broadcast_projects_changed("opened", project_id)
     # What opening changed that the person should know (a folded Krea node's
     # dropped job-output connections); the snapshot is saved migrated, so
     # this is said once.
@@ -9844,6 +9878,15 @@ async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
         # for seconds (an Accept's run waited 24 s), so it runs in a worker
         # thread, before the catalog lock, which other requests take to read.
         await asyncio.to_thread(_validate_graph_ingress_complexity, body["snapshot"])
+    result = _save_project(project_id, body, checked=checked)
+    # A save moves the card up and can change its picture and node count.
+    await _broadcast_projects_changed("renamed" if "name" in body else "saved", project_id)
+    return result
+
+
+def _save_project(project_id: str, body: dict[str, Any], *, checked: bool = False) -> dict[str, Any]:
+    """The save itself. ``checked``: the snapshot's file references were
+    already validated (in a worker thread, by the route)."""
     with project_store.transaction() as catalog:
         project = _project_id_or_404(project_id, catalog)
         handoff = catalog.get("handoff") or {}
@@ -9951,7 +9994,9 @@ async def pin_project_cover(project_id: str, body: dict[str, Any]) -> dict[str, 
             project["coverPin"] = url
         refresh_metadata(project, touch=False)
         project_store.commit(catalog)
-        return {"project": project_metadata(project)}
+        result = {"project": project_metadata(project)}
+    await _broadcast_projects_changed("cover", project_id)
+    return result
 
 
 @app.delete("/api/projects/{project_id}")
@@ -9986,6 +10031,7 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
         }
     if deleting_active:
         await _broadcast_graph_sync(graph_replaced=True, reason="project-delete")
+    await _broadcast_projects_changed("deleted", project_id)
     return result
 
 
@@ -10014,7 +10060,9 @@ async def restore_saved_project(project_id: str) -> dict[str, Any]:
         _trashed_or_404(project_id, catalog)
         project = restore_from_trash(catalog, project_id)
         project_store.commit(catalog)
-        return {"project": project_metadata(project), "workspaceRevision": catalog["workspaceRevision"]}
+        result = {"project": project_metadata(project), "workspaceRevision": catalog["workspaceRevision"]}
+    await _broadcast_projects_changed("restored", project_id)
+    return result
 
 
 @app.delete("/api/projects/trash/{project_id}")
@@ -10026,7 +10074,9 @@ async def purge_trashed_project(project_id: str) -> dict[str, Any]:
         del catalog["trash"][project_id]
         project_store.commit(catalog)
         node_errors.keep_projects(set(catalog["projects"]) | set(catalog.get("trash") or {}))
-        return {"trash": _trash_listing(catalog)}
+        result = {"trash": _trash_listing(catalog)}
+    await _broadcast_projects_changed("purged", project_id)
+    return result
 
 
 @app.post("/api/projects/trash/empty")
@@ -10044,7 +10094,10 @@ async def empty_project_trash(body: dict[str, Any] | None = None) -> dict[str, A
         if doomed:
             project_store.commit(catalog)
             node_errors.keep_projects(set(catalog["projects"]) | set(trash))
-        return {"trash": _trash_listing(catalog)}
+        result = {"trash": _trash_listing(catalog)}
+    if doomed:
+        await _broadcast_projects_changed("purged")
+    return result
 
 
 def _shown_trash_ids(body: dict[str, Any] | None, key: str) -> set[str] | None:
@@ -10247,6 +10300,9 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     )
     if target:
         await _show_agent({"nodeId": target}, say=f"Running {_node_label(target)}")
+    else:
+        # The whole canvas has no one node to point at: the Agent log only.
+        await _say_agent_action(f"Running {len(sub_nodes)} node{'' if len(sub_nodes) == 1 else 's'}")
 
     outcome: dict[str, Any] = {"results": {}, "errors": {}, "skipped": {}}
     task = asyncio.create_task(_execute_cli_run(run_id, sub_nodes, sub_edges, api_keys, outcome))
@@ -11250,6 +11306,7 @@ async def create_moodboard(body: MoodboardCreate) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     await _broadcast_stored_asset("moodboard", moodboard)
+    await _say_agent_action(moodboard_actions.describe_create(moodboard))
     return _moodboard_out(moodboard)
 
 
@@ -11302,6 +11359,18 @@ def _journal_board_change(before: dict, after: dict, changes: dict, *, say: str 
     _journal(entry["kind"], data=data, summary=entry["summary"])
 
 
+async def _say_agent_board_change(before: dict, after: dict, changes: dict, *, say: str = "",
+                                  undo: bool = False) -> None:
+    """One Agent log line for an agent's board write (an edit batch or a
+    PUT): the agent's own ``say`` when it sent one, else the journal's
+    summary of the change (services/moodboard_actions.describe_change),
+    marked "Undo:" for a batch of ``restore`` ops. A write that changed
+    nothing, and the person's own writes, send nothing."""
+    if not changes.get("slices") or identify_agent(current_request_headers()) is None:
+        return
+    await _say_agent_action(say or moodboard_actions.describe_change(changes, before, after, undo=undo))
+
+
 def _base_version(raw: Any) -> int | None:
     if raw is None:
         return None
@@ -11348,6 +11417,7 @@ async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
     changes = diff(before, moodboard)
     _journal_board_change(before, moodboard, changes)
     await _broadcast_stored_asset("moodboard", moodboard, edit={"touched": changes["touched"], "undo": None})
+    await _say_agent_board_change(before, moodboard, changes)
     return _moodboard_out(moodboard)
 
 
@@ -11377,9 +11447,12 @@ async def edit_moodboard(moodboard_id: str, body: MoodboardEditsBody) -> dict:
             return _asset_not_found("moodboard", moodboard_id)
         raise HTTPException(status_code=422, detail=str(exc))
     if result.changed:
-        _journal_board_change(before, board, result.changes, say=clean_say(body.say))
+        say = clean_say(body.say)
+        _journal_board_change(before, board, result.changes, say=say)
         undo = result.undo if len(body.ops) <= UNDO_BROADCAST_LIMIT else None
         await _broadcast_stored_asset("moodboard", board, edit={"touched": result.touched, "undo": undo})
+        undo_batch = all(isinstance(op, dict) and op.get("op") == "restore" for op in body.ops)
+        await _say_agent_board_change(before, board, result.changes, say=say, undo=undo_batch)
     return {"board": _moodboard_out(board), "version": board.get("version"), "applied": result.applied,
             "undo": result.undo}
 
@@ -11400,6 +11473,7 @@ async def keep_moodboard_brief_override(moodboard_id: str) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     await _broadcast_stored_asset("moodboard", moodboard, edit=_UNTOUCHED_LAYOUT)
+    await _say_agent_action(moodboard_actions.describe_write("kept the brief on", moodboard))
     return _moodboard_out(moodboard)
 
 
@@ -11441,6 +11515,7 @@ async def analyze_moodboard_route(moodboard_id: str) -> dict:
         except (KeyError, ValueError):
             raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
     await _broadcast_stored_asset("moodboard", moodboard, edit=_UNTOUCHED_LAYOUT)
+    await _say_agent_action(moodboard_actions.describe_write("analyzed", moodboard))
     return _moodboard_out(moodboard)
 
 
@@ -11483,6 +11558,7 @@ async def delete_moodboard(moodboard_id: str) -> dict:
     except (KeyError, ValueError):
         raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
     await _broadcast_stored_asset("moodboard", None, moodboard_id, deleted=True)
+    await _say_agent_action(moodboard_actions.describe_write("deleted", record))
     return {"status": "trashed", "id": moodboard_id, "trashed": record}
 
 
@@ -11562,6 +11638,8 @@ async def _move_stored_asset(kind: str, asset_id: str, body: AssetMoveBody) -> d
     result["movedBy"] = actor_record(actor_for_headers(current_request_headers()))
     result["detail"] = f"Moved “{name}” from {names['from']} to {names['to']}."
     await _broadcast_stored_asset(kind, after, moved=True)
+    if kind == "moodboard":
+        await _say_agent_action(moodboard_actions.describe_write("moved", after, f"to {names['to']}"))
     return result
 
 
@@ -11680,6 +11758,8 @@ async def restore_trashed(kind: str, item_id: str) -> dict[str, Any]:
             return {"restored": kind, "id": item_id, "asset": _asset_out(kind, live), "alreadyRestored": True}
         raise HTTPException(status_code=404, detail=f"{_asset_noun(kind)} '{item_id}' isn't in Recently deleted")
     await _broadcast_stored_asset(kind, asset)
+    if kind == "moodboard":
+        await _say_agent_action(moodboard_actions.describe_write("restored", asset))
     # Read back through the store, as GET does (a board gets its brief).
     return {"restored": kind, "id": item_id, "asset": _asset_out(kind, _stored_asset(kind, item_id) or asset)}
 
@@ -11739,6 +11819,8 @@ async def empty_trash(kind: str | None = None, scope: str | None = None,
             if doomed:
                 purged += len(doomed)
                 project_store.commit(catalog)
+        if doomed:
+            await _broadcast_projects_changed("purged")
     return {"purged": purged}
 
 
