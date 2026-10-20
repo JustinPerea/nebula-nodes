@@ -49,7 +49,7 @@ import math
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 from uuid import uuid4
 
 from services import moodboard_layout as layout
@@ -67,6 +67,9 @@ OPS = ("add", "remove", "place", "resize", "link", "unlink", "setAside", "weight
 LATER_OPS = ("arrange", "look.set", "look.inherit", "suggestion.accept", "suggestion.dismiss", "realPerson")
 # The image settings a ``restore`` slice can put back.
 SETTING_KEYS = ("weight", "excluded", "notes", "privateNote")
+# What an image saved before a setting existed reads as (the store's
+# _normalize_images saves these on its next write): not a change.
+SETTING_DEFAULTS: dict[str, Any] = {"weight": 1.0, "excluded": False, "notes": "", "privateNote": ""}
 # What the whole-board analysis reads of each image (moodboard_analysis.source_hash).
 STEERING_KEYS = ("url", "weight", "notes", "excluded")
 SLICE_PARTS = ("frame", "image", "settings", "card", "fields")
@@ -1079,6 +1082,11 @@ def _images_by_id(board: dict[str, Any]) -> dict[str, tuple[int, dict[str, Any]]
             if isinstance(img, dict)}
 
 
+def _setting(img: dict[str, Any], key: str) -> Any:
+    value = img.get(key)
+    return SETTING_DEFAULTS[key] if value is None else value
+
+
 def diff(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
     """What changed from ``before`` to ``after``: the slices that undo it,
     the ids it touched and what the journal says (kinds and the images
@@ -1111,7 +1119,7 @@ def diff(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
         if image_id not in old:
             continue
         was = old[image_id][1]
-        changed = [key for key in SETTING_KEYS if was.get(key) != img.get(key)]
+        changed = [key for key in SETTING_KEYS if _setting(was, key) != _setting(img, key)]
         if changed:
             slices.append({"part": "settings", "image": image_id,
                            "before": {key: copy.deepcopy(was.get(key)) for key in changed},
@@ -1194,6 +1202,25 @@ def steering(board: dict[str, Any]) -> list[tuple[Any, ...]]:
 KIND_ORDER = ("added", "removed", "frame", "grouped", "setAside", "resized", "noted", "moved")
 
 
+# A board's name in a summary is cut to this many characters.
+MAX_BOARD_NAME_CHARS = 60
+
+
+def board_where(board: Mapping[str, Any] | None, *fallbacks: Mapping[str, Any] | None) -> str:
+    """"board Dusk": how a board is named in the journal's summaries and in
+    the Agent log's lines (services/moodboard_actions), so the two never name
+    one board two ways. The first of ``board`` and ``fallbacks`` with a name
+    (a deleted board's record, the board before a rename), else its id."""
+    boards = [item for item in (board, *fallbacks) if item]
+    name = next((str(item["name"]) for item in boards if item.get("name")), None)
+    if name is None:
+        name = next((str(item["id"]) for item in boards if item.get("id")), "Untitled board")
+    name = " ".join(name.split())
+    if len(name) > MAX_BOARD_NAME_CHARS:
+        name = name[: MAX_BOARD_NAME_CHARS - 1].rstrip() + "…"
+    return f"board {name}"
+
+
 def journal_entry(changes: dict[str, Any], before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any] | None:
     """The journal event for a change (``diff``'s), or None when nothing worth
     journaling changed (a move under 8 px, a rename). Never any note text:
@@ -1213,8 +1240,7 @@ def journal_entry(changes: dict[str, Any], before: dict[str, Any], after: dict[s
     refs = [{"number": number(image_id), "id": image_id} for image_id in named]
     listed = _listed([f"#{ref['number']}" for ref in refs if ref["number"]])
     kind = kinds[0]
-    name = str(after.get("name") or before.get("name") or after.get("id"))
-    where = f"board {name}"
+    where = board_where(after, before)
     if kind == "added":
         summary = f"added {listed} to {where}"
     elif kind == "removed":
@@ -1300,5 +1326,5 @@ def apply_edits(board: dict[str, Any], ops: Any, *, by: str, now: str | None = N
 
 
 __all__ = ["EditError", "EditResult", "FIELD_KEYS", "MAX_OPS", "OPS", "UNDO_BROADCAST_LIMIT", "apply_edits",
-           "clean_say", "diff", "field_value", "fields_slice", "holds_private_note", "journal_entry", "parse_ops",
-           "steering"]
+           "board_where", "clean_say", "diff", "field_value", "fields_slice", "holds_private_note", "journal_entry",
+           "parse_ops", "steering"]

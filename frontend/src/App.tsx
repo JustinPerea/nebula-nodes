@@ -4,7 +4,7 @@ import { Canvas } from './components/Canvas';
 import { CanvasTabs } from './components/CanvasTabs';
 import { NodeLibrary } from './components/panels/NodeLibrary';
 import { AssetsPanel } from './components/panels/AssetsPanel';
-import { OnboardingOverlay, RunHistoryPanel } from './components/DeferredPanels';
+import { AgentLog, OnboardingOverlay, RunHistoryPanel } from './components/DeferredPanels';
 import { Settings } from './components/panels/Settings';
 import { Toolbar } from './components/panels/Toolbar';
 import { GraphFileActions } from './components/GraphFileActions';
@@ -12,7 +12,9 @@ import { WorkspaceRail } from './components/WorkspaceRail';
 import { ChatLauncher } from './components/ChatLauncher';
 import { NodeInspectorPopover } from './components/panels/NodeInspectorPopover';
 import { ChatPanel } from './components/panels/ChatPanel';
-import { AgentLog } from './components/panels/AgentLog';
+// The Agent log's store collects every agent's actions from page load, even
+// before the panel mounts (store/agentLogStore.ts subscribes at import).
+import './store/agentLogStore';
 import { CommandPalette } from './components/CommandPalette';
 import { KeyboardShortcuts } from './components/KeyboardShortcuts';
 import { BackendConnectionStatus } from './components/BackendConnectionStatus';

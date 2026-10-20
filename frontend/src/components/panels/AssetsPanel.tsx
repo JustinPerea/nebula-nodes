@@ -80,7 +80,8 @@ export function AssetsPanel() {
   // A board or Character saved or deleted elsewhere (the Studio, an agent,
   // the CLI) shows up without reopening the panel.
   useEffect(() => wsClient.subscribe((event) => {
-    if (event.type === 'storedAssetChanged') setRelistKey((value) => value + 1);
+    // socketReconnected: changes made while the socket was down aren't replayed.
+    if (event.type === 'storedAssetChanged' || event.type === 'socketReconnected') setRelistKey((value) => value + 1);
   }), []);
 
   useEffect(() => {

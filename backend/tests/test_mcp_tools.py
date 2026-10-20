@@ -318,7 +318,7 @@ def test_view_output_says_when_an_output_is_from_before_a_failed_run(nebula):
     try:
         note, picture = mcp_server.view_output(image)
     finally:
-        main.node_errors.forget_all()
+        main.node_errors.forget_canvas()
     assert isinstance(picture, Image)
     assert json.loads(note)["note"] == "This output is from before its last run, which failed: HTTP 429: rate limited"
 
@@ -336,7 +336,7 @@ def test_view_output_says_when_a_value_is_from_before_a_failed_run(nebula):
     try:
         answer = json.loads(mcp_server.view_output(prompt)[0])
     finally:
-        main.node_errors.forget_all()
+        main.node_errors.forget_canvas()
     assert answer["note"] == "This output is from before its last run, which failed: Moodboard 'b1' is in Recently deleted."
     assert answer["outputs"]["text"]["value"] == "hello there"
 
@@ -354,4 +354,7 @@ def test_propose_change_warns_about_run_nodes_that_cannot_run(nebula, monkeypatc
     )
     assert response["proposal"]["cost"]["notReady"][0]["missing"] == "needs OPENAI_API_KEY in Settings > Providers"
     assert "+img (GPT Image 2) needs OPENAI_API_KEY" in response["warning"]
+    # Named the MCP way, not the CLI's or the HTTP route's.
+    assert response["warning"].endswith("(find_nodes lists them).")
+    assert "nebula context" not in response["warning"] and "/api/agent/nodes" not in response["warning"]
     mcp_server.withdraw_proposal(response["proposal"]["id"])

@@ -77,7 +77,9 @@ The server exposes these tools for building and running (see
   Moodboard Studio, with their brief (Direction, Avoid, pinned colours, a
   hand-written brief, and the brief generators get). `moodboard_analyze`
   with `dry_run` previews an analysis, optionally with other colour
-  thresholds, and saves nothing. `moodboard_move` and `character_move`
+  thresholds, and saves nothing; with `read_with="gemini-4-argon"` and
+  `dry_run` it reads the references with that vision model (paid, moves
+  nothing; `estimate_only` prices it first). `moodboard_move` and `character_move`
   move a board or a Character to Global or a canvas project (`to`:
   "global", "current", or a project's id or exact name). See
   [Moodboards from the CLI and MCP](#moodboards-from-the-cli-and-mcp).
@@ -161,6 +163,17 @@ NEBULA_AGENT_NAME="Claude Code" nebula point n2 --say "Checking this prompt"
 nebula point n2.prompt --from n1.text --say "Wiring the prompt in"
 nebula look          # the canvas as text; --json for the full snapshot
 ```
+
+Every one of these actions is also listed in the canvas's **Agent log**
+(bottom right, shown by default with or without the chat; hide it from its
+own eye-off button or Settings > Preferences > "Agent log"): the agent's
+name in its cursor colour, the cursor's words ("Added Moodboard", "Running
+Krea 2", "Accepted"), and the time. Moodboard writes are listed there too
+(your edit batch's `say`, else the journal's words: "Set aside #1 on board
+Dusk"; "Analyzed board Dusk"), and so is a run of the
+whole canvas ("Running 4 nodes"); neither has one place on the canvas, so
+they move no cursor. The log is in the browser's memory only: the last 50
+entries, gone on reload.
 
 The REST surface is `POST /api/canvas/cursor`, `GET /api/canvas/snapshot`, and
 `POST /api/canvas/view` (the browser's own report of viewport, node bounds and
@@ -564,7 +577,9 @@ and `describe_node` use (`node_readiness.instance_missing`, read at the
 values Accept would write: "needs OPENAI_API_KEY in Settings > Providers",
 a Krea sign-in, or why the chosen route can't take it), and the cost entry
 of such a node has the same `missing`. `propose_change` and `nebula propose`
-turn the list into a `warning` (`canvas_proposals.readiness_warning`). On
+turn the list into a `warning` (`canvas_proposals.readiness_warning`), each
+pointing at its own way to find a node that runs here: `find_nodes` for MCP,
+`nebula context` for the CLI, and `GET /api/agent/nodes` in the HTTP reply. On
 the canvas the ghost shows the ⚠ a real node shows, with the same title, and
 the bar lists the nodes under its summary (three, then the rest in its
 details). Both re-check keys as the person adds them, so a line goes away
@@ -1166,7 +1181,16 @@ A run in which any node failed reports `status: "failed"` with `error`
 naming the node, `errors` with each message and `results` with what
 finished; `get_run` and `nebula result` say the same. The backend keeps each
 node's last error (`services/node_errors.py`) for `look_at_canvas`,
-`view_output`, `nebula look` and `nebula path` until the node runs again. It waits 45
+`view_output`, `nebula look` and `nebula path` until the node runs again,
+whoever ran it (the canvas Run button too). It is kept per project, in
+`node-errors.json` in the state dir, so it survives a page reload, a switch to
+another project and back, and a backend restart; every graph the canvas loads
+(graphSync, `GET /api/projects/{id}`) gives such a node `state: "error"` with
+the card's `error`, `errorFriendly` and `errorCategory`. Loading a graph over
+the project or clearing it forgets its errors, as does deleting the project
+for good. Deleting a node keeps its error, so undoing the delete
+(`POST /api/graph/restore`) puts the node back failed, as the canvas's undo
+shows it; an undo that swaps another node in under the id forgets it. It waits 45
 seconds by default because Codex gives each tool call 60 seconds unless
 configured otherwise (in-app Codex gets 150); `get_run` waits again (up to 300). Finished image and
 video outputs come back as small previews from
@@ -1352,6 +1376,8 @@ nebula moodboard set <board> --clash-mode flag           # leave-out (default), 
 nebula moodboard set <board> --restore set-output.json  # undo: the `set --json` output
 nebula moodboard analyze <board>
 nebula moodboard analyze <board> --dry-run --merge-delta-e 8   # preview; saves nothing
+nebula moodboard analyze <board> --read-with gemini-4-argon --estimate           # the price; reads nothing
+nebula moodboard analyze <board> --read-with gemini-4-argon --dry-run --only 3,5   # paid read; moves nothing
 nebula moodboard list                      # boards for every project, plus the open project's
 nebula moodboard move <board> --to global  # or current, or a project's id or exact name
 nebula character move <character> --to "Shoot B"
@@ -1420,7 +1446,12 @@ nebula moodboard delete <board>
   unless the same change gives a weight. Set-aside images still count in a
   board's image count, named beside it: `nebula moodboard list` reads
   "(5 images, 1 set aside, look, ...)", and the Moodboard node card, the
-  Studio's board list and the Assets panel read "5 images · 1 set aside · look". When nothing steers, the analysis
+  Studio's board list and the Assets panel read "5 images · 1 set aside · look"
+  (the card on one line, the whole of it on hover). An open Studio, the card and the
+  lists also catch up on a change made while their tab's socket was closed
+  (a backend restart), once it opens again. A Preview of the run
+  counts only the images that steer ("4 images"), weight 0 left out like
+  the switch. When nothing steers, the analysis
   warns "Every reference is set aside, so none of them shapes the board."
 - Each image has `notes`, which steer (the analysis reads them), and
   `privateNote`, the person's own label (`--private-note`, or
@@ -1502,6 +1533,50 @@ nebula moodboard delete <board>
   `--merge-delta-e` / `merge_delta_e` (0-50, default 5) try other colour
   thresholds for that run only; without the dry run they are refused.
   On a Nebula without the dry run it says so and analyzes nothing.
+- `analyze --read-with gemini-4-argon --dry-run` (`moodboard_analyze` with
+  `read_with` and `dry_run`) reads the references with a vision model
+  (`POST /api/moodboards/{id}/read?dryRun=1`, contract 07, section 1.13):
+  batches of 6, two at a time, each image sent as a 1024 px JPEG. It prints
+  every line as it arrives, the readings first (`#21  clouds under a
+  halftone screen → Dither (0.82)`), then how Analyze would sort them
+  (`#6 Unsorted: no look fits (0.41)`, a suggestion such as "Make a
+  Painterly × Dither look for #3, #9, #14?"), a done line ("Dry run: would
+  sort 14 into 4 looks (1 new) · 2 Unsorted · nothing moved") and what it
+  spent. It is paid, and only the dry run exists: it saves nothing and moves
+  nothing, and the board's `version` stays. Without `--dry-run` it is
+  refused.
+  - `--estimate` / `estimate_only` (`POST .../read/estimate`) prices it and
+    sends nothing: "$0.37 to $1.02" for 14 images at medium, from Google's
+    list price on the day (Gemini 4 Argon is $2.00 input and $10.00 output
+    per million tokens through 2026-11-30, then $4.00 and $20.00; thinking
+    counts as output). The high end assumes one retry per batch.
+  - The spent line is a minimum: a request that stopped without a token
+    count (a 5xx, a time bound) isn't in it, and the CLI says how many
+    there were (`spent.requestsWithoutUsage` in the MCP answer).
+  - `--only 3,5` / `only=[3, 5]` reads some images (numbers or ids);
+    `--thinking-level low|medium|high` / `thinking_level` (default medium);
+    `--quiet` prints only the done and spent lines; `--json` prints each
+    trace line and then the result as JSON lines. `include_thoughts` adds
+    the reader's thought lines to the MCP answer (Argon's thought summaries
+    are unconfirmed, so it asks for none yet).
+  - Agents go through the spending limits: a read counts as one run of the
+    Gemini chat node, priced at its high estimate, so one above the per-run
+    limit (default $1) is refused with the price and how to ask. The person
+    can raise Gemini chat's limit in Settings > Agent spending. A request
+    that never started is given back. A read with no list price is refused
+    under any dollar limit.
+  - The reader sees the images as A to F, never board numbers; reasons that
+    name another image are cleaned before they are shown. A new look's name
+    must be 1 to 60 characters and at most 4 words, of letters, digits,
+    spaces and `&-'`, with no `#n`, image label, link or `@`; when the
+    reader names a look any other way, its images show as Unsorted ("its
+    look's name was refused") instead. Each reading in `--json` carries
+    `reader` and `readerName` ("Gemini 4 Argon"), and the answer's `reader`
+    says who read (`source: "model"`). Board and image
+    notes go only when the board's `sendNotes` is on; private notes never.
+    A reference that isn't a file on this computer is skipped and listed.
+  - It needs `GOOGLE_API_KEY` (400 without it, and nothing is charged).
+
 - Strength 0 turns the board off for every node it's wired into: no brief,
   Avoid, negatives or images, and each such node's run notes "Board
   strength is 0: board not sent". Any other board wired into the same node

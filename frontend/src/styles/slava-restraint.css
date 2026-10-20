@@ -134,6 +134,10 @@ body.app-slava-restraint {
    * inspector, and node chrome. Component rules consume these instead of
    * inventing one-off sizes. */
   --toolbar-pad: 64px;
+  /* The chat launcher: same 48px height and baseline as the bottom bar. The
+   * agent log and the docked chat stack above it (layouts.css). */
+  --chat-launcher-bottom: var(--sr-space-6);
+  --chat-launcher-size: 48px;
   --sr-space-1: 4px;
   --sr-space-2: 8px;
   --sr-space-3: 12px;
@@ -2283,9 +2287,9 @@ body.app-slava-restraint .panel-launcher {
 /* Chat matches the bottom bar: same 48px height, same baseline, same 14px
    floating-surface corner (its dotted press layer sits 4px in at 10px). */
 body.app-slava-restraint .panel-launcher.panel-launcher--chat {
-  bottom: var(--sr-space-6);
-  width: 48px;
-  height: 48px;
+  bottom: var(--chat-launcher-bottom);
+  width: var(--chat-launcher-size);
+  height: var(--chat-launcher-size);
   border-radius: var(--sr-radius-panel);
 }
 
@@ -2407,7 +2411,73 @@ body.app-slava-restraint .agent-log__header {
   padding: 10px 12px 10px 14px;
 }
 
-body.app-slava-restraint .agent-log--open .agent-log__header {
+/* The drag row holds the header button and the hide control side by side;
+ * the header keeps its padding, the row adds none. */
+body.app-slava-restraint .agent-log__drag-row {
+  padding: 0;
+}
+
+body.app-slava-restraint .agent-log__hide {
+  margin-right: var(--sr-space-2);
+  border-radius: var(--sr-radius-control, 8px);
+  color: var(--sr-ink-faint);
+  transition:
+    color 120ms ease,
+    background-color 120ms ease,
+    transform 220ms var(--agent-log-spring);
+}
+
+body.app-slava-restraint .agent-log__hide:hover {
+  background: var(--sr-glass-raised);
+  color: var(--sr-ink);
+}
+
+body.app-slava-restraint .agent-log__hide:focus-visible {
+  outline: 1px solid var(--sr-edge-strong);
+  outline-offset: 1px;
+  color: var(--sr-ink);
+}
+
+body.app-slava-restraint .agent-log-hidden-notice {
+  z-index: var(--sr-layer-agent-log);
+  background: var(--sr-glass);
+  backdrop-filter: var(--sr-blur-panel);
+  -webkit-backdrop-filter: var(--sr-blur-panel);
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-panel);
+  box-shadow: var(--sr-shadow-panel-sm);
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-control);
+}
+
+body.app-slava-restraint .agent-log-hidden-notice__icon,
+body.app-slava-restraint .agent-log-hidden-notice__sep {
+  color: var(--sr-ink-faint);
+}
+
+body.app-slava-restraint .agent-log-hidden-notice__action {
+  background: var(--sr-glass-raised);
+  border: 1px solid var(--sr-edge);
+  color: var(--sr-ink);
+  font-weight: 500;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    transform 220ms var(--agent-log-spring);
+}
+
+body.app-slava-restraint .agent-log-hidden-notice__action:hover {
+  border-color: var(--sr-edge-strong);
+}
+
+body.app-slava-restraint .agent-log-hidden-notice__action:focus-visible {
+  outline: 1px solid var(--sr-edge-strong);
+  outline-offset: 2px;
+}
+
+/* The divider runs under the whole row, hide control included. */
+body.app-slava-restraint .agent-log--open .agent-log__drag-row {
   border-bottom-color: var(--sr-edge);
 }
 
@@ -2612,8 +2682,11 @@ body.app-slava-restraint .agent-log__time {
 }
 
 body.app-slava-restraint .agent-log__source {
+  overflow: hidden;
   color: var(--agent-log-source-color);
+  text-overflow: ellipsis;
   text-transform: lowercase;
+  white-space: nowrap;
   letter-spacing: 0;
   font-size: var(--sr-type-meta);
 }
