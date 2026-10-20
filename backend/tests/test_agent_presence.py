@@ -102,8 +102,8 @@ def test_an_action_with_no_place_on_the_canvas_is_said_but_draws_no_cursor():
     presence = AgentPresence(clock=Clock())
     identity = identify({"X-Nebula-Agent": "Claude Code"})
     presence.point(identity, target={"nodeId": "n1"}, say="Added Moodboard")
-    event = presence.point(identity, target=None, say="Analyzed “Dusk”")
-    assert event["say"] == "Analyzed “Dusk”" and "target" not in event
+    event = presence.point(identity, target=None, say="Analyzed board Dusk")
+    assert event["say"] == "Analyzed board Dusk" and "target" not in event
     (cursor,) = presence.active()
     assert cursor["target"] == {"nodeId": "n1"} and cursor["say"] == "Added Moodboard"
 

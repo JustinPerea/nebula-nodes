@@ -1,7 +1,7 @@
 import type { PaperRunInput, PortValue, VariantScope } from '../types';
 import type { PaperSourceRecord } from './paperSource';
 import { getProjectContext } from './projectContext';
-import { GRAPH_PARAMS_VERSION, upgradeRunSnapshot } from './savedParamsUpgrades';
+import { GRAPH_PARAMS_VERSION, RUN_BEHAVIOUR_VERSION, upgradeRunSnapshot } from './savedParamsUpgrades';
 
 /** Persistent run-history records for the Run History panel. Records contain the
  * exact JSON graph sent to the backend so a later replay never reads mutable
@@ -92,6 +92,11 @@ export interface RunRecord {
    *  already in projects) sent version-0 values. Read through
    *  runParamsVersion. */
   paramsVersion?: number;
+  /** The behaviour version the run went at (RUN_BEHAVIOUR_VERSION): changes
+   *  that alter what a replay does without changing a saved value, such as
+   *  Krea 2's board strengths. Missing means 0. Read through
+   *  runBehaviourVersion. */
+  behaviourVersion?: number;
 }
 
 export interface ProviderRecoveryCheckpoint {
@@ -567,7 +572,7 @@ export function applyProviderRecoveryToLiveParams(
   return paramsWithProviderRecovery({ definitionId, params }, checkpoint);
 }
 
-export type OpenRunRecord = Omit<RunRecord, 'status' | 'durationSec' | 'nodesExecuted' | 'paramsVersion'>;
+export type OpenRunRecord = Omit<RunRecord, 'status' | 'durationSec' | 'nodesExecuted' | 'paramsVersion' | 'behaviourVersion'>;
 
 function isParamsVersion(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0;
@@ -576,6 +581,11 @@ function isParamsVersion(value: unknown): value is number {
 /** The version a record's recipe was sent at. Missing or malformed is 0. */
 export function runParamsVersion(record: Pick<RunRecord, 'paramsVersion'>): number {
   return isParamsVersion(record.paramsVersion) ? record.paramsVersion : 0;
+}
+
+/** The behaviour version a record's run went at. Missing or malformed is 0. */
+export function runBehaviourVersion(record: Pick<RunRecord, 'behaviourVersion'>): number {
+  return isParamsVersion(record.behaviourVersion) ? record.behaviourVersion : 0;
 }
 
 /** A record's recipe as it should run now (savedParamsUpgrades.ts). The
@@ -634,7 +644,8 @@ function cappedRunHistory(history: RunRecord[]): RunRecord[] {
 /** Prepend a new running record, capping the list. Pure with respect to history;
  * the incoming snapshot is cloned so later canvas mutations cannot alter it.
  * Fresh runs send the canvas, which is at this bundle's version, and replays
- * send an upgraded recipe, so every new record is stamped current. */
+ * send an upgraded recipe, so every new record is stamped current. Every run
+ * also goes at this backend's behaviour (RUN_BEHAVIOUR_VERSION). */
 export function openRunRecord(history: RunRecord[], rec: OpenRunRecord): RunRecord[] {
   const snapshot = freezeRunSnapshot(rec.snapshot);
   const paperInputs = paperInputsForSnapshot(snapshot, rec.targetNodeId);
@@ -645,6 +656,7 @@ export function openRunRecord(history: RunRecord[], rec: OpenRunRecord): RunReco
     outOfDateReasons: [],
   } : {};
   return cappedRunHistory([{ ...rec, ...contract, snapshot, paramsVersion: GRAPH_PARAMS_VERSION,
+    behaviourVersion: RUN_BEHAVIOUR_VERSION,
     createOrigin: rec.createOrigin ? deepFreeze(JSON.parse(JSON.stringify(rec.createOrigin)) as CreateRunOrigin) : undefined,
     cinemaShot: rec.cinemaShot ? deepFreeze({ ...rec.cinemaShot }) : undefined,
     status: 'running' as const }, ...history]);
@@ -880,9 +892,13 @@ export function loadRunHistory(
       const batchVariants = sanitizeRunBatchVariants(record);
       if (JSON.stringify(record.batchVariants) !== JSON.stringify(batchVariants)) metadataChanged = true;
       // A malformed stamp is read as 0 and dropped; it never drops the record.
-      const { paramsVersion, ...unstamped } = record;
-      const stamp = isParamsVersion(paramsVersion) ? { paramsVersion } : {};
+      const { paramsVersion, behaviourVersion, ...unstamped } = record;
+      const stamp = {
+        ...(isParamsVersion(paramsVersion) ? { paramsVersion } : {}),
+        ...(isParamsVersion(behaviourVersion) ? { behaviourVersion } : {}),
+      };
       if (paramsVersion !== undefined && !isParamsVersion(paramsVersion)) metadataChanged = true;
+      if (behaviourVersion !== undefined && !isParamsVersion(behaviourVersion)) metadataChanged = true;
       const reconnectingWorldLabs = record.status === 'running'
         && (record.startedFreshPaidWorldLabs === true
           || (record.startedFreshPaidWorldLabs === undefined

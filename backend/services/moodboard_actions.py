@@ -4,90 +4,88 @@ Graph edits narrate themselves through the agent's cursor ("Added Moodboard",
 "Running Krea 2"). A board write has no place on the canvas, so main.py sends
 the same ``agentPresence`` event without a target (``_say_agent_action``) and
 these helpers write its ``say``. Only the agent's own action is named, never
-what the person wrote: a private note is "Edited private notes", not its text.
+what the person wrote: a private note is "private note changed", not its text.
+
+One set of words, the journal's (``services/moodboard_edits``). A change to a
+board (an edit batch or a ``PUT``) is said in ``journal_entry``'s summary, so
+the Agent log and the journal never describe one change two ways. The journal
+leaves the board's fields out (a Direction change, a rename); those are named
+by the labels ``moodboard_edits.FIELD_LABELS`` already gives them. Every line
+names the board as the journal does (``moodboard_edits.board_where``: "board
+Dusk"), the lines for writes the journal has no event for (make, Analyze,
+Keep, move, delete, restore) too.
 """
 from __future__ import annotations
 
 from typing import Any, Mapping
 
-MAX_NAME_CHARS = 60
-
-# Board fields an agent may set, and what changing one says. Lists and
-# objects compare whole; `analysis`, `colorCheck` and the layout are Nebula's.
-_FIELD_WORDS: tuple[tuple[str, str], ...] = (
-    ("notes", "edited notes"),
-    ("direction", "set Direction"),
-    ("avoid", "set Avoid"),
-    ("pinnedColors", "set pinned colors"),
-    ("colorChoices", "changed color choices"),
-    ("clashMode", "set clash mode"),
-    ("mode", "set mode"),
-    ("strength", "set strength"),
-)
-
-
-def board_name(board: Mapping[str, Any] | None) -> str:
-    """“Dusk dunes”, cut to ``MAX_NAME_CHARS``."""
-    name = " ".join(str((board or {}).get("name") or "Untitled board").split())
-    if len(name) > MAX_NAME_CHARS:
-        name = name[: MAX_NAME_CHARS - 1].rstrip() + "…"
-    return f"“{name}”"
+from services.moodboard_edits import FIELD_LABELS, board_where, journal_entry
 
 
 def _images(n: int) -> str:
     return f"{n} image{'' if n == 1 else 's'}"
 
 
-def _weight(image: Mapping[str, Any]) -> Any:
-    # An image saved before weights were written reads without one and is
-    # saved at the store's default on its next write: not the agent's change.
-    return image.get("weight", 1.0)
+def _label(key: str) -> str:
+    label = FIELD_LABELS.get(key, key)
+    return "the " + label[4:] if label.startswith("The ") else label
 
 
-def _changed(before: Mapping[str, Any], after: Mapping[str, Any], key: str) -> bool:
-    return before.get(key) != after.get(key)
+def _listed(words: list[str]) -> str:
+    return words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]
 
 
-def describe_update(before: Mapping[str, Any], after: Mapping[str, Any]) -> str:
-    """One line for a board update: "Set aside 1 image in “Dusk”"."""
-    old = {img.get("id"): img for img in before.get("images") or [] if img.get("id")}
-    new = {img.get("id"): img for img in after.get("images") or [] if img.get("id")}
-    kept = [image_id for image_id in new if image_id in old]
+def _field_words(changes: Mapping[str, Any], entry: Mapping[str, Any] | None) -> list[str]:
+    """The board fields the change set, from its ``fields`` slice. The board's
+    notes are left out only when the journal's summary is the one about them
+    ("changed the notes of board Dusk")."""
+    fields = next((item for item in changes.get("slices") or [] if item.get("part") == "fields"), None)
+    if not fields:
+        return []
+    keys = list((fields.get("expect") or {}).keys())
+    board_notes_said = (entry is not None and entry.get("kind") == "board.noted"
+                        and not (changes.get("kinds") or {}).get("noted"))
+    if board_notes_said:
+        keys = [key for key in keys if key != "notes"]
+    words: list[str] = []
+    changed = [key for key in keys if key != "sendNotes"]
+    if changed:
+        words.append("changed " + _listed([_label(key) for key in changed]))
+    if "sendNotes" in keys:
+        words.append(f"turned {FIELD_LABELS['sendNotes']} " + ("on" if fields["expect"]["sendNotes"] else "off"))
+    return words
 
-    def count(test) -> int:
-        return sum(1 for image_id in kept if test(old[image_id], new[image_id]))
 
-    parts: list[str] = []
-    aside = count(lambda a, b: not a.get("excluded") and bool(b.get("excluded")))
-    used = count(lambda a, b: bool(a.get("excluded")) and not b.get("excluded"))
-    added = sum(1 for image_id in new if image_id not in old)
-    removed = sum(1 for image_id in old if image_id not in new)
-    weighted = count(lambda a, b: _weight(a) != _weight(b))
-    noted = count(lambda a, b: (a.get("notes") or "") != (b.get("notes") or ""))
-    private = count(lambda a, b: (a.get("privateNote") or "") != (b.get("privateNote") or ""))
-    for n, words in ((aside, "set aside {}"), (used, "used {} again"), (added, "added {}"),
-                     (removed, "removed {}"), (weighted, "set the weight of {}"),
-                     (noted, "edited notes on {}"), (private, "edited private notes on {}")):
-        if n:
-            parts.append(words.format(_images(n)))
-    parts.extend(words for key, words in _FIELD_WORDS if _changed(before, after, key))
-    if _changed(before, after, "briefOverride"):
-        parts.append("wrote the brief" if after.get("briefOverride") else "removed the hand-written brief")
-    if _changed(before, after, "sendNotes"):
-        parts.append("turned notes for generators " + ("on" if after.get("sendNotes") else "off"))
-
-    renamed = _changed(before, after, "name")
-    said = ", ".join(parts)
-    if said:
-        said = f"{said} in {board_name(after)}"
-    if renamed:
-        rename = f"renamed {board_name(before)} to {board_name(after)}"
-        said = f"{rename}; {said}" if said else rename
-    if not said:
-        return f"Updated {board_name(after)}"
+def _sentence(said: str) -> str:
     return said[0].upper() + said[1:]
+
+
+def describe_change(changes: Mapping[str, Any], before: Mapping[str, Any], after: Mapping[str, Any], *,
+                    undo: bool = False) -> str:
+    """One line for a board change (``moodboard_edits.diff``'s): the journal's
+    summary, "Set aside #1 on board Dusk", with the fields it doesn't name.
+    ``undo``: the change was an undo (a batch of ``restore`` ops), which
+    otherwise reads like the change it undid: "Undo: Removed #3 from board
+    Dusk"."""
+    entry = journal_entry(dict(changes), dict(before), dict(after))
+    fields = _field_words(changes, entry)
+    where = board_where(after, before)
+    if entry is not None:
+        said = "; ".join([entry["summary"], *fields])
+    elif fields:
+        said = f"{'; '.join(fields)} on {where}"
+    else:  # a nudge under 8 px, a card's own change
+        said = f"edited {where}"
+    said = _sentence(said)
+    return f"Undo: {said}" if undo else said
 
 
 def describe_create(board: Mapping[str, Any]) -> str:
     count = len(board.get("images") or [])
-    return f"Made moodboard {board_name(board)}" + (f" with {_images(count)}" if count else "")
+    return f"Made {board_where(board)}" + (f" with {_images(count)}" if count else "")
+
+
+def describe_write(verb: str, board: Mapping[str, Any] | None, rest: str = "") -> str:
+    """A board write the journal has no event for: "Analyzed board Dusk",
+    "Kept the brief on board Dusk", "Moved board Dusk to Global"."""
+    return _sentence(" ".join(part for part in (verb, board_where(board), rest) if part))

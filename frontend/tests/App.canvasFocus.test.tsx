@@ -10,7 +10,8 @@ vi.mock('@xyflow/react', async (original) => ({
 }));
 vi.mock('../src/lib/api', async (original) => ({
   ...await original<typeof import('../src/lib/api')>(),
-  getSettings: vi.fn().mockResolvedValue({ apiKeys: {}, kreaConnectionMode: 'api-token' }),
+  // The threshold is already in settings.json, so App sends no migration PUT.
+  getSettings: vi.fn().mockResolvedValue({ apiKeys: {}, kreaConnectionMode: 'api-token', runCostConfirmUsd: 1 }),
 }));
 vi.mock('../src/lib/kreaConnection', async (original) => ({
   ...await original<typeof import('../src/lib/kreaConnection')>(),
@@ -42,6 +43,7 @@ import App from '../src/App';
 import { useUIStore } from '../src/store/uiStore';
 import { useGraphStore } from '../src/store/graphStore';
 import { useProjectStore } from '../src/store/projectStore';
+import { usePricingStore } from '../src/store/pricingStore';
 const initialUI = useUIStore.getState();
 const initialGraph = useGraphStore.getState();
 const initialProjects = useProjectStore.getState();
@@ -64,6 +66,8 @@ describe('App project startup and explicit workspace entry', () => {
     useGraphStore.setState({ ...initialGraph, nodes: [savedNode()], edges: [], isExecuting: false, runHistory: [] }, true);
     useProjectStore.setState({ ...initialProjects, screen: 'home', initialized: true, loading: false, projects: [savedProject], activeProject: savedProject,
       open: mocks.open, createProject: mocks.create, retry: mocks.retry }, true);
+    // Prices already loaded, so App doesn't GET /api/pricing.
+    usePricingStore.setState({ table: { currencies: {}, nodes: {} }, loading: false });
   });
   afterEach(() => {
     cleanup();

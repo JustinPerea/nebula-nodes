@@ -60,9 +60,9 @@ describe('agent log store', () => {
   });
 
   it('lists a moodboard write, which has no target, without drawing a cursor', () => {
-    emit(action('Set aside 1 image in “Dusk dunes”', { target: undefined }));
+    emit(action('Set aside #1 on board Dusk dunes', { target: undefined }));
     expect(useAgentLogStore.getState().entries.map((entry) => entry.message)).toEqual([
-      'Set aside 1 image in “Dusk dunes”',
+      'Set aside #1 on board Dusk dunes',
     ]);
     expect(useAgentPresenceStore.getState().agents).toEqual({});
   });
@@ -95,13 +95,13 @@ describe('agent log store', () => {
 describe('AgentLog panel', () => {
   it('shows actions an MCP agent took while the panel was not mounted, newest first', () => {
     emit(action('Added Moodboard'));
-    emit(action('Analyzed “Dusk dunes”', { target: undefined, at: Date.UTC(2026, 9, 20, 14, 6, 0) }));
+    emit(action('Analyzed board Dusk dunes', { target: undefined, at: Date.UTC(2026, 9, 20, 14, 6, 0) }));
     showLog();
     openLog();
 
     const rows = screen.getAllByRole('listitem');
     expect(rows.map((row) => row.querySelector('.agent-log__msg')?.textContent)).toEqual([
-      'Analyzed “Dusk dunes”',
+      'Analyzed board Dusk dunes',
       'Added Moodboard',
     ]);
     const source = rows[0].querySelector('.agent-log__source');
