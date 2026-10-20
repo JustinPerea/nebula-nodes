@@ -2,6 +2,7 @@ import { backendWebSocketUrl, personTokenForSocket } from './backend';
 import { onPersonConnected, reportPersonRequired } from './personSession';
 import type { PortValue, VariantScope } from '../types';
 import type { ExecutionStatusResult } from './api';
+import type { AgentNotesEvent } from './agentNotes';
 import type {
   ProviderRecoveryCheckpoint,
   ProviderStartAmbiguity,
@@ -285,6 +286,7 @@ export type ExecutionEvent = (
     }
   | AgentPresenceEvent
   | CanvasPinsEvent
+  | AgentNotesEvent
   | StoredAssetChangedEvent
   | ProjectsChangedEvent
   | ProposalOpenedEvent

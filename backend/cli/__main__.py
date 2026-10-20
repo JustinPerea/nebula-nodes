@@ -99,7 +99,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     point_p = sub.add_parser("point", help="Move your cursor on the canvas so the user sees where you are working")
     point_p.add_argument("target", help="Node (n2), port (n2.prompt) or flow coordinates (120,-40)")
-    point_p.add_argument("--say", default="", help="Short line shown next to your cursor")
+    point_p.add_argument("--say", default="",
+                         help="Short line shown next to your cursor: your own action only "
+                              "(what you noticed goes in `nebula note`)")
     point_p.add_argument("--from", dest="origin", help="Start of a drag gesture (same forms as target)")
     point_p.add_argument("--action", choices=["move", "click", "drag", "look"], default=None,
                          help="Gesture to show (default: move, or drag with --from)")
@@ -129,9 +131,39 @@ def build_parser() -> argparse.ArgumentParser:
     pin_sub = pin_p.add_subparsers(dest="pin_cmd", required=True)
     resolve_p = pin_sub.add_parser("resolve", help="Reply in one line and mark the note done")
     resolve_p.add_argument("pin_id", help="Pin id from `nebula look` or `nebula pins` (e.g. pin_8c41d2aa)")
-    resolve_p.add_argument("--say", required=True, help="Your one-line reply (280 characters max)")
+    resolve_p.add_argument("--say", required=True,
+                           help="Your one-line reply (280 characters max): your own answer only; "
+                                "what you noticed goes in `nebula note`")
     resolve_p.add_argument("--as", dest="agent_name",
                            help="Your agent name (default: $NEBULA_AGENT_NAME; in-app agents are named automatically)")
+
+    note_p = sub.add_parser(
+        "note",
+        help="Tell the person what you noticed, a report or a suggestion: they read it under Updates "
+             "in the top right (your cursor's --say is for your own action)",
+        description=(
+            "Posts an update. The person reads it in the Updates list in the top right of Nebula, saved with "
+            "the project (or with the board, with --board). On a board, #12 in the text names image 12 and "
+            "always shows its current number; a number not on the board refuses the update. Never quote a "
+            "private note. At most 6 a minute. Updates carry no buttons: make the change, or propose it."
+        ),
+    )
+    note_p.add_argument("text", help="One plain line, 240 characters max")
+    note_p.add_argument("--board", help="A moodboard id or exact name: post on that board instead of the canvas")
+    note_p.add_argument("--ref", dest="refs", action="append", default=[], metavar="IMAGE",
+                        help="With --board: an image it is about, by number or id (repeatable, 12 max)")
+    note_p.add_argument("--node", dest="nodes", action="append", default=[], metavar="nX",
+                        help="A canvas node it is about, e.g. --node n7 (repeatable, 12 max)")
+    note_p.add_argument("--since-last-turn", dest="since_last_turn", action="store_true",
+                        help="About what the person changed since your last turn (replaces your unread one)")
+    note_p.add_argument("--json", action="store_true", help="Print the raw result JSON")
+    note_p.add_argument("--as", dest="agent_name",
+                        help="Your agent name (default: $NEBULA_AGENT_NAME; in-app agents are named automatically)")
+
+    notes_p = sub.add_parser("notes", help="List the Updates agents posted for the person (newest first)")
+    notes_p.add_argument("--board", help="A moodboard id or exact name: that board's Updates")
+    notes_p.add_argument("--unread", action="store_true", help="Only those the person hasn't opened")
+    notes_p.add_argument("--json", action="store_true", help="Print the raw listing JSON")
 
     propose_p = sub.add_parser(
         "propose",
@@ -145,7 +177,8 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     propose_p.add_argument("--file", help="JSON file with {note, nodes, edges, params, run}")
-    propose_p.add_argument("--note", help="One line the person reads (160 characters max)")
+    propose_p.add_argument("--note", help="One line the person reads (160 characters max): your own proposal "
+                                          "only; what you noticed goes in `nebula note`")
     propose_p.add_argument("--add", action="append", default=[], metavar="+ref=definitionId",
                            help="A new node, e.g. --add +up=topaz-image-upscale (repeatable)")
     propose_p.add_argument("--param", action="append", nargs="*", default=[], metavar="+ref.key=value",
@@ -184,7 +217,8 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     apply_p.add_argument("--file", help="JSON plan file, or - for standard input")
-    apply_p.add_argument("--note", help="One line saying what this does (shown with your cursor)")
+    apply_p.add_argument("--note", help="One line saying what this does (shown with your cursor): your own "
+                                        "edit only; what you noticed goes in `nebula note`")
     apply_p.add_argument("--add", action="append", default=[], metavar="+ref=definitionId",
                          help="A new node, e.g. --add +img=nano-banana (repeatable)")
     apply_p.add_argument("--param", action="append", nargs="*", default=[], metavar="+ref.key=value",
@@ -434,6 +468,7 @@ def main() -> None:
         apply, canvas, character, commons, context, nodes, keys, graph, execute, moodboard, quick, path, pins,
         projects, proposals, selection, spend, trash,
     )
+    from .commands import notes as notes_cmd
 
     dispatch = {
         "commons": lambda: commons.run(client, args),
@@ -466,6 +501,8 @@ def main() -> None:
         ),
         "pins": lambda: pins.run_list(client),
         "pin": lambda: pins.run_pin(client, args),
+        "note": lambda: notes_cmd.run_note(client, args),
+        "notes": lambda: notes_cmd.run_notes(client, args),
         "propose": lambda: proposals.run_propose(client, args),
         "apply": lambda: apply.run_apply(client, args),
         "undo": lambda: apply.run_undo(client, args),
