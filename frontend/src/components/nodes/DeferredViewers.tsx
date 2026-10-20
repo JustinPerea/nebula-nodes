@@ -14,7 +14,9 @@ import '../../styles/world-preview.css';
  * idle card the real viewer draws first (same classes, same min-height, the
  * same absolutely placed layers), so a node does not change height when the
  * viewer chunk arrives. After the idle preload in App.tsx the chunk is usually
- * already here and the fallback never renders.
+ * already here and the fallback never renders. If the chunk fails to load, the
+ * card keeps that face and the real viewer replaces it once the chunk loads
+ * (back online, window focus, or any other preload; DeferredBoundary).
  */
 
 function MeshPreviewFallback({ src }: { src: string }) {
@@ -41,7 +43,7 @@ function MeshPreviewFallback({ src }: { src: string }) {
 
 export function MeshPreview({ src }: { src: string }) {
   return (
-    <DeferredBoundary failed={<MeshPreviewFallback src={src} />}>
+    <DeferredBoundary chunk={DeferredMeshPreview} failed={<MeshPreviewFallback src={src} />}>
       <Suspense fallback={<MeshPreviewFallback src={src} />}>
         <DeferredMeshPreview src={src} />
       </Suspense>
@@ -74,7 +76,7 @@ function WorldPreviewFallback({ value, compact = false }: WorldPreviewProps) {
 
 export function WorldPreview(props: WorldPreviewProps) {
   return (
-    <DeferredBoundary failed={<WorldPreviewFallback {...props} />}>
+    <DeferredBoundary chunk={DeferredWorldPreview} failed={<WorldPreviewFallback {...props} />}>
       <Suspense fallback={<WorldPreviewFallback {...props} />}>
         <DeferredWorldPreview {...props} />
       </Suspense>
