@@ -178,6 +178,9 @@ nebula moodboard set <board> --keep-anyway "#a6392d"     # put a left-out colour
 nebula moodboard set <board> --leave-out "#1c70f2"       # or --leave-out-flagged, --reset-color HEX
 nebula moodboard set <board> --clash-mode flag           # leave-out (default), flag, no-measured, keep-all
 nebula moodboard set <board> --restore set-output.json  # undo: the `set --json` output
+nebula moodboard edit <board> --place 12=200,40 --resize 3=0.6   # move and resize cards
+nebula moodboard edit <board> --in 5=Dither --link 5=Glass --say "Grouped the warm ones"
+nebula moodboard edit <board> --undo edit-output.json   # undo: the `edit --json` output
 nebula moodboard analyze <board>
 nebula moodboard analyze <board> --dry-run --merge-delta-e 8   # preview; saves nothing
 nebula moodboard analyze <board> --read-with gemini-4-argon --estimate          # the price; reads nothing
@@ -246,8 +249,18 @@ nebula moodboard delete <board>
   weight, and `frameId`, the frame it is in or null) and the board's
   `frames`. A card's size is its weight (full weight is 480x270). The layout
   never steers: it isn't in the analysis or the brief. New images land
-  after the last one, and `--weight` resizes the image's card. The CLI can't
-  move cards yet.
+  after the last one, and `--weight` resizes the image's card.
+- `edit` moves cards, the same checked edits the person's drags in the
+  Studio's Board view send: `--place CARD=X,Y` (top-left, board pixels),
+  `--resize CARD=0.6` or `CARD=480x270` (it keeps its aspect), `--in
+  CARD=LOOK`, `--link IMAGE=LOOK`, `--set-aside`, `--use`, `--note`,
+  `--private-note`, and `--ops FILE` for any other ops as JSON (contract 07
+  section 1.12; MCP `moodboard_edit(board, ops)`). A CARD is the image's
+  number when it has one card, else `12@Dither` or a card id from `show
+  --json`. Say what you did with `--say` (the person reads it in the Agent
+  log). It all lands or none of it, and an open Studio shows it at once. It
+  prints how to undo it; `--undo` with its `--json` output puts back only
+  what is still as you left it and says what changed since.
 - Your changes never overwrite the person's: `add` lands on the board as it
   is saved, and an open Moodboard Studio shows it at once and keeps what the
   person was typing. If a write says the board changed since you read it,
