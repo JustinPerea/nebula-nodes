@@ -11,6 +11,7 @@ vi.mock('../lib/projects', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/projects')>()),
   saveProject: vi.fn(),
   listProjects: vi.fn(),
+  recoverProject: vi.fn(),
 }));
 
 import * as api from '../lib/projects';
@@ -19,7 +20,8 @@ import { setProjectContext } from '../lib/projectContext';
 import { wsClient } from '../lib/wsClient';
 import { useGraphStore } from './graphStore';
 import { useUIStore } from './uiStore';
-import { subscribeProjectAutosave, useProjectStore } from './projectStore';
+import { resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore } from './projectStore';
+import { GRAPH_PARAMS_VERSION } from '../lib/savedParamsUpgrades';
 import type { ProjectSnapshot, SavedProject } from '../lib/projects';
 
 const saveProject = vi.mocked(api.saveProject);
@@ -46,7 +48,11 @@ let flushCalls = 0;
 let unsubscribe: () => void = () => {};
 
 beforeEach(async () => {
+  // The store keeps module state (the last saved fingerprint, a pending
+  // recovered copy, a params-version stop); start every test from none.
+  resetProjectStoreForTests();
   vi.useFakeTimers();
+  vi.mocked(api.recoverProject).mockReset();
   saveProject.mockReset();
   saveProject.mockImplementation(async (_id, snapshot) => saved(snapshot));
   setProjectContext({ id: 'p1', revision: 'r1' });
@@ -157,9 +163,12 @@ describe('project autosave', () => {
     await vi.advanceTimersByTimeAsync(600);
     setPrompt('c');
     // Another tab switched the backend's active project while 'b' was saving.
+    // (At this bundle's params version: a sync without one is a backend from
+    // before the gate, which stops the tab for a different reason.)
     const onSocket = vi.mocked(wsClient.subscribeFirst).mock.calls.at(-1)?.[0];
-    onSocket?.({ type: 'graphSync', workspaceRevision: 'r2' } as never);
-    expect(useProjectStore.getState()).toMatchObject({ initialized: false, dirty: true });
+    onSocket?.({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION } as never);
+    expect(useProjectStore.getState()).toMatchObject({ initialized: false, dirty: true,
+      error: 'The active project changed in another window. Try again to save your unsaved edits as a recovered project.' });
     finish();
     await vi.advanceTimersByTimeAsync(2000);
 
@@ -168,6 +177,8 @@ describe('project autosave', () => {
     expect(flushCalls).toBe(2);
     expect(savedPrompts()).toEqual(['b']);
     expect(useProjectStore.getState().dirty).toBe(true);
+    // Nothing is sent until the person chooses Try again.
+    expect(api.recoverProject).not.toHaveBeenCalled();
   });
 
   it('shows the retry state when a save fails, and Retry saves it', async () => {
