@@ -89,7 +89,7 @@ class NebulaArgumentParser(argparse.ArgumentParser):
             choices = [str(choice) for choice in (getattr(action, "choices", None) or [])]
             if isinstance(action, argparse._SubParsersAction) and self.prog == _root_prog(self):
                 choices += list(ALIASES)
-            close = difflib.get_close_matches(value, choices, n=2, cutoff=0.6)
+            close = _closest(value, choices)
             if isinstance(action, argparse._SubParsersAction):
                 # The list of every command is the help's job, not the error's.
                 where = f"`{self.prog} --help` lists them"
@@ -108,6 +108,14 @@ class NebulaArgumentParser(argparse.ArgumentParser):
             if suggestions:
                 return f"{message}. Did you mean {_either(suggestions)}?"
         return message
+
+
+def _closest(word: str, choices: Sequence[str]) -> list[str]:
+    """Up to two close choices, the second only when it is about as close as
+    the first: `nodez` gets "nodes", not "nodes or note"."""
+    close = difflib.get_close_matches(word, choices, n=2, cutoff=0.6)
+    score = lambda choice: difflib.SequenceMatcher(None, word, choice).ratio()
+    return close[:1] if len(close) == 2 and score(close[1]) < score(close[0]) - 0.1 else close
 
 
 def _either(words: Sequence[str]) -> str:

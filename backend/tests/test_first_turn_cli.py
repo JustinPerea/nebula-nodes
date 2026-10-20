@@ -186,6 +186,13 @@ def test_cli_suggests_a_close_command_and_subcommand():
     assert "Did you mean show?" in err
 
 
+def test_a_suggestion_names_a_second_choice_only_when_it_is_as_close():
+    from cli.parser import _closest
+    assert _closest("nodez", ["nodes", "note"]) == ["nodes"]
+    assert sorted(_closest("nod", ["node", "nods"])) == ["node", "nods"]  # a tie keeps both
+    assert _closest("zzz", ["nodes", "note"]) == []
+
+
 def test_aliases_run_the_mcp_named_commands():
     assert _parse(["describe", "nano-banana"]).command == "info"
     assert _parse(["find", "upscale"]).command == "nodes"
