@@ -189,6 +189,7 @@ Before any handler runs, the engine folds a wired Nebula moodboard (a `nebula_mo
 
 | Step | Rule |
 |------|------|
+| Strength 0 | First, a bundle whose `strength` is 0 (or below) is taken out of the `moodboard` input, so none of its brief, Avoid, negatives or images reach the node (Q36 a, 2026-10-20), and the run gets the note "Board strength is 0: board not sent". Other boards on the same input still go; with none left, the node runs as with no board wired. A missing or unreadable `strength` reads as 0.7. The note is collected in the engine for this run only: the cache entry keeps only the handler's notes, and a replay puts this run's board note in front. With the board off the cache key equals the no-board key, so this keeps the note right both ways (an entry from a run without the board, replayed with it off, gets the note; one from a run with it off, replayed with no board, doesn't) |
 | Brief | `<prompt>\n\nMoodboard direction: <styleBrief>` (several boards: their briefs joined by spaces) |
 | Avoid in the prompt | Only for instruction-following models (ids starting `gpt-image-`, `nano-banana`, `krea-2-`, and the Krea catalog copies of GPT Image, Nano Banana and Krea 2): the bundle's `avoidPrompt` is added as one more paragraph. Diffusion-style models never get it there, since "no X" in their prompt pulls X in |
 | Negative field | A node with a `negative_prompt` param gets the board's `negativePrompt` merged after its own terms (case-insensitive de-duplication) |
@@ -230,3 +231,4 @@ Golden files under `contracts/fixtures/` — web pytest is oracle; Swift/TS port
 | 2026-07-01 | Initial handler patterns |
 | 2026-10-14 | `skipped` event and gate withholding |
 | 2026-10-18 | Moodboard fold (engine adds a board's brief, Avoid list and negatives) |
+| 2026-10-20 | Moodboard fold: a board at strength 0 is not sent, text included (Q36 a) |

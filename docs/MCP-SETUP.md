@@ -1224,7 +1224,10 @@ nebula moodboard delete <board>
   or weight 0), while the analysis marks only switched images with
   `setAside` (a weight-0 image keeps its ordinary entry, measured and in no
   colour's sources). Using a weight-0 image again sets the weight its card shows,
-  unless the same change gives a weight. When nothing steers, the analysis
+  unless the same change gives a weight. Set-aside images still count in a
+  board's image count, named beside it: `nebula moodboard list` reads
+  "(5 images, 1 set aside, look, ...)", and the Moodboard node card, the
+  Studio's board list and the Assets panel read "5 images · 1 set aside · look". When nothing steers, the analysis
   warns "Every reference is set aside, so none of them shapes the board."
 - Each image has `notes`, which steer (the analysis reads them), and
   `privateNote`, the person's own label (`--private-note`, or
@@ -1306,6 +1309,15 @@ nebula moodboard delete <board>
   `--merge-delta-e` / `merge_delta_e` (0-50, default 5) try other colour
   thresholds for that run only; without the dry run they are refused.
   On a Nebula without the dry run it says so and analyzes nothing.
+- Strength 0 turns the board off for every node it's wired into: no brief,
+  Avoid, negatives or images, and each such node's run notes "Board
+  strength is 0: board not sent". Any other board wired into the same node
+  still goes. The Moodboard node's own outputs (Brief, Negative, Palette,
+  Images) are unchanged, since wiring one is the person's choice. `show`
+  says the brief is not sent while strength is 0. Images off with text on
+  is the node's "Send board images" switch, not strength 0; that switch
+  isn't in this version yet, and until it is, GPT Image, Nano Banana, FLUX
+  and the other content-slot nodes get the text only anyway.
 - Like Moodboard Studio, changing images, notes, mode or strength clears the
   board's analysis, so run `analyze` again; a rename and the brief fields
   keep it. `--remove` takes an image off the board; its file stays, and the
