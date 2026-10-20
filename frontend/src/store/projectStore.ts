@@ -15,6 +15,8 @@ import { clearPersistedRunHistory, loadRunHistory } from '../lib/runHistory';
 import * as api from '../lib/projects';
 import { wsClient } from '../lib/wsClient';
 import type { ProjectSwitch } from '../lib/wsClient';
+import { isOwnEcho, type EditOrigin } from '../lib/canvasUndo';
+import { TAB_ID } from '../lib/tabId';
 import type { ProjectSnapshot, ProjectSummary, SavedProject, TrashedProject } from '../lib/projects';
 
 /** An agent (or a script) opened or made a project and this tab followed it.
@@ -65,7 +67,39 @@ interface ProjectState {
 let initializing: Promise<void> | null = null;
 let saveQueue: Promise<unknown> = Promise.resolve();
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+/** The person's edits save this long after the last one, so typing and
+ * dragging go as one save. */
+const AUTOSAVE_MS = 600;
+/** A change the canvas made itself (saveCanvasChange) saves quietly once the
+ * canvas has held still this long, so a fit's frames go as one save. */
+const CANVAS_SETTLE_MS = 300;
+let canvasTimer: ReturnType<typeof setTimeout> | null = null;
+/** Count the changes the save label shows: the person's own (markDirty) and
+ * someone else's edits that reached this tab (saveForeignEdit). A save
+ * records both when it captures the canvas, so once it lands it can tell who
+ * changed what is still unsaved, and a save with neither since the last one
+ * landed is only the canvas's own and leaves "Saved" alone. */
+let personChanges = 0;
+let foreignEdits = 0;
+let savedPersonChanges = 0;
+let savedForeignEdits = 0;
+/** Set while the graph store applies a graphSync carrying someone else's
+ * edit ('edit') or the layout the canvas wrote for an agent's nodes
+ * ('canvas'); what changes meanwhile is that sync's (applyingSync), and
+ * syncSaving says the edit's save is already asked for. */
+let syncBeingApplied: 'edit' | 'canvas' | null = null;
+let syncSaving = false;
 let lastSaved = '';
+/** The canvas the save under way is sending. While it is out, a change is
+ * measured against it, not the last save that landed: React Flow measuring an
+ * agent's new nodes gives the graph a new nodes array, and next to the older
+ * save that read as "Unsaved changes" though nothing saved had changed. */
+let inFlight: string | null = null;
+/** The canvas as of the last change looked at. A store update that leaves
+ * what the project saves as it was (React Flow measuring nodes, selection)
+ * isn't a change at all, so it neither reads as unsaved nor restarts a wait,
+ * even while an earlier change is still waiting to save. */
+let lastSeen = '';
 let applying = false;
 /** The view the open project was saved with. A tab that isn't connected as
  * the person (an agent's browser) keeps its own zoom and pan while open but
@@ -202,6 +236,9 @@ function applyProject(project: SavedProject, revision: string, bootstrap = false
       initialized: true, dirty: false, saveStatus: 'saved', error: null,
     });
     lastSaved = JSON.stringify(captureProjectSnapshot());
+    lastSeen = lastSaved;
+    savedPersonChanges = personChanges;
+    savedForeignEdits = foreignEdits;
   } finally { applying = false; }
 }
 
@@ -224,8 +261,7 @@ function paramsStopWork(snapshot: ProjectSnapshot, neverRan: Set<string>): strin
 }
 /** `neverRan` is given for a params-version stop (handleParamsVersionChange). */
 function preserveWorkspaceConflict(message: string, neverRan?: Set<string>, captured?: ProjectSnapshot): void {
-  if (saveTimer !== null) clearTimeout(saveTimer);
-  saveTimer = null;
+  cancelPendingSaves();
   const context = getProjectContext();
   let snapshot = captureProjectSnapshot();
   if (captured) snapshot = captured;
@@ -264,9 +300,13 @@ async function recoverPendingWork(): Promise<boolean> {
 export function resetProjectStoreForTests(): void {
   initializing = null;
   saveQueue = Promise.resolve();
-  if (saveTimer !== null) clearTimeout(saveTimer);
-  saveTimer = null;
+  cancelPendingSaves();
   lastSaved = '';
+  inFlight = null;
+  lastSeen = '';
+  personChanges = foreignEdits = savedPersonChanges = savedForeignEdits = 0;
+  syncBeingApplied = null;
+  syncSaving = false;
   applying = false;
   projectViewport = null;
   pendingRecovery = null;
@@ -345,27 +385,121 @@ function handleParamsVersionChange(backendVersion: number | null): Promise<void>
   return paramsVersionChange;
 }
 
-function markDirty(): void {
+function cancelPendingSaves(): void {
+  if (saveTimer !== null) clearTimeout(saveTimer);
+  saveTimer = null;
+  if (canvasTimer !== null) clearTimeout(canvasTimer);
+  canvasTimer = null;
+}
+
+/** Whether a store update changed what the project saves (since the last
+ * one looked at) to something not saved or being saved yet. `recheck` asks
+ * only the second half: after a switch, rename or delete held the tab busy,
+ * a change made meanwhile was seen but not yet marked. */
+function unsavedChange(recheck = false): boolean {
   const state = useProjectStore.getState();
-  if (applying || !state.initialized || !state.activeProject || state.busy) return;
-  if (JSON.stringify(captureProjectSnapshot()) === lastSaved) return;
+  if (applying || !state.initialized || !state.activeProject) return false;
+  const now = JSON.stringify(captureProjectSnapshot());
+  const changed = recheck || now !== lastSeen;
+  lastSeen = now;
+  return changed && now !== (inFlight ?? lastSaved);
+}
+
+/** The person's own change: "Unsaved changes", then a save once they have
+ * paused for AUTOSAVE_MS. While the tab is busy (switching projects) it is
+ * only counted; the switch saves first and looks again when it finishes. */
+function markDirty(recheck = false): void {
+  if (!unsavedChange(recheck)) return;
+  personChanges += 1;
+  if (useProjectStore.getState().busy) return;
   useProjectStore.setState({ dirty: true, saveStatus: 'unsaved' });
   if (saveTimer !== null) clearTimeout(saveTimer);
+  // The person's save takes along a canvas change still settling: its quiet
+  // save must not go first and cut the person's wait short.
+  if (canvasTimer !== null) clearTimeout(canvasTimer);
+  canvasTimer = null;
   saveTimer = setTimeout(() => {
     saveTimer = null;
     void useProjectStore.getState().flush().catch(() => { /* Visible retry state. */ });
-  }, 600);
+  }, AUTOSAVE_MS);
+}
+
+/** Someone else's edit reached this tab (an agent's edit_canvas or `nebula
+ * apply`, another window's, an outside app's). It came as one graphSync that
+ * is already the whole change, coalesced where it was made, so there is
+ * nothing to wait for: it reads "Saving…" from the moment it lands and saves
+ * now, taking along anything of the person's still waiting. One save goes at
+ * a time (saveQueue), and each captures the canvas when it starts, so a
+ * second edit landing meanwhile saves next, newest state and all. A failed
+ * save reads as one, and the unload prompt stays armed (dirty). */
+function saveForeignEdit(): boolean {
+  if (!unsavedChange()) return false;
+  foreignEdits += 1;
+  if (useProjectStore.getState().busy) return true;
+  useProjectStore.setState({ dirty: true, saveStatus: 'saving' });
+  // The save captures the canvas when it starts, after the whole sync is in.
+  void useProjectStore.getState().flush().catch(() => { /* Visible retry state. */ });
+  return true;
+}
+
+/** A change the canvas made itself: its camera after an agent's nodes land
+ * (the fit, an arrange's reveal) or the layout it wrote for them. It isn't
+ * the person's edit, so it never reads "Unsaved changes" and never restarts
+ * or extends the person's autosave wait: a save already waiting takes it
+ * along, and otherwise it saves quietly once the canvas holds still, the
+ * label keeping what it says. Until then the unload prompt still guards it. */
+function saveCanvasChange(): void {
+  if (!unsavedChange() || useProjectStore.getState().busy) return;
+  if (!useProjectStore.getState().dirty) useProjectStore.setState({ dirty: true });
+  if (saveTimer !== null) return;
+  if (canvasTimer !== null) clearTimeout(canvasTimer);
+  canvasTimer = setTimeout(() => {
+    canvasTimer = null;
+    void useProjectStore.getState().flush().catch(() => { /* Visible retry state. */ });
+  }, CANVAS_SETTLE_MS);
+}
+
+/** A change to what the project saves, from the graph or the camera: the
+ * person's, unless it is part of a sync being applied (applyingSync). */
+function noteChange(): void {
+  if (syncBeingApplied === 'edit') {
+    // Its save is asked for once; a later write of the same sync is only
+    // looked at (lastSeen), so a measure after it isn't read as a new change.
+    if (!syncSaving) syncSaving = saveForeignEdit();
+    else unsavedChange();
+  }
+  else if (syncBeingApplied === 'canvas') saveCanvasChange();
+  else markDirty();
+}
+
+/** A graphSync for the open project that is someone else's edit, or that
+ * finishes an agent's arrange (the layout this or another canvas measured
+ * and wrote: no `edit`, an `arranged` marker), is about to be applied: the
+ * graph store does it next, in this same dispatch (wsClient hands every
+ * handler the message at once), so what changes until this task's microtask
+ * is that sync's, and saves the way its kind does (noteChange). Run results
+ * and this tab's own echoes aren't tagged and stay the person's path. */
+function applyingSync(event: { edit?: EditOrigin; arranged?: unknown }): void {
+  const kind = event.edit && !isOwnEcho(event.edit, TAB_ID) ? 'edit' : !event.edit && event.arranged ? 'canvas' : null;
+  if (!kind) return;
+  syncBeingApplied = kind;
+  syncSaving = false;
+  void Promise.resolve().then(() => {
+    syncBeingApplied = null;
+    syncSaving = false;
+  });
 }
 
 /** The canvas placed its own first camera (on mount: React Flow's start, or
  * its fit of a project saved without a view). That isn't an edit: when it is
  * all that differs from the last save, it joins what counts as saved, so a
  * project just opened or followed reads "Saved"; the next real change saves
- * it along. */
+ * it along. When more differs (an agent's first nodes, which bring this fit
+ * on a canvas that opened empty), it saves with that, as the canvas's own. */
 function adoptCanvasCamera(before: ProjectSnapshot['viewport']): void {
   const snapshot = captureProjectSnapshot();
-  if (lastSaved && JSON.stringify({ ...snapshot, viewport: before }) === lastSaved) lastSaved = JSON.stringify(snapshot);
-  else markDirty();
+  if (lastSaved && JSON.stringify({ ...snapshot, viewport: before }) === lastSaved) lastSaved = lastSeen = JSON.stringify(snapshot);
+  else saveCanvasChange();
 }
 
 async function activate(action: () => Promise<api.ProjectActivation>): Promise<void> {
@@ -410,7 +544,7 @@ async function activate(action: () => Promise<api.ProjectActivation>): Promise<v
   finally {
     if (reserved) useGraphStore.getState().releaseGraphImport();
     useProjectStore.setState({ busy: false });
-    markDirty();
+    markDirty(true);
   }
 }
 
@@ -562,8 +696,7 @@ function switchedAwayFrom(notice: ProjectSwitch | undefined, context: { id: stri
  * who switched it. */
 async function followProjectSwitch(notice: ProjectSwitch, context: { id: string; revision: string } | null,
   snapshot: ProjectSnapshot | null, unsaved: boolean): Promise<void> {
-  if (saveTimer !== null) clearTimeout(saveTimer);
-  saveTimer = null;
+  cancelPendingSaves();
   // Nothing else may save under the old project from here on.
   setProjectContext(null);
   useProjectStore.setState({ busy: true, error: null });
@@ -656,7 +789,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       await get().flush();
       updateSummary(await api.renameProject(id, name));
     } catch (error) { showError(error); }
-    finally { set({ busy: false }); markDirty(); }
+    finally { set({ busy: false }); markDirty(true); }
   },
   remove: async (id) => {
     const state = get();
@@ -673,8 +806,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         // The open canvas is being thrown away, so don't save it first. Let any
         // save already in flight land, then hold the canvas so nothing else
         // writes to a project that is about to disappear.
-        if (saveTimer !== null) clearTimeout(saveTimer);
-        saveTimer = null;
+        cancelPendingSaves();
         await saveQueue.catch(() => {});
         reserved = useGraphStore.getState().reserveGraphImport();
         if (!reserved) throw new Error('The canvas became busy. Try again when its run finishes.');
@@ -700,7 +832,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     } finally {
       if (reserved) useGraphStore.getState().releaseGraphImport();
       set({ busy: false });
-      markDirty();
+      markDirty(true);
     }
   },
   restore: async (id) => {
@@ -750,8 +882,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     try { await get().flush(); } catch { /* Home keeps the canvas and visible retry. */ }
   },
   flush: async () => {
-    if (saveTimer !== null) clearTimeout(saveTimer);
-    saveTimer = null;
+    cancelPendingSaves();
     const task = saveQueue.catch(() => {}).then(async (): Promise<boolean> => {
       const state = get();
       const context = getProjectContext();
@@ -764,22 +895,45 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         if (state.dirty) set({ dirty: false, saveStatus: 'saved' });
         return false;
       }
-      set({ saveStatus: 'saving' });
+      const captured = { person: personChanges, foreign: foreignEdits };
+      // Only the canvas's own changes since the last save (saveCanvasChange):
+      // "Saved" stays as it is while they go.
+      const quiet = state.saveStatus === 'saved'
+        && captured.person === savedPersonChanges && captured.foreign === savedForeignEdits;
+      if (!quiet) set({ saveStatus: 'saving' });
+      inFlight = fingerprint;
       try {
         const saved = await api.saveProject(context.id, snapshot, context.revision);
         if (getProjectContext()?.revision !== context.revision) return false;
         lastSaved = fingerprint;
+        savedPersonChanges = captured.person;
+        savedForeignEdits = captured.foreign;
         if (holdsPersonCredential()) projectViewport = snapshot.viewport ?? null;
         updateSummary(saved);
-        const dirty = JSON.stringify(captureProjectSnapshot()) !== lastSaved;
-        set({ dirty, saveStatus: dirty ? 'unsaved' : 'saved' });
-        if (dirty) markDirty();
-        return true;
+        if (JSON.stringify(captureProjectSnapshot()) === lastSaved) {
+          set({ dirty: false, saveStatus: 'saved' });
+          return true;
+        }
+        // Something changed while the request was out. The person's change
+        // reads "Unsaved changes" as always; another edit that landed has its
+        // save queued already. What only the canvas changed (its fit still
+        // running) saves when it settles, or now if it already has.
+        if (personChanges !== captured.person) {
+          set({ dirty: true, saveStatus: 'unsaved' });
+          markDirty(true);
+          return true;
+        }
+        if (foreignEdits !== captured.foreign) {
+          set({ dirty: true, saveStatus: 'saving' });
+          return true;
+        }
+        set({ dirty: true, saveStatus: 'saved' });
+        return canvasTimer === null;
       } catch (error) {
         set({ dirty: true, saveStatus: 'error' });
         showError(error);
         throw error;
-      }
+      } finally { inFlight = null; }
     });
     saveQueue = task;
     // An edit that landed during the request also belongs to the outgoing project.
@@ -817,13 +971,15 @@ useProjectStore.subscribe((state) => publishOpenProject(currentProjectOf(state))
 /** One coordinator stays mounted across Home, Canvas and all studios. */
 export function subscribeProjectAutosave(): () => void {
   const graph = useGraphStore.subscribe((state, previous) => {
-    if (state.nodes !== previous.nodes || state.edges !== previous.edges || state.runHistory !== previous.runHistory) markDirty();
+    if (state.nodes !== previous.nodes || state.edges !== previous.edges || state.runHistory !== previous.runHistory) noteChange();
   });
   const ui = useUIStore.subscribe((state, previous) => {
-    // The mark stays until the next setCanvasViewport; a camera cleared by a
+    // The marks stay until the next setCanvasViewport; a camera cleared by a
     // graph replacement (null) is never the canvas's own.
-    if (state.canvasViewport !== previous.canvasViewport && state.canvasViewport && state.canvasViewportInitial) adoptCanvasCamera(previous.canvasViewport);
-    else if (state.canvasViewport !== previous.canvasViewport || state.createSessionId !== previous.createSessionId) markDirty();
+    const moved = state.canvasViewport !== previous.canvasViewport;
+    if (moved && state.canvasViewport && state.canvasViewportInitial) adoptCanvasCamera(previous.canvasViewport);
+    else if (moved && state.canvasViewport && state.canvasViewportByCanvas) saveCanvasChange();
+    else if (moved || state.createSessionId !== previous.createSessionId) noteChange();
   });
   const drafts = useCreateDraftStore.subscribe(() => markDirty());
   // First, so it sees the canvas before the graph store swaps in the new graph.
@@ -871,7 +1027,11 @@ export function subscribeProjectAutosave(): () => void {
       }
       return;
     }
-    if (revision === context.revision) return;
+    if (revision === context.revision) {
+      // A change to the open project: an agent's edit saves at once.
+      applyingSync(event as { edit?: EditOrigin; arranged?: unknown });
+      return;
+    }
     const snapshot = captureProjectSnapshot();
     const unsaved = JSON.stringify(snapshot) !== lastSaved;
     // An agent or script opened or made a project: follow it, with a way back.
@@ -905,7 +1065,6 @@ export function subscribeProjectAutosave(): () => void {
     graph(); ui(); drafts(); socket(); outdated(); clearTimeout(relistTimer);
     window.removeEventListener('beforeunload', beforeUnload);
     for (const type of ['focus', 'online']) window.removeEventListener(type, relistIfStale);
-    if (saveTimer !== null) clearTimeout(saveTimer);
-    saveTimer = null;
+    cancelPendingSaves();
   };
 }
