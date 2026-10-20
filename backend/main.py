@@ -5218,11 +5218,12 @@ async def _finalize_cancelled_execution(
     if not preserve_graph_params and _sync_params_to_cli_graph(nodes, submitted=submitted):
         await _broadcast_graph_sync()
     await manager.broadcast(GraphCancelledEvent(run_id=run_id))
+    stopped_by, started_by = _run_cancelled_actor(run_id)
     _journal(
         "run.cancelled",
-        data={"runId": run_id},
+        data={"runId": run_id, "startedBy": started_by},
         summary="run stopped",
-        actor=canvas_events.run_actor(run_id),
+        actor=stopped_by,
     )
 
 
@@ -5744,6 +5745,55 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     return {"status": "started", "nodeCount": len(sub_nodes), "runId": run_id}
 
 
+# -- who may stop a run (Justin, 2026-10-20, MCP parity Q61 a) --------------------
+# Agents stop only runs an agent started; the person stops anything. The rule
+# is services/execution_runs.py stop_refusal; here is who the caller is.
+
+def _run_party(headers: Mapping[str, str] | None = None) -> dict[str, Any]:
+    """The caller as a run's starter or stopper, as the journal names actors:
+    the person, a named agent, or anonymous (no marker, no person token: the
+    `nebula` CLI without NEBULA_AGENT_NAME, curl, a tab not connected as the
+    person). A request with an agent marker but no name is still an agent."""
+    headers = current_request_headers() if headers is None else headers
+    actor = actor_for_headers(headers)
+    if actor.get("kind") != "agent" and has_agent_marker(headers):
+        actor = {"kind": "agent", "name": "An agent"}
+    return actor
+
+
+execution_runs.set_starter_source(_run_party)
+
+
+def _refuse_stopping_the_persons_run(run_id: str, record: Any) -> None:
+    """Refuse a Stop the caller may not make, before anything is recorded.
+
+    A run still being admitted (its POST noted the starter in the journal but
+    hasn't registered it) is judged by the journal. A run ID nobody started
+    here keeps today's pre-admission tombstone for any caller, and a run that
+    already ended answers its status (there is nothing left to stop)."""
+    from services.execution_runs import stop_refusal
+    from services.person_gate import AGENT_REFUSED, PERSON_REQUIRED
+
+    if record is not None and record.status not in {"running", "cancelling"}:
+        return
+    headers = current_request_headers()
+    started_by = record.started_by if record is not None else canvas_events.run_actor(run_id)
+    refusal = stop_refusal(started_by, caller_is_person=is_person(headers))
+    if refusal is not None:
+        raise PersonGateError(403, refusal, AGENT_REFUSED if has_agent_marker(headers) else PERSON_REQUIRED)
+    if record is not None and record.stopped_by is None:
+        record.stopped_by = _run_party(headers)
+
+
+def _run_cancelled_actor(run_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """(who stopped it, who started it) for the run.cancelled journal event.
+    A Stop another backend recorded has no stopper here: the starter stands in."""
+    record = execution_runs.get(run_id)
+    started_by = record.started_by if record is not None else canvas_events.run_actor(run_id)
+    stopped_by = record.stopped_by if record is not None and record.stopped_by else started_by
+    return stopped_by, {key: started_by[key] for key in ("kind", "name") if started_by.get(key)}
+
+
 @app.get("/api/executions/{run_id}")
 async def get_execution_status(run_id: str) -> dict:
     record = execution_runs.get(run_id)
@@ -5754,8 +5804,11 @@ async def get_execution_status(run_id: str) -> dict:
 
 @app.delete("/api/executions/{run_id}")
 async def cancel_execution(run_id: str) -> dict:
-    """Idempotently request cancellation of a tracked graph execution."""
+    """Idempotently request cancellation of a tracked graph execution.
+
+    Only the person stops a run the person started (_refuse_stopping_the_persons_run)."""
     existing = execution_runs.get(run_id)
+    _refuse_stopping_the_persons_run(run_id, existing)
     try:
         # Persist every Stop, including one received by the task-owning worker.
         # Otherwise a different backend could reuse the same runId after the
