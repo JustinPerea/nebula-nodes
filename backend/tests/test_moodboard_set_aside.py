@@ -230,7 +230,8 @@ def test_krea_references_never_include_a_set_aside_image(tmp_path, monkeypatch) 
     for bundle in (fresh, saved):
         refs = references(bundle)
         assert [ref["url"] for ref in refs] == [cream, navy]
-        assert [ref["strength"] for ref in refs] == pytest.approx([0.7 * 0.8, 0.7 * 0.5])
+        # Q21 b: the two share out the board's 0.7 (weights 0.8 and 0.5).
+        assert [ref["strength"] for ref in refs] == [0.4308, 0.2692]
         assert bundle["representativeImages"] == [cream, navy]
         # The bundle carries no set-aside image: not in images, not in the
         # analysis's images, not in a colour's sources.

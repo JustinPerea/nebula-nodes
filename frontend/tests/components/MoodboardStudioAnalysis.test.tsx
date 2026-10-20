@@ -2,9 +2,12 @@ import { act, cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Moodboard, MoodboardAnalysis } from '../../src/types';
 
-const api = vi.hoisted(() => ({ boards: vi.fn(), board: vi.fn() }));
+const api = vi.hoisted(() => ({ boards: vi.fn(), board: vi.fn(), trash: vi.fn(async () => []) }));
 vi.mock('../../src/lib/api', async (original) => ({ ...await original<typeof import('../../src/lib/api')>(),
   fetchMoodboards: api.boards, fetchMoodboard: api.board }));
+// The Studio's Recently deleted list.
+vi.mock('../../src/lib/trash', async (original) => ({ ...await original<typeof import('../../src/lib/trash')>(),
+  fetchTrash: api.trash }));
 
 import { MoodboardStudioView } from '../../src/components/moodboard-studio/MoodboardStudioView';
 import { useUIStore } from '../../src/store/uiStore';

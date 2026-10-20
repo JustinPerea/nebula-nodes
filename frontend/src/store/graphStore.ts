@@ -31,6 +31,7 @@ import {
   paperRecipeRevision,
   paperRunOutOfDateReasons,
   currentRunSnapshot,
+  runBehaviourVersion,
   recordRunOutput,
   recordRunBatchOutputs,
   recordRunSkip,
@@ -49,7 +50,7 @@ import {
   type ActiveRun,
   type CreateRunOrigin,
 } from '../lib/runHistory';
-import { GRAPH_PARAMS_VERSION } from '../lib/savedParamsUpgrades';
+import { GRAPH_PARAMS_VERSION, runReplayNotes } from '../lib/savedParamsUpgrades';
 import { backendParamsVersion } from '../lib/paramsOutdated';
 import type { PaperSourceRecord } from '../lib/paperSource';
 import {
@@ -5724,6 +5725,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         } : undefined;
         const runNotes = Array.isArray(event.notes)
           ? event.notes.filter((note): note is string => typeof note === 'string' && note !== '') : [];
+        // A replay of a record from before a behaviour change says once that
+        // it can differ (savedParamsUpgrades.ts runReplayNotes).
+        const replayed = record?.sourceRunId
+          ? get().runHistory.find((candidate) => candidate.id === record.sourceRunId) : undefined;
+        if (replayed) {
+          for (const note of runReplayNotes(replayed.snapshot, runBehaviourVersion(replayed))[event.nodeId] ?? []) {
+            if (!runNotes.includes(note)) runNotes.push(note);
+          }
+        }
         get().updateNodeData(event.nodeId, { state: 'complete', outputs: liveOutputs as NodeData['outputs'],
           batchOutputs, batchVariants, batchRunId: runId ?? undefined, runNotes: runNotes.length ? runNotes : undefined,
           outputFreshness, progress: undefined, streamingText: undefined, streamingPartials: undefined, streamingSvg: undefined,

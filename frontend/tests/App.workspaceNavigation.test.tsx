@@ -9,7 +9,8 @@ vi.mock('@xyflow/react', async (original) => ({
 }));
 vi.mock('../src/lib/api', async (original) => ({
   ...await original<typeof import('../src/lib/api')>(),
-  getSettings: vi.fn().mockResolvedValue({}), fetchCLIGraph: () => new Promise(() => {}),
+  // The threshold is already in settings.json, so App sends no migration PUT.
+  getSettings: vi.fn().mockResolvedValue({ runCostConfirmUsd: 1 }), fetchCLIGraph: () => new Promise(() => {}),
 }));
 vi.mock('../src/lib/kreaConnection', async (original) => ({
   ...await original<typeof import('../src/lib/kreaConnection')>(),
@@ -50,6 +51,7 @@ import App from '../src/App';
 import { useUIStore } from '../src/store/uiStore';
 import { useGraphStore } from '../src/store/graphStore';
 import { useProjectStore } from '../src/store/projectStore';
+import { usePricingStore } from '../src/store/pricingStore';
 
 const initialUI = useUIStore.getState();
 const initialGraph = useGraphStore.getState();
@@ -58,6 +60,8 @@ beforeEach(() => {
   useUIStore.setState({ ...initialUI, commonsEnabled: true, hasOnboarded: true }, true);
   useGraphStore.setState({ nodes: [], edges: [], runHistory: [], activeRuns: [] });
   useProjectStore.setState({ ...initialProjects, screen: 'workspace', initialized: true, loading: false }, true);
+  // Prices already loaded, so App doesn't GET /api/pricing.
+  usePricingStore.setState({ table: { currencies: {}, nodes: {} }, loading: false });
 });
 afterEach(() => { cleanup(); useUIStore.setState(initialUI, true); useGraphStore.setState(initialGraph, true); useProjectStore.setState(initialProjects, true); });
 

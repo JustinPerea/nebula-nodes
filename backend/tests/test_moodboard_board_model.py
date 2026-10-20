@@ -327,7 +327,7 @@ def test_cli_add_on_an_old_board_saves_the_grid_with_the_new_image_last(app, roo
     png = tmp_path / "new.png"
     Image.new("RGB", (32, 18), (10, 200, 10)).save(png)
 
-    board, added, _ = boards.add_to_board(app.api, "oldboard0001", [str(png)])
+    board, added, _, _ = boards.add_to_board(app.api, "oldboard0001", [str(png)])
 
     assert added == 1
     assert _placements({"images": board["images"][:-1]}) == _placements(read)
@@ -358,7 +358,7 @@ def test_cli_add_on_a_full_grid_row_of_narrow_cards_starts_a_new_row(app, root, 
     png = tmp_path / "next.png"
     Image.new("RGB", size, (10, 200, 10)).save(png)
 
-    board, added, _ = boards.add_to_board(app.api, "oldboard0001", [str(png)])
+    board, added, _, _ = boards.add_to_board(app.api, "oldboard0001", [str(png)])
 
     assert added == 1
     assert _placements({"images": board["images"][:-1]}) == _placements(read)

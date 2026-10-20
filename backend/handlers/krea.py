@@ -11,10 +11,11 @@ from urllib.parse import urlparse
 
 import httpx
 
-from models.events import ExecutionEvent, ProgressEvent
+from models.events import ExecutionEvent, ProgressEvent, add_run_note
 from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.moodboard_analysis import rank_representative_images
+from services.moodboard_weights import native_strengths
 from services.cancellation import schedule_detached_cancel
 from services.output import OUTPUT_ROOT, get_run_dir
 from execution.missing_credential import MissingCredentialError
@@ -365,19 +366,72 @@ def _native_moodboard_values(inputs: dict[str, PortValueDict]) -> list[dict[str,
     return values
 
 
+# Krea 2's ``image_style_references[].strength``: 0..1 in the schema Krea's
+# gateway enforces (krea-2-medium.md, krea-2-large.md), as the clamp guards.
+KREA2_STRENGTH_RANGE = (0.0, 1.0)
+BOARD_STRENGTH_ZERO_NOTE = "Board strength is 0: no board images sent"
+
+
+def _board_label(moodboard: dict[str, Any]) -> str:
+    name = _clean_str(moodboard.get("name"))
+    return f"Board '{name}'" if name else "The board"
+
+
+def _board_numbers(moodboard: dict[str, Any]) -> dict[str, int]:
+    """Each image's board number by URL: the analysis's ``number`` where it has
+    one (set-aside images keep their place in it), else its place in the
+    bundle's images."""
+    numbers: dict[str, int] = {}
+    analysis = moodboard.get("analysis") if isinstance(moodboard.get("analysis"), dict) else {}
+    for item in _as_list(analysis.get("images")):
+        if isinstance(item, dict) and item.get("url") and isinstance(item.get("number"), int):
+            numbers.setdefault(str(item["url"]), item["number"])
+    for index, img in enumerate(_as_list(moodboard.get("images")), start=1):
+        if isinstance(img, dict) and img.get("url"):
+            numbers.setdefault(str(img["url"]), index)
+    return numbers
+
+
+def _strength_text(value: float) -> str:
+    return f"{value:.2f}"
+
+
+def _sent_strength_text(value: float) -> str:
+    """A strength that was sent, for the run note: 2 decimals, or the 4 the
+    request carries when 2 would read 0.00 (it went, so it isn't 0)."""
+    text = _strength_text(value)
+    return f"{value:.4f}" if value > 0 and text == "0.00" else text
+
+
 async def _collect_native_moodboard_style_references(
     to_url: UrlResolver,
     inputs: dict[str, PortValueDict],
     *,
     remaining_slots: int,
+    wired: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
+    """A Nebula board's images as Krea 2 style references.
+
+    Q21 b (Justin, 2026-10-20; plan section 5.7.4): the board images sent
+    share out the board's strength, ``S * w / sum(w)`` over the images that
+    go (after the slot cap and dedupe), at 4 decimals adding up to exactly
+    ``S``. ``wired`` (the person's own references, which took their slots
+    first) keep their strengths and are named in the run note. A board at
+    strength 0 sends nothing (Q32 a)."""
     if remaining_slots <= 0:
         return []
 
-    refs: list[dict[str, Any]] = []
+    # Pick first, then scale: the sum is over the images that actually go.
+    picked: list[tuple[dict[str, Any], list[tuple[Any, str, float]]]] = []
     seen: set[str] = set()
+    taken = 0
     for moodboard in _native_moodboard_values(inputs):
+        if taken >= remaining_slots:
+            break
         strength = _float_value(moodboard.get("strength"), 0.7, 0.0, 1.0)
+        if strength <= 0:
+            add_run_note(BOARD_STRENGTH_ZERO_NOTE)
+            continue
         analysis = moodboard.get("analysis") if isinstance(moodboard.get("analysis"), dict) else {}
         hints = analysis.get("providerHints") if isinstance(analysis, dict) else {}
         krea_hints = hints.get("krea") if isinstance(hints, dict) and isinstance(hints.get("krea"), dict) else {}
@@ -389,17 +443,58 @@ async def _collect_native_moodboard_style_references(
             for img in moodboard.get("images", [])
             if isinstance(img, dict) and img.get("url")
         }
+        chosen: list[tuple[Any, str, float]] = []
         for raw in _as_list(raw_images):
             url_key = _clean_str(raw)
             if not url_key or url_key in seen:
                 continue
+            # A URL the bundle's images don't list counts as full weight, as
+            # before; a weight-0 image never steers, whatever a stale hint says.
+            weight = image_weights.get(url_key, 1.0)
+            if weight <= 0:
+                continue
             seen.add(url_key)
+            chosen.append((raw, url_key, weight))
+            taken += 1
+            if taken >= remaining_slots:
+                break
+        if chosen:
+            picked.append((moodboard, chosen))
+
+    refs: list[dict[str, Any]] = []
+    for moodboard, chosen in picked:
+        strength = _float_value(moodboard.get("strength"), 0.7, 0.0, 1.0)
+        scaled = native_strengths(strength, [weight for _, _, weight in chosen],
+                                  normalize="sum-to-strength", range=KREA2_STRENGTH_RANGE)
+        label = _board_label(moodboard)
+        numbers = _board_numbers(moodboard)
+        if scaled.clamped:
+            add_run_note(f"{label}: a strength was outside Krea 2's 0 to 1 and was clamped.")
+        sent: list[tuple[str, float]] = []
+        for (raw, url_key, _), value in zip(chosen, scaled.strengths):
+            number = numbers.get(url_key)
+            tag = f"#{number}" if number else url_key
+            if value <= 0:
+                add_run_note(f"{label}: {tag} is too light to steer at this board strength, so it wasn't sent.")
+                continue
             refs.append({
                 "url": await to_url(raw, description="Nebula native moodboard reference"),
-                "strength": _float_value(strength * image_weights.get(url_key, 1.0), strength, 0.0, 1.0),
+                "strength": value,
             })
-            if len(refs) >= remaining_slots:
-                return refs
+            sent.append((tag, value))
+        if len(sent) == 1:
+            add_run_note(f"{label} sent 1 image, at the board's strength {_strength_text(strength)}.")
+        elif sent:
+            listed = ", ".join(f"{tag} {_sent_strength_text(value)}" for tag, value in sent)
+            add_run_note(f"{label} sent {len(sent)} images; their strengths add up to the board's "
+                         f"{_strength_text(strength)} ({listed}).")
+
+    if refs and wired:
+        board_total = sum(_float_value(m.get("strength"), 0.7, 0.0, 1.0) for m, _ in picked)
+        wired_total = sum(_float_value(ref.get("strength"), 0.0, 0.0, 1.0) for ref in wired)
+        count = len(wired)
+        add_run_note(f"Your {count} reference{'s add' if count != 1 else ' adds'} {_strength_text(wired_total)} "
+                     f"on top of the board's {_strength_text(board_total)}.")
     return refs
 
 
@@ -492,6 +587,7 @@ async def handle_krea_generate(
             to_url,
             inputs,
             remaining_slots=max(0, 10 - len(image_refs)),
+            wired=image_refs,
         )
         image_refs.extend(native_refs)
         if image_refs:
