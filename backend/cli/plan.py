@@ -1,10 +1,11 @@
 """Plans for `nebula propose` and `nebula apply`: one body shape, two routes.
 
-A plan adds nodes (with +refs), wires them, and changes params on existing
-nodes. `propose` sends it to the person (POST /api/canvas/proposals) and may
-ask for runs; `apply` edits the canvas directly (POST /api/graph/apply, the
-MCP server's edit_canvas) and may also rename, move, remove and unwire, but
-never runs anything. So one file of nodes, edges and params works with both.
+A plan adds nodes (with +refs), wires them, names them, and changes params on
+existing nodes. `propose` sends it to the person (POST /api/canvas/proposals)
+and may ask for runs, and names only its own new nodes; `apply` edits the
+canvas directly (POST /api/graph/apply, the MCP server's edit_canvas) and may
+also rename existing nodes, move, remove and unwire, but never runs anything.
+So one file of nodes, edges, params and names for new nodes works with both.
 
 `apply` also takes a plan of steps, {"note"?, "steps": [plan, plan, ...]}.
 The CLI sends each step as its own edit, in order; each lands whole or not
@@ -22,7 +23,8 @@ from pathlib import Path
 from typing import Any
 
 # Keys only `nebula apply` sends (a proposal can't do these).
-APPLY_ONLY = ("rename", "move", "remove", "unwire", "arrange")
+APPLY_ONLY = ("move", "remove", "unwire", "arrange")
+RENAME_EXISTING = "Rename existing nodes with edit_canvas (or `nebula rename`)"
 _STEP_KEYS = frozenset({"note", "steps"})
 
 
@@ -275,13 +277,24 @@ def read_plan(source: str) -> dict[str, Any]:
     return body
 
 
+def _refuse_apply_only_flags(args: argparse.Namespace) -> None:
+    """`nebula propose` takes `nebula apply`'s other options only to name them."""
+    for flag in APPLY_ONLY:
+        if getattr(args, flag, None):
+            raise BuildError(f"`nebula propose` doesn't take --{flag}: a proposal adds nodes, wires, param changes, "
+                             f"names for its new nodes and runs, for the person to accept. `nebula apply --{flag}` "
+                             "does it directly.")
+
+
 def body_from_args(args: argparse.Namespace, *, command: str) -> dict[str, Any]:
     """The body for `nebula propose` or `nebula apply`, from --file or the builder flags."""
+    if command == "propose":
+        _refuse_apply_only_flags(args)
     flags = {
         "add": args.add, "param": _flatten(args.param), "set_params": args.set_params, "wire": args.wire,
-        "at": args.at,
+        "at": args.at, "rename": getattr(args, "rename", None) or [],
         **({"run": args.run} if command == "propose" else {
-            "rename": args.rename, "move": args.move, "remove": args.remove, "unwire": args.unwire,
+            "move": args.move, "remove": args.remove, "unwire": args.unwire,
             "arrange": getattr(args, "arrange", None)}),
     }
     if args.file:
@@ -315,7 +328,11 @@ def body_from_args(args: argparse.Namespace, *, command: str) -> dict[str, Any]:
         extra = [key for key in APPLY_ONLY if key in body]
         if extra:
             raise BuildError(f"a proposal can't {extra[0]}; `nebula apply` edits the canvas directly "
-                             f"(rename, move, remove, unwire, arrange)")
+                             f"(move, remove, unwire, arrange, and renaming existing nodes)")
+        existing = [name for name in (body.get("rename") or {}) if isinstance(name, str) and not name.startswith("+")]
+        if existing:
+            raise BuildError(f"{RENAME_EXISTING}; a proposal names only the nodes it adds ({existing[0]} is "
+                             "on the canvas already)")
     return body
 
 

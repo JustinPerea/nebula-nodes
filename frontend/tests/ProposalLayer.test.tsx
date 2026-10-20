@@ -80,6 +80,22 @@ describe('ProposalLayer', () => {
     expect(wrapper.style.getPropertyValue('--agent-color')).toBe('#5B9DFF');
   });
 
+  it('shows the name the agent gave a new node, with the model in the caption', () => {
+    const named = proposal();
+    named.nodes[0] = { ...named.nodes[0], name: 'Lake hero', model: 'Nano Banana' };
+    useCanvasProposalsStore.getState().open(named, 'key-a');
+    const { container } = render(<ProposalLayer />);
+    expect(container.querySelector('.proposal-ghost__name')!.textContent).toBe('Lake hero');
+    expect(container.querySelector('.proposal-ghost__caption')!.textContent).toBe('+up · Nano Banana · proposed by Codex');
+    expect(container.querySelector('.proposal-ghost')!.getAttribute('aria-label'))
+      .toBe('Proposed Lake hero (+up, Nano Banana) from Codex');
+  });
+
+  it('keeps the plain caption when the agent gave no name', () => {
+    const { container } = render(<ProposalLayer />);
+    expect(container.querySelector('.proposal-ghost__caption')!.textContent).toBe('+up · proposed by Codex');
+  });
+
   it('drags a ghost in flow units (screen delta divided by zoom)', () => {
     const { container } = render(<ProposalLayer />);
     const ghost = container.querySelector<HTMLElement>('.proposal-ghost')!;

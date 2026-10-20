@@ -52,6 +52,9 @@ MAX_RUN = 6
 MAX_NOTE = 160
 MAX_REASON = 140
 MAX_HANDLE = 64
+# A node's name, as edit_canvas's rename takes it (canvas_edits.MAX_LABEL).
+MAX_NAME = 80
+RENAME_EXISTING = "Rename existing nodes with edit_canvas (or `nebula rename`)"
 CLOSED_KEEP_SECONDS = 1800
 MAX_CLOSED = 50
 COORD_LIMIT = 1e7
@@ -61,7 +64,7 @@ PERSON_VALUE_CHARS = 4000
 
 REF_RE = re.compile(r"^\+[A-Za-z0-9_-]{1,24}$")
 NODE_ID_RE = re.compile(r"^n\d{1,9}$")
-_ALLOWED_KEYS = frozenset({"note", "nodes", "edges", "params", "run"})
+_ALLOWED_KEYS = frozenset({"note", "nodes", "edges", "params", "run", "rename"})
 
 OPEN = "open"
 CLOSED_STATUSES = frozenset({"accepted", "rejected", "withdrawn", "expired", "invalidated"})
@@ -116,6 +119,12 @@ class ProposalSpec:
     edges: tuple[ProposedEdge, ...] = ()
     params: tuple[ParamChange, ...] = ()
     run: tuple[str, ...] = ()
+    # Names for this proposal's own new nodes: (+ref, name). Accepting applies them.
+    rename: tuple[tuple[str, str], ...] = ()
+
+    @property
+    def names(self) -> dict[str, str]:
+        return dict(self.rename)
 
     @property
     def refs(self) -> set[str]:
@@ -273,9 +282,31 @@ def parse_spec(body: Any, *, internal_ok: frozenset[str] = frozenset(), capped: 
             raise ProposalError(400, f"run lists '{item}' twice")
         run.append(item)
 
+    names = _names(body.get("rename"), refs)
+
     if not (nodes or edges or changes or run):
         raise ProposalError(422, "a proposal needs at least one node, wire, param change or run")
-    return ProposalSpec(note=note, nodes=tuple(nodes), edges=tuple(edges), params=tuple(changes), run=tuple(run))
+    return ProposalSpec(note=note, nodes=tuple(nodes), edges=tuple(edges), params=tuple(changes), run=tuple(run),
+                        rename=tuple(names.items()))
+
+
+def _names(raw: Any, refs: set[str]) -> dict[str, str]:
+    """`rename` names the proposal's own new nodes ({"+g": "Lake hero"}).
+    Renaming a node already on the canvas isn't something the person needs to
+    decide, so it stays a direct edit (edit_canvas, `nebula rename`)."""
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ProposalError(422, 'rename must be an object of {"+ref": "name"} for this proposal\'s new nodes')
+    names: dict[str, str] = {}
+    for key, value in raw.items():
+        if isinstance(key, str) and NODE_ID_RE.fullmatch(key):
+            raise ProposalError(422, f"{RENAME_EXISTING}; a proposal names only the nodes it adds ({key} is on "
+                                     "the canvas already)")
+        if not isinstance(key, str) or key not in refs:
+            raise ProposalError(400, f"rename names '{str(key)[:30]}', which is not one of this proposal's new nodes")
+        names[key] = clean_note(value, limit=MAX_NAME, label=f"rename.{key}")
+    return names
 
 
 def clean_positions(raw: Any, refs: Iterable[str]) -> dict[str, dict[str, float]]:
@@ -670,12 +701,16 @@ class ProposalBook:
         spec = proposal.spec
         node_costs = {entry.get("ref"): entry for entry in proposal.cost.get("nodes", [])}
         nodes: list[dict[str, Any]] = []
+        names = spec.names
         for node in spec.nodes:
             definition = definitions.get(node.definition_id, {}) if isinstance(definitions, dict) else {}
+            model = str(definition.get("displayName") or node.definition_id)
             nodes.append({
                 "ref": node.ref,
                 "definitionId": node.definition_id,
-                "name": str(definition.get("displayName") or node.definition_id),
+                # The name the proposal gives it (accepting applies it), else the model's.
+                "name": names.get(node.ref) or model,
+                **({"model": model} if names.get(node.ref) else {}),
                 "category": str(definition.get("category") or ""),
                 "params": safe_value(node.params, key="params"),
                 "position": dict(proposal.positions.get(node.ref) or node.position or {"x": 0.0, "y": 0.0}),

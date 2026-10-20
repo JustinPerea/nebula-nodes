@@ -275,6 +275,20 @@ A change to the board, an edit batch (1.12: `moodboard_add`, `nebula moodboard a
 
 The browser lists the event in the Agent log under the agent's name and colour; with no target no cursor moves, and `nebula look` lists no cursor for it. The person's own writes, a refused write, a batch or `PUT` that changed nothing and the dry run (1.8) send nothing.
 
+### 1.14 Every board in an agent's first answer
+
+`GET /api/agent/start` (MCP `start_here`, `nebula context`; plan v2.7 PR26, MCP-SETUP.md) lists the person's boards in its `boards` part, so an agent needn't list each project's boards first. It comes from `MoodboardStore.summaries()` (`backend/services/moodboard_store.py`), a walk of the store's folders: `_global` and each canvas project's folder; dot folders (`.trash`, `.notes`) and folders whose name isn't a safe project id are skipped. It reads each board's JSON for its name, image count, whether it has an analysis, Direction and `updatedAt`, never the images or any note.
+
+```json
+{"count": 41, "rows": [
+  {"id": "mb_1", "name": "Good Machines", "where": "current", "images": 12, "analyzed": true, "direction": "quiet, warm, early light"}
+], "truncated": true, "more": "moodboard_get gives one in full"}
+```
+
+- **`where`.** `current` for the open project (1.9), `global`, or the project's name from the catalog.
+- **Left out.** Boards in Recently deleted, boards filed under a project that is in Recently deleted, and boards in a folder that isn't a project in the catalog (an old-style folder the re-home hasn't moved yet, 1.9).
+- **Order and limits.** The current project's, then Global's, then the rest, each newest edit first; 30 rows at most, Direction cut to 80 characters, the whole part kept within 800 tokens (characters / 4). `count` is every board listed before the cut. `truncated` and `more` appear when rows were cut; `more` alone when every row fits but a Direction was cut short. The `via=cli` answer says "`nebula moodboard show <id>` gives one in full" instead.
+
 ## Changelog
 
 | Date | Change |
@@ -293,3 +307,4 @@ The browser lists the event in the Agent log under the agent's name and colour; 
 | 2026-10-20 | Moodboard canvas, checked board edits: `POST /api/moodboards/{id}/edits`, `baseVersion` and 409 on edits and `PUT`, `storedAssetChanged` with `version`, `edit`, `touched`, `undo`, `board.*` journal events for edits and `PUT`s (1.12); Moodboard Studio sends image changes as ops and board fields only on `PUT`, and follows edits made elsewhere (1.3, 1.12); `add_to_board` and `moodboard_add` return `undo` and `addedIds` |
 | 2026-10-20 | Moodboard: undo skips what changed since. `restore` takes a `fields` slice (the board's own fields, checked one by one) and puts image settings back one by one (1.12); `previous` carries `undo`, which `set --restore`, `moodboard_update` and `undo_board` send as one checked write, reporting what was left as is in `skipped` (1.6) |
 | 2026-10-20 | Moodboard: an agent's board writes reach the Agent log as target-less `agentPresence` events; an edit batch or `PUT` is said in the agent's `say` or the journal's summary; the journal no longer names an older image's unsaved defaults as a change (1.13, 1.12) |
+| 2026-10-20 | Agents: `GET /api/agent/start` lists every board in its `boards` part, from `MoodboardStore.summaries()` (1.14); proposals name their own new nodes (`rename` in `POST /api/canvas/proposals`, `propose_change` and `nebula propose --rename`; a node entry carries `name` and, when named, `model`; renaming an existing node is refused with 422) |
