@@ -97,7 +97,13 @@ And these canvas tools:
   your own edits. If you also use the `nebula` CLI, set `NEBULA_AGENT_NAME`
   so both share one name; otherwise your CLI edits arrive as `anonymous`
   (the result then carries a `note`). Pass the returned `cursor` back as `since`; see
-  [Watching for changes](#watching-for-changes).
+  [Watching for changes](#watching-for-changes). The wait holds only its own
+  call: other calls on the same server, such as the main agent's while a
+  Claude Code subagent waits (subagents share the parent's connection) or
+  parallel tool calls, answer meanwhile. Every tool runs off the server's
+  event loop; up to 32 long calls (waits, runs, link downloads) run at once,
+  and the short calls have 16 threads of their own. A wait the client
+  cancels stops at its next poll (within 25 s).
 - `resolve_pin`: answers one of the person's pinned notes (from
   `look_at_canvas` `pins`) with a one-line reply, which marks it resolved and
   moves the agent's cursor to it. See [Pins](#pins).
