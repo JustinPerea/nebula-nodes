@@ -171,7 +171,7 @@ PR26 did cut MCP orientation (D's median 5 to E's 2). On the CLI the baseline wa
 ### What the transcripts show
 
 - **A doesn't reproduce GM's 8 of 16.** GM's run went to Justin's dev Nebula, with many projects and boards, an analyzed board, and the CLI of that morning. These runs start from one project, one unanalyzed board, and a CLI that already has #118 (the Undo line) and #123 (the cover). That is the likely reason: fewer things to look through, and better errors, leave less to orient on.
-- **B follows GM's system prompt, which says to read `nebula apply --help`.** Every B run did, and also ran `nebula context`, so B pays for both. B1's usage error is `nebula point --say "..."` with no node or x and y.
+- **B follows GM's system prompt, which says to read `nebula apply --help`.** Every B run did. The start line didn't send them to `nebula context` first: only B2 ran it, late, after `propose --help`. B1's usage error is `nebula point --say "..."` with no node or x and y.
 - **C: `nebula context` names `apply` but not its flags.** With the prompt pointing at `nebula context` instead, no run made a usage error and none took more than 3 orientation turns. But each still ran `nebula apply --help` to learn `--add`, `--param`, `--wire` and `--at`.
 - **E: `start_here` first means no tool schemas loaded.** Claude Code defers MCP tool schemas behind its ToolSearch tool. `start_here` takes no arguments, so in E1 and E2 the agent called it straight away, never loaded a schema, and guessed the argument names of the tools after it:
   - `moodboard_get {"id": ...}` (it takes `board`);
