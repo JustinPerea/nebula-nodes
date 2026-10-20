@@ -87,6 +87,13 @@ APPROVED_PARAM_LABEL_CHANGES = {
 APPROVED_PORT_LABEL_CHANGES = {
     "identity-edit": {"mask": ("Mask", "Mask (unavailable)")},
 }
+# Moodboard adapters (plan PR13, 2026-10-20): Krea 2's `moodboard` port became
+# a board port (Any to Moodboard) so the adapter contract sees it. Saved
+# wires that were valid under Any stay (services/port_contracts.py
+# RETYPED_PORTS); a run says where a Krea moodboard id goes now.
+APPROVED_PORT_TYPE_CHANGES = {
+    "krea-2-generate": {"moodboard": ("Any", "Moodboard")},
+}
 APPROVED_OPTION_FIELD_ADDITIONS = {
     "seedream-4-5": {"image_size": {"auto_3K": {"visibleWhen": {"model": ["5.0-lite"]}}}},
 }
@@ -718,6 +725,10 @@ def _without_role_additions(node_id: str, node: dict[str, Any]) -> dict[str, Any
         port = _sole_entry(normalized["inputPorts"], "id", port_id)
         assert port["label"] == current_label, f"unapproved label: {node_id}.{port_id}"
         port["label"] = baseline_label
+    for port_id, (baseline_type, current_type) in APPROVED_PORT_TYPE_CHANGES.get(node_id, {}).items():
+        port = _sole_entry(normalized["inputPorts"], "id", port_id)
+        assert port["dataType"] == current_type, f"unapproved port type: {node_id}.{port_id}"
+        port["dataType"] = baseline_type
     for after_key, inserted in APPROVED_INSERTED_PARAMS.get(node_id, []):
         index = next(i for i, param in enumerate(normalized["params"]) if param.get("key") == after_key)
         assert normalized["params"][index + 1] == inserted, f"unapproved inserted param: {node_id}.{inserted['key']}"

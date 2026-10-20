@@ -902,7 +902,7 @@ Nodes: 308 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/krea/krea-2/{variant}` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)*, Style Images (Image ×n), Image Style Refs (Any ×n), Styles (Any ×n), Moodboard (Any) |
+| **Inputs** | Prompt (Text)*, Style Images (Image ×n), Image Style Refs (Any ×n), Styles (Any ×n), Moodboard (Moodboard) |
 | **Outputs** | Image (Image), Job (Any) |
 | **Audited** | 2026-10-09 |
 

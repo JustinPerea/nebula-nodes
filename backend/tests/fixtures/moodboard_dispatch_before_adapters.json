@@ -1,0 +1,6466 @@
+{
+ "boards": [
+  "prebrief_unanalyzed",
+  "prebrief_v2_edited",
+  "prebrief_v2_plain",
+  "v3_current",
+  "v3_override_stale",
+  "v4_current_private",
+  "v4_override_pinned"
+ ],
+ "nodes": [
+  "fast-sdxl",
+  "flux-2-pro",
+  "gpt-image-1-5",
+  "gpt-image-1-5-edit",
+  "gpt-image-1-edit",
+  "gpt-image-1-generate",
+  "gpt-image-2-5-edit",
+  "gpt-image-2-5-generate",
+  "gpt-image-2-edit",
+  "gpt-image-2-fal-edit",
+  "gpt-image-2-fal-generate",
+  "gpt-image-2-generate",
+  "krea-2-generate",
+  "nano-banana",
+  "nano-banana-fal",
+  "nano-banana-fal-edit"
+ ],
+ "prompts": {
+  "0aad7da77d2ed59c": "   ",
+  "2672508cee8bfccb": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Raw board-formed concrete under a flat overcast sky. Cold blue-grey light, wet surfaces, no sun. Keep the architecture monumental and empty.",
+  "2815af3e45182c3b": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Sun-bleached market awnings in olive and teal, hard noon shadows, dense stalls. Second.\n\nKeep these out of the image: logos.\n\nKeep these out of the image: logos.",
+  "373e1fc10d84b027": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Sun-bleached market awnings in olive and teal, hard noon shadows, dense stalls.\n\nKeep these out of the image: logos.",
+  "384d7bb48cd47bd5": "A lighthouse on a cliff at dusk",
+  "39e117f5646a35f4": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy. Second.",
+  "3a74a534e385e88d": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Glossy 1970s pool club at midday: teal water, peach tile, deep ink shade. Calm, sunlit, members only. Second.",
+  "3ede00d2204f642a": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Glossy 1970s pool club at midday: teal water, peach tile, deep ink shade. Calm, sunlit, members only.",
+  "45a063944e520f8f": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy.\n\nKeep these out of the image: crowds.",
+  "47934ceef4ece2c6": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Sun-bleached market awnings in olive and teal, hard noon shadows, dense stalls. Second.",
+  "57635d4ad2e5ddbd": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Glossy 1970s pool club at midday: teal water, peach tile, deep ink shade. Calm, sunlit, members only.\n\nKeep these out of the image: watermarks, extra fingers, colors close to #075a68.",
+  "5d451cfd7c44f37a": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy.",
+  "60732017eb44e535": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy.",
+  "68a2bca111c9069d": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy. Second.\n\nKeep these out of the image: crowds.\n\nKeep these out of the image: crowds.",
+  "6965d08be6ec91f0": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Raw board-formed concrete under a flat overcast sky. Cold blue-grey light, wet surfaces, no sun. Keep the architecture monumental and empty. Second.",
+  "6ddbcbb0cc911af5": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy. Second.",
+  "733f242bf9b6b6b5": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Use the Nebula moodboard 'Portrait studies' as subject direction at strength 0.60. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #6a311b, #4e2516, #cfc4b1, #2f1a13, #e2d9c8, #813c21. Accent colors, used sparingly: #28c8be, #145ae6. Visual cues: palette-led, subject continuity, silhouette consistency, high color energy. Second.",
+  "7474ed4e8dd5094c": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy.",
+  "74a9f6a61fec964e": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Glossy 1970s pool club at midday: teal water, peach tile, deep ink shade. Calm, sunlit, members only. Second.\n\nKeep these out of the image: watermarks, extra fingers, colors close to #075a68.\n\nKeep these out of the image: watermarks, extra fingers, colors close to #075a68.",
+  "79be789006b255ac": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Sun-bleached market awnings in olive and teal, hard noon shadows, dense stalls.",
+  "dd57e98ba1133221": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Raw board-formed concrete under a flat overcast sky. Cold blue-grey light, wet surfaces, no sun. Keep the architecture monumental and empty. Second.\n\nKeep these out of the image: text overlays, lens flare.\n\nKeep these out of the image: text overlays, lens flare.",
+  "f097411644d55d13": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Use the Nebula moodboard 'Portrait studies' as subject direction at strength 0.60. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #6a311b, #4e2516, #cfc4b1, #2f1a13, #e2d9c8, #813c21. Accent colors, used sparingly: #28c8be, #145ae6. Visual cues: palette-led, subject continuity, silhouette consistency, high color energy.",
+  "fb5901675dbd817c": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Raw board-formed concrete under a flat overcast sky. Cold blue-grey light, wet surfaces, no sun. Keep the architecture monumental and empty.\n\nKeep these out of the image: text overlays, lens flare.",
+  "fe512756da2d100b": "A lighthouse on a cliff at dusk\n\nMoodboard direction: Moody street portraits at night. Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy. Second."
+ },
+ "records": {
+  "fast-sdxl|-|no-board": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "fast-sdxl|prebrief_unanalyzed|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "fast-sdxl|prebrief_unanalyzed|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "fast-sdxl|prebrief_unanalyzed|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift, low-detail artifacts"
+   },
+   "paramsSame": false,
+   "prompt": "f097411644d55d13"
+  },
+  "fast-sdxl|prebrief_unanalyzed|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "fast-sdxl|prebrief_unanalyzed|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, low-detail artifacts"
+   },
+   "paramsSame": false,
+   "prompt": "733f242bf9b6b6b5"
+  },
+  "fast-sdxl|prebrief_unanalyzed|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, low-detail artifacts"
+   },
+   "paramsSame": false,
+   "prompt": "f097411644d55d13"
+  },
+  "fast-sdxl|prebrief_v2_edited|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "fast-sdxl|prebrief_v2_edited|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "fast-sdxl|prebrief_v2_edited|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift, low-detail artifacts, text overlays, lens flare"
+   },
+   "paramsSame": false,
+   "prompt": "2672508cee8bfccb"
+  },
+  "fast-sdxl|prebrief_v2_edited|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "fast-sdxl|prebrief_v2_edited|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, low-detail artifacts, text overlays, lens flare"
+   },
+   "paramsSame": false,
+   "prompt": "6965d08be6ec91f0"
+  },
+  "fast-sdxl|prebrief_v2_edited|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, low-detail artifacts, text overlays, lens flare"
+   },
+   "paramsSame": false,
+   "prompt": "2672508cee8bfccb"
+  },
+  "fast-sdxl|prebrief_v2_plain|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "fast-sdxl|prebrief_v2_plain|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "fast-sdxl|prebrief_v2_plain|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift, low-detail artifacts"
+   },
+   "paramsSame": false,
+   "prompt": "60732017eb44e535"
+  },
+  "fast-sdxl|prebrief_v2_plain|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "fast-sdxl|prebrief_v2_plain|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, low-detail artifacts"
+   },
+   "paramsSame": false,
+   "prompt": "6ddbcbb0cc911af5"
+  },
+  "fast-sdxl|prebrief_v2_plain|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, low-detail artifacts"
+   },
+   "paramsSame": false,
+   "prompt": "60732017eb44e535"
+  },
+  "fast-sdxl|v3_current|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "fast-sdxl|v3_current|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "fast-sdxl|v3_current|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift, low-detail artifacts, crowds"
+   },
+   "paramsSame": false,
+   "prompt": "5d451cfd7c44f37a"
+  },
+  "fast-sdxl|v3_current|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "fast-sdxl|v3_current|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, low-detail artifacts, crowds"
+   },
+   "paramsSame": false,
+   "prompt": "fe512756da2d100b"
+  },
+  "fast-sdxl|v3_current|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, low-detail artifacts, crowds"
+   },
+   "paramsSame": false,
+   "prompt": "5d451cfd7c44f37a"
+  },
+  "fast-sdxl|v3_override_stale|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "fast-sdxl|v3_override_stale|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "fast-sdxl|v3_override_stale|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift, low-detail artifacts, logos"
+   },
+   "paramsSame": false,
+   "prompt": "79be789006b255ac"
+  },
+  "fast-sdxl|v3_override_stale|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "fast-sdxl|v3_override_stale|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, low-detail artifacts, logos"
+   },
+   "paramsSame": false,
+   "prompt": "47934ceef4ece2c6"
+  },
+  "fast-sdxl|v3_override_stale|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, low-detail artifacts, logos"
+   },
+   "paramsSame": false,
+   "prompt": "79be789006b255ac"
+  },
+  "fast-sdxl|v4_current_private|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "fast-sdxl|v4_current_private|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "fast-sdxl|v4_current_private|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift, low-detail artifacts"
+   },
+   "paramsSame": false,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "fast-sdxl|v4_current_private|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "fast-sdxl|v4_current_private|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, low-detail artifacts"
+   },
+   "paramsSame": false,
+   "prompt": "39e117f5646a35f4"
+  },
+  "fast-sdxl|v4_current_private|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, low-detail artifacts"
+   },
+   "paramsSame": false,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "fast-sdxl|v4_override_pinned|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "fast-sdxl|v4_override_pinned|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "fast-sdxl|v4_override_pinned|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift, low-detail artifacts, watermarks, extra fingers"
+   },
+   "paramsSame": false,
+   "prompt": "3ede00d2204f642a"
+  },
+  "fast-sdxl|v4_override_pinned|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "fast-sdxl|v4_override_pinned|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, low-detail artifacts, watermarks, extra fingers"
+   },
+   "paramsSame": false,
+   "prompt": "3a74a534e385e88d"
+  },
+  "fast-sdxl|v4_override_pinned|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, low-detail artifacts, watermarks, extra fingers"
+   },
+   "paramsSame": false,
+   "prompt": "3ede00d2204f642a"
+  },
+  "flux-2-pro|-|no-board": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "flux-2-pro|prebrief_unanalyzed|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "flux-2-pro|prebrief_unanalyzed|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "flux-2-pro|prebrief_unanalyzed|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "flux-2-pro|prebrief_unanalyzed|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "flux-2-pro|prebrief_unanalyzed|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "733f242bf9b6b6b5"
+  },
+  "flux-2-pro|prebrief_unanalyzed|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "flux-2-pro|prebrief_v2_edited|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "flux-2-pro|prebrief_v2_edited|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "flux-2-pro|prebrief_v2_edited|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "2672508cee8bfccb"
+  },
+  "flux-2-pro|prebrief_v2_edited|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "flux-2-pro|prebrief_v2_edited|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "6965d08be6ec91f0"
+  },
+  "flux-2-pro|prebrief_v2_edited|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "2672508cee8bfccb"
+  },
+  "flux-2-pro|prebrief_v2_plain|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "flux-2-pro|prebrief_v2_plain|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "flux-2-pro|prebrief_v2_plain|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "flux-2-pro|prebrief_v2_plain|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "flux-2-pro|prebrief_v2_plain|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "6ddbcbb0cc911af5"
+  },
+  "flux-2-pro|prebrief_v2_plain|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "flux-2-pro|v3_current|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "flux-2-pro|v3_current|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "flux-2-pro|v3_current|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "5d451cfd7c44f37a"
+  },
+  "flux-2-pro|v3_current|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "flux-2-pro|v3_current|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "fe512756da2d100b"
+  },
+  "flux-2-pro|v3_current|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "5d451cfd7c44f37a"
+  },
+  "flux-2-pro|v3_override_stale|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "flux-2-pro|v3_override_stale|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "flux-2-pro|v3_override_stale|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "79be789006b255ac"
+  },
+  "flux-2-pro|v3_override_stale|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "flux-2-pro|v3_override_stale|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "47934ceef4ece2c6"
+  },
+  "flux-2-pro|v3_override_stale|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "79be789006b255ac"
+  },
+  "flux-2-pro|v4_current_private|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "flux-2-pro|v4_current_private|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "flux-2-pro|v4_current_private|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "flux-2-pro|v4_current_private|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "flux-2-pro|v4_current_private|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "39e117f5646a35f4"
+  },
+  "flux-2-pro|v4_current_private|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "flux-2-pro|v4_override_pinned|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "flux-2-pro|v4_override_pinned|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "flux-2-pro|v4_override_pinned|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "3ede00d2204f642a"
+  },
+  "flux-2-pro|v4_override_pinned|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "flux-2-pro|v4_override_pinned|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "3a74a534e385e88d"
+  },
+  "flux-2-pro|v4_override_pinned|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "3ede00d2204f642a"
+  },
+  "gpt-image-1-5-edit|-|no-board": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-5-edit|prebrief_unanalyzed|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-5-edit|prebrief_unanalyzed|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-5-edit|prebrief_unanalyzed|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "gpt-image-1-5-edit|prebrief_unanalyzed|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-5-edit|prebrief_unanalyzed|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "733f242bf9b6b6b5"
+  },
+  "gpt-image-1-5-edit|prebrief_unanalyzed|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "gpt-image-1-5-edit|prebrief_v2_edited|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-5-edit|prebrief_v2_edited|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-5-edit|prebrief_v2_edited|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "gpt-image-1-5-edit|prebrief_v2_edited|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-5-edit|prebrief_v2_edited|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "dd57e98ba1133221"
+  },
+  "gpt-image-1-5-edit|prebrief_v2_edited|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "gpt-image-1-5-edit|prebrief_v2_plain|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-5-edit|prebrief_v2_plain|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-5-edit|prebrief_v2_plain|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "gpt-image-1-5-edit|prebrief_v2_plain|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-5-edit|prebrief_v2_plain|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "6ddbcbb0cc911af5"
+  },
+  "gpt-image-1-5-edit|prebrief_v2_plain|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "gpt-image-1-5-edit|v3_current|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-5-edit|v3_current|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-5-edit|v3_current|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "gpt-image-1-5-edit|v3_current|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-5-edit|v3_current|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "68a2bca111c9069d"
+  },
+  "gpt-image-1-5-edit|v3_current|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "gpt-image-1-5-edit|v3_override_stale|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-5-edit|v3_override_stale|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-5-edit|v3_override_stale|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "gpt-image-1-5-edit|v3_override_stale|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-5-edit|v3_override_stale|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "2815af3e45182c3b"
+  },
+  "gpt-image-1-5-edit|v3_override_stale|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "gpt-image-1-5-edit|v4_current_private|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-5-edit|v4_current_private|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-5-edit|v4_current_private|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "gpt-image-1-5-edit|v4_current_private|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-5-edit|v4_current_private|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "39e117f5646a35f4"
+  },
+  "gpt-image-1-5-edit|v4_current_private|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "gpt-image-1-5-edit|v4_override_pinned|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-5-edit|v4_override_pinned|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-5-edit|v4_override_pinned|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "gpt-image-1-5-edit|v4_override_pinned|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-5-edit|v4_override_pinned|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "74a9f6a61fec964e"
+  },
+  "gpt-image-1-5-edit|v4_override_pinned|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "gpt-image-1-5|-|no-board": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-5|prebrief_unanalyzed|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-5|prebrief_unanalyzed|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-5|prebrief_unanalyzed|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "gpt-image-1-5|prebrief_unanalyzed|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-5|prebrief_unanalyzed|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "733f242bf9b6b6b5"
+  },
+  "gpt-image-1-5|prebrief_unanalyzed|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "gpt-image-1-5|prebrief_v2_edited|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-5|prebrief_v2_edited|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-5|prebrief_v2_edited|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "gpt-image-1-5|prebrief_v2_edited|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-5|prebrief_v2_edited|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "dd57e98ba1133221"
+  },
+  "gpt-image-1-5|prebrief_v2_edited|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "gpt-image-1-5|prebrief_v2_plain|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-5|prebrief_v2_plain|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-5|prebrief_v2_plain|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "gpt-image-1-5|prebrief_v2_plain|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-5|prebrief_v2_plain|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "6ddbcbb0cc911af5"
+  },
+  "gpt-image-1-5|prebrief_v2_plain|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "gpt-image-1-5|v3_current|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-5|v3_current|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-5|v3_current|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "gpt-image-1-5|v3_current|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-5|v3_current|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "68a2bca111c9069d"
+  },
+  "gpt-image-1-5|v3_current|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "gpt-image-1-5|v3_override_stale|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-5|v3_override_stale|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-5|v3_override_stale|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "gpt-image-1-5|v3_override_stale|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-5|v3_override_stale|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "2815af3e45182c3b"
+  },
+  "gpt-image-1-5|v3_override_stale|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "gpt-image-1-5|v4_current_private|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-5|v4_current_private|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-5|v4_current_private|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "gpt-image-1-5|v4_current_private|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-5|v4_current_private|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "39e117f5646a35f4"
+  },
+  "gpt-image-1-5|v4_current_private|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "gpt-image-1-5|v4_override_pinned|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-5|v4_override_pinned|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-5|v4_override_pinned|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "gpt-image-1-5|v4_override_pinned|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-5|v4_override_pinned|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "74a9f6a61fec964e"
+  },
+  "gpt-image-1-5|v4_override_pinned|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "gpt-image-1-edit|-|no-board": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-edit|prebrief_unanalyzed|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-edit|prebrief_unanalyzed|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-edit|prebrief_unanalyzed|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "gpt-image-1-edit|prebrief_unanalyzed|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-edit|prebrief_unanalyzed|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "733f242bf9b6b6b5"
+  },
+  "gpt-image-1-edit|prebrief_unanalyzed|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "gpt-image-1-edit|prebrief_v2_edited|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-edit|prebrief_v2_edited|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-edit|prebrief_v2_edited|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "gpt-image-1-edit|prebrief_v2_edited|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-edit|prebrief_v2_edited|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "dd57e98ba1133221"
+  },
+  "gpt-image-1-edit|prebrief_v2_edited|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "gpt-image-1-edit|prebrief_v2_plain|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-edit|prebrief_v2_plain|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-edit|prebrief_v2_plain|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "gpt-image-1-edit|prebrief_v2_plain|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-edit|prebrief_v2_plain|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "6ddbcbb0cc911af5"
+  },
+  "gpt-image-1-edit|prebrief_v2_plain|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "gpt-image-1-edit|v3_current|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-edit|v3_current|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-edit|v3_current|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "gpt-image-1-edit|v3_current|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-edit|v3_current|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "68a2bca111c9069d"
+  },
+  "gpt-image-1-edit|v3_current|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "gpt-image-1-edit|v3_override_stale|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-edit|v3_override_stale|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-edit|v3_override_stale|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "gpt-image-1-edit|v3_override_stale|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-edit|v3_override_stale|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "2815af3e45182c3b"
+  },
+  "gpt-image-1-edit|v3_override_stale|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "gpt-image-1-edit|v4_current_private|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-edit|v4_current_private|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-edit|v4_current_private|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "gpt-image-1-edit|v4_current_private|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-edit|v4_current_private|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "39e117f5646a35f4"
+  },
+  "gpt-image-1-edit|v4_current_private|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "gpt-image-1-edit|v4_override_pinned|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-edit|v4_override_pinned|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-edit|v4_override_pinned|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "gpt-image-1-edit|v4_override_pinned|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-edit|v4_override_pinned|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "74a9f6a61fec964e"
+  },
+  "gpt-image-1-edit|v4_override_pinned|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "gpt-image-1-generate|-|no-board": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-generate|prebrief_unanalyzed|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-generate|prebrief_unanalyzed|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-generate|prebrief_unanalyzed|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "gpt-image-1-generate|prebrief_unanalyzed|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-generate|prebrief_unanalyzed|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "733f242bf9b6b6b5"
+  },
+  "gpt-image-1-generate|prebrief_unanalyzed|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "gpt-image-1-generate|prebrief_v2_edited|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-generate|prebrief_v2_edited|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-generate|prebrief_v2_edited|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "gpt-image-1-generate|prebrief_v2_edited|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-generate|prebrief_v2_edited|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "dd57e98ba1133221"
+  },
+  "gpt-image-1-generate|prebrief_v2_edited|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "gpt-image-1-generate|prebrief_v2_plain|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-generate|prebrief_v2_plain|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-generate|prebrief_v2_plain|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "gpt-image-1-generate|prebrief_v2_plain|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-generate|prebrief_v2_plain|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "6ddbcbb0cc911af5"
+  },
+  "gpt-image-1-generate|prebrief_v2_plain|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "gpt-image-1-generate|v3_current|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-generate|v3_current|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-generate|v3_current|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "gpt-image-1-generate|v3_current|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-generate|v3_current|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "68a2bca111c9069d"
+  },
+  "gpt-image-1-generate|v3_current|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "gpt-image-1-generate|v3_override_stale|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-generate|v3_override_stale|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-generate|v3_override_stale|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "gpt-image-1-generate|v3_override_stale|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-generate|v3_override_stale|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "2815af3e45182c3b"
+  },
+  "gpt-image-1-generate|v3_override_stale|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "gpt-image-1-generate|v4_current_private|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-generate|v4_current_private|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-generate|v4_current_private|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "gpt-image-1-generate|v4_current_private|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-generate|v4_current_private|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "39e117f5646a35f4"
+  },
+  "gpt-image-1-generate|v4_current_private|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "gpt-image-1-generate|v4_override_pinned|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-1-generate|v4_override_pinned|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-1-generate|v4_override_pinned|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "gpt-image-1-generate|v4_override_pinned|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-1-generate|v4_override_pinned|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "74a9f6a61fec964e"
+  },
+  "gpt-image-1-generate|v4_override_pinned|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "gpt-image-2-5-edit|-|no-board": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-5-edit|prebrief_unanalyzed|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-5-edit|prebrief_unanalyzed|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-5-edit|prebrief_unanalyzed|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "gpt-image-2-5-edit|prebrief_unanalyzed|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-5-edit|prebrief_unanalyzed|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "733f242bf9b6b6b5"
+  },
+  "gpt-image-2-5-edit|prebrief_unanalyzed|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "gpt-image-2-5-edit|prebrief_v2_edited|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-5-edit|prebrief_v2_edited|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-5-edit|prebrief_v2_edited|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "gpt-image-2-5-edit|prebrief_v2_edited|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-5-edit|prebrief_v2_edited|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "dd57e98ba1133221"
+  },
+  "gpt-image-2-5-edit|prebrief_v2_edited|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "gpt-image-2-5-edit|prebrief_v2_plain|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-5-edit|prebrief_v2_plain|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-5-edit|prebrief_v2_plain|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "gpt-image-2-5-edit|prebrief_v2_plain|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-5-edit|prebrief_v2_plain|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "6ddbcbb0cc911af5"
+  },
+  "gpt-image-2-5-edit|prebrief_v2_plain|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "gpt-image-2-5-edit|v3_current|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-5-edit|v3_current|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-5-edit|v3_current|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "gpt-image-2-5-edit|v3_current|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-5-edit|v3_current|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "68a2bca111c9069d"
+  },
+  "gpt-image-2-5-edit|v3_current|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "gpt-image-2-5-edit|v3_override_stale|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-5-edit|v3_override_stale|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-5-edit|v3_override_stale|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "gpt-image-2-5-edit|v3_override_stale|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-5-edit|v3_override_stale|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "2815af3e45182c3b"
+  },
+  "gpt-image-2-5-edit|v3_override_stale|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "gpt-image-2-5-edit|v4_current_private|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-5-edit|v4_current_private|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-5-edit|v4_current_private|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "gpt-image-2-5-edit|v4_current_private|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-5-edit|v4_current_private|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "39e117f5646a35f4"
+  },
+  "gpt-image-2-5-edit|v4_current_private|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "gpt-image-2-5-edit|v4_override_pinned|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-5-edit|v4_override_pinned|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-5-edit|v4_override_pinned|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "gpt-image-2-5-edit|v4_override_pinned|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-5-edit|v4_override_pinned|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "74a9f6a61fec964e"
+  },
+  "gpt-image-2-5-edit|v4_override_pinned|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "gpt-image-2-5-generate|-|no-board": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-5-generate|prebrief_unanalyzed|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-5-generate|prebrief_unanalyzed|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-5-generate|prebrief_unanalyzed|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "gpt-image-2-5-generate|prebrief_unanalyzed|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-5-generate|prebrief_unanalyzed|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "733f242bf9b6b6b5"
+  },
+  "gpt-image-2-5-generate|prebrief_unanalyzed|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "gpt-image-2-5-generate|prebrief_v2_edited|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-5-generate|prebrief_v2_edited|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-5-generate|prebrief_v2_edited|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "gpt-image-2-5-generate|prebrief_v2_edited|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-5-generate|prebrief_v2_edited|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "dd57e98ba1133221"
+  },
+  "gpt-image-2-5-generate|prebrief_v2_edited|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "gpt-image-2-5-generate|prebrief_v2_plain|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-5-generate|prebrief_v2_plain|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-5-generate|prebrief_v2_plain|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "gpt-image-2-5-generate|prebrief_v2_plain|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-5-generate|prebrief_v2_plain|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "6ddbcbb0cc911af5"
+  },
+  "gpt-image-2-5-generate|prebrief_v2_plain|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "gpt-image-2-5-generate|v3_current|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-5-generate|v3_current|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-5-generate|v3_current|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "gpt-image-2-5-generate|v3_current|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-5-generate|v3_current|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "68a2bca111c9069d"
+  },
+  "gpt-image-2-5-generate|v3_current|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "gpt-image-2-5-generate|v3_override_stale|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-5-generate|v3_override_stale|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-5-generate|v3_override_stale|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "gpt-image-2-5-generate|v3_override_stale|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-5-generate|v3_override_stale|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "2815af3e45182c3b"
+  },
+  "gpt-image-2-5-generate|v3_override_stale|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "gpt-image-2-5-generate|v4_current_private|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-5-generate|v4_current_private|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-5-generate|v4_current_private|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "gpt-image-2-5-generate|v4_current_private|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-5-generate|v4_current_private|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "39e117f5646a35f4"
+  },
+  "gpt-image-2-5-generate|v4_current_private|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "gpt-image-2-5-generate|v4_override_pinned|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-5-generate|v4_override_pinned|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-5-generate|v4_override_pinned|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "gpt-image-2-5-generate|v4_override_pinned|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-5-generate|v4_override_pinned|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "74a9f6a61fec964e"
+  },
+  "gpt-image-2-5-generate|v4_override_pinned|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "gpt-image-2-edit|-|no-board": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-edit|prebrief_unanalyzed|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-edit|prebrief_unanalyzed|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-edit|prebrief_unanalyzed|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "gpt-image-2-edit|prebrief_unanalyzed|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-edit|prebrief_unanalyzed|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "733f242bf9b6b6b5"
+  },
+  "gpt-image-2-edit|prebrief_unanalyzed|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "gpt-image-2-edit|prebrief_v2_edited|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-edit|prebrief_v2_edited|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-edit|prebrief_v2_edited|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "gpt-image-2-edit|prebrief_v2_edited|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-edit|prebrief_v2_edited|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "dd57e98ba1133221"
+  },
+  "gpt-image-2-edit|prebrief_v2_edited|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "gpt-image-2-edit|prebrief_v2_plain|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-edit|prebrief_v2_plain|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-edit|prebrief_v2_plain|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "gpt-image-2-edit|prebrief_v2_plain|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-edit|prebrief_v2_plain|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "6ddbcbb0cc911af5"
+  },
+  "gpt-image-2-edit|prebrief_v2_plain|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "gpt-image-2-edit|v3_current|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-edit|v3_current|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-edit|v3_current|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "gpt-image-2-edit|v3_current|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-edit|v3_current|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "68a2bca111c9069d"
+  },
+  "gpt-image-2-edit|v3_current|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "gpt-image-2-edit|v3_override_stale|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-edit|v3_override_stale|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-edit|v3_override_stale|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "gpt-image-2-edit|v3_override_stale|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-edit|v3_override_stale|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "2815af3e45182c3b"
+  },
+  "gpt-image-2-edit|v3_override_stale|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "gpt-image-2-edit|v4_current_private|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-edit|v4_current_private|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-edit|v4_current_private|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "gpt-image-2-edit|v4_current_private|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-edit|v4_current_private|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "39e117f5646a35f4"
+  },
+  "gpt-image-2-edit|v4_current_private|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "gpt-image-2-edit|v4_override_pinned|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-edit|v4_override_pinned|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-edit|v4_override_pinned|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "gpt-image-2-edit|v4_override_pinned|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-edit|v4_override_pinned|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "74a9f6a61fec964e"
+  },
+  "gpt-image-2-edit|v4_override_pinned|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "gpt-image-2-fal-edit|-|no-board": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-fal-edit|prebrief_unanalyzed|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-fal-edit|prebrief_unanalyzed|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-fal-edit|prebrief_unanalyzed|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "gpt-image-2-fal-edit|prebrief_unanalyzed|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-fal-edit|prebrief_unanalyzed|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "733f242bf9b6b6b5"
+  },
+  "gpt-image-2-fal-edit|prebrief_unanalyzed|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "gpt-image-2-fal-edit|prebrief_v2_edited|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-fal-edit|prebrief_v2_edited|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-fal-edit|prebrief_v2_edited|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "gpt-image-2-fal-edit|prebrief_v2_edited|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-fal-edit|prebrief_v2_edited|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "dd57e98ba1133221"
+  },
+  "gpt-image-2-fal-edit|prebrief_v2_edited|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "gpt-image-2-fal-edit|prebrief_v2_plain|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-fal-edit|prebrief_v2_plain|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-fal-edit|prebrief_v2_plain|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "gpt-image-2-fal-edit|prebrief_v2_plain|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-fal-edit|prebrief_v2_plain|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "6ddbcbb0cc911af5"
+  },
+  "gpt-image-2-fal-edit|prebrief_v2_plain|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "gpt-image-2-fal-edit|v3_current|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-fal-edit|v3_current|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-fal-edit|v3_current|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "gpt-image-2-fal-edit|v3_current|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-fal-edit|v3_current|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "68a2bca111c9069d"
+  },
+  "gpt-image-2-fal-edit|v3_current|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "gpt-image-2-fal-edit|v3_override_stale|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-fal-edit|v3_override_stale|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-fal-edit|v3_override_stale|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "gpt-image-2-fal-edit|v3_override_stale|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-fal-edit|v3_override_stale|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "2815af3e45182c3b"
+  },
+  "gpt-image-2-fal-edit|v3_override_stale|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "gpt-image-2-fal-edit|v4_current_private|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-fal-edit|v4_current_private|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-fal-edit|v4_current_private|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "gpt-image-2-fal-edit|v4_current_private|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-fal-edit|v4_current_private|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "39e117f5646a35f4"
+  },
+  "gpt-image-2-fal-edit|v4_current_private|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "gpt-image-2-fal-edit|v4_override_pinned|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-fal-edit|v4_override_pinned|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-fal-edit|v4_override_pinned|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "gpt-image-2-fal-edit|v4_override_pinned|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-fal-edit|v4_override_pinned|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "74a9f6a61fec964e"
+  },
+  "gpt-image-2-fal-edit|v4_override_pinned|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "gpt-image-2-fal-generate|-|no-board": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-fal-generate|prebrief_unanalyzed|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-fal-generate|prebrief_unanalyzed|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-fal-generate|prebrief_unanalyzed|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "gpt-image-2-fal-generate|prebrief_unanalyzed|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-fal-generate|prebrief_unanalyzed|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "733f242bf9b6b6b5"
+  },
+  "gpt-image-2-fal-generate|prebrief_unanalyzed|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "gpt-image-2-fal-generate|prebrief_v2_edited|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-fal-generate|prebrief_v2_edited|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-fal-generate|prebrief_v2_edited|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "gpt-image-2-fal-generate|prebrief_v2_edited|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-fal-generate|prebrief_v2_edited|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "dd57e98ba1133221"
+  },
+  "gpt-image-2-fal-generate|prebrief_v2_edited|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "gpt-image-2-fal-generate|prebrief_v2_plain|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-fal-generate|prebrief_v2_plain|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-fal-generate|prebrief_v2_plain|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "gpt-image-2-fal-generate|prebrief_v2_plain|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-fal-generate|prebrief_v2_plain|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "6ddbcbb0cc911af5"
+  },
+  "gpt-image-2-fal-generate|prebrief_v2_plain|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "gpt-image-2-fal-generate|v3_current|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-fal-generate|v3_current|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-fal-generate|v3_current|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "gpt-image-2-fal-generate|v3_current|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-fal-generate|v3_current|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "68a2bca111c9069d"
+  },
+  "gpt-image-2-fal-generate|v3_current|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "gpt-image-2-fal-generate|v3_override_stale|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-fal-generate|v3_override_stale|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-fal-generate|v3_override_stale|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "gpt-image-2-fal-generate|v3_override_stale|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-fal-generate|v3_override_stale|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "2815af3e45182c3b"
+  },
+  "gpt-image-2-fal-generate|v3_override_stale|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "gpt-image-2-fal-generate|v4_current_private|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-fal-generate|v4_current_private|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-fal-generate|v4_current_private|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "gpt-image-2-fal-generate|v4_current_private|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-fal-generate|v4_current_private|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "39e117f5646a35f4"
+  },
+  "gpt-image-2-fal-generate|v4_current_private|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "gpt-image-2-fal-generate|v4_override_pinned|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-fal-generate|v4_override_pinned|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-fal-generate|v4_override_pinned|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "gpt-image-2-fal-generate|v4_override_pinned|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-fal-generate|v4_override_pinned|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "74a9f6a61fec964e"
+  },
+  "gpt-image-2-fal-generate|v4_override_pinned|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "gpt-image-2-generate|-|no-board": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-generate|prebrief_unanalyzed|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-generate|prebrief_unanalyzed|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-generate|prebrief_unanalyzed|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "gpt-image-2-generate|prebrief_unanalyzed|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-generate|prebrief_unanalyzed|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "733f242bf9b6b6b5"
+  },
+  "gpt-image-2-generate|prebrief_unanalyzed|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "gpt-image-2-generate|prebrief_v2_edited|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-generate|prebrief_v2_edited|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-generate|prebrief_v2_edited|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "gpt-image-2-generate|prebrief_v2_edited|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-generate|prebrief_v2_edited|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "dd57e98ba1133221"
+  },
+  "gpt-image-2-generate|prebrief_v2_edited|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "gpt-image-2-generate|prebrief_v2_plain|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-generate|prebrief_v2_plain|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-generate|prebrief_v2_plain|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "gpt-image-2-generate|prebrief_v2_plain|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-generate|prebrief_v2_plain|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "6ddbcbb0cc911af5"
+  },
+  "gpt-image-2-generate|prebrief_v2_plain|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "gpt-image-2-generate|v3_current|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-generate|v3_current|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-generate|v3_current|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "gpt-image-2-generate|v3_current|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-generate|v3_current|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "68a2bca111c9069d"
+  },
+  "gpt-image-2-generate|v3_current|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "gpt-image-2-generate|v3_override_stale|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-generate|v3_override_stale|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-generate|v3_override_stale|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "gpt-image-2-generate|v3_override_stale|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-generate|v3_override_stale|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "2815af3e45182c3b"
+  },
+  "gpt-image-2-generate|v3_override_stale|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "gpt-image-2-generate|v4_current_private|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-generate|v4_current_private|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-generate|v4_current_private|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "gpt-image-2-generate|v4_current_private|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-generate|v4_current_private|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "39e117f5646a35f4"
+  },
+  "gpt-image-2-generate|v4_current_private|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "gpt-image-2-generate|v4_override_pinned|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "gpt-image-2-generate|v4_override_pinned|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "gpt-image-2-generate|v4_override_pinned|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "gpt-image-2-generate|v4_override_pinned|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "gpt-image-2-generate|v4_override_pinned|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "74a9f6a61fec964e"
+  },
+  "gpt-image-2-generate|v4_override_pinned|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "krea-2-generate|-|no-board": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "krea-2-generate|prebrief_unanalyzed|blank-prompt": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "krea-2-generate|prebrief_unanalyzed|no-prompt": {
+   "inputs": [
+    "moodboard"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "krea-2-generate|prebrief_unanalyzed|own-negative": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "krea-2-generate|prebrief_unanalyzed|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "krea-2-generate|prebrief_unanalyzed|two-boards": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "733f242bf9b6b6b5"
+  },
+  "krea-2-generate|prebrief_unanalyzed|wired": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "krea-2-generate|prebrief_v2_edited|blank-prompt": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "krea-2-generate|prebrief_v2_edited|no-prompt": {
+   "inputs": [
+    "moodboard"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "krea-2-generate|prebrief_v2_edited|own-negative": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "krea-2-generate|prebrief_v2_edited|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "krea-2-generate|prebrief_v2_edited|two-boards": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "dd57e98ba1133221"
+  },
+  "krea-2-generate|prebrief_v2_edited|wired": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "krea-2-generate|prebrief_v2_plain|blank-prompt": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "krea-2-generate|prebrief_v2_plain|no-prompt": {
+   "inputs": [
+    "moodboard"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "krea-2-generate|prebrief_v2_plain|own-negative": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "krea-2-generate|prebrief_v2_plain|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "krea-2-generate|prebrief_v2_plain|two-boards": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "6ddbcbb0cc911af5"
+  },
+  "krea-2-generate|prebrief_v2_plain|wired": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "krea-2-generate|v3_current|blank-prompt": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "krea-2-generate|v3_current|no-prompt": {
+   "inputs": [
+    "moodboard"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "krea-2-generate|v3_current|own-negative": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "krea-2-generate|v3_current|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "krea-2-generate|v3_current|two-boards": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "68a2bca111c9069d"
+  },
+  "krea-2-generate|v3_current|wired": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "krea-2-generate|v3_override_stale|blank-prompt": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "krea-2-generate|v3_override_stale|no-prompt": {
+   "inputs": [
+    "moodboard"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "krea-2-generate|v3_override_stale|own-negative": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "krea-2-generate|v3_override_stale|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "krea-2-generate|v3_override_stale|two-boards": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "2815af3e45182c3b"
+  },
+  "krea-2-generate|v3_override_stale|wired": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "krea-2-generate|v4_current_private|blank-prompt": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "krea-2-generate|v4_current_private|no-prompt": {
+   "inputs": [
+    "moodboard"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "krea-2-generate|v4_current_private|own-negative": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "krea-2-generate|v4_current_private|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "krea-2-generate|v4_current_private|two-boards": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "39e117f5646a35f4"
+  },
+  "krea-2-generate|v4_current_private|wired": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "krea-2-generate|v4_override_pinned|blank-prompt": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "krea-2-generate|v4_override_pinned|no-prompt": {
+   "inputs": [
+    "moodboard"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "krea-2-generate|v4_override_pinned|own-negative": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "krea-2-generate|v4_override_pinned|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "krea-2-generate|v4_override_pinned|two-boards": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "74a9f6a61fec964e"
+  },
+  "krea-2-generate|v4_override_pinned|wired": {
+   "inputs": [
+    "moodboard",
+    "prompt"
+   ],
+   "moodboardSame": true,
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "nano-banana-fal-edit|-|no-board": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "nano-banana-fal-edit|prebrief_unanalyzed|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "nano-banana-fal-edit|prebrief_unanalyzed|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "nano-banana-fal-edit|prebrief_unanalyzed|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "nano-banana-fal-edit|prebrief_unanalyzed|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "nano-banana-fal-edit|prebrief_unanalyzed|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "733f242bf9b6b6b5"
+  },
+  "nano-banana-fal-edit|prebrief_unanalyzed|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "nano-banana-fal-edit|prebrief_v2_edited|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "nano-banana-fal-edit|prebrief_v2_edited|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "nano-banana-fal-edit|prebrief_v2_edited|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "nano-banana-fal-edit|prebrief_v2_edited|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "nano-banana-fal-edit|prebrief_v2_edited|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "dd57e98ba1133221"
+  },
+  "nano-banana-fal-edit|prebrief_v2_edited|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "nano-banana-fal-edit|prebrief_v2_plain|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "nano-banana-fal-edit|prebrief_v2_plain|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "nano-banana-fal-edit|prebrief_v2_plain|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "nano-banana-fal-edit|prebrief_v2_plain|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "nano-banana-fal-edit|prebrief_v2_plain|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "6ddbcbb0cc911af5"
+  },
+  "nano-banana-fal-edit|prebrief_v2_plain|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "nano-banana-fal-edit|v3_current|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "nano-banana-fal-edit|v3_current|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "nano-banana-fal-edit|v3_current|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "nano-banana-fal-edit|v3_current|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "nano-banana-fal-edit|v3_current|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "68a2bca111c9069d"
+  },
+  "nano-banana-fal-edit|v3_current|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "nano-banana-fal-edit|v3_override_stale|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "nano-banana-fal-edit|v3_override_stale|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "nano-banana-fal-edit|v3_override_stale|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "nano-banana-fal-edit|v3_override_stale|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "nano-banana-fal-edit|v3_override_stale|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "2815af3e45182c3b"
+  },
+  "nano-banana-fal-edit|v3_override_stale|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "nano-banana-fal-edit|v4_current_private|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "nano-banana-fal-edit|v4_current_private|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "nano-banana-fal-edit|v4_current_private|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "nano-banana-fal-edit|v4_current_private|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "nano-banana-fal-edit|v4_current_private|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "39e117f5646a35f4"
+  },
+  "nano-banana-fal-edit|v4_current_private|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "nano-banana-fal-edit|v4_override_pinned|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "nano-banana-fal-edit|v4_override_pinned|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "nano-banana-fal-edit|v4_override_pinned|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "nano-banana-fal-edit|v4_override_pinned|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "nano-banana-fal-edit|v4_override_pinned|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "74a9f6a61fec964e"
+  },
+  "nano-banana-fal-edit|v4_override_pinned|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "nano-banana-fal|-|no-board": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "nano-banana-fal|prebrief_unanalyzed|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "nano-banana-fal|prebrief_unanalyzed|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "nano-banana-fal|prebrief_unanalyzed|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "nano-banana-fal|prebrief_unanalyzed|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "nano-banana-fal|prebrief_unanalyzed|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "733f242bf9b6b6b5"
+  },
+  "nano-banana-fal|prebrief_unanalyzed|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "nano-banana-fal|prebrief_v2_edited|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "nano-banana-fal|prebrief_v2_edited|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "nano-banana-fal|prebrief_v2_edited|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "nano-banana-fal|prebrief_v2_edited|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "nano-banana-fal|prebrief_v2_edited|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "dd57e98ba1133221"
+  },
+  "nano-banana-fal|prebrief_v2_edited|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "nano-banana-fal|prebrief_v2_plain|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "nano-banana-fal|prebrief_v2_plain|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "nano-banana-fal|prebrief_v2_plain|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "nano-banana-fal|prebrief_v2_plain|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "nano-banana-fal|prebrief_v2_plain|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "6ddbcbb0cc911af5"
+  },
+  "nano-banana-fal|prebrief_v2_plain|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "nano-banana-fal|v3_current|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "nano-banana-fal|v3_current|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "nano-banana-fal|v3_current|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "nano-banana-fal|v3_current|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "nano-banana-fal|v3_current|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "68a2bca111c9069d"
+  },
+  "nano-banana-fal|v3_current|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "nano-banana-fal|v3_override_stale|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "nano-banana-fal|v3_override_stale|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "nano-banana-fal|v3_override_stale|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "nano-banana-fal|v3_override_stale|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "nano-banana-fal|v3_override_stale|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "2815af3e45182c3b"
+  },
+  "nano-banana-fal|v3_override_stale|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "nano-banana-fal|v4_current_private|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "nano-banana-fal|v4_current_private|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "nano-banana-fal|v4_current_private|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "nano-banana-fal|v4_current_private|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "nano-banana-fal|v4_current_private|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "39e117f5646a35f4"
+  },
+  "nano-banana-fal|v4_current_private|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "nano-banana-fal|v4_override_pinned|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "nano-banana-fal|v4_override_pinned|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "nano-banana-fal|v4_override_pinned|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "nano-banana-fal|v4_override_pinned|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "nano-banana-fal|v4_override_pinned|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "74a9f6a61fec964e"
+  },
+  "nano-banana-fal|v4_override_pinned|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "nano-banana|-|no-board": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "nano-banana|prebrief_unanalyzed|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "nano-banana|prebrief_unanalyzed|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "nano-banana|prebrief_unanalyzed|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "nano-banana|prebrief_unanalyzed|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "nano-banana|prebrief_unanalyzed|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "733f242bf9b6b6b5"
+  },
+  "nano-banana|prebrief_unanalyzed|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "f097411644d55d13"
+  },
+  "nano-banana|prebrief_v2_edited|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "nano-banana|prebrief_v2_edited|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "nano-banana|prebrief_v2_edited|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "nano-banana|prebrief_v2_edited|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "nano-banana|prebrief_v2_edited|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "dd57e98ba1133221"
+  },
+  "nano-banana|prebrief_v2_edited|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "fb5901675dbd817c"
+  },
+  "nano-banana|prebrief_v2_plain|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "nano-banana|prebrief_v2_plain|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "nano-banana|prebrief_v2_plain|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "nano-banana|prebrief_v2_plain|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "nano-banana|prebrief_v2_plain|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "6ddbcbb0cc911af5"
+  },
+  "nano-banana|prebrief_v2_plain|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "60732017eb44e535"
+  },
+  "nano-banana|v3_current|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "nano-banana|v3_current|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "nano-banana|v3_current|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "nano-banana|v3_current|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "nano-banana|v3_current|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "68a2bca111c9069d"
+  },
+  "nano-banana|v3_current|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "45a063944e520f8f"
+  },
+  "nano-banana|v3_override_stale|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "nano-banana|v3_override_stale|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "nano-banana|v3_override_stale|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "nano-banana|v3_override_stale|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "nano-banana|v3_override_stale|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "2815af3e45182c3b"
+  },
+  "nano-banana|v3_override_stale|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "373e1fc10d84b027"
+  },
+  "nano-banana|v4_current_private|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "nano-banana|v4_current_private|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "nano-banana|v4_current_private|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "nano-banana|v4_current_private|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "nano-banana|v4_current_private|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "39e117f5646a35f4"
+  },
+  "nano-banana|v4_current_private|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "7474ed4e8dd5094c"
+  },
+  "nano-banana|v4_override_pinned|blank-prompt": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "0aad7da77d2ed59c"
+  },
+  "nano-banana|v4_override_pinned|no-prompt": {
+   "inputs": [],
+   "notes": [],
+   "params": {},
+   "paramsSame": true
+  },
+  "nano-banana|v4_override_pinned|own-negative": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {
+    "negative_prompt": "blurry, Unrelated style drift"
+   },
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  },
+  "nano-banana|v4_override_pinned|strength-0": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [
+    "Board strength is 0: board not sent"
+   ],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "384d7bb48cd47bd5"
+  },
+  "nano-banana|v4_override_pinned|two-boards": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "74a9f6a61fec964e"
+  },
+  "nano-banana|v4_override_pinned|wired": {
+   "inputs": [
+    "prompt"
+   ],
+   "notes": [],
+   "params": {},
+   "paramsSame": true,
+   "prompt": "57635d4ad2e5ddbd"
+  }
+ }
+}

@@ -1,0 +1,5 @@
+{
+  "_about": "Moodboard adapter entries for Krea catalog nodes, written by scripts/sync-krea-catalog.py from the catalog's port names and request schemas; never edit by hand. The hand-written table is backend/data/moodboard_adapters.json; backend/services/moodboard_adapters.py reads both.",
+  "generatedBy": "scripts/sync-krea-catalog.py",
+  "entries": {}
+}

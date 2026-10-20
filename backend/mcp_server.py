@@ -606,7 +606,17 @@ def describe_node(definition_id: str, ctx: Context | None = None) -> dict[str, A
     on BytePlus keeps the start image's shape and doesn't use aspect_ratio. A local node that calls a provider (Cinema
     Scene's base model, a Video QC node's vision-llm mode) has
     `runsWithOptions`: readiness per value of the param that picks it, and a
-    note when a different value would run with the keys set here."""
+    note when a different value would run with the keys set here.
+    A node with a Moodboard input has `moodboardAdapter`: what a wired Nebula
+    moodboard does there, at its defaults on the route a run takes here
+    (`route`, when it has several). `line` is the card's Moodboard line;
+    `channel`, `default` (images: board images go; text: only the brief),
+    `slots` (the port board images fill, `label`, `max`, `sharesLimitWith`),
+    `needsWired`, `never` (ports the board never fills), `weight` (how board
+    weights reach the model), `text`, `reason` and `unconfirmed` are the
+    table's own facts; `variants` lists the param values or routes that change
+    them ({when, line, changed fields; null = dropped; `route` when that
+    value moves the run to another route})."""
     from urllib.parse import quote
 
     return _canvas_call("GET", f"/api/agent/nodes/{quote(definition_id, safe='')}", ctx)
