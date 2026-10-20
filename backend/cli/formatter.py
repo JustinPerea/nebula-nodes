@@ -166,7 +166,41 @@ def format_node_detail(node: dict[str, Any]) -> str:
         lines.append(f"SIZE: {size_note}")
         lines.append("")
 
+    board = node.get("moodboardAdapter")
+    if isinstance(board, dict):
+        lines.extend(_moodboard_lines(board))
+        lines.append("")
+
     return "\n".join(lines)
+
+
+def _moodboard_lines(board: dict[str, Any]) -> list[str]:
+    """What a wired moodboard does here (describe_node's moodboardAdapter):
+    the card's line, then the channel, weight, ports it skips and the params
+    or routes that change it, on one line."""
+    route = f" (on {board['route']})" if board.get("route") else ""
+    lines = [f"MOODBOARD: {board.get('line')}{route}"]
+    parts = [str(board.get("channel") or board.get("note") or "")]
+    weight = board.get("weight") if isinstance(board.get("weight"), dict) else None
+    if weight:
+        span = weight.get("range")
+        parts.append(" ".join(str(bit) for bit in (
+            "weight", weight.get("mode"), weight.get("field") or weight.get("param"),
+            f"{span[0]}-{span[1]}" if isinstance(span, list) and len(span) == 2 else None) if bit))
+    if board.get("needsWired"):
+        parts.append(f"needs {', '.join(board['needsWired'])} wired")
+    if board.get("never"):
+        parts.append(f"never {', '.join(board['never'])}")
+    for variant in board.get("variants") or []:
+        when = ", ".join(f"{key}={value}" for key, value in (variant.get("when") or {}).items())
+        slots = variant.get("slots")
+        said = (f"up to {slots[0].get('max')}" if isinstance(slots, list) and slots and variant.get("line") == board.get("line")
+                else variant.get("line"))
+        parts.append(f"{when}: {said}")
+    parts = [part for part in parts if part]
+    if parts:
+        lines.append("  " + " · ".join(parts))
+    return lines
 
 
 def _option_condition(only: dict[str, list[Any]], param_when: dict[str, list[Any]]) -> str:

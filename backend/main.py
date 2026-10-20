@@ -1159,7 +1159,7 @@ def _validate_restore_graph(graph: Any) -> dict[str, Any]:
         include_outputs=True,
         normalize_image_inputs=False,
     )
-    _stage_graph_edges(candidate, ingress_edges, id_map)
+    _stage_graph_edges(candidate, ingress_edges, id_map, saved=True)
     return graph
 
 
@@ -3799,6 +3799,9 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
             result["sizeNote"] = size_note
     if access is None:
         result["missing"] = node_readiness.missing(definition, krea_signed_in, definitions)
+    board = _moodboard_adapter(definition, settings)
+    if board is not None:
+        result["moodboardAdapter"] = board
     options = node_readiness.detail(definition, keys, krea_signed_in, definitions)
     if options:
         result["runsWithOptions"] = options
@@ -6375,6 +6378,19 @@ async def get_pricing() -> dict:
     return {"currencies": data.get("currencies") or {}, "nodes": data.get("nodes") or {}}
 
 
+@app.get("/api/moodboard/adapters")
+async def get_moodboard_adapters() -> dict:
+    """How each node takes a wired Nebula moodboard (services/moodboard_adapters.py,
+    contract 07 section 1.16): the hand-written and the generated Krea entries,
+    unresolved. Read per request, like prices."""
+    from services import moodboard_adapters
+
+    try:
+        return moodboard_adapters.public_table()
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=500, detail=f"Moodboard adapter table unavailable: {exc}") from exc
+
+
 @app.get("/api/nodes")
 async def list_nodes() -> dict:
     all_nodes = node_registry.get_all()
@@ -6414,7 +6430,22 @@ async def get_node(node_id: str) -> dict:
         else:
             detail = f"Node '{node_id}' not found"
         raise HTTPException(status_code=404, detail=detail)
-    return node
+    board = _moodboard_adapter(node, load_settings())
+    # `nebula info` prints it; the definition itself stays as registered.
+    return {**node, "moodboardAdapter": board} if board is not None else node
+
+
+def _moodboard_adapter(definition: Mapping[str, Any], settings: Mapping[str, Any]) -> dict[str, Any] | None:
+    """What a wired moodboard does on this node type (moodboard_adapters.describe),
+    for describe_node and `nebula info`; None without a Moodboard port. A table
+    that can't be read leaves it out rather than failing the lookup."""
+    from services import moodboard_adapters
+
+    try:
+        return moodboard_adapters.describe(definition, settings.get("apiKeys") or {})
+    except (OSError, ValueError):
+        logging.getLogger("nebula.moodboard").exception("Moodboard adapter table unavailable")
+        return None
 
 
 # ---------- CLI: Graph management ----------
@@ -6863,8 +6894,13 @@ def _validate_connect_handles(
     dst_port: str,
     *,
     graph: CLIGraph | None = None,
+    saved: bool = False,
 ) -> None:
     """Reject a connection that violates the shared registry contract.
+
+    ``saved``: the edge comes from a saved project, which keeps a wire that
+    was valid before its input port's type changed (port_contracts
+    RETYPED_PORTS); a run refuses it and says what to do instead.
 
     The proposed edge is checked together with existing edges so duplicate
     connections and target-port multiplicity/maxConnections are enforced at
@@ -6908,7 +6944,7 @@ def _validate_connect_handles(
         (issue for issue in result.issues if issue.edge_index == proposed_index),
         None,
     )
-    if proposed_issue is not None:
+    if proposed_issue is not None and not (saved and proposed_issue.kind == "retyped"):
         raise HTTPException(
             status_code=400,
             detail=proposed_issue.message,
@@ -8972,8 +9008,11 @@ def _stage_graph_edges(
     candidate: CLIGraph,
     raw_edges: list[dict[str, Any]],
     id_map: dict[str, str],
+    *,
+    saved: bool = False,
 ) -> list[str]:
-    """Validate every endpoint/handle before adding any edge to live state."""
+    """Validate every endpoint/handle before adding any edge to live state.
+    ``saved``: the edges come from a saved graph (_validate_connect_handles)."""
     edge_ids: list[str] = []
     seen: set[tuple[str, str, str, str]] = set()
     for index, raw in enumerate(raw_edges):
@@ -9008,6 +9047,7 @@ def _stage_graph_edges(
             target,
             target_handle,
             graph=candidate,
+            saved=saved,
         )
         try:
             edge_ids.append(
@@ -9062,7 +9102,7 @@ async def import_graph(body: dict[str, Any]) -> dict:
     _refuse_agent_billing_change(
         (node_id, str(candidate.nodes[node_id].get("definitionId") or ""), _folded_billing_baseline(ref, folded),
          candidate.nodes[node_id].get("params") or {}) for ref, node_id in id_map.items())
-    _stage_graph_edges(candidate, raw_edges, id_map)
+    _stage_graph_edges(candidate, raw_edges, id_map, saved=True)
     with _paid_graph_mutation("replace the graph"):
         _reject_graph_replacement_during_paid_start("replace the graph")
         if execution_runs.has_active() or _synchronous_workspace_runs:
@@ -9495,7 +9535,7 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
             raise HTTPException(status_code=400, detail="Duplicate project connection")
         signatures.add(signature)
         if source in known and target in known:
-            _validate_connect_handles(source, source_handle, target, target_handle, graph=candidate)
+            _validate_connect_handles(source, source_handle, target, target_handle, graph=candidate, saved=True)
         candidate.edges.append({"id": edge_id, "source": source, "sourceHandle": source_handle, "target": target, "targetHandle": target_handle})
     try:
         graph_nodes, graph_edges = candidate.to_execute_format()

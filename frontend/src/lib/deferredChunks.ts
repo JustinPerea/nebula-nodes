@@ -52,6 +52,13 @@ export const DeferredWorldPreview = lazyWithPreload(
   (module) => module.WorldPreview,
 );
 
+// The Moodboard line on a node card (components/nodes/MoodboardAdapterRow.tsx
+// draws its empty box until it arrives), with the adapter table's store.
+export const DeferredMoodboardAdapterLine = lazyWithPreload(
+  () => import('../components/nodes/MoodboardAdapterLine'),
+  (module) => module.MoodboardAdapterLine,
+);
+
 /** Fetch every deferred chunk; called once the canvas is idle after first paint. */
 export const DEFERRED_PRELOADS: readonly (() => Promise<unknown>)[] = [
   DeferredAgentLog.preload,
@@ -61,6 +68,7 @@ export const DEFERRED_PRELOADS: readonly (() => Promise<unknown>)[] = [
   DeferredMeshPreview.preload,
   DeferredWorldPreview.preload,
   DeferredMaskPainterModal.preload,
+  DeferredMoodboardAdapterLine.preload,
 ];
 
 /** Source paths (relative to src/) that must stay out of the startup entry. */
@@ -72,4 +80,7 @@ export const DEFERRED_MODULES: readonly string[] = [
   'components/panels/MaskPainterModal.tsx',
   'components/nodes/MeshPreview.tsx',
   'components/nodes/WorldPreview.tsx',
+  'components/nodes/MoodboardAdapterLine.tsx',
+  'lib/moodboardAdapters.ts',
+  'store/moodboardAdapterStore.ts',
 ];

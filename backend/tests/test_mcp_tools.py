@@ -355,3 +355,95 @@ def test_propose_change_warns_about_run_nodes_that_cannot_run(nebula, monkeypatc
     assert response["proposal"]["cost"]["notReady"][0]["missing"] == "needs OPENAI_API_KEY in Settings > Providers"
     assert "+img (GPT Image 2) needs OPENAI_API_KEY" in response["warning"]
     mcp_server.withdraw_proposal(response["proposal"]["id"])
+
+
+# -- the moodboard adapter table, as agents read it (contract 07 section 1.16) --------------------------
+
+def _call_tool(name: str, arguments: dict) -> dict:
+    """A tool called the way a client calls it, through FastMCP."""
+    result = asyncio.run(mcp_server.mcp.call_tool(name, arguments))
+    if isinstance(result, tuple):
+        structured = result[1]
+        return structured.get("result", structured) if isinstance(structured, dict) else structured
+    return json.loads(result[0].text)
+
+
+def test_describe_node_says_what_a_wired_moodboard_does(nebula):
+    """describe_node carries the node's adapter entry, resolved at its defaults
+    on the route a run takes here: the facts behind the card's Moodboard line."""
+    krea = _call_tool("describe_node", {"definition_id": "krea-2-generate"})["moodboardAdapter"]
+    assert krea["line"] == "Board images: on · up to 10 to Image Style Refs"
+    assert krea["channel"] == "weighted-style" and krea["default"] == "images" and krea["handler"] == "reads-board"
+    assert krea["slots"] == [{"port": "image_style_references", "label": "Image Style Refs", "max": 10,
+                              "sharesLimitWith": ["style_images"]}]
+    assert krea["never"] == ["style_images", "styles"]
+    assert krea["weight"]["mode"] == "native" and krea["weight"]["range"] == [0, 1]
+    assert krea["weight"]["field"] == "strength" and "schema" not in krea["weight"]
+    assert krea["text"] == "brief" and krea["unconfirmed"]
+    for internal in ("sources", "checked", "byModel", "byRoute"):
+        assert internal not in krea
+
+    edit = _call_tool("describe_node", {"definition_id": "gpt-image-2-edit"})["moodboardAdapter"]
+    assert edit["line"] == "Board images: off · the brief goes as text"
+    assert edit["channel"] == "refs" and edit["default"] == "text"
+    assert edit["slots"] == [{"port": "images", "label": "Images", "max": 16}]
+    assert edit["needsWired"] == ["images"] and edit["never"] == ["mask"]
+    assert "variants" not in edit and "route" not in edit
+
+    text_only = mcp_server.describe_node("gpt-image-2-generate")["moodboardAdapter"]
+    assert text_only["line"] == "This model takes the brief as text." and text_only["channel"] == "text-only"
+    assert "slots" not in text_only and text_only["reason"].startswith("Text to image")
+
+    # No Moodboard port: nothing about boards.
+    assert "moodboardAdapter" not in _call_tool("describe_node", {"definition_id": "flux-schnell"})
+    assert "moodboardAdapter" not in mcp_server.describe_node("text-input")
+
+
+def test_describe_node_lists_the_params_and_routes_that_change_the_board(nebula, monkeypatch):
+    import main
+
+    banana = mcp_server.describe_node("nano-banana")["moodboardAdapter"]
+    assert banana["slots"][0]["max"] == 14
+    variants = {json.dumps(variant["when"], sort_keys=True): variant for variant in banana["variants"]}
+    small = variants['{"model": "gemini-2.5-flash-image"}']
+    assert small["slots"] == [{"port": "images", "label": "Images", "max": 3}]
+    assert small["line"] == banana["line"]
+    later = variants['{"model": "gemini-nano-banana-2.1"}']
+    assert later["channel"] == "text-only" and later["line"] == "This model takes the brief as text."
+    assert later["slots"] is None and "Nano Banana 2.1" in later["reason"]
+
+    # The route a run takes here is the one the entry resolves on.
+    real = main.load_settings
+    keys: dict = {}
+    monkeypatch.setattr(main, "load_settings", lambda: {**real(), "apiKeys": dict(keys)})
+    assert "route" not in mcp_server.describe_node("gpt-image-2-fal-edit")["moodboardAdapter"]
+    keys.update({"FAL_KEY": "f"})
+    assert mcp_server.describe_node("gpt-image-2-fal-edit")["moodboardAdapter"]["route"] == "fal"
+    keys.update({"OPENAI_API_KEY": "o"})
+    assert mcp_server.describe_node("gpt-image-2-fal-edit")["moodboardAdapter"]["route"] == "openai"
+
+
+def test_nebula_info_prints_what_a_wired_moodboard_does(nebula, capsys):
+    from cli.client import NebulaClient
+    from cli.commands import nodes
+
+    http, _ = nebula
+    client = NebulaClient("http://testserver")
+    client._client = http
+
+    nodes.run_info(client, "krea-2-generate")
+    out = capsys.readouterr().out
+    board = [line for line in out.splitlines() if line.startswith("MOODBOARD")]
+    assert board == ["MOODBOARD: Board images: on · up to 10 to Image Style Refs"]
+    detail = out.splitlines()[out.splitlines().index(board[0]) + 1]
+    assert "weighted-style" in detail and "weight native strength 0-1" in detail
+    assert "never style_images, styles" in detail
+
+    nodes.run_info(client, "nano-banana")
+    out = capsys.readouterr().out
+    assert "MOODBOARD: Board images: off · the brief goes as text" in out
+    assert "model=gemini-2.5-flash-image: up to 3" in out
+    assert "model=gemini-nano-banana-2.1: This model takes the brief as text." in out
+
+    nodes.run_info(client, "flux-schnell")
+    assert "MOODBOARD" not in capsys.readouterr().out

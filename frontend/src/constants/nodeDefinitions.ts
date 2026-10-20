@@ -8396,7 +8396,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'style_images', label: 'Style Images', dataType: 'Image', required: false, multiple: true, maxConnections: 10, role: 'style' },
       { id: 'image_style_references', label: 'Image Style Refs', dataType: 'Any', required: false, multiple: true, maxConnections: 10 },
       { id: 'styles', label: 'Styles', dataType: 'Any', required: false, multiple: true },
-      { id: 'moodboard', label: 'Moodboard', dataType: 'Any', required: false, maxConnections: 1 },
+      { id: 'moodboard', label: 'Moodboard', dataType: 'Moodboard', required: false, maxConnections: 1 },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },

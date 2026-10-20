@@ -45,6 +45,16 @@ The server exposes these tools for building and running (see
   it as a sentence in its message. `_provider` changes go through
   `propose_change`. See
   [Provider routes](PROVIDER-ROUTES.md#hidden-settings-paramvisiblewhen).
+  A node with a Moodboard input has `moodboardAdapter`: what a wired Nebula
+  moodboard does there, from the adapter table (contract 07 section 1.16) at
+  the node's defaults on the route a run takes here (`route`, when it has
+  more than one). `line` is the card's Moodboard line ("Board images: on ·
+  up to 10 to Image Style Refs"); `channel`, `default`, `slots` (port,
+  `label`, `max`, `sharesLimitWith`), `needsWired`, `never`, `weight`,
+  `text`, `reason` and `unconfirmed` are the entry's fields, and `variants`
+  lists the param values (`byModel`) or routes (`byRoute`) that change them,
+  with the fields they change. `nebula info` prints the same as a
+  `MOODBOARD:` line and one line of detail.
 - `edit_canvas`: adds nodes, wires, param changes, renames and moves in one
   call, all or nothing. Same shape as `propose_change`, with no limit on how
   much one call adds. `arrange: true` has the canvas lay out the new nodes by
