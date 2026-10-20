@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { deleteCharacter, deleteMoodboard } from '../lib/api';
+import { deletePreset } from '../lib/createPresets';
 import { restoreTrashed } from '../lib/trash';
 import type { AssetScope } from '../store/uiStore';
 
@@ -10,13 +11,14 @@ export interface DeletedAsset {
 }
 
 /**
- * Delete a board or character from its Studio, with Undo.
+ * Delete a board or character from its Studio (a Style from the Assets
+ * panel), with Undo.
  *
  * The delete moves it to Recently deleted (backend services/asset_trash.py);
  * Undo restores it with the same id. `refreshKey` changes after each delete
  * or undo so the Studio's Recently deleted list and library rail reload.
  */
-export function useAssetDelete(kind: 'moodboard' | 'character') {
+export function useAssetDelete(kind: 'moodboard' | 'character' | 'style') {
   const [lastDeleted, setLastDeleted] = useState<DeletedAsset | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +28,8 @@ export function useAssetDelete(kind: 'moodboard' | 'character') {
     setBusy(true);
     setError(null);
     try {
-      await (kind === 'moodboard' ? deleteMoodboard(asset.id) : deleteCharacter(asset.id));
+      await (kind === 'moodboard' ? deleteMoodboard(asset.id)
+        : kind === 'style' ? deletePreset(asset.id) : deleteCharacter(asset.id));
       setLastDeleted(asset);
       return true;
     } catch (err) {

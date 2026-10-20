@@ -1,0 +1,663 @@
+{
+  "_about": "How each node takes a wired Nebula moodboard: moodboard canvas plan section 5.7, contract 07 section 1.16. Hand-written; the Krea catalog's entries are generated into moodboard_adapters_krea.json by scripts/sync-krea-catalog.py. Entries are sorted by node id. The checks are section 5.7.10's, in backend/services/moodboard_adapters.py (table_problems) and scripts/check-node-contracts.mjs.",
+  "entries": {
+    "fast-sdxl": {
+      "channel": "text-only",
+      "textSlot": {
+        "port": "prompt"
+      },
+      "text": "brief",
+      "negativeField": "auto",
+      "reason": "Text to image: no image input on this node.",
+      "sources": [
+        {
+          "code": "backend/data/node_definitions.json",
+          "quote": "fast-sdxl inputPorts: prompt, moodboard; params include negative_prompt"
+        }
+      ],
+      "checked": "2026-10-20"
+    },
+    "flux-2-pro": {
+      "channel": "text-only",
+      "textSlot": {
+        "port": "prompt"
+      },
+      "text": "brief",
+      "reason": "Takes no images on this node: FLUX.2's reference images (input_image to input_image_8 on BFL) aren't ports here, a node gap (plan section 8).",
+      "sources": [
+        {
+          "code": "backend/data/node_definitions.json",
+          "quote": "flux-2-pro inputPorts: prompt, moodboard"
+        },
+        {
+          "code": "backend/tests/fixtures/provider_schemas/bfl.json",
+          "quote": "input_image_2: Path to the second input image."
+        }
+      ],
+      "checked": "2026-10-20"
+    },
+    "gpt-image-1-5": {
+      "channel": "text-only",
+      "textSlot": {
+        "port": "prompt"
+      },
+      "text": "brief",
+      "reason": "Text to image: no image input on this node (GPT Image 1.5 Edit is the node that takes images).",
+      "sources": [
+        {
+          "code": "backend/data/node_definitions.json",
+          "quote": "gpt-image-1-5 inputPorts: prompt, moodboard"
+        }
+      ],
+      "checked": "2026-10-20"
+    },
+    "gpt-image-1-5-edit": {
+      "channel": "refs",
+      "default": "text",
+      "slots": [
+        {
+          "port": "images",
+          "max": 16
+        }
+      ],
+      "needsWired": [
+        "images"
+      ],
+      "textSlot": {
+        "port": "prompt"
+      },
+      "text": "brief",
+      "weight": {
+        "mode": "select",
+        "normalize": "rank"
+      },
+      "order": "weight",
+      "syntax": "Image {n}",
+      "sources": [
+        {
+          "url": "https://developers.openai.com/api/reference/resources/images",
+          "quote": "For GPT image models, you can provide up to 16 images.",
+          "checked": "2026-10-14"
+        },
+        {
+          "code": "backend/execution/maker_routes_openai.py:259",
+          "quote": "OpenAI image edits take up to {MAX_REFERENCE_IMAGES} images (16)"
+        },
+        {
+          "code": "backend/handlers/fal_universal.py:197",
+          "quote": "Multi-image port (gpt-image-1-5-edit, seedance-2-r2v) -> image_urls list"
+        }
+      ],
+      "checked": "2026-10-20",
+      "unconfirmed": [
+        "syntax: how this model reads image numbers in the prompt (PR14's legend writer settles it)",
+        "slots.images.max on the fal route: fal's limit isn't in its schema or the code (16 is OpenAI's)"
+      ]
+    },
+    "gpt-image-1-edit": {
+      "channel": "text-only",
+      "textSlot": {
+        "port": "prompt"
+      },
+      "text": "brief",
+      "never": [
+        "image",
+        "mask"
+      ],
+      "reason": "Its one image is the edit target, so there is no free slot for board images (plan section 5.7.11 A).",
+      "sources": [
+        {
+          "code": "backend/data/node_definitions.json",
+          "quote": "gpt-image-1-edit inputPorts: image (required), prompt, mask, moodboard"
+        }
+      ],
+      "checked": "2026-10-20"
+    },
+    "gpt-image-1-generate": {
+      "channel": "text-only",
+      "textSlot": {
+        "port": "prompt"
+      },
+      "text": "brief",
+      "reason": "Text to image: no image input on this node.",
+      "sources": [
+        {
+          "code": "backend/data/node_definitions.json",
+          "quote": "gpt-image-1-generate inputPorts: prompt, moodboard"
+        }
+      ],
+      "checked": "2026-10-20"
+    },
+    "gpt-image-2-5-edit": {
+      "channel": "refs",
+      "default": "text",
+      "slots": [
+        {
+          "port": "images",
+          "max": 16
+        }
+      ],
+      "needsWired": [
+        "images"
+      ],
+      "never": [
+        "mask"
+      ],
+      "textSlot": {
+        "port": "prompt"
+      },
+      "text": "brief",
+      "weight": {
+        "mode": "select",
+        "normalize": "rank"
+      },
+      "order": "weight",
+      "syntax": "Image {n}",
+      "sources": [
+        {
+          "url": "https://developers.openai.com/api/reference/resources/images",
+          "quote": "For GPT image models, you can provide up to 16 images.",
+          "checked": "2026-10-14"
+        },
+        {
+          "code": "backend/handlers/openai_image_v2.py:306",
+          "quote": "handle_gpt_image_25_edit runs handle_gpt_image_2_edit, which takes up to MAX_EDIT_IMAGES = 16"
+        }
+      ],
+      "checked": "2026-10-20",
+      "unconfirmed": [
+        "syntax: how this model reads image numbers in the prompt (PR14's legend writer settles it)"
+      ]
+    },
+    "gpt-image-2-5-generate": {
+      "channel": "text-only",
+      "textSlot": {
+        "port": "prompt"
+      },
+      "text": "brief",
+      "reason": "Text to image: no image input on this node (GPT Image 2.5 Edit takes images).",
+      "sources": [
+        {
+          "code": "backend/data/node_definitions.json",
+          "quote": "gpt-image-2-5-generate inputPorts: prompt, moodboard"
+        }
+      ],
+      "checked": "2026-10-20"
+    },
+    "gpt-image-2-edit": {
+      "channel": "refs",
+      "default": "text",
+      "slots": [
+        {
+          "port": "images",
+          "max": 16
+        }
+      ],
+      "needsWired": [
+        "images"
+      ],
+      "never": [
+        "mask"
+      ],
+      "textSlot": {
+        "port": "prompt"
+      },
+      "text": "brief",
+      "weight": {
+        "mode": "select",
+        "normalize": "rank"
+      },
+      "order": "weight",
+      "syntax": "Image {n}",
+      "sources": [
+        {
+          "url": "https://developers.openai.com/api/reference/resources/images",
+          "quote": "For GPT image models, you can provide up to 16 images.",
+          "checked": "2026-10-14"
+        },
+        {
+          "code": "backend/handlers/openai_image_v2.py:145",
+          "quote": "MAX_EDIT_IMAGES = 16"
+        },
+        {
+          "code": "backend/handlers/openai_image_v2.py:179",
+          "quote": "if len(image_paths) > MAX_EDIT_IMAGES: raise ValueError"
+        }
+      ],
+      "checked": "2026-10-20",
+      "unconfirmed": [
+        "syntax: how this model reads image numbers in the prompt (PR14's legend writer settles it)"
+      ]
+    },
+    "gpt-image-2-fal-edit": {
+      "channel": "refs",
+      "default": "text",
+      "slots": [
+        {
+          "port": "images",
+          "max": 16
+        }
+      ],
+      "needsWired": [
+        "images"
+      ],
+      "textSlot": {
+        "port": "prompt"
+      },
+      "text": "brief",
+      "weight": {
+        "mode": "select",
+        "normalize": "rank"
+      },
+      "order": "weight",
+      "syntax": "Image {n}",
+      "sources": [
+        {
+          "url": "https://developers.openai.com/api/reference/resources/images",
+          "quote": "For GPT image models, you can provide up to 16 images.",
+          "checked": "2026-10-14"
+        },
+        {
+          "code": "backend/execution/maker_routes_openai.py:259",
+          "quote": "OpenAI image edits take up to {MAX_REFERENCE_IMAGES} images (16)"
+        },
+        {
+          "code": "backend/handlers/fal_universal.py:197",
+          "quote": "images -> image_urls list"
+        }
+      ],
+      "checked": "2026-10-20",
+      "unconfirmed": [
+        "syntax: how this model reads image numbers in the prompt (PR14's legend writer settles it)",
+        "slots.images.max on the fal route: fal's limit isn't in its schema or the code (16 is OpenAI's)"
+      ]
+    },
+    "gpt-image-2-fal-generate": {
+      "channel": "text-only",
+      "textSlot": {
+        "port": "prompt"
+      },
+      "text": "brief",
+      "reason": "Text to image: no image input on this node (GPT Image 2 Edit (FAL) takes images).",
+      "sources": [
+        {
+          "code": "backend/data/node_definitions.json",
+          "quote": "gpt-image-2-fal-generate inputPorts: prompt, moodboard"
+        }
+      ],
+      "checked": "2026-10-20"
+    },
+    "gpt-image-2-generate": {
+      "channel": "text-only",
+      "textSlot": {
+        "port": "prompt"
+      },
+      "text": "brief",
+      "reason": "Text to image: no image input on this node (GPT Image 2 Edit takes images).",
+      "sources": [
+        {
+          "code": "backend/data/node_definitions.json",
+          "quote": "gpt-image-2-generate inputPorts: prompt, moodboard"
+        }
+      ],
+      "checked": "2026-10-20"
+    },
+    "krea-2-generate": {
+      "channel": "weighted-style",
+      "default": "images",
+      "handler": "reads-board",
+      "slots": [
+        {
+          "port": "image_style_references",
+          "max": 10,
+          "sharesLimitWith": [
+            "style_images"
+          ]
+        }
+      ],
+      "never": [
+        "style_images",
+        "styles"
+      ],
+      "textSlot": {
+        "port": "prompt"
+      },
+      "text": "brief",
+      "weight": {
+        "mode": "native",
+        "field": "strength",
+        "range": [
+          0,
+          1
+        ],
+        "normalize": "sum-to-strength",
+        "precision": 0.0001,
+        "schema": {
+          "source": "krea-catalog",
+          "endpoints": [
+            "/generate/image/krea/krea-2/medium",
+            "/generate/image/krea/krea-2/large"
+          ],
+          "field": "image_style_references"
+        }
+      },
+      "order": "weight",
+      "syntax": null,
+      "syntaxReason": "The weight is native: each board image goes with its own strength (Q21 b), so the prompt names none.",
+      "costPerRef": "priced",
+      "sources": [
+        {
+          "url": "https://www.krea.ai/docs/api-reference/image/krea-2-medium.md",
+          "quote": "image_style_references: Image style references. (0 = no style influence, 1 = maximum). Default 0.5. maxItems: 10; strength minimum: 0, maximum: 1",
+          "checked": "2026-10-20"
+        },
+        {
+          "url": "https://www.krea.ai/docs/developers/krea-2/style-transfer.md",
+          "quote": "The references blend additively — start with strengths that sum near `1.0` and tune from there.",
+          "checked": "2026-10-20"
+        },
+        {
+          "code": "backend/data/krea_gateway_models.json",
+          "quote": "/generate/image/krea/krea-2/medium and /large: image_style_references maxItems 10, items.strength minimum 0, maximum 1"
+        },
+        {
+          "code": "backend/handlers/krea.py:406",
+          "quote": "_collect_native_moodboard_style_references: remaining_slots=max(0, 10 - len(image_refs)), strengths from native_strengths"
+        },
+        {
+          "code": "backend/data/model_pricing.json",
+          "quote": "krea-2-generate priceParams include (wired moodboard)"
+        }
+      ],
+      "checked": "2026-10-20",
+      "unconfirmed": [
+        "Krea's guide says \"Set `strength` between -2 and 2 per reference\" (style-transfer.md, read 2026-10-20); the schema its gateway enforces says 0 to 1, which Nebula uses"
+      ]
+    },
+    "nano-banana": {
+      "channel": "refs",
+      "default": "text",
+      "slots": [
+        {
+          "port": "images",
+          "max": 14
+        }
+      ],
+      "textSlot": {
+        "port": "prompt"
+      },
+      "text": "brief",
+      "weight": {
+        "mode": "select",
+        "normalize": "rank"
+      },
+      "order": "weight",
+      "syntax": "Image {n}",
+      "byModel": {
+        "model=gemini-2.5-flash-image": {
+          "slots": [
+            {
+              "port": "images",
+              "max": 3
+            }
+          ]
+        },
+        "model=gemini-nano-banana-2.1": {
+          "channel": "text-only",
+          "reason": "Board images aren't sent to Nano Banana 2.1 yet: its limits aren't confirmed (plan section 5.7.11 A)."
+        }
+      },
+      "sources": [
+        {
+          "url": "https://ai.google.dev/gemini-api/docs/image-generation",
+          "quote": "Up to 14 reference images: Mix up to 14 reference images to produce the final image.",
+          "checked": "2026-10-14"
+        },
+        {
+          "code": "backend/cinema/art_direction.py:138",
+          "quote": "reference_cap_for: nano-banana 14 for gemini-3.1-flash-image, -3.1-flash-lite-image, -3-pro-image; 3 for gemini-2.5-flash-image"
+        }
+      ],
+      "checked": "2026-10-20",
+      "unconfirmed": [
+        "syntax: how this model reads image numbers in the prompt (PR14's legend writer settles it)",
+        "Google's per-role counts (3.1 Flash: 10 object + 4 character, no style; 3 Pro: 6 + 5 + 3) are from the research note only, and which one caps board images (PR14 settles it from Google's page)",
+        "costPerRef: reference images are in the price row's high end (sync-krea-catalog.py with_references), set with PR14's switch"
+      ]
+    },
+    "nano-banana-fal": {
+      "channel": "text-only",
+      "textSlot": {
+        "port": "prompt"
+      },
+      "text": "brief",
+      "reason": "Text to image on fal: no image input on this node (Nano Banana Edit (FAL) takes images).",
+      "sources": [
+        {
+          "code": "backend/data/node_definitions.json",
+          "quote": "nano-banana-fal inputPorts: prompt, moodboard"
+        }
+      ],
+      "checked": "2026-10-20"
+    },
+    "nano-banana-fal-edit": {
+      "channel": "refs",
+      "default": "text",
+      "slots": [
+        {
+          "port": "images",
+          "max": 14
+        }
+      ],
+      "needsWired": [
+        "images"
+      ],
+      "textSlot": {
+        "port": "prompt"
+      },
+      "text": "brief",
+      "weight": {
+        "mode": "select",
+        "normalize": "rank"
+      },
+      "order": "weight",
+      "syntax": "Image {n}",
+      "byModel": {
+        "model=nano-banana": {
+          "slots": [
+            {
+              "port": "images",
+              "max": 3
+            }
+          ]
+        },
+        "model=gemini-25-flash-image": {
+          "slots": [
+            {
+              "port": "images",
+              "max": 3
+            }
+          ]
+        }
+      },
+      "sources": [
+        {
+          "url": "https://ai.google.dev/gemini-api/docs/image-generation",
+          "quote": "Up to 14 reference images: Mix up to 14 reference images to produce the final image.",
+          "checked": "2026-10-14"
+        },
+        {
+          "code": "backend/cinema/art_direction.py:138",
+          "quote": "reference_cap_for: nano-banana-fal-edit 14 for nano-banana-2, nano-banana-pro, gemini-3-pro-image; 3 for nano-banana, gemini-25-flash-image"
+        },
+        {
+          "code": "backend/handlers/fal_universal.py:213",
+          "quote": "Nano Banana edit requires at least one reference image"
+        }
+      ],
+      "checked": "2026-10-20",
+      "unconfirmed": [
+        "syntax: how this model reads image numbers in the prompt (PR14's legend writer settles it)"
+      ]
+    }
+  },
+  "census": {
+    "_about": "Plan section 5.7.10 rule 12: every image, video and audio generator with a prompt has a Moodboard port and an entry, or is listed here. excluded: never a board, with the reason. pending: the PR that gives it a port; that PR moves it into entries.",
+    "categories": [
+      "image-gen",
+      "video-gen",
+      "audio-gen"
+    ],
+    "excluded": {
+      "flux-video-edit": "Edits an existing clip: the board doesn't direct an edit of footage (plan section 5.7.11 E).",
+      "identity-edit": "Edits a person's identity in an existing image from a Character, not a description (plan section 5.7.11 E).",
+      "krea-audio-elevenlabs-tts": "Speech: reads its text aloud, nothing a board can direct (plan section 5.7.11 E).",
+      "openai-stt": "Transcription: its prompt is a spelling hint for the audio, not a description (plan section 5.7.11 E).",
+      "openai-translate": "Translation: its prompt guides the transcript's wording, not a description (plan section 5.7.11 E)."
+    },
+    "pending": {
+      "elevenlabs-music": "PR18",
+      "flux-1-1-ultra": "PR16",
+      "flux-3-image": "PR16",
+      "flux-3-image-klein": "PR16",
+      "flux-3-image-klein-base": "PR16",
+      "flux-3-video": "PR17",
+      "flux-fill-inpaint": "PR16",
+      "flux-kontext": "PR16",
+      "flux-schnell": "PR16",
+      "gemini-omni-flash": "PR17",
+      "grok-imagine-image": "PR16",
+      "grok-imagine-image-edit": "PR16",
+      "grok-imagine-video": "PR17",
+      "higgsfield": "PR17",
+      "hunyuan-video": "PR17",
+      "ideogram-character": "PR15",
+      "ideogram-edit": "PR15",
+      "ideogram-edit-prompt": "PR16",
+      "ideogram-remix": "PR15",
+      "ideogram-replace-background": "PR15",
+      "ideogram-transparent": "PR16",
+      "ideogram-v4": "PR16",
+      "kling-motion": "PR17",
+      "kling-o3": "PR17",
+      "kling-o3-ref": "PR17",
+      "kling-pro": "PR17",
+      "kling-v2-1": "PR17",
+      "kling-v3": "PR17",
+      "krea-3": "PR16",
+      "krea-audio-bytedance-seed-audio-1-0": "PR18",
+      "krea-audio-elevenlabs-music": "PR18",
+      "krea-audio-elevenlabs-music-v2": "PR18",
+      "krea-audio-elevenlabs-music-v2-5": "PR18",
+      "krea-image-alibaba-qwen-image-2-1": "PR15",
+      "krea-image-alibaba-qwen-image-3": "PR15",
+      "krea-image-bfl-flux-1-1-pro": "PR16",
+      "krea-image-bfl-flux-1-1-pro-ultra": "PR16",
+      "krea-image-bfl-flux-1-dev": "PR15",
+      "krea-image-bfl-flux-1-kontext-dev": "PR15",
+      "krea-image-bytedance-seededit": "PR16",
+      "krea-image-bytedance-seedream-4": "PR15",
+      "krea-image-bytedance-seedream-5-lite": "PR15",
+      "krea-image-bytedance-seedream-5-pro": "PR15",
+      "krea-image-google-nano-banana": "PR16",
+      "krea-image-google-nano-banana-2": "PR16",
+      "krea-image-google-nano-banana-2-1": "PR16",
+      "krea-image-google-nano-banana-flash-lite": "PR16",
+      "krea-image-google-nano-banana-pro": "PR16",
+      "krea-image-ideogram-ideogram-2-turbo": "PR16",
+      "krea-image-ideogram-ideogram-3": "PR15",
+      "krea-image-ideogram-ideogram-4-5": "PR16",
+      "krea-image-ideogram-ideogram-4-5-precise": "PR16",
+      "krea-image-krea-krea-2-large": "PR15",
+      "krea-image-krea-krea-2-medium": "PR15",
+      "krea-image-krea-krea-2-medium-turbo": "PR15",
+      "krea-image-luma-uni-1": "PR15",
+      "krea-image-meta-muse-image": "PR15",
+      "krea-image-openai-gpt-image": "PR16",
+      "krea-image-openai-gpt-image-2": "PR16",
+      "krea-image-openai-gpt-image-2-5-flare": "PR16",
+      "krea-image-openai-gpt-image-2-5-sunburst": "PR16",
+      "krea-image-qwen-2512": "PR16",
+      "krea-image-recraft-recraft-v4-1-flash": "PR16",
+      "krea-image-runway-gen-4-image": "PR15",
+      "krea-image-xai-grok-imagine-2": "PR15",
+      "krea-image-xai-grok-imagine-2-edit": "PR16",
+      "krea-image-z-image-z-image": "PR15",
+      "krea-video-alibaba-wan-2-1": "PR17",
+      "krea-video-alibaba-wan-2-2": "PR17",
+      "krea-video-alibaba-wan-2-5": "PR17",
+      "krea-video-alibaba-wan-3-0": "PR17",
+      "krea-video-bytedance-seedance-1-0-pro": "PR17",
+      "krea-video-bytedance-seedance-1-0-pro-fast": "PR17",
+      "krea-video-bytedance-seedance-2": "PR17",
+      "krea-video-bytedance-seedance-2-5": "PR17",
+      "krea-video-bytedance-seedance-2-fast": "PR17",
+      "krea-video-bytedance-seedance-2-mini": "PR17",
+      "krea-video-google-gemini-omni-flash": "PR17",
+      "krea-video-google-gemini-omni-flash-1-1": "PR17",
+      "krea-video-google-veo-2": "PR17",
+      "krea-video-google-veo-3": "PR17",
+      "krea-video-google-veo-3-1": "PR17",
+      "krea-video-google-veo-3-1-fast": "PR17",
+      "krea-video-google-veo-3-1-lite": "PR17",
+      "krea-video-google-veo-3-fast": "PR17",
+      "krea-video-kling-kling-2-5": "PR17",
+      "krea-video-kling-kling-2-6": "PR17",
+      "krea-video-kling-kling-3-0": "PR17",
+      "krea-video-kling-kling-o1": "PR17",
+      "krea-video-lightricks-ltx-video-2-3-22b": "PR17",
+      "krea-video-lightricks-ltx-video-2-5-fast": "PR17",
+      "krea-video-lightricks-ltx-video-2-5-pro": "PR17",
+      "krea-video-luma-ray-2": "PR17",
+      "krea-video-minimax-h3-max": "PR17",
+      "krea-video-minimax-h3-max-camera-controls": "PR17",
+      "krea-video-minimax-h3-max-turbo": "PR17",
+      "krea-video-minimax-hailuo": "PR17",
+      "krea-video-minimax-hailuo-02": "PR17",
+      "krea-video-minimax-hailuo-2-3": "PR17",
+      "krea-video-minimax-hailuo-2-3-fast": "PR17",
+      "krea-video-minimax-hailuo-3": "PR17",
+      "krea-video-runway-gen-4-5": "PR17",
+      "krea-video-runway-gen-4-video": "PR17",
+      "krea-video-vidu-q3": "PR17",
+      "krea-video-xai-grok-video": "PR17",
+      "krea-video-xai-grok-video-1-5": "PR17",
+      "ltx-2-3": "PR17",
+      "ltx-2-3-fast-t2v": "PR17",
+      "ltx-audio-to-video": "PR17",
+      "ltx-video-2": "PR17",
+      "luma-ray2-flash-modify": "PR17",
+      "luma-ray2-i2v": "PR17",
+      "luma-ray2-t2v": "PR17",
+      "lyria-3": "PR18",
+      "meshy-image-to-image": "PR16",
+      "meshy-text-to-image": "PR16",
+      "minimax-i2v": "PR17",
+      "minimax-s2v": "PR17",
+      "minimax-t2v": "PR17",
+      "mmaudio-v2": "PR18",
+      "pika-i2v": "PR17",
+      "pixverse-v4-5": "PR17",
+      "quiver-arrow-generate": "PR16",
+      "recraft-v4-raster": "PR15",
+      "recraft-v4-svg": "PR15",
+      "runway-aleph": "PR17",
+      "runway-image": "PR15",
+      "runway-video": "PR17",
+      "seedance-1-0-t2v": "PR17",
+      "seedance-2-fast-i2v": "PR17",
+      "seedance-2-fast-t2v": "PR17",
+      "seedance-2-i2v": "PR17",
+      "seedance-2-r2v": "PR17",
+      "seedance-2-t2v": "PR17",
+      "seedance-v1-5": "PR17",
+      "seedream-4-5": "PR16",
+      "stable-audio-25": "PR18",
+      "veo-3": "PR17",
+      "veo-3-flf": "PR17",
+      "wan-2-6-i2v": "PR17",
+      "wan-2-6-r2v": "PR17",
+      "wan-2-6-t2v": "PR17"
+    }
+  }
+}

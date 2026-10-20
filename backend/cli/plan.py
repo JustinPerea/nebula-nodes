@@ -1,17 +1,20 @@
 """Plans for `nebula propose` and `nebula apply`: one body shape, two routes.
 
-A plan adds nodes (with +refs), wires them, and changes params on existing
-nodes. `propose` sends it to the person (POST /api/canvas/proposals) and may
-ask for runs; `apply` edits the canvas directly (POST /api/graph/apply, the
-MCP server's edit_canvas) and may also rename, move, remove and unwire, but
-never runs anything. So one file of nodes, edges and params works with both.
+A plan adds nodes (with +refs), wires them, names them, and changes params on
+existing nodes. `propose` sends it to the person (POST /api/canvas/proposals)
+and may ask for runs, and names only its own new nodes; `apply` edits the
+canvas directly (POST /api/graph/apply, the MCP server's edit_canvas) and may
+also rename existing nodes, move, remove and unwire, but never runs anything.
+So one file of nodes, edges, params and names for new nodes works with both.
 
 `apply` also takes a plan of steps, {"note"?, "steps": [plan, plan, ...]}.
 The CLI sends each step as its own edit, in order; each lands whole or not
 at all. A step can use the +refs earlier steps created (`+mood` in step 2
 means the node step 1 made for `+mood`): the CLI swaps in the node ids each
 apply returned in `idMap`, so the backend never holds plan state. A step may
-set `arrange` to have the canvas lay out that step's new nodes.
+set `arrange` to have the canvas lay out that step's new nodes. The checks
+and the stop-and-report rule live in backend/apply_steps.py, shared with the
+MCP server's edit_canvas(steps=...).
 """
 from __future__ import annotations
 
@@ -21,9 +24,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import apply_steps
+
 # Keys only `nebula apply` sends (a proposal can't do these).
-APPLY_ONLY = ("rename", "move", "remove", "unwire", "arrange")
-_STEP_KEYS = frozenset({"note", "steps"})
+APPLY_ONLY = ("move", "remove", "unwire", "arrange")
+RENAME_EXISTING = "Rename existing nodes with edit_canvas (or `nebula rename`)"
 
 
 class BuildError(ValueError):
@@ -170,97 +175,16 @@ def build_body(
     return body
 
 
-# Where a plan names a node: these may hold a +ref from an earlier step.
-def _named_nodes(step: dict[str, Any]) -> list[str]:
-    names: list[str] = []
-    for key in ("edges", "unwire"):
-        for wire in step.get(key) or []:
-            if isinstance(wire, dict):
-                names.extend(str(wire.get(end)) for end in ("source", "target") if isinstance(wire.get(end), str))
-    for change in step.get("params") or []:
-        if isinstance(change, dict) and isinstance(change.get("nodeId"), str):
-            names.append(change["nodeId"])
-    for key in ("rename", "move"):
-        if isinstance(step.get(key), dict):
-            names.extend(str(name) for name in step[key])
-    names.extend(str(item) for item in step.get("remove") or [] if isinstance(item, str))
-    return names
-
-
-def _declared(step: dict[str, Any]) -> list[str]:
-    return [str(node["ref"]) for node in step.get("nodes") or []
-            if isinstance(node, dict) and isinstance(node.get("ref"), str)]
-
-
 def check_steps(body: dict[str, Any], *, note: str | None = None) -> list[dict[str, Any]]:
-    """A steps plan's steps, checked before anything is sent.
-
-    Each step is a plan without `run`. A +ref is created once across all
-    steps, and a step may only use refs it or an earlier step creates, so a
-    typo is caught before step 1 lands. `note` (from --note) fills in steps
-    that have none, after the plan's own top-level note."""
-    unknown = sorted(set(body) - _STEP_KEYS)
-    if unknown:
-        raise BuildError(f"a plan with steps holds only note and steps; move '{unknown[0]}' into a step")
-    raw = body.get("steps")
-    if not isinstance(raw, list) or not raw:
-        raise BuildError("steps must be a non-empty list of plans")
-    default_note = note or body.get("note") or ""
-    created: dict[str, int] = {}
-    steps: list[dict[str, Any]] = []
-    for number, step in enumerate(raw, start=1):
-        if not isinstance(step, dict):
-            raise BuildError(f"step {number} must be a JSON object (a plan)")
-        if "steps" in step:
-            raise BuildError(f"step {number} has its own steps; steps don't nest")
-        if "run" in step:
-            raise BuildError(f"step {number} has run, and apply never runs anything: run the nodes with "
-                             "`nebula run` after the plan is applied")
-        if not any(step.get(key) for key in ("nodes", "edges", "params", "rename", "move", "remove", "unwire")):
-            raise BuildError(f"step {number} changes nothing; give it nodes, edges, params, rename, move, "
-                             "remove or unwire, or drop it")
-        if step.get("arrange") and not step.get("nodes"):
-            raise BuildError(f"step {number} has arrange but adds no nodes; arrange lays out the nodes its own "
-                             "step adds, so put it on the step that adds them")
-        mine = _declared(step)
-        for ref in mine:
-            if ref in created:
-                raise BuildError(f"step {number} creates {ref}, which step {created[ref]} already created; "
-                                 "a ref names one node across all steps")
-        for name in _named_nodes(step):
-            if name.startswith("+") and name not in mine and name not in created:
-                raise BuildError(f"step {number} uses {name}, which neither it nor an earlier step creates")
-        created.update({ref: number for ref in mine})
-        step = dict(step)
-        if not step.get("note"):
-            step.pop("note", None)
-            if default_note:
-                step["note"] = default_note
-        steps.append(step)
-    return steps
+    """A steps plan's steps, checked before anything is sent (apply_steps.check_steps,
+    shared with the MCP server's edit_canvas)."""
+    try:
+        return apply_steps.check_steps(body, note=note)
+    except apply_steps.PlanError as exc:
+        raise BuildError(str(exc)) from exc
 
 
-def resolve_step(step: dict[str, Any], id_map: dict[str, str]) -> dict[str, Any]:
-    """The step with +refs from earlier steps replaced by the node ids they became."""
-    own = set(_declared(step))
-
-    def swap(name: Any) -> Any:
-        return id_map.get(name, name) if isinstance(name, str) and name not in own else name
-
-    out = dict(step)
-    for key in ("edges", "unwire"):
-        if isinstance(step.get(key), list):
-            out[key] = [{**wire, "source": swap(wire.get("source")), "target": swap(wire.get("target"))}
-                        if isinstance(wire, dict) else wire for wire in step[key]]
-    if isinstance(step.get("params"), list):
-        out["params"] = [{**change, "nodeId": swap(change.get("nodeId"))} if isinstance(change, dict) else change
-                         for change in step["params"]]
-    for key in ("rename", "move"):
-        if isinstance(step.get(key), dict):
-            out[key] = {swap(name): value for name, value in step[key].items()}
-    if isinstance(step.get("remove"), list):
-        out["remove"] = [swap(item) for item in step["remove"]]
-    return out
+resolve_step = apply_steps.resolve_step
 
 
 def read_plan(source: str) -> dict[str, Any]:
@@ -275,13 +199,24 @@ def read_plan(source: str) -> dict[str, Any]:
     return body
 
 
+def _refuse_apply_only_flags(args: argparse.Namespace) -> None:
+    """`nebula propose` takes `nebula apply`'s other options only to name them."""
+    for flag in APPLY_ONLY:
+        if getattr(args, flag, None):
+            raise BuildError(f"`nebula propose` doesn't take --{flag}: a proposal adds nodes, wires, param changes, "
+                             f"names for its new nodes and runs, for the person to accept. `nebula apply --{flag}` "
+                             "does it directly.")
+
+
 def body_from_args(args: argparse.Namespace, *, command: str) -> dict[str, Any]:
     """The body for `nebula propose` or `nebula apply`, from --file or the builder flags."""
+    if command == "propose":
+        _refuse_apply_only_flags(args)
     flags = {
         "add": args.add, "param": _flatten(args.param), "set_params": args.set_params, "wire": args.wire,
-        "at": args.at,
+        "at": args.at, "rename": getattr(args, "rename", None) or [],
         **({"run": args.run} if command == "propose" else {
-            "rename": args.rename, "move": args.move, "remove": args.remove, "unwire": args.unwire,
+            "move": args.move, "remove": args.remove, "unwire": args.unwire,
             "arrange": getattr(args, "arrange", None)}),
     }
     if args.file:
@@ -315,7 +250,11 @@ def body_from_args(args: argparse.Namespace, *, command: str) -> dict[str, Any]:
         extra = [key for key in APPLY_ONLY if key in body]
         if extra:
             raise BuildError(f"a proposal can't {extra[0]}; `nebula apply` edits the canvas directly "
-                             f"(rename, move, remove, unwire, arrange)")
+                             f"(move, remove, unwire, arrange, and renaming existing nodes)")
+        existing = [name for name in (body.get("rename") or {}) if isinstance(name, str) and not name.startswith("+")]
+        if existing:
+            raise BuildError(f"{RENAME_EXISTING}; a proposal names only the nodes it adds ({existing[0]} is "
+                             "on the canvas already)")
     return body
 
 

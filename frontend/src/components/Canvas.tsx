@@ -8,8 +8,6 @@ import {
   useInternalNode,
   useStore,
   type Connection,
-  type NodeTypes,
-  type EdgeTypes,
   type OnConnectEnd,
   type OnConnectStart,
   type Viewport,
@@ -19,22 +17,9 @@ import '@xyflow/react/dist/style.css';
 import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { useIsValidConnection } from '../hooks/useIsValidConnection';
-import { ModelNode } from './nodes/ModelNode';
-import { DynamicNode } from './nodes/DynamicNode';
-import { RerouteNode } from './nodes/RerouteNode';
-import { EditNode } from './nodes/EditNode';
-import { RemotionNode } from './nodes/RemotionNode';
-import { CinemaSceneNode } from './nodes/CinemaSceneNode';
-import { CharacterNode } from './nodes/CharacterNode';
-import { CameraRigNode } from './nodes/CameraRigNode';
-import { ReferenceSetNode } from './nodes/ReferenceSetNode';
-import { MoodboardNode } from './nodes/MoodboardNode';
-import { VideoQcNode } from './nodes/VideoQcNode';
-import { PaperSourceNode } from './nodes/PaperSourceNode';
-import { BatchNode } from './nodes/BatchNode';
-import { TypedEdge } from './edges/TypedEdge';
+import { CANVAS_EDGE_TYPES, CANVAS_NODE_TYPES } from './canvasTypes';
 import { ContextMenu } from './ContextMenu';
-import { ConnectionPopup } from './DeferredPanels';
+import { AgentNoteOutlines, ConnectionPopup } from './DeferredPanels';
 import { SelectionToolbar } from './SelectionToolbar';
 import { CanvasNavigation } from './CanvasNavigation';
 import { AgentCursorLayer } from './canvas/AgentCursorLayer';
@@ -51,33 +36,18 @@ import { apiFetch } from '../lib/backend';
 import { CANVAS_INTERACTION_PROPS } from '../lib/canvasNavigation';
 import { CANVAS_FIT_DURATION, CANVAS_ZOOM_DURATION, computeCanvasFitPadding } from '../lib/canvasFit';
 import { useFitCanvasView } from '../hooks/useFitCanvasView';
+import { cameraMoveIsCanvasOwn, cameraMoveStarted, claimCameraMove } from '../lib/canvasCameraOwner';
 import { CANVAS_LOD_ZOOM } from '../lib/canvasOverview';
 import { isCanvasShortcutTarget } from '../lib/canvasShortcutScope';
 import { boundingRect, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
+import { visibleFlowRect } from '../lib/visibleFlowRect';
 import type { NodeData } from '../types';
 import { NODE_RENAME_EVENT } from '../lib/keyboardShortcuts';
 import { publishCanvasSelection, selectedNodeIds } from '../lib/canvasSelection';
 import '../styles/canvas.css';
 
-const nodeTypes: NodeTypes = {
-  'model-node': ModelNode,
-  'dynamic-node': DynamicNode,
-  'reroute-node': RerouteNode,
-  editNode: EditNode,
-  remotionNode: RemotionNode,
-  cinemaSceneNode: CinemaSceneNode,
-  characterNode: CharacterNode,
-  cameraRigNode: CameraRigNode,
-  referenceSetNode: ReferenceSetNode,
-  moodboardNode: MoodboardNode,
-  videoQcNode: VideoQcNode,
-  paperSourceNode: PaperSourceNode,
-  batchNode: BatchNode,
-};
-
-const edgeTypes: EdgeTypes = {
-  'typed-edge': TypedEdge,
-};
+const nodeTypes = CANVAS_NODE_TYPES;
+const edgeTypes = CANVAS_EDGE_TYPES;
 
 const DEFAULT_FIT_MAX_ZOOM = 0.85;
 const FIRST_NODE_FIT_MAX_ZOOM = 0.62;
@@ -319,10 +289,10 @@ export function Canvas() {
   // The fitView prop's fit waits for nodes: on a canvas that mounted empty it
   // runs when a followed project's graph arrives, and is still the canvas's own.
   const initialFit = useRef(initialCanvasState.fitEnabled);
-  const rememberViewport = useCallback((viewport: Viewport, initial?: boolean) => {
+  const rememberViewport = useCallback((viewport: Viewport, options?: { initial?: boolean; byCanvas?: boolean }) => {
     const ui = useUIStore.getState();
     const canvasActive = ui.viewMode === 'canvas' || (ui.viewMode === 'commons' && !ui.commonsEnabled);
-    if (canvasMounted.current && canvasActive) ui.setCanvasViewport(viewport, { initial });
+    if (canvasMounted.current && canvasActive) ui.setCanvasViewport(viewport, options);
   }, []);
   const onViewportInitialized = useCallback((instance: { getViewport: () => Viewport }) => {
     // React Flow schedules onInit. An import can replace the graph before that
@@ -332,11 +302,14 @@ export function Canvas() {
     // still be waiting for node measurements. A quick studio visit must not
     // turn that temporary origin camera into a restored, never-fitted viewport.
     if (initialCanvasState.fitEnabled && useGraphStore.getState().nodes.length > 0) return;
-    rememberViewport(instance.getViewport(), true);
+    rememberViewport(instance.getViewport(), { initial: true });
   }, [initialCanvasState.fitEnabled, initialCanvasState.viewportRevision, rememberViewport]);
   const onViewportMove = useCallback((event: MouseEvent | TouchEvent | null, viewport: Viewport) => {
     // The first fit has no input event; the person's pan or zoom ends it.
-    rememberViewport(viewport, !event && initialFit.current);
+    // Later, the moves the canvas claimed (its fit after an agent's nodes
+    // land, an arrange's reveal) are its own too; projectStore saves them
+    // with that edit instead of reading them as unsaved changes.
+    rememberViewport(viewport, { initial: !event && initialFit.current, byCanvas: cameraMoveIsCanvasOwn(event) });
     initialFit.current = false;
   }, [rememberViewport]);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -454,6 +427,8 @@ export function Canvas() {
           event instanceof CustomEvent && typeof event.detail?.totalCount === 'number'
             ? event.detail.totalCount
             : useGraphStore.getState().nodes.length;
+        // The canvas's own move: it never restarts the autosave wait.
+        claimCameraMove();
         fitView({
           padding,
           duration: 400,
@@ -774,6 +749,7 @@ export function Canvas() {
         fitView={initialCanvasState.fitEnabled}
         defaultViewport={initialCanvasState.viewport ?? undefined}
         onInit={onViewportInitialized}
+        onMoveStart={cameraMoveStarted}
         onMove={onViewportMove}
         fitViewOptions={{ padding: computeCanvasFitPadding() }}
         minZoom={0.1}
@@ -801,6 +777,7 @@ export function Canvas() {
         <CanvasViewReporter />
         <ArrangeController />
         <AgentCursorLayer />
+        <AgentNoteOutlines />
         <PinLayer />
         <ProposalLayer />
         <ProposalBar />
@@ -829,18 +806,6 @@ export function Canvas() {
       <PinComposer />
     </div>
   );
-}
-
-/** The canvas the person can see, in flow coordinates, or undefined before it has a size. */
-function visibleFlowRect(
-  wrapper: HTMLDivElement | null,
-  screenToFlowPosition: (point: { x: number; y: number }) => { x: number; y: number },
-): NodeRect | undefined {
-  const box = wrapper?.getBoundingClientRect();
-  if (!box || box.width <= 0 || box.height <= 0) return undefined;
-  const topLeft = screenToFlowPosition({ x: box.left, y: box.top });
-  const bottomRight = screenToFlowPosition({ x: box.right, y: box.bottom });
-  return { x: topLeft.x, y: topLeft.y, width: bottomRight.x - topLeft.x, height: bottomRight.y - topLeft.y };
 }
 
 /** The pasted nodes' bounding box, with measured sizes when known. */

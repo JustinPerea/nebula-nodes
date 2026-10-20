@@ -15,7 +15,7 @@ At every startup this moves each such asset, by the rule in ``decide_home``:
 
 and updates its ``projectId`` (and a style's ``scope``). Nothing else in the
 file changes: not ``id``, ``version`` or ``updatedAt``, since a re-home isn't
-an edit. A board or character in Recently deleted (``.trash``) stays there;
+an edit. A board, character or Style in Recently deleted (``.trash``) stays there;
 its file and its record (``projectId``, ``scopeDir``) are pointed at the new
 home, so Restore puts it there.
 
@@ -89,7 +89,8 @@ def default_roots() -> list[AssetRoot]:
     return [
         AssetRoot("moodboard", moodboard_store.store_root(), True),
         AssetRoot("character", character_store.store_root(), True),
-        AssetRoot("preset", preset_store.store_root(), False),
+        # Styles have had Recently deleted since 2026-10-20 (Q53 a).
+        AssetRoot("preset", preset_store.store_root(), True),
     ]
 
 

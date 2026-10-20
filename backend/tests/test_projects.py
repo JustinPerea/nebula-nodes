@@ -119,9 +119,9 @@ def test_preserves_ids_outputs_recipe_and_creator_state_on_switch(workspace, per
     # The opened project's pins (canvasPins) follow the graph replacement.
     replacement = next(call.args[0] for call in reversed(broadcast.await_args_list)
                        if call.args[0]["type"] == "graphSync")
-    # Then projectsChanged, for the Projects screen's list.
+    # Then its Updates (agentNotes), and projectsChanged for the Projects screen's list.
     kinds = [call.args[0]["type"] for call in broadcast.await_args_list]
-    assert kinds[-3:] == ["graphSync", "canvasPins", "projectsChanged"]
+    assert kinds[-4:] == ["graphSync", "canvasPins", "agentNotes", "projectsChanged"]
     assert replacement["graphReplaced"] is True
     assert replacement["workspaceRevision"] == opened.json()["workspaceRevision"]
     assert replacement["activeProjectId"] == project_id

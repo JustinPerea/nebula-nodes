@@ -125,6 +125,17 @@ body:not(.app-slava-restraint) .model-node__id-chip:hover {
 .model-node__port-label { font-size: 11px; }
 body:not(.app-slava-restraint) .model-node__port-label { color: #888; }
 
+/* What a wired moodboard does on this node (MoodboardAdapterRow): one line
+ * under the ports. The empty line drawn while it loads keeps the same box. */
+.model-node__board-line {
+  min-height: calc(11px * 1.35);
+  padding: 0 10px 6px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+body:not(.app-slava-restraint) .model-node__board-line { color: #888; }
+body.app-slava-restraint .model-node__board-line { color: var(--sr-ink-light); font-size: var(--sr-type-label); }
+
 /* Semantic reference role badge — small colored dot rendered next to an input
  * port's label when the port carries `role` metadata (see referenceRoles.ts).
  * The color is set inline from the role definition; this rule only shapes the

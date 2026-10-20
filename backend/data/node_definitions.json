@@ -16075,7 +16075,7 @@
       {
         "id": "moodboard",
         "label": "Moodboard",
-        "dataType": "Any",
+        "dataType": "Moodboard",
         "required": false,
         "maxConnections": 1
       }

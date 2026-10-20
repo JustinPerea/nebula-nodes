@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { mergeTables, tableProblems as moodboardAdapterProblems } from './moodboard-adapter-contract.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..');
@@ -18,6 +19,12 @@ const ROUTE_TABLES_PATH = join(REPO_ROOT, 'backend', 'tests', 'fixtures', 'route
 // NEBULA_CONTRACTS_PRICING_PATH points the check at another pricing table
 // (tests/test_node_contracts.py checks a broken copy with it).
 const PRICING_PATH = process.env.NEBULA_CONTRACTS_PRICING_PATH || join(REPO_ROOT, 'backend', 'data', 'model_pricing.json');
+// NEBULA_CONTRACTS_ADAPTERS_PATH and NEBULA_CONTRACTS_KREA_ADAPTERS_PATH point
+// the moodboard adapter check at other copies of the two tables (tests break
+// a copy and expect the backend's message).
+const ADAPTERS_PATH = process.env.NEBULA_CONTRACTS_ADAPTERS_PATH || join(REPO_ROOT, 'backend', 'data', 'moodboard_adapters.json');
+const KREA_ADAPTERS_PATH = process.env.NEBULA_CONTRACTS_KREA_ADAPTERS_PATH || join(REPO_ROOT, 'backend', 'data', 'moodboard_adapters_krea.json');
+const KREA_CATALOG_PATH = join(REPO_ROOT, 'backend', 'data', 'krea_gateway_models.json');
 
 const VALID_CATEGORIES = new Set([
   'image-gen',
@@ -104,6 +111,9 @@ const settingsExample = JSON.parse(await readFile(SETTINGS_EXAMPLE_PATH, 'utf8')
 const routeFixtures = JSON.parse(await readFile(ROUTE_CASES_PATH, 'utf8')).definitions ?? {};
 const pricing = JSON.parse(await readFile(PRICING_PATH, 'utf8'));
 const keyProviders = JSON.parse(await readFile(ROUTE_TABLES_PATH, 'utf8')).keyProviders ?? {};
+const moodboardAdapters = JSON.parse(await readFile(ADAPTERS_PATH, 'utf8'));
+const kreaMoodboardAdapters = JSON.parse(await readFile(KREA_ADAPTERS_PATH, 'utf8'));
+const kreaCatalog = JSON.parse(await readFile(KREA_CATALOG_PATH, 'utf8'));
 // backend/services/credential_catalog.py KEYS_AHEAD_OF_NODES: keys Settings
 // lists before any node uses them.
 const catalogSource = await readFile(join(REPO_ROOT, 'backend', 'services', 'credential_catalog.py'), 'utf8');
@@ -123,6 +133,7 @@ validatePinnedCorrections();
 validateLocalExecutionCoverage();
 validateLocalExecutionProvider();
 validateProviderVia();
+validateMoodboardAdapters();
 
 if (errors.length) {
   console.error(`Node contract check failed with ${errors.length} issue(s):`);
@@ -551,6 +562,18 @@ function validateEnumParam(nodeId, group, param) {
   if ('default' in param && !values.has(JSON.stringify(param.default))) {
     errors.push(`${nodeId}.${group}.${param.key} default is not in enum options: ${param.default}`);
   }
+}
+
+// Moodboard canvas plan section 5.7.10 (A5): how each node with a Moodboard
+// port takes a board, in backend/data/moodboard_adapters.json and the
+// generated moodboard_adapters_krea.json. scripts/moodboard-adapter-contract.mjs
+// mirrors backend/services/moodboard_adapters.py.
+function validateMoodboardAdapters() {
+  const { table, problems } = mergeTables(moodboardAdapters, kreaMoodboardAdapters, {
+    handName: 'moodboard_adapters.json', kreaName: 'moodboard_adapters_krea.json',
+  });
+  errors.push(...problems);
+  errors.push(...moodboardAdapterProblems(table, definitions, { catalog: kreaCatalog, keyProviders, repoRoot: REPO_ROOT }));
 }
 
 function validateFrontendBackendIdParity() {
