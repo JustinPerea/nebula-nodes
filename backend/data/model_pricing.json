@@ -3025,6 +3025,223 @@
       ],
       "checked": "2026-10-12"
     },
+    "krea-2-generate": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "(wired image_style_references)",
+        "(wired moodboard)",
+        "(wired style_images)",
+        "(wired styles)",
+        "_kreaAuth",
+        "moodboard_id",
+        "style_id",
+        "variant"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "variant": "medium",
+            "moodboard_id": "",
+            "(wired moodboard)": "no",
+            "(wired style_images)": "no",
+            "(wired image_style_references)": "no",
+            "(wired styles)": "no",
+            "style_id": ""
+          },
+          "price": 0.03
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "variant": "medium",
+            "moodboard_id": "",
+            "(wired moodboard)": "no",
+            "(wired style_images)": "no",
+            "(wired image_style_references)": "no"
+          },
+          "price": [
+            0.03,
+            0.04
+          ]
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "variant": "medium",
+            "moodboard_id": "",
+            "(wired moodboard)": "no",
+            "(wired styles)": "no",
+            "style_id": ""
+          },
+          "price": 0.035
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "variant": "medium",
+            "moodboard_id": "",
+            "(wired moodboard)": "no"
+          },
+          "price": [
+            0.035,
+            0.04
+          ]
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "variant": "medium",
+            "moodboard_id": "",
+            "(wired styles)": "no",
+            "style_id": ""
+          },
+          "price": [
+            0.035,
+            0.04
+          ]
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "variant": "medium",
+            "moodboard_id": ""
+          },
+          "price": [
+            0.035,
+            0.04
+          ]
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "variant": "medium",
+            "(wired styles)": "no",
+            "style_id": ""
+          },
+          "price": 0.04
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "variant": "medium"
+          },
+          "price": 0.04
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "variant": "large",
+            "moodboard_id": "",
+            "(wired moodboard)": "no",
+            "(wired style_images)": "no",
+            "(wired image_style_references)": "no",
+            "(wired styles)": "no",
+            "style_id": ""
+          },
+          "price": 0.06
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "variant": "large",
+            "moodboard_id": "",
+            "(wired moodboard)": "no",
+            "(wired style_images)": "no",
+            "(wired image_style_references)": "no"
+          },
+          "price": [
+            0.06,
+            0.07
+          ]
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "variant": "large",
+            "moodboard_id": "",
+            "(wired moodboard)": "no",
+            "(wired styles)": "no",
+            "style_id": ""
+          },
+          "price": 0.065
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "variant": "large",
+            "moodboard_id": "",
+            "(wired moodboard)": "no"
+          },
+          "price": [
+            0.065,
+            0.07
+          ]
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "variant": "large",
+            "moodboard_id": "",
+            "(wired styles)": "no",
+            "style_id": ""
+          },
+          "price": [
+            0.065,
+            0.07
+          ]
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "variant": "large",
+            "moodboard_id": ""
+          },
+          "price": [
+            0.065,
+            0.07
+          ]
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "variant": "large",
+            "(wired styles)": "no",
+            "style_id": ""
+          },
+          "price": 0.07
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "variant": "large"
+          },
+          "price": 0.07
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced. Krea 2 bills by k2BillingTier: text to image, style references, or a moodboard (a moodboard with style references bills the moodboard price). An input counts when its field is filled in or its port is wired ((wired PORT)). Krea doesn't say which tier LoRA styles or an image-to-image source bill, so a run with styles or style_id is the range from the tier its references give up to the moodboard price, the highest tier Krea lists. A wired moodboard is a Nebula board (sent as style references) or a Krea moodboard id (billed as a moodboard), which only the wired value tells apart, so it is the range between the two.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/image/krea/krea-2/medium (spec sha256 125dae8e751d)"
+        },
+        {
+          "url": "https://www.krea.ai/docs/developers/krea-2/overview.md#pricing",
+          "quote": "| **Medium** | $0.030 | $0.035 | $0.040 | ... | **Large** | $0.060 | $0.065 | $0.070 | ... Combining moodboards with style references does not increase the price per generation — you pay the moodboard rate ($0.040 Medium / $0.070 Large)."
+        },
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/image/krea/krea-2/large (spec sha256 125dae8e751d)"
+        }
+      ],
+      "checked": "2026-10-19",
+      "generatedBy": "scripts/sync-krea-catalog.py",
+      "whitespaceUnset": [
+        "moodboard_id",
+        "style_id"
+      ]
+    },
     "krea-3": {
       "routes": {
         "krea": {
@@ -4231,6 +4448,305 @@
         }
       },
       "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-image-krea-krea-2-large": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "(wired image_style_references)",
+        "(wired image_url)",
+        "(wired moodboards)",
+        "(wired styles)",
+        "_kreaAuth",
+        "image_style_references",
+        "image_url",
+        "moodboards",
+        "styles"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "moodboards": "",
+            "(wired moodboards)": "no",
+            "image_style_references": "",
+            "(wired image_style_references)": "no",
+            "styles": "",
+            "(wired styles)": "no",
+            "image_url": "",
+            "(wired image_url)": "no"
+          },
+          "price": 0.06
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "moodboards": "",
+            "(wired moodboards)": "no",
+            "image_style_references": "",
+            "(wired image_style_references)": "no"
+          },
+          "price": [
+            0.06,
+            0.07
+          ]
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "moodboards": "",
+            "(wired moodboards)": "no",
+            "styles": "",
+            "(wired styles)": "no",
+            "image_url": "",
+            "(wired image_url)": "no"
+          },
+          "price": 0.065
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "moodboards": "",
+            "(wired moodboards)": "no"
+          },
+          "price": [
+            0.065,
+            0.07
+          ]
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "styles": "",
+            "(wired styles)": "no",
+            "image_url": "",
+            "(wired image_url)": "no"
+          },
+          "price": 0.07
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token"
+          },
+          "price": 0.07
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced. Krea 2 bills by k2BillingTier: text to image, style references, or a moodboard (a moodboard with style references bills the moodboard price). An input counts when its field is filled in or its port is wired ((wired PORT)). Krea doesn't say which tier LoRA styles or an image-to-image source bill, so a run with styles or image_url is the range from the tier its references give up to the moodboard price, the highest tier Krea lists.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/image/krea/krea-2/large (spec sha256 125dae8e751d)"
+        },
+        {
+          "url": "https://www.krea.ai/docs/developers/krea-2/overview.md#pricing",
+          "quote": "| **Medium** | $0.030 | $0.035 | $0.040 | ... | **Large** | $0.060 | $0.065 | $0.070 | ... Combining moodboards with style references does not increase the price per generation — you pay the moodboard rate ($0.040 Medium / $0.070 Large)."
+        }
+      ],
+      "checked": "2026-10-19",
+      "generatedBy": "scripts/sync-krea-catalog.py",
+      "whitespaceUnset": [
+        "image_style_references",
+        "moodboards",
+        "styles"
+      ]
+    },
+    "krea-image-krea-krea-2-medium": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "(wired image_style_references)",
+        "(wired image_url)",
+        "(wired moodboards)",
+        "(wired styles)",
+        "_kreaAuth",
+        "image_style_references",
+        "image_url",
+        "moodboards",
+        "styles"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "moodboards": "",
+            "(wired moodboards)": "no",
+            "image_style_references": "",
+            "(wired image_style_references)": "no",
+            "styles": "",
+            "(wired styles)": "no",
+            "image_url": "",
+            "(wired image_url)": "no"
+          },
+          "price": 0.03
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "moodboards": "",
+            "(wired moodboards)": "no",
+            "image_style_references": "",
+            "(wired image_style_references)": "no"
+          },
+          "price": [
+            0.03,
+            0.04
+          ]
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "moodboards": "",
+            "(wired moodboards)": "no",
+            "styles": "",
+            "(wired styles)": "no",
+            "image_url": "",
+            "(wired image_url)": "no"
+          },
+          "price": 0.035
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "moodboards": "",
+            "(wired moodboards)": "no"
+          },
+          "price": [
+            0.035,
+            0.04
+          ]
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "styles": "",
+            "(wired styles)": "no",
+            "image_url": "",
+            "(wired image_url)": "no"
+          },
+          "price": 0.04
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token"
+          },
+          "price": 0.04
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced. Krea 2 bills by k2BillingTier: text to image, style references, or a moodboard (a moodboard with style references bills the moodboard price). An input counts when its field is filled in or its port is wired ((wired PORT)). Krea doesn't say which tier LoRA styles or an image-to-image source bill, so a run with styles or image_url is the range from the tier its references give up to the moodboard price, the highest tier Krea lists.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/image/krea/krea-2/medium (spec sha256 125dae8e751d)"
+        },
+        {
+          "url": "https://www.krea.ai/docs/developers/krea-2/overview.md#pricing",
+          "quote": "| **Medium** | $0.030 | $0.035 | $0.040 | ... | **Large** | $0.060 | $0.065 | $0.070 | ... Combining moodboards with style references does not increase the price per generation — you pay the moodboard rate ($0.040 Medium / $0.070 Large)."
+        }
+      ],
+      "checked": "2026-10-19",
+      "generatedBy": "scripts/sync-krea-catalog.py",
+      "whitespaceUnset": [
+        "image_style_references",
+        "moodboards",
+        "styles"
+      ]
+    },
+    "krea-image-krea-krea-2-medium-turbo": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "(wired image_style_references)",
+        "(wired image_url)",
+        "(wired moodboards)",
+        "(wired styles)",
+        "_kreaAuth",
+        "image_style_references",
+        "image_url",
+        "moodboards",
+        "styles"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "moodboards": "",
+            "(wired moodboards)": "no",
+            "image_style_references": "",
+            "(wired image_style_references)": "no",
+            "styles": "",
+            "(wired styles)": "no",
+            "image_url": "",
+            "(wired image_url)": "no"
+          },
+          "price": 0.015
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "moodboards": "",
+            "(wired moodboards)": "no",
+            "image_style_references": "",
+            "(wired image_style_references)": "no"
+          },
+          "price": [
+            0.015,
+            0.02
+          ]
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "moodboards": "",
+            "(wired moodboards)": "no",
+            "styles": "",
+            "(wired styles)": "no",
+            "image_url": "",
+            "(wired image_url)": "no"
+          },
+          "price": 0.0175
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "moodboards": "",
+            "(wired moodboards)": "no"
+          },
+          "price": [
+            0.0175,
+            0.02
+          ]
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "styles": "",
+            "(wired styles)": "no",
+            "image_url": "",
+            "(wired image_url)": "no"
+          },
+          "price": 0.02
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token"
+          },
+          "price": 0.02
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced. Krea 2 bills by k2BillingTier: text to image, style references, or a moodboard (a moodboard with style references bills the moodboard price). An input counts when its field is filled in or its port is wired ((wired PORT)). Krea doesn't say which tier LoRA styles or an image-to-image source bill, so a run with styles or image_url is the range from the tier its references give up to the moodboard price, the highest tier Krea lists.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/image/krea/krea-2/medium-turbo (spec sha256 125dae8e751d)"
+        }
+      ],
+      "checked": "2026-10-19",
+      "generatedBy": "scripts/sync-krea-catalog.py",
+      "whitespaceUnset": [
+        "image_style_references",
+        "moodboards",
+        "styles"
+      ]
     },
     "krea-image-meta-muse-image": {
       "currency": "usd",

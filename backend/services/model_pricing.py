@@ -19,6 +19,9 @@ Shape of one entry (keyed by node definition id)::
       "provider": "google",                          # dual-route nodes: whose price this is
       "plus": "input images",                        # a known cost the vendor doesn't publish
       "defaults": {"duration": 8},                   # what the handler sends when unset
+      "whitespaceUnset": ["moodboard_id"],           # params the handler strips: a value of
+                                                     # only whitespace sends nothing, so it
+                                                     # prices as unset
       "unconfirmed": true,                           # the page doesn't state this price exactly
                                                      # (also on one row: that row's price only)
       "notes": "...",
@@ -67,6 +70,13 @@ parentheses and can never be a param's key:
   no references costs exactly the base price on Krea and fal, and only a run
   with references wired gets the range up to the most references a route
   takes (their number and size are only known at run time).
+- ``(wired PORT)`` (WIRED_PREFIX) is ``yes`` when input port PORT has an
+  edge in, else ``no``. Krea 2 prices by billing tier (text to image, style
+  references, moodboard), and the tier's inputs can arrive by wire or be
+  typed in the param of the same id. A row that reads param X and also
+  ``(wired X)`` stays priced with X wired: the wire is accounted for (the
+  wired-port rule above skips X when every row and extra naming X names
+  ``(wired X)`` too).
 - RUN_TIME_VARIABLES depend on the source clip a run is given (its length,
   its frame size), which only exists once the upstream node has run. An entry
   that reads one keeps the provider's real formula, and is unpriced before
@@ -98,6 +108,9 @@ _IMAGE_PORTS = ("start_image", "keyframes", "end_image")
 REFERENCES = "(references)"
 REFERENCE_VALUES = ("none", "some")
 _REFERENCE_PORTS = ("images",)
+# (wired PORT): whether that input port has an edge in.
+WIRED_PREFIX = "(wired "
+WIRED_VALUES = ("yes", "no")
 # Price variables known only once the run's source clip is: FLUX Video Edit [fast]
 # bills the source's length, Upscale its output frame size too (source size
 # times upscale_factor squared), and fal's upscale tiers by that output size.
@@ -253,6 +266,10 @@ def _validate_entry(
             problems.append(f"{where} checked is not a real date")
     if "unconfirmed" in entry and not isinstance(entry.get("unconfirmed"), bool):
         problems.append(f"{where} unconfirmed must be true or false")
+    blank = entry.get("whitespaceUnset")
+    if blank is not None and (not isinstance(blank, list)
+                              or not all(isinstance(key, str) for key in blank)):
+        problems.append(f"{where} whitespaceUnset must be a list of param keys")
     sources = entry.get("sources")
     if not isinstance(sources, list) or not sources:
         problems.append(f"{where} needs at least one source")
@@ -266,7 +283,9 @@ def _validate_entry(
                 problems.append(f"{where} every source needs the quoted price line")
 
     params = {p.get("key"): p for p in _definition_params(definition)}
-    known_keys = set(params) | set((entry.get("defaults") or {}).keys()) | {VIDEO_MODE, REFERENCES, *RUN_TIME_VARIABLES}
+    ports = {str(port.get("id")) for port in definition.get("inputPorts") or [] if isinstance(port, Mapping)}
+    known_keys = (set(params) | set((entry.get("defaults") or {}).keys()) | {VIDEO_MODE, REFERENCES, *RUN_TIME_VARIABLES}
+                  | {wired_key(port) for port in ports})
     rows = entry.get("rows")
     if not isinstance(rows, list) or not rows:
         problems.append(f"{where} needs at least one row")
@@ -287,6 +306,8 @@ def _validate_entry(
                 problems.append(f"{where} row {index} {VIDEO_MODE} must be one of {VIDEO_MODES}")
             if key == REFERENCES and value not in REFERENCE_VALUES:
                 problems.append(f"{where} row {index} {REFERENCES} must be one of {REFERENCE_VALUES}")
+            if wired_port(key) is not None and value not in WIRED_VALUES:
+                problems.append(f"{where} row {index} {key} must be one of {WIRED_VALUES}")
             options = (params.get(key) or {}).get("options")
             if isinstance(options, list) and options:
                 allowed = {str(o.get("value") if isinstance(o, Mapping) else o) for o in options}
@@ -309,6 +330,9 @@ def _validate_entry(
     for key in entry.get("multiplyBy") or []:
         if key not in known_keys:
             problems.append(f"{where} multiplyBy names unknown param '{key}'")
+    for key in blank if isinstance(blank, list) else []:
+        if key not in params:
+            problems.append(f"{where} whitespaceUnset names unknown param '{key}'")
 
 
 def _utility_entry_problems(where: str, entry: Mapping[str, Any], definition: Mapping[str, Any]) -> list[str]:
@@ -375,6 +399,29 @@ def references(wired: Iterable[str]) -> str:
     return "some" if {str(port) for port in wired} & set(_REFERENCE_PORTS) else "none"
 
 
+def wired_key(port: str) -> str:
+    """The price variable for whether ``port`` has an edge in."""
+    return f"{WIRED_PREFIX}{port})"
+
+
+def wired_port(key: Any) -> str | None:
+    """The port a ``(wired PORT)`` price variable reads, else None."""
+    text = str(key)
+    return text[len(WIRED_PREFIX):-1] if text.startswith(WIRED_PREFIX) and text.endswith(")") else None
+
+
+def wire_aware_keys(entry: Mapping[str, Any]) -> set[str]:
+    """Params the entry reads only alongside ``(wired X)`` for the port of the
+    same id: every row and extra that matches X also matches ``(wired X)``,
+    and X isn't a multiplier. A wire into X is then priced, not unknown."""
+    matched = [item.get("match") or {} for item in [*(entry.get("rows") or []), *(entry.get("extras") or [])]
+               if isinstance(item, Mapping)]
+    candidates = {wired_port(key) for match in matched for key in match} - {None}
+    return {str(port) for port in candidates
+            if port not in {str(key) for key in entry.get("multiplyBy") or []}
+            and all(wired_key(str(port)) in match for match in matched if port in match)}
+
+
 def priced_keys(entry: Mapping[str, Any]) -> set[str]:
     """Every setting an entry's price reads: row and extra matches, multiplyBy."""
     keys = {str(key) for row in entry.get("rows") or [] if isinstance(row, Mapping)
@@ -406,11 +453,20 @@ def _price_values(entry: Mapping[str, Any], definition: Mapping[str, Any], param
     priced = priced_keys(entry)
     # Price what will run: a retired value is replaced before the run (retired_nodes).
     params = migrate_params(str(definition.get("id") or ""), dict(params or {}))
+    # A param the handler strips sends nothing when it's only whitespace.
+    for key in entry.get("whitespaceUnset") or []:
+        if isinstance(params.get(key), str) and not params[key].strip():
+            params[key] = ""
     values = effective_params(entry, definition, params)
     if VIDEO_MODE in priced:
         values[VIDEO_MODE] = video_mode(wired)
     if REFERENCES in priced:
         values[REFERENCES] = references(wired)
+    ports = {str(port) for port in wired}
+    for key in priced:
+        port = wired_port(key)
+        if port is not None:
+            values[key] = "yes" if port in ports else "no"
     return values
 
 
@@ -442,7 +498,7 @@ def estimate_node(
     entry = routed
     wired = {str(port) for port in wired}
     priced = priced_keys(entry)
-    if priced & wired or priced & set(RUN_TIME_VARIABLES):
+    if (priced - wire_aware_keys(entry)) & wired or priced & set(RUN_TIME_VARIABLES):
         return None
     values = _price_values(entry, definition, params, wired)
     for row in entry.get("rows") or []:

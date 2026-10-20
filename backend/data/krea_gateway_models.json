@@ -201,9 +201,33 @@
         "image_style_references",
         "moodboards"
       ],
-      "pricingUnmapped": [
-        "k2BillingTier"
-      ]
+      "pricing": {
+        "type": "fixed",
+        "currency": "USD",
+        "unit": "request",
+        "price_points": [
+          {
+            "amount": 0.03,
+            "dimensions": {
+              "k2BillingTier": "text-to-image"
+            }
+          },
+          {
+            "amount": 0.035,
+            "dimensions": {
+              "k2BillingTier": "srefs"
+            }
+          },
+          {
+            "amount": 0.04,
+            "dimensions": {
+              "k2BillingTier": "moodboards"
+            }
+          }
+        ]
+      },
+      "fetchedAt": "2026-10-19",
+      "openapiSha256": "125dae8e751d45deee1cd65f5f18453c8f174726ca4756d1a28e01c3fbaa8afa"
     },
     "krea-image-krea-krea-2-large": {
       "endpoint": "/generate/image/krea/krea-2/large",
@@ -403,9 +427,33 @@
         "image_style_references",
         "moodboards"
       ],
-      "pricingUnmapped": [
-        "k2BillingTier"
-      ]
+      "pricing": {
+        "type": "fixed",
+        "currency": "USD",
+        "unit": "request",
+        "price_points": [
+          {
+            "amount": 0.06,
+            "dimensions": {
+              "k2BillingTier": "text-to-image"
+            }
+          },
+          {
+            "amount": 0.065,
+            "dimensions": {
+              "k2BillingTier": "srefs"
+            }
+          },
+          {
+            "amount": 0.07,
+            "dimensions": {
+              "k2BillingTier": "moodboards"
+            }
+          }
+        ]
+      },
+      "fetchedAt": "2026-10-19",
+      "openapiSha256": "125dae8e751d45deee1cd65f5f18453c8f174726ca4756d1a28e01c3fbaa8afa"
     },
     "krea-image-krea-krea-2-medium-turbo": {
       "endpoint": "/generate/image/krea/krea-2/medium-turbo",
@@ -605,9 +653,33 @@
         "image_style_references",
         "moodboards"
       ],
-      "pricingUnmapped": [
-        "k2BillingTier"
-      ]
+      "pricing": {
+        "type": "fixed",
+        "currency": "USD",
+        "unit": "request",
+        "price_points": [
+          {
+            "amount": 0.015,
+            "dimensions": {
+              "k2BillingTier": "text-to-image"
+            }
+          },
+          {
+            "amount": 0.0175,
+            "dimensions": {
+              "k2BillingTier": "srefs"
+            }
+          },
+          {
+            "amount": 0.02,
+            "dimensions": {
+              "k2BillingTier": "moodboards"
+            }
+          }
+        ]
+      },
+      "fetchedAt": "2026-10-19",
+      "openapiSha256": "125dae8e751d45deee1cd65f5f18453c8f174726ca4756d1a28e01c3fbaa8afa"
     },
     "krea-image-ideogram-ideogram-4-5": {
       "endpoint": "/generate/image/ideogram/ideogram-4.5",
@@ -14816,5 +14888,23 @@
         "images": "image_urls"
       }
     }
+  },
+  "krea2Guide": {
+    "url": "https://www.krea.ai/docs/developers/krea-2/overview.md",
+    "fetchedAt": "2026-10-19",
+    "sectionSha256": "36e4ea0de6f709decc67908bbe9b349944d8934cbbc6966761f9e4269e89d5ee",
+    "prices": {
+      "medium": [
+        0.03,
+        0.035,
+        0.04
+      ],
+      "large": [
+        0.06,
+        0.065,
+        0.07
+      ]
+    },
+    "quote": "| **Medium** | $0.030 | $0.035 | $0.040 | ... | **Large** | $0.060 | $0.065 | $0.070 | ... Combining moodboards with style references does not increase the price per generation — you pay the moodboard rate ($0.040 Medium / $0.070 Large)."
   }
 }

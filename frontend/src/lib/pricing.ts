@@ -25,6 +25,9 @@ export interface PriceEntry {
   extras?: PriceRow[];
   multiplyBy?: string[];
   defaults?: Record<string, unknown>;
+  /** Params the handler strips: a value of only whitespace sends nothing, so
+   * it prices as unset (model_pricing.py `whitespaceUnset`). */
+  whitespaceUnset?: string[];
   provider?: string;
   plus?: string;
   /** The provider's page doesn't state this price exactly (a higher page
@@ -101,6 +104,39 @@ const IMAGE_PORTS = ['start_image', 'keyframes', 'end_image'];
  * exact base price. */
 export const REFERENCES = '(references)';
 const REFERENCE_PORTS = ['images'];
+/** `(wired PORT)`: `yes` when that input port has an edge in, else `no`
+ * (model_pricing.WIRED_PREFIX). Krea 2 prices by billing tier, and a tier's
+ * input can arrive by wire or be typed in the param of the same id. */
+export const WIRED_PREFIX = '(wired ';
+
+export function wiredKey(port: string): string {
+  return `${WIRED_PREFIX}${port})`;
+}
+
+/** The port a `(wired PORT)` price variable reads, else null. */
+export function wiredPort(key: string): string | null {
+  return key.startsWith(WIRED_PREFIX) && key.endsWith(')') ? key.slice(WIRED_PREFIX.length, -1) : null;
+}
+
+/** Params the entry reads only alongside `(wired X)` for the port of the
+ * same id (every row and extra matching X also matches `(wired X)`, and X
+ * isn't a multiplier), so a wire into X is priced, not unknown
+ * (model_pricing.wire_aware_keys). */
+export function wireAwareKeys(entry: PriceEntry): Set<string> {
+  const matched = [...(entry.rows ?? []), ...(entry.extras ?? [])].map((row) => row.match ?? {});
+  const factors = new Set(entry.multiplyBy ?? []);
+  const result = new Set<string>();
+  for (const match of matched) {
+    for (const key of Object.keys(match)) {
+      const port = wiredPort(key);
+      if (port === null || factors.has(port)) continue;
+      if (matched.every((other) => !Object.hasOwn(other, port) || Object.hasOwn(other, wiredKey(port)))) {
+        result.add(port);
+      }
+    }
+  }
+  return result;
+}
 /** Price variables known only once the run's source clip is (its length,
  * its output frame size): an entry that reads one is unpriced before the run
  * (model_pricing.RUN_TIME_VARIABLES). */
@@ -151,12 +187,23 @@ export function entryForRoute(entry: PriceEntry | undefined, provider: string | 
   return routed && typeof routed === 'object' ? routed : undefined;
 }
 
-/** One run of this node, or null when it's unpriced (no entry, no matching
- * row, the run bills a different provider than the entry prices, a setting
- * the price reads arrives by wire, so it's only known at run time, or the
- * price reads a RUN_TIME_VARIABLES quantity). The wired ports also give the
- * VIDEO_MODE and REFERENCES a row may match. A `routes` entry prices the route
- * `routeProvider` names. */
+/** Whitespace as Python's str.strip() sees it, since the handlers strip with
+ * it (JS trim() also strips U+FEFF and keeps U+001C-001F and U+0085). Code
+ * points rather than a regex, which can't hold the control characters lint-clean. */
+const PYTHON_WHITESPACE = new Set<number>([
+  0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x85, 0xa0, 0x1680,
+  0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200a,
+  0x2028, 0x2029, 0x202f, 0x205f, 0x3000,
+]);
+
+function isPythonBlank(value: string): boolean {
+  for (const char of value) {
+    if (!PYTHON_WHITESPACE.has(char.codePointAt(0) ?? -1)) return false;
+  }
+  return true;
+}
+
+
 /** The values an entry's rows are matched against: the effective params
  * plus the price variables read from the wired ports (model_pricing._price_values). */
 function priceValues(
@@ -166,12 +213,29 @@ function priceValues(
   ports: string[],
 ): Record<string, unknown> {
   const priced = pricedKeys(entry);
-  const values = effectiveParams(entry, definition, params);
+  // A param the handler strips sends nothing when it's only whitespace.
+  const cleaned: Record<string, unknown> = { ...(params ?? {}) };
+  for (const key of entry.whitespaceUnset ?? []) {
+    const value = cleaned[key];
+    if (typeof value === 'string' && isPythonBlank(value)) cleaned[key] = '';
+  }
+  const values = effectiveParams(entry, definition, cleaned);
   if (priced.has(VIDEO_MODE)) values[VIDEO_MODE] = videoMode(ports);
   if (priced.has(REFERENCES)) values[REFERENCES] = references(ports);
+  const wiredSet = new Set(ports);
+  for (const key of priced) {
+    const port = wiredPort(key);
+    if (port !== null) values[key] = wiredSet.has(port) ? 'yes' : 'no';
+  }
   return values;
 }
 
+/** One run of this node, or null when it's unpriced (no entry, no matching
+ * row, the run bills a different provider than the entry prices, a setting
+ * the price reads arrives by wire, so it's only known at run time, or the
+ * price reads a RUN_TIME_VARIABLES quantity). The wired ports also give the
+ * VIDEO_MODE and REFERENCES a row may match. A `routes` entry prices the route
+ * `routeProvider` names. */
 export function estimateNode(
   priceEntry: PriceEntry | undefined,
   definition: Partial<ModelNodeDefinition>,
@@ -186,7 +250,8 @@ export function estimateNode(
   if (entry === priceEntry && entry.provider && routeProvider && entry.provider !== routeProvider) return null;
   const priced = pricedKeys(entry);
   const ports = [...wired];
-  if (ports.some((port) => priced.has(port)) || RUN_TIME_VARIABLES.some((key) => priced.has(key))) return null;
+  const aware = wireAwareKeys(entry);
+  if (ports.some((port) => priced.has(port) && !aware.has(port)) || RUN_TIME_VARIABLES.some((key) => priced.has(key))) return null;
   const values = priceValues(entry, definition, params, ports);
   const row = (entry.rows ?? []).find((candidate) => matches(values, candidate.match));
   if (!row) return null;
