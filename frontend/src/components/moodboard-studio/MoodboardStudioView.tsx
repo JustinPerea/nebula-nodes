@@ -305,6 +305,12 @@ export function MoodboardStudioView() {
   }, [key, moveDraft]);
 
   useEffect(() => wsClient.subscribe((event) => {
+    // Back after the socket was down: what was said meanwhile isn't replayed,
+    // so read the board again (follow keeps it only if it's newer).
+    if (event.type === 'socketReconnected') {
+      void follow();
+      return;
+    }
     if (event.type !== 'storedAssetChanged' || event.kind !== 'moodboard' || event.deleted) return;
     // The echo of this tab's own write.
     if (event.edit?.tab && event.edit.tab === TAB_ID) return;
@@ -904,7 +910,7 @@ function MoodboardRail({
 
   // A board saved or deleted elsewhere (an agent, the CLI) shows up here too.
   useEffect(() => wsClient.subscribe((event) => {
-    if (event.type === 'storedAssetChanged' && event.kind === 'moodboard') relist();
+    if ((event.type === 'storedAssetChanged' && event.kind === 'moodboard') || event.type === 'socketReconnected') relist();
   }), [relist]);
 
   const noProject = scope === 'project' && !projectId;

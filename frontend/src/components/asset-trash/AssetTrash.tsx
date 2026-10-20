@@ -115,7 +115,9 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
 
   // A delete or restore elsewhere (another tab, an agent) shows up here too.
   useEffect(() => wsClient.subscribe((event) => {
-    if (event.type === 'storedAssetChanged' && event.kind === kind) setReload((value) => value + 1);
+    if ((event.type === 'storedAssetChanged' && event.kind === kind) || event.type === 'socketReconnected') {
+      setReload((value) => value + 1);
+    }
   }), [kind]);
 
   const act = useCallback(async (work: () => Promise<void>, after?: () => void) => {

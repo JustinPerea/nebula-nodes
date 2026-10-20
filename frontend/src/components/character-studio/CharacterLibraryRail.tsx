@@ -52,7 +52,7 @@ export function CharacterLibraryRail({
   // appears here without a manual refresh.
   // A Character saved or deleted elsewhere (an agent, the CLI) shows up here too.
   useEffect(() => wsClient.subscribe((event) => {
-    if (event.type === 'storedAssetChanged' && event.kind === 'character') relist();
+    if ((event.type === 'storedAssetChanged' && event.kind === 'character') || event.type === 'socketReconnected') relist();
   }), [relist]);
 
   const noProject = scope === 'project' && !projectId;

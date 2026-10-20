@@ -16,8 +16,9 @@ export function setAsideCount(images: readonly SetAsideFields[]): number {
 
 /** A board's image count wherever it shows (the node card, the Studio rail,
  *  the Assets panel): "5 images · 1 set aside". Every image counts, so the
- *  set-aside ones are named beside it; the Preview counts only what a run
- *  sent ("4 images"). */
+ *  set-aside ones are named beside it; the Preview counts only the images
+ *  that steer, the same rule (lib/moodboardBundle): "4 images" beside
+ *  "5 images · 1 set aside", whether #n was switched aside or is at weight 0. */
 export function moodboardImagesLabel(count: number, setAside = 0): string {
   const images = `${count} ${count === 1 ? 'image' : 'images'}`;
   return setAside > 0 ? `${images} · ${setAside} set aside` : images;
