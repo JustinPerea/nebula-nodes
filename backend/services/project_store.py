@@ -215,6 +215,43 @@ class ProjectStore:
         with self.transaction() as catalog:
             return catalog
 
+    def workspace(self) -> dict[str, Any]:
+        """{activeProjectId, workspaceRevision} without copying the catalog.
+
+        Every canvas event carries these two (main._workspace_context). read()
+        parses, upgrades and deep-copies every project's snapshot and run
+        history, which on the event loop held up runs as projects grew. The
+        answer is kept until catalog.json changes: commits replace the file
+        (os.replace), so its inode, mtime and size say when, whichever
+        process wrote it."""
+        signature = self._signature()
+        cached = getattr(self, "_workspace_cache", None)
+        if signature is not None and cached is not None and cached[0] == signature:
+            return dict(cached[1])
+        try:
+            self._ensure_root()
+            fd = os.open(self.root / ".lock", os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+            with os.fdopen(fd, "a+") as handle:
+                os.fchmod(handle.fileno(), 0o600)
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                signature = self._signature()
+                catalog = self._read(upgrade=False)
+        except OSError as exc:
+            raise ProjectStoreError("Project storage is unavailable; the canvas was preserved") from exc
+        answer = {"activeProjectId": catalog.get("activeProjectId"), "workspaceRevision": catalog["workspaceRevision"]}
+        if signature is not None:
+            self._workspace_cache = (signature, dict(answer))
+        return answer
+
+    def _signature(self) -> tuple[int, int, int] | None:
+        try:
+            info = self.path.stat()
+        except FileNotFoundError:
+            return None
+        except OSError as exc:
+            raise ProjectStoreError("Project storage is unavailable; the canvas was preserved") from exc
+        return (info.st_ino, info.st_mtime_ns, info.st_size)
+
     def advance_params_version(self, *, live_graph_advanced: bool) -> bool:
         """Boot step after a one-time params upgrade (main.py). When the
         catalog on disk holds an entry saved before ``PARAMS_VERSION``, or

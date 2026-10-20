@@ -114,6 +114,30 @@ describe('Preview card with a Moodboard bundle', () => {
     expect(container.querySelector('.model-node--structured-surface')).not.toBeNull();
   });
 
+  it('counts and draws only the images that steer: weight 0 is set aside, as on the node card', () => {
+    // The handler drops switched-aside images; a weight-0 one is still in the
+    // bundle, but no generator gets it (moodboard_analysis.steers, Krea 2's
+    // guard), so the Preview leaves it out like the card's "1 set aside".
+    const images = BUNDLE.images.map((image) => (image.id === 'c' ? { ...image, weight: 0 } : image));
+    renderPreview({ type: 'Moodboard', value: { ...BUNDLE, images } });
+    const card = screen.getByRole('group', { name: 'Moodboard Dusk Harbor' });
+    expect(within(card).getByText(/look · 70% · 4 images/)).toBeInTheDocument();
+    const srcs = within(card).getAllByRole('img').map((img) => img.getAttribute('src'));
+    expect(srcs.some((src) => src?.includes('/moodboards/c.png'))).toBe(false);
+    expect(srcs).toHaveLength(4);
+    expect(within(card).queryByText('+1')).toBeNull();
+  });
+
+  it('a representative hint naming a weight-0 image does not draw it (an old or agent-written bundle)', () => {
+    const images = BUNDLE.images.map((image) => (image.id === 'b' ? { ...image, weight: 0 } : image));
+    renderPreview({ type: 'Moodboard', value: { ...BUNDLE, images } });
+    const card = screen.getByRole('group', { name: 'Moodboard Dusk Harbor' });
+    const srcs = within(card).getAllByRole('img').map((img) => img.getAttribute('src'));
+    // b leads representativeImages, but at weight 0 it steers nothing.
+    expect(srcs.some((src) => src?.includes('/moodboards/b.png'))).toBe(false);
+    expect(srcs[0]).toContain('/moodboards/a.png');
+  });
+
   it('opens the whole brief with Read all and closes it again', () => {
     renderPreview({ type: 'Moodboard', value: BUNDLE });
     const toggle = screen.getByRole('button', { name: /^Read all/ });

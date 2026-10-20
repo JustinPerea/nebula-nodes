@@ -757,8 +757,13 @@ describe('Settings — preferences', () => {
     expect(useUIStore.getState().canvasMinimapEnabled).toBe(true);
     expect(localStorage.getItem('nebula:canvas:minimapEnabled')).toBe('1');
     expect(useUIStore.getState().canvasPerfMode).toBe(false);
-    fireEvent.click(screen.getByRole('switch', { name: /Agent log/ }));
-    expect(useUIStore.getState().agentLogEnabled).toBe(true);
+    // The Agent log is on by default (Q38); the switch turns it off.
+    const agentLog = screen.getByRole('switch', { name: /Agent log/ });
+    expect(agentLog).toBeChecked();
+    expect(screen.getByText("Every agent's actions, bottom right")).toBeInTheDocument();
+    fireEvent.click(agentLog);
+    expect(useUIStore.getState().agentLogEnabled).toBe(false);
+    expect(localStorage.getItem('nebula:agentLog:enabled')).toBe('0');
     expect(updateSettingsMock).not.toHaveBeenCalled();
     expect(providerApiFetchMock).not.toHaveBeenCalled();
   });

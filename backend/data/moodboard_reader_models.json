@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "about": "Curated vision models that read moodboard references (services/moodboard_reader.py). Hand-maintained like model_pricing.json: every price names the vendor page, a quote and the date it was checked. Not model_pricing.json, whose entries must be node definitions. Prices are USD per 1M tokens; an output price includes thinking tokens. tests/test_moodboard_reader.py validates this file.",
+  "models": {
+    "gemini-4-argon": {
+      "name": "Gemini 4 Argon",
+      "provider": "google",
+      "model": "gemini-4-argon",
+      "keyName": "GOOGLE_API_KEY",
+      "definitionId": "gemini-chat",
+      "color": "#B49CFF",
+      "streams": true,
+      "thoughtSummaries": "unconfirmed",
+      "defaultThinkingLevel": "medium",
+      "thinking": {
+        "low": {"thinkingTokens": 2048},
+        "medium": {"thinkingTokens": 6144},
+        "high": {"thinkingTokens": 16384}
+      },
+      "answerTokens": {"perImage": 450, "base": 300},
+      "sortTokens": {"perImage": 60, "base": 400, "readingInput": [120, 300]},
+      "imageTokens": 1120,
+      "timeBounds": {
+        "low": {"firstByte": 60, "quiet": 60, "total": 180},
+        "medium": {"firstByte": 60, "quiet": 60, "total": 180},
+        "high": {"firstByte": 120, "quiet": 120, "total": 300}
+      },
+      "allowancesUnconfirmed": true,
+      "prices": [
+        {"from": null, "until": "2026-11-30", "inputPerMTok": 2.0, "outputPerMTok": 10.0},
+        {"from": "2026-12-01", "until": null, "inputPerMTok": 4.0, "outputPerMTok": 20.0}
+      ],
+      "units": "USD per 1M tokens, Standard tier; output includes thinking tokens",
+      "unconfirmed": false,
+      "notes": "The color is a placeholder until GM picks the lavender. Thinking allowances, the answer allowance and the time bounds are first guesses until the one approved Argon probe measures thoughtsTokenCount, bytes during thinking and time to the first item (scripts/moodboard_reader_probe.py). thoughtSummaries stays \"unconfirmed\" (no includeThoughts is sent) until that probe shows summaries come back alongside a response schema on image batches. imageTokens is Google's figure for one image at the default media resolution on Gemini 4 and 3 models.",
+      "sources": [
+        {"url": "https://ai.google.dev/gemini-api/docs/pricing",
+         "quote": "Gemini 4 Argon, Standard: Input $2.00 through November 30, 2026, then $4.00 starting December 1, 2026; Output price (including thinking tokens) $10.00 through November 30, 2026, then $20.00 from December 1, 2026 (per 1M tokens)"},
+        {"url": "https://ai.google.dev/gemini-api/docs/media-resolution",
+         "quote": "Gemini 4 and Gemini 3 models ... unspecified (Default) 1120 [tokens per image]"},
+        {"url": "https://ai.google.dev/gemini-api/docs/thinking",
+         "quote": "The max_output_tokens generation parameter sets the maximum number of tokens a response can generate, including thought tokens."},
+        {"url": "https://ai.google.dev/api/generate-content",
+         "quote": "responseSchema (deprecated) ... Deprecated. Use responseFormat instead. ... TextResponseFormat: mimeType (APPLICATION_JSON), schema"}
+      ],
+      "checked": "2026-10-20"
+    }
+  }
+}
