@@ -1,5 +1,6 @@
 """What agents and the CLI see for a route-table node: describe_node and
 find_nodes in main.py, and `nebula info` (cli/formatter.py)."""
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -241,7 +242,9 @@ def test_the_mcp_tool_description_names_the_route_fields_describe_node_returns(r
     assert {"params", "hides", "price", "note", "block"} <= route_fields
     assert "providerChoice" in body and "fixes" in main.node_route.route_unavailable(
         REGISTRY["flux-3-image-klein"], {"_provider": "openrouter", "seed": 42}, {"OPENROUTER_API_KEY": "k"})
-    assert "routes" in mcp_server.INSTRUCTIONS and "propose_change" in mcp_server.INSTRUCTIONS
+    # The routes paragraph moved from the instructions into describe_node's description (plan v2.7, PR26).
+    described = inspect.getdoc(mcp_server.describe_node)
+    assert "routes" in described and "propose_change" in described
 
 
 def test_a_proposal_cost_entry_carries_the_fixes_of_a_hidden_setting_stop():

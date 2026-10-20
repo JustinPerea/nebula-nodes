@@ -39,6 +39,9 @@ class PortContractIssue:
     port_id: str
     message: str
     edge_index: int | None = None
+    # "retyped": the wire was valid under the port's type before RETYPED_PORTS
+    # changed it. A saved project keeps such an edge; a run refuses it.
+    kind: str = ""
 
 
 @dataclass(frozen=True)
@@ -52,6 +55,21 @@ class EdgeContractResult:
 class _PortLookup:
     definition: Mapping[str, Any] | None
     dynamic: bool = False
+
+
+# What to do instead, said after "Incompatible port types" for an input
+# whose type changed under saved graphs. Krea 2's `moodboard` port was Any
+# until the moodboard adapters (plan PR13) made it a Moodboard port, so a
+# saved graph may still wire text (a Krea moodboard id) into it: the edge is
+# kept, and the run names where the id goes now.
+# The type each retyped input had before, so a saved wire that was valid then
+# is told apart from one that never was.
+RETYPED_PORTS: dict[tuple[str, str], str] = {("krea-2-generate", "moodboard"): "Any"}
+PORT_TYPE_HINTS: dict[tuple[str, str], str] = {
+    ("krea-2-generate", "moodboard"): (
+        "Krea 2's Moodboard input takes a Nebula moodboard or the Krea Moodboard node's Moodboard output; "
+        "put a Krea moodboard id in the node's Moodboard ID setting instead."),
+}
 
 
 def port_types_compatible(source_type: str, target_type: str) -> bool:
@@ -317,8 +335,13 @@ def validate_edge_contracts(
                             f"Incompatible port types: source '{source_handle}' on node "
                             f"'{edge.source}' outputs {source_type}, but target "
                             f"'{target_handle}' on node '{edge.target}' accepts {target_type}"
+                            + (f". {hint}" if (hint := PORT_TYPE_HINTS.get(
+                                (target_node.definition_id, str(target_handle)))) else "")
                         ),
                         edge_index=index,
+                        kind="retyped" if (was := RETYPED_PORTS.get(
+                            (target_node.definition_id, str(target_handle)))) is not None
+                        and port_types_compatible(source_type, was) else "",
                     )
                 )
 

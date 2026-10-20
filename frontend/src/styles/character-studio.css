@@ -505,6 +505,23 @@ body.app-slava-restraint .character-studio-view__notice--error {
   color: #e0796b;
 }
 
+/* Someone else changed a field the person was editing: theirs is kept, and
+   this says so. It springs in (the undo notice's spring) so it's seen. */
+body.app-slava-restraint .character-studio-view__notice--conflict {
+  --character-studio-spring: linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1);
+  color: var(--sr-ink);
+  animation: character-studio-note-in 420ms var(--character-studio-spring) both;
+}
+
+@keyframes character-studio-note-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .character-studio-view__notice--conflict { animation: none; }
+}
+
 body.app-slava-restraint .character-studio-view__retry {
   background: none;
   border: 1px solid currentColor;

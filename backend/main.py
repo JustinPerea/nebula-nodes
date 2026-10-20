@@ -85,6 +85,7 @@ from services.settings import (
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
+from services import agent_start, node_categories
 from services import output_thumbnail
 from services.node_errors import NodeErrors
 from services import project_cover
@@ -126,6 +127,7 @@ from services.agent_workspaces import AgentWorkspaceContext, WorkspaceSessions, 
 from services.chat_actions import publish_action
 from services import moodboard_actions
 from services.agent_presence import (
+    AgentIdentity,
     PresenceError,
     RequestHeadersContext,
     agent_presence,
@@ -144,6 +146,7 @@ from services.canvas_events import (
     parse_kinds,
 )
 from services.canvas_pins import CanvasPins, PinError, pin_summary
+from services.agent_notes import AgentNotes, NoteError, note_summary
 from services import person_session
 from services import asset_trash
 from services.child_env import scrubbed_env
@@ -157,6 +160,9 @@ from services.person_gate import (
 )
 from services.canvas_edits import INTERNAL_OK as BILLING_PARAMS, EditSpec, parse_edit
 from services.canvas_arrange import canvas_arrange
+from services.canvas_undo import (
+    EDIT_ID_RE, CanvasUndoBook, UndoError, build_inverse, capture_before, plan_undo,
+)
 from services.agent_params import ASSET_PARAM_TYPES, asset_params, internal_keys, internal_refusal
 from services.canvas_proposals import (
     MAX_REASON,
@@ -243,6 +249,9 @@ cli_graph = CLIGraph(persist_path=_STATE_PATH)
 project_store = ProjectStore(_STATE_DIR / "projects")
 # Pins follow `main.project_store` through the getter (tests swap the store).
 canvas_pins = CanvasPins(lambda: project_store)
+# Updates (plan section 5.9): the agent's and the reader's notices, kept with
+# the project (main canvas) or beside each board. Same getter as pins.
+agent_notes = AgentNotes(lambda: project_store)
 _request_workspace_revision: ContextVar[str | None] = ContextVar("workspace_revision", default=None)
 _execution_workspace_context: ContextVar[dict[str, Any] | None] = ContextVar("execution_workspace", default=None)
 _synchronous_workspace_runs: set[str] = set()
@@ -1177,7 +1186,7 @@ def _validate_restore_graph(graph: Any) -> dict[str, Any]:
         include_outputs=True,
         normalize_image_inputs=False,
     )
-    _stage_graph_edges(candidate, ingress_edges, id_map)
+    _stage_graph_edges(candidate, ingress_edges, id_map, saved=True)
     return graph
 
 
@@ -2091,12 +2100,21 @@ def _refuse_agent_billing_in_run(nodes: list[GraphNode], *, on_canvas: bool = Tr
     way the canvas node it names does (_billing_choice: a route-table node's
     provider, a dual-mode Krea node's billing mode). A node that isn't on the
     canvas, or is there as another definition, starts on the defaults (Auto,
-    the API token)."""
+    the API token).
+
+    It reads the params the run runs with: the engine migrates retired params
+    before a node runs (execution/engine.py _with_current_params), and not
+    every route normalizes its nodes first (Cinema shots, /api/quick), so a
+    retired key (a Moodboard's ``_moodboardId``) can't name what the check
+    didn't see."""
     changes = []
     for node in nodes:
         live = cli_graph.nodes.get(node.id) if on_canvas else None
         before = live.get("params") or {} if live and live.get("definitionId") == node.definition_id else None
-        changes.append((node.id if on_canvas else node.definition_id, node.definition_id, before, node.params))
+        if before is not None:
+            before = migrate_params(node.definition_id, before)
+        after = migrate_params(node.definition_id, node.params)
+        changes.append((node.id if on_canvas else node.definition_id, node.definition_id, before, after))
     _refuse_agent_billing_change(changes)
 
 
@@ -2823,6 +2841,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         export = await export_graph_for_frontend()
         await websocket.send_text(json.dumps({"type": "graphSync", **export}))
         await websocket.send_text(json.dumps(_pins_message()))
+        await websocket.send_text(json.dumps(_canvas_notes_message()))
         while True:
             raw = await websocket.receive_text()
             if manager.is_browser(websocket):
@@ -3577,14 +3596,9 @@ def _keyed_mode_hint(definition: Mapping[str, Any]) -> str | None:
                      for (keys, priced), values in groups.items())
 
 
-@app.get("/api/agent/nodes")
-async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool = True, limit: int = 20) -> dict[str, Any]:
-    """Node types an agent can use, best matches first: whether each can run
-    here (and if not, what's missing) and its list price at default settings.
-
-    Every word of `query` must appear in the id, name or description."""
+def _agent_node_context() -> dict[str, Any]:
+    """What find_nodes and the start call read once per request: settings, keys, Krea sign-in, prices."""
     settings = load_settings()
-    keys = node_readiness.configured_keys(settings)
     try:
         krea_signed_in = _krea_connector().status().get("status") == "connected"
     except Exception:  # noqa: BLE001 - an unreadable Krea vault just means not signed in
@@ -3593,57 +3607,84 @@ async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool
         pricing = model_pricing.load_pricing().get("nodes") or {}
     except (OSError, ValueError):
         pricing = {}
+    return {"settings": settings, "keys": node_readiness.configured_keys(settings), "krea": krea_signed_in,
+            "pricing": pricing, "definitions": node_registry.get_all()}
+
+
+def _agent_node_row(definition: Mapping[str, Any], context: Mapping[str, Any]) -> dict[str, Any]:
+    """One node type as find_nodes lists it: whether it runs here (and if not,
+    what's missing) and its list price at default settings."""
+    settings = context["settings"]
+    definitions = context["definitions"]
+    name = str(definition.get("displayName") or definition["id"])
+    access = node_readiness.node_access(definition, context["keys"], context["krea"], definitions)
+    row: dict[str, Any] = {
+        "id": definition["id"], "name": name, "category": definition.get("category"),
+        "runsWith": access,
+    }
+    if definition.get("description"):
+        row["description"] = _short(definition["description"])
+    if access is None:
+        row["missing"] = node_readiness.missing(definition, context["krea"], definitions)
+    hint = _keyed_mode_hint(definition)
+    if hint:
+        row["needsKeyFor"] = hint  # free at its defaults; describe_node has the detail
+    if node_route.has_routes(definition):
+        # Each provider route it can run on, in Auto order (describe_node has each one).
+        row["providers"] = [str(route["id"]) for route in node_route.routes_of(definition)]
+    if definition["id"] == model_pricing.CINEMA_SCENE:
+        row["price"] = None  # its base model's price, once per shot (describe_node)
+    elif model_pricing.is_local(definition):
+        row["price"] = "free"
+    elif definition.get("apiProvider") == "utility":
+        row["price"] = None
+    else:
+        estimate = model_pricing.estimate_node(
+            context["pricing"].get(definition["id"]), definition, {},
+            model_pricing.route_price_key(
+                definition, node_route.select_route(definition, {}, settings.get("apiKeys") or {}))
+            if node_route.has_routes(definition)
+            else model_pricing.route_provider(definition, settings.get("apiKeys") or {}))
+        row["price"] = ([round(estimate["low"], 4), round(estimate["high"], 4)]
+                        if estimate and estimate.get("currency") == "usd" else None)
+    return row
+
+
+@app.get("/api/agent/nodes")
+async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool = True, limit: int = 20) -> dict[str, Any]:
+    """Node types an agent can use, best matches first: whether each can run
+    here (and if not, what's missing) and its list price at default settings.
+
+    Every word of `query` must appear in the id, name or description.
+    `category` is a category id (image-gen) or its short name (image),
+    services/node_categories.py."""
+    context = _agent_node_context()
     words = [word for word in query.lower().split() if word]
     limit = max(1, min(int(limit), 100))
+    definitions = context["definitions"]
+    wanted = (node_categories.resolve(category, {str(d.get("category")) for d in definitions.values()}) or category
+              if category else "")
     rows: list[tuple[tuple[int, int, str], dict[str, Any]]] = []
-    definitions = node_registry.get_all()
     for definition in definitions.values():
-        if category and definition.get("category") != category:
+        if wanted and definition.get("category") != wanted:
             continue
         name = str(definition.get("displayName") or definition["id"])
         haystack = f"{definition['id']} {name} {definition.get('description') or ''}".lower()
         if any(word not in haystack for word in words):
             continue
-        access = node_readiness.node_access(definition, keys, krea_signed_in, definitions)
-        if ready_only and access is None:
+        if ready_only and node_readiness.node_access(definition, context["keys"], context["krea"], definitions) is None:
             continue
-        row: dict[str, Any] = {
-            "id": definition["id"], "name": name, "category": definition.get("category"),
-            "runsWith": access,
-        }
-        if definition.get("description"):
-            row["description"] = _short(definition["description"])
-        if access is None:
-            row["missing"] = node_readiness.missing(definition, krea_signed_in, definitions)
-        hint = _keyed_mode_hint(definition)
-        if hint:
-            row["needsKeyFor"] = hint  # free at its defaults; describe_node has the detail
-        if node_route.has_routes(definition):
-            # Each provider route it can run on, in Auto order (describe_node has each one).
-            row["providers"] = [str(route["id"]) for route in node_route.routes_of(definition)]
-        if definition["id"] == model_pricing.CINEMA_SCENE:
-            row["price"] = None  # its base model's price, once per shot (describe_node)
-        elif model_pricing.is_local(definition):
-            row["price"] = "free"
-        elif definition.get("apiProvider") == "utility":
-            row["price"] = None
-        else:
-            estimate = model_pricing.estimate_node(
-                pricing.get(definition["id"]), definition, {},
-                model_pricing.route_price_key(
-                    definition, node_route.select_route(definition, {}, settings.get("apiKeys") or {}))
-                if node_route.has_routes(definition)
-                else model_pricing.route_provider(definition, settings.get("apiKeys") or {}))
-            row["price"] = ({"usd": [round(estimate["low"], 4), round(estimate["high"], 4)]}
-                            if estimate and estimate.get("currency") == "usd" else None)
+        row = _agent_node_row(definition, context)
+        if isinstance(row["price"], list):
+            row["price"] = {"usd": row["price"]}
         # Ready first; then exact id, id prefix, name hits; then by name.
         idq = " ".join(words)
         rank = 0 if definition["id"] == idq else 1 if idq and definition["id"].startswith(idq) else \
             2 if idq and idq in name.lower() else 3
-        rows.append(((0 if access else 1, rank, name.lower()), row))
+        rows.append(((0 if row["runsWith"] else 1, rank, name.lower()), row))
     rows.sort(key=lambda pair: pair[0])
     return {"total": len(rows), "nodes": [row for _, row in rows[:limit]],
-            "krea": "signed in" if krea_signed_in else "not signed in"}
+            "krea": "signed in" if context["krea"] else "not signed in"}
 
 
 PROVIDER_CHOICE_NOTE = (
@@ -3817,6 +3858,9 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
             result["sizeNote"] = size_note
     if access is None:
         result["missing"] = node_readiness.missing(definition, krea_signed_in, definitions)
+    board = _moodboard_adapter(definition, settings)
+    if board is not None:
+        result["moodboardAdapter"] = board
     options = node_readiness.detail(definition, keys, krea_signed_in, definitions)
     if options:
         result["runsWithOptions"] = options
@@ -3997,6 +4041,7 @@ def _journal(
             node_id=node_id,
             data=data,
             summary=summary,
+            edit=_canvas_edit_link.get(),
         )
     except Exception:  # noqa: BLE001 - the journal is decoration, like presence
         pass
@@ -4140,6 +4185,93 @@ async def get_canvas_snapshot() -> dict[str, Any]:
     await _sweep_proposals()
     snapshot["proposals"] = [canvas_proposals.brief(p) for p in canvas_proposals.open_list()]
     return snapshot
+
+
+def _start_node_notes(rows: list[dict[str, Any]], context: Mapping[str, Any], via: str) -> list[str]:
+    """What the start call's node list can't say in a price: nodes free at
+    their defaults that call a provider in another mode, a local node whose
+    default base model can't run here, Krea plan billing and provider routes.
+    The CLI's `nebula context` said the same before it moved onto the route."""
+    ready = [row for row in rows if row.get("runsWith")]
+    notes: list[str] = []
+    keyed: dict[str, list[str]] = {}
+    for row in ready:
+        if row.get("needsKeyFor"):
+            keyed.setdefault(str(row["needsKeyFor"]), []).append(str(row["id"]))
+    for hint, ids in keyed.items():
+        notes.append(f"{', '.join(ids)}: free at the defaults; {hint}.")
+    definitions = context["definitions"]
+    for row in ready:
+        definition = definitions.get(str(row["id"])) or {}
+        via_spec = node_readiness.provider_via(definition) or {}
+        if via_spec.get("kind") == "model":
+            options = node_readiness.detail(definition, context["keys"], context["krea"], definitions) or {}
+            if options.get("note"):
+                notes.append(f"{row['id']}: {options['note']}")
+    look = "`nebula info <id>`" if via == "cli" else "describe_node"
+    propose = "`nebula propose`" if via == "cli" else "propose_change"
+    if any(row.get("runsWith") == "krea" for row in ready):
+        notes.append(f"runsWith krea: runs on the signed-in Krea account. Billing a node differently (_kreaAuth) "
+                     f"is the person's call: {propose} it.")
+    if any(row.get("providers") for row in ready):
+        notes.append(f"A node with providers runs on one route (_provider; {look} lists them); switching it is "
+                     f"the person's call: {propose} it.")
+    if via == "cli":
+        # find_nodes' hints name MCP tools; a shell-only agent reads the `nebula` commands.
+        notes = [_cli_words(note) for note in notes]
+    return notes
+
+
+_CLI_WORDS = {"describe_node": "`nebula info <id>`", "propose_change": "`nebula propose`",
+              "find_nodes": "`nebula nodes`", "edit_canvas": "`nebula apply`"}
+
+
+def _cli_words(text: str) -> str:
+    return re.sub(r"\b(" + "|".join(_CLI_WORDS) + r")\b", lambda match: _CLI_WORDS[match.group(1)], text)
+
+
+@app.get("/api/agent/start")
+async def agent_start_here(request: Request, via: str = "mcp") -> dict[str, Any]:
+    """An agent's first call: the canvas, open pins and proposals, every board,
+    the node types that run here with prices, and the spend limits, each in
+    its own budget (services/agent_start.py). MCP `start_here` and `nebula
+    context` print it; `via=cli` words its hints as `nebula` commands."""
+    if via not in agent_start.VIAS:
+        raise HTTPException(status_code=422, detail="via must be mcp or cli")
+    headers = current_request_headers()
+    caller = identify_agent(headers)
+    selected = selection_context.snapshot(cli_graph, node_registry).get("selectedNodeIds", [])
+    snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=selected)
+    catalog = project_store.read()
+    active_id = catalog.get("activeProjectId")
+    projects = catalog.get("projects") or {}
+    active = projects.get(active_id) if active_id else None
+    project = {"id": active_id, "name": active.get("name")} if active else None
+    try:
+        pins = canvas_pins.list()["pins"]
+    except (PinError, ProjectStoreError):
+        pins = []
+    await _sweep_proposals()
+    briefs = [canvas_proposals.brief(p) for p in canvas_proposals.open_list()]
+    # Reads every board file; off the event loop.
+    summaries = await asyncio.to_thread(lambda: _moodboard_store().summaries())
+    context = await asyncio.to_thread(_agent_node_context)
+    rows = await asyncio.to_thread(
+        lambda: [_agent_node_row(definition, context) for definition in context["definitions"].values()])
+    spend = await agent_spend_status(request)
+    return agent_start.build(
+        canvas=agent_start.canvas_part(snapshot, project=project, caller_id=caller.id if caller else None, via=via),
+        pins=agent_start.pins_part(pins, via=via),
+        proposals=agent_start.proposals_part(briefs, via=via),
+        boards=agent_start.boards_part(
+            summaries, active_project_id=active_id,
+            project_names={str(pid): str(p.get("name") or pid) for pid, p in projects.items() if isinstance(p, dict)},
+            via=via),
+        nodes=agent_start.nodes_part(rows, total=len(rows), notes=_start_node_notes(rows, context, via),
+                                     krea="signed in" if context["krea"] else "not signed in", via=via),
+        spend=agent_start.spend_part(spend),
+        next=agent_start.next_part({"journal": canvas_events.journal_id, "cursor": canvas_events.latest}, via=via),
+    )
 
 
 def _query_number(raw: str | None, name: str, *, integer: bool, low: float, high: float | None) -> float | None:
@@ -4319,6 +4451,218 @@ async def resolve_canvas_pin(pin_id: str, body: dict[str, Any]) -> dict[str, Any
     return {"pin": pin}
 
 
+# ---------- Updates: what an agent or the reader noticed (plan section 5.9) ----------
+# On screen "Updates"; in code agentNotes (services/agent_notes.py).
+
+from pydantic import BaseModel, ConfigDict, Field  # noqa: E402 - the models below need them here
+
+
+class AgentNoteBody(BaseModel):
+    """POST .../agent-notes: what an agent noticed, reports or suggests."""
+    model_config = ConfigDict(extra="forbid")
+
+    text: Any = None
+    refs: Any = None
+    about: Any = None
+    # Refused with a reason (services/agent_notes.py): agents' updates carry no actions.
+    actions: Any = None
+
+
+class AgentNotesReadBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    upTo: str | None = None
+    # Just these updates (a click on one dropped card), instead of upTo.
+    ids: list[str] | None = Field(default=None, max_length=200)
+
+
+def _note_http_error(exc: NoteError) -> HTTPException | JSONResponse:
+    if exc.code:
+        return JSONResponse(status_code=exc.status, content={"detail": exc.detail, "code": exc.code})
+    return HTTPException(status_code=exc.status, detail=exc.detail)
+
+
+def _raise_note_error(exc: NoteError):
+    error = _note_http_error(exc)
+    if isinstance(error, HTTPException):
+        raise error from exc
+    return error
+
+
+def _notes_message(surface: str, op: str, *, project_id: str | None = None, board_id: str | None = None,
+                   **extra: Any) -> dict[str, Any]:
+    message: dict[str, Any] = {"type": "agentNotes", "surface": surface, "op": op,
+                               "at": int(_time_module.time() * 1000), **extra}
+    if surface == "board":
+        message["boardId"] = board_id
+    else:
+        message["projectId"] = project_id
+    return message
+
+
+def _canvas_notes_message() -> dict[str, Any]:
+    """Every update of the open project, sent on connect and after a project
+    switch, so a tab that reconnects has the list (op "sync")."""
+    try:
+        listing = agent_notes.canvas_list()
+    except (NoteError, ProjectStoreError):
+        listing = {"projectId": None, "notes": [], "unread": 0}
+    return _notes_message("canvas", "sync", project_id=listing["projectId"], notes=listing["notes"],
+                          unread=listing["unread"])
+
+
+async def _broadcast_raw_quietly(message: dict[str, Any]) -> None:
+    try:
+        await manager.broadcast_raw(message)
+    except Exception:  # noqa: BLE001 - saved already; a reconnect resyncs
+        pass
+
+
+def _journal_note(note: dict[str, Any], surface: str, *, board: dict[str, Any] | None = None,
+                  actor: dict[str, Any] | None = None) -> None:
+    data: dict[str, Any] = {"surface": surface, "noteId": note.get("id"), "about": note.get("about"),
+                            "refs": list(note.get("refs") or [])[:12], "text": note.get("text")}
+    if board is not None:
+        data["boardId"] = board.get("id")
+        data["boardName"] = board.get("name")
+    _journal("note.posted", data=data, summary=note_summary(note), actor=actor)
+
+
+def _note_author() -> AgentIdentity:
+    identity = identify_agent(current_request_headers())
+    if identity is None:
+        raise HTTPException(status_code=400, detail=(
+            "Name yourself with NEBULA_AGENT_NAME or --as: an update is posted by an agent, "
+            "and the person reads it under Updates"))
+    return identity
+
+
+@app.get("/api/canvas/agent-notes")
+async def list_canvas_agent_notes(unread: int = 0) -> Any:
+    """The open project's Updates, newest first (``?unread=1`` for unread only)."""
+    try:
+        return agent_notes.canvas_list(unread_only=bool(unread))
+    except NoteError as exc:
+        return _raise_note_error(exc)
+
+
+@app.post("/api/canvas/agent-notes", status_code=201)
+async def post_canvas_agent_note(body: AgentNoteBody) -> Any:
+    """An agent posts what it noticed on the main canvas: ``{text, refs?, about?}``.
+    ``refs`` are node ids; unknown ones are dropped and listed in ``dropped``."""
+    identity = _note_author()
+    try:
+        result = agent_notes.canvas_post(identity, body.model_dump(exclude_unset=True),
+                                         graph_nodes=cli_graph.nodes)
+    except NoteError as exc:
+        return _raise_note_error(exc)
+    await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"],
+                                                note=result["note"], unread=result["unread"],
+                                                removed=result["removed"]))
+    _journal_note(result["note"], "canvas")
+    return result
+
+
+@app.post("/api/canvas/agent-notes/read")
+async def read_canvas_agent_notes(body: AgentNotesReadBody | None = None) -> Any:
+    """The person opened the list: every update up to ``upTo`` (all when left
+    out) is read, or just ``ids`` (a dropped card they clicked). Person only,
+    so an agent can't hide an update."""
+    require_person(current_request_headers())
+    try:
+        result = agent_notes.canvas_mark_read(body.upTo if body else None, ids=body.ids if body else None)
+    except NoteError as exc:
+        return _raise_note_error(exc)
+    if result["ids"]:
+        await _broadcast_raw_quietly(_notes_message("canvas", "read", project_id=result["projectId"],
+                                                    ids=result["ids"], unread=result["unread"]))
+    return result
+
+
+@app.post("/api/canvas/agent-notes/{note_id}/dismiss")
+async def dismiss_canvas_agent_note(note_id: str) -> Any:
+    """× on a card, or "Not now": the update stays in the list, greyed. Person only."""
+    require_person(current_request_headers())
+    try:
+        result = agent_notes.canvas_dismiss(note_id)
+    except NoteError as exc:
+        return _raise_note_error(exc)
+    await _broadcast_raw_quietly(_notes_message("canvas", "dismissed", project_id=result["projectId"],
+                                                ids=[note_id], note=result["note"], unread=result["unread"]))
+    return result
+
+
+def _live_board_for_notes(moodboard_id: str) -> dict[str, Any] | JSONResponse:
+    store = _moodboard_store()
+    try:
+        board = store.get(moodboard_id, laid_out=False)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+    if board is None:
+        return _asset_not_found("moodboard", moodboard_id)
+    return board
+
+
+@app.get("/api/moodboards/{moodboard_id}/agent-notes")
+async def list_board_agent_notes(moodboard_id: str, unread: int = 0) -> Any:
+    """A board's Updates, newest first, numbers drawn as the board is now."""
+    board = await asyncio.to_thread(_live_board_for_notes, moodboard_id)
+    if isinstance(board, JSONResponse):
+        return board
+    return agent_notes.board_list(board, unread_only=bool(unread))
+
+
+@app.post("/api/moodboards/{moodboard_id}/agent-notes", status_code=201)
+async def post_board_agent_note(moodboard_id: str, body: AgentNoteBody) -> Any:
+    """An agent posts what it noticed on a board. ``#n`` in the text is saved
+    as that image's id (a ``#n`` not on the board refuses it); ``refs`` are
+    image ids or numbers. Never writes the board file."""
+    identity = _note_author()
+    board = await asyncio.to_thread(_live_board_for_notes, moodboard_id)
+    if isinstance(board, JSONResponse):
+        return board
+    try:
+        result = await asyncio.to_thread(agent_notes.board_post, identity, board,
+                                         body.model_dump(exclude_unset=True))
+    except NoteError as exc:
+        return _raise_note_error(exc)
+    await _broadcast_raw_quietly(_notes_message("board", "added", board_id=board["id"], note=result["note"],
+                                                unread=result["unread"], removed=result["removed"]))
+    _journal_note(result["note"], "board", board=board)
+    return result
+
+
+@app.post("/api/moodboards/{moodboard_id}/agent-notes/read")
+async def read_board_agent_notes(moodboard_id: str, body: AgentNotesReadBody | None = None) -> Any:
+    require_person(current_request_headers())
+    board = await asyncio.to_thread(_live_board_for_notes, moodboard_id)
+    if isinstance(board, JSONResponse):
+        return board
+    try:
+        result = agent_notes.board_mark_read(board, body.upTo if body else None, ids=body.ids if body else None)
+    except NoteError as exc:
+        return _raise_note_error(exc)
+    if result["ids"]:
+        await _broadcast_raw_quietly(_notes_message("board", "read", board_id=board["id"], ids=result["ids"],
+                                                    unread=result["unread"]))
+    return result
+
+
+@app.post("/api/moodboards/{moodboard_id}/agent-notes/{note_id}/dismiss")
+async def dismiss_board_agent_note(moodboard_id: str, note_id: str) -> Any:
+    require_person(current_request_headers())
+    board = await asyncio.to_thread(_live_board_for_notes, moodboard_id)
+    if isinstance(board, JSONResponse):
+        return board
+    try:
+        result = agent_notes.board_dismiss(board, note_id)
+    except NoteError as exc:
+        return _raise_note_error(exc)
+    await _broadcast_raw_quietly(_notes_message("board", "dismissed", board_id=board["id"], ids=[note_id],
+                                                note=result["note"], unread=result["unread"]))
+    return result
+
+
 # ---------- Proposals: agents propose, the person approves ----------
 
 _PROPOSAL_KEY_HEADER = "x-nebula-proposal-key"
@@ -4409,12 +4753,15 @@ def _stage_proposal(
         _validate_params(definition_id, change.params)
         candidate.update_params(change.node_id, migrate_param_update(
             definition_id, node.get("params"), _coerce_params(definition_id, change.params)))
+    names = spec.names
     raw_nodes = [
         {
             "tempId": node.ref,
             "definitionId": node.definition_id,
             "params": copy.deepcopy(node.params),
             "position": (positions or {}).get(node.ref) or node.position,
+            # A proposal's name for its own new node (canvas_proposals._names).
+            **({"label": names[node.ref]} if node.ref in names else {}),
         }
         for node in spec.nodes
     ]
@@ -4612,8 +4959,9 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
 
     Body: {note, nodes?: [{ref: "+up", definitionId, params?, position?}],
     edges?: [{source, sourceHandle, target, targetHandle}] (refs or node ids),
-    params?: [{nodeId, params}], run?: [ref or node id]}. Nothing changes on
-    the canvas until the person accepts in Nebula.
+    params?: [{nodeId, params}], run?: [ref or node id], rename?: {"+up": name}}
+    (names for the proposal's own new nodes only). Nothing changes on the
+    canvas until the person accepts in Nebula.
     """
     headers = current_request_headers()
     identity = identify_agent(headers)
@@ -6392,6 +6740,19 @@ async def get_pricing() -> dict:
     return {"currencies": data.get("currencies") or {}, "nodes": data.get("nodes") or {}}
 
 
+@app.get("/api/moodboard/adapters")
+async def get_moodboard_adapters() -> dict:
+    """How each node takes a wired Nebula moodboard (services/moodboard_adapters.py,
+    contract 07 section 1.16): the hand-written and the generated Krea entries,
+    unresolved. Read per request, like prices."""
+    from services import moodboard_adapters
+
+    try:
+        return moodboard_adapters.public_table()
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=500, detail=f"Moodboard adapter table unavailable: {exc}") from exc
+
+
 @app.get("/api/nodes")
 async def list_nodes() -> dict:
     all_nodes = node_registry.get_all()
@@ -6431,7 +6792,27 @@ async def get_node(node_id: str) -> dict:
         else:
             detail = f"Node '{node_id}' not found"
         raise HTTPException(status_code=404, detail=detail)
-    return node
+    board = _moodboard_adapter(node)
+    # `nebula info` prints it; the definition itself stays as registered.
+    return {**node, "moodboardAdapter": board} if board is not None else node
+
+
+def _moodboard_adapter(definition: Mapping[str, Any], settings: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
+    """What a wired moodboard does on this node type (moodboard_adapters.describe),
+    for describe_node and `nebula info`; None without a Moodboard port.
+    Settings (for the route the keys pick) are read only for a node with that
+    port, so other lookups stay as cheap as before. A table or settings file
+    that can't be read leaves it out rather than failing the lookup."""
+    from services import moodboard_adapters
+
+    if moodboard_adapters.board_port(definition) is None:
+        return None
+    try:
+        keys = (settings if settings is not None else load_settings()).get("apiKeys") or {}
+        return moodboard_adapters.describe(definition, keys)
+    except (OSError, ValueError, AttributeError):
+        logging.getLogger("nebula.moodboard").exception("Moodboard adapter table or settings unavailable")
+        return None
 
 
 # ---------- CLI: Graph management ----------
@@ -6463,6 +6844,11 @@ def _graph_edit_origin() -> dict[str, Any]:
     # gets no echo match either; it can't be told apart from a script.
     if is_person(headers) and isinstance(tab, str) and _TAB_ID_RE.fullmatch(tab):
         origin["tab"] = tab
+    # The edit this sync carries (services/canvas_undo.py), so the canvas's
+    # undo step knows which edit it holds and its Cmd+Z can say so.
+    link = _canvas_edit_link.get()
+    if link:
+        origin.update({key: link[key] for key in ("id", "undoes", "redoes") if key in link})
     return origin
 
 
@@ -6499,6 +6885,7 @@ async def _broadcast_graph_sync(
         canvas_arrange.clear()
         if reason == "import":
             node_errors.forget_canvas()
+            _forget_canvas_undo("a graph was loaded into the project since, so its node ids started again")
     export = await export_graph_for_frontend()
     if graph_replaced:
         agent_presence.forget_graph()
@@ -6539,6 +6926,10 @@ async def _broadcast_graph_sync(
             except (PinError, ProjectStoreError):
                 detached = []
         await _broadcast_pins()
+        # Updates belong to the project record too: an open or create brings
+        # that project's list; an import keeps the project, and its list.
+        if safe_reason != "import":
+            await _broadcast_raw_quietly(_canvas_notes_message())
         await _journal_detached_pins(detached, "the canvas was replaced")
         # Proposals point at node ids that just restarted: none of them still fit.
         # Nor do runs approved on Accept that haven't started.
@@ -6883,8 +7274,13 @@ def _validate_connect_handles(
     dst_port: str,
     *,
     graph: CLIGraph | None = None,
+    saved: bool = False,
 ) -> None:
     """Reject a connection that violates the shared registry contract.
+
+    ``saved``: the edge comes from a saved project, which keeps a wire that
+    was valid before its input port's type changed (port_contracts
+    RETYPED_PORTS); a run refuses it and says what to do instead.
 
     The proposed edge is checked together with existing edges so duplicate
     connections and target-port multiplicity/maxConnections are enforced at
@@ -6928,7 +7324,7 @@ def _validate_connect_handles(
         (issue for issue in result.issues if issue.edge_index == proposed_index),
         None,
     )
-    if proposed_issue is not None:
+    if proposed_issue is not None and not (saved and proposed_issue.kind == "retyped"):
         raise HTTPException(
             status_code=400,
             detail=proposed_issue.message,
@@ -7290,13 +7686,6 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
                     dst,
                     connect_spec.get("targetHandle", ""),
                 )
-                # Deleting an earlier edge can leave the len+1 allocator at an
-                # existing id. The confirmed pair needs a unique edge identity.
-                used_edge_ids = {existing["id"] for existing in candidate.edges[:-1]}
-                edge_number = len(candidate.edges)
-                while edge["id"] in used_edge_ids:
-                    edge_number += 1
-                    edge["id"] = f"e{edge_number}"
             except ValueError as exc:
                 # Discard the persistence-free candidate on every connection
                 # failure; the caller requested a pair, not a standalone node.
@@ -7456,13 +7845,6 @@ async def send_cinema_shot_to_motion(body: dict[str, Any]) -> dict:
             target_id = candidate.add_node("veo-3", defaults, position={"x": position["x"] + 360.0, "y": position["y"]})
             _validate_connect_handles(node_id, port_id, target_id, "image", graph=candidate)
             edge = candidate.connect(node_id, port_id, target_id, "image")
-            # CLIGraph's sequential edge allocator can collide after deletion.
-            # Keep this new connection's identity valid before durable adoption.
-            used_edge_ids = {existing["id"] for existing in candidate.edges[:-1]}
-            edge_number = len(candidate.edges)
-            while edge["id"] in used_edge_ids:
-                edge_number += 1
-                edge["id"] = f"e{edge_number}"
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=f"Cannot connect this shot to motion: {exc}") from exc
         # This action adds only an ordinary Veo node/edge. Existing recovery
@@ -7757,7 +8139,9 @@ def _require_clear_intent(force: bool) -> None:
     clear one undo step (the graphSync carries ``edit``; Undo sends the nodes,
     wires, names and outputs back through POST /api/graph/restore). The
     canvas's Clear button and chat /clear send force after the person
-    confirms; `nebula clear --force` and the MCP send it when asked to."""
+    confirms, and `nebula clear --force` sends it when asked to. No MCP tool
+    clears the canvas: MCP agents start fresh work with new_project, and
+    remove_from_canvas deletes nodes (its result's undo token puts them back)."""
     if force or not cli_graph.nodes:
         return
     count = len(cli_graph.nodes)
@@ -7781,6 +8165,7 @@ async def clear_graph(force: bool = False) -> dict:
         cli_graph.clear()
         run_approvals.clear()
     agent_presence.forget_graph()
+    _forget_canvas_undo("the canvas was cleared since")
     await _broadcast_graph_sync(edit=True)
     publish_action("Cleared the canvas")
     _journal("canvas.cleared", summary="cleared the canvas")
@@ -8214,6 +8599,7 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         for change in additions.params
     }
     labels_before = {key: _node_label(key) for key in spec.rename if not key.startswith("+")}
+    undo_before = _canvas_undo_before(spec, shown)
 
     removed: list[dict[str, Any]] = []
     with _paid_graph_mutation("edit the canvas"):
@@ -8267,6 +8653,9 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             source="agent-edit",
         )
 
+    edit_link = _canvas_edit_link.set({"id": canvas_undo_book.new_id()})
+    # Before any await: a request that lands while this one broadcasts is not part of this edit.
+    undo_after = _canvas_undo_after(undo_before, list(id_map.values()))
     # An explicit move wins over any arrange still waiting for these nodes.
     canvas_arrange.forget_nodes(moves)
     arrange = None
@@ -8341,6 +8730,8 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     if focus is not None and focus in cli_graph.nodes:
         await _show_agent({"nodeId": focus}, say=additions.note if note else summary)
     wanted = set(edge_ids)
+    undo = _canvas_undo_keep(identity, undo_after)
+    _canvas_edit_link.reset(edit_link)
     return {
         "status": "applied",
         "summary": summary,
@@ -8354,6 +8745,7 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         "removed": [gone["id"] for gone in removed],
         "unwired": [edge.as_dict() for edge in spec.unwire],
         **({"arrange": _arrange_reply(arrange)} if arrange is not None else {}),
+        "undo": undo,
     }
 
 
@@ -8424,7 +8816,39 @@ async def restore_graph_state(body: dict[str, Any]) -> dict[str, Any]:
     undoing the same step agree. Staged on a copy (unwire, remove, nodes,
     wire) with the checks single edits use, then committed at once. Never
     runs anything. Anyone can call it, agents too: it is itself undoable.
+
+    ``edit`` (an edit id, ``ed_...``) is the edit this step undoes or redoes,
+    when the canvas's step came from that edit's graphSync (its ``edit.id``).
+    From the person's canvas it links the restore to that edit: its journal
+    events say so (``edit: {id, undoes|redoes, of}``), an ``edit.undone`` or
+    ``edit.redone`` event follows, and the agent's undo token for it knows
+    the person undid it (services/canvas_undo.py). From anyone else it is
+    ignored: agents undo their own edits with POST /api/graph/apply/undo.
     """
+    link = _restore_edit_link(body)
+    if link is None:
+        return await _restore_graph(body)
+    token = _canvas_edit_link.set(link)
+    try:
+        result = await _restore_graph(body)
+        _journal_restored_edit(link, body.get("action", "undo"))
+    finally:
+        _canvas_edit_link.reset(token)
+    return result
+
+
+async def _restore_graph(
+    body: dict[str, Any],
+    *,
+    trusted: frozenset[str] = frozenset(),
+    skipped_wires: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """The restore itself, for POST /api/graph/restore and an agent's undo
+    (POST /api/graph/apply/undo). ``trusted`` are node ids whose items the
+    server wrote (an edit's kept inverse): they may carry ``_`` params, a
+    billing choice the node had, and a moodboard or character that is gone
+    since, as the node had them. With ``skipped_wires`` a wire that can't go
+    back is listed there instead of refusing the whole restore."""
     _check_workspace_revision()
     _validate_graph_ingress_complexity(body)
     action = body.get("action", "undo")
@@ -8481,13 +8905,15 @@ async def restore_graph_state(body: dict[str, Any]) -> dict[str, Any]:
             definition_id, params, position, outputs, label = _validated_ingress_node(
                 raw, index, include_outputs=current is None,
             )
-            _refuse_agent_internal_params(params, node_id)
+            if node_id not in trusted:
+                _refuse_agent_internal_params(params, node_id)
             _check_provider(definition_id, params, node_id)
             _check_krea_auth(definition_id, params, node_id)
             params = migrate_params(definition_id, params)
             if current is None:
-                _check_asset_refs(definition_id, params, node_id)
-                billing.append((node_id, definition_id, None, params))
+                _check_asset_refs(definition_id, params, node_id, must_exist=False if node_id in trusted else None)
+                if node_id not in trusted:
+                    billing.append((node_id, definition_id, None, params))
                 try:
                     candidate.add_node(definition_id, params, position=position, outputs=outputs, node_id=node_id)
                 except ValueError as exc:
@@ -8504,14 +8930,16 @@ async def restore_graph_state(body: dict[str, Any]) -> dict[str, Any]:
             # canvas leaves out params and name when the step didn't touch them.
             if "params" in raw:
                 params_before = copy.deepcopy(current.get("params") or {})
-                _check_asset_refs(definition_id, params, node_id, before=params_before)
+                _check_asset_refs(definition_id, params, node_id, before=params_before,
+                                  must_exist=False if node_id in trusted else None)
                 if definition_id == "paper-source":
                     kept = _kept_paper_source(params_before, params)
                     if kept is not None:
                         params["_paperSource"] = kept
                 _author_cinema_scene(candidate, node_id, current, params)
                 _keep_recovery_checkpoint(current, params)
-                billing.append((node_id, definition_id, params_before, params))
+                if node_id not in trusted:
+                    billing.append((node_id, definition_id, params_before, params))
                 if params != params_before:
                     candidate.set_params(node_id, params)
                     changed[node_id] = params_before
@@ -8536,7 +8964,14 @@ async def restore_graph_state(body: dict[str, Any]) -> dict[str, Any]:
                 raise HTTPException(status_code=409, detail=(
                     f"{missing} is no longer on the canvas, so its wire can't be put back. "
                     "Reload the canvas to see the current graph."))
-            _validate_connect_handles(source, source_handle, target, target_handle, graph=candidate)
+            try:
+                _validate_connect_handles(source, source_handle, target, target_handle, graph=candidate)
+            except HTTPException as exc:
+                if skipped_wires is None:
+                    raise
+                skipped_wires.append({"source": source, "sourceHandle": source_handle, "target": target,
+                                      "targetHandle": target_handle, "reason": str(exc.detail)})
+                continue
             wired.append(candidate.connect(source, source_handle, target, target_handle))
         try:
             graph_nodes, graph_edges = candidate.to_execute_format()
@@ -8621,6 +9056,239 @@ async def restore_graph_state(body: dict[str, Any]) -> dict[str, Any]:
         "wired": [_edge_data(edge) for edge in wired],
         "unwired": unwired,
     }
+
+
+# -- Undo of an agent's own edit (POST /api/graph/apply/undo) -----------------------
+# Each apply that changes something keeps its inverse in canvas_undo_book
+# (services/canvas_undo.py) and hands the agent an undo token. The undo puts
+# back each part the canvas still has as the edit left it, through the same
+# restore the canvas's Cmd+Z uses. The journal names the edit an undo reverts
+# (event ``edit``), for that undo and for the person's Cmd+Z of the edit.
+
+canvas_undo_book = CanvasUndoBook()
+# The edit the current request makes ({id}, or {id, undoes|redoes, of?}): it
+# tags the request's journal events (_journal) and its graphSync (_graph_edit_origin).
+_canvas_edit_link: ContextVar[dict[str, Any] | None] = ContextVar("canvas_edit_link", default=None)
+
+
+def _open_project_brief() -> tuple[str | None, str]:
+    catalog = project_store.read()
+    active = catalog.get("activeProjectId")
+    project = catalog["projects"].get(active) if active else None
+    return active, str((project or {}).get("name") or "")
+
+
+def _canvas_undo_before(spec: EditSpec, shown: Mapping[str, Any]) -> dict[str, Any]:
+    """The canvas as an apply is about to change it (only what the edit names)."""
+    return capture_before(
+        cli_graph.nodes, cli_graph.edges,
+        removed=list(spec.remove),
+        changed=[change.node_id for change in spec.additions.params],
+        renamed=[key for key in spec.rename if not key.startswith("+")],
+        moved=[key for key in spec.move if not key.startswith("+")],
+        shown=shown,
+    )
+
+
+def _canvas_undo_after(before: dict[str, Any], added: list[str]) -> dict[str, Any]:
+    """Right after an apply commits, before it awaits anything: its inverse
+    and the project it was made in. Built later, it would take in whatever
+    another request changed while this one was still broadcasting."""
+    project_id, project_name = _open_project_brief()
+    return {"inverse": build_inverse(before, cli_graph.nodes, cli_graph.edges, added=added),
+            "projectId": project_id, "projectName": project_name, "epoch": canvas_undo_book.epoch(project_id)}
+
+
+def _canvas_undo_keep(identity: Any, after: dict[str, Any]) -> dict[str, Any] | None:
+    """At the end of an apply: keep its inverse, and the reply's ``undo`` (None when nothing changed)."""
+    edit_id = (_canvas_edit_link.get() or {}).get("id")
+    if not edit_id or after["inverse"] is None:
+        return None
+    actor = actor_for_headers(current_request_headers())
+    canvas_undo_book.link(edit_id, kind="edit", actor=actor)
+    canvas_undo_book.note_events(edit_id, canvas_events.seqs_of_edit(edit_id))
+    return canvas_undo_book.keep(edit_id=edit_id, actor=actor, agent_id=identity.id, project_id=after["projectId"],
+                                 project_name=after["projectName"], inverse=after["inverse"], epoch=after["epoch"])
+
+
+def _forget_canvas_undo(why: str) -> None:
+    """The open project's node ids start again: its undo tokens end."""
+    try:
+        canvas_undo_book.forget_project(_workspace_context()["activeProjectId"], why)
+    except Exception:  # noqa: BLE001 - never break a clear or a load over undo bookkeeping
+        pass
+
+
+def _undo_refused_change(node_id: str, definition_id: str, before: dict[str, Any], after: dict[str, Any]) -> str | None:
+    try:
+        _refuse_agent_billing_change([(node_id, definition_id, before, after)])
+    except HTTPException as exc:
+        return str(exc.detail)
+    return None
+
+
+def _undo_cannot_remove(node_id: str, node: dict[str, Any]) -> str | None:
+    try:
+        _ensure_node_deletable(node_id, node)
+    except HTTPException as exc:
+        return str(exc.detail)
+    return None
+
+
+def _undo_owner_text(of: Mapping[str, Any] | None, *, by: Mapping[str, Any]) -> str:
+    """Whose edit an undo reverted, in a summary: "its own", "Claude Code's"."""
+    if not of:
+        return "an edit Nebula no longer knows"
+    if of.get("kind") == "agent" and of.get("id") and of.get("id") == by.get("id"):
+        return "its own edit"
+    return f"{actor_label(of)}'s edit"
+
+
+def _restore_edit_link(body: dict[str, Any]) -> dict[str, Any] | None:
+    """The link for a restore whose ``edit`` names the edit the canvas's step
+    came from: only the person's canvas links (anyone else is ignored)."""
+    raw = body.get("edit")
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or EDIT_ID_RE.fullmatch(raw) is None:
+        raise HTTPException(status_code=400, detail=(
+            "edit must be an edit id like ed_0123456789abcdef: the edit.id of the graphSync the step came from"))
+    headers = current_request_headers()
+    action = body.get("action", "undo")
+    if action not in RESTORE_ACTIONS or not is_person(headers):
+        return None
+    target = canvas_undo_book.link_of(raw)
+    link: dict[str, Any] = {"id": canvas_undo_book.new_id(), ("undoes" if action == "undo" else "redoes"): raw}
+    if target is not None:
+        link["of"] = target.actor
+    canvas_undo_book.link(link["id"], kind=action, actor=actor_for_headers(headers), target=raw)
+    return link
+
+
+def _journal_restored_edit(link: dict[str, Any], action: str) -> None:
+    """After the person's linked Cmd+Z (or redo): the edit.undone (edit.redone)
+    event, and the agent's undo token learns where its edit stands."""
+    target_id = str(link.get("undoes") or link.get("redoes"))
+    target = canvas_undo_book.link_of(target_id)
+    canvas_undo_book.note_events(link["id"], canvas_events.seqs_of_edit(link["id"]))
+    by = actor_for_headers(current_request_headers())
+    data: dict[str, Any] = {"editId": target_id, f"{action}Id": link["id"]}
+    noun = "edit"
+    if target is not None:
+        data.update({"of": target.actor, "editKind": target.kind, "events": target.events})
+        if target.kind == "undo" and target.target:
+            data["undid"] = target.target
+            noun = "undo"
+    owner = _undo_owner_text(link.get("of"), by=by)
+    if noun == "undo":
+        owner = owner.removesuffix("edit") + "undo"
+    where = "Cmd+Z on the canvas" if action == "undo" else "redo on the canvas"
+    _journal("edit.undone" if action == "undo" else "edit.redone", data=data,
+             summary=f"{'undid' if action == 'undo' else 'redid'} {owner} ({where})")
+    # Where the agent's edit stands now, for its undo token.
+    if target is None:
+        return
+    person = actor_record(by)
+    if target.kind == "edit":
+        record = canvas_undo_book.by_edit(target_id)
+        if record is not None:
+            record.state, record.undone_by = ("undone", person) if action == "undo" else ("applied", None)
+    elif target.kind == "undo" and target.target:
+        record = canvas_undo_book.by_edit(target.target)
+        if record is not None:
+            record.state, record.undone_by = (("applied", None) if action == "undo"
+                                              else ("undone", actor_record(target.actor)))
+
+
+@app.post("/api/graph/apply/undo")
+async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
+    """An agent undoes one of its own edits: ``{token}``, the ``undo.token``
+    its POST /api/graph/apply reply carried (MCP undo_canvas_edit, ``nebula undo``).
+
+    Only the agent that made the edit, while the project it was made in is
+    open, within UNDO_TTL_SECONDS. Each part (a node it added, a param,
+    name or position it changed, a node or wire it removed) goes back only
+    if the canvas still has it as the edit left it; a part someone changed
+    since stays and is listed in ``skipped``. The rest goes through one
+    restore, as the canvas's Cmd+Z does, so it lands whole or not at all.
+
+    ``status`` is ``undone``; ``skipped`` when nothing could go back (the
+    token still works, say after the person puts a part back); or
+    ``already-undone`` (by this agent, or by the person on the canvas) with
+    ``undoneBy``. The journal tags each event ``edit: {id, undoes, of}`` and
+    ends with ``edit.undone``.
+    """
+    headers = current_request_headers()
+    identity = identify_agent(headers)
+    if identity is None:
+        if is_person(headers):
+            raise HTTPException(status_code=403, detail=(
+                "This route is for agents; the canvas undoes an agent's edit with Cmd+Z or the notice's Undo"))
+        raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
+    extra = sorted(set(body) - {"token"})
+    if extra:
+        raise HTTPException(status_code=400, detail=f"Undo takes only the token; '{extra[0][:40]}' isn't part of it")
+    token = body.get("token")
+    if not isinstance(token, str) or not token:
+        raise HTTPException(status_code=400, detail="token must be the undo.token of one of your edits")
+    project_id, _ = _open_project_brief()
+    try:
+        record = canvas_undo_book.take(token.strip(), agent_id=identity.id, project_id=project_id)
+    except UndoError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+    if record.state == "undone":
+        by = record.undone_by or {}
+        who = "you" if by.get("kind") == "agent" and record.undo_id else (
+            "the person, on the canvas" if by.get("kind") == "person" else actor_label(by))
+        return {"status": "already-undone", "editId": record.edit_id, "undoId": record.undo_id,
+                "undoneBy": by, "skipped": record.last_skipped,
+                "message": f"This edit was already undone by {who}; nothing changed."}
+    plan = plan_undo(record.inverse, cli_graph.nodes, cli_graph.edges,
+                     cannot_remove=_undo_cannot_remove, refused_change=_undo_refused_change)
+    owner = record.actor
+    actor = actor_for_headers(headers)
+    if plan.empty:
+        if plan.skipped:
+            return {"status": "skipped", "editId": record.edit_id, "added": [], "removed": [], "changed": [],
+                    "renamed": [], "moved": [], "wired": [], "unwired": [], "skipped": plan.skipped,
+                    "message": ("Nothing went back: every part of this edit was changed since. The token still "
+                                "works if those parts are put back the way the edit left them.")}
+        record.state, record.undone_by, record.last_skipped = "undone", actor_record(actor), []
+        return {"status": "undone", "editId": record.edit_id, "undoId": None, "added": [], "removed": [],
+                "changed": [], "renamed": [], "moved": [], "wired": [], "unwired": [], "skipped": [],
+                "message": "The canvas already looks as it did before this edit; nothing changed."}
+    undo_id = canvas_undo_book.new_id()
+    link = {"id": undo_id, "undoes": record.edit_id, "of": owner}
+    canvas_undo_book.link(undo_id, kind="undo", actor=actor, target=record.edit_id)
+    wire_skips: list[dict[str, Any]] = []
+    context = _canvas_edit_link.set(link)
+    try:
+        result = await _restore_graph(plan.restore, trusted=plan.trusted, skipped_wires=wire_skips)
+        skipped = plan.skipped + [{
+            "part": "wire", "nodeId": wire["target"], "reason": "can't be wired now",
+            "wire": {key: wire[key] for key in ("source", "sourceHandle", "target", "targetHandle")},
+            "message": (f"the wire {wire['source']}.{wire['sourceHandle']} → {wire['target']}.{wire['targetHandle']} "
+                        f"can't come back: {wire['reason']}")} for wire in wire_skips]
+        record.state, record.undone_by, record.undo_id = "undone", actor_record(actor), undo_id
+        record.last_skipped = skipped
+        canvas_undo_book.note_events(undo_id, canvas_events.seqs_of_edit(undo_id))
+        link_entry = canvas_undo_book.link_of(record.edit_id)
+        counts = {key: len(result.get(key) or []) for key in ("added", "removed", "changed", "renamed", "moved")}
+        done = ", ".join(f"{verb} {counts[key]}" for key, verb in (
+            ("removed", "removed"), ("added", "put back"), ("changed", "reset"), ("renamed", "renamed"),
+            ("moved", "moved")) if counts[key])
+        left = f"; left {len(skipped)} part{'s' if len(skipped) != 1 else ''} as is" if skipped else ""
+        _journal("edit.undone", data={
+            "editId": record.edit_id, "undoId": undo_id, "of": owner, "editKind": "edit",
+            "events": link_entry.events if link_entry else [], "counts": counts, "skipped": len(skipped)},
+            summary=f"undid {_undo_owner_text(owner, by=actor)} ({done or 'no change'}){left}")
+    finally:
+        _canvas_edit_link.reset(context)
+    publish_action(f"{identity.name} undid its edit: {done or 'no change'}{left}")
+    return {"status": "undone", "editId": record.edit_id, "undoId": undo_id,
+            **{key: result.get(key) for key in ("added", "removed", "changed", "renamed", "moved", "wired",
+                                                 "unwired")},
+            "skipped": skipped}
 
 
 @app.get("/api/graph/node/{node_id}/path")
@@ -8818,6 +9486,14 @@ def _graph_ingress_items(body: dict[str, Any], key: str) -> list[dict[str, Any]]
 def _validate_graph_ingress_complexity(value: Any) -> None:
     """Bound and reject non-finite values on every mutable graph ingress."""
     _check_workspace_revision()
+    _check_graph_ingress_values(value)
+
+
+def _check_graph_ingress_values(value: Any) -> None:
+    """The walk behind _validate_graph_ingress_complexity: bounds, finite
+    numbers and protected file references (validate_file_references). Reads
+    nothing but the value, the filesystem and the request's context, so it can
+    run in a worker thread (_ingress_verdict)."""
     stack: list[tuple[Any, int]] = [(value, 0)]
     value_count = 0
     while stack:
@@ -8834,6 +9510,62 @@ def _validate_graph_ingress_complexity(value: Any) -> None:
         elif isinstance(current, list):
             stack.extend((item, depth + 1) for item in current)
     validate_file_references(value)
+
+
+class _IngressVerdict:
+    """What checking one whole graph value off the event loop found
+    (_ingress_verdict): the value checked and the refusal, if any.
+
+    The check walks every string in a project (its run records repeat the
+    graph) and stats each distinct one as a path, seconds on a large project.
+    On the event loop that held up every request and canvas event, so the
+    routes that check a whole snapshot (project save, open and recover, graph
+    import) run it in a worker thread before their transaction, and apply the
+    verdict with ``require`` where the check used to run: its refusal keeps
+    its place behind the route's own (a missing project, a stale revision),
+    and the revision check still runs there, on the loop.
+    """
+
+    __slots__ = ("value", "error")
+
+    def __init__(self, value: Any, error: BaseException | None) -> None:
+        self.value = value
+        self.error = error
+
+    def require(self, current: Any) -> None:
+        """Refuse ``current`` as the check did, or pass it. ``current`` must be
+        what is committed: the same object (a request's own body, which nothing
+        else holds) or, read again inside the transaction, equal to what was
+        checked. Anything else changed after the check (another writer saved
+        the project in between), so it is checked again, here."""
+        _check_workspace_revision()
+        if current is not self.value and current != self.value:
+            _check_graph_ingress_values(current)
+            return
+        if self.error is not None:
+            raise self.error
+
+    def part(self, key: str) -> "_IngressVerdict":
+        """The verdict for ``value[key]`` (a recovery body's snapshot), which
+        the check of the whole value covered. Only after ``require`` passed."""
+        assert self.error is None, "require() refuses before a part is used"
+        return _IngressVerdict(self.value.get(key) if isinstance(self.value, dict) else None, None)
+
+
+def _ingress_verdict(value: Any) -> _IngressVerdict:
+    """Check a whole graph value (in a worker thread) and keep the refusal
+    for _IngressVerdict.require instead of raising it here."""
+    try:
+        _check_graph_ingress_values(value)
+    except Exception as exc:  # noqa: BLE001 - re-raised by require(), where the check ran before
+        return _IngressVerdict(value, exc)
+    return _IngressVerdict(value, None)
+
+
+async def _ingress_verdict_off_loop(value: Any) -> _IngressVerdict:
+    # asyncio.to_thread runs it in a copy of this request's context, so the
+    # agent workspace the path check reads (agent_workspaces) is the caller's.
+    return await asyncio.to_thread(_ingress_verdict, value)
 
 
 def _migrate_ingress(
@@ -8996,8 +9728,11 @@ def _stage_graph_edges(
     candidate: CLIGraph,
     raw_edges: list[dict[str, Any]],
     id_map: dict[str, str],
+    *,
+    saved: bool = False,
 ) -> list[str]:
-    """Validate every endpoint/handle before adding any edge to live state."""
+    """Validate every endpoint/handle before adding any edge to live state.
+    ``saved``: the edges come from a saved graph (_validate_connect_handles)."""
     edge_ids: list[str] = []
     seen: set[tuple[str, str, str, str]] = set()
     for index, raw in enumerate(raw_edges):
@@ -9032,6 +9767,7 @@ def _stage_graph_edges(
             target,
             target_handle,
             graph=candidate,
+            saved=saved,
         )
         try:
             edge_ids.append(
@@ -9060,8 +9796,11 @@ async def import_graph(body: dict[str, Any]) -> dict:
     short IDs so the rest of the system treats the loaded graph like any other
     CLI-created graph — including Claude's `nebula graph` view.
     """
+    # A whole graph file: checked in a worker thread (_IngressVerdict). The
+    # rest stays synchronous from the revision check to the commit, as before.
+    verdict = await _ingress_verdict_off_loop(body)
     _check_workspace_revision()
-    _validate_graph_ingress_complexity(body)
+    verdict.require(body)
     candidate = CLIGraph()
     raw_nodes = _graph_ingress_items(body, "nodes")
     raw_edges = _graph_ingress_items(body, "edges")
@@ -9086,7 +9825,7 @@ async def import_graph(body: dict[str, Any]) -> dict:
     _refuse_agent_billing_change(
         (node_id, str(candidate.nodes[node_id].get("definitionId") or ""), _folded_billing_baseline(ref, folded),
          candidate.nodes[node_id].get("params") or {}) for ref, node_id in id_map.items())
-    _stage_graph_edges(candidate, raw_edges, id_map)
+    _stage_graph_edges(candidate, raw_edges, id_map, saved=True)
     with _paid_graph_mutation("replace the graph"):
         _reject_graph_replacement_during_paid_start("replace the graph")
         if execution_runs.has_active() or _synchronous_workspace_runs:
@@ -9408,20 +10147,22 @@ def _migrate_rf_graph(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) 
 
 def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None = None,
                             warnings: list[str] | None = None,
-                            ingress_checked: bool = False) -> tuple[dict[str, Any], CLIGraph]:
+                            ingress: _IngressVerdict | None = None) -> tuple[dict[str, Any], CLIGraph]:
     """Validate a saved RF graph with canonical definitions, retaining its IDs.
 
     A removed definition can still be viewed when it was already in this
     project's history or live canvas. It cannot acquire execution authority
     from a frontend-supplied definition object. A folded Krea node loads as
     its new node (_migrate_rf_graph); what that dropped goes in ``warnings``.
-    ``ingress_checked``: the caller already ran _validate_graph_ingress_complexity
-    on this same object (save_project does, off the event loop).
+    ``ingress``: the check already ran on this snapshot in a worker thread
+    (the project routes do); without it, it runs here.
     """
     if not isinstance(snapshot, dict):
         raise HTTPException(status_code=400, detail="Project snapshot must be an object")
-    if not ingress_checked:
+    if ingress is None:
         _validate_graph_ingress_complexity(snapshot)
+    else:
+        ingress.require(snapshot)
     if len(json.dumps(snapshot, allow_nan=False, ensure_ascii=False).encode("utf-8")) > MAX_PROJECT_BYTES:
         raise HTTPException(status_code=413, detail="Project snapshot exceeds the 16 MiB limit")
     nodes = _graph_ingress_items(snapshot, "nodes")
@@ -9528,7 +10269,7 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
             raise HTTPException(status_code=400, detail="Duplicate project connection")
         signatures.add(signature)
         if source in known and target in known:
-            _validate_connect_handles(source, source_handle, target, target_handle, graph=candidate)
+            _validate_connect_handles(source, source_handle, target, target_handle, graph=candidate, saved=True)
         candidate.edges.append({"id": edge_id, "source": source, "sourceHandle": source_handle, "target": target, "targetHandle": target_handle})
     try:
         graph_nodes, graph_edges = candidate.to_execute_format()
@@ -9704,6 +10445,9 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         params_version = request_version(body, 0)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # The tab's whole snapshot: checked in a worker thread, refused (if it
+    # is) below where the check ran before (_IngressVerdict).
+    verdict = await _ingress_verdict_off_loop(body)
     with project_store.transaction() as catalog:
         source_id = body.get("sourceProjectId")
         try:
@@ -9717,14 +10461,16 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         }
         # Hash the submitted JSON, before canonical coercion. A retry of the
         # same request remains idempotent even if source metadata changes.
-        _validate_graph_ingress_complexity(body)
+        verdict.require(body)
         fingerprint = hashlib.sha256(json.dumps({"sourceProjectId": source["id"], "snapshot": body.get("snapshot"), "name": body.get("name")}, sort_keys=True, allow_nan=False, ensure_ascii=False).encode("utf-8")).hexdigest()
         if existing := catalog["projects"].get(recovery_id):
             if existing.get("_recoveryFingerprint") != fingerprint:
                 raise HTTPException(status_code=409, detail="Recovery ID already belongs to a different snapshot")
             return {"project": public_project(existing), "workspaceRevision": catalog["workspaceRevision"]}
         historical = {node["id"]: node.get("data", {}).get("definitionId") for node in source["snapshot"]["nodes"]}
-        snapshot, candidate = _stage_project_snapshot(body.get("snapshot"), historical=historical)
+        # The body's check covered its snapshot; staging doesn't walk it twice.
+        snapshot, candidate = _stage_project_snapshot(body.get("snapshot"), historical=historical,
+                                                      ingress=verdict.part("snapshot"))
         _refuse_agent_billing_in_project(
             candidate, *([cli_graph.nodes] if catalog["activeProjectId"] == source["id"] else []),
             _snapshot_nodes(source["snapshot"]))
@@ -9838,8 +10584,63 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
     return {"project": public_project(project), "workspaceRevision": revision, "paramsVersion": PARAMS_VERSION}
 
 
+async def _open_ingress_verdict_off_loop(project_id: str, body: dict[str, Any]) -> _IngressVerdict | None:
+    """Check the snapshot an open will stage, in a worker thread, before the
+    open's transaction. None when it can't be known ahead (no such project,
+    an unreadable catalog) or the open is going to be refused anyway (a stale
+    revision, an active run): the open then answers its own 404, 409 or
+    storage error at once, as before, and checks inline if it gets past
+    them after all."""
+    live = None
+    try:
+        workspace = project_store.workspace()
+        # The transaction's own refusals, ahead of time: what it then holds
+        # decides, so this only spares a refused open the check's wait.
+        _project_revision(body, workspace)
+        _project_replacement_guard()
+    except (ProjectStoreError, HTTPException):
+        return None
+    reopening = workspace["activeProjectId"] == project_id
+    if reopening:
+        # Reopening the open project stages it with the live canvas merged in
+        # (_overlay_live_project), so the thread checks that merge. A copy:
+        # the export shares nested values with the live graph, which requests
+        # on the loop can change while the thread reads.
+        live = copy.deepcopy(await _projects_live_export())
+    return await asyncio.to_thread(_open_ingress_verdict, project_id, live)
+
+
+def _open_ingress_verdict(project_id: str, live: dict[str, Any] | None) -> _IngressVerdict | None:
+    # No catalog lock: the loop takes it, and a thread holding it would stall
+    # the loop. Commits replace catalog.json whole (os.replace), so this reads
+    # one complete version; the open compares what it stages inside its
+    # transaction with what was checked here (_IngressVerdict.require).
+    # Anything else that fails here (an unreadable catalog, a saved project
+    # the merge can't read) leaves the check to the open, which then fails
+    # where it always did, after its own refusals.
+    try:
+        catalog = project_store.read_unlocked()
+        project = catalog["projects"].get(project_id)
+        if project is None:
+            return None
+        if catalog.get("activeProjectId") == project_id:
+            if live is None:
+                return None
+            _overlay_live_project(project, live)
+        snapshot = project["snapshot"]
+    except Exception:  # noqa: BLE001 - see above
+        return None
+    return _ingress_verdict(snapshot)
+
+
 @app.post("/api/projects/{project_id}/open")
 async def open_saved_project(project_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    # The saved snapshot's check (seconds on a large project) runs in a worker
+    # thread first. From the live export to the commit the open stays
+    # synchronous on the loop, as before: no edit lands between the export
+    # and the overlay. If the project changed after the check (another writer
+    # saved it), staging checks it again, inline (_IngressVerdict.require).
+    verdict = await _open_ingress_verdict_off_loop(project_id, body or {})
     exported = await _projects_live_export()
     actor = _switch_actor()
     with project_store.transaction() as catalog, _paid_graph_mutation("open a project"):
@@ -9850,7 +10651,8 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
             _overlay_live_project(catalog["projects"][active], exported)
         historical = {node["id"]: node.get("data", {}).get("definitionId") for node in project["snapshot"]["nodes"]}
         warnings: list[str] = []
-        project["snapshot"], candidate = _stage_project_snapshot(project["snapshot"], historical=historical, warnings=warnings)
+        project["snapshot"], candidate = _stage_project_snapshot(project["snapshot"], historical=historical, warnings=warnings,
+                                                                 ingress=verdict)
         candidate._counter = max(candidate._counter, project.get("_nodeCounter", 0))
         project["lastOpenedAt"] = project_now()
         start = _begin_switch(catalog, actor)
@@ -9870,23 +10672,24 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
 
 @app.put("/api/projects/{project_id}")
 async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
-    checked = isinstance(body.get("snapshot"), dict)
-    if checked:
+    verdict = None
+    if isinstance(body.get("snapshot"), dict):
         # The canvas autosaves after every edit, and the check walks every
         # string in the project (run records repeat the graph) and stats file
         # paths. On the event loop it held up every request and canvas event
         # for seconds (an Accept's run waited 24 s), so it runs in a worker
         # thread, before the catalog lock, which other requests take to read.
-        await asyncio.to_thread(_validate_graph_ingress_complexity, body["snapshot"])
-    result = _save_project(project_id, body, checked=checked)
+        # Its refusal comes where the check ran before (_IngressVerdict).
+        verdict = await _ingress_verdict_off_loop(body["snapshot"])
+    result = _save_project(project_id, body, ingress=verdict)
     # A save moves the card up and can change its picture and node count.
     await _broadcast_projects_changed("renamed" if "name" in body else "saved", project_id)
     return result
 
 
-def _save_project(project_id: str, body: dict[str, Any], *, checked: bool = False) -> dict[str, Any]:
-    """The save itself. ``checked``: the snapshot's file references were
-    already validated (in a worker thread, by the route)."""
+def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVerdict | None = None) -> dict[str, Any]:
+    """The save itself. ``ingress``: the snapshot's check, already run (in a
+    worker thread, by the route)."""
     with project_store.transaction() as catalog:
         project = _project_id_or_404(project_id, catalog)
         handoff = catalog.get("handoff") or {}
@@ -9897,7 +10700,7 @@ def _save_project(project_id: str, body: dict[str, Any], *, checked: bool = Fals
             # The next switch (anyone's) ends the handoff. The project may
             # be the open one again: an agent reopened the project the tab
             # was showing, which reloads it from what was saved.
-            _save_handoff(project, body["snapshot"], ingress_checked=checked)
+            _save_handoff(project, body["snapshot"], ingress=ingress)
             refresh_metadata(project)
             project_store.commit(catalog)
             return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"],
@@ -9908,7 +10711,7 @@ def _save_project(project_id: str, body: dict[str, Any], *, checked: bool = Fals
                 raise HTTPException(status_code=409, detail="Only the currently open project can autosave its canvas")
             historical = {node["id"]: node.get("data", {}).get("definitionId") for node in project["snapshot"]["nodes"]}
             historical.update({node_id: node["definitionId"] for node_id, node in cli_graph.nodes.items()})
-            staged, candidate = _stage_project_snapshot(body["snapshot"], historical=historical, ingress_checked=checked)
+            staged, candidate = _stage_project_snapshot(body["snapshot"], historical=historical, ingress=ingress)
             _refuse_agent_billing_in_project(candidate, cli_graph.nodes, _snapshot_nodes(project["snapshot"]))
             _keep_person_viewport(staged, project["snapshot"])
             project["snapshot"] = staged
@@ -9938,7 +10741,7 @@ def _keep_person_viewport(staged: dict[str, Any], stored: dict[str, Any]) -> Non
         staged["viewport"] = copy.deepcopy(stored.get("viewport"))
 
 
-def _save_handoff(project: dict[str, Any], raw: Any, *, ingress_checked: bool = False) -> None:
+def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict | None = None) -> None:
     """The last save from a tab whose project an agent switched away from.
 
     The switch already merged the live canvas into this project
@@ -9948,7 +10751,7 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress_checked: bool = 
     """
     stored = project["snapshot"]
     historical = {node["id"]: node.get("data", {}).get("definitionId") for node in stored["nodes"]}
-    staged, candidate = _stage_project_snapshot(raw, historical=historical, ingress_checked=ingress_checked)
+    staged, candidate = _stage_project_snapshot(raw, historical=historical, ingress=ingress)
     _refuse_agent_billing_in_project(candidate, _snapshot_nodes(stored))
     _keep_person_viewport(staged, stored)
     backend_nodes = set(project.get("_backendNodeIds") or [])
@@ -10882,6 +11685,9 @@ class CharacterUpdate(BaseModel):
     frozenTraitString: str | None = None
     seed: int | None = None
     consistencyStrength: float | None = None
+    # The version the caller read: any other is a 409 with the Character as
+    # it is (contract 07, 2.1). Left out, the write isn't checked.
+    baseVersion: Any = None
 
 
 # Moodboard bodies refuse unknown fields: an image list sent under any other
@@ -10956,6 +11762,9 @@ class MoodboardCreate(BaseModel):
     clashMode: Any = None
     colorChoices: Any = None
     sendNotes: Any = None
+    # The image the board opens on, by its id among ``images`` (the store
+    # checks it); left out, the board opens on #1.
+    coverImageId: Any = None
     # The saved colour check is the store's; a sent one is ignored.
     colorCheck: Any = None
     # The board's layout: never set here (see _refuse_moodboard_layout).
@@ -10964,6 +11773,8 @@ class MoodboardCreate(BaseModel):
     readings: Any = None
     layoutVersion: Any = None
     lastRead: Any = None
+    # Updates are written only through /agent-notes (refused here by name).
+    agentNotes: Any = None
 
 
 class MoodboardUpdate(BaseModel):
@@ -10990,6 +11801,10 @@ class MoodboardUpdate(BaseModel):
     clashMode: Any = None
     colorChoices: Any = None
     sendNotes: Any = None
+    # The image the board opens on: an image's id, or an explicit null for
+    # none (it opens on #1). Left out, the cover stays. A pick, not a
+    # reorder: no image changes number (services/moodboard_store.py).
+    coverImageId: Any = None
     colorCheck: Any = None
     # The board's layout: never set here (see _refuse_moodboard_layout).
     frames: Any = None
@@ -10997,6 +11812,8 @@ class MoodboardUpdate(BaseModel):
     readings: Any = None
     layoutVersion: Any = None
     lastRead: Any = None
+    # Updates are written only through /agent-notes (refused here by name).
+    agentNotes: Any = None
     # The board's version the client read: a different one is refused (409)
     # with the board as it is now. Left out, the write isn't checked.
     baseVersion: Any = None
@@ -11116,6 +11933,11 @@ def _refuse_moodboard_layout(body: BaseModel) -> None:
     sent = [key for key in LAYOUT_BOARD_KEYS if key in body.model_fields_set]
     if sent:
         raise HTTPException(status_code=422, detail=f"{', '.join(sent)} {LAYOUT_REFUSED}")
+    if "agentNotes" in body.model_fields_set:
+        raise HTTPException(status_code=422, detail=(
+            "agentNotes can't be set on a board: an agent posts an update with POST "
+            "/api/moodboards/{id}/agent-notes (MCP post_note, `nebula note --board`), and the person "
+            "marks them read in the Updates list. They are kept beside the board, not in it."))
 
 
 def _moodboard_out(board: dict) -> dict:
@@ -11250,18 +12072,34 @@ async def get_character(char_id: str) -> dict:
 
 @app.put("/api/characters/{char_id}")
 async def update_character(char_id: str, body: CharacterUpdate) -> dict:
-    """Update mutable fields on a Character; bumps version."""
+    """Update mutable fields on a Character; bumps version. With
+    ``baseVersion``, a Character saved elsewhere since is a 409 carrying it as
+    it is now, and nothing is written. The broadcast carries the new
+    ``version`` and who wrote it (``edit``), so an open Character Studio
+    follows an outside edit and skips its own echo."""
+    from services.character_store import CharacterVersionConflict
+
+    if body.baseVersion is not None and (isinstance(body.baseVersion, bool) or not isinstance(body.baseVersion, int)):
+        raise HTTPException(status_code=422, detail="baseVersion must be a whole number: the Character's version you read")
     store = _char_store()
-    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    updates = {k: v for k, v in body.model_dump().items() if v is not None and k != "baseVersion"}
     try:
-        character = store.update(char_id, **updates)
+        character = store.update(char_id, base_version=body.baseVersion, **updates)
     except KeyError:
         # In Recently deleted (an agent may have deleted it): say so, so the
         # Studio can tell the person to restore it and keep their edits.
         return _asset_not_found("character", char_id)
+    except CharacterVersionConflict as exc:
+        return JSONResponse(status_code=409, content={
+            "detail": (f"The Character changed since you read it: it is at version {exc.character.get('version')}. "
+                       "Read it again (it is in this answer), redo your change on it and send it with that baseVersion."),
+            "code": "version_conflict",
+            "version": exc.character.get("version"),
+            "character": exc.character,
+        })
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
-    await _broadcast_stored_asset("character", character)
+    await _broadcast_stored_asset("character", character, edit={})
     return character
 
 
@@ -11314,6 +12152,7 @@ async def create_moodboard(body: MoodboardCreate) -> dict:
             clashMode=body.clashMode,
             colorChoices=body.colorChoices,
             sendNotes=body.sendNotes,
+            coverImageId=body.coverImageId,
             by=_moodboard_author(),
         )
     except NotesOptInProtected as exc:
@@ -11408,6 +12247,8 @@ async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
         updates["analysis"] = None
     if "briefOverride" in body.model_fields_set and body.briefOverride is None:
         updates["briefOverride"] = None
+    if "coverImageId" in body.model_fields_set and body.coverImageId is None:
+        updates["coverImageId"] = None
     if "images" in updates:
         # Images merge by id: a key an image leaves out keeps its saved value
         # (services/moodboard_store._normalize_images), so only what was sent.
