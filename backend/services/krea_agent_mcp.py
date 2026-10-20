@@ -48,7 +48,7 @@ NEBULA_MCP_TOOLS = (
     "list_trash", "restore_from_trash",
     "commons_search", "commons_get", "commons_add", "commons_comment", "commons_borrow",
     "moodboard_list", "moodboard_get", "moodboard_create", "moodboard_add", "moodboard_update",
-    "moodboard_analyze", "moodboard_delete", "moodboard_move", "character_move",
+    "moodboard_edit", "moodboard_analyze", "moodboard_delete", "moodboard_move", "character_move",
     # MCP parity U10 and U14 (2026-10-20): universal-node catalogs, Krea discovery.
     "model_catalog", "model_schema", "krea_discovery_tools", "krea_discover",
 )

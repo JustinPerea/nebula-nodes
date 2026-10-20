@@ -215,8 +215,9 @@ def test_the_new_tools_are_read_only_open_world_and_listed():
         assert name in krea_agent_mcp.NEBULA_MCP_TOOLS
         annotations = tools[name].annotations
         assert annotations.readOnlyHint is True and annotations.openWorldHint is True, name
-    for name in NEW_TOOLS:
-        assert name in mcp_server.INSTRUCTIONS
+    # Not named in INSTRUCTIONS: the first-turn text keeps to the loop and stays
+    # under its 3,000-character budget (test_first_turn_instructions); agents
+    # find these in the tool list, by their descriptions.
 
 
 def test_the_setup_doc_lists_the_new_tools_and_the_stop_rule():

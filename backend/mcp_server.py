@@ -53,9 +53,8 @@ The loop:
 
 Pins are the person's requests: act on one, then answer it with resolve_pin. wait_for_canvas_change waits for the next change instead of polling.
 When you start on a request, call point_at with a short say naming your own next step (under 8 words). What you noticed, a report or a suggestion goes in post_note: the person reads those in Updates, top right, not at your cursor.
-Moodboards: see moodboard_get; moodboard_update(cover=...) picks the image a board opens on. New work goes in a new project (new_project), not over theirs.
+Moodboards: see moodboard_get; moodboard_update(cover=...) picks the image a board opens on, and moodboard_edit moves, resizes and groups its cards in one checked edit its `undo` takes back. New work goes in a new project (new_project), not over theirs.
 A run the person started is theirs: cancel_run stops only agents' runs, so ask them to press Stop.
-Universal-node models: model_catalog, model_schema; the connected Krea account: krea_discovery_tools, krea_discover.
 If you also use the `nebula` CLI, set NEBULA_AGENT_NAME so both share one name.
 """
 
@@ -1209,9 +1208,10 @@ def moodboard_get(board: str, ctx: Context | None = None) -> dict[str, Any]:
     never put it in a prompt (nothing that generates gets it). `placements`
     are its cards on the board (x, y, w, h in board pixels, weight, and
     `frameId`: the frame it is in, null for none); `frames` lists the board's
-    frames. The layout never steers generation. `cover` {number, id} is the
-    image chosen to open the board on (no `cover`: it opens on #1);
-    moodboard_update(cover=...) changes it.
+    frames. The layout never steers generation. `version` is the board's
+    write counter: pass it to moodboard_edit as `base_version`. `cover`
+    {number, id} is the image chosen to open the board on (no `cover`: it
+    opens on #1); moodboard_update(cover=...) changes it.
 
     `brief` is what generators get, as Nebula composed it: `styleBrief` (the
     hand-written brief when there is one, else the generated one),
@@ -1390,6 +1390,55 @@ def moodboard_update(board: str, images: list[dict] | None = None, remove: list[
         leave_out_flagged=leave_out_flagged, reset_colors=reset_colors, color_choices=color_choices,
         clash_mode=clash_mode, send_notes=send_notes, cover=cover, headers=_board_headers(ctx))
     return {**boards.brief(updated), "removed": removed, "previous": previous}
+
+
+@_tool(annotations=_EDIT)
+def moodboard_edit(board: str, ops: list[dict], base_version: int | None = None, say: str | None = None,
+                   ctx: Context | None = None) -> dict[str, Any]:
+    """Move, resize and group a moodboard's cards, and change its images, in
+    one checked edit: the same ops Moodboard Studio sends when the person
+    drags a card (POST /api/moodboards/{id}/edits, contract 07 section 1.12).
+    All of `ops` lands, or none of it; an open Studio shows it at once and
+    keeps what the person was doing.
+
+    Each op is an absolute set (sending it twice changes nothing more):
+    {"op": "place", "placement": CARD, "x": 200, "y": 40} moves a card
+    (top-left, board pixels; "frameId": a look moves it in, null out);
+    {"op": "resize", "placement": CARD, "weight": 0.6} (0.05 to 1, or "w"
+    and "h"; the card keeps its aspect and the image weighs its largest card);
+    {"op": "link", "image": 12, "frameId": "Glass"} adds a copy in a look;
+    {"op": "unlink", "placement": CARD}; {"op": "setAside", "image": 12,
+    "value": true}; {"op": "weight", "image": 12, "value": 0.5};
+    {"op": "note", "image": 12, "notes": "..."} (or "privateNote", the
+    person's own label, never sent to generators); {"op": "cover", "image":
+    12} (the image the board opens on; null for #1); {"op": "add", "urls": [...],
+    "at": {"x", "y"}} and {"op": "remove", "images": [12]}; looks are frames:
+    "frame.create" ({"name", "x", "y", "w", "h"} or {"around": [cards]}),
+    "frame.update", "frame.delete" (its cards stay) and "frame.merge"
+    ({"frame", "into"}). A CARD is a card id from moodboard_get's
+    `placements`, "12@Dither" (image 12's card in that look), or an image's
+    number or id when it has one card. Numbers name images as the board was
+    before the batch. Moving or resizing a card keeps the analysis; a change
+    to what steers (weight, notes, Set aside, adding, removing) clears it.
+
+    `base_version`: the board's `version` you read (moodboard_get); when the
+    board was saved since, nothing is changed and the error says its version
+    (read it again). Leave it out to apply the ops to the board as it is now.
+    `say`: your own words for what you did, up to 140 characters ("Moved #12
+    into Dither"); the person sees it in the Agent log.
+
+    Returns the board as moodboard_get gives it (with `placements` and
+    `frames`), `version`, `applied` (one entry per op: "applied" or
+    "unchanged") and `undo`. To undo the change, call moodboard_edit again
+    with `undo.ops` as `ops`: it puts back only what is still as you left it,
+    and `applied[0].skipped` names what changed since ("#12 changed since,
+    left as is")."""
+    import moodboard_client as boards
+
+    result = _board_call(boards.edit_board, _api(), board, ops, base_version=base_version, say=say,
+                         headers=_board_headers(ctx))
+    return {**boards.brief(result["board"], layout=True), "version": result.get("version"),
+            "applied": result.get("applied") or [], "undo": result.get("undo") or {"ops": []}}
 
 
 def _read_answer(result: dict[str, Any], *, include_thoughts: bool = False) -> dict[str, Any]:
