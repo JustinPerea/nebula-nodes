@@ -154,6 +154,7 @@ nebula moodboard set <board> --direction "quiet coastal mornings" --avoid "neon 
   --pin-color "#E8593C" --keep-out-color "#0000FF"
 nebula moodboard set <board> --unavoid "neon signage" --unpin-color "#0000FF"
 nebula moodboard set <board> --brief "My own brief..."   # or --clear-brief, --keep-brief
+nebula moodboard set <board> --cover 3                  # the image the board opens on; --clear-cover: #1 again
 nebula moodboard set <board> --keep-anyway "#a6392d"     # put a left-out colour back (not pinned)
 nebula moodboard set <board> --leave-out "#1c70f2"       # or --leave-out-flagged, --reset-color HEX
 nebula moodboard set <board> --clash-mode flag           # leave-out (default), flag, no-measured, keep-all
@@ -205,6 +206,15 @@ nebula moodboard delete <board>
   other than 80 and 443. For those, save the image and add the file.
 - Name a board by its id or exact name, and an image by its number or id
   from `show`.
+- `--cover` picks the image a board opens on: its card on the canvas, its
+  thumbnail in lists and Studio, `show` ("Cover: #3"). Without one it is #1,
+  as before. It is a pick, not a reorder: #n stays the same image, and the
+  cover never changes what generators get (images, weights, brief or
+  analysis). A set-aside image can be the cover. Taking the cover image off
+  the board opens it on #1 again, and undoing that brings both back.
+  `--clear-cover` goes back to #1. MCP: `moodboard_update(cover=3)`, or
+  `cover=""` to clear; `moodboard_get` lists `cover` (number, id) when one
+  is chosen.
 - `show --json` (and MCP `moodboard_get`) also lists where each image's
   card sits on the board: `placements` (x, y, w, h in board pixels, its
   weight, and `frameId`, the frame it is in or null) and the board's

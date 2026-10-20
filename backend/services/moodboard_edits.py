@@ -17,6 +17,8 @@ the ops it hasn't seen confirmed on top of a board someone else changed.
   ``link`` (a copy of an image in a frame), ``unlink``.
 - Image settings: ``setAside``, ``weight`` (scales the copies), ``note``
   (``notes`` or ``privateNote``).
+- The cover: ``cover`` (the image the board opens on, by number or id; null
+  opens it on #1 again). It moves nothing: no image changes number.
 - Frames: ``frame.create`` (a rectangle, or ``around`` some cards),
   ``frame.update`` (name or rectangle; a move moves its cards),
   ``frame.delete`` (its cards stay), ``frame.merge``.
@@ -61,7 +63,7 @@ UNDO_BROADCAST_LIMIT = 200
 SAY_LIMIT = 140
 MOVE_THRESHOLD_PX = 8.0
 
-OPS = ("add", "remove", "place", "resize", "link", "unlink", "setAside", "weight", "note",
+OPS = ("add", "remove", "place", "resize", "link", "unlink", "setAside", "weight", "note", "cover",
        "frame.create", "frame.update", "frame.delete", "frame.merge", "restore")
 # Ops a later Nebula adds (plan section 5.1); refused by name until then.
 LATER_OPS = ("arrange", "look.set", "look.inherit", "suggestion.accept", "suggestion.dismiss", "realPerson")
@@ -78,14 +80,15 @@ SLICE_PARTS = ("frame", "image", "settings", "card", "fields")
 # against them, the hand-written brief last (it is stamped with the board
 # as it ends up). Values are as ``field_value`` reads them.
 FIELD_KEYS = ("name", "notes", "mode", "strength", "direction", "avoid", "pinnedColors", "clashMode",
-              "colorChoices", "sendNotes", "briefOverride")
+              "colorChoices", "sendNotes", "coverImageId", "briefOverride")
 # What the board's mode, strength and notes are to the whole-board analysis.
 STEERING_FIELDS = ("mode", "strength", "notes")
 FIELD_LABELS = {
     "name": "The name", "notes": "The board's notes", "mode": "Mode", "strength": "Strength",
     "direction": "Direction", "avoid": "The Avoid list", "pinnedColors": "The pinned colours",
     "clashMode": "The clash mode", "colorChoices": "The colour choices",
-    "sendNotes": "Send notes to generators", "briefOverride": "The hand-written brief",
+    "sendNotes": "Send notes to generators", "coverImageId": "The cover",
+    "briefOverride": "The hand-written brief",
 }
 SETTING_LABELS = {"weight": "weight", "excluded": "Set aside switch", "notes": "notes",
                   "privateNote": "private note"}
@@ -542,6 +545,15 @@ class _Batch:
                 raise EditError(f"privateNote is longer than {PRIVATE_NOTE_LIMIT} characters")
             changed |= self.set(img, "privateNote", text)
         return {"changed": changed}
+
+    def op_cover(self, op: dict[str, Any]) -> dict[str, Any]:
+        """The image the board opens on (its thumbnail), or null for #1. A
+        pick, not a reorder: ``images`` and every number stay as they are."""
+        _keys(op, ("image",))
+        if "image" not in op:
+            raise EditError("cover needs image: its number or id, or null to open the board on #1 again")
+        image_id = None if op["image"] is None else self.image_id(op["image"])
+        return {"changed": self.set(self.board, "coverImageId", image_id)}
 
     def _rect(self, op: dict[str, Any], label: str) -> tuple[int, int, int, int] | None:
         raw = op.get("rect") if op.get("rect") is not None else (
@@ -1010,6 +1022,9 @@ def _check_fields_slice(item: dict[str, Any], label: str) -> None:
                 if not isinstance(value, str):
                     raise ValueError("is the brief's text (\"\" for none)")
                 brief.normalize_override_text(value)
+            if key == "coverImageId" and value is not None and (not isinstance(value, str)
+                                                               or not _ID_RE.fullmatch(value)):
+                raise ValueError("is an image's id, or null for no cover")
         except EditError:
             raise
         except ValueError as exc:
@@ -1161,6 +1176,12 @@ def diff(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
         kinds.setdefault("frame", [])
     if before.get("notes") != after.get("notes") and "notes" in after:
         kinds.setdefault("noted", [])
+    was_cover, cover = field_value(before, "coverImageId"), field_value(after, "coverImageId")
+    if was_cover != cover:
+        # The journal names the new cover, or the one that went.
+        note("cover", str(cover or was_cover))
+        if cover and was_cover and str(was_cover) not in touched_images:
+            touched_images.append(str(was_cover))
     fields = fields_slice(before, after)
     if fields is not None:
         slices.append(fields)
@@ -1199,7 +1220,7 @@ def steering(board: dict[str, Any]) -> list[tuple[Any, ...]]:
 # -- the journal's words ----------------------------------------------------------
 
 # One event per batch: the kind of the most telling change, the rest in data.kinds.
-KIND_ORDER = ("added", "removed", "frame", "grouped", "setAside", "resized", "noted", "moved")
+KIND_ORDER = ("added", "removed", "frame", "grouped", "setAside", "resized", "noted", "moved", "cover")
 
 
 # A board's name in a summary is cut to this many characters.
@@ -1238,8 +1259,12 @@ def journal_entry(changes: dict[str, Any], before: dict[str, Any], after: dict[s
         return None if index is None else index + 1
 
     refs = [{"number": number(image_id), "id": image_id} for image_id in named]
-    listed = _listed([f"#{ref['number']}" for ref in refs if ref["number"]])
     kind = kinds[0]
+    # A cover picked with another change is said on its own ("made #2 the
+    # cover"), so its image isn't listed as part of that change.
+    others = {image_id for k in kinds if k != "cover" for image_id in changes["kinds"][k]}
+    listed = _listed([f"#{ref['number']}" for ref in refs
+                      if ref["number"] and (kind == "cover" or ref["id"] in others)])
     where = board_where(after, before)
     if kind == "added":
         summary = f"added {listed} to {where}"
@@ -1256,6 +1281,8 @@ def journal_entry(changes: dict[str, Any], before: dict[str, Any], after: dict[s
         summary = f"{verb} {_listed([f'#{number(i)}' for i in ids])} on {where}"
     elif kind == "resized":
         summary = f"resized {listed} on {where}"
+    elif kind == "cover":
+        summary = cover_words(after, where)
     elif kind == "noted":
         noted = changes["kinds"]["noted"]
         if not noted:
@@ -1270,6 +1297,20 @@ def journal_entry(changes: dict[str, Any], before: dict[str, Any], after: dict[s
         summary += " (private note changed)"
     return {"kind": f"board.{kind}", "kinds": [f"board.{k}" for k in kinds], "refs": refs[:50],
             "summary": summary}
+
+
+def cover_words(after: dict[str, Any], where: str = "") -> str:
+    """A cover change in the journal's words: "made #3 the cover of board
+    Dusk", "set the cover of board Dusk back to #1" (no cover chosen now).
+    Without ``where``, the short form the Agent log adds to another change:
+    "made #3 the cover", "the cover is #1 again"."""
+    chosen = field_value(after, "coverImageId")
+    index = _images_by_id(after).get(str(chosen), (None, None))[0] if chosen else None
+    if index is not None:
+        return f"made #{index + 1} the cover of {where}" if where else f"made #{index + 1} the cover"
+    if not where:
+        return "the cover is #1 again" if after.get("images") else "the board has no cover now"
+    return f"set the cover of {where} back to #1" if after.get("images") else f"cleared the cover of {where}"
 
 
 def _listed(items: list[str], limit: int = 6) -> str:
@@ -1299,6 +1340,7 @@ def apply_edits(board: dict[str, Any], ops: Any, *, by: str, now: str | None = N
     staged["frames"] = layout.frames_of(staged)
     batch = _Batch(staged, by=by, now=now or _now_iso())
     applied: list[dict[str, Any]] = []
+    covers: list[tuple[int, str]] = []
     for index, op in enumerate(ops):
         name = op.get("op") if isinstance(op, dict) else None
         try:
@@ -1306,15 +1348,28 @@ def apply_edits(board: dict[str, Any], ops: Any, *, by: str, now: str | None = N
         except EditError as exc:
             raise EditError(f"ops[{index}] ({str(name)[:40]}): {exc}") from None
         applied.append({"index": index, **entry})
+        if name == "cover" and staged.get("coverImageId"):
+            covers.append((index, str(staged["coverImageId"])))
+    # A batch can't both pick an image as the cover and take it off (the CLI
+    # and MCP refuse the same call before sending it).
+    left = {str(img.get("id")) for img in staged["images"]}
+    for index, image_id in covers:
+        if image_id not in left:
+            name = f"#{batch.numbers.index(image_id) + 1}" if image_id in batch.numbers else repr(image_id)
+            raise EditError(f"ops[{index}] (cover): image {name} can't be the cover and come off the board "
+                            "in one batch: pick one")
     try:
         layout.check_frames(staged["frames"])
         layout.check_image_placements(staged["images"], {f["id"] for f in staged["frames"]})
     except ValueError as exc:
         raise EditError(f"the board after these ops: {exc}") from None
+    # A cover whose image left the board goes (it opens on #1 again), before
+    # the diff, so the batch's undo brings the cover back with the image.
+    from services.moodboard_store import follow_cover
+    follow_cover(staged)
     changes = diff(board, staged)
     changed = bool(changes["slices"])
     if changed:
-        staged["thumbnail"] = staged["images"][0]["url"] if staged["images"] else ""
         if steering(board) != steering(staged) or any(board.get(key) != staged.get(key) for key in STEERING_FIELDS):
             staged["analysis"] = None
     undo = {"ops": [{"op": "restore", "slices": changes["slices"]}]} if changed else {"ops": []}
@@ -1326,5 +1381,5 @@ def apply_edits(board: dict[str, Any], ops: Any, *, by: str, now: str | None = N
 
 
 __all__ = ["EditError", "EditResult", "FIELD_KEYS", "MAX_OPS", "OPS", "UNDO_BROADCAST_LIMIT", "apply_edits",
-           "board_where", "clean_say", "diff", "field_value", "fields_slice", "holds_private_note", "journal_entry",
-           "parse_ops", "steering"]
+           "board_where", "clean_say", "cover_words", "diff", "field_value", "fields_slice", "holds_private_note",
+           "journal_entry", "parse_ops", "steering"]

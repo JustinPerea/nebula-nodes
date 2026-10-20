@@ -86,6 +86,8 @@ EVENT_KINDS = frozenset({
     "board.setAside",
     "board.noted",
     "board.frame",
+    # The image the board opens on changed (a cover pick; nothing moves).
+    "board.cover",
     "board.sorted",
     "board.arranged",
     "board.suggested",
