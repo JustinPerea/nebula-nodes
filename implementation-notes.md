@@ -29,6 +29,32 @@ Branch `feat/agent-first-turn` (plan v2.7 PR26, §5.10.1, §3.7; GM's run record
   - *`test_skill_examples_parse` can't fail on main* (every example there parses), so the plan's fail-first list wasn't met by it. Added `test_skill_category_examples_list_nodes`: every `--category X` in SKILL.md lists nodes through the real CLI (failed on main: "No matching nodes found" for `image`).
   - `nebula propose --file`'s help names `rename`.
 
+## 2026-10-20 — Canvas cards subscribe only to what they draw (the Accept delay)
+
+Branch `perf/modelnode-narrow-selectors` (from origin/main `24123df3`). Found by #99's follow-up review: every ModelNode subscribed to the whole `nodes` and `edges` arrays, so any graph change re-rendered every card (about 1 s per Accept on a 100-node canvas in dev).
+
+- **The rule.** A card's store selectors return primitives (or shallow arrays of primitives) computed from its own node, its own wires and the fields of the source nodes it draws. Lookups go through `lib/graphIndex.ts` (`nodeById`, `edgesInto`, `edgesOutOf`, WeakMap-cached per array, so 120 cards share one index per store update). The derived values live in `lib/cardSelectors.ts` (mask source preview, Paper sources ready, port wired). Selection is two booleans per card (`hooks/useCardSelection.ts`) instead of `selectedNodeId`; the selection toolbar's action slot is a per-node snapshot (`lib/selectionActionSlot.ts`); `isExecuting` is read only by a card that draws the run lock (a selected/slotted card with a media preview, or one offering Rerun with latest source).
+- **Store updates keep unchanged objects** (`lib/structuralShare.ts`). React Flow re-renders a card when its node object changes, so narrowing selectors alone wasn't enough: graphSync rebuilt every node and `resetExecution` mapped every node. graphSync now runs its merged nodes and edges through `shareUnchanged` (deep JSON equality, previous object kept when equal, previous array when nothing changed); `resetExecution` uses `replaceChanged`. Edges are keyed by id plus connection because the backend can reuse an edge id (see open items).
+- **graphSync keeps React Flow's own fields** (`canvasOwnFields` in `graphStore.ts`): `measured`, `selected`, `dragging`. Before, the merge dropped them from every node, which forced React Flow to re-measure all 120 cards (a second full re-render) and cleared the person's selection whenever an agent edited anything (seen live: `keepsSelectionAfterAgentEdit` false before, true after). Behaviour change, judged a fix: a selected card stays selected through an agent edit; selected edges likewise.
+- **Audit of other subscribers.** Changed: DynamicNode, BatchNode, NodeSettingsAction (selection booleans), ReferenceSetNode (wired-role key), NodeRunStatus (wired ports only while running or queued), `jevView.upstreamPortValues` and `gating.edgeIsInactive` (index lookups). CommandPalette (always mounted) rebuilt every command, model search text included, on every graph change while closed (about 45 ms per change in the CPU profile); it now reads ids and labels only while open. NodeLibrary's reservation pruning is a store listener, not a subscription. Unchanged, checked: MoodboardNode and CharacterNode (no graph subscriptions), TypedEdge (boolean selector), MiniMap (static colour), Inspector (mounts only while the popover is open, one component), RunHistoryPanel (renders null while closed), ConnectionPopup (mounted only while open), Toolbar and SelectionToolbar (one component each).
+- **`canvasTypes.ts`.** The node and edge type maps moved out of `Canvas.tsx` so the render tests mount the real map.
+- **Tests (failed first).** `tests/canvasRenderScope.test.tsx` (22) renders the real node types in a ReactFlow with a counting wrapper. 12 render-scope tests (param change, run event, error, add/remove wire, selection, action slot, Inspector, run start/stop, upstream output, graphSync, graphSync keeps measured/selected) all failed on `24123df3`; 10 behaviour tests (mask source and rewire, Pick Best candidates, Decide/Box, provider label by wiring, Rerun with latest source, Reference Set, run states/error/missing-key badge/output, selection bar and Inspector toggle, slot portal, agent param change) passed before and after. `tests/panelRenderScope.test.tsx` (4): closed palette and open library don't re-render on a graph change (failed before), palette canvas search and library slot freeing (pass both).
+- **Measured** (120-node seeded canvas, 40 text→image→preview chains, agent edits through the backend, providers not called; card renders / all component renders):
+
+  | Interaction | dev before | dev after | prod before | prod after |
+  |---|---|---|---|---|
+  | Agent param change | 360 / 5,426 | 1 / 664 | 360 / 5,426 | 1 / 664 |
+  | Type 10 chars | 1,810 / 24,008 | 12 / 2,708 | 1,450 / 18,556 | 12 / 3,181 |
+  | Select a card | 240 / 2,876 | 4 / 761 | 600 / 8,332 | 4 / 288 |
+  | Agent removes / adds a wire | 360 / ~5,415 | 0 / ~690 | 360 / ~5,418 | 0 / ~690 |
+  | Accept and run | 1,838 / 25,556 | 20 / 6,091 | 1,838 / 26,449 | 18 / 8,855 |
+  | Accept click to first run event (median of 5) | 526 ms | 164 ms | 119 ms | 57 ms |
+  | Busy CPU in the profiled Accept | 1,124 ms | 626 ms | 515 ms | 335 ms |
+
+  Timings were taken with a load average of 21-43 from other sessions, so read them as relative. The remaining Accept renders are mostly the two new cards mounting.
+- **Adversarial review fixes** (same day, tests failed first in `canvasRenderScope.test.tsx`). (1) `canvasOwnFields` copied `selected`/`dragging` only when true, but React Flow leaves `selected: false` / `dragging: false` on a node once a selection or a drag ends, so the next graphSync saw those nodes as changed and re-rendered their cards (every card after a select-all and a click on the pane); it now copies the boolean either way, and graphSync carries a wire's `selected: false` too. (2) `uiStore.requestCanvasNodeFocus` (Add next step's new node, cinema motion) sent a select change for every node, which copied every node; it now sends changes only for nodes whose selection changes, as `Canvas.tsx`'s focus effect already did. (3) `duplicateSelected`, `pasteClipboard` and `selectAll` rebuilt every node to set `selected`; they now replace only the nodes whose selection changes (`deselectedNodes` / `replaceChanged`).
+- **Open items.** `backend/services/cli_graph.py:129` names a new edge `e{len(edges)+1}`, which repeats an id after a removal (two `e80` edges and a React duplicate-key warning in the harness). `projectStore` stringifies the project on every graph change (`captureProjectSnapshot`, about 10 ms on this canvas). Toolbar summarizes the run scope over the whole graph on each change (one component).
+
 ## 2026-10-20 — Weight-0 images out of the bundle and summary; kept drafts rehome after a socket drop; Character Studio follows outside edits
 
 Branch `fix/moodboard-weight0-and-outside-edits` (from `fix/moodboard-count-and-resync` da5698b6). Justin's go: "A, B, and C" (desktop app out of scope).
@@ -58,6 +84,13 @@ Branch `fix/moodboard-weight0-and-outside-edits` (from `fix/moodboard-count-and-
   - Screenshots: `scratchpad/w0-check/shots/` 01-12. The default skin (reachable only by removing `app-slava-restraint`) has no Character Studio styles at all (pre-existing); the note is styled only in Slava.
 - **Gates.** Backend, isolated, in 3 shards (one run hit the 1 h `lg` limit at 81% with the machine at load ~80): 7356 passed, 61 skipped, 1 failed: `test_iterator_execution.py::test_cancelled_batch_cancels_active_handler_and_keeps_completed_items` (a 1 s `wait_for` under load; the file passes alone, 16/16; not touched here). Vitest: 3437 tests, 3203 passed in the full run and the 234 in the 90 files that timed out under load all passed on a rerun with 4 workers. `tsc -b` clean, lint clean, build budget 480,198 bytes raw / 140,033 gzip (limit 512,000).
 - **Docs.** `docs/contracts/07-studios-and-resources.md` (1.3a, 1.4, 1.10, 1.12, new §2.1, changelog), `docs/MCP-SETUP.md`, `skills/nebula/SKILL.md`, `docs/moodboard-canvas-plan.md`, `backend/mcp_server.py` `moodboard_get` docstring (changes its tools/list description). Settings > Connect your agent untouched.
+
+## 2026-10-20 — A new edge never takes a live edge's id
+
+Found by the ModelNode render-scope review: `CLIGraph.connect` named a new edge `e{len(edges)+1}`, so after a removal it could give a second live edge the same id (edges e1-e3, remove e1, connect: a second `e3`). The canvas then held two wires with one id: duplicate React keys, and selecting or removing by id could hit the other wire. Two routes (`create_node_and_connect`, `send_cinema_shot_to_motion`) had each patched the id after the fact; the allocator now skips ids in use, and both patches are gone.
+
+- Ids of removed edges can still come back; nothing keys on an old edge id (canvas undo matches wires by their four endpoints, `canvas_undo.wire_key`).
+- Test: `test_a_new_edge_never_takes_the_id_of_one_still_on_the_canvas` (failed first). The existing `test_deleted_edge_does_not_reuse_an_existing_confirmed_edge_id` still passes, now through the allocator.
 
 ## 2026-10-20 — Moodboard: the board's cover (a pick, not a reorder)
 
