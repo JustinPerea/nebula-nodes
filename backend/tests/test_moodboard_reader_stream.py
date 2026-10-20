@@ -192,3 +192,42 @@ def test_a_long_reason_is_trimmed_at_a_word_to_120():
     assert text.startswith(trimmed[:-1])
     assert not trimmed[:-1].endswith(" ")
     assert trim_reason("short") == "short"
+
+
+@pytest.mark.parametrize("text, expected", [
+    # A letter glued to &, -, ' or ’ and then a word is part of that word, not a label.
+    ("Image A - B&W grain", "B&W grain"),
+    ("Like Image A, B-movie glow", "Like, B-movie glow"),
+    ("Like Image A, D'Arcy's light", "Like, D'Arcy's light"),
+    ("Image B&W grain", "Image B&W grain"),
+    ("Image B-movie tones", "Image B-movie tones"),
+    # Lists and ranges of labels still go, glued or not.
+    ("Warm, like Images A & B", "Warm, like"),
+    ("Images A, B and C are warm", "are warm"),
+    ("Grain as in (A–C)", "Grain as in"),
+    ("Images A&B share a palette", "share a palette"),
+    ("Images A-C, softer", "softer"),
+    ("Images A and B's palette", "palette"),
+    # Look-alike letters from other scripts (UTS #39) are labels too; the rest of the text keeps its script.
+    ("Like Іmage В, softer", "Like, softer"),
+    ("Like Image Β and С", "Like"),
+    ("Тёмный свет", "Тёмный свет"),
+])
+def test_reason_cleaning_keeps_glued_letters_and_sees_look_alikes(text, expected):
+    assert clean_model_text(text) == expected
+
+
+@pytest.mark.parametrize("text, expected", [
+    # A #n in another script's digits is still stripped (UTS #39 reads ١ as "l" and ٥ as "o").
+    ("Like #١٨ and #18", "Like"),
+    ("Like #٥ soft", "Like soft"),
+    # "/" glues a letter to a word too: B/W is black and white, not Image B.
+    ("Image A - B/W grain", "B/W grain"),
+    ("Image B/W split", "Image B/W split"),
+    ("Images A/B share a palette", "share a palette"),
+    # The join a stripped label leaves before a glued word goes with it.
+    ("Images A & B-movie glow", "B-movie glow"),
+    ("Images A&B&W", "B&W"),
+])
+def test_reason_cleaning_keeps_other_digits_and_slashed_words(text, expected):
+    assert clean_model_text(text) == expected

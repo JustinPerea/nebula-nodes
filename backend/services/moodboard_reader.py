@@ -81,7 +81,9 @@ from services.moodboard_reader_stream import (
     GeminiStreamParser,
     StreamOutcome,
     clean_model_text,
-    names_a_label,
+    names_a_label_any_case,
+    skeleton,
+    skeletons,
     split_text,
     trim_reason,
 )
@@ -123,6 +125,12 @@ SYSTEM_PROMPT = (
 
 class ReaderError(ValueError):
     """A read that can't start as asked (an unknown model, a bad image id)."""
+
+
+class MixedReadersError(RuntimeError):
+    """A sort task built from readings another source wrote: a programming
+    error, never a provider's or a person's. A run has one reader, and the
+    sort prompt carries only that source's own readings (section 5.6.2)."""
 
 
 class NoReaderKeyError(MissingCredentialError):
@@ -1028,7 +1036,15 @@ def build_read_task(board: Mapping[str, Any], targets: Sequence[Target], images:
 
 
 def build_sort_task(board: Mapping[str, Any], labelled: Sequence[tuple[str, Target, Mapping[str, Any]]], *,
-                    attempt: int, wider: bool = False) -> SortTask:
+                    attempt: int, reader: str, wider: bool = False) -> SortTask:
+    """The sort task for ``labelled`` readings, to go to the source whose
+    ``reader_key`` is ``reader``. A reading's look names and reason are that
+    source's own text, unchecked as a prompt, so they may go back only to the
+    source that wrote them: a reading from any other reader (or none) raises
+    ``MixedReadersError`` (section 5.6.2, "never mix")."""
+    mixed = sorted({str(reading.get("reader")) for _, _, reading in labelled if reading.get("reader") != reader})
+    if mixed:
+        raise MixedReadersError(f"the sort for {reader} was given readings by {', '.join(mixed)}")
     labels = tuple(label for label, _, _ in labelled)
     return SortTask(attempt=attempt, labels=labels, system=SYSTEM_PROMPT,
                     instructions=phase2_prompt(board, labelled), schema=phase2_schema(labels), wider=wider)
@@ -1544,7 +1560,8 @@ class MoodboardRead:
         proposal: dict[str, list[dict[str, Any]]] | None = None
         wider = False
         for attempt in (1, 2):
-            task = build_sort_task(self.board, labelled, attempt=attempt, wider=wider)
+            task = build_sort_task(self.board, labelled, attempt=attempt, reader=reader_key(self.source.identity),
+                                   wider=wider)
             self._sent.append("sort" if attempt == 1 else "sort-retry")
             sink = _SortSink(self, attempt)
             outcome = await self.source.sort(task, sink)
@@ -1576,7 +1593,7 @@ class MoodboardRead:
         """``name`` as the board's frame (the person's name, not checked),
         or as a new look's name after ``check_look_name``; None when that
         check refuses it."""
-        frame = _frames_by_name(self.board).get(_look_key(name))
+        frame = _frame_named(_frames_by_key(self.board), name)
         if frame is not None:
             return {"frameId": frame.get("id"), "name": frame.get("name")}
         checked = check_look_name(name)
@@ -1689,9 +1706,21 @@ def _sort_items(value: Mapping[str, Any], by_label: Mapping[str, Target], log: l
     return out
 
 
-def _frames_by_name(board: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
-    return {_look_key(str(frame.get("name"))): frame for frame in board.get("frames") or []
-            if isinstance(frame, dict) and frame.get("kind") == "look" and frame.get("name")}
+def _frames_by_key(board: Mapping[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    """The board's look frames by ``_look_key``, each key's frames in board
+    order: two frames can share a key ("Mid–century" and "Mid-century")."""
+    frames: dict[str, list[dict[str, Any]]] = {}
+    for frame in board.get("frames") or []:
+        if isinstance(frame, dict) and frame.get("kind") == "look" and frame.get("name"):
+            frames.setdefault(_look_key(str(frame["name"])), []).append(frame)
+    return frames
+
+
+def _frame_named(frames: Mapping[str, list[dict[str, Any]]], name: str) -> dict[str, Any] | None:
+    """The frame a look name means: of the frames sharing its key, the one
+    whose name is exactly ``name`` as given, else the first on the board."""
+    same = frames.get(_look_key(name)) or []
+    return next((frame for frame in same if frame["name"] == name), same[0] if same else None)
 
 
 # Typographic apostrophes and dashes that keyboards, autocorrect and models
@@ -1703,16 +1732,13 @@ _LOOK_NAME_TYPOGRAPHY = str.maketrans({"\u2019": "'", "\u2018": "'", "\u02bc": "
                                        "\u2013": "-", "\u2014": "-", "\u2010": "-", "\u2011": "-"})
 _LOOK_NAME_PUNCTUATION = set(" &-'")
 _LOOK_NAME_WORDS = 4
-# A sort label ("R3", "r12") or a link ("https", "www") in a name, as whole
-# words in any case.
-_SORT_LABEL_OR_LINK = re.compile(r"(?i:\bR\d+\b|\bhttps?\b|\bwww\b)")
+# A sort label ("R3", "r12", "R 3", as "# 18" is a #n) or a link ("https",
+# "www") in a name, as whole words in any case.
+_SORT_LABEL_OR_LINK = re.compile(r"(?i:\bR\s*\d+\b|\bhttps?\b|\bwww\b)")
 # The words of a name, to tell a name that is only batch labels ("B", "'b'",
 # "A & C"; "Plan B" and "B&W film" are names).
 _LOOK_NAME_WORD = re.compile(r"[^\W_]+")
 _BATCH_LABEL = re.compile(r"[A-Fa-f]")
-# A lone a to f, raised to a capital so ``names_a_label`` (which takes only
-# capitals, for reasons like "image a bit") sees "image b" as "Image B".
-_LONE_SMALL_LABEL = re.compile(r"\b[a-f]\b")
 
 
 def normalize_look_name(name: str) -> str:
@@ -1723,12 +1749,23 @@ def normalize_look_name(name: str) -> str:
 
 
 def _names_a_label_any_case(name: str) -> bool:
-    """A batch label or ``#n`` (``names_a_label``) in any case, or a name
-    whose every word is a batch label."""
-    words = _LOOK_NAME_WORD.findall(name)
-    if words and all(_BATCH_LABEL.fullmatch(word) for word in words):
+    """A batch label or ``#n`` in any case after its noun
+    (``names_a_label_any_case``: "image b", never the article in "Photo a
+    day"), or a name whose every word is a batch label ("B", "A & C"), read
+    through ``skeleton`` so a look-alike ("Image В", Cyrillic) is the letter
+    it copies. One letter repeated ("B&B") is a phrase, not labels: a batch
+    never names one image twice in a list."""
+    words = _LOOK_NAME_WORD.findall(skeleton(name))
+    if words and all(_BATCH_LABEL.fullmatch(word) for word in words) and (
+            len(words) == 1 or len({word.upper() for word in words}) > 1):
         return True
-    return names_a_label(_LONE_SMALL_LABEL.sub(lambda m: m.group().upper(), name))
+    return names_a_label_any_case(name)
+
+
+def _look_words(name: str) -> int:
+    """How many words ``name`` has: runs with a letter or digit in them, so
+    a lone "&" or "-" isn't one ("Black & white film grain" is 4)."""
+    return sum(1 for word in name.split() if any(map(_look_char, word)))
 
 
 def _look_key(name: str) -> str:
@@ -1759,12 +1796,14 @@ def check_look_name(name: Any) -> str | None:
     # spell a label or link the checks below can't see: refused, not folded.
     if unicodedata.normalize("NFKC", name) != name:
         return None
-    if not 1 <= len(name) <= FRAME_NAME_LIMIT or len(name.split()) > _LOOK_NAME_WORDS:
+    if not 1 <= len(name) <= FRAME_NAME_LIMIT or _look_words(name) > _LOOK_NAME_WORDS:
         return None
     # isalnum would let "½" and "Ⅻ" in.
     if not all(_look_char(ch) or ch in _LOOK_NAME_PUNCTUATION for ch in name) or not any(map(_look_char, name)):
         return None
-    if _names_a_label_any_case(name) or _SORT_LABEL_OR_LINK.search(name):
+    # The label and link checks read look-alikes from other scripts as the
+    # letter or digit they copy (``skeletons``); the name keeps its own letters.
+    if _names_a_label_any_case(name) or any(map(_SORT_LABEL_OR_LINK.search, skeletons(name))):
         return None
     return name
 
@@ -1784,18 +1823,21 @@ def enforce_sort(board: Mapping[str, Any], targets: Sequence[Target], proposal: 
     whose best look it was goes to Unsorted (not to its second look), and it
     is never a second look or a suggestion. Existing looks aren't checked:
     their names are the person's."""
-    frames = _frames_by_name(board)
+    frames = _frames_by_key(board)
     out = _Sorted()
 
     def usable(looks: list[dict[str, Any]]) -> list[dict[str, Any]]:
         seen, kept = set(), []
         for look in looks:
-            name = normalize_look_name(str(look.get("name") or ""))
+            given = str(look.get("name") or "")
+            name = normalize_look_name(given)
             key = name.casefold()
             if not name or key == "unsorted" or key in seen:
                 continue
             seen.add(key)
-            frame = frames.get(key)
+            # Two frames whose names normalise alike: the exact one, else
+            # the first on the board (``_frame_named``), never dict order.
+            frame = _frame_named(frames, given)
             # A new look is kept in its checked form; the check runs on the
             # whole name, so a reading's over-long look in the fallback draft
             # is refused, never cut until it fits.

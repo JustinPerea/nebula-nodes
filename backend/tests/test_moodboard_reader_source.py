@@ -528,3 +528,120 @@ def test_the_route_s_spend_hold_skips_an_unpriced_source(monkeypatch):
     with pytest.raises(HTTPException) as refused:
         main._reader_spend_hold(unpriced, est, {"runCostConfirmUsd": 50.0}, "board1")
     assert refused.value.status_code == 403 and "no list price" in refused.value.detail
+
+
+# -- look-name hardening (2026-10-20) -------------------------------------------------------------
+
+@pytest.mark.parametrize("name, ok", [
+    # A word is a run with a letter or digit in it: a lone "&" or "-" isn't one.
+    ("Black & white film grain", True), ("Dark - moody", True), ("Rock & roll & soul", True),
+    ("Light - shade & tone grain", True), ("One & two & three & four & five", False),
+    ("Dark - moody - soft - warm - grain", False),
+    # A sort label with spaces, as "# 18" is a #n: R, spaces, digits, as whole words.
+    ("R 3", False), ("r 3", False), ("R 3 film", False), ("Soft R 12", False), ("Soft r 3's", False),
+    ("Color 3", True), ("Mr 3 chrome", True), ("Grade R", True), ("Type R film", True),
+    # A lowercase "a" after a label noun is the article; capitals and b to f are labels.
+    ("Photo a day", True), ("Image a bit", True), ("Picture a scene", True), ("photo a day", True),
+    ("Image A", False), ("image b", False), ("ref c", False), ("Images b and c", False),
+    ("Images a and b", False), ("image a-b", False), ("Photos a & c", False),
+    # A repeated letter can't be a list of labels (no batch names an image twice): a phrase.
+    ("B&B", True), ("b&b", True), ("B&B hotel", True), ("A&E", False), ("A & C", False),
+    # Look-alikes from other scripts (UTS #39 confusables) are read as the letter they copy,
+    # for the checks only: Cyrillic В and І, Cyrillic а, Greek Α Β Ε, Cyrillic г for r,
+    # Cyrillic ԝ and һ in a link.
+    ("Image В", False), ("Іmage B", False), ("Imаge B", False), ("Image Ε", False),
+    ("Α & Β", False), ("г3", False), ("г 3 film", False),
+    ("ԝԝԝ site", False), ("һttps x", False), ("ref с", False),
+    # A word in another script stays a name: the map is only for the checks.
+    ("Тёмный", True), ("Кофе с молоком", True),
+    ("Ретро", True), ("Photo а day", True),
+    # Cyrillic Р is P's look-alike in UTS #39, not R's: "Р3" reads "P3", no label.
+    ("Р3", True),
+    # @ and # look-alikes are compatibility characters or not letters: refused already.
+    ("＠studio", False), ("﹫ studio", False), ("＃ 3", False), ("﹟3 grain", False),
+    ("♯3 grain", False),
+])
+def test_the_look_name_check_hardened(name, ok):
+    assert (reader.check_look_name(name) is not None) is ok
+
+
+def test_a_look_name_in_another_script_keeps_its_script():
+    assert reader.check_look_name("Тёмный") == "Тёмный"
+    assert reader.check_look_name("Ретро  глянец") == (
+        "Ретро глянец")
+
+
+def _sorted_to(frames, names):
+    b = board(len(names), frames=frames)
+    proposal = {f"img{n:02d}": [{"name": name, "fit": 0.9}] for n, name in enumerate(names, 1)}
+    out = reader.enforce_sort(b, targets_of(b), proposal, {})
+    return [out.placements[f"img{n:02d}"]["frameId"] for n in range(1, len(names) + 1)]
+
+
+def test_two_frames_with_one_normalised_name_prefer_the_exact_one_then_board_order():
+    frames = [{"id": "f1", "name": "Mid–century", "kind": "look"},
+              {"id": "f2", "name": "Mid-century", "kind": "look"}]
+    assert _sorted_to(frames, ["Mid-century", "Mid–century", "mid-century", "MID—CENTURY"]) == [
+        "f2", "f1", "f1", "f1"]
+    # The other board order: the first frame on the board wins when neither is exact.
+    assert _sorted_to(frames[::-1], ["Mid-century", "Mid–century", "mid-century"]) == ["f2", "f1", "f2"]
+
+
+def test_the_reading_line_takes_the_same_frame_as_the_sort():
+    frames = [{"id": "f1", "name": "Mid–century", "kind": "look"},
+              {"id": "f2", "name": "Mid-century", "kind": "look"}]
+    b = board(2, frames=frames)
+    result = run_with(FakeSource({"img01": {"look": "Mid-century"}, "img02": {"look": "mid-century"}}), b)
+    assert [line["look"]["frameId"] for line in lines(result, "reading")] == ["f2", "f1"]
+    assert [r["frameId"] for r in result["results"]] == ["f2", "f1"]
+
+
+def test_a_sort_task_carries_only_the_sort_source_s_own_readings():
+    b = board(2)
+    targets = targets_of(b)
+    own = {"reader": "agent:test:fake", "readerName": "Fake (tests)", "medium": "m", "style": "s", "light": "l",
+           "motifs": [], "looks": [{"name": "Dither", "fit": 0.8}], "reason": "r"}
+    other = {**own, "reader": "gemini-4-argon", "readerName": "Gemini 4 Argon"}
+    task = reader.build_sort_task(b, [("R1", targets[0], own), ("R2", targets[1], own)], attempt=1,
+                                  reader="agent:test:fake")
+    assert task.labels == ("R1", "R2")
+    with pytest.raises(reader.MixedReadersError):
+        reader.build_sort_task(b, [("R1", targets[0], own), ("R2", targets[1], other)], attempt=1,
+                               reader="agent:test:fake")
+    with pytest.raises(reader.MixedReadersError):
+        reader.build_sort_task(b, [("R1", targets[0], {k: v for k, v in own.items() if k != "reader"})],
+                               attempt=1, reader="agent:test:fake")
+    # The run's own sort passes the guard, for a fake and for Argon.
+    assert run_with(FakeSource(), b)["sortError"] is None
+    assert run_read(b, FakeGoogle())["sortError"] is None
+
+
+def test_a_thought_loses_its_labels_but_keeps_b_and_w():
+    fake = FakeSource(thoughts_sent=["Image A - B&W grain, like images A & B"])
+    fake.thoughts = True
+    result = run_with(fake, board(1))
+    assert [line["text"] for line in lines(result, "thought")] == ["B&W grain, like"]
+
+
+def test_a_reason_keeps_a_glued_letter():
+    _, fields = reader.check_reading(reading("A", reason="Image A - B&W grain"), ["A"])
+    assert fields["reason"] == "B&W grain"
+
+
+# -- review of the hardening (2026-10-20) ---------------------------------------------------------
+
+@pytest.mark.parametrize("name, ok", [
+    # A decimal digit from another script is still a digit in a sort label: UTS #39 reads
+    # Arabic-Indic one as "l" and five as "o" and Devanagari zero as "o", but these were refused
+    # before the look-alike map and must stay refused.
+    ("R١", False), ("R ١", False), ("R١٢", False), ("R٥", False), ("R०", False), ("r ٣ film", False),
+    # Letters that UTS #39 reads as 1 ("l": Cyrillic palochka Ӏ, Greek Ι) or 0 ("O": Cyrillic О,
+    # Greek Ο) from another script, after R, are digits of a sort label, as Cyrillic З is a 3.
+    ("RӀ", False), ("RӀ2", False), ("R1О", False), ("R Ο", False), ("r ӀО film", False),
+    # Latin letters stay letters, and the noun check still reads Cyrillic І as Image's I.
+    ("RIO", True), ("Rio grande", True), ("Rl", True), ("RO film", True), ("Іmage B", False),
+    # A Cyrillic word with О or І in it isn't a sort label.
+    ("Роса", True), ("Січ", True),
+])
+def test_the_sort_label_check_reads_digits_and_their_look_alikes(name, ok):
+    assert (reader.check_look_name(name) is not None) is ok
