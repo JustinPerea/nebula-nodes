@@ -54,6 +54,7 @@ import { useFitCanvasView } from '../hooks/useFitCanvasView';
 import { CANVAS_LOD_ZOOM } from '../lib/canvasOverview';
 import { isCanvasShortcutTarget } from '../lib/canvasShortcutScope';
 import { boundingRect, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
+import { visibleFlowRect } from '../lib/visibleFlowRect';
 import type { NodeData } from '../types';
 import { NODE_RENAME_EVENT } from '../lib/keyboardShortcuts';
 import { publishCanvasSelection, selectedNodeIds } from '../lib/canvasSelection';
@@ -829,18 +830,6 @@ export function Canvas() {
       <PinComposer />
     </div>
   );
-}
-
-/** The canvas the person can see, in flow coordinates, or undefined before it has a size. */
-function visibleFlowRect(
-  wrapper: HTMLDivElement | null,
-  screenToFlowPosition: (point: { x: number; y: number }) => { x: number; y: number },
-): NodeRect | undefined {
-  const box = wrapper?.getBoundingClientRect();
-  if (!box || box.width <= 0 || box.height <= 0) return undefined;
-  const topLeft = screenToFlowPosition({ x: box.left, y: box.top });
-  const bottomRight = screenToFlowPosition({ x: box.right, y: box.bottom });
-  return { x: topLeft.x, y: topLeft.y, width: bottomRight.x - topLeft.x, height: bottomRight.y - topLeft.y };
 }
 
 /** The pasted nodes' bounding box, with measured sizes when known. */

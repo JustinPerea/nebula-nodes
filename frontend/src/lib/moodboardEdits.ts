@@ -1,5 +1,6 @@
-import type { Moodboard, MoodboardImage } from '../types';
+import type { Moodboard, MoodboardImage, MoodboardPlacement } from '../types';
 import { cardWeight } from '../components/moodboard-studio/steering';
+import { sizeFor } from './moodboardLayout';
 
 /**
  * Checked board edits, the Studio's side (backend services/moodboard_edits.py,
@@ -15,14 +16,20 @@ import { cardWeight } from '../components/moodboard-studio/steering';
  * with `baseVersion`, so it can't undo anyone's edit either.
  */
 
-/** The ops the Studio sends today. The backend takes more (cards, frames,
- *  `restore`); the Board view adds them. */
+/** The ops the Studio sends. The backend takes more (resize, frames...);
+ *  later parts of the board canvas add them. `restore` is never queued: it
+ *  is a batch's `undo`, sent back as it came (lib/boardUndo). */
 export type MoodboardOp =
-  | { op: 'add'; images: Array<Partial<MoodboardImage> & { url: string }>; index?: number; unique?: boolean }
+  | { op: 'add'; images: Array<Partial<MoodboardImage> & { url: string }>; index?: number; unique?: boolean;
+    /** The card's top-left on the board (an image dropped at the pointer); one image per op. */
+    at?: { x: number; y: number } }
   | { op: 'remove'; images: string[] }
   | { op: 'weight'; image: string; value: number }
   | { op: 'setAside'; image: string; value: boolean }
-  | { op: 'note'; image: string; notes?: string; privateNote?: string };
+  | { op: 'note'; image: string; notes?: string; privateNote?: string }
+  /** A card moved on the Board view (whole flow pixels). */
+  | { op: 'place'; placement: string; x: number; y: number }
+  | { op: 'restore'; slices: Array<Record<string, unknown>> };
 
 /** What a board edit answers. `undo` is a `restore` that puts the board back. */
 export interface MoodboardEditResult {
@@ -47,6 +54,7 @@ export class MoodboardVersionConflict extends Error {
 /** Whether an op changes what the analysis reads (backend `steering`):
  *  a private note doesn't. */
 export function opSteers(op: MoodboardOp): boolean {
+  if (op.op === 'place') return false;
   return op.op !== 'note' || 'notes' in op;
 }
 
@@ -55,10 +63,18 @@ export function newBoardImage(fields: Partial<MoodboardImage> & { url: string; i
   return { weight: 1, notes: '', privateNote: '', excluded: false, ...fields };
 }
 
+/** What applyOps may know beyond the ops: each dropped file's aspect
+ *  (width / height, read in the browser before the upload), so its card
+ *  shows at the size the server will give it. */
+export interface ApplyOptions {
+  aspects?: Readonly<Record<string, number>>;
+}
+
 /** `ops` applied to `images`, as the backend applies them (the cards a new
- *  image gets, and a weight's rescaled cards, come back with the board). An op
- *  naming an image that isn't there changes nothing. */
-export function applyOps(images: MoodboardImage[], ops: MoodboardOp[]): MoodboardImage[] {
+ *  image gets, and a weight's rescaled cards, come back with the board; an
+ *  image added `at` a point shows a card there at once). An op naming an
+ *  image or card that isn't there changes nothing. */
+export function applyOps(images: MoodboardImage[], ops: MoodboardOp[], options: ApplyOptions = {}): MoodboardImage[] {
   let next = images;
   const change = (id: string, update: (image: MoodboardImage) => MoodboardImage) => {
     next = next.map((image) => (image.id === id ? update(image) : image));
@@ -69,6 +85,12 @@ export function applyOps(images: MoodboardImage[], ops: MoodboardOp[]): Moodboar
       const urls = new Set(next.map((image) => image.url));
       const fresh = op.images.filter((image) => !(image.id && ids.has(image.id)) && !(op.unique && urls.has(image.url)))
         .map((image) => newBoardImage({ ...image, id: image.id ?? image.url }));
+      if (op.at && fresh.length > 0 && !fresh[0].placements?.length) {
+        const [w, h] = sizeFor(fresh[0].weight > 0 ? fresh[0].weight : 1, options.aspects?.[fresh[0].url] ?? Number.NaN);
+        fresh[0] = { ...fresh[0], placements: [{ id: `new-${fresh[0].id}`, frameId: null, x: Math.round(op.at.x),
+          y: Math.round(op.at.y), w, h, weight: fresh[0].weight > 0 ? Math.min(1, fresh[0].weight) : 1,
+          placedBy: 'person', placedAt: '' }] };
+      }
       const at = Math.max(0, Math.min(op.index ?? next.length, next.length));
       next = [...next.slice(0, at), ...fresh, ...next.slice(at)];
     } else if (op.op === 'remove') {
@@ -76,6 +98,13 @@ export function applyOps(images: MoodboardImage[], ops: MoodboardOp[]): Moodboar
       next = next.filter((image) => !gone.has(image.id));
     } else if (op.op === 'weight') {
       change(op.image, (image) => ({ ...image, weight: op.value }));
+    } else if (op.op === 'place') {
+      next = next.map((image) => (image.placements?.some((card) => card.id === op.placement)
+        ? { ...image, placements: image.placements.map((card): MoodboardPlacement => (card.id === op.placement
+          ? { ...card, x: op.x, y: op.y } : card)) }
+        : image));
+    } else if (op.op === 'restore') {
+      // Never queued: an undo goes to the server, and the board comes back with its answer.
     } else if (op.op === 'setAside') {
       // Used again from weight 0, an image weighs what its card shows.
       change(op.image, (image) => ({ ...image, excluded: op.value,
@@ -88,8 +117,9 @@ export function applyOps(images: MoodboardImage[], ops: MoodboardOp[]): Moodboar
   return next;
 }
 
-const opKey = (op: MoodboardOp): string | null => {
+export const opKey = (op: MoodboardOp): string | null => {
   if (op.op === 'weight' || op.op === 'setAside') return `${op.op}:${op.image}`;
+  if (op.op === 'place') return `place:${op.placement}`;
   if (op.op === 'note') return `note:${op.image}:${'notes' in op ? 'notes' : ''}:${'privateNote' in op ? 'privateNote' : ''}`;
   return null;
 };
@@ -178,6 +208,7 @@ export function rebaseDraft<D extends QueuedDraft>(draft: D, board: { images: Mo
   for (const op of draft.pendingOps ?? []) {
     if (sent.has(op)) continue;
     if ('image' in op && !images.some((image) => image.id === op.image)) continue;
+    if (op.op === 'place' && !images.some((image) => image.placements?.some((card) => card.id === op.placement))) continue;
     pendingOps.push(op);
     images = applyOps(images, [op]);
   }

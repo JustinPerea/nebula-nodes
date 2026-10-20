@@ -49,7 +49,7 @@ Workflow:
 Spending: the person sets limits (get_spend_limits). A run over a limit, or with a node that has no list price, is refused; send the same plan as propose_change. The person accepts or rejects it in Nebula; agents cannot accept, and get_proposal waits for the decision. Use propose_change too when the change is theirs to decide (reworking their graph, a costly run).
 
 Projects: list_projects, open_project, new_project. Start new work in a new project rather than emptying the person's canvas; they can switch back.
-Moodboards (the boards in Moodboard Studio): moodboard_create makes one from files, folders and image links, moodboard_update sets weights, notes, private notes (the person's own labels, never sent to generators), Set aside (excluded: the image stays and its colours are still read, but it never steers; weight 0 shows as set aside too) and the brief fields (Direction, Avoid, pinned colours, a hand-written brief), moodboard_analyze reads its palette (each colour lists the images it comes from; it can also preview an analysis, optionally with other colour thresholds, saving nothing). A board's `brief` is what generators get (brief.styleBrief, brief.negativePrompt, brief.palette); analysis.styleBrief is not. Only the person may change their own hand-written brief. Nebula checks the measured colours against the Direction and Avoid words: by default a clashing colour leaves the brief (brief.leftOut, each with its reason), brief.mayClash still goes, and pinned colours always go (brief.pinnedClashes). Tell the person what was left out; moodboard_update can keep one anyway. A board's notes are for the person, their team and you: generators get them only when the person turns that on (brief.notesSent).
+Moodboards (the boards in Moodboard Studio): moodboard_create makes one from files, folders and image links, moodboard_update sets weights, notes, private notes (the person's own labels, never sent to generators), Set aside (excluded: the image stays and its colours are still read, but it never steers; weight 0 shows as set aside too) and the brief fields (Direction, Avoid, pinned colours, a hand-written brief), moodboard_edit moves, resizes and groups its cards (the Board view in the Studio) in one checked edit that its `undo` takes back, moodboard_analyze reads its palette (each colour lists the images it comes from; it can also preview an analysis, optionally with other colour thresholds, saving nothing). A board's `brief` is what generators get (brief.styleBrief, brief.negativePrompt, brief.palette); analysis.styleBrief is not. Only the person may change their own hand-written brief. Nebula checks the measured colours against the Direction and Avoid words: by default a clashing colour leaves the brief (brief.leftOut, each with its reason), brief.mayClash still goes, and pinned colours always go (brief.pinnedClashes). Tell the person what was left out; moodboard_update can keep one anyway. A board's notes are for the person, their team and you: generators get them only when the person turns that on (brief.notesSent).
 A moodboard or Character is Global (every project lists it) or in one canvas project. moodboard_move and character_move move one between them ("global", "current" or a project); nodes that use it keep working everywhere, and moving it back undoes it.
 Deleted moodboards, characters and projects go to Recently deleted: list_trash shows them and restore_from_trash brings one back with the same id. Deleting for good is the person's alone.
 
@@ -969,7 +969,8 @@ def moodboard_get(board: str, ctx: Context | None = None) -> dict[str, Any]:
     never put it in a prompt (nothing that generates gets it). `placements`
     are its cards on the board (x, y, w, h in board pixels, weight, and
     `frameId`: the frame it is in, null for none); `frames` lists the board's
-    frames. The layout never steers generation.
+    frames. The layout never steers generation. `version` is the board's
+    write counter: pass it to moodboard_edit as `base_version`.
 
     `brief` is what generators get, as Nebula composed it: `styleBrief` (the
     hand-written brief when there is one, else the generated one),
@@ -1124,6 +1125,54 @@ def moodboard_update(board: str, images: list[dict] | None = None, remove: list[
         leave_out_flagged=leave_out_flagged, reset_colors=reset_colors, color_choices=color_choices,
         clash_mode=clash_mode, send_notes=send_notes, headers=_board_headers(ctx))
     return {**boards.brief(updated), "removed": removed, "previous": previous}
+
+
+@_tool(annotations=_EDIT)
+def moodboard_edit(board: str, ops: list[dict], base_version: int | None = None, say: str | None = None,
+                   ctx: Context | None = None) -> dict[str, Any]:
+    """Move, resize and group a moodboard's cards, and change its images, in
+    one checked edit: the same ops Moodboard Studio sends when the person
+    drags a card (POST /api/moodboards/{id}/edits, contract 07 section 1.12).
+    All of `ops` lands, or none of it; an open Studio shows it at once and
+    keeps what the person was doing.
+
+    Each op is an absolute set (sending it twice changes nothing more):
+    {"op": "place", "placement": CARD, "x": 200, "y": 40} moves a card
+    (top-left, board pixels; "frameId": a look moves it in, null out);
+    {"op": "resize", "placement": CARD, "weight": 0.6} (0.05 to 1, or "w"
+    and "h"; the card keeps its aspect and the image weighs its largest card);
+    {"op": "link", "image": 12, "frameId": "Glass"} adds a copy in a look;
+    {"op": "unlink", "placement": CARD}; {"op": "setAside", "image": 12,
+    "value": true}; {"op": "weight", "image": 12, "value": 0.5};
+    {"op": "note", "image": 12, "notes": "..."} (or "privateNote", the
+    person's own label, never sent to generators); {"op": "add", "urls": [...],
+    "at": {"x", "y"}} and {"op": "remove", "images": [12]}; looks are frames:
+    "frame.create" ({"name", "x", "y", "w", "h"} or {"around": [cards]}),
+    "frame.update", "frame.delete" (its cards stay) and "frame.merge"
+    ({"frame", "into"}). A CARD is a card id from moodboard_get's
+    `placements`, "12@Dither" (image 12's card in that look), or an image's
+    number or id when it has one card. Numbers name images as the board was
+    before the batch. Moving or resizing a card keeps the analysis; a change
+    to what steers (weight, notes, Set aside, adding, removing) clears it.
+
+    `base_version`: the board's `version` you read (moodboard_get); when the
+    board was saved since, nothing is changed and the error says its version
+    (read it again). Leave it out to apply the ops to the board as it is now.
+    `say`: your own words for what you did, up to 140 characters ("Moved #12
+    into Dither"); the person sees it in the Agent log.
+
+    Returns the board as moodboard_get gives it (with `placements` and
+    `frames`), `version`, `applied` (one entry per op: "applied" or
+    "unchanged") and `undo`. To undo the change, call moodboard_edit again
+    with `undo.ops` as `ops`: it puts back only what is still as you left it,
+    and `applied[0].skipped` names what changed since ("#12 changed since,
+    left as is")."""
+    import moodboard_client as boards
+
+    result = _board_call(boards.edit_board, _api(), board, ops, base_version=base_version, say=say,
+                         headers=_board_headers(ctx))
+    return {**boards.brief(result["board"], layout=True), "version": result.get("version"),
+            "applied": result.get("applied") or [], "undo": result.get("undo") or {"ops": []}}
 
 
 @_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True,
