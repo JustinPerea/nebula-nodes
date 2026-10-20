@@ -671,11 +671,14 @@ export const useUIStore = create<UIState>((set, get) => ({
     if (!targetId) return;
     const graph = useGraphStore.getState();
     if (graph.nodes.some((node) => node.id === targetId)) {
-      graph.onNodesChange(graph.nodes.map((node) => ({
+      // Only the nodes whose selection changes: a change for every node
+      // copies every node, which re-renders every card.
+      const selectionChanges = graph.nodes.filter((node) => !!node.selected !== (node.id === targetId)).map((node) => ({
         id: node.id,
         type: 'select' as const,
         selected: node.id === targetId,
-      })));
+      }));
+      if (selectionChanges.length) graph.onNodesChange(selectionChanges);
       graph.onEdgesChange(graph.edges.filter((edge) => edge.selected).map((edge) => ({
         id: edge.id, type: 'select' as const, selected: false,
       })));
