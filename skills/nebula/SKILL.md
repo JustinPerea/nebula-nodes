@@ -178,7 +178,8 @@ nebula moodboard delete <board>
 - Before wiring a board into a generator's `moodboard` port, `nebula info
   <node-id>` says what that node takes from it: the `MOODBOARD:` line is the
   card's ("Board images: on · up to 10 to Image Style Refs", or the brief as
-  text only), then the channel, weights, ports the board never fills, and the
+  text only), with `(on <route>)` after it on a node with more than one
+  route, then the channel, weights, ports the board never fills, and the
   models or routes that change it.
 
 - `show` lists each palette and accent colour with its share of the board

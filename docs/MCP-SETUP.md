@@ -49,12 +49,17 @@ The server exposes these tools for building and running (see
   moodboard does there, from the adapter table (contract 07 section 1.16) at
   the node's defaults on the route a run takes here (`route`, when it has
   more than one). `line` is the card's Moodboard line ("Board images: on ·
-  up to 10 to Image Style Refs"); `channel`, `default`, `slots` (port,
-  `label`, `max`, `sharesLimitWith`), `needsWired`, `never`, `weight`,
-  `text`, `reason` and `unconfirmed` are the entry's fields, and `variants`
+  up to 10 to Image Style Refs"). The rest are the entry's own fields as
+  section 1.16 defines them, without its sources: `channel`, `default`,
+  `handler`, `slots` (port, `label`, `max`, `sharesLimitWith`),
+  `needsWired`, `never`, `textSlot`, `text`, `negativeField`, `weight`
+  (without its `schema`), `order`, `syntax`, `syntaxReason`, `costPerRef`,
+  `reason` and `unconfirmed`, among others. A node with a Moodboard port and
+  no entry gets `channel: null` and a `note`. `variants`
   lists the param values (`byModel`) or routes (`byRoute`) that change them,
-  with the fields they change. `nebula info` prints the same as a
-  `MOODBOARD:` line and one line of detail.
+  with the fields they change (and `route`, when the value moves the run to
+  another route). `nebula info` prints the same as a `MOODBOARD:` line and
+  one line of detail.
 - `edit_canvas`: adds nodes, wires, param changes, renames, moves, removals
   (`remove`) and unwires (`unwire`) in one call, all or nothing: everything
   `nebula apply` does. Same shape as `propose_change`, with no limit on how

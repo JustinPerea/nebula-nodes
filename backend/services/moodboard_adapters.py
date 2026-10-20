@@ -293,7 +293,8 @@ def describe(definition: Mapping[str, Any] | None, api_keys: Mapping[str, Any] |
     entry = table()["entries"].get(node_id)
     if entry is None:
         return {"line": TEXT_LINE, "channel": None, "note": NO_ENTRY_NOTE}
-    route = run_route(definition, {}, {BOARD_PORT: _Wired()}, api_keys or {})
+    wired = {BOARD_PORT: _Wired()}
+    route = run_route(definition, {}, wired, api_keys or {})
     base = _plain(resolve(node_id, {}, route, definition=definition) or {}, definition)
     out: dict[str, Any] = {"line": card_line(base, definition), **base}
     if route is not None:
@@ -307,7 +308,12 @@ def describe(definition: Mapping[str, Any] | None, api_keys: Mapping[str, Any] |
     variants = []
     for key in (entry.get("byModel") or {}):
         param, _, value = str(key).partition("=")
-        found = variant({param: value}, resolve(node_id, {param: value}, route, definition=definition) or {})
+        # A value can move the run to another route (a maker rule that keeps
+        # it on the copy): resolved on the route that run takes, as it runs.
+        moved = run_route(definition, {param: value}, wired, api_keys or {})
+        found = variant({param: value}, resolve(node_id, {param: value}, moved, definition=definition) or {})
+        if found and moved != route:
+            found["route"] = moved
         if found:
             variants.append(found)
     for route_id in (entry.get("byRoute") or {}):

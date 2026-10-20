@@ -6678,21 +6678,26 @@ async def get_node(node_id: str) -> dict:
         else:
             detail = f"Node '{node_id}' not found"
         raise HTTPException(status_code=404, detail=detail)
-    board = _moodboard_adapter(node, load_settings())
+    board = _moodboard_adapter(node)
     # `nebula info` prints it; the definition itself stays as registered.
     return {**node, "moodboardAdapter": board} if board is not None else node
 
 
-def _moodboard_adapter(definition: Mapping[str, Any], settings: Mapping[str, Any]) -> dict[str, Any] | None:
+def _moodboard_adapter(definition: Mapping[str, Any], settings: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
     """What a wired moodboard does on this node type (moodboard_adapters.describe),
-    for describe_node and `nebula info`; None without a Moodboard port. A table
+    for describe_node and `nebula info`; None without a Moodboard port.
+    Settings (for the route the keys pick) are read only for a node with that
+    port, so other lookups stay as cheap as before. A table or settings file
     that can't be read leaves it out rather than failing the lookup."""
     from services import moodboard_adapters
 
+    if moodboard_adapters.board_port(definition) is None:
+        return None
     try:
-        return moodboard_adapters.describe(definition, settings.get("apiKeys") or {})
-    except (OSError, ValueError):
-        logging.getLogger("nebula.moodboard").exception("Moodboard adapter table unavailable")
+        keys = (settings if settings is not None else load_settings()).get("apiKeys") or {}
+        return moodboard_adapters.describe(definition, keys)
+    except (OSError, ValueError, AttributeError):
+        logging.getLogger("nebula.moodboard").exception("Moodboard adapter table or settings unavailable")
         return None
 
 

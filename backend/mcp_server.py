@@ -567,7 +567,8 @@ def describe_node(definition_id: str, ctx: Context | None = None) -> dict[str, A
     `needsWired`, `never` (ports the board never fills), `weight` (how board
     weights reach the model), `text`, `reason` and `unconfirmed` are the
     table's own facts; `variants` lists the param values or routes that change
-    them ({when, line, changed fields; null = dropped})."""
+    them ({when, line, changed fields; null = dropped; `route` when that
+    value moves the run to another route})."""
     from urllib.parse import quote
 
     return _canvas_call("GET", f"/api/agent/nodes/{quote(definition_id, safe='')}", ctx)

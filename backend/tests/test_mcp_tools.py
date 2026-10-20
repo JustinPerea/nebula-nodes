@@ -452,6 +452,25 @@ def test_nebula_info_prints_what_a_wired_moodboard_does(nebula, capsys):
     assert "MOODBOARD" not in capsys.readouterr().out
 
 
+def test_get_node_reads_settings_only_for_a_moodboard_node(nebula, monkeypatch):
+    """/api/nodes/{id} (`nebula info`, `nebula create`) answered without
+    settings before the adapter field: a node without a Moodboard port still
+    does, and one with it leaves the field out when settings can't be read."""
+    import main
+
+    http, _ = nebula
+
+    def broken():
+        raise ValueError("settings.json is not valid JSON")
+
+    monkeypatch.setattr(main, "load_settings", broken)
+    plain = http.get("/api/nodes/flux-schnell")
+    assert plain.status_code == 200 and "moodboardAdapter" not in plain.json()
+    board = http.get("/api/nodes/krea-2-generate")
+    assert board.status_code == 200 and "moodboardAdapter" not in board.json()
+    assert board.json()["id"] == "krea-2-generate"
+
+
 # -- U1: edit_canvas at apply parity, and undo_canvas_edit ------------------------
 
 def test_edit_canvas_removes_and_unwires_like_apply(nebula):

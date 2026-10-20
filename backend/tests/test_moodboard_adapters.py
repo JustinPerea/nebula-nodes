@@ -927,3 +927,29 @@ def test_card_line_reads_as_the_card_says_it():
     assert line("nano-banana") == "Board images: off · the brief goes as text"
     assert line("krea-2-generate") == "Board images: on · up to 10 to Image Style Refs"
     assert adapters.card_line(None, DEFINITIONS["flux-2-pro"]) == "This model takes the brief as text."
+
+
+def test_describe_variants_resolve_on_the_route_their_own_run_takes(monkeypatch):
+    """A byModel value that moves the run to another route (here a fal-only
+    image_size on GPT Image 2 Edit) is described on that route, as the run
+    resolves it, not on the default's."""
+    from services import moodboard_adapters as adapters
+
+    definition = DEFINITIONS["gpt-image-2-fal-edit"]
+    entry = copy.deepcopy(_table()["entries"]["gpt-image-2-fal-edit"])
+    entry["byModel"] = {"image_size=square": {"order": "upload"}}
+    entry["byRoute"] = {"fal": {"slots": [{"port": "images", "max": 4}]}}
+    real = adapters.table()
+    monkeypatch.setattr(adapters, "table", lambda: {**real, "entries": {**real["entries"], definition["id"]: entry}})
+    keys = {"OPENAI_API_KEY": "o", "FAL_KEY": "f"}
+
+    described = adapters.describe(definition, keys)
+    assert described["route"] == "openai" and described["slots"][0]["max"] == 16
+    square = next(v for v in described["variants"] if v["when"] == {"image_size": "square"})
+    wired = {"moodboard": PortValueDict(type="Moodboard", value={"id": "b1"})}
+    route = adapters.run_route(definition, {"image_size": "square"}, wired, keys)
+    run = adapters.resolve(definition["id"], {"image_size": "square"}, route, definition=definition)
+    assert route == "fal" and square["route"] == "fal"
+    assert square["slots"] == [{"port": "images", "label": "Reference Images", "max": run["slots"][0]["max"]}] == [
+        {"port": "images", "label": "Reference Images", "max": 4}]
+    assert square["order"] == "upload"
