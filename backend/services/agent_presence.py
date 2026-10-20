@@ -227,22 +227,31 @@ class AgentPresence:
         self,
         identity: AgentIdentity,
         *,
-        target: dict[str, Any],
+        target: dict[str, Any] | None,
         origin: dict[str, Any] | None = None,
         action: str = "move",
         say: Any = None,
     ) -> dict[str, Any]:
+        """The broadcast event for one agent action.
+
+        ``target=None`` is an action with no place on the canvas (a moodboard
+        write): the event carries no ``target``, so the browser lists it in
+        the Agent log and moves no cursor, and the agent's cursor here keeps
+        its last place.
+        """
         if action not in ACTIONS:
             raise PresenceError(f"action must be one of {', '.join(ACTIONS)}")
         now = self._clock()
         event: dict[str, Any] = {
             "type": "agentPresence",
             "agent": identity.as_dict(),
-            "target": target,
             "action": action,
             "say": _clean_say(say),
             "at": int(now * 1000),
         }
+        if target is None:
+            return event
+        event["target"] = target
         if origin is not None:
             event["from"] = origin
         self._agents[identity.id] = {**event, "_t": now}
