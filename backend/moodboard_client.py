@@ -988,7 +988,7 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
                  keep_anyway: list[str] | None = None, leave_out: list[str] | None = None,
                  leave_out_flagged: bool = False, reset_colors: list[str] | None = None,
                  color_choices: dict[str, Any] | None = None, clash_mode: str | None = None,
-                 send_notes: bool | None = None, undo: dict[str, Any] | None = None,
+                 send_notes: bool | None = None, cover: Any = None, undo: dict[str, Any] | None = None,
                  headers: dict[str, str] | None = None) -> tuple[dict[str, Any], list[str], dict[str, Any]]:
     """Change a board. `images` is a list of {"image": number or id, "weight",
     "notes", "privateNote", "excluded"}; `remove` takes images off the board (their files
@@ -1037,6 +1037,13 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
     flag, no-measured or keep-all. `send_notes` False stops the board's
     notes reaching generators; True is the person's call (refused for an
     agent, before anything is saved).
+
+    `cover` picks the image the board opens on (its thumbnail on the canvas
+    card and in lists), by number ("#3" or 3) or id; "" opens it on #1
+    again. A pick, not a reorder: no image changes number, and no notes,
+    weights or analysis change. It goes in the same checked batch as the
+    image changes; an image can't be the cover and come off the board in
+    one call.
 
     `undo` (from a `previous`) makes the call an undo: see undo_board,
     which also says what it left as is. The other arguments are then what
@@ -1105,9 +1112,23 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
             target["notes"] = note_op["notes"] = str(edit["notes"])
         if note_op:
             ops.append({"op": "note", "image": image_id, **note_op})
+    # The cover, by its id (numbers as read), in the same batch as the image changes.
+    cover_id: str | None = None
+    if cover is not None:
+        if "coverImageId" not in board:
+            raise MoodboardError("this version of Nebula has no board cover: a board always opens on image #1. "
+                                 "Nothing was changed.")
+        text = str(cover).strip()
+        if text:
+            cover_id = str(current[find_image(current, text[1:] if text.startswith("#") else text)]["id"])
+        ops.append({"op": "cover", "image": cover_id})
     removed: list[str] = []
     if remove:
         drop = {find_image(current, item) for item in remove}
+        if cover_id is not None and cover_id in {str(current[index]["id"]) for index in drop}:
+            number = next(i for i, image in enumerate(current) if str(image["id"]) == cover_id) + 1
+            raise MoodboardError(f"image {number} can't be the cover and come off the board in one change: pick "
+                                 "one. Nothing was changed.")
         removed = [str(current[index]["url"]) for index in sorted(drop)]
         ops.append({"op": "remove", "images": [str(current[index]["id"]) for index in sorted(drop)]})
         current = [image for index, image in enumerate(current) if index not in drop]
@@ -1212,6 +1233,8 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
                            headers=headers)
             updated = answer["board"]
             edited = True
+            if (updated.get("coverImageId") or None) != (board.get("coverImageId") or None):
+                previous["cover"] = board.get("coverImageId") or ""
             for op in (answer.get("undo") or {}).get("ops") or []:
                 undo_slices.extend(op.get("slices") or [])
             if undo_slices:
@@ -1380,7 +1403,7 @@ def _steering(images: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # image in `images` carries its weight, notes, private note and excluded.
 # `undo` is the checked way back a change hands over too (undo_board).
 RESTORE_KEYS = ("name", "notes", "mode", "strength", "images", "direction", "avoid", "pinned_colors",
-                "brief_override", "clash_mode", "color_choices", "send_notes", "undo")
+                "brief_override", "clash_mode", "color_choices", "send_notes", "cover", "undo")
 
 
 def previous_settings(board: dict[str, Any], *, brief: bool = False, notes: bool = False,
@@ -1603,6 +1626,18 @@ def _override(board: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def cover_of(board: dict[str, Any]) -> dict[str, Any] | None:
+    """The image the board opens on: `{number, id, chosen}`. `chosen` is
+    False when nobody picked one and it opens on #1; None for a board with
+    no images."""
+    images = [image for image in board.get("images") or [] if isinstance(image, dict)]
+    chosen = board.get("coverImageId")
+    for index, image in enumerate(images):
+        if chosen and str(image.get("id")) == str(chosen):
+            return {"number": index + 1, "id": image.get("id"), "chosen": True}
+    return {"number": 1, "id": images[0].get("id"), "chosen": False} if images else None
+
+
 def brief(board: dict[str, Any], *, layout: bool = False) -> dict[str, Any]:
     """A board as an agent needs it: settings, the brief fields, the brief
     generators get, numbered images, and the analysis.
@@ -1623,7 +1658,12 @@ def brief(board: dict[str, Any], *, layout: bool = False) -> dict[str, Any]:
     `brief` is the backend's composed brief as it sent it (`styleBrief` is
     the text generators get, `negativePrompt` their negatives); None when
     this Nebula doesn't send one. The analysis's own `styleBrief` leaves out
-    Direction, pinned colours and any hand-written brief, so it is not it."""
+    Direction, pinned colours and any hand-written brief, so it is not it.
+
+    `cover` ({number, id}) is the image chosen to open the board on, its
+    picture on the canvas card and in lists; with none chosen (or on a
+    Nebula without covers) there is no `cover` and the board opens on #1.
+    It is only what the board shows: no generator gets it."""
     analysis = board.get("analysis") or None
     composed = board.get("brief")
     view = {
@@ -1648,6 +1688,10 @@ def brief(board: dict[str, Any], *, layout: bool = False) -> dict[str, Any]:
              **({"privateNote": image.get("privateNote") or ""} if "privateNote" in image else {})}
             for index, image in enumerate(board.get("images") or [])
         ],
+        # Only when one is chosen, so an old board's view is as it was (the
+        # golden file pins it): no `cover` means it opens on #1.
+        **({"cover": {key: chosen[key] for key in ("number", "id")}}
+           if (chosen := cover_of(board)) and chosen["chosen"] else {}),
         "analysis": analysis,
         "updatedAt": board.get("updatedAt"),
     }

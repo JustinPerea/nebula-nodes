@@ -1037,3 +1037,99 @@ body.app-slava-restraint .moodboard-switch__hint {
     animation: none;
   }
 }
+
+/* The board's cover (lib/moodboardCover): the image it opens on. The tile
+   that is the cover carries a "Cover" mark (amber when chosen, quiet when
+   it is #1 by default), its controls offer Use as cover or Back to #1, and
+   the preview above the fields shows it with a caption. A new cover and a
+   mark that lands enter on the Studio's spring (k 500, c 36, about 1%
+   overshoot over 320ms); none under reduced motion. */
+.moodboard-def__cover,
+.moodboard-tile__cover {
+  --moodboard-spring: linear(0, 0.079, 0.247, 0.434, 0.606, 0.744, 0.847, 0.919, 0.965, 0.992, 1.006, 1.013, 1.014, 1.012, 1.01, 1.007, 1);
+}
+
+body.app-slava-restraint .moodboard-def__cover-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+body.app-slava-restraint .moodboard-def__cover img {
+  animation: moodboard-cover-swap 320ms var(--moodboard-spring) both;
+}
+
+body.app-slava-restraint .moodboard-def__cover-caption {
+  margin: 0;
+  color: var(--sr-ink-meta);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+body.app-slava-restraint .moodboard-tile__cover {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  border: 1px solid rgba(245, 158, 11, 0.7);
+  border-radius: 3px;
+  padding: 1px 6px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #f5b544;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  transform-origin: bottom left;
+  animation: moodboard-cover-in 320ms var(--moodboard-spring) both;
+}
+
+body.app-slava-restraint .moodboard-tile__cover--first {
+  border-color: rgba(255, 255, 255, 0.28);
+  color: rgba(255, 255, 255, 0.78);
+}
+
+body.app-slava-restraint .moodboard-tile__cover-row {
+  display: flex;
+  align-items: center;
+  min-height: 22px;
+}
+
+body.app-slava-restraint .moodboard-tile__cover-button {
+  border: 1px solid var(--sr-edge);
+  border-radius: 2px;
+  background: none;
+  color: var(--sr-ink-meta);
+  padding: 2px 8px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .moodboard-tile__cover-button:hover,
+body.app-slava-restraint .moodboard-tile__cover-button:focus-visible {
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+body.app-slava-restraint .moodboard-tile__cover-hint {
+  color: var(--sr-ink-faint);
+  font-size: 11px;
+}
+
+@keyframes moodboard-cover-in {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: none; }
+}
+
+/* The preview settles in from a touch larger, so it never shows its frame's edge. */
+@keyframes moodboard-cover-swap {
+  from { opacity: 0.25; transform: scale(1.04); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .moodboard-def__cover img,
+  body.app-slava-restraint .moodboard-tile__cover {
+    animation: none;
+  }
+}

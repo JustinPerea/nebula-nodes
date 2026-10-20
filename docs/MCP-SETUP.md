@@ -237,7 +237,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `proposal.accepted` | the person accepted; the added nodes and wires follow as `node.added` / `edge.added` by the person | `proposalId`, `idMap`, `runNodeIds` |
 | `proposal.rejected` | the person rejected | `proposalId`, `reason` |
 | `proposal.withdrawn` / `proposal.expired` / `proposal.invalidated` | the agent took it back, 15 minutes passed, or the canvas changed under it | `proposalId`, `reason` |
-| `board.added` / `board.removed` / `board.frame` / `board.grouped` / `board.setAside` / `board.resized` / `board.noted` / `board.moved` | a moodboard edit or save changed the board: one event per write, its kind the first of these that applies (`grouped` is a card into or out of a frame, `moved` 8 px or more) | `kinds` (every kind in the write), `refs` (`{number, id}` per image), `boardId`, `boardName`, `scope`; never any note text ("private note changed") |
+| `board.added` / `board.removed` / `board.frame` / `board.grouped` / `board.setAside` / `board.resized` / `board.noted` / `board.moved` / `board.cover` | a moodboard edit or save changed the board: one event per write, its kind the first of these that applies (`grouped` is a card into or out of a frame, `moved` 8 px or more, `cover` the image the board opens on) | `kinds` (every kind in the write), `refs` (`{number, id}` per image), `boardId`, `boardName`, `scope`; never any note text ("private note changed") |
 | `edit.undone` / `edit.redone` | a whole edit was undone (an agent's `undo_canvas_edit`, or the person's Cmd+Z of a step the canvas knew the edit of) or redone; after the node and wire events it made | `editId` (the edit reverted), `of` (whose), `editKind`, `events` (that edit's event cursors), `undid` (for an undo of an undo), `counts`, `skipped` |
 
 Events of a canvas edit carry `edit`: an agent's `edit_canvas`,
@@ -1403,6 +1403,15 @@ nebula moodboard delete <board>
   not `brief`, not the negative prompt, not the Moodboard node's outputs.
   Changing it keeps the analysis, and `previous` puts it back like any other
   image setting.
+- `cover` in `moodboard_update` (a number, `#n` or an id; `""` for none)
+  picks the image the board opens on: its canvas card, its thumbnail in the
+  lists and Studio, `cover` ({number, id}) in `moodboard_get` and
+  `moodboard_list` when one is chosen (`nebula moodboard set --cover` /
+  `--clear-cover`). Without one it is #1. It moves no image, so #n stays the
+  same image, and generators get exactly what they got before: same images,
+  weights, brief and analysis. A set-aside image can be the cover; taking
+  the cover image off the board opens it on #1 again, and `previous` puts
+  the cover back like any other change.
 - Images can be files, folders (the images directly inside, in name order,
   so `2.png` comes before `10.png`), http(s) links or Nebula outputs
   (`/api/outputs/...`, used as they are).
