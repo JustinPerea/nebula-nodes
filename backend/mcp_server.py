@@ -903,13 +903,20 @@ async def moodboard_create(name: str, sources: list[str] | None = None, project_
 async def moodboard_add(board: str, sources: list[str], ctx: Context | None = None) -> dict[str, Any]:
     """Add images to a moodboard: files, folders, http(s) image links or Nebula
     outputs, as in moodboard_create. Images already on the board are skipped.
-    Adding clears the board's analysis; run moodboard_analyze again."""
+    They go on as one checked board edit, so nothing the person changes in
+    Moodboard Studio meanwhile is overwritten, and an open Studio shows them
+    at once. Adding clears the board's analysis; run moodboard_analyze again.
+
+    `addedIds` are the new images' ids: moodboard_update with `remove` takes
+    them off again. `undo` is the board edit that does the same
+    (POST /api/moodboards/{id}/edits), skipping any image changed since."""
     import moodboard_client as boards
 
     headers = _board_headers(ctx)
-    updated, added, skipped = await anyio.to_thread.run_sync(lambda: _board_call(
+    updated, added, skipped, undo = await anyio.to_thread.run_sync(lambda: _board_call(
         boards.add_to_board, _api(), board, sources, headers=headers))
-    return {**boards.brief(updated), "added": added, "duplicatesSkipped": skipped}
+    return {**boards.brief(updated), "added": added, "duplicatesSkipped": skipped,
+            "addedIds": boards.added_ids(updated, undo), "undo": undo}
 
 
 @mcp.tool(annotations=_EDIT)
@@ -924,7 +931,7 @@ def moodboard_update(board: str, images: list[dict] | None = None, remove: list[
                      leave_out: list[str] | None = None, leave_out_flagged: bool = False,
                      reset_colors: list[str] | None = None, color_choices: dict | None = None,
                      clash_mode: str | None = None, send_notes: bool | None = None,
-                     ctx: Context | None = None) -> dict[str, Any]:
+                     undo: dict | None = None, ctx: Context | None = None) -> dict[str, Any]:
     """Change a moodboard. `images`: changes to single images, each
     {"image": its number or id, "weight": 0-1, "notes": "...", "privateNote": "...", "excluded": true}.
     `excluded` is the Set aside switch (`setAside` is the same key): a
@@ -955,13 +962,37 @@ def moodboard_update(board: str, images: list[dict] | None = None, remove: list[
     no-measured or keep-all. `send_notes` false keeps the notes from
     generators; true is the person's call and is refused (propose it).
 
-    `previous` holds the settings before the change; pass them back to
-    moodboard_update to undo it (it has `brief_override` only when the change
-    touched the brief). Changing images, notes, mode or strength
+    `previous` holds what the change changed, as it was before; pass it back
+    to moodboard_update (all of it, `undo` included) to undo it. Its `undo`
+    puts back, in one checked write, only what this change changed, so
+    edits others made since are kept: a setting someone changed again since
+    is left as they set it, and the result's `skipped` says so ("Direction
+    changed since, left as is"). With `undo`, the other arguments are only
+    what an older Nebula puts back instead (`remove`, a list change or a Keep
+    beside it is refused). Changing images, notes, mode or strength
     clears the analysis (run moodboard_analyze again); a rename and the brief
     fields keep it."""
     import moodboard_client as boards
 
+    if undo is not None:
+        # `previous` never holds a change to a list or a Keep, so one beside
+        # `undo` is a second change, refused as `set --restore` refuses it.
+        mixed = [label for label, value in (
+            ("remove", remove), ("avoid_add", avoid_add), ("avoid_remove", avoid_remove),
+            ("pin_colors", pin_colors), ("keep_out_colors", keep_out_colors), ("unpin_colors", unpin_colors),
+            ("keep_brief", keep_brief), ("keep_anyway", keep_anyway), ("leave_out", leave_out),
+            ("leave_out_flagged", leave_out_flagged), ("reset_colors", reset_colors)) if value]
+        if mixed:
+            raise RuntimeError(f"`undo` puts back a whole `previous`, so it can't go with {', '.join(mixed)}. "
+                               "Nothing was changed: undo first, then make the change.")
+        fallback = {key: value for key, value in {
+            "name": name, "notes": notes, "mode": mode, "strength": strength, "images": images,
+            "direction": direction, "avoid": avoid, "pinned_colors": pinned_colors,
+            "brief_override": brief_override, "clash_mode": clash_mode, "color_choices": color_choices,
+            "send_notes": send_notes}.items() if value is not None}
+        updated, removed, previous, skipped = _board_call(boards.undo_board, _api(), board, undo, fallback=fallback,
+                                                          headers=_board_headers(ctx))
+        return {**boards.brief(updated), "removed": removed, "previous": previous, "skipped": skipped}
     updated, removed, previous = _board_call(
         boards.update_board, _api(), board, name=name, notes=notes, mode=mode, strength=strength,
         images=images, remove=remove, direction=direction, avoid=avoid, avoid_add=avoid_add,
