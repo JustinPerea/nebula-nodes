@@ -620,8 +620,10 @@ def test_a_change_hands_back_what_puts_it_back(app, tmp_path):
     before = boards.get_board(app.api, board["id"])
     _, _, previous = boards.update_board(app.api, board["id"], notes="agent notes", strength=0.2, mode="world",
                                          images=[{"image": 2, "weight": 0.1, "excluded": True, "notes": "x"}])
-    boards.update_board(app.api, board["id"], name=previous["name"], notes=previous["notes"], mode=previous["mode"],
-                        strength=previous["strength"], images=previous["images"])
+    # Only what the change changed: the name it didn't touch isn't there.
+    assert sorted(previous) == ["images", "mode", "notes", "strength", "undo"]
+    assert [image["image"] for image in previous["images"]] == [before["images"][1]["id"]]
+    boards.update_board(app.api, board["id"], **previous)
     after = boards.get_board(app.api, board["id"])
     for key in ("name", "notes", "mode", "strength"):
         assert after[key] == before[key]
@@ -643,7 +645,7 @@ def test_add_keeps_an_edit_made_while_it_downloaded(app, tmp_path, monkeypatch):
         return original(api, sources, **kwargs)
 
     monkeypatch.setattr(boards, "source_urls", slow_download)
-    updated, added, _ = boards.add_to_board(app.api, board["id"], [str(second)])
+    updated, added, _, _ = boards.add_to_board(app.api, board["id"], [str(second)])
     assert added == 1
     assert updated["images"][0]["weight"] == 0.3 and len(updated["images"]) == 2
 
@@ -859,14 +861,27 @@ def test_previous_leaves_the_brief_alone_when_the_change_didnt_touch_it(app, tmp
     assert restored["briefOverride"]["text"] == "Written after the change."
 
 
-def test_an_undo_that_would_replace_the_persons_new_brief_changes_nothing_and_says_how(app, tmp_path):
-    # The agent changed its own brief, then the person wrote theirs: putting
-    # the agent's text back would replace the person's, so nothing is sent
-    # and the agent is told to leave brief_override out.
+def test_an_undo_that_would_replace_the_persons_new_brief_leaves_it_and_says_so(app, tmp_path):
+    # The agent changed its own brief, then the person wrote theirs: the undo
+    # puts the Direction back and leaves the person's brief as they wrote it.
     board = _analyzed_board(app, tmp_path)
     _, _, previous = boards.update_board(app.api, board["id"], direction="Agent direction",
                                          brief_override="Agent text.")
     assert previous["brief_override"] == ""
+    _person_override(board["id"], "The person's words.")
+    restored, _removed, _redo, skipped = boards.undo_board(app.api, board["id"], previous["undo"])
+    assert restored["direction"] == "" and restored["briefOverride"]["text"] == "The person's words."
+    assert skipped == ["The hand-written brief changed since, left as is"]
+
+
+def test_an_old_previous_that_would_replace_the_persons_new_brief_changes_nothing_and_says_how(app, tmp_path):
+    # A `previous` from before checked undo (no `undo`): putting the agent's
+    # text back would replace the person's, so nothing is sent and the agent
+    # is told to leave brief_override out.
+    board = _analyzed_board(app, tmp_path)
+    _, _, previous = boards.update_board(app.api, board["id"], direction="Agent direction",
+                                         brief_override="Agent text.")
+    previous.pop("undo")
     _person_override(board["id"], "The person's words.")
     with pytest.raises(boards.MoodboardError, match="Nothing was changed") as caught:
         boards.update_board(app.api, board["id"], **previous)
@@ -932,8 +947,22 @@ def test_a_refused_keep_gives_the_keep_reason(app, tmp_path, capsys):
 
 def _stale_read(monkeypatch, board):
     """The board as the agent read it, before the person wrote their brief:
-    the race where the backend's own 403 is what stops the change."""
-    monkeypatch.setattr(boards, "get_board", lambda api, ref, headers=None: board)
+    the race where the backend's own refusal is what stops the change. Each
+    change's first read is the stale board; a read after its 409 (the PUT
+    sends baseVersion) is the board as it is, as with a real backend."""
+    real_get_board, real_update_board = boards.get_board, boards.update_board
+    stale = {"next": True}
+
+    def read(api, ref, headers=None):
+        first, stale["next"] = stale["next"], False
+        return board if first else real_get_board(api, ref, headers)
+
+    def update(*args, **kwargs):
+        stale["next"] = True
+        return real_update_board(*args, **kwargs)
+
+    monkeypatch.setattr(boards, "get_board", read)
+    monkeypatch.setattr(boards, "update_board", update)
 
 
 def test_a_backend_refusal_in_a_race_reads_as_cli_and_mcp_wording(app, tmp_path, monkeypatch):
@@ -1066,21 +1095,28 @@ def test_a_keep_lost_to_a_race_hands_back_what_puts_the_saved_part_back(app, tmp
     previous = caught.value.previous
     assert previous["direction"] == "Before" and previous["avoid"] == []
     assert "brief_override" not in previous
-    # The MCP tool and the CLI hand it on too.
+    # The MCP tool and the CLI hand it on too. `previous` holds only what
+    # each write changed, as the board it replaced had it.
     with pytest.raises(Exception, match="pass this `previous` to moodboard_update") as mcp_caught:
         asyncio.run(mcp_server.mcp.call_tool("moodboard_update", {
             "board": board["id"], "direction": "Saved direction", "avoid_add": ["y"], "keep_brief": True}))
-    assert '"direction": "Before"' in str(mcp_caught.value)
+    assert 'moodboard_update: {"avoid": ["x"], "undo": ' in str(mcp_caught.value)
     with pytest.raises(SystemExit):
-        _cli(app, ["moodboard", "set", board["id"], "--direction", "Saved direction", "--keep-brief"], capsys)
+        _cli(app, ["moodboard", "set", board["id"], "--avoid", "z", "--keep-brief"], capsys)
     err = capsys.readouterr().err
     assert "The other changes were saved" in err and f"nebula moodboard set {board['id']} --restore" in err
     printed = json.loads(err[err.index("{"):])
-    assert printed["previous"]["direction"] == "Before"
+    assert printed["previous"]["avoid"] == ["x", "y"] and set(printed["previous"]) == {"avoid", "undo"}
+    # A Keep lost after a write that changed nothing has nothing to put back.
+    with pytest.raises(boards.MoodboardError, match="saved, and changed nothing") as same:
+        boards.update_board(app.api, board["id"], avoid_add=["z"], keep_brief=True)
+    assert same.value.previous is None
 
     monkeypatch.setattr(boards, "get_board", real_get_board)
     restored, _, _ = boards.update_board(app.api, board["id"], **previous)
-    assert restored["direction"] == "Before" and restored["avoid"] == []
+    # The Avoid list was changed again since (the MCP and CLI calls above), so
+    # the undo leaves it as they left it and puts only the Direction back.
+    assert restored["direction"] == "Before" and restored["avoid"] == ["x", "y", "z"]
     assert restored["briefOverride"]["text"] == "The person's words."
 
 
@@ -1271,7 +1307,9 @@ def test_mcp_set_aside_is_the_excluded_switch(app, tmp_path):
     assert [(image["excluded"], image["setAside"]) for image in updated["images"]] == [
         (True, True), (True, True), (False, False)]
     # The undo puts it back as it was.
-    assert [image["excluded"] for image in updated["previous"]["images"]] == [False, False, False]
+    # Only the images it changed: #3 isn't in it.
+    assert [(image["image"], image["excluded"]) for image in updated["previous"]["images"]] == [
+        (board["images"][0]["id"], False), (board["images"][1]["id"], False)]
     with pytest.raises(RuntimeError, match="same switch"):
         mcp_server.moodboard_update(board["id"], images=[{"image": 3, "setAside": True, "excluded": False}])
 

@@ -6,6 +6,7 @@ import type { Moodboard } from '../../types';
 const api = vi.hoisted(() => ({
   analyzeMoodboard: vi.fn(),
   createMoodboard: vi.fn(),
+  editMoodboard: vi.fn(),
   fetchMoodboard: vi.fn(),
   fetchMoodboards: vi.fn(),
   keepMoodboardBriefOverride: vi.fn(),
@@ -32,6 +33,7 @@ import { setOpenProject } from '../../test/projectState';
 import { useUIStore } from '../../store/uiStore';
 import { assetStudioDraftKey, useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
 import { NEW_MOODBOARD_SENTINEL } from '../../lib/studioSentinels';
+import { applyOps, type MoodboardOp } from '../../lib/moodboardEdits';
 
 const analysis = { version: 2, sourceHash: 'h1', summary: 'Warm.', palette: ['#e8593c'], accents: [] };
 
@@ -67,6 +69,14 @@ beforeEach(() => {
     .filter((item) => (scope === 'project' ? item.projectId === projectId : !item.projectId)));
   api.createMoodboard.mockImplementation(async (body: Partial<Moodboard>) => ({ ...board(), ...body, id: 'made1' }));
   api.updateMoodboard.mockImplementation(async (id: string, body: Partial<Moodboard>) => ({ ...boards[id], ...body }));
+  // Image edits go as checked edits (PR3); the board answers with them applied.
+  api.editMoodboard.mockImplementation(async (id: string, ops: MoodboardOp[]) => {
+    const steers = ops.some((op) => op.op !== 'note' || 'notes' in op);
+    const edited = { ...boards[id], images: applyOps(boards[id].images, ops),
+      analysis: steers ? null : boards[id].analysis, version: boards[id].version + 1 } as Moodboard;
+    for (const key of Object.keys(boards)) if (boards[key].id === id) boards[key] = edited;
+    return { board: edited, version: edited.version, applied: [], undo: { ops: [] } };
+  });
   api.lookupStoredAsset.mockResolvedValue({ status: 'missing' });
   api.moveStoredAsset.mockImplementation(async (_kind: string, id: string, to: string | null) => movedTo(id, to));
   useAssetStudioDraftStore.setState({ entries: {}, aliases: {} });
@@ -120,16 +130,18 @@ describe('Moodboard Studio private note', () => {
     expect(screen.getByText('Only for you. Not sent anywhere.')).toBeTruthy();
     fireEvent.change(privateNote, { target: { value: 'PAINTERLY (liked)' } });
 
-    await waitFor(() => expect(api.updateMoodboard).toHaveBeenCalled(), { timeout: 3000 });
-    const [, body] = api.updateMoodboard.mock.calls.at(-1)!;
-    expect(body.images[0].privateNote).toBe('PAINTERLY (liked)');
-    expect(body.analysis).toEqual(analysis);
+    // An image change is a checked edit now (PR3), never a whole-board PUT.
+    await waitFor(() => expect(api.editMoodboard).toHaveBeenCalled(), { timeout: 3000 });
+    expect(api.editMoodboard.mock.calls.at(-1)![1]).toEqual([{ op: 'note', image: 'i1', privateNote: 'PAINTERLY (liked)' }]);
+    expect(api.updateMoodboard).not.toHaveBeenCalled();
+    expect(boards.g1.analysis).toEqual(analysis);
     expect(screen.getByText('Warm.')).toBeTruthy();
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Image note' }), { target: { value: 'the orange' } });
-    await waitFor(() => expect(api.updateMoodboard.mock.calls.at(-1)![1].images[0].notes).toBe('the orange'),
+    await waitFor(() => expect(api.editMoodboard.mock.calls.at(-1)![1]).toEqual([{ op: 'note', image: 'i1', notes: 'the orange' }]),
       { timeout: 3000 });
-    expect(api.updateMoodboard.mock.calls.at(-1)![1].analysis).toBeNull();
+    expect(boards.g1.analysis).toBeNull();
+    expect(screen.queryByText('Warm.')).toBeNull();
   });
 });
 
@@ -137,7 +149,7 @@ describe('Moodboard Studio and the board layout', () => {
   const card = { id: 'c1', frameId: null, x: 40, y: 80, w: 480, h: 270, weight: 1, placedBy: 'person',
     placedAt: '2026-10-19T00:00:00+00:00' };
 
-  it('saves without the board layout and sends each image back with its cards', async () => {
+  it('saves board fields without the layout or the images, and keeps each image\'s cards', async () => {
     boards.g1 = board({
       images: [{ id: 'i1', url: '/api/outputs/a.png', weight: 1, notes: '', privateNote: '', excluded: false,
         placements: [card] }],
@@ -145,12 +157,16 @@ describe('Moodboard Studio and the board layout', () => {
     } as Partial<Moodboard>);
     await openStudio('g1', 'global', 'Global board');
     fireEvent.change(screen.getByRole('textbox', { name: 'Private note' }), { target: { value: 'liked' } });
+    await waitFor(() => expect(api.editMoodboard).toHaveBeenCalled(), { timeout: 3000 });
+    expect(boards.g1.images[0].placements).toEqual([card]);
 
+    fireEvent.change(screen.getByDisplayValue('Global board'), { target: { value: 'Laid out' } });
     await waitFor(() => expect(api.updateMoodboard).toHaveBeenCalled(), { timeout: 3000 });
     const [, body] = api.updateMoodboard.mock.calls.at(-1)!;
-    for (const key of ['layoutVersion', 'frames', 'suggestions', 'readings', 'lastRead']) expect(body).not.toHaveProperty(key);
-    expect(body.images[0].placements).toEqual([card]);
-    expect(body.analysis).toEqual(analysis);
+    for (const key of ['layoutVersion', 'frames', 'suggestions', 'readings', 'lastRead', 'images', 'analysis']) {
+      expect(body).not.toHaveProperty(key);
+    }
+    expect(body).toEqual({ name: 'Laid out', baseVersion: 2 });
   });
 
   it('clears the analysis only for what it reads', () => {
@@ -185,17 +201,19 @@ describe('Moodboard Studio Set aside', () => {
     const [first, second] = screen.getAllByRole('checkbox', { name: 'Set aside' });
 
     fireEvent.click(first);
-    await waitFor(() => expect(api.updateMoodboard).toHaveBeenCalled(), { timeout: 3000 });
-    let images = api.updateMoodboard.mock.calls.at(-1)![1].images;
-    expect([images[0].excluded, images[0].weight]).toEqual([true, 0.4]);
-    expect(api.updateMoodboard.mock.calls.at(-1)![1].analysis).toBeNull();
+    await waitFor(() => expect(api.editMoodboard).toHaveBeenCalled(), { timeout: 3000 });
+    expect(api.editMoodboard.mock.calls.at(-1)![1]).toEqual([{ op: 'setAside', image: 'i1', value: true }]);
+    expect([boards.g1.images[0].excluded, boards.g1.images[0].weight]).toEqual([true, 0.4]);
+    expect(boards.g1.analysis).toBeNull();
 
-    api.updateMoodboard.mockClear();
+    api.editMoodboard.mockClear();
     fireEvent.click(second);
-    await waitFor(() => expect(api.updateMoodboard).toHaveBeenCalled(), { timeout: 3000 });
-    images = api.updateMoodboard.mock.calls.at(-1)![1].images;
-    expect([images[1].excluded, images[1].weight]).toEqual([false, 0.55]);
+    await waitFor(() => expect(api.editMoodboard).toHaveBeenCalled(), { timeout: 3000 });
+    // The server gives a weight-0 image its card's weight when it's used again.
+    expect(api.editMoodboard.mock.calls.at(-1)![1]).toEqual([{ op: 'setAside', image: 'i2', value: false }]);
+    expect([boards.g1.images[1].excluded, boards.g1.images[1].weight]).toEqual([false, 0.55]);
     expect((screen.getAllByRole('checkbox', { name: 'Set aside' })[1] as HTMLInputElement).checked).toBe(false);
+    expect(api.updateMoodboard).not.toHaveBeenCalled();
   });
 
   it('reads set aside as the switch or weight 0', () => {
@@ -435,7 +453,8 @@ describe('Moodboard Studio: what generators get', () => {
     await waitFor(() => expect(api.updateMoodboard).toHaveBeenCalled(), { timeout: 3000 });
     const [, body] = api.updateMoodboard.mock.calls.at(-1)!;
     expect(body.colorChoices).toEqual({ keep: ['#e8593c'], leaveOut: [] });
-    expect(body.analysis).toEqual(analysis);
+    // Only what changed goes on the PUT: the analysis stays as it is.
+    expect(body).not.toHaveProperty('analysis');
   });
 
   it('has a notes switch, off, that says who the notes are for', async () => {
@@ -447,7 +466,8 @@ describe('Moodboard Studio: what generators get', () => {
     fireEvent.click(toggle);
     await waitFor(() => expect(api.updateMoodboard.mock.calls.at(-1)?.[1].sendNotes).toBe(true), { timeout: 3000 });
     // Sending notes or not doesn't change what the analysis read.
-    expect(api.updateMoodboard.mock.calls.at(-1)![1].analysis).toEqual(analysis);
+    expect(api.updateMoodboard.mock.calls.at(-1)![1]).not.toHaveProperty('analysis');
+    expect(screen.getByText('Warm.')).toBeTruthy();
   });
 
   it('saves the clash setting from Advanced', async () => {
