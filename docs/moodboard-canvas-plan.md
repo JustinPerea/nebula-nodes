@@ -1273,7 +1273,7 @@ Version 2.5 (Justin, relayed by GM - Design, 2026-10-20):
 - **Two kinds of action.**
   - **Edit actions** change the board. They are a closed set, each with a fixed label, stored in `actions`, and only on updates Nebula writes (`source: "nebula"`): `suggestion.accept {suggestionIds}` ("Make frame" for a hybrid, "Add copies" for a run's `alsoIn`), `suggestion.dismiss {suggestionIds}` ("Not now"), `run.undo {boardId, runId}` ("Undo the move" when the run moved one placement, else "Undo the sort"; PR10), `history.restore {boardId, historyIds}` ("Restore": every entry of one write, §5.8), `proposal.accept` / `proposal.reject {proposalId}` ("Accept", "Reject"). Agent-posted updates carry none: an agent that wants something done does it ("Act directly") or proposes it ("Ask first").
   - **Navigation actions** only move the view. "Show #37" when the update names one image, "Show on board" when it names more (on the main canvas, "Show on canvas"). They are drawn by the list and the card from `refs`, never stored, and offered on **every** update with refs, the agent's included (the still gives the agent's "since its last turn" update "Show on board"). Show selects and frames the refs and outlines them in the author's colour. It writes nothing, isn't journaled and needs no undo, so it doesn't break "agent updates carry no actions".
-  - **Two buttons at most.** Edit actions come first; Show takes the second slot when there is one left. A hybrid suggestion with Make frame / Not now shows no Show button, as in the still. Clicking any row does what Show does, so every update with refs can still be found. (The still's 10:52 entry puts "Show #37" before "Undo the sort"; this plan uses one order everywhere.)
+  - **Two buttons at most.** Edit actions come first; Show takes the second slot when there is one left. A hybrid suggestion with Make frame / Not now shows no Show button, as in the still. Clicking any row does what Show does, so every update with refs can still be found. (GM's still was updated on 2026-10-20 to match: its 10:52 entry now reads "Undo the sort", then "Show #37".)
   - **A run-done entry stores one edit action.** `run.undo` already sends the run's `historyIds`, so undoing the run brings back a removed look with its words (§5.9 "The route"). So the entry stores "Undo the move" / "Undo the sort" when the run moved anything, and stores `history.restore` ("Restore") only when it moved nothing. Show keeps the second slot. A Restore and a run undo of the same entries, from two places, never apply twice: the second gets `alreadyRestored` or `alreadyUndone`.
 - **An update points at the record it is about** (`suggestionIds`, `runId`, `historyIds`, `proposalId`) and never copies it. `suggestions[]` stays the source of truth for suggestions (§4.1), and the run record for a run's undo (below).
 
@@ -1297,7 +1297,7 @@ Checked against GM's still:
 
 - "Sorted 20 into four looks by what they share. #37 I couldn't place." is the whole-board template with n = 20, k = 4 and one Unsorted, #37. Its refs are [#37], so its buttons are "Undo the sort" and "Show #37".
 - "Read 3 of your selection. Moved #20 to Cut windows; #12 is in Painterly and Dither." is the selection template: three targets, #20 moved, #12 in two looks, and the third target unchanged and unnamed. One card moved, so "Undo the move", then "Show on board".
-- "#12 reads as painterly and pixel. Start a Painterly × Dither frame?" can't be made exactly. "pixel" isn't a look name, and the only place it could come from is the model's reading, which this plan never puts into an update. The template gives "#12 reads as painterly and dither. Start a Painterly × Dither frame?" GM to confirm the copy (Not verified).
+- "#12 reads as painterly and dither. Start a Painterly × Dither frame?" is the hybrid template from look names. The still first said "painterly and pixel", but "pixel" isn't a look name and could only come from the model's reading, which this plan never puts into an update; GM updated the still to the template's words on 2026-10-20.
 - The agent's "You added the lake to Painterly and made the meadow the heaviest. Reading both now." is the agent's own text (`source: "agent"`), with the lake and the meadow as `refs`. Show on board is drawn from them.
 
 **Private notes are never quoted.**
@@ -1410,7 +1410,7 @@ Checked against GM's still:
 - **The label:** "Updates", not "Notes", so it doesn't clash with image notes, the brief's NOTES row or pins. Code names keep `agentNotes` (§10.6).
 - **`AgentLog`:** stays separate ("Yes keep separate"), joined by "See all actions →" at the foot of the open list.
 - **The opened list:** GM's still `updates-open.png` (above): the header with count, read state and where it is kept; newest first; the 4 px author stripe; author, label and clock time; each entry's own buttons; the footer. The chip's count is a muted 0 while the list is open.
-- **Still open with GM:** the hybrid suggestion's copy ("painterly and dither" from look names, not the still's "pixel"), and the order of the buttons on a run-done entry (this plan: edit actions first, then Show).
+- **Settled with GM (2026-10-20):** the hybrid suggestion's copy is "painterly and dither" from look names, and a run-done entry puts edit actions first, then Show. GM updated `updates-open.png` and `updates-list.html` to match.
 
 ---
 
@@ -1712,7 +1712,7 @@ Runs alongside PR3 and PR5.
 
 - **Goal.** What Analyze suggests reaches the person as an update he can act on in one click, and nothing new is drawn on the canvas.
 - **Scope.** Suggestions reach the person as **updates, not chips** (§5.9), authored by the reader named in `suggestions[].model` ("Gemini 4 Argon · Analyze").
-  - **Hybrid:** one update each, from §5.9's template: "#12 reads as painterly and dither. Start a Painterly × Dither frame?" (look names only; the still's "pixel" would need model text) with **Make frame** / **Not now** and lavender outlines on its members (every linked copy, as v5.2's `nt-2`). Make frame creates the frame, moves those references in (Q10) and replaces their `alsoIn` suggestions; one Undo.
+  - **Hybrid:** one update each, from §5.9's template: "#12 reads as painterly and dither. Start a Painterly × Dither frame?" (look names only, as in GM's updated still) with **Make frame** / **Not now** and lavender outlines on its members (every linked copy, as v5.2's `nt-2`). Make frame creates the frame, moves those references in (Q10) and replaces their `alsoIn` suggestions; one Undo.
   - **`alsoIn`:** one update per run, "#3 and #9 also fit Dither", with Add copies / Not now. Accepting creates a linked copy in free space in that frame, at the same weight. One at a time: "Also fits Dither · Add copy" in the selected reference's side panel.
   - "Not now" dismisses for good (kept as `dismissed`, never suggested again; Q35 a, Justin 2026-10-20: "Dismiss it for good. It's kept as dismissed and never offered again; the list still lets you make the frame later"). Make frame stays in the list while the members are unchanged.
   - The actions call `suggestion.accept` / `suggestion.dismiss` with lists (§5.1). CLI `nebula moodboard suggestions [--accept ID|--dismiss ID]`; suggestions in `moodboard_look`. An accepted suggestion makes the target look stale by hash; Measure re-rolls it.
@@ -2274,10 +2274,10 @@ Justin answered GM's three §5.9 questions on 2026-10-20, relayed by GM - Design
 **The reader's texts are templates** (§5.9 "The reader's templates", §5.6.1's `suggestion` and `done` rows). Every slot is named with its data: counts from the run's targets and the look frames after the batch, moves and two-look images from the applied batch, look names from `frameIds`, `#n` from id tokens.
 
 - The still's two run-done sentences come out word for word.
-- The hybrid sentence can't, because "pixel" would have to come from the model's reading. The template says "#12 reads as painterly and dither", and GM is asked to confirm (Not verified).
+- The hybrid sentence couldn't, because "pixel" would have to come from the model's reading. The template says "#12 reads as painterly and dither", and GM updated the still to match (settled 2026-10-20).
 - The trace's `done` line and the update count differently on purpose ("Sorted 19 … · 1 Unsorted" on the bar; "Sorted 20 into four looks … #37 I couldn't place." in the list), and §5.6.1 says so.
 
-**Settled:** the three items GM took to Justin are marked settled in §5.9 and in Not verified. New open items there: the hybrid copy, the button order on run-done entries, the list's width at 1440×900, `AgentLog` in the shared overlays, and the run record's size.
+**Settled:** the three items GM took to Justin are marked settled in §5.9 and in Not verified. New open items there: the list's width at 1440×900, `AgentLog` in the shared overlays, and the run record's size.
 
 **Sizes (§9, recomputed from the 31 rows):** PR9a +150, +100, +0.5; PR9 +50, +50, +0.25; PR10 +250, +200, +0.75. The total is 29,400 + 16,950 (46,350) lines and 94.25 days (was 28,950 + 16,600 and 92.75): canvas 51, looks 11, adapters 32.25. Critical path 31 days (was 30.25), three lanes about 33.25 to 35.25 days.
 
@@ -2347,8 +2347,7 @@ Justin answered GM's three §5.9 questions on 2026-10-20, relayed by GM - Design
 - That nothing else is fixed in the main canvas's top right where the Updates chip goes (PR9a).
 - The private-note guard's cost on main-canvas updates when a project sees many boards (cached per board `version`; PR9a measures it).
 - ~~Whether `AgentLog` merges into Notes, the label "Notes", and the opened list's design~~: settled by Justin through GM on 2026-10-20 (version 2.5): it stays separate with a "See all actions →" link, the label is "Updates", and the list is GM's still `updates-open.png` (§5.9). The card's place while chat is open, the main canvas's own chip mount and the ring's colour were settled with GM the same day.
-- The hybrid suggestion's copy: the template gives "#12 reads as painterly and dither" from look names, where the still says "painterly and pixel" (GM to confirm, PR11).
-- The button order on a run-done entry: this plan puts edit actions first, then Show; the still's 10:52 entry has "Show #37" first (GM to confirm, PR9a).
+- ~~The hybrid suggestion's copy and the button order on a run-done entry~~: settled with GM on 2026-10-20. The still now says "painterly and dither" and puts "Undo the sort" before "Show #37" (§5.9).
 - The list's width at 1440×900: the still is 560 px wide at 1920×1080 (PR9a's screenshots settle it).
 - That nothing outside `AgentLog` relies on it being mounted on the main canvas only, once PR9 mounts it in the shared overlays (`App.tsx:295-305`; PR9 checks the `agent-log-*` body classes in `layouts.css` in the Studio).
 - The size of a run record for a 300-image sort (about 60 KB estimated; PR10 measures it).
