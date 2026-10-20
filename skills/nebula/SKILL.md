@@ -197,7 +197,8 @@ nebula moodboard delete <board>
   it); `--use N` uses it again (`--exclude`/`--include` are the old names).
   Weight 0 shows as set aside too, and `--use` on a weight-0 image gives it
   the weight its card shows unless you pass `--weight`. `show` marks them
-  "set aside"; `--json` has `setAside` on each image. The analysis lists an
+  "set aside" and `list` counts them ("5 images, 1 set aside"); `--json`
+  has `setAside` on each image. The analysis lists an
   image switched aside with `setAside: true` and its colours; a weight-0
   image keeps its ordinary entry there. `--remove` takes
   an image off the board (its file stays).

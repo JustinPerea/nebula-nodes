@@ -15,6 +15,7 @@ import { ScrollFade } from '../ScrollFade';
 import { NO_PROJECT_OPEN, useCurrentProject } from '../../lib/currentProject';
 import { wsClient } from '../../lib/wsClient';
 import { moveChoices } from '../../lib/assetMove';
+import { moodboardImagesLabel, setAsideCount } from '../../lib/moodboardCount';
 import { AssetMoveMenu } from '../asset-move/AssetMoveMenu';
 import { useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
 import '../../styles/panels.css';
@@ -153,7 +154,8 @@ export function AssetsPanel() {
   const onDragMoodboard = (e: ReactDragEvent<HTMLButtonElement>, m: Moodboard) => {
     e.dataTransfer.setData(
       MOODBOARD_DRAG_MIME,
-      JSON.stringify({ id: m.id, name: m.name, thumbnail: m.thumbnail, imageCount: m.images.length, mode: m.mode })
+      JSON.stringify({ id: m.id, name: m.name, thumbnail: m.thumbnail, imageCount: m.images.length,
+        setAsideCount: setAsideCount(m.images), mode: m.mode })
     );
     e.dataTransfer.effectAllowed = 'move';
   };
@@ -299,7 +301,7 @@ export function AssetsPanel() {
                 <AssetItem
                   key={m.id}
                   name={m.name}
-                  sub={`${m.images.length} images · ${m.mode}`}
+                  sub={`${moodboardImagesLabel(m.images.length, setAsideCount(m.images))} · ${m.mode}`}
                   thumbnail={m.thumbnail}
                   emptyThumb="▦"
                   selected={selected === `moodboards:${m.id}`}
@@ -308,7 +310,8 @@ export function AssetsPanel() {
                   onOpen={() => enterMoodboardEditor(m.id, scope)}
                   openLabel="Open"
                   onAdd={() => addMoodboardNode(m.id, canvasCenter(),
-                    { name: m.name, thumbnail: m.thumbnail, imageCount: m.images.length, mode: m.mode })}
+                    { name: m.name, thumbnail: m.thumbnail, imageCount: m.images.length,
+                      setAsideCount: setAsideCount(m.images), mode: m.mode })}
                   move={<AssetMoveMenu noun="board" buttonClassName="assets-item__action"
                     choices={moveChoices(m.projectId, project)} busy={movingId === m.id}
                     onChoose={(choice) => { void moveAsset('moodboard', m.id, choice.target); }} />}
