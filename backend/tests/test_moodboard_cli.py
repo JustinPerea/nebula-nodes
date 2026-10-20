@@ -145,6 +145,9 @@ def test_new_from_a_folder_and_a_link_then_set_analyze_and_delete(app, web, tmp_
 
     out = _cli(app, ["moodboard", "list", "--global"], capsys)
     assert board["id"] in out and "Renamed" in out
+    # The set-aside image still counts, and is named beside the count as the
+    # Studio and the node card do.
+    assert "(4 images, 1 set aside, look, analyzed" in out
 
     # This Nebula has Recently deleted, so the CLI may delete: a restore undoes it.
     out = _cli(app, ["moodboard", "delete", "Renamed"], capsys)
@@ -1317,3 +1320,21 @@ def test_mcp_set_aside_is_the_excluded_switch(app, tmp_path):
     assert zero["images"][0]["setAside"] is True and zero["images"][0]["excluded"] is False
     back = mcp_server.moodboard_update(board["id"], images=[{"image": 1, "excluded": False}])
     assert back["images"][0]["weight"] == 1.0 and back["images"][0]["setAside"] is False
+
+
+def test_show_says_a_board_at_strength_zero_sends_nothing(capsys, monkeypatch):
+    # Q36 a (Justin 2026-10-20): strength 0 turns the board off for every
+    # node it's wired into, so its brief isn't "sent to generators".
+    off = {"id": "mb_off", "name": "Off", "mode": "look", "strength": 0.0, "images": [],
+           "brief": {"styleBrief": "Quiet coastal mornings.", "negativePrompt": "blurry"}}
+
+    class _API:
+        def request(self, method, path, **kwargs):
+            assert (method, path) == ("GET", "/api/moodboards/mb_off")
+            return off
+
+    monkeypatch.setattr(NebulaClient, "api", property(lambda self: _API()))
+    moodboard_cmd.run(NebulaClient("http://testserver"), build_parser().parse_args(["moodboard", "show", "mb_off"]))
+    shown = capsys.readouterr().out
+    assert "Brief sent to generators" not in shown
+    assert "not sent: board strength is 0" in shown and "Quiet coastal mornings." in shown

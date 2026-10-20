@@ -287,3 +287,195 @@ def test_a_real_brown_still_conflicts_with_avoid_brown():
 def test_sage_stays_a_soft_colour():
     # A muted green conflicts with Avoid "sage" from C 0.03, as before.
     assert worst(check("", ["sage"], colours(palette=[("#8a9a80", 0.2)], accents=[]), [])) == {"#8a9a80": "conflict"}
+
+
+# -- reason wording (demo dry run, 2026-10-20) ------------------------------------
+# A reason quotes the person's own words. It used to build "allows <term> for
+# the <first noun>", and the first noun of "late-summer" was "late": "The
+# Direction allows Warm for the late, but this one is more saturated." Every
+# quote must now be the person's words as written, whole words only, in one of
+# the sentences below.
+
+SUMMER = "Warm late-summer light for a sunscreen campaign: soft, sun-faded, optimistic"
+SUMMER_AVOID = ["neon", "harsh magenta", "cold blue"]
+# The demo board's measured colours (dry run, 5 images, shot 06).
+SUMMER_PALETTE = [("#edb495", 0.086), ("#e9e2d1", 0.076), ("#1d1e45", 0.072), ("#0f2941", 0.059),
+                  ("#f7b550", 0.057), ("#a4b499", 0.053), ("#f7c762", 0.049), ("#536c4e", 0.043)]
+SUMMER_ACCENTS = [("#f69c7a", 0.0083), ("#640c5a", 0.0053), ("#0f2875", 0.0035), ("#faad63", 0.0007)]
+
+_QUOTE = r"“[^”]+”(?: in the [^,.]+)?"
+_TAILS = [
+    r"",
+    rf"\. The Direction also asks for {_QUOTE}, so it may clash\.",
+    rf"\. This color is more saturated than that, though the Direction also asks for {_QUOTE}\.",
+    r"\. The board's colors lean that way overall\.",
+    r"\. The board leans that way, and this color adds to it\.",
+    r"\. It may tint the image toward the cast you avoid\.",
+]
+
+
+def _norm(text: str) -> str:
+    """Spaces collapsed, and without brackets or quotation marks: a clause
+    drops one its span would cut in half."""
+    return " ".join(str(text).translate(str.maketrans("", "", "“”()[]\"")).split())
+
+
+def _whole_words_in(fragment: str, source: str, *, any_case: bool = False) -> bool:
+    """Whether ``fragment`` is in ``source`` as whole words: never part of a
+    longer or hyphenated word."""
+    import re
+
+    if not fragment or fragment != fragment.strip(" ,;:&/-'’"):
+        return False
+    flags = re.IGNORECASE if any_case else 0
+    pattern = rf"(?<![\w'’-]){re.escape(_norm(fragment))}(?![\w'’-])"
+    return re.search(pattern, _norm(source), flags) is not None
+
+
+def assert_reason_reads_well(finding: dict, direction: str, avoid: list[str]) -> None:
+    """The reason is "<Avoid|Direction>: <the person's words>" and one of the
+    sentences in _TAILS, and every quote is whole words from the text."""
+    import re
+
+    reason, clause = finding["reason"], finding["clause"]
+    label = f"{'Avoid' if finding['source'] == 'avoid' else 'Direction'}: {clause}"
+    assert reason.startswith(label), reason
+    source = direction if finding["source"] == "direction" else next(
+        (item for item in avoid if _norm(item) == clause), None)
+    assert source is not None, reason
+    assert _whole_words_in(clause, source), (clause, reason)
+    tail = reason[len(label):]
+    assert any(re.fullmatch(pattern, tail) for pattern in _TAILS), reason
+    for quoted, noun in re.findall(r"“([^”]+)”(?: in the ([^,.]+))?", tail):
+        assert _whole_words_in(quoted, direction), (quoted, reason)
+        if noun:
+            assert _whole_words_in(noun, direction, any_case=True), (noun, reason)
+
+
+def summer(direction=SUMMER, avoid=SUMMER_AVOID, pinned=()):
+    return check(direction, list(avoid), colours(SUMMER_PALETTE, SUMMER_ACCENTS), list(pinned))
+
+
+def test_the_demo_board_reasons_quote_whole_words():
+    findings = summer()
+    by_hex = {}
+    for finding in findings:
+        by_hex.setdefault(finding["hex"], []).append(finding["reason"])
+        assert_reason_reads_well(finding, SUMMER, SUMMER_AVOID)
+    # The four warm colours the dry run showed as "Warm for the late".
+    for hex_value in ("#f7b550", "#f7c762", "#f69c7a", "#faad63"):
+        assert by_hex[hex_value] == [
+            "Direction: sun-faded. This color is more saturated than that, though the Direction also asks for "
+            "“Warm late-summer light”."], hex_value
+    assert by_hex["#640c5a"] == ["Avoid: harsh magenta", "Direction: sun-faded"]
+    assert not any("for the late" in reason for reasons in by_hex.values() for reason in reasons)
+
+
+LONG = " ".join([SUMMER + "."] * 60)[:4000]
+
+
+@pytest.mark.parametrize("direction", [
+    SUMMER,
+    SUMMER.upper(),
+    SUMMER.lower(),
+    "wArM lAtE-sUmMeR lIgHt: SoFt, SuN-fAdEd",
+    "Muted palette. Sky-blue walls, blue-tinted glass, cornflower-blue flowers and warm-grey stone.",
+    "Sun-bleached, washed-out tones; a well-worn, hand-dyed red-orange scarf. Desaturated.",
+    "Soft!! warm... light? (muted) palette — with gold/amber accents; no neon-pink, please!",
+    "Lumière dorée, café crème walls, muted palette; chaleur douce, warm light. Ça va, très bien.",
+    "Real 19th-century landscape oil in a faded palette: warm late-afternoon sky over 1970s-style red barns.",
+    "Late-summer flowers: cornflower blue. Silver tonalist palette.",
+    "Flowers in cool jewel tones: cornflower blue, violet. Muted palette.",
+    "Faded palette, with “warm” golden-hour light and 'soft' peach-pink skin.",
+    "no blue-tinted glass, no sun-faded red flowers; muted palette, warm sky",
+    LONG,
+    "",
+    "   ",
+    GM_DIRECTION,
+], ids=lambda direction: direction[:40] or "empty")
+def test_every_reason_quotes_whole_words(direction):
+    avoid = [*SUMMER_AVOID, "blue-tinted glass", "Rouge vif, café-au-lait", "warm yellow varnish cast"]
+    findings = check(direction, avoid, colours([*SUMMER_PALETTE, *GM_PALETTE], [*SUMMER_ACCENTS, *GM_ACCENTS]),
+                     [PIN])
+    for finding in findings:
+        assert_reason_reads_well(finding, direction, avoid)
+    if not direction.strip():
+        assert all(finding["source"] == "avoid" for finding in findings)
+
+
+def test_an_inherited_noun_reads_in_lower_case_and_whole():
+    findings = check("Late-summer flowers: cornflower blue. Silver tonalist palette.", [],
+                     colours(palette=[], accents=[(BLUE, 0.002)]), [])
+    assert [f["reason"] for f in findings] == [
+        "Direction: Silver tonalist palette. This color is more saturated than that, though the Direction also "
+        "asks for “cornflower blue” in the late-summer flowers."]
+
+
+@pytest.mark.parametrize("direction, place", [
+    # The same word earlier in the text, mid-sentence, used to keep this one's capital.
+    ("Garden Flowers everywhere. Flowers: cornflower blue. Silver tonalist palette.", "flowers"),
+    # ... and the same word earlier at a sentence start lower-cased this one.
+    ("Flowers. Bright Flowers: cornflower blue. Silver tonalist palette.", "Flowers"),
+    ("Garden\nFlowers: cornflower blue. Silver tonalist palette.", "flowers"),
+])
+def test_an_inherited_noun_reads_its_own_capital(direction, place):
+    findings = check(direction, [], colours(palette=[], accents=[(BLUE, 0.002)]), [])
+    assert [f["reason"] for f in findings] == [
+        "Direction: Silver tonalist palette. This color is more saturated than that, though the Direction also "
+        f"asks for “cornflower blue” in the {place}."]
+
+
+def test_a_softened_avoid_quotes_the_direction():
+    findings = check("Flowers in cornflower blue.", ["blue flowers"], colours(palette=[], accents=[("#6495ed", 0.002)]),
+                     [])
+    assert [f["reason"] for f in findings] == [
+        "Avoid: blue flowers. The Direction also asks for “cornflower blue”, so it may clash."]
+
+
+def test_a_direction_exclusion_quotes_its_whole_noun_phrase():
+    findings = check("Bright beach, without blue-tinted glass.", [], colours(palette=[], accents=[(BLUE, 0.002)]),
+                     [])
+    assert [f["clause"] for f in findings] == ["without blue-tinted glass"]
+
+
+def test_words_with_letters_beyond_english_stay_whole():
+    """'café' used to read as 'caf': a quote never cuts a word."""
+    findings = check("Faded palette, warm café light.", [],
+                     colours(palette=[], accents=[("#f7b550", 0.002)]), [])
+    assert [f["reason"] for f in findings] == [
+        "Direction: Faded palette. This color is more saturated than that, though the Direction also asks for "
+        "“warm café light”."]
+
+
+def test_the_brief_lists_read_well_left_out_kept_and_may_clash():
+    """The Studio's Left out, Kept anyway and May clash lists, and the Preview
+    rows, show these reasons as they are (services/moodboard_brief.compose)."""
+    from services.moodboard_brief import compose
+
+    analysis = {
+        "version": 4, "sourceHash": "fixture", "mode": "look", "strength": 0.7, "summary": "", "keywords": [],
+        "palette": [h for h, _ in SUMMER_PALETTE], "accents": [h for h, _ in SUMMER_ACCENTS],
+        "colors": ([{"hex": h, "share": s, "role": "dominant", "images": 1} for h, s in SUMMER_PALETTE]
+                   + [{"hex": h, "share": s, "role": "accent", "images": 1} for h, s in SUMMER_ACCENTS]),
+    }
+    board = {"id": "summerboard1", "name": "Summer Light", "mode": "look", "strength": 0.7, "notes": "",
+             "images": [], "direction": SUMMER, "avoid": list(SUMMER_AVOID),
+             "pinnedColors": {"include": [], "exclude": []}, "briefOverride": None, "briefVersion": 1,
+             "colorChoices": {"keep": ["#0f2875"], "leaveOut": []}, "analysis": analysis}
+    brief = compose(board)
+    assert [item["hex"] for item in brief["kept"]] == ["#0f2875"]
+    assert [item["hex"] for item in brief["leftOut"]] == ["#640c5a"]
+    assert len(brief["mayClash"]) == 5
+    for item in [*brief["leftOut"], *brief["kept"], *brief["mayClash"]]:
+        for reason in item["reasons"]:
+            assert "for the late" not in reason
+            source = "avoid" if reason.startswith("Avoid: ") else "direction"
+            clause = next(c for c in [*SUMMER_AVOID, "sun-faded"] if reason.startswith(
+                f"{'Avoid' if source == 'avoid' else 'Direction'}: {c}"))
+            assert_reason_reads_well({"reason": reason, "clause": clause, "source": source}, SUMMER, SUMMER_AVOID)
+
+
+def test_a_second_negation_keeps_the_first_ones_words():
+    findings = check("no blue glass, no red flowers", [], colours(palette=[], accents=[(BLUE, 0.002), (BRICK, 0.002)]),
+                     [])
+    assert sorted(f["reason"] for f in findings) == ["Direction: no blue glass", "Direction: no red flowers"]
