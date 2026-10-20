@@ -363,7 +363,16 @@ nebula watch --once            # wait for the next change on the canvas
 nebula pins                    # notes the person pinned for agents
 nebula pin resolve <pin-id> --say "Warmed the grade on n7"
 nebula point n4 --say "Trying a tighter crop here"
+nebula note "n4 and n7 use different seeds; I'll match them" --node n4 --node n7
+nebula notes --unread          # your updates the person hasn't opened
 ```
+
+`--say` (on `point`, `pin resolve`) and `--note` (on `apply`, `propose`) are
+for your own action. What you noticed, a report or a suggestion goes in
+`nebula note`: the person reads it under Updates in the top right, saved with
+the project (`--board <name>` for a moodboard's, where `#12` names image 12).
+One plain line, 240 characters, at most 6 a minute; never quote a private
+note; `--since-last-turn` for what they changed since your last turn.
 
 ## Save and load
 

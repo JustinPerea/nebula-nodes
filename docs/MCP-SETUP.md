@@ -111,9 +111,15 @@ And these canvas tools:
   `error` (and the plain-language `errorHint`, when there is one).
   `view.stale` is true when no browser has reported for 30 seconds.
 - `point_at`: moves the agent's cursor on the canvas to a node, a port or a
-  flow-space point, with an optional line of narration (`say`) and an
-  optional drag gesture (`from_node_id`/`from_port`). The cursor is named
-  after `$NEBULA_AGENT_NAME`, or the MCP client's own name.
+  flow-space point, with an optional short line beside it (`say`, the
+  agent's own action only) and an optional drag gesture
+  (`from_node_id`/`from_port`). The cursor is named after
+  `$NEBULA_AGENT_NAME`, or the MCP client's own name. What the agent
+  noticed goes in `post_note` instead (see [Updates](#updates)).
+- `post_note` / `list_notes`: post what the agent noticed, a report or a
+  suggestion, and read the list back. The person reads them under
+  **Updates** in the top right of the canvas, saved with the project (or
+  with a board, with `board`). See [Updates](#updates).
 - `wait_for_canvas_change`: blocks until the person (or another agent)
   changes the canvas, then returns what changed and who did it. It skips
   your own edits. When the person undoes your edit with Cmd+Z, the events
@@ -168,8 +174,8 @@ request:
 | none of these (the browser itself) | no cursor | Your own clicks never spawn one |
 
 Creating, wiring, setting, running, removing and unwiring nodes move the
-cursor automatically (a wire shows as a drag from port to port). To point or
-narrate explicitly:
+cursor automatically (a wire shows as a drag from port to port). To point
+explicitly, with a short line about your own action:
 
 ```bash
 NEBULA_AGENT_NAME="Claude Code" nebula point n2 --say "Checking this prompt"
@@ -241,6 +247,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `proposal.withdrawn` / `proposal.expired` / `proposal.invalidated` | the agent took it back, 15 minutes passed, or the canvas changed under it | `proposalId`, `reason` |
 | `board.added` / `board.removed` / `board.frame` / `board.grouped` / `board.setAside` / `board.resized` / `board.noted` / `board.moved` / `board.cover` | a moodboard edit or save changed the board: one event per write, its kind the first of these that applies (`grouped` is a card into or out of a frame, `moved` 8 px or more, `cover` the image the board opens on) | `kinds` (every kind in the write), `refs` (`{number, id}` per image), `boardId`, `boardName`, `scope`; never any note text ("private note changed") |
 | `edit.undone` / `edit.redone` | a whole edit was undone (an agent's `undo_canvas_edit`, or the person's Cmd+Z of a step the canvas knew the edit of) or redone; after the node and wire events it made | `editId` (the edit reverted), `of` (whose), `editKind`, `events` (that edit's event cursors), `undid` (for an undo of an undo), `counts`, `skipped` |
+| `note.posted` | an agent posted an update to the person (Updates, `post_note`) | `surface` (canvas or board), `noteId`, `about`, `refs` (up to 12), `text`; `boardId`, `boardName` on a board |
 
 Events of a canvas edit carry `edit`: an agent's `edit_canvas`,
 `remove_from_canvas` or `nebula apply` gives each of its events `edit: {id}`
@@ -378,7 +385,9 @@ nebula pin resolve pin_8c41d2aa --say "Warmed the grade on n7"
 ```
 
 The reply shows on the pin, and the agent's cursor moves there. Over MCP use
-`resolve_pin(pin_id, reply)`. Resolving again replaces the reply.
+`resolve_pin(pin_id, reply)`. Resolving again replaces the reply. The reply
+is about your own answer; anything else you noticed goes in an update
+(below).
 
 Rules:
 
@@ -397,6 +406,67 @@ Rules:
   snapshot, so autosave never touches them) and switch with it. Deleting a
   pinned node leaves its pins where the node stood, marked detached; so does
   an import or Clear canvas that removes the node.
+
+### Updates
+
+`say` is for your own action. What you noticed, a report or a suggestion
+goes in an **update**: the person reads it in the Updates corner in the top
+right of the canvas, not at your cursor. A card drops from the "Updates"
+chip for about four seconds and outlines the nodes it names in your colour;
+the chip counts the updates the person hasn't opened; the list keeps every
+one, newest first, with your name, the time and a "Show on canvas" button
+that frames what it names. Updates are saved with the project (beside the
+canvas snapshot, like pins, so autosave never touches them) and switch with
+it; a moodboard's are saved beside the board (`<moodboards>/.notes/<id>.json`,
+never in the board file).
+
+```bash
+nebula note "The two portrait branches use different seeds; I'll match them" --node n4 --node n7
+nebula note "#12 reads painterly and dither" --board Dusk --ref 12
+nebula note "You moved the lake into Painterly" --board Dusk --since-last-turn
+nebula notes --unread                                   # the list, newest first
+```
+
+Over MCP: `post_note(text, board?, refs?, about?)` and
+`list_notes(board?, unread?)`. The words "note" stay in the tool names; on
+screen they are Updates.
+
+Rules:
+
+- Text is one plain line, 1–240 characters. `refs` (at most 12) are node ids
+  on the canvas, or image ids or numbers on a board; unknown ones are left
+  out and listed in `dropped`, never outlined from a guess. On a board, `#12`
+  in the text is saved as that image, so it always shows its current number
+  ("(removed)" once it's gone); a `#n` not on the board refuses the update
+  ("#45 isn't on this board").
+- `about`: `sinceLastTurn` (what the person changed since your last turn; a
+  newer one replaces your unread one) or `other` (the default). Other values
+  are Nebula's own.
+- No buttons: an agent's update carries no actions. Do the change, or propose
+  it. Nebula's own updates (the board reader's results, from later versions)
+  carry them.
+- An update that quotes a private note (the person's own label on a board
+  image) is refused (`note_quotes_private_note`): a whole note of 12 or more
+  characters, or any 32-character run of a longer one, compared without case,
+  punctuation or extra spaces. On the canvas every board the project can see
+  is checked (its own and the Global ones).
+- At most 6 a minute per agent per canvas or board (429
+  `notes_rate_limited`); 200 kept per project and 100 per board, the oldest
+  read ones dropped first.
+- Agents post and list. Only the person marks updates read (opening the list
+  marks them all; `{upTo}` reads that one and everything older, `{ids}` just
+  those) or dismisses one: `POST .../agent-notes/read` and
+  `.../{id}/dismiss` require the person token. A dismissed update stays in
+  the list, greyed.
+- Each update is one `note.posted` event in the change journal
+  (`nebula watch --kinds note`); reading and dismissing aren't.
+- REST: `GET`/`POST /api/canvas/agent-notes` and
+  `/api/moodboards/{id}/agent-notes` (`?unread=1`), body `{text, refs?,
+  about?}`, answer `{note, dropped, removed, unread}` (`removed`: updates
+  that left the list to make room, such as your replaced "since its last
+  turn" one). The `agentNotes` socket message (`op`: `sync`, `added`, `read`,
+  `dismissed`, `acted`) keeps every tab's chip in step.
+  A board `PUT` that sends `agentNotes` is refused (422).
 
 ### Proposals
 

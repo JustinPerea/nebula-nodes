@@ -126,6 +126,7 @@ from services.agent_workspaces import AgentWorkspaceContext, WorkspaceSessions, 
 from services.chat_actions import publish_action
 from services import moodboard_actions
 from services.agent_presence import (
+    AgentIdentity,
     PresenceError,
     RequestHeadersContext,
     agent_presence,
@@ -144,6 +145,7 @@ from services.canvas_events import (
     parse_kinds,
 )
 from services.canvas_pins import CanvasPins, PinError, pin_summary
+from services.agent_notes import AgentNotes, NoteError, note_summary
 from services import person_session
 from services import asset_trash
 from services.child_env import scrubbed_env
@@ -246,6 +248,9 @@ cli_graph = CLIGraph(persist_path=_STATE_PATH)
 project_store = ProjectStore(_STATE_DIR / "projects")
 # Pins follow `main.project_store` through the getter (tests swap the store).
 canvas_pins = CanvasPins(lambda: project_store)
+# Updates (plan section 5.9): the agent's and the reader's notices, kept with
+# the project (main canvas) or beside each board. Same getter as pins.
+agent_notes = AgentNotes(lambda: project_store)
 _request_workspace_revision: ContextVar[str | None] = ContextVar("workspace_revision", default=None)
 _execution_workspace_context: ContextVar[dict[str, Any] | None] = ContextVar("execution_workspace", default=None)
 _synchronous_workspace_runs: set[str] = set()
@@ -2835,6 +2840,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         export = await export_graph_for_frontend()
         await websocket.send_text(json.dumps({"type": "graphSync", **export}))
         await websocket.send_text(json.dumps(_pins_message()))
+        await websocket.send_text(json.dumps(_canvas_notes_message()))
         while True:
             raw = await websocket.receive_text()
             if manager.is_browser(websocket):
@@ -4330,6 +4336,218 @@ async def resolve_canvas_pin(pin_id: str, body: dict[str, Any]) -> dict[str, Any
     except Exception:  # noqa: BLE001 - the cursor is decoration on a saved reply
         pass
     return {"pin": pin}
+
+
+# ---------- Updates: what an agent or the reader noticed (plan section 5.9) ----------
+# On screen "Updates"; in code agentNotes (services/agent_notes.py).
+
+from pydantic import BaseModel, ConfigDict, Field  # noqa: E402 - the models below need them here
+
+
+class AgentNoteBody(BaseModel):
+    """POST .../agent-notes: what an agent noticed, reports or suggests."""
+    model_config = ConfigDict(extra="forbid")
+
+    text: Any = None
+    refs: Any = None
+    about: Any = None
+    # Refused with a reason (services/agent_notes.py): agents' updates carry no actions.
+    actions: Any = None
+
+
+class AgentNotesReadBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    upTo: str | None = None
+    # Just these updates (a click on one dropped card), instead of upTo.
+    ids: list[str] | None = Field(default=None, max_length=200)
+
+
+def _note_http_error(exc: NoteError) -> HTTPException | JSONResponse:
+    if exc.code:
+        return JSONResponse(status_code=exc.status, content={"detail": exc.detail, "code": exc.code})
+    return HTTPException(status_code=exc.status, detail=exc.detail)
+
+
+def _raise_note_error(exc: NoteError):
+    error = _note_http_error(exc)
+    if isinstance(error, HTTPException):
+        raise error from exc
+    return error
+
+
+def _notes_message(surface: str, op: str, *, project_id: str | None = None, board_id: str | None = None,
+                   **extra: Any) -> dict[str, Any]:
+    message: dict[str, Any] = {"type": "agentNotes", "surface": surface, "op": op,
+                               "at": int(_time_module.time() * 1000), **extra}
+    if surface == "board":
+        message["boardId"] = board_id
+    else:
+        message["projectId"] = project_id
+    return message
+
+
+def _canvas_notes_message() -> dict[str, Any]:
+    """Every update of the open project, sent on connect and after a project
+    switch, so a tab that reconnects has the list (op "sync")."""
+    try:
+        listing = agent_notes.canvas_list()
+    except (NoteError, ProjectStoreError):
+        listing = {"projectId": None, "notes": [], "unread": 0}
+    return _notes_message("canvas", "sync", project_id=listing["projectId"], notes=listing["notes"],
+                          unread=listing["unread"])
+
+
+async def _broadcast_raw_quietly(message: dict[str, Any]) -> None:
+    try:
+        await manager.broadcast_raw(message)
+    except Exception:  # noqa: BLE001 - saved already; a reconnect resyncs
+        pass
+
+
+def _journal_note(note: dict[str, Any], surface: str, *, board: dict[str, Any] | None = None,
+                  actor: dict[str, Any] | None = None) -> None:
+    data: dict[str, Any] = {"surface": surface, "noteId": note.get("id"), "about": note.get("about"),
+                            "refs": list(note.get("refs") or [])[:12], "text": note.get("text")}
+    if board is not None:
+        data["boardId"] = board.get("id")
+        data["boardName"] = board.get("name")
+    _journal("note.posted", data=data, summary=note_summary(note), actor=actor)
+
+
+def _note_author() -> AgentIdentity:
+    identity = identify_agent(current_request_headers())
+    if identity is None:
+        raise HTTPException(status_code=400, detail=(
+            "Name yourself with NEBULA_AGENT_NAME or --as: an update is posted by an agent, "
+            "and the person reads it under Updates"))
+    return identity
+
+
+@app.get("/api/canvas/agent-notes")
+async def list_canvas_agent_notes(unread: int = 0) -> Any:
+    """The open project's Updates, newest first (``?unread=1`` for unread only)."""
+    try:
+        return agent_notes.canvas_list(unread_only=bool(unread))
+    except NoteError as exc:
+        return _raise_note_error(exc)
+
+
+@app.post("/api/canvas/agent-notes", status_code=201)
+async def post_canvas_agent_note(body: AgentNoteBody) -> Any:
+    """An agent posts what it noticed on the main canvas: ``{text, refs?, about?}``.
+    ``refs`` are node ids; unknown ones are dropped and listed in ``dropped``."""
+    identity = _note_author()
+    try:
+        result = agent_notes.canvas_post(identity, body.model_dump(exclude_unset=True),
+                                         graph_nodes=cli_graph.nodes)
+    except NoteError as exc:
+        return _raise_note_error(exc)
+    await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"],
+                                                note=result["note"], unread=result["unread"],
+                                                removed=result["removed"]))
+    _journal_note(result["note"], "canvas")
+    return result
+
+
+@app.post("/api/canvas/agent-notes/read")
+async def read_canvas_agent_notes(body: AgentNotesReadBody | None = None) -> Any:
+    """The person opened the list: every update up to ``upTo`` (all when left
+    out) is read, or just ``ids`` (a dropped card they clicked). Person only,
+    so an agent can't hide an update."""
+    require_person(current_request_headers())
+    try:
+        result = agent_notes.canvas_mark_read(body.upTo if body else None, ids=body.ids if body else None)
+    except NoteError as exc:
+        return _raise_note_error(exc)
+    if result["ids"]:
+        await _broadcast_raw_quietly(_notes_message("canvas", "read", project_id=result["projectId"],
+                                                    ids=result["ids"], unread=result["unread"]))
+    return result
+
+
+@app.post("/api/canvas/agent-notes/{note_id}/dismiss")
+async def dismiss_canvas_agent_note(note_id: str) -> Any:
+    """× on a card, or "Not now": the update stays in the list, greyed. Person only."""
+    require_person(current_request_headers())
+    try:
+        result = agent_notes.canvas_dismiss(note_id)
+    except NoteError as exc:
+        return _raise_note_error(exc)
+    await _broadcast_raw_quietly(_notes_message("canvas", "dismissed", project_id=result["projectId"],
+                                                ids=[note_id], note=result["note"], unread=result["unread"]))
+    return result
+
+
+def _live_board_for_notes(moodboard_id: str) -> dict[str, Any] | JSONResponse:
+    store = _moodboard_store()
+    try:
+        board = store.get(moodboard_id, laid_out=False)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+    if board is None:
+        return _asset_not_found("moodboard", moodboard_id)
+    return board
+
+
+@app.get("/api/moodboards/{moodboard_id}/agent-notes")
+async def list_board_agent_notes(moodboard_id: str, unread: int = 0) -> Any:
+    """A board's Updates, newest first, numbers drawn as the board is now."""
+    board = await asyncio.to_thread(_live_board_for_notes, moodboard_id)
+    if isinstance(board, JSONResponse):
+        return board
+    return agent_notes.board_list(board, unread_only=bool(unread))
+
+
+@app.post("/api/moodboards/{moodboard_id}/agent-notes", status_code=201)
+async def post_board_agent_note(moodboard_id: str, body: AgentNoteBody) -> Any:
+    """An agent posts what it noticed on a board. ``#n`` in the text is saved
+    as that image's id (a ``#n`` not on the board refuses it); ``refs`` are
+    image ids or numbers. Never writes the board file."""
+    identity = _note_author()
+    board = await asyncio.to_thread(_live_board_for_notes, moodboard_id)
+    if isinstance(board, JSONResponse):
+        return board
+    try:
+        result = await asyncio.to_thread(agent_notes.board_post, identity, board,
+                                         body.model_dump(exclude_unset=True))
+    except NoteError as exc:
+        return _raise_note_error(exc)
+    await _broadcast_raw_quietly(_notes_message("board", "added", board_id=board["id"], note=result["note"],
+                                                unread=result["unread"], removed=result["removed"]))
+    _journal_note(result["note"], "board", board=board)
+    return result
+
+
+@app.post("/api/moodboards/{moodboard_id}/agent-notes/read")
+async def read_board_agent_notes(moodboard_id: str, body: AgentNotesReadBody | None = None) -> Any:
+    require_person(current_request_headers())
+    board = await asyncio.to_thread(_live_board_for_notes, moodboard_id)
+    if isinstance(board, JSONResponse):
+        return board
+    try:
+        result = agent_notes.board_mark_read(board, body.upTo if body else None, ids=body.ids if body else None)
+    except NoteError as exc:
+        return _raise_note_error(exc)
+    if result["ids"]:
+        await _broadcast_raw_quietly(_notes_message("board", "read", board_id=board["id"], ids=result["ids"],
+                                                    unread=result["unread"]))
+    return result
+
+
+@app.post("/api/moodboards/{moodboard_id}/agent-notes/{note_id}/dismiss")
+async def dismiss_board_agent_note(moodboard_id: str, note_id: str) -> Any:
+    require_person(current_request_headers())
+    board = await asyncio.to_thread(_live_board_for_notes, moodboard_id)
+    if isinstance(board, JSONResponse):
+        return board
+    try:
+        result = agent_notes.board_dismiss(board, note_id)
+    except NoteError as exc:
+        return _raise_note_error(exc)
+    await _broadcast_raw_quietly(_notes_message("board", "dismissed", board_id=board["id"], ids=[note_id],
+                                                note=result["note"], unread=result["unread"]))
+    return result
 
 
 # ---------- Proposals: agents propose, the person approves ----------
@@ -6558,6 +6776,10 @@ async def _broadcast_graph_sync(
             except (PinError, ProjectStoreError):
                 detached = []
         await _broadcast_pins()
+        # Updates belong to the project record too: an open or create brings
+        # that project's list; an import keeps the project, and its list.
+        if safe_reason != "import":
+            await _broadcast_raw_quietly(_canvas_notes_message())
         await _journal_detached_pins(detached, "the canvas was replaced")
         # Proposals point at node ids that just restarted: none of them still fit.
         # Nor do runs approved on Accept that haven't started.
@@ -7309,13 +7531,6 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
                     dst,
                     connect_spec.get("targetHandle", ""),
                 )
-                # Deleting an earlier edge can leave the len+1 allocator at an
-                # existing id. The confirmed pair needs a unique edge identity.
-                used_edge_ids = {existing["id"] for existing in candidate.edges[:-1]}
-                edge_number = len(candidate.edges)
-                while edge["id"] in used_edge_ids:
-                    edge_number += 1
-                    edge["id"] = f"e{edge_number}"
             except ValueError as exc:
                 # Discard the persistence-free candidate on every connection
                 # failure; the caller requested a pair, not a standalone node.
@@ -7475,13 +7690,6 @@ async def send_cinema_shot_to_motion(body: dict[str, Any]) -> dict:
             target_id = candidate.add_node("veo-3", defaults, position={"x": position["x"] + 360.0, "y": position["y"]})
             _validate_connect_handles(node_id, port_id, target_id, "image", graph=candidate)
             edge = candidate.connect(node_id, port_id, target_id, "image")
-            # CLIGraph's sequential edge allocator can collide after deletion.
-            # Keep this new connection's identity valid before durable adoption.
-            used_edge_ids = {existing["id"] for existing in candidate.edges[:-1]}
-            edge_number = len(candidate.edges)
-            while edge["id"] in used_edge_ids:
-                edge_number += 1
-                edge["id"] = f"e{edge_number}"
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=f"Cannot connect this shot to motion: {exc}") from exc
         # This action adds only an ordinary Veo node/edge. Existing recovery
@@ -11406,6 +11614,8 @@ class MoodboardCreate(BaseModel):
     readings: Any = None
     layoutVersion: Any = None
     lastRead: Any = None
+    # Updates are written only through /agent-notes (refused here by name).
+    agentNotes: Any = None
 
 
 class MoodboardUpdate(BaseModel):
@@ -11443,6 +11653,8 @@ class MoodboardUpdate(BaseModel):
     readings: Any = None
     layoutVersion: Any = None
     lastRead: Any = None
+    # Updates are written only through /agent-notes (refused here by name).
+    agentNotes: Any = None
     # The board's version the client read: a different one is refused (409)
     # with the board as it is now. Left out, the write isn't checked.
     baseVersion: Any = None
@@ -11559,6 +11771,11 @@ def _refuse_moodboard_layout(body: BaseModel) -> None:
     sent = [key for key in LAYOUT_BOARD_KEYS if key in body.model_fields_set]
     if sent:
         raise HTTPException(status_code=422, detail=f"{', '.join(sent)} {LAYOUT_REFUSED}")
+    if "agentNotes" in body.model_fields_set:
+        raise HTTPException(status_code=422, detail=(
+            "agentNotes can't be set on a board: an agent posts an update with POST "
+            "/api/moodboards/{id}/agent-notes (MCP post_note, `nebula note --board`), and the person "
+            "marks them read in the Updates list. They are kept beside the board, not in it."))
 
 
 def _moodboard_out(board: dict) -> dict:

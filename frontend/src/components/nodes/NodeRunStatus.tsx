@@ -5,6 +5,7 @@ import { useGraphStore } from '../../store/graphStore';
 import { withWiredBlockers } from '../../lib/directRoute';
 import { providerLabel, runRouteProvider } from '../../lib/modelDiscovery';
 import { nodeWiredPorts } from '../../lib/runScope';
+import { edgesInto } from '../../lib/graphIndex';
 import { formatElapsed } from '../../lib/runStatus';
 
 interface NodeRunStatusProps {
@@ -20,9 +21,11 @@ interface NodeRunStatusProps {
  * for how long ("OpenAI · 6s"), plus a bar once the provider reports progress. */
 export function NodeRunStatus({ data, definition, nodeId }: NodeRunStatusProps) {
   const apiKeys = useUIStore((state) => state.settingsCache.apiKeys);
-  // A joined string, so edge changes elsewhere on the canvas don't re-render this node.
-  const wired = useGraphStore((state) => (nodeId ? nodeWiredPorts(nodeId, state.edges).join('\n') : ''));
   const executing = data.state === 'executing';
+  // A joined string, so edge changes elsewhere on the canvas don't re-render
+  // this node, and only while it is queued or running (when it is drawn).
+  const active = executing || data.state === 'queued';
+  const wired = useGraphStore((state) => (nodeId && active ? nodeWiredPorts(nodeId, edgesInto(state.edges, nodeId)).join('\n') : ''));
   // A node that was already running when it mounted (project switch, remount)
   // counts from now; the store stamps the real start for live runs.
   const [mountedAt] = useState(() => Date.now());

@@ -99,6 +99,7 @@ import { isPortCompatible } from '../lib/portCompatibility';
 import { getProjectContext } from '../lib/projectContext';
 import { boundingRect, findOpenGroupOffset, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
 import { withParamDefaults } from '../lib/paramDefaults';
+import { replaceChanged, shareUnchanged } from '../lib/structuralShare';
 
 export type TrackItemOrderAction = 'send-to-back' | 'send-backward' | 'bring-forward' | 'bring-to-front';
 
@@ -1897,6 +1898,25 @@ function sameProviderRecoveryIdentity(
     && left.existingWorldId === right.existingWorldId;
 }
 
+/** The fields React Flow and this canvas keep on a node, which a graphSync's
+ * copy of the node doesn't carry. */
+function canvasOwnFields(node: Node<NodeData>): Partial<Node<NodeData>> {
+  const own: Partial<Node<NodeData>> = {};
+  if (node.measured) own.measured = node.measured;
+  // `false` too: React Flow leaves `selected: false` / `dragging: false` on a
+  // node once a selection or drag ends, and dropping them made the node
+  // differ from the canvas's copy, so the next sync re-rendered its card.
+  if (typeof node.selected === 'boolean') own.selected = node.selected;
+  if (typeof node.dragging === 'boolean') own.dragging = node.dragging;
+  return own;
+}
+
+/** The nodes with none selected; a node that wasn't stays the same object,
+ * so only the cards losing the selection re-render. */
+function deselectedNodes(nodes: Node<NodeData>[]): Node<NodeData>[] {
+  return replaceChanged(nodes, (node) => (node.selected ? { ...node, selected: false } : node));
+}
+
 function nodesWithProviderRecoveries(
   nodes: Node<NodeData>[],
   checkpoints: readonly ProviderRecoveryCheckpoint[],
@@ -2609,6 +2629,13 @@ wsClient.subscribe((event) => {
         }
         return {
           ...cliNode,
+          // What React Flow keeps on the node (its measured size, whether it
+          // is selected or being dragged) isn't the backend's: keep this
+          // canvas's. Dropping `measured` had React Flow measure every node
+          // again after each sync (a second update of every card), and
+          // dropping `selected` cleared the person's selection whenever an
+          // agent or a run synced the graph.
+          ...canvasOwnFields(existing),
           type: isPaperSource ? 'paperSourceNode' : cliNode.data.definitionId === 'batch'
             ? 'batchNode' : existing.type ?? cliNode.type,
           position: takesBackendPosition(cliNode, existing) ? cliNode.position : existing.position,
@@ -2668,10 +2695,13 @@ wsClient.subscribe((event) => {
       };
     });
 
-    const merged = nodesWithProviderRecoveries(
+    // A node the sync didn't change stays the same object (and the array
+    // the same array when nothing changed), so React Flow re-renders only
+    // the cards that changed (tests/canvasRenderScope.test.tsx).
+    const merged = shareUnchanged(graphReplaced ? [] : state.nodes, nodesWithProviderRecoveries(
       [...frontendOnlyNodes, ...cliMerged],
       useGraphStore.getState().providerRecoveries,
-    );
+    ));
     const mergedIds = new Set(merged.map((n) => n.id));
 
     // Preserve frontend-only edges whose endpoints are still present. We dedupe
@@ -2691,7 +2721,19 @@ wsClient.subscribe((event) => {
           && e.source === item.nodeId && e.sourceHandle === shotPortId(item.shotId)
           && e.target === item.targetId && e.targetHandle === 'image'),
     );
-    const mergedEdges = [...frontendOnlyEdges, ...cliEdges];
+    // Edges are matched by id and connection: the backend can hand two
+    // edges the same id (cli_graph.connect numbers by count after a removal).
+    const edgeIdentity = (edge: Edge) => `${edge.id}\u0000${edgeKey(edge)}`;
+    const existingEdges = new Map((graphReplaced ? [] : state.edges).map((edge) => [edgeIdentity(edge), edge]));
+    const mergedEdges = shareUnchanged(graphReplaced ? [] : state.edges, [
+      ...frontendOnlyEdges,
+      // A selected wire stays selected (React Flow keeps `selected` on the
+      // edge, `false` once deselected, which is kept too so the wire is unchanged).
+      ...(cliEdges as Edge[]).map((edge) => {
+        const selected = existingEdges.get(edgeIdentity(edge))?.selected;
+        return typeof selected === 'boolean' ? { ...edge, selected } : edge;
+      }),
+    ], edgeIdentity);
 
     if (!origin && !graphReplaced) foldFinishedArrange(state, arranged, cliNodes as Node<NodeData>[]);
     useGraphStore.setState({
@@ -2893,7 +2935,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
     set((state) => ({
       nodes: [
-        ...state.nodes.map((n) => ({ ...n, selected: false })),
+        ...deselectedNodes(state.nodes),
         ...newNodes,
       ],
       edges: [...state.edges, ...newEdges],
@@ -2907,7 +2949,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   selectAll: () => {
     set((state) => ({
-      nodes: state.nodes.map((n) => ({ ...n, selected: true })),
+      // Only the nodes not yet selected change (and their cards re-render).
+      nodes: replaceChanged(state.nodes, (n) => (n.selected ? n : { ...n, selected: true })),
     }));
   },
 
@@ -2969,7 +3012,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
     set((state) => ({
       nodes: [
-        ...state.nodes.map((n) => ({ ...n, selected: false })),
+        ...deselectedNodes(state.nodes),
         ...newNodes,
       ],
       edges: [...state.edges, ...newEdges],
@@ -4244,17 +4287,14 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       activeRuns: [],
       createLaunchingIds: [],
       createCancelledLaunchIds: [],
-      nodes: state.nodes.map((node) => ({
-        ...node,
-        data: {
-          ...node.data,
-          // Only reset nodes that are mid-execution — preserve completed/errored results
-          state: (node.data.state === 'queued' || node.data.state === 'executing')
-            ? 'idle' as const
-            : node.data.state,
-          progress: undefined,
-        },
-      })),
+      nodes: replaceChanged(state.nodes, (node) => {
+        // Only reset nodes that are mid-execution — preserve completed/errored results.
+        const running = node.data.state === 'queued' || node.data.state === 'executing';
+        // A node with nothing to reset stays the same object, so its card
+        // doesn't re-render (every run starts here).
+        if (!running && node.data.progress === undefined) return node;
+        return { ...node, data: { ...node.data, state: running ? 'idle' as const : node.data.state, progress: undefined } };
+      }),
     }));
   },
 
