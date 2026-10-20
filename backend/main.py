@@ -172,6 +172,10 @@ from services.canvas_proposals import (
     readiness_warning,
     summarize_cost,
 )
+# Proposals outside the graph: a project's cover, a board's Send notes (U16).
+from services.asset_proposals import AssetProposal, asset_proposals
+from services.asset_proposals import parse_change as parse_asset_change, summary as asset_proposal_summary
+from services.agent_presence import request_headers_scope
 from services.local_guard import host_allowed
 from services import run_approvals as approvals
 from services.run_approvals import RunApprovals
@@ -2836,6 +2840,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             if manager.promote(websocket, frame.get("personToken")):
                 # Accept keys travel only to the person's canvas sockets.
                 await websocket.send_text(json.dumps(_proposal_sync_message()))
+                await websocket.send_text(json.dumps(await _asset_proposal_sync_message()))
             else:
                 await websocket.send_text(json.dumps({
                     "type": "personRequired",
@@ -4724,6 +4729,8 @@ async def get_canvas_proposal(proposal_id: str, request: Request) -> dict[str, A
     wait = min(wait, 25.0)
     await _sweep_proposals()
     proposal = canvas_proposals.get(proposal_id)
+    if proposal is None and asset_proposals.get(proposal_id) is not None:
+        return await _get_asset_proposal(proposal_id, wait)  # a project's or a board's (U16)
     if proposal is None:
         raise HTTPException(status_code=404, detail=f"No proposal {proposal_id[:20]} (decided proposals are kept for 30 minutes)")
     loop = asyncio.get_running_loop()
@@ -4754,6 +4761,8 @@ async def withdraw_canvas_proposal(proposal_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
     await _sweep_proposals()
     proposal = canvas_proposals.get(proposal_id)
+    if proposal is None and asset_proposals.get(proposal_id) is not None:
+        return await _withdraw_asset_proposal(proposal_id, identity)  # a project's or a board's (U16)
     if proposal is None:
         raise HTTPException(status_code=404, detail=f"No proposal {proposal_id[:20]}")
     if proposal.agent.id != identity.id:
@@ -4977,6 +4986,501 @@ async def release_run_approval(approval_id: str) -> dict[str, Any]:
     run, or the canvas didn't start it). The nodes it locked are free again."""
     require_person(current_request_headers())
     return {"status": "released" if run_approvals.drop(approval_id) else "not_found"}
+
+
+# ---------- Asset proposals: changes outside the graph (U16) ----------
+#
+# The canvas proposals' life cycle and accept gate for a project's cover and
+# a board's Send notes (services/asset_proposals.py). Accept applies the
+# change through the route the person's own click uses (the cover route, the
+# board PUT), as the person.
+
+# Proposals being applied right now: an agent can't withdraw one and the
+# sweep leaves it alone until Accept has closed it.
+_asset_deciding: set[str] = set()
+_ASSET_WAIT_KINDS = {"proposal", "project", "board", "commons"}
+
+
+def _asset_proposal_view(proposal: AssetProposal) -> dict[str, Any]:
+    return asset_proposals.view(proposal)
+
+
+def _asset_proposal_closed_message(proposal: AssetProposal) -> dict[str, Any]:
+    # Every socket gets it, agents' too: a commons proposal's reason (the
+    # person's words) reaches only those who may read it (get_proposal).
+    return {"type": "assetProposalClosed", "proposalId": proposal.id, "status": proposal.status,
+            "reason": None if proposal.kind == "commons" else proposal.reason, "kind": proposal.kind,
+            "targetId": proposal.target_id}
+
+
+def _asset_journal_data(proposal: AssetProposal) -> dict[str, Any]:
+    data = {"proposalId": proposal.id, "agentId": proposal.agent.id, "kind": proposal.kind,
+            "targetId": proposal.target_id, "targetName": proposal.target_name, "note": proposal.note}
+    if proposal.kind == "commons":
+        # Every agent on the canvas reads the journal, whatever its brand; the
+        # note and the person's reason reach only those who see the reference.
+        data.pop("note")
+    return data
+
+
+async def _announce_closed_asset_proposals(proposals: list[AssetProposal], *,
+                                           actor: dict[str, Any] | None = None) -> None:
+    """Journal and broadcast asset proposals that just closed."""
+    for proposal in proposals:
+        reason = f": {proposal.reason}" if proposal.reason and proposal.kind != "commons" else ""
+        _journal(
+            f"proposal.{proposal.status}",
+            data={**_asset_journal_data(proposal), "reason": proposal.reason if proposal.kind != "commons" else None},
+            summary=f"{proposal.status} {proposal.agent.name}'s proposal {proposal.id}{reason}",
+            actor=actor,
+        )
+        try:
+            await manager.broadcast_raw(_asset_proposal_closed_message(proposal))
+        except Exception:  # noqa: BLE001 - the screens also hide expired proposals locally
+            pass
+
+
+async def _asset_proposal_misfit(proposal: AssetProposal, exported: dict[str, Any] | None = None) -> str | None:
+    """Why the proposal no longer fits its target, or None while it does."""
+    if proposal.kind == "commons":
+        return await _commons_proposal_misfit(proposal)
+    if proposal.kind == "project":
+        catalog = project_store.read()
+        project = catalog["projects"].get(proposal.target_id)
+        if project is None:
+            return "the project was deleted"
+        if _cover_state(project) != proposal.before:
+            return "the project's cover changed since it was proposed"
+        url = proposal.change.get("cover")
+        if url is not None and not project_cover.is_choice(_cover_images_now(project, catalog, exported), url):
+            return "that image is no longer one of the project's images"
+        return None
+    try:
+        board = await asyncio.to_thread(_moodboard_store().get, proposal.target_id)
+    except ValueError:
+        board = None
+    if board is None:
+        return "the board was deleted"
+    if board.get("sendNotes") is True:
+        return "Send notes to generators is already on"
+    return None
+
+
+async def _sweep_asset_proposals() -> None:
+    """Expire overdue asset proposals and invalidate those whose target moved
+    on (another cover pinned, the project or board deleted, notes already
+    sent). Called before every asset proposal read and decision, and after a
+    cover change."""
+    try:
+        expired = [p for p in asset_proposals.sweep() if isinstance(p, AssetProposal)]
+    except Exception:  # noqa: BLE001 - never fail a read over housekeeping
+        return
+    misfits: list[AssetProposal] = []
+    waiting = [p for p in asset_proposals.open_list() if p.id not in _asset_deciding]
+    exported = None
+    if any(p.kind == "project" for p in waiting):
+        try:
+            exported = await _projects_live_export()
+        except Exception:  # noqa: BLE001 - checked against the saved snapshot then
+            exported = None
+    for proposal in waiting:
+        try:
+            reason = await _asset_proposal_misfit(proposal, exported)
+            if reason and proposal.is_open and proposal.id not in _asset_deciding:
+                asset_proposals.close(proposal.id, "invalidated", reason=reason)
+                misfits.append(proposal)
+        except Exception:  # noqa: BLE001 - one odd target never blocks the rest
+            continue
+    await _announce_closed_asset_proposals(expired + misfits, actor=dict(_SYSTEM_ACTOR))
+
+
+async def _asset_proposal_sync_message() -> dict[str, Any]:
+    """Every open asset proposal with its accept key, for a socket that just
+    said hello as the person (the Projects screen and Moodboard Studio)."""
+    await _sweep_asset_proposals()
+    return {"type": "assetProposalSync",
+            "proposals": [{**_asset_proposal_person_view(p), "acceptKey": p.accept_key}
+                          for p in asset_proposals.open_list()]}
+
+
+async def _asset_proposal_target(kind: str, target_id: str, change: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """(the target's name, its state now) for a new proposal; 404 for a
+    missing target, 400 for an image not in the project, 409 for a change
+    that is already so."""
+    if kind == "project":
+        exported = await _projects_live_export()
+        catalog = project_store.read()
+        project = _project_id_or_404(target_id, catalog)
+        url = change.get("cover")
+        if url is not None and not project_cover.is_choice(_cover_images_now(project, catalog, exported), url):
+            raise HTTPException(status_code=400, detail=(
+                "Pick one of this project's own images for its cover (list_project_covers, "
+                f"GET /api/projects/{target_id}/covers, lists them)."))
+        state = _cover_state(project)
+        if state["cover"] == url:
+            raise HTTPException(status_code=409, detail=(
+                "That is already the project's cover; nothing to propose." if url is not None
+                else "The project's cover is already the automatic one; nothing to propose."))
+        return str(project.get("name") or ""), state
+    try:
+        board = await asyncio.to_thread(_moodboard_store().get, target_id)
+    except ValueError:
+        board = None
+    if board is None:
+        raise HTTPException(status_code=404, detail=f"No moodboard '{target_id[:40]}' (moodboard_list lists them)")
+    if board.get("sendNotes") is True:
+        raise HTTPException(status_code=409, detail=(
+            f'Send notes to generators is already on for board "{board.get("name")}"; nothing to propose.'))
+    return str(board.get("name") or ""), {"sendNotes": False}
+
+
+@app.post("/api/asset-proposals", status_code=201)
+async def create_asset_proposal(body: dict[str, Any]) -> dict[str, Any]:
+    """An agent proposes a change outside the graph; the person decides where
+    they work on that thing (a project's cover on the Projects screen, a
+    board's Send notes in Moodboard Studio). Nothing changes until they accept.
+
+    Body: {kind: "project" | "moodboard", id, change, note}. ``change`` is
+    {"cover": url | null} for a project, {"sendNotes": true} for a board."""
+    headers = current_request_headers()
+    identity = identify_agent(headers)
+    if identity is None:
+        if is_person(headers):
+            raise HTTPException(status_code=403, detail="The person doesn't need to propose; change it directly")
+        raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
+    await _sweep_asset_proposals()
+    try:
+        spec = parse_asset_change(body)
+    except ProposalError as exc:
+        raise _proposal_http_error(exc) from exc
+    if spec.kind == "commons":
+        spec, name, before = await _commons_proposal_target(spec, headers)
+    else:
+        name, before = await _asset_proposal_target(spec.kind, spec.target_id, spec.change)
+    try:
+        proposal = asset_proposals.create_asset(agent=identity, spec=spec, target_name=name, before=before)
+    except ProposalError as exc:
+        raise _proposal_http_error(exc) from exc
+    view = _asset_proposal_view(proposal)
+    said = asset_proposal_summary(proposal)
+    _journal("proposal.created", data={**_asset_journal_data(proposal), "change": sorted(spec.change)},
+             summary=(f"proposed {proposal.id} ({said})" if spec.kind == "commons"
+                      else f'proposed {proposal.id}: "{spec.note}" ({said})'))
+    try:
+        # The accept key goes only to the person's canvas sockets.
+        await manager.broadcast_browser({"type": "assetProposalOpened",
+                                         "proposal": _asset_proposal_person_view(proposal),
+                                         "acceptKey": proposal.accept_key})
+    except Exception:  # noqa: BLE001 - a screen that missed it gets assetProposalSync on reconnect
+        pass
+    where = {"project": "on the Projects screen", "commons": "in the Commons"}.get(spec.kind, "in Moodboard Studio")
+    # No cursor can go there, so the Agent log names it.
+    await _say_agent_action(f"Asks to {said} (decide {where})")
+    return {"proposal": view}
+
+
+@app.get("/api/asset-proposals")
+async def list_asset_proposals(kind: str | None = None, id: str | None = None) -> dict[str, Any]:  # noqa: A002
+    """Open asset proposals, optionally for one kind or one target (never their accept keys)."""
+    await _sweep_asset_proposals()
+    headers = current_request_headers()
+    return {"proposals": [_asset_proposal_view(p) for p in asset_proposals.for_target(kind, id)
+                          if await _commons_proposal_visible(p, headers)]}
+
+
+async def _get_asset_proposal(proposal_id: str, wait: float) -> dict[str, Any]:
+    """``GET /api/canvas/proposals/{id}`` for an asset proposal: with ``wait``
+    (≤25 s), wait for the decision, or for its target to move on."""
+    await _sweep_asset_proposals()
+    proposal = asset_proposals.get(proposal_id)
+    if not isinstance(proposal, AssetProposal) or not await _commons_proposal_visible(proposal, current_request_headers()):
+        raise HTTPException(status_code=404, detail=f"No proposal {proposal_id[:20]} (decided proposals are kept for 30 minutes)")
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + wait
+    cursor = canvas_events.latest
+    while proposal.is_open:
+        remaining = min(deadline - loop.time(), proposal.expires_at - asset_proposals.now() + 0.05)
+        if remaining <= 0:
+            break
+        try:
+            result = await canvas_events.wait(after=cursor, journal=canvas_events.journal_id,
+                                              wait=remaining, kinds=set(_ASSET_WAIT_KINDS))
+        except TooManyWaiters as exc:
+            raise HTTPException(status_code=429, detail=str(exc)) from exc
+        cursor = result.get("cursor", cursor)
+        await _sweep_asset_proposals()
+        if result.get("timedOut") and deadline - loop.time() <= 0:
+            break
+    return {"proposal": _asset_proposal_view(proposal)}
+
+
+async def _withdraw_asset_proposal(proposal_id: str, identity: Any) -> dict[str, Any]:
+    await _sweep_asset_proposals()
+    proposal = asset_proposals.get(proposal_id)
+    if not isinstance(proposal, AssetProposal) or not await _commons_proposal_visible(proposal, current_request_headers()):
+        raise HTTPException(status_code=404, detail=f"No proposal {proposal_id[:20]}")
+    if proposal.agent.id != identity.id:
+        raise HTTPException(status_code=403, detail="Only the agent that proposed this can withdraw it")
+    if proposal.id in _asset_deciding:
+        raise HTTPException(status_code=409, detail="The person is accepting this proposal right now")
+    try:
+        asset_proposals.close(proposal_id, "withdrawn", reason="withdrawn by the agent")
+    except ProposalError as exc:
+        raise _proposal_http_error(exc) from exc
+    await _announce_closed_asset_proposals([proposal])
+    return {"proposal": _asset_proposal_view(proposal)}
+
+
+async def _decidable_asset_proposal(proposal_id: str) -> AssetProposal:
+    """The person-only checks of accept and reject, as for canvas proposals:
+    no agent markers and the person token, then the proposal's accept key,
+    then still open."""
+    headers = current_request_headers()
+    require_person(headers)
+    lower = {k.lower(): v for k, v in (headers or {}).items()}
+    supplied = lower.get(_PROPOSAL_KEY_HEADER) or ""
+    proposal = asset_proposals.get(proposal_id)
+    if not isinstance(proposal, AssetProposal):
+        raise HTTPException(status_code=404, detail="This proposal is no longer available")
+    if not supplied or not secrets.compare_digest(supplied.encode(), proposal.accept_key.encode()):
+        raise HTTPException(status_code=403, detail="This proposal can only be decided from Nebula, where you saw it.")
+    await _sweep_asset_proposals()
+    if not proposal.is_open or proposal.id in _asset_deciding:
+        raise HTTPException(status_code=409, detail=f"This proposal is already {proposal.status}")
+    return proposal
+
+
+async def _apply_asset_proposal(proposal: AssetProposal) -> dict[str, Any]:
+    """Make the change as the person, through the route their own click uses."""
+    note = f" (accepted from {proposal.agent.name})"
+    if proposal.kind == "commons":
+        return await _apply_commons_proposal(proposal)
+    if proposal.kind == "project":
+        url = proposal.change.get("cover")
+        result = await _set_project_cover(proposal.target_id, url, expect=proposal.before, note=note)
+        return {"applied": {"cover": url}, "project": result["project"]}
+    # Without the tab id, the write isn't this tab's echo: the Studio that
+    # clicked Accept reads the board again like every other open one.
+    headers = {k: v for k, v in (current_request_headers() or {}).items() if k.lower() != "x-nebula-tab"}
+    with request_headers_scope(headers):
+        answer = await update_moodboard(proposal.target_id, MoodboardUpdate(sendNotes=True))
+    if isinstance(answer, Response):
+        detail = ""
+        try:
+            detail = str(json.loads(bytes(answer.body)).get("detail") or "")
+        except Exception:  # noqa: BLE001
+            pass
+        raise HTTPException(status_code=409, detail=detail or "the board can't take it now")
+    return {"applied": {"sendNotes": True}, "board": answer}
+
+
+@app.post("/api/asset-proposals/{proposal_id}/accept")
+async def accept_asset_proposal(proposal_id: str) -> dict[str, Any]:
+    """The person accepts: the change is made as theirs, or nothing is (409,
+    and the proposal closes as invalidated when it no longer fits)."""
+    proposal = await _decidable_asset_proposal(proposal_id)
+    _asset_deciding.add(proposal.id)
+    # Expiry must not land while the change is being made.
+    proposal.expires_at = max(proposal.expires_at, asset_proposals.now() + 120)
+    try:
+        exported = await _projects_live_export() if proposal.kind == "project" else None
+        misfit = await _asset_proposal_misfit(proposal, exported)
+        if misfit is not None:
+            raise HTTPException(status_code=409, detail=misfit)
+        outcome = await _apply_asset_proposal(proposal)
+    except (HTTPException, PersonGateError) as exc:
+        detail = str(getattr(exc, "detail", "") or exc)
+        _asset_deciding.discard(proposal.id)
+        if proposal.is_open:
+            asset_proposals.close(proposal.id, "invalidated", reason=detail[:200])
+            await _announce_closed_asset_proposals([proposal], actor=dict(_PERSON_ACTOR))
+        raise HTTPException(status_code=409, detail=f"This proposal no longer fits: {detail}") from exc
+    except BaseException:
+        _asset_deciding.discard(proposal.id)
+        raise
+    proposal.applied = dict(outcome["applied"])
+    try:
+        asset_proposals.close(proposal.id, "accepted")
+    except ProposalError:
+        pass  # unreachable while it is in _asset_deciding; the change is made either way
+    _asset_deciding.discard(proposal.id)
+    _journal("proposal.accepted", data={**_asset_journal_data(proposal), "applied": proposal.applied},
+             summary=f"accepted {proposal.agent.name}'s proposal {proposal.id} ({asset_proposal_summary(proposal)})",
+             actor=dict(_PERSON_ACTOR))
+    try:
+        await manager.broadcast_raw(_asset_proposal_closed_message(proposal))
+    except Exception:  # noqa: BLE001
+        pass
+    publish_action(f"Accepted {proposal.agent.name}'s proposal to {asset_proposal_summary(proposal)}")
+    return {"status": "accepted", "proposalId": proposal.id, "kind": proposal.kind,
+            "targetId": proposal.target_id, **outcome}
+
+
+@app.post("/api/asset-proposals/{proposal_id}/reject")
+async def reject_asset_proposal(proposal_id: str, request: Request) -> dict[str, Any]:
+    """The person says no. Body: {reason?} (one short line the agent will read)."""
+    proposal = await _decidable_asset_proposal(proposal_id)
+    body = await _proposal_body(request)
+    if not proposal.is_open or proposal.id in _asset_deciding:
+        raise HTTPException(status_code=409, detail=f"This proposal is already {proposal.status}")
+    reason: str | None = None
+    if body.get("reason") not in (None, ""):
+        try:
+            reason = clean_note(body.get("reason"), limit=MAX_REASON, label="reason")
+        except ProposalError as exc:
+            raise _proposal_http_error(exc) from exc
+    asset_proposals.close(proposal.id, "rejected", reason=reason)
+    await _announce_closed_asset_proposals([proposal], actor=dict(_PERSON_ACTOR))
+    return {"status": "rejected", "proposalId": proposal.id}
+
+
+# ---------- Commons curation as asset proposals (Justin's Q63 b, U13) ----------
+#
+# Curating the Commons (corrections, regions, a reference's role, why or
+# inbox place) stays the person's: agents propose it with kind "commons"
+# and the person decides on the reference's detail in the Commons. Accept
+# makes each edit through the Commons route the person's own click uses
+# (services/commons_proposals.py). Every curation write, the person's own
+# and an accepted proposal's, journals a commons.* event.
+
+def _asset_proposal_person_view(proposal: AssetProposal) -> dict[str, Any]:
+    """The view plus what only the person's screen may see (a commons
+    proposal's ``before``: Commons text), for the browser-only messages."""
+    return {**_asset_proposal_view(proposal), **asset_proposals.person_values(proposal)}
+
+
+def _commons_proposal_store() -> Any:
+    from commons import activation as commons_activation, runtime as commons_runtime
+
+    if not commons_activation.is_enabled():
+        raise HTTPException(status_code=404, detail="The Commons is off on this backend, so there is nothing to propose.")
+    return commons_runtime.get_store()
+
+
+async def _commons_proposal_target(spec: Any, headers: Mapping[str, str] | None) -> tuple[Any, str, dict[str, Any]]:
+    """(the spec with edits already so dropped, the target's name, ``before``).
+    The agent must see the reference in its own scope, as commons_get does."""
+    import dataclasses
+
+    from routes import commons as commons_routes
+    from services import commons_proposals
+
+    store = _commons_proposal_store()
+    try:
+        actor = commons_actors.resolve_actor(headers or {})
+    except commons_actors.AuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    change, before = await asyncio.to_thread(commons_proposals.target, store, actor, spec.target_id,
+                                             spec.change, spec.brand)
+    # The scope it was proposed in: who else may read it (_commons_proposal_visible).
+    scope = {"brand": commons_routes._effective_brand(actor, spec.brand),
+             "workspace": str(actor.workspace) if actor.workspace is not None else None}
+    return dataclasses.replace(spec, change=change), "", {"edits": before, "scope": scope}
+
+
+async def _commons_proposal_visible(proposal: AssetProposal, headers: Mapping[str, str] | None) -> bool:
+    """Whether this caller may read a proposal: any proposal but a commons
+    one; that one only for the person, the session that proposed it (which
+    reads the outcome even once the reference is gone), and callers who see
+    its reference in the brand it was proposed for, as commons_get does. A
+    brand-bound agent session never sees another brand's (the Commons fence)."""
+    if proposal.kind != "commons" or is_person(headers):
+        return True
+    from commons import activation as commons_activation, runtime as commons_runtime
+    from routes import commons as commons_routes
+
+    scope = proposal.before.get("scope") or {}
+    try:
+        actor = commons_actors.resolve_actor(headers or {})
+    except commons_actors.AuthError:
+        return False
+    identity = identify_agent(headers)
+    workspace = str(actor.workspace) if actor.workspace is not None else None
+    if identity is not None and identity.id == proposal.agent.id and workspace == scope.get("workspace"):
+        return True
+    if not commons_activation.is_enabled():
+        return False
+
+    def sees_reference() -> bool:
+        try:
+            commons_routes._asset_access(commons_runtime.get_store(), actor, proposal.target_id, scope.get("brand"))
+        except HTTPException:
+            return False
+        return True
+
+    return await asyncio.to_thread(sees_reference)
+
+
+async def _commons_proposal_misfit(proposal: AssetProposal) -> str | None:
+    from commons import activation as commons_activation, runtime as commons_runtime
+    from services import commons_proposals
+
+    if not commons_activation.is_enabled():
+        return "the Commons was turned off"
+    return await asyncio.to_thread(commons_proposals.misfit, commons_runtime.get_store(), proposal.target_id,
+                                   proposal.change, list(proposal.before.get("edits") or []))
+
+
+async def _apply_commons_proposal(proposal: AssetProposal) -> dict[str, Any]:
+    from services import commons_proposals
+
+    store = _commons_proposal_store()
+    said = commons_proposals.accepted_from.set(proposal.agent.name)
+    try:
+        made = await asyncio.to_thread(commons_proposals.apply, store, proposal.target_id, proposal.change)
+    finally:
+        commons_proposals.accepted_from.reset(said)
+    # Other proposals on this reference may no longer fit (this one is still deciding).
+    await _sweep_asset_proposals()
+    return {"applied": {"edits": made}}
+
+
+_COMMONS_EVENT_KINDS = {"corrected": "commons.corrected", "region": "commons.region",
+                        "membership": "commons.membership"}
+
+
+def _commons_curation_summary(kind: str, data: Mapping[str, Any]) -> str:
+    asset_id = data.get("assetId") or "?"
+    if kind == "corrected":
+        return f"corrected {data.get('fieldPath')} ({data.get('op')}) on Commons reference {asset_id}"
+    changed = ", ".join(data.get("change") or []) or "nothing"
+    if kind == "region":
+        return f"{'added a region' if changed == 'added' else f'changed a region ({changed})'} on Commons reference {asset_id}"
+    return f"changed {changed} of Commons reference {asset_id} in a collection"
+
+
+def _journal_commons_curation(kind: str, data: dict[str, Any], actor: Any) -> None:
+    """routes/commons.py's curation hook: one commons.* event per write, with
+    who made it, and never Commons text (no values, labels or whys). Then the
+    proposals waiting on that reference are checked, from the route's worker
+    thread (an accepted proposal sweeps for itself)."""
+    from services import commons_proposals
+
+    event = _COMMONS_EVENT_KINDS.get(kind)
+    if event is None:
+        return
+    who = dict(_PERSON_ACTOR) if getattr(actor, "is_human", False) else actor_for_headers(current_request_headers())
+    origin = commons_proposals.accepted_from.get()
+    note = f" (accepted from {origin})" if origin else ""
+    _journal(event, data=dict(data), summary=_commons_curation_summary(kind, data) + note, actor=who)
+    if origin or not asset_proposals.for_target("commons", str(data.get("assetId") or "")):
+        return
+    try:
+        import anyio.from_thread
+
+        anyio.from_thread.run(_sweep_asset_proposals)
+    except Exception:  # noqa: BLE001 - not on a route's worker thread; the next read sweeps
+        pass
+
+
+def _register_commons_curation_journal() -> None:
+    from routes import commons as commons_routes
+
+    if _journal_commons_curation not in commons_routes.curation_listeners:
+        commons_routes.curation_listeners.append(_journal_commons_curation)
+
+
+_register_commons_curation_journal()
 
 
 @app.get("/api/project")
@@ -9975,27 +10479,91 @@ async def list_project_covers(project_id: str) -> dict[str, Any]:
         if catalog["activeProjectId"] == project_id and _overlay_live_project(project, exported):
             project_store.commit(catalog)
         return {"images": project_cover.choices(project["snapshot"]), "pinned": project.get("coverPin"),
-                "cover": project.get("cover")}
+                "cover": project.get("cover"), "pinnedBy": _cover_owner(project)}
 
 
 @app.put("/api/projects/{project_id}/cover")
 async def pin_project_cover(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
     """Pin one of the project's images as its card picture ({"url": ...}), or
-    go back to the automatic one ({"url": null}). The person's choice only."""
-    require_person(current_request_headers())
-    url = body.get("url")
+    go back to the automatic one ({"url": null}).
+
+    The person may always. Anyone else (an agent, a script) may while the
+    person hasn't pinned one; a cover the person pinned changes only through
+    a proposal they accept on the Projects screen (``POST
+    /api/asset-proposals``, Justin's Q60 a, 2026-10-20). Who set the pin is
+    saved as ``coverBy``. The answer's ``previous`` ({"cover": url or null})
+    put back through this route undoes the change."""
+    return await _set_project_cover(project_id, body.get("url"))
+
+
+def _cover_owner(project: Mapping[str, Any]) -> dict[str, str] | None:
+    """Who pinned the project's cover, or None for the automatic one. A pin
+    saved before ``coverBy`` existed is the person's: only they could pin."""
+    if not project.get("coverPin"):
+        return None
+    by = project.get("coverBy")
+    return dict(by) if isinstance(by, dict) and by.get("kind") else {"kind": "person", "name": "You"}
+
+
+def _cover_state(project: Mapping[str, Any]) -> dict[str, Any]:
+    return {"cover": project.get("coverPin") or None, "coverBy": _cover_owner(project)}
+
+
+def _cover_images_now(project: dict[str, Any], catalog: Mapping[str, Any], exported: dict[str, Any] | None) -> dict[str, Any]:
+    """The project's snapshot as its images are now: the open project's
+    saved snapshot lags the live canvas, so it is overlaid on a copy."""
+    if exported is None or catalog.get("activeProjectId") != project.get("id"):
+        return project["snapshot"]
+    copied = copy.deepcopy(project)
+    _overlay_live_project(copied, exported)
+    return copied["snapshot"]
+
+
+async def _set_project_cover(project_id: str, url: Any, *, expect: dict[str, Any] | None = None,
+                             note: str = "") -> dict[str, Any]:
+    """The cover change itself, for the route and for an accepted proposal
+    (``expect``: the cover as the proposal saw it, else 409)."""
+    headers = current_request_headers()
+    person = is_person(headers)
+    exported = await _projects_live_export()
     with project_store.transaction() as catalog:
         project = _project_id_or_404(project_id, catalog)
-        if url is None:
+        if catalog["activeProjectId"] == project_id:
+            _overlay_live_project(project, exported)
+        if expect is not None and _cover_state(project) != expect:
+            raise HTTPException(status_code=409, detail="The project's cover changed since it was proposed.")
+        owner = _cover_owner(project)
+        if not person and owner is not None and owner.get("kind") == "person":
+            require_person(headers, hint=(
+                f'The person pinned the cover of project "{project["name"]}", so only they can change it. '
+                f'To ask them, propose it: propose_asset_change(kind="project", id="{project_id}", '
+                'change={"cover": <url or null>}, note=...) (POST /api/asset-proposals); they decide on the '
+                "Projects screen."))
+        previous = project.get("coverPin") or None
+        if url is None or url == "":
+            url = None
             project.pop("coverPin", None)
+            project.pop("coverBy", None)
         else:
             if not isinstance(url, str) or not project_cover.is_choice(project["snapshot"], url):
                 raise HTTPException(status_code=400, detail="Pick one of this project's own images for its cover.")
             project["coverPin"] = url
+            project["coverBy"] = actor_record(actor_for_headers(headers))
+        changed = previous != url or owner != _cover_owner(project)
         refresh_metadata(project, touch=False)
         project_store.commit(catalog)
-        result = {"project": project_metadata(project)}
+        name = str(project.get("name") or "")
+        result = {"project": project_metadata(project), "previous": {"cover": previous}}
+    if changed:
+        _journal(
+            "project.cover",
+            data={"projectId": project_id, "projectName": name, "cover": url},
+            summary=(f'pinned a cover on project "{name}"' if url is not None
+                     else f'set the cover of project "{name}" back to automatic') + note,
+        )
     await _broadcast_projects_changed("cover", project_id)
+    # A cover proposal for this project may no longer fit (the person picked another).
+    await _sweep_asset_proposals()
     return result
 
 

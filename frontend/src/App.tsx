@@ -36,6 +36,8 @@ import { NODE_DEFINITIONS } from './constants/nodeDefinitions';
 import { ProjectCoordinator } from './components/projects/ProjectCoordinator';
 import { ProjectSwitchToast } from './components/projects/ProjectSwitchToast';
 import { ProjectHome } from './components/projects/ProjectHome';
+// Asset proposals (a pinned cover, a board's Send notes) reach this tab on any screen.
+import './store/assetProposalsSocket';
 import { useHomeSettingsDock } from './components/projects/useHomeSettingsDock';
 import { useProjectStore } from './store/projectStore';
 import { listCoverChoices } from './lib/projects';

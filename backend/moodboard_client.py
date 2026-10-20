@@ -1318,7 +1318,9 @@ _OTHERS_SAVED = "The other changes were saved; `previous` puts them back."
 _PERSON_NOTES = ("Only the person can send this board's notes to generators: the notes are their words about "
                  "the board, for them, their team and agents. Nothing was changed: leave send_notes "
                  "(--send-notes) out to make the other changes, or ask the person to turn on \"Send these notes "
-                 "to generators\" in Moodboard Studio.")
+                 "to generators\" in Moodboard Studio: propose it with propose_asset_change(kind=\"moodboard\", "
+                 "id=<board id>, change={\"sendNotes\": true}, note=...) over MCP, or POST /api/asset-proposals, "
+                 "and they accept it there.")
 
 
 # The backend's cap on an image's private note (services/moodboard_store.py).

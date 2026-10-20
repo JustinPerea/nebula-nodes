@@ -133,6 +133,16 @@ them).
 `nebula proposals` lists open ones; `nebula proposal withdraw <id>` takes one
 back.
 
+Curating the Commons (when it is on) is the person's too: correcting a
+reference's reading, its regions, or its role, why or inbox place in a
+collection. Ask with `nebula commons propose <id> --edit '{"correction":
+{"field_path": "summary", "value": "..."}}' --note "..."` (repeat `--edit`,
+up to 8; `--brand` for the brand you work on); the person decides in the
+Commons and `nebula proposal <proposal id> --wait` follows it.
+`nebula commons collections`, `status`, `borrowings`, `fidelity <id>` and
+`concentration` read the rest. Blind labeling and the agent review stay the
+person's alone.
+
 ## Moodboards
 
 Moodboards are the boards in Moodboard Studio: reference images with weights
@@ -268,7 +278,11 @@ nebula moodboard delete <board>
   and you: generators don't get them unless the person turns on "Send these
   notes to generators" (`sendNotes`, `brief.notesSent`). `--no-send-notes`
   turns it off; `--send-notes` is the person's call and refused for an
-  agent. A Moodboard node's `send_notes` param (`board`, `yes`, `no`) can
+  agent: ask with `POST /api/asset-proposals` (`{"kind": "moodboard", "id":
+  "<board id>", "change": {"sendNotes": true}, "note": "..."}`, or
+  `propose_asset_change` over MCP), which the person decides in Moodboard
+  Studio; `nebula proposal <id> --wait --timeout 60` follows it. A Moodboard
+  node's `send_notes` param (`board`, `yes`, `no`) can
   override it per node; moving it toward sending is also the person's, so
   propose it. That includes pointing a node on `yes` at another board: set
   `send_notes` to `board` or `no` in the same edit, or propose it.

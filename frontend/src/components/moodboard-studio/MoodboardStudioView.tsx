@@ -28,6 +28,7 @@ import { overrideAuthor } from './briefAuthor';
 import { AutoGrowTextarea } from '../AutoGrowTextarea';
 import { assetHome, emptyRailMessage, railNotice, type AssetHome } from '../../lib/assetHome';
 import { wsClient } from '../../lib/wsClient';
+import { AssetProposalStrip } from '../proposals/AssetProposalStrip';
 import { moveChoices, type MoveChoice } from '../../lib/assetMove';
 import { useStudioAssetMove } from '../../hooks/useStudioAssetMove';
 import { AssetMoveMenu } from '../asset-move/AssetMoveMenu';
@@ -723,6 +724,8 @@ export function MoodboardStudioView() {
                 </label>
                 <NotesSwitch on={draft.sendNotes === true}
                   onChange={(sendNotes) => setBriefFields({ sendNotes })} />
+                {/* An agent asking to turn it on: only the person may. */}
+                {savedId && <AssetProposalStrip kind="moodboard" targetId={savedId} />}
               </div>
             </section>
 

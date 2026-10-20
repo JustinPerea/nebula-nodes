@@ -353,7 +353,9 @@ class NotesOptInProtected(Exception):
 
 NOTES_OPT_IN_REFUSED = ("Only the person can send this board's notes to generators. Notes stay with "
                         "the person, their team and agents unless the person turns sending on in Studio. "
-                        "Leave sendNotes out of the request, or ask the person (propose it).")
+                        "Leave sendNotes out of the request, or ask the person: propose it with "
+                        "propose_asset_change(kind=\"moodboard\", id=<board id>, change={\"sendNotes\": true}, "
+                        "note=...) (POST /api/asset-proposals), and they decide in Moodboard Studio.")
 
 
 def _guard_send_notes(previous: bool, value: Any, by: str) -> None:
