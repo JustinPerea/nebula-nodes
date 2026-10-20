@@ -117,14 +117,24 @@ function createDefaultPanels(): UIState['panels'] {
   };
 }
 
+// Shown by default (Q38, Justin 2026-10-20: "it can be toggled off to get
+// out of the way"): a missing preference reads as on; an explicit '0' stays off.
 function loadAgentLogEnabled(): boolean {
-  if (typeof window === 'undefined') return false;
-  return window.localStorage.getItem(AGENT_LOG_ENABLED_KEY) === '1';
+  if (typeof window === 'undefined') return true;
+  try {
+    return window.localStorage.getItem(AGENT_LOG_ENABLED_KEY) !== '0';
+  } catch {
+    return true;
+  }
 }
 
 function persistAgentLogEnabled(enabled: boolean): void {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(AGENT_LOG_ENABLED_KEY, enabled ? '1' : '0');
+  try {
+    window.localStorage.setItem(AGENT_LOG_ENABLED_KEY, enabled ? '1' : '0');
+  } catch {
+    // Storage blocked: the choice holds for this session only.
+  }
 }
 
 // Render culling and zoom LOD default on; optional canvas chrome defaults off.

@@ -156,6 +156,17 @@ nebula point n2.prompt --from n1.text --say "Wiring the prompt in"
 nebula look          # the canvas as text; --json for the full snapshot
 ```
 
+Every one of these actions is also listed in the canvas's **Agent log**
+(bottom right, shown by default with or without the chat; hide it from its
+own eye-off button or Settings > Preferences > "Agent log"): the agent's
+name in its cursor colour, the cursor's words ("Added Moodboard", "Running
+Krea 2", "Accepted"), and the time. Moodboard writes are listed there too
+(your edit batch's `say`, else the journal's words: "Set aside #1 on board
+Dusk"; "Analyzed board Dusk"), and so is a run of the
+whole canvas ("Running 4 nodes"); neither has one place on the canvas, so
+they move no cursor. The log is in the browser's memory only: the last 50
+entries, gone on reload.
+
 The REST surface is `POST /api/canvas/cursor`, `GET /api/canvas/snapshot`, and
 `POST /api/canvas/view` (the browser's own report of viewport, node bounds and
 run states; never persisted), plus `GET /api/canvas/events` (the change

@@ -2,6 +2,7 @@ import { Suspense, useState, type ComponentProps, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 import {
+  DeferredAgentLog,
   DeferredConnectionPopup,
   DeferredMaskPainterModal,
   DeferredOnboardingOverlay,
@@ -41,6 +42,23 @@ const closeRunHistory = () => {
 };
 const closeTour = () => useUIStore.setState({ onboardingActive: false, onboardingStep: 0 });
 const closeConnectionPopup = () => useUIStore.getState().hideConnectionPopup();
+
+/**
+ * The Agent log (bottom right on the canvas). Unlike the panels below it shows
+ * at once, with nothing opened first, so it mounts straight away and simply
+ * appears when its chunk lands; the empty fallback is what a hidden log draws.
+ * If the chunk fails it retries when the browser is back online or the window
+ * regains focus (DeferredBoundary), since there is no open to retry on.
+ */
+export function AgentLog() {
+  return (
+    <DeferredBoundary chunk={DeferredAgentLog} failed={null}>
+      <Suspense fallback={null}>
+        <DeferredAgentLog />
+      </Suspense>
+    </DeferredBoundary>
+  );
+}
 
 export function RunHistoryPanel() {
   const { opened, opens } = useOpens(useUIStore((s) => s.panels.history.visible));

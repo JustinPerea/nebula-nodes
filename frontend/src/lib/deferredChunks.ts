@@ -22,6 +22,14 @@ export const DeferredOnboardingOverlay = lazyWithPreload(
   (module) => module.OnboardingOverlay,
 );
 
+// The Agent log shows on the canvas by default (Q38) but isn't needed for the
+// first paint; its store (store/agentLogStore.ts) is imported eagerly by
+// App.tsx so no entry is missed before the panel arrives.
+export const DeferredAgentLog = lazyWithPreload(
+  () => import('../components/panels/AgentLog'),
+  (module) => module.AgentLog,
+);
+
 export const DeferredConnectionPopup = lazyWithPreload(
   () => import('../components/ConnectionPopup'),
   (module) => module.ConnectionPopup,
@@ -46,6 +54,7 @@ export const DeferredWorldPreview = lazyWithPreload(
 
 /** Fetch every deferred chunk; called once the canvas is idle after first paint. */
 export const DEFERRED_PRELOADS: readonly (() => Promise<unknown>)[] = [
+  DeferredAgentLog.preload,
   DeferredRunHistoryPanel.preload,
   DeferredOnboardingOverlay.preload,
   DeferredConnectionPopup.preload,
@@ -56,6 +65,7 @@ export const DEFERRED_PRELOADS: readonly (() => Promise<unknown>)[] = [
 
 /** Source paths (relative to src/) that must stay out of the startup entry. */
 export const DEFERRED_MODULES: readonly string[] = [
+  'components/panels/AgentLog.tsx',
   'components/panels/RunHistoryPanel.tsx',
   'components/onboarding/OnboardingOverlay.tsx',
   'components/ConnectionPopup.tsx',

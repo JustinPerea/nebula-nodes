@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { MaskPainterModal, OnboardingOverlay, RunHistoryPanel, ConnectionPopup } from '../../src/components/DeferredPanels';
+import { AgentLog, MaskPainterModal, OnboardingOverlay, RunHistoryPanel, ConnectionPopup } from '../../src/components/DeferredPanels';
 import { MeshPreview, WorldPreview } from '../../src/components/nodes/DeferredViewers';
 import { useUIStore } from '../../src/store/uiStore';
 
@@ -47,6 +47,8 @@ vi.mock('../../src/lib/deferredChunks', async (importOriginal) => {
     DeferredWorldPreview: lazyWithPreload(
       flaky('world', { WorldPreview: () => <button type="button">Real world viewer</button> }),
       (m) => m.WorldPreview),
+    DeferredAgentLog: lazyWithPreload(
+      flaky('agentlog', { AgentLog: () => <p>Agent log stub</p> }), (m) => m.AgentLog),
   };
 });
 
@@ -155,5 +157,18 @@ describe('a deferred node viewer whose chunk failed once', () => {
     await fire('focus');
     expect(await screen.findByRole('button', { name: 'Real world viewer' })).toBeInTheDocument();
     expect(container.querySelector('[data-deferred-fallback]')).toBeNull();
+  });
+});
+
+describe('the Agent log, which has no open to retry on', () => {
+  it('appears when the window comes back online after its chunk failed', async () => {
+    chunks.failures.set('agentlog', 1);
+    render(<AgentLog />);
+    await flush();
+    expect(screen.queryByText('Agent log stub')).toBeNull();
+
+    await fire('online');
+    expect(await screen.findByText('Agent log stub')).toBeInTheDocument();
+    expect(chunks.loads.get('agentlog')).toBe(2);
   });
 });
