@@ -245,16 +245,6 @@ body:not(.app-slava-restraint) .model-node__loop-toggle--on:hover {
   border-color: rgba(110, 231, 183, 0.65);
 }
 
-body:not(.app-slava-restraint) .model-node__preview-placeholder {
-  background: #161616;
-  border: 1px solid #2a2a2a;
-  border-radius: 4px;
-  padding: 8px;
-  text-align: center;
-  color: #555;
-  font-size: 11px;
-}
-
 body:not(.app-slava-restraint) .model-node__error {
   padding: 4px 10px;
   font-size: 10px;

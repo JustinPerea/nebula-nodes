@@ -22,6 +22,7 @@ import '../../styles/nodes.css';
 import { NodeLabel } from './NodeLabel';
 import { NodeRunStatus } from './NodeRunStatus';
 import { OverviewImage, OverviewVideoStill } from './OverviewImage';
+import { StructuredOutputs } from './StructuredValuePreview';
 
 function isDynamicData(data: NodeData): data is DynamicNodeData {
   return 'isDynamic' in data && (data as DynamicNodeData).isDynamic === true;
@@ -80,6 +81,17 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
   const isImageSurface = !worldOutput && Boolean(previewImageSrc);
   const isTextSurface = !worldOutput && !shouldRenderSpatial && Boolean(displayText);
   const isWorldSurface = previewComplete && Boolean(worldOutput);
+  // As on ModelNode: a run whose values none of the renderers below draw
+  // shows them as structured values rather than an empty card.
+  const drewOutput = Boolean(previewImageSrc)
+    || Boolean(displayText)
+    || Boolean(worldOutput)
+    || shouldRenderSpatial
+    || (videoOutput !== undefined && typeof videoOutput.value === 'string')
+    || (meshOutput !== undefined && typeof meshOutput.value === 'string')
+    || (audioOutput !== undefined && typeof audioOutput.value === 'string');
+  const structuredOutputs = previewComplete && !drewOutput ? Object.entries(previewOutputs) : [];
+  const isStructuredSurface = structuredOutputs.length > 0;
 
   // Model badge: show selected model compactly
   const modelBadge = dynData?.modelId || (nodeData.params.model as string) || (nodeData.params.model_id as string) || (nodeData.params.endpoint_id as string) || null;
@@ -121,7 +133,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
 
   return (
     <div
-      className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''}${isWorldSurface ? ' model-node--world-surface' : ''}${shouldRenderSpatial ? ' model-node--spatial-surface' : ''}${isTextSurface ? ' model-node--text-surface' : ''} ${isNodeSelected ? 'model-node--selected' : ''}${entranceClass}`}
+      className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''}${isWorldSurface ? ' model-node--world-surface' : ''}${shouldRenderSpatial ? ' model-node--spatial-surface' : ''}${isTextSurface ? ' model-node--text-surface' : ''}${isStructuredSurface ? ' model-node--structured-surface' : ''} ${isNodeSelected ? 'model-node--selected' : ''}${entranceClass}`}
       onClick={() => selectNode(id)}
       style={{ ['--node-category-color' as string]: categoryColor }}
     >
@@ -260,6 +272,13 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
         <div className="model-node__preview">
           <audio src={audioOutput.value} controls className="model-node__preview-audio nodrag nowheel"
             onMouseDown={(event) => event.stopPropagation()} />
+        </div>
+      )}
+
+      {isStructuredSurface && (
+        <div className="model-node__preview model-node__preview--structured model-node__preview--overview">
+          <StructuredOutputs outputs={structuredOutputs}
+            labels={Object.fromEntries(outputPorts.map((port) => [port.id, port.label]))} />
         </div>
       )}
 
