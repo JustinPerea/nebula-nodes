@@ -15,7 +15,7 @@ export function followAssetMoves(): void {
   if (listening) return;
   listening = true;
   wsClient.subscribe((event) => {
-    if (event.type !== 'storedAssetChanged' || event.deleted || !('projectId' in event)) return;
+    if (event.type !== 'storedAssetChanged' || event.deleted || !('projectId' in event) || event.kind === 'style') return;
     useAssetStudioDraftStore.getState().rehome(event.kind, event.id, event.projectId ?? null);
   });
 }

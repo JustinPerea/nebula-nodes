@@ -319,6 +319,32 @@ nebula moodboard delete <board>
   person, or take images off the board instead.
 - `--json` on any of them prints the board as JSON.
 
+## Styles
+
+A Style is a saved look the person applies in Create (and sees in the Assets
+panel's Styles tab): a prompt fragment, optionally with a model and its
+settings. Name one by id or exact name.
+
+```bash
+nebula style list                       # Global Styles plus the open project's
+nebula style show "Neon noir"
+nebula style new "Neon noir" --prompt "neon noir, wet streets" \
+  --model nano-banana --params '{"aspect_ratio": "3:4"}'
+nebula style set "Neon noir" --prompt "neon noir, rain" --json > undo.json
+nebula style set "Neon noir" --restore undo.json   # undo that change
+nebula style delete "Neon noir"         # to Recently deleted
+nebula trash restore style <id>         # bring it back, same id
+```
+
+- New Styles are Global unless `--project current` (or an id) keeps one in
+  a canvas project.
+- `set` is a checked write: if someone saved the Style since you read it,
+  nothing is written; read it again. `--params` replaces the settings whole.
+  `--restore` undoes your change and is refused once someone changed it again.
+- Who bills a Style's model (`_provider`, `_kreaAuth`) is the person's call:
+  leave those out. Internal `_` params are refused.
+- Deleting for good is the person's, in the app.
+
 ## Watch and answer the person
 
 ```bash

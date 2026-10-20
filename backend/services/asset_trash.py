@@ -1,4 +1,7 @@
-"""Recently deleted, for saved moodboards and characters.
+"""Recently deleted, for saved moodboards, characters and Styles (presets).
+
+Styles joined on 2026-10-20 (Justin's Q53 a): a Style's record has kind
+"style", and everything below holds for it as for a board.
 
 Deleting a board or a character used to unlink its JSON file, so a delete
 (an agent may delete one, design-canvas answer D5) could not be undone. Now a

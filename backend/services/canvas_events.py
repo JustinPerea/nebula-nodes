@@ -89,6 +89,13 @@ EVENT_KINDS = frozenset({
     "board.sorted",
     "board.arranged",
     "board.suggested",
+    # Styles (presets, main.py /api/presets and /api/trash): one event per
+    # write, with data {styleId, styleName, scope} (+ fields for an update).
+    "style.created",
+    "style.updated",
+    "style.deleted",
+    "style.restored",
+    "style.purged",
 })
 EVENT_GROUPS = frozenset(kind.split(".", 1)[0] for kind in EVENT_KINDS)
 
