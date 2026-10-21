@@ -81,7 +81,21 @@ The server exposes these tools for building and running (see
   `missing`. "free" is at the node's defaults: a row with `needsKeyFor` (the
   Video QC nodes) calls a provider in another mode.
 - `describe_node`: one node type's ports, params (options, defaults, ranges)
-  and list prices by the params that set them. A local node that still calls
+  and list prices by the params that set them. `definition_id` is the id, or
+  the node type's exact display name (any case, outer spaces ignored) when
+  one node type has it: `describe_node(definition_id="Moodboard")` answers
+  for `nebula-moodboard`, starting with `lookup` ("Moodboard is the Moodboard
+  node: nebula-moodboard"). An id always wins; a name two node types share
+  is refused with both ids; anything else gets "No node type '...'" with
+  close matches, exact-name matches first. `nebula info` (and `nebula
+  describe`) does the same, printing the `lookup` line first. Writes stay
+  strict: `edit_canvas`, `propose_change`, `nebula apply`/`propose`/
+  `create`/`quick` and a Style's `model_id` (`style_create`/`style_update`,
+  `nebula style new/set --model`) take ids only, because they store and bill by id and a
+  display name can be renamed or come to be shared; given a name they refuse
+  with "unknown node definition 'moodboard': did you mean nebula-moodboard
+  (Moodboard)?". (Before, `nebula create` stored a node of any type it was
+  given and `nebula quick` tried to run it.) A local node that still calls
   a provider also has `runsWithOptions`: readiness per value of the param that
   picks the provider (Cinema Scene's `scene.base.model`, a QC node's `mode`),
   and a note when another value would run with the keys set here. A QC

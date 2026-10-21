@@ -74,7 +74,8 @@ class NebulaClient:
         return self._request("GET", "/api/nodes")
 
     def get_node(self, node_id: str) -> dict[str, Any]:
-        return self._request("GET", f"/api/nodes/{node_id}")
+        # An id, or a node type's display name (spaces, a slash: "Jev Decide (judge / classify / yes-no)").
+        return self._request("GET", f"/api/nodes/{quote(node_id, safe='')}")
 
     def get_settings(self) -> dict[str, Any]:
         return self._request("GET", "/api/settings")

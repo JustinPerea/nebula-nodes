@@ -792,7 +792,12 @@ def find_nodes(query: str = "", category: str = "", ready_only: bool = True, lim
 
 @_tool(annotations=_READ)
 def describe_node(definition_id: str, ctx: Context | None = None) -> dict[str, Any]:
-    """One node type in detail: input and output ports (ids to wire), params
+    """One node type in detail. `definition_id` is its id, or its exact
+    display name ("Moodboard", any case) when one node type has it; the
+    answer then starts with `lookup`, the id it used ("Moodboard is the
+    Moodboard node: nebula-moodboard"). An id always wins; a name two types
+    share is refused with both ids. edit_canvas and propose_change take ids
+    only. The answer: input and output ports (ids to wire), params
     (type, default, options, ranges, `onlyWhen` another param has a value,
     and `optionsOnlyWhen` for options offered only for some values of another param),
     whether it runs here, and list prices by the params that set them.
