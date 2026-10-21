@@ -829,6 +829,31 @@ describe('the corner keeps clear of each screen\'s controls', () => {
     expect(count.getAttribute('data-muted')).toBe(unread === 0 ? 'true' : 'false');
   });
 
+  // GM review of PR #157, round 2: the 1 row of count-forms.png had no ring,
+  // because the ring only showed while a card was up. "One new item is
+  // exactly when you most need it to pull. The ring should come on at any
+  // count of 1 or more." No card is up here: the list is synced, not dropped.
+  it.each([1, 2, 9, 12])('rings the chip at %i unread, with no card up', (unread) => {
+    on('create');
+    render(<AppAgentNotes />);
+    sync(Array.from({ length: unread + 1 }, (_, i) => note(`an_${i}`, i < unread ? {} : { readAt: '2026-10-21T12:30:00.000Z' })));
+    expect(screen.queryByRole('status', { name: /Update from/ })).toBeNull();
+    expect(chip().getAttribute('aria-label')).toBe(`Updates, ${unread} unread`);
+    expect(chip().classList.contains('agent-notes-chip--ringed')).toBe(true);
+  });
+
+  it('has no ring at 0 unread, and none while the list is open', () => {
+    on('create');
+    render(<AppAgentNotes />);
+    sync([note('an_read', { readAt: '2026-10-21T12:30:00.000Z' })]);
+    expect(chip().classList.contains('agent-notes-chip--ringed')).toBe(false);
+    sync([note('an_1'), note('an_2')]);
+    expect(chip().classList.contains('agent-notes-chip--ringed')).toBe(true);
+    fireEvent.click(chip());
+    expect(screen.getByRole('dialog', { name: 'Updates' })).toBeTruthy();
+    expect(chip().classList.contains('agent-notes-chip--ringed')).toBe(false);
+  });
+
   it('keeps its own corner on the canvas, where no header slot shows', () => {
     on('canvas');
     render(<AppAgentNotes />);
