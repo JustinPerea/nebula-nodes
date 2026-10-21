@@ -76,6 +76,43 @@ body.app-slava-restraint .commons-tab--active {
   border-color: var(--sr-edge-strong);
 }
 
+/* More holds Blind labeling and Settings, only while the toolbar folds. */
+body.app-slava-restraint .commons-tabs__more {
+  display: none;
+  align-items: center;
+}
+
+/* The Updates chip takes its room at the header's right end (Q107 a). Below
+ * 1440 px the toolbar no longer fits one row beside it (measured: the full
+ * chip needs 1406 px, the compact one below 1360 px needs 1346), so the two
+ * least-used sections fold into More (CommonsView). That frees about the
+ * room the compact chip takes (GM review: no two-row wrap at 1280). */
+@media (max-width: 1439px) {
+  body.app-slava-restraint.agent-notes-shown .commons-tab--overflow:not(.commons-tab--active) {
+    display: none;
+  }
+
+  /* The open folded section stays the tablist's selected tab for assistive
+   * tech, hidden only on screen (More shows it); CommonsView takes it out of
+   * the Tab order while it folds. */
+  body.app-slava-restraint.agent-notes-shown .commons-tab--overflow.commons-tab--active {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  body.app-slava-restraint.agent-notes-shown .commons-tabs__more {
+    display: inline-flex;
+  }
+}
+
 body.app-slava-restraint .commons-button {
   display: inline-flex;
   align-items: center;

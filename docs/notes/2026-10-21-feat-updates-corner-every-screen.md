@@ -106,3 +106,69 @@ Branch `feat/updates-corner-every-screen`, from main `296e9199` (after #148). Un
   - A transient card can cover page content under it, such as Projects' New project button, for about 4 s.
   - When Review starts on Moodboard Studio for that same board, the strip doesn't take focus.
   - The Commons toolbar wraps to two rows at 1280 (above).
+
+## Header fix (GM review)
+
+- **What changed and why.** GM - Design, relaying Justin's design, rejected the tradeoff above: "treat the two-row wrap at 1280 as a defect, not something to accept". 1280 is a common laptop width, and a taller toolbar pushes the canvas down on the screens with the least room. GM's fixes, in order: (1) below about 1360 px the chip shrinks to its author dots and the count, and the header reserves that compact width; (2) only if a header still wraps at 1280 with the compact chip, that header's lowest-priority items move into an overflow menu. Q107 asked to show the corner without harming each screen, so this is part of the approved build.
+  - **(1) Compact chip.** `@media (max-width: 1359px)` hides `.agent-notes-chip__label` (agentNotes.css). The chip keeps its `aria-label` ("Updates, 1 unread"), both dots, the count, its 40 px height and the list it opens. layouts.css now has `--agent-notes-chip-w-full: 145px` and `--agent-notes-chip-w-compact: 85px` (both measured live). `--agent-notes-chip-w` is the full width by default and the compact one under the same media query. The slot and the header padding read only that one token. The corner still writes the chip's measured width into it (a two-digit count widens the chip and the slot). It now measures again on a window resize, because crossing the breakpoint changes the chip's width without a re-render.
+  - **(2) The Commons folds two tabs.** With the compact chip the Commons toolbar still needed 1346 px for one row, so it still wrapped at 1280. Blind labeling and Settings now fold into a **More** menu. This happens below 1440 px and only while the chip shows (`body.agent-notes-shown`, commons.css). They are the least-used sections: Blind labeling is an occasional evaluation session and Settings is set once. All, Inbox and Agent review, Add to / Add, and the worker line are what each visit acts on, so they stay. More uses the app's existing toolbar menu. AssetMoveMenu's popover is now exported as `ToolbarMenuPopover`, with an optional `checked` that turns items into `menuitemradio`. The keyboard is the same: arrows, Home/End, Escape or Tab closes and returns focus, and a press outside closes. While a folded section is open, More shows as the active tab and is named "More: Settings".
+- **Decisions not in the spec.**
+  - **Two breakpoints, both from measurement.** The chip is compact below 1360, as GM said. The Commons folds below 1440, because at 1366 even the full chip wrapped it: it needs 1406 px with all five tabs. With the fold, the Commons header takes about 1 px less than main's below 1360. At 1366 to 1439 it has 101 px to spare.
+  - **The canvas follows the same rule.** There is one chip, carried across screens, so at a given window width it looks the same everywhere. Otherwise the word would appear and vanish on each canvas↔studio switch. The canvas corner's placement is unchanged.
+  - The card and the list are right-aligned to the slot's right edge, so they line up with the chip at both sizes. Live at 1280: chip right edge 1266, list right edge 1266, list top 57 below the 49 px header.
+  - The old token value (112 px) was stale. The chip has measured 145 px since the count and the dots were added. Only the measured inline value had been in use.
+- **Tradeoffs.**
+  - Below 1440, with a project open, Blind labeling and Settings are one click further away, behind More.
+  - At 1440 and up the Commons keeps 34 px to spare with the seeded worker line ("Worker stopped · 1 queued"). A much longer status, such as "Library analysis paused until reference labels are sealed", can still wrap there. On main that status wraps even at 1280.
+  - The first-load entry grew by 133 bytes (the shared menu is eager through AssetsPanel).
+- **Surprises.**
+  - Calling `projectStore.goHome()` inside a Puppeteer `evaluate` gave "Promise was collected". Calling it from a `setTimeout` worked. This was a harness issue only.
+- **Tests (written first, seen failing).**
+  - `agentNotesLayoutCss.test.ts`: 5 new tests, all 5 failed first.
+    - The tokens were missing (`--agent-notes-chip-w-full` was null).
+    - `@media (max-width: 1359px)` was missing in layouts.css and in agentNotes.css.
+    - commons.css had no `.commons-tabs__more` rule and no `@media (max-width: 1439px)`.
+    - One test resolves the token at 1280/1359/1366/1440/1920 (85/85/145/145/145) and checks that the slot and the padding read it.
+  - `AgentNotesEveryScreen.test.tsx`, "measures the chip again on a window resize": failed first with `expected '145px' to be '85px'`. A guard that the compact chip keeps its name, two dots and count passed before and after (the label is CSS-hidden).
+  - New `commonsTabsOverflow.test.tsx`, 3 tests, all failed first ("Unable to find ... button ... /^More/"). They cover which tabs fold, More outside the tablist, the radio menu, focus on the first item, ArrowDown, choosing Settings (the menu closes, focus returns, the tab is selected, More becomes "More: Settings"), and Escape.
+- **Live check.** Isolated backend 8839 and Vite 5839 (`VITE_NEBULA_BACKEND_PORT=8839`), temp HOME, every NEBULA_* root in scratch, no keys. One real MCP stdio agent (NEBULA_AGENT_NAME "Claude Code") posted two Updates through `post_note`, so the chip showed "Updates, 1 unread". Main's frontend came from `git archive origin/main frontend` (d128fb9b; no frontend change since this branch's base). It ran on the same ports, one Vite at a time.
+  - Header height in px, main / before this fix / after. Chip width after. Overlaps: chip rect against every text or control in the header. The chip was the top element at its centre in every after row.
+
+    | Screen | 1280x800 | 1366x768 | 1440x900 | 1920x1080 |
+    |---|---|---|---|---|
+    | Projects | 72 / 72 / 72 | 72 / 72 / 72 | 72 / 72 / 72 | 72 / 72 / 72 |
+    | Creator Studio | 49 / 49 / 49 | 49 / 49 / 49 | 49 / 49 / 49 | 49 / 49 / 49 |
+    | Moodboard Studio | 49 / 49 / 49 | 49 / 49 / 49 | 49 / 49 / 49 | 49 / 49 / 49 |
+    | Character | 49 / 49 / 49 | 49 / 49 / 49 | 49 / 49 / 49 | 49 / 49 / 49 |
+    | Cinema | 49 / 49 / 49 | 49 / 49 / 49 | 49 / 49 / 49 | 49 / 49 / 49 |
+    | Remotion | 49 / 49 / 49 | 49 / 49 / 49 | 49 / 49 / 49 | 49 / 49 / 49 |
+    | Video editor | 51 / 51 / 51 | 51 / 51 / 51 | 51 / 51 / 51 | 51 / 51 / 51 |
+    | Commons | 49 / **86** / 49 | 49 / **86** / 49 | 49 / 49 / 49 | 49 / 49 / 49 |
+    | Chip width after | 85 | 145 | 145 | 145 |
+    | Overlaps after | 0 | 0 | 0 | 0 |
+
+  - **The Commons by size.** At 1280 and 1366 it shows All, Inbox, Agent review and More. At 1440 it shows all five tabs and no More. More opened by keyboard (Enter) under its button (x 436-636, y 43), with focus on "Blind labeling". ArrowDown then Enter opened Settings: the header stayed 49, focus went back to "More: Settings", and the menu closed.
+  - Screenshots are in the scratch dir `updates-chip/shots/`: `final-{commons,create,moodboard-editor}-{1280,1440}.png`, `commons-1280-more-open.png` and `after-canvas-1280.png`.
+  - **Blocked requests.** 4 in total, all in the deliberate canary probe (8000 and 5173). 0 during the run, and canary hits 0. Proxy failures during the run: only `localhost:8839/api/health` (the page's discovery; only 127.0.0.1 is bypassed). Console: the usual 403 on `PUT /api/settings` without the person link, and connection-refused while the Vite was switched to main's copy.
+- **Agents.** Nothing changes for agents. The chip, its name, the list and Review are the same, and the Commons sections are the same tabs behind one more click. No MCP tool, CLI command or doc describes the chip's label or the Commons toolbar layout.
+- **Gates (2026-10-21, load average about 11).**
+  - `tsc -b` rc 0, and `npm run -s lint` rc 0.
+  - `vite build` plus the budget passed: **511,386 bytes raw** / 149,574 gzip (614 under 512,000; +133 from the shared menu).
+  - Focused vitest: 15 files (agent-notes, layout CSS, App every-screen, the Commons files, AssetsPanel and studio drafts), **143 passed**.
+  - **Whole `vitest run`:** 28 failed, 3970 passed (10 of 337 files failed; 18 of the failures were "Test timed out"). The 10 files rerun together all passed (168): CommonsDetail, ChatPanel.personal, CommandPalette, ModelDiscovery.integration, ModelPicker, ResultsGallery, ConnectionPopup, GraphFileActions, NodeLibrary, Settings. These are the same load-sensitive files as in the earlier runs.
+  - **Backend whole suite** (iso.sh; no backend file changed): 1 failed, 9450 passed, 61 skipped in 22:45. The failure was `test_krea_mcp_server.py::test_stdio_bridge_process_connects_to_only_local_discovery_routes`, an anyio deadline on a subprocess under load. Alone, its file passes 5/5.
+- **Open items.**
+  - At 1440 and up, a long Commons worker status can still wrap the toolbar when main's wouldn't (above).
+- **Review (three confirmed findings on the More fold, all fixed).**
+  - *Sighted people couldn't see which folded section was open.* More's menu now draws a check and bold text on the checked item (`asset-move.css`, `[role="menuitemradio"]` / `[aria-checked="true"]`). The Move menu never passes `checked`, so it looks the same as before. The reviewer also suggested putting the section's name on the button. I measured that live first: at 1280 there are 33 px to spare, "Settings ▾" needs 17 more and fits, but "Blind labeling ▾" needs 46 more and wraps the header to 86 px. So the button keeps "More", as the reviewer's fallback said. When More's menu is closed, the toolbar shows only that More is active. The menu and the panel show which section is open.
+  - *The tablist had no selected tab.* The open folded tab used to get `display: none`, which removed it from the accessibility tree. Now only the closed folded tabs are `display: none`. The open one is hidden on screen only (the clip pattern, `position: absolute`, 1 px), so the tablist still has one selected tab. While the toolbar folds, that tab gets `tabIndex=-1`, so Tab never lands on something invisible. CommonsView works out "folds" the same way the stylesheet does: `(max-width: 1439px)` plus `body.agent-notes-shown`, through `useSyncExternalStore`, a matchMedia listener and a body-class observer. With the chip hidden, no tab ever leaves the Tab order.
+  - *Focus fell to `<body>` when crossing 1440.* If More or a folded tab had focus when the window crossed the fold, focus now moves to whichever counterpart is on screen. Going wide, it moves to the open folded tab, or to Blind labeling when neither is open. Going narrow, it moves to More. The blur and the media change can arrive in either order, so a blur to nowhere keeps the mark for two frames. The move waits one frame and only takes focus from `<body>` or from these controls. The same applies when More's menu is open, which closes on resize: focus in the menu counts as More's.
+  - Tests first. `agentNotesLayoutCss.test.ts`: the fold test now needs the `:not(.commons-tab--active)` selector; a new test checks that the open folded tab is clipped rather than `display: none`; another new test checks the menu's check mark. All 3 failed first ("missing rule ..."). `commonsTabsOverflow.test.tsx` has 6 new tests with a matchMedia stub whose change event can fire either before or after the blur. Four failed first: the selected folded tab's tabIndex was 0 instead of -1, and three focus tests left focus on `<body>`. Two were guards and passed before and after: no tab leaves the Tab order without the chip, and focus elsewhere is left alone.
+  - Live, 8839/5839, the same harness with one real MCP agent ("Updates, 1 unread"). At 1280, with the keyboard, I chose More, then Settings: the header stayed 49, focus returned to "More: Settings", and the accessibility tree showed "All | Inbox | Agent review | Settings*". The menu showed ✓ and bold on Settings only. Shift+Tab from More went to Agent review, skipping the hidden tab. Widening to 1440 moved focus to the Settings tab, and narrowing to 1280 moved it back to More. With Blind labeling open and its menu open, widening closed the menu and focused the Blind labeling tab. Focus on Add stayed on Add across the fold. A new sweep of all 8 screens at 4 sizes matched main's header heights everywhere, with 0 overlaps and the chip on top in every row. Main's numbers come from the earlier sweep: origin/main is still d128fb9b and its frontend is the same. Blocked requests: 0 during the run, and 2 in the deliberate canary probe. Shots: `updates-chip/shots/review-*.png`.
+  - Nothing changes for agents.
+  - Gates after the review fixes:
+    - `tsc -b` rc 0, and lint rc 0.
+    - Build and budget passed: 511,386 bytes raw / 149,572 gzip. That is unchanged, because the Commons is a lazy chunk.
+    - Focused vitest: 28 files, 243 passed.
+    - Whole `vitest run`: 31 failed, 3975 passed. 10 of 337 files failed, with 21 "Test timed out". They were the same 10 load-sensitive files as before, and rerun alone all 10 passed (168).
+    - Backend whole suite (iso.sh, no backend file changed): 9451 passed, 61 skipped, 0 failed.

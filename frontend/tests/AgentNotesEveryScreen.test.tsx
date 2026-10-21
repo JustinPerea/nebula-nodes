@@ -442,6 +442,48 @@ describe('the corner keeps clear of each screen\'s controls', () => {
     expect(root.style.getPropertyValue('--agent-notes-drop-top')).toBe('');
   });
 
+  // GM review of Q107 a: below about 1360 px the chip drops the word
+  // "Updates" (agentNotes.css) and the header reserves its compact width. The
+  // corner writes the chip's measured width into the one token the slot and
+  // the header padding read; a window resize across the breakpoint changes
+  // that width with no re-render, so the corner measures it again then.
+  it('measures the chip again on a window resize, so the slot follows its compact width', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
+    const root = document.documentElement;
+    let width = 145;
+    const widths = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('agent-notes-chip') ? width : 0;
+    });
+    try {
+      on('moodboard-editor');
+      slot({ left: 1281, right: 1426, top: 8, bottom: 40 });
+      render(<AppAgentNotes />);
+      sync([note('an_1')]);
+      expect(root.style.getPropertyValue('--agent-notes-chip-w')).toBe('145px');
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+      width = 85;
+      act(() => { window.dispatchEvent(new Event('resize')); });
+      await vi.waitFor(() => expect(root.style.getPropertyValue('--agent-notes-chip-w')).toBe('85px'));
+    } finally {
+      widths.mockRestore();
+      root.style.removeProperty('--agent-notes-chip-w');
+    }
+  });
+
+  it('keeps the compact chip\'s name, dots and count: only the word is its own element', () => {
+    on('commons');
+    render(<AppAgentNotes />);
+    sync([note('an_1')]);
+    const button = chip();
+    expect(button.getAttribute('aria-label')).toBe('Updates, 1 unread');
+    expect(button.querySelectorAll('.agent-notes-chip__dots .agent-notes-dot')).toHaveLength(2);
+    expect(button.querySelector('.agent-notes-chip__count')?.textContent).toBe('1');
+    // The word the compact chip hides is a leaf of its own, so hiding it leaves the rest.
+    const label = button.querySelector('.agent-notes-chip__label');
+    expect(label?.textContent).toBe('Updates');
+    expect(label?.children).toHaveLength(0);
+  });
+
   it('keeps its own corner on the canvas, where no header slot shows', () => {
     on('canvas');
     render(<AppAgentNotes />);
