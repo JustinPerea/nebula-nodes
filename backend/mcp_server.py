@@ -56,7 +56,7 @@ Off the canvas, ask with propose_asset_change: a cover the person pinned, a boar
 Pins are the person's requests: act on one, then answer it with resolve_pin. wait_for_canvas_change waits for the next change instead of polling.
 When you start on a request, call point_at with a short say naming your own next step (under 8 words). What you noticed, a report or a suggestion goes in post_note: the person reads those in Updates, top right, not at your cursor.
 Moodboards: see moodboard_get; moodboard_update(cover=...) picks the image a board opens on, and moodboard_edit moves, resizes and groups its cards in one checked edit its `undo` takes back. New work goes in a new project (new_project), not over theirs.
-get_project reads a saved project unopened; rename_project renames one. get_settings and provider_status say which keys are set and work, never a key.
+get_project reads a saved project unopened; rename_project renames one. Which keys work: get_settings, provider_status.
 Styles (saved looks in Create): style_list, style_get, style_create, style_update (`previous` undoes it), style_delete.
 A run the person started is theirs: cancel_run stops only agents' runs, so ask them to press Stop.
 If you also use the `nebula` CLI, set NEBULA_AGENT_NAME so both share one name.
