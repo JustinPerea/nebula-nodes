@@ -130,6 +130,13 @@ out ...`.
   list of them, else `text`. The model's other inputs are params of the same
   name: set them with `--param`, don't wire them.
 
+To see a model's ports before the apply, an agent on Nebula's MCP server
+calls `model_schema(provider, model_id)` (its `ports`, with types) or
+`model_catalog(provider, query)` (each row's `ports`, as ids). They come from
+the same function the apply configures the node with, so wiring exactly those
+ports in the apply that sets the model is accepted. There is no `nebula`
+command for the catalogs yet.
+
 Changing the model of a node with wires on ports the new model lacks (or
 clearing it, or naming one Nebula can't read, which leaves the basic ports)
 is refused: `--unwire` them in the same apply. Without the provider's key the
