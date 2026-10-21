@@ -229,6 +229,18 @@ describe('Create draft integration', () => {
     expect(mocks.execute).not.toHaveBeenCalled();
   });
 
+  it('applying a Style attaches only Nebula’s own images and says an outside link was left out', () => {
+    mocks.pendingPreset = { id: 'old-style', name: 'Old', category: 'My Styles', prompt: 'Old scene',
+      modelId: 'gpt-image-2-generate', params: {}, refImages: ['/api/outputs/style.png', 'https://images.example.com/x.png'],
+      thumbnail: '', scope: 'project', projectId: null, version: 1, createdAt: '', updatedAt: '' };
+    const view = render(<CreateView />);
+    expect(view.getByAltText('Reference 1')).toHaveAttribute('src', '/api/outputs/style.png');
+    expect(view.queryByAltText('Reference 2')).toBeNull();
+    expect(useCreateDraftStore.getState().drafts['draft-session'].refs.map((ref) => ref.filePath)).toEqual(['/api/outputs/style.png']);
+    expect(view.getByRole('status')).toHaveTextContent('1 image link from outside Nebula in this Style was left out.');
+    expect(document.querySelector('img[src^="https://"]')).toBeNull();
+  });
+
   it('applies an explicit pending Style only once to the saved draft and resets the composer without creating a new run', () => {
     const first = render(<CreateView />);
     fireEvent.change(first.getByRole('textbox', { name: 'Create prompt' }), { target: { value: 'My draft' } }); first.unmount();

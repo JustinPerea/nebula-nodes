@@ -1543,7 +1543,9 @@ async def moodboard_create(name: str, sources: list[str] | None = None, project_
     project, the same "project" the Studio's and Assets panel's Project tab show ("current" = the one open on the
     canvas; else a project id from list_projects); by default it's Global and every project can use it. `mode`:
     look, world or subject. `strength` and image weights run 0 to 1. Run
-    moodboard_analyze after to get its palette and brief.
+    moodboard_analyze after to get its palette and brief. The board then holds
+    Nebula's own copies ("/api/outputs/..."), the only images a Character or a
+    Style takes too.
     """
     import moodboard_client as boards
 
@@ -1855,7 +1857,12 @@ def character_move(character: str, to: str, ctx: Context | None = None) -> dict[
     as moodboard_move does for a board: `to` is "global", "current" or a
     project's id or exact name. Nodes that use it keep working in every
     project; moving it back undoes it. Returns `status`, `from`, `to`,
-    `fromName`, `toName`, `movedBy` and the Character as `asset`."""
+    `fromName`, `toName`, `movedBy` and the Character as `asset`.
+
+    No tool edits a Character's fields (PUT /api/characters/{id} does). Its
+    images (`referenceViews`) take only Nebula's own files: "/api/outputs/..."
+    (POST /api/uploads returns one as `url`). A web link or data: URI is
+    refused with a 422 and nothing is saved; download and upload it first."""
     import character_client as characters
 
     return _board_call(characters.move_character, _api(), character, to, _board_headers(ctx))

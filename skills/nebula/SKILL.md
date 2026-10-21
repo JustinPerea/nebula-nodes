@@ -407,6 +407,13 @@ nebula moodboard delete <board>
   so you never write over the person's edit; a 409 `version_conflict`
   carries the Character as it is now. The person's unsaved edits stay, and
   if you both changed one field the Studio tells them, naming you.
+- A Character's `referenceViews` and a Style's `refImages` and `thumbnail`
+  take only Nebula's own files: `/api/outputs/...` (upload a file with
+  `POST /api/uploads` and use its `url`) or a shipped Style thumbnail
+  `/api/presets/thumbnails/<name>`. A web link, a `data:` URI or a file
+  outside Nebula's output folder is refused (422, nothing saved); download
+  and upload the image first. A Character saved earlier with a web link
+  keeps it, but a run leaves that view out and its notes say so.
 - `set --json` returns `previous`: what your change changed, as it was
   before (only those settings, Direction, Avoid, pinned colours, your own
   hand-written brief, and only the image settings you changed), so undoing

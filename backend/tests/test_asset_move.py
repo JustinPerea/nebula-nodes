@@ -18,10 +18,17 @@ from cli.commands import character as character_cmd
 from cli.commands import moodboard as moodboard_cmd
 from nebula_api import NebulaAPI
 from services.project_store import ProjectStore, make_project, move_to_trash
+from tests.conftest import stored_image_urls
 
-CHARACTER = {"name": "Rina", "subjectType": "human", "referenceViews": ["a", "b", "c"],
+CHARACTER = {"name": "Rina", "subjectType": "human", "referenceViews": stored_image_urls(),
              "frozenTraitString": "warm", "seed": 7, "consistencyStrength": 0.9}
 KINDS = {"moodboard": ("/api/moodboards", "moodboards"), "character": ("/api/characters", "characters")}
+
+@pytest.fixture(autouse=True)
+def _stored_views():
+    """The Character's views must be files Nebula serves (services/stored_image_refs.py)."""
+    stored_image_urls()
+
 
 
 @pytest.fixture

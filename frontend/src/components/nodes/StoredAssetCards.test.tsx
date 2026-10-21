@@ -94,4 +94,15 @@ describe("a card for another project's asset", () => {
     fireEvent.doubleClick(screen.getByText('◐ Shoot A hero'));
     expect(enterCharacterEditor).toHaveBeenCalledWith('ca');
   });
+
+  it('Character: an outside thumbnail is never loaded; the card says why it has none', async () => {
+    api.lookupStoredAsset.mockResolvedValue({ status: 'ready', asset: {
+      id: 'co', name: 'Old hero', thumbnail: 'https://images.example.com/face.png', referenceViews: ['a', 'b', 'c'], projectId: 'pB' } });
+    const props = { id: 'n6', data: { params: { character: 'co' } }, selected: false } as unknown as NodeProps;
+    const { container } = renderNode(<CharacterNode {...props} />);
+
+    expect(await screen.findByText('◐ Old hero')).toBeTruthy();
+    expect(container.querySelector('img')).toBeNull();
+    expect(screen.getByText('Image link from outside Nebula')).toBeTruthy();
+  });
 });

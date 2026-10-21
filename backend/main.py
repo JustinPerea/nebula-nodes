@@ -12856,6 +12856,37 @@ def _preset_params_version(body: BaseModel, missing: int) -> int:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+def _check_stored_images(kind: str, fields: Mapping[str, Any], before: Mapping[str, Any] | None = None) -> None:
+    """422 unless every image a Style (``kind="style"``: refImages, thumbnail
+    and its image params) or a Character (``"character"``: referenceViews)
+    write names is one of Nebula's own files (services/stored_image_refs.py).
+    Every caller is checked, the person too; a value ``before`` (the asset as
+    stored) already holds isn't checked again."""
+    from services.stored_image_refs import StoredImageError, check
+
+    if kind == "style":
+        # The params the Style will have under the model it will have: a
+        # write that changes only the model can make a held value an image
+        # param, so a held param counts as held only under its own model.
+        stored = before or {}
+        model = fields["modelId"] if "modelId" in fields else stored.get("modelId")
+        definition = node_registry.get(str(model or "")) or {}
+        param_keys = ["_previewUrl", *(str(p.get("key")) for p in definition.get("params") or []
+                                       if isinstance(p, dict) and p.get("type") == "file")]
+        image_fields: tuple[str, ...] = ("refImages", "thumbnail")
+        if "params" not in fields or fields["params"] is None:
+            fields = {**fields, "params": stored.get("params")}
+        if before is not None and (model or None) != (stored.get("modelId") or None):
+            before = {key: value for key, value in before.items() if key != "params"}
+    else:
+        param_keys, image_fields = [], ("referenceViews", "thumbnail")
+    try:
+        check(fields, image_fields=image_fields, before=before, param_keys=param_keys,
+              shipped_thumbnail=lambda value: _preset_thumbnail_path_from_ref(value) is not None)
+    except StoredImageError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 def _char_store():
     from services.character_store import CharacterStore
     return CharacterStore()
@@ -13000,6 +13031,7 @@ async def list_characters(scope: str = "global", projectId: str | None = None) -
 async def create_character(body: CharacterCreate) -> dict:
     """Create a new Character."""
     _require_canvas_project(body.projectId)
+    _check_stored_images("character", body.model_dump())
     store = _char_store()
     try:
         character = store.create(
@@ -13043,6 +13075,22 @@ async def update_character(char_id: str, body: CharacterUpdate) -> dict:
         raise HTTPException(status_code=422, detail="baseVersion must be a whole number: the Character's version you read")
     store = _char_store()
     updates = {k: v for k, v in body.model_dump().items() if v is not None and k != "baseVersion"}
+    if "referenceViews" in updates:
+        try:
+            stored = store.get(char_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
+        # Not live: the in_trash 404 the Studio offers Restore from, before
+        # any check (a Studio sends the views it read, held links too).
+        if stored is None:
+            return _asset_not_found("character", char_id)
+        # A version behind (versions only grow): the update below is the 409
+        # the Studio merges from and writes nothing, so the views aren't
+        # checked against a Character they can't land on.
+        version = stored.get("version")
+        behind = (body.baseVersion is not None and isinstance(version, int) and version > body.baseVersion)
+        if not behind:
+            _check_stored_images("character", updates, before=stored)
     try:
         character = store.update(char_id, base_version=body.baseVersion, **updates)
     except KeyError:
@@ -13883,6 +13931,7 @@ async def create_preset(body: PresetCreate) -> dict:
     # params from before every upgrade: version 0 (services/saved_graph_upgrades.py).
     params_version = _preset_params_version(body, 0)
     _check_style_write(body.name, body.modelId, body.params, None)
+    _check_stored_images("style", body.model_dump())
     try:
         preset = preset_store.create(
             name=body.name, category=body.category, prompt=body.prompt, params=body.params,
@@ -13941,6 +13990,11 @@ async def update_preset(preset_id: str, body: PresetUpdate) -> dict:
                        fields.get("params", before.get("params") or {}),
                        before if after_model == (before.get("modelId") or None) else None,
                        before_params=before.get("params") or {})
+    # A version behind (versions only grow): the update below is the 409 the
+    # caller re-reads from, so an outside link it still holds isn't the answer.
+    version = before.get("version")
+    if not (base_version is not None and isinstance(version, int) and version > base_version):
+        _check_stored_images("style", fields, before=before)
     try:
         preset = preset_store.update(preset_id, params_version=params_version, base_version=base_version, **fields)
     except KeyError:

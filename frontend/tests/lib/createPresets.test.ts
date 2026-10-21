@@ -26,6 +26,19 @@ describe('createPresets client', () => {
     expect(JSON.parse((init as { body: string }).body).paramsVersion).toBe(1);
   });
 
+  it('createPreset throws the backend’s reason when it refuses the Style', async () => {
+    const detail = "refImages[0] is an image link from outside Nebula ('https://x.example/a.png'). Images on a Style ...";
+    fetchMock.mockResolvedValue({ ok: false, status: 422, json: async () => ({ detail }) });
+    await expect(createPreset({ name: 'B', category: 'Style', prompt: 'x', params: {}, modelId: 'nano-banana',
+      refImages: ['https://x.example/a.png'], scope: 'global', paramsVersion: 1 })).rejects.toThrow(detail);
+  });
+
+  it('createPreset keeps its status line when the refusal has no reason', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 500, json: async () => { throw new Error('not json'); } });
+    await expect(createPreset({ name: 'B', category: 'Style', prompt: 'x', params: {}, modelId: 'nano-banana',
+      refImages: [], scope: 'global', paramsVersion: 1 })).rejects.toThrow('Create preset failed: 500');
+  });
+
   it('fetchPresets supplies the current id for project scope', async () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => [] });
     await fetchPresets('project');
