@@ -94,7 +94,7 @@ from services.saved_graph_upgrades import PARAMS_VERSION, request_version, upgra
 from services.project_store import (
     MAX_PROJECT_BYTES, ProjectLimitError, ProjectStore, ProjectStoreError, empty_snapshot,
     make_project, metadata as project_metadata, needs_cover, now as project_now,
-    project_name, public_project, refresh_metadata, validate_project_id,
+    project_name, public_project, recorded_cover_owner, refresh_metadata, validate_project_id,
     move_to_trash, purge_expired_trash, restore_from_trash, trash_metadata,
 )
 from services.port_contracts import (
@@ -164,7 +164,8 @@ from services.person_gate import (
 from services.canvas_edits import INTERNAL_OK as BILLING_PARAMS, EditSpec, parse_edit
 from services.canvas_arrange import canvas_arrange
 from services.canvas_undo import (
-    EDIT_ID_RE, CanvasUndoBook, UndoError, build_inverse, capture_before, plan_undo,
+    EDIT_ID_RE, UNDONE_VERBS, CanvasUndoBook, UndoError, build_inverse, capture_before, nothing_went_back,
+    plan_undo, touched_nodes,
 )
 from services.agent_params import ASSET_PARAM_TYPES, asset_params, internal_keys, internal_refusal
 from services.canvas_proposals import (
@@ -184,6 +185,7 @@ from services.canvas_proposals import (
 # Proposals outside the graph: a project's cover, a board's Send notes (U16).
 from services.asset_proposals import AssetProposal, asset_proposals
 from services.asset_proposals import parse_change as parse_asset_change, summary as asset_proposal_summary
+from services.asset_proposals import outcome_line as asset_outcome_line, update_text as asset_update_text
 from services.agent_presence import request_headers_scope
 from services.local_guard import host_allowed
 from services import run_approvals as approvals
@@ -2882,6 +2884,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         export = await export_graph_for_frontend()
         await websocket.send_text(json.dumps({"type": "graphSync", **export}))
         await websocket.send_text(json.dumps(_pins_message()))
+        await _settle_asset_updates()
         await websocket.send_text(json.dumps(_canvas_notes_message()))
         while True:
             raw = await websocket.receive_text()
@@ -3790,6 +3793,11 @@ def _agent_node_row(definition: Mapping[str, Any], context: Mapping[str, Any]) -
     return row
 
 
+# GET /api/agent/nodes' largest `limit`: above the catalog (308 node types,
+# 2026-10-21), so `nebula nodes --all` gets every one in one call.
+AGENT_NODES_MAX = 2000
+
+
 @app.get("/api/agent/nodes")
 async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool = True, limit: int = 20) -> dict[str, Any]:
     """Node types an agent can use, best matches first: whether each can run
@@ -3797,10 +3805,11 @@ async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool
 
     Every word of `query` must appear in the id, name or description.
     `category` is a category id (image-gen) or its short name (image),
-    services/node_categories.py."""
+    services/node_categories.py. `limit` goes up to AGENT_NODES_MAX: MCP's
+    find_nodes asks for at most 100 rows, `nebula nodes` for every match."""
     context = _agent_node_context()
     words = [word for word in query.lower().split() if word]
-    limit = max(1, min(int(limit), 100))
+    limit = max(1, min(int(limit), AGENT_NODES_MAX))
     definitions = context["definitions"]
     wanted = (node_categories.resolve(category, {str(d.get("category")) for d in definitions.values()}) or category
               if category else "")
@@ -4242,6 +4251,41 @@ _RUN_EVENT_VERBS = {"run.started": "started", "run.finished": "finished", "run.f
                     "run.skipped": "skipped"}
 
 
+def _note_run(run_id: str) -> None:
+    """Who asked for a run, and when: the journal credits its node events to
+    them, and an agent's undo (POST /api/graph/apply/undo) leaves a node
+    someone else ran after the agent's edit (services/canvas_undo.py)."""
+    actor = actor_for_headers(current_request_headers())
+    canvas_events.note_run(run_id, actor)
+    try:
+        canvas_undo_book.run_started(run_id, actor=actor, project_id=_workspace_context()["activeProjectId"])
+    except Exception:  # noqa: BLE001 - never refuse a run over undo bookkeeping
+        pass
+
+
+def _note_run_nodes(run_id: str, nodes: list[GraphNode]) -> None:
+    """The canvas nodes a run set out to run: while it is going they count as
+    run for an agent's undo, before the engine reaches them."""
+    canvas_undo_book.run_nodes(run_id, [node.id for node in nodes])
+
+
+def _run_is_active(run_id: str) -> bool:
+    record = execution_runs.get(run_id)
+    return record is not None and record.status in {"running", "cancelling"}
+
+
+def _note_node_ran(event: Any, run_id: str | None) -> None:
+    """A run started a canvas node (its ExecutingEvent), for an agent's undo."""
+    node_id = getattr(event, "node_id", None)
+    if not isinstance(event, ExecutingEvent) or not isinstance(node_id, str) or node_id not in cli_graph.nodes:
+        return
+    try:
+        project_id = (_execution_workspace_context.get() or _workspace_context())["activeProjectId"]
+        canvas_undo_book.node_ran(run_id, node_id, actor=canvas_events.run_actor(run_id), project_id=project_id)
+    except Exception:  # noqa: BLE001 - never break execution over undo bookkeeping
+        pass
+
+
 def _journal_execution_event(event: Any, run_id: str | None) -> None:
     """Journal one node's run start/finish/failure, attributed to whoever started the run."""
     try:
@@ -4255,11 +4299,15 @@ def _journal_execution_event(event: Any, run_id: str | None) -> None:
         if not canvas_events.first_run_event(run_id, node_id, kind):
             return
         data: dict[str, Any] = {"runId": run_id}
+        # Agents read these (wait_for_canvas_change, `nebula watch`): hide a key
+        # a provider quoted (services/key_echoes.py) before cutting to 200, so
+        # a key cut short can't slip under the 8-character run check.
         if isinstance(event, ErrorEvent):
-            error = event.friendly or event.error or ""
+            error = _hide_key_echoes(event.friendly or event.error or "", _agent_key_secrets())
             data["error"] = str(_journal_safe_value(error, key="error"))[:200]
         if isinstance(event, SkippedEvent):
-            data["reason"] = str(_journal_safe_value(event.reason, key="reason"))[:200]
+            reason = _hide_key_echoes(event.reason, _agent_key_secrets())
+            data["reason"] = str(_journal_safe_value(reason, key="reason"))[:200]
             if event.gate_node_id:
                 data["gateNodeId"] = event.gate_node_id
         _journal(
@@ -4359,10 +4407,11 @@ async def get_canvas_snapshot() -> dict[str, Any]:
     selected = selection_context.snapshot(cli_graph, node_registry).get("selectedNodeIds", [])
     snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=selected)
     # Why a node's last run failed, as its card says it (services/node_errors.py).
+    key_words = _agent_key_secrets()
     for node in snapshot.get("nodes") or []:
         failed = node_errors.get(node["id"])
         if failed:
-            node["error"] = failed["error"]
+            node["error"] = _hide_key_echoes(failed["error"], key_words)
             if failed.get("hint"):
                 node["errorHint"] = failed["hint"]
     # `nebula look` then `nebula watch --since <cursor>` leaves no gap.
@@ -4375,7 +4424,46 @@ async def get_canvas_snapshot() -> dict[str, Any]:
     # Proposals waiting for the person (one line each; never their accept keys).
     await _sweep_proposals()
     snapshot["proposals"] = [canvas_proposals.brief(p) for p in canvas_proposals.open_list()]
+    snapshot["providerHolds"] = _provider_holds_for_agents()
     return snapshot
+
+
+def _provider_holds_for_agents() -> dict[str, Any]:
+    """Paid starts Nebula holds, read-only (graph export has the same two
+    lists): `recoveries` are accepted World Labs operations a rerun resumes
+    instead of paying again; `startAmbiguities` are starts Nebula couldn't
+    confirm, which keep the node from starting again until someone checks
+    Marble and clears it. Agents have no tool to clear either."""
+    try:
+        recoveries = provider_recovery_store.list()
+    except Exception:  # noqa: BLE001 - a read surface never fails the snapshot
+        recoveries = []
+    try:
+        ambiguities = provider_start_guard.list()
+    except Exception:  # noqa: BLE001
+        ambiguities = []
+    return {
+        "recoveries": [{key: record.get(key) for key in ("runId", "nodeId", "resumeOperationId", "existingWorldId")}
+                       for record in recoveries],
+        "startAmbiguities": [{key: record.get(key) for key in ("runId", "nodeId", "kind", "message", "durable")}
+                             for record in ambiguities],
+    }
+
+
+def _journal_provider_hold(hold: str, change: str, *, run_id: str | None, node_id: str,
+                           kind: str | None = None, durable: bool | None = None,
+                           actor: dict[str, Any] | None = None) -> None:
+    """One ``provider.hold`` event: a paid start held (`change` "held") or
+    cleared ("cleared"). `hold` is "recovery" or "startAmbiguity"."""
+    data: dict[str, Any] = {"hold": hold, "change": change, "runId": run_id}
+    if kind:
+        data["kind"] = kind
+    if durable is not None:
+        data["durable"] = durable
+    what = "a paid start Nebula couldn't confirm" if hold == "startAmbiguity" else "a recovery checkpoint"
+    summary = (f"{_node_label(node_id)} ({node_id}) is held: {what}" if change == "held"
+               else f"{what} on {_node_label(node_id)} ({node_id}) was cleared")
+    _journal("provider.hold", node_id=node_id, data=data, summary=summary, actor=actor)
 
 
 def _start_node_notes(rows: list[dict[str, Any]], context: Mapping[str, Any], via: str) -> list[str]:
@@ -4444,6 +4532,11 @@ async def agent_start_here(request: Request, via: str = "mcp") -> dict[str, Any]
         pins = []
     await _sweep_proposals()
     briefs = [canvas_proposals.brief(p) for p in canvas_proposals.open_list()]
+    # Asset proposals too (a cover, Send notes, Commons curation), with the
+    # Update each posted; a commons one only where the caller sees it.
+    await _sweep_asset_proposals()
+    briefs += [asset_proposals.brief(p) for p in asset_proposals.open_list()
+               if isinstance(p, AssetProposal) and await _commons_proposal_visible(p, headers)]
     # Reads every board file; off the event loop.
     summaries = await asyncio.to_thread(lambda: _moodboard_store().summaries())
     context = await asyncio.to_thread(_agent_node_context)
@@ -4732,6 +4825,7 @@ def _note_author() -> AgentIdentity:
 async def list_canvas_agent_notes(unread: int = 0) -> Any:
     """The open project's Updates, newest first (``?unread=1`` for unread only)."""
     try:
+        await _settle_asset_updates()  # never list an expired proposal as waiting
         return agent_notes.canvas_list(unread_only=bool(unread))
     except NoteError as exc:
         return _raise_note_error(exc)
@@ -5749,6 +5843,74 @@ async def _announce_closed_asset_proposals(proposals: list[AssetProposal], *,
             await manager.broadcast_raw(_asset_proposal_closed_message(proposal))
         except Exception:  # noqa: BLE001 - the screens also hide expired proposals locally
             pass
+    await _follow_asset_updates(proposals)
+
+
+# ---- the Update each asset proposal posts (Justin's Q92 a, 2026-10-21) ----
+#
+# "Keep the wording, and each proposal also posts an Update ("Claude Code asks
+# to change the cover of X", with Review)." Posted on the open project's
+# Updates (the corner on the canvas), the way Nebula posts its own updates,
+# attributed to the agent; one per agent and target. When the proposal closes
+# the Update says how and is read.
+
+_RESOLVED_BY = {"accepted": {"kind": "person"}, "rejected": {"kind": "person"}}
+
+
+async def _post_asset_update(proposal: AssetProposal) -> None:
+    try:
+        result = await asyncio.to_thread(
+            agent_notes.post_proposal, author={"kind": "agent", **proposal.agent.as_dict()},
+            text=asset_update_text(proposal),
+            proposal={"id": proposal.id, "kind": proposal.kind, "targetId": proposal.target_id})
+    except (NoteError, ProjectStoreError):
+        return  # no project open: the Agent log line is the only notice, as before
+    note = result["note"]
+    ref = {"id": note["id"], "projectId": result["projectId"]}
+    # The agent's earlier open proposals on this target share the one Update.
+    for other in asset_proposals.open_list():
+        if isinstance(other, AssetProposal) and _same_asker(other, proposal):
+            other.update = dict(ref)
+    proposal.update = dict(ref)
+    await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"], note=note,
+                                                unread=result["unread"], removed=result["removed"]))
+    _journal_note(note, "canvas")
+
+
+def _same_asker(one: AssetProposal, other: AssetProposal) -> bool:
+    return one.agent.id == other.agent.id and one.kind == other.kind and one.target_id == other.target_id
+
+
+async def _follow_asset_updates(proposals: list[AssetProposal]) -> None:
+    """Closed proposals: each one's Update says how it ended, unless the same
+    agent still has another proposal open on that target (the Update then
+    reviews that one)."""
+    for proposal in proposals:
+        ref = proposal.update
+        if not ref or proposal.is_open:
+            continue
+        waiting = [p for p in asset_proposals.open_list()
+                   if isinstance(p, AssetProposal) and _same_asker(p, proposal) and p.update == ref]
+        try:
+            if waiting:
+                newest = max(waiting, key=lambda p: p.created_at)
+                result = await asyncio.to_thread(agent_notes.retarget_proposal, ref["projectId"], ref["id"], newest.id)
+                op, extra = "changed", {}
+            else:
+                by = _RESOLVED_BY.get(proposal.status) or (
+                    {"kind": "agent", "name": proposal.agent.name} if proposal.status == "withdrawn" else {"kind": "system"})
+                result = await asyncio.to_thread(agent_notes.resolve_proposal, ref["projectId"], ref["id"],
+                                                 outcome=asset_outcome_line(proposal), by=by)
+                op, extra = "resolved", ({"unread": result["unread"]} if result else {})
+        except (NoteError, ProjectStoreError):
+            continue
+        if result is None:
+            continue
+        # Only the open project's list is on the person's screen; another
+        # project's reloads with it when they open it.
+        if result["projectId"] == project_store.read().get("activeProjectId"):
+            await _broadcast_raw_quietly(_notes_message("canvas", op, project_id=result["projectId"],
+                                                        ids=[ref["id"]], note=result["note"], **extra))
 
 
 async def _asset_proposal_misfit(proposal: AssetProposal, exported: dict[str, Any] | None = None) -> str | None:
@@ -5760,12 +5922,7 @@ async def _asset_proposal_misfit(proposal: AssetProposal, exported: dict[str, An
         project = catalog["projects"].get(proposal.target_id)
         if project is None:
             return "the project was deleted"
-        if _cover_state(project) != proposal.before:
-            return "the project's cover changed since it was proposed"
-        url = proposal.change.get("cover")
-        if url is not None and not project_cover.is_choice(_cover_images_now(project, catalog, exported), url):
-            return "that image is no longer one of the project's images"
-        return None
+        return _cover_proposal_misfit(proposal, project, _cover_images_now(project, catalog, exported))
     try:
         board = await asyncio.to_thread(_moodboard_store().get, proposal.target_id)
     except ValueError:
@@ -5777,11 +5934,31 @@ async def _asset_proposal_misfit(proposal: AssetProposal, exported: dict[str, An
     return None
 
 
+def _cover_proposal_misfit(proposal: AssetProposal, project: Mapping[str, Any],
+                           images: Mapping[str, Any]) -> str | None:
+    """A cover proposal against its project (``images``: its snapshot as it is
+    now), refreshing what its view shows: a lost pin and the automatic cover."""
+    if _cover_state(project) != proposal.before:
+        return "the project's cover changed since it was proposed"
+    # The pin it was proposed against may have lost its image, or got it back (Q90 a).
+    proposal.lost_pin = _lost_pin(project, images)
+    proposal.auto_cover = _automatic_cover(images)
+    url = proposal.change.get("cover")
+    if url is None and proposal.lost_pin:
+        # "Back to automatic" against a pin whose image is gone changes
+        # nothing (a new one is refused with 409); Accepting it would only
+        # drop the stored pin an undo brings back.
+        return "the project's cover is already the automatic one"
+    if url is not None and not project_cover.is_choice(dict(images), url):
+        return "that image is no longer one of the project's images"
+    return None
+
+
 async def _sweep_asset_proposals() -> None:
     """Expire overdue asset proposals and invalidate those whose target moved
     on (another cover pinned, the project or board deleted, notes already
-    sent). Called before every asset proposal read and decision, and after a
-    cover change."""
+    sent). Called before every asset proposal read and decision, after a
+    cover change, and on each proposal's expiry timer (_schedule_asset_expiry)."""
     try:
         expired = [p for p in asset_proposals.sweep() if isinstance(p, AssetProposal)]
     except Exception:  # noqa: BLE001 - never fail a read over housekeeping
@@ -5805,34 +5982,166 @@ async def _sweep_asset_proposals() -> None:
     await _announce_closed_asset_proposals(expired + misfits, actor=dict(_SYSTEM_ACTOR))
 
 
-async def _asset_proposal_sync_message() -> dict[str, Any]:
-    """Every open asset proposal with its accept key, for a socket that just
-    said hello as the person (the Projects screen and Moodboard Studio)."""
+# ---- on time, not on the next read (review of Q92 a) ----
+#
+# The sweep above runs when something reads proposals. An agent that proposes
+# and stops, with the person on the canvas, reads nothing: without a timer the
+# Update would keep "waiting for your OK" and a live Review past expiry.
+
+_asset_expiry_tasks: set[asyncio.Task[Any]] = set()
+
+
+def _call_later(delay: float, callback: Callable[..., Any], *args: Any) -> None:
+    asyncio.get_running_loop().call_later(delay, callback, *args)
+
+
+def _schedule_asset_expiry(proposal: AssetProposal) -> None:
+    """Check the proposal just after it is due (asset_proposals' clock)."""
+    delay = max(0.0, proposal.expires_at - asset_proposals.now()) + 0.5
+    try:
+        _call_later(delay, _start_asset_expiry_check, proposal.id)
+    except RuntimeError:  # no running loop (a script): the next read sweeps
+        pass
+
+
+def _start_asset_expiry_check(proposal_id: str) -> None:
+    task = asyncio.get_running_loop().create_task(_asset_expiry_check(proposal_id))
+    _asset_expiry_tasks.add(task)
+    task.add_done_callback(_asset_expiry_tasks.discard)
+
+
+async def _asset_expiry_check(proposal_id: str) -> None:
     await _sweep_asset_proposals()
+    proposal = asset_proposals.get(proposal_id)
+    if isinstance(proposal, AssetProposal) and proposal.is_open:
+        _schedule_asset_expiry(proposal)  # its expiry moved out (an accept under way)
+
+
+_ASSET_UPDATE_KINDS = ("project", "moodboard", "commons")
+
+
+async def _settle_asset_updates() -> None:
+    """Before the open project's Updates are listed: sweep, then resolve any
+    asset proposal Update whose proposal can no longer be decided. Proposals
+    live in memory and Updates on the project, so after a restart an Update
+    can outlive its proposal; its Review would lead nowhere."""
+    await _sweep_asset_proposals()
+    try:
+        listing = await asyncio.to_thread(agent_notes.canvas_list)
+    except (NoteError, ProjectStoreError):
+        return
+    project_id = listing.get("projectId")
+    for note in listing.get("notes") or []:
+        ref = note.get("proposal")
+        if (note.get("about") != "proposal" or note.get("source") != "nebula" or note.get("resolvedAt")
+                or not isinstance(ref, Mapping) or ref.get("kind") not in _ASSET_UPDATE_KINDS):
+            continue
+        proposal = asset_proposals.get(str(ref.get("id") or ""))
+        if isinstance(proposal, AssetProposal) and proposal.is_open:
+            continue
+        outcome = asset_outcome_line(proposal) if isinstance(proposal, AssetProposal) else "Expired"
+        try:
+            result = await asyncio.to_thread(agent_notes.resolve_proposal, project_id, note["id"],
+                                             outcome=outcome, by={"kind": "system"})
+        except (NoteError, ProjectStoreError):
+            continue
+        if result is not None:
+            await _broadcast_raw_quietly(_notes_message("canvas", "resolved", project_id=project_id,
+                                                        ids=[note["id"]], note=result["note"],
+                                                        unread=result["unread"]))
+
+
+async def _follow_cover_proposals(exported: dict[str, Any]) -> None:
+    """After any change to the live canvas (every one goes through
+    _broadcast_graph_sync): re-check the open project's cover proposals, so
+    the person's tab hears at once when the pin lost its image or got it back,
+    or the automatic cover moved, instead of on the autosave's relist. Those
+    that no longer fit close (assetProposalClosed); if a view still open
+    changed, the person's tabs get assetProposalSync. Bounded: nothing to do
+    unless a cover proposal waits on the open project, then only its
+    proposals, against the export the sync already made. Never fails or
+    holds up the canvas edit."""
+    try:
+        waiting = [p for p in asset_proposals.open_list()
+                   if isinstance(p, AssetProposal) and p.kind == "project" and p.id not in _asset_deciding]
+        if not waiting:
+            return
+        active = project_store.workspace().get("activeProjectId")  # no catalog copy
+        mine = [p for p in waiting if p.target_id == active]
+        if not mine:
+            return
+        project = _open_project_record(active)
+        if project is None:
+            return  # the sweep on the next read says "deleted"
+        images = _cover_images_now(project, {"activeProjectId": active}, exported)
+        shown = {p.id: _asset_proposal_view(p) for p in mine}
+        closed: list[AssetProposal] = []
+        for proposal in mine:
+            reason = _cover_proposal_misfit(proposal, project, images)
+            if reason and proposal.is_open and proposal.id not in _asset_deciding:
+                asset_proposals.close(proposal.id, "invalidated", reason=reason)
+                closed.append(proposal)
+        if closed:
+            await _announce_closed_asset_proposals(closed, actor=dict(_SYSTEM_ACTOR))
+        if any(p.is_open and _asset_proposal_view(p) != shown[p.id] for p in mine):
+            await manager.broadcast_browser(_asset_proposal_open_message())
+    except Exception:  # noqa: BLE001 - housekeeping; the autosave's projectsChanged relists anyway
+        return
+
+
+# (catalog.json's signature, the open project's record): a run's many output
+# syncs reuse it; the catalog is read again only once it is written.
+_open_project_cache: tuple[Any, str, dict[str, Any]] | None = None
+
+
+def _open_project_record(project_id: str) -> dict[str, Any] | None:
+    global _open_project_cache
+    signature = project_store.signature()
+    cached = _open_project_cache
+    if signature is not None and cached is not None and cached[0] == signature and cached[1] == project_id:
+        return cached[2]
+    project = project_store.read()["projects"].get(project_id)
+    _open_project_cache = (signature, project_id, project) if project is not None and signature is not None else None
+    return project
+
+
+def _asset_proposal_open_message() -> dict[str, Any]:
     return {"type": "assetProposalSync",
             "proposals": [{**_asset_proposal_person_view(p), "acceptKey": p.accept_key}
                           for p in asset_proposals.open_list()]}
 
 
-async def _asset_proposal_target(kind: str, target_id: str, change: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    """(the target's name, its state now) for a new proposal; 404 for a
-    missing target, 400 for an image not in the project, 409 for a change
-    that is already so."""
+async def _asset_proposal_sync_message() -> dict[str, Any]:
+    """Every open asset proposal with its accept key, for a socket that just
+    said hello as the person (the Projects screen and Moodboard Studio)."""
+    await _sweep_asset_proposals()
+    return _asset_proposal_open_message()
+
+
+async def _asset_proposal_target(kind: str, target_id: str, change: dict[str, Any]
+                                 ) -> tuple[str, dict[str, Any], dict[str, Any] | None, str | None]:
+    """(the target's name, its state now, a lost pin, the automatic cover's
+    image) for a new proposal; 404
+    for a missing target, 400 for an image not in the project, 409 for a
+    change that is already so."""
     if kind == "project":
         exported = await _projects_live_export()
         catalog = project_store.read()
         project = _project_id_or_404(target_id, catalog)
+        images = _cover_images_now(project, catalog, exported)
         url = change.get("cover")
-        if url is not None and not project_cover.is_choice(_cover_images_now(project, catalog, exported), url):
+        if url is not None and not project_cover.is_choice(images, url):
             raise HTTPException(status_code=400, detail=(
                 "Pick one of this project's own images for its cover (list_project_covers, "
                 f"GET /api/projects/{target_id}/covers, lists them)."))
         state = _cover_state(project)
-        if state["cover"] == url:
+        lost = _lost_pin(project, images)
+        # Against what the card shows: a pin whose image is gone shows the automatic cover.
+        if (None if lost else state["cover"]) == url:
             raise HTTPException(status_code=409, detail=(
                 "That is already the project's cover; nothing to propose." if url is not None
                 else "The project's cover is already the automatic one; nothing to propose."))
-        return str(project.get("name") or ""), state
+        return str(project.get("name") or ""), state, lost, _automatic_cover(images)
     try:
         board = await asyncio.to_thread(_moodboard_store().get, target_id)
     except ValueError:
@@ -5842,7 +6151,7 @@ async def _asset_proposal_target(kind: str, target_id: str, change: dict[str, An
     if board.get("sendNotes") is True:
         raise HTTPException(status_code=409, detail=(
             f'Send notes to generators is already on for board "{board.get("name")}"; nothing to propose.'))
-    return str(board.get("name") or ""), {"sendNotes": False}
+    return str(board.get("name") or ""), {"sendNotes": False}, None, None
 
 
 @app.post("/api/asset-proposals", status_code=201)
@@ -5864,14 +6173,20 @@ async def create_asset_proposal(body: dict[str, Any]) -> dict[str, Any]:
         spec = parse_asset_change(body)
     except ProposalError as exc:
         raise _proposal_http_error(exc) from exc
+    lost = auto = None
     if spec.kind == "commons":
         spec, name, before = await _commons_proposal_target(spec, headers)
     else:
-        name, before = await _asset_proposal_target(spec.kind, spec.target_id, spec.change)
+        name, before, lost, auto = await _asset_proposal_target(spec.kind, spec.target_id, spec.change)
     try:
         proposal = asset_proposals.create_asset(agent=identity, spec=spec, target_name=name, before=before)
     except ProposalError as exc:
         raise _proposal_http_error(exc) from exc
+    proposal.lost_pin = lost
+    proposal.auto_cover = auto
+    # The Update in the corner (Q92 a), before the view so the answer names it.
+    await _post_asset_update(proposal)
+    _schedule_asset_expiry(proposal)
     view = _asset_proposal_view(proposal)
     said = asset_proposal_summary(proposal)
     _journal("proposal.created", data={**_asset_journal_data(proposal), "change": sorted(spec.change)},
@@ -6022,6 +6337,7 @@ async def accept_asset_proposal(proposal_id: str) -> dict[str, Any]:
         await manager.broadcast_raw(_asset_proposal_closed_message(proposal))
     except Exception:  # noqa: BLE001
         pass
+    await _follow_asset_updates([proposal])
     publish_action(f"Accepted {proposal.agent.name}'s proposal to {asset_proposal_summary(proposal)}")
     return {"status": "accepted", "proposalId": proposal.id, "kind": proposal.kind,
             "targetId": proposal.target_id, **outcome}
@@ -6296,8 +6612,12 @@ async def get_settings() -> dict:
     settings = load_settings()
     masked = dict(settings)
     if "apiKeys" in masked:
+        # Justin, Q55 a: "Only the app (your person token) gets the endings.
+        # Everything else learns which providers are set, and nothing more."
+        # An agent's curl or `nebula keys` sees a bare "***" for a set key.
+        person = _is_person_request()
         masked["apiKeys"] = {
-            k: ("***" + v[-4:] if len(v) > 4 else "***") if v else ""
+            k: (("***" + v[-4:] if len(v) > 4 else "***") if person else "***") if v else ""
             for k, v in masked["apiKeys"].items()
         }
     if agent_spend.CAPS_KEY in masked:
@@ -6712,10 +7032,11 @@ async def execute(request: ExecuteRequest) -> dict:
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
-    canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
+    _note_run(run_id)
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
     nodes = _normalize_execute_nodes(request.nodes)
+    _note_run_nodes(run_id, nodes)
     submitted = _submitted_params(nodes)
     _validate_cinema_base_models(nodes)
 
@@ -6850,7 +7171,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
-    canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
+    _note_run(run_id)
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
     nodes = _normalize_execute_nodes(request.nodes)
@@ -6866,6 +7187,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
             status_code=404,
             detail=f"Node '{request.target_node_id}' not found in graph",
         )
+    _note_run_nodes(run_id, sub_nodes)
 
     _validate_cinema_base_models(sub_nodes)
 
@@ -7432,7 +7754,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
-    canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
+    _note_run(run_id)
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
     nodes = _normalize_execute_nodes(request.nodes)
@@ -7466,6 +7788,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     sub_nodes, sub_edges = get_subgraph(patched_nodes, request.edges, request.node_id)
     if not sub_nodes:
         raise HTTPException(status_code=404, detail=f"Node '{request.node_id}' not found in graph")
+    _note_run_nodes(run_id, sub_nodes)
     fresh_paid_ancestors = _fresh_paid_worldlabs_claims(sub_nodes)
     if fresh_paid_ancestors:
         blocked_ids = ", ".join(node_id for _kind, node_id in fresh_paid_ancestors)
@@ -7821,6 +8144,8 @@ async def _broadcast_graph_sync(
                                  **({"arranged": arranged} if arranged and not graph_replaced else {}),
                                  **({"edit": _graph_edit_origin()}
                                     if edit and (not graph_replaced or reason == "import") else {})})
+    # A cover proposal's view follows the live canvas (a pin's image deleted or back).
+    await _follow_cover_proposals(export)
     if graph_replaced:
         # Tag, don't reset: seq stays monotonic, and the new project id rides
         # on this event and every one after it.
@@ -7853,6 +8178,7 @@ async def _broadcast_graph_sync(
         # Updates belong to the project record too: an open or create brings
         # that project's list; an import keeps the project, and its list.
         if safe_reason != "import":
+            await _settle_asset_updates()
             await _broadcast_raw_quietly(_canvas_notes_message())
         await _journal_detached_pins(detached, "the canvas was replaced")
         # Proposals point at node ids that just restarted: none of them still fit.
@@ -7965,6 +8291,8 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
                 }
             )
         await manager.broadcast(event)
+        _journal_provider_hold("startAmbiguity", "held", run_id=run_id, node_id=event.node_id, kind=event.kind,
+                               durable=event.durable, actor=canvas_events.run_actor(run_id))
         if run_id is not None:
             await _broadcast_graph_sync()
         return
@@ -7981,6 +8309,9 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
                 update={"durable": False, "warning": durability_warning}
             )
         await manager.broadcast(event)
+        _journal_provider_hold("recovery", "held", run_id=event.run_id or execution_run_id.get(),
+                               node_id=event.node_id, durable=event.durable,
+                               actor=canvas_events.run_actor(event.run_id or execution_run_id.get()))
         if changed or safety_hold_changed:
             await _broadcast_graph_sync()
         return
@@ -7991,6 +8322,7 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
     if record is not None and record.status in {"cancelling", "cancelled"}:
         return
     _journal_execution_event(event, run_id)
+    _note_node_ran(event, run_id)
     node_errors.observe(event)
     if isinstance(event, ErrorEvent) and run_id is not None:
         # The engine reports per-node failures as events and then returns
@@ -8010,6 +8342,8 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
                 for snapshot in event.batch_outputs
             ]
         event = event.model_copy(update=updates)
+    # What get_run reports for the run (services/run_reports.py).
+    _run_reports().observe(event, run_id)
     await manager.broadcast(event)
 
 
@@ -9304,6 +9638,8 @@ async def delete_provider_recovery(
                 current["params"] = params
                 cli_graph._maybe_persist()
     await _broadcast_graph_sync()
+    if removed:
+        _journal_provider_hold("recovery", "cleared", run_id=run_id, node_id=node_id)
     return {
         "status": "deleted",
         "runId": run_id,
@@ -9335,6 +9671,8 @@ async def acknowledge_provider_start_ambiguity(
             detail="Could not durably acknowledge World Labs paid-start hold",
         ) from exc
     await _broadcast_graph_sync()
+    if removed:
+        _journal_provider_hold("startAmbiguity", "cleared", run_id=run_id, node_id=node_id, kind=kind)
     return {
         "status": "acknowledged",
         "kind": kind,
@@ -10159,7 +10497,8 @@ def _canvas_undo_after(before: dict[str, Any], added: list[str]) -> dict[str, An
     another request changed while this one was still broadcasting."""
     project_id, project_name = _open_project_brief()
     return {"inverse": build_inverse(before, cli_graph.nodes, cli_graph.edges, added=added),
-            "projectId": project_id, "projectName": project_name, "epoch": canvas_undo_book.epoch(project_id)}
+            "projectId": project_id, "projectName": project_name, "epoch": canvas_undo_book.epoch(project_id),
+            "mark": canvas_undo_book.mark()}
 
 
 def _canvas_undo_keep(identity: Any, after: dict[str, Any]) -> dict[str, Any] | None:
@@ -10171,7 +10510,8 @@ def _canvas_undo_keep(identity: Any, after: dict[str, Any]) -> dict[str, Any] | 
     canvas_undo_book.link(edit_id, kind="edit", actor=actor)
     canvas_undo_book.note_events(edit_id, canvas_events.seqs_of_edit(edit_id))
     return canvas_undo_book.keep(edit_id=edit_id, actor=actor, agent_id=identity.id, project_id=after["projectId"],
-                                 project_name=after["projectName"], inverse=after["inverse"], epoch=after["epoch"])
+                                 project_name=after["projectName"], inverse=after["inverse"], epoch=after["epoch"],
+                                 mark=after.get("mark"))
 
 
 def _forget_canvas_undo(why: str) -> None:
@@ -10263,6 +10603,26 @@ def _journal_restored_edit(link: dict[str, Any], action: str) -> None:
                                               else ("undone", actor_record(target.actor)))
 
 
+def _undo_ran_since(record: Any) -> dict[str, list[dict[str, Any]]]:
+    """The nodes an edit touched that someone other than its agent ran since
+    the edit (the person, another agent, an unnamed client), with who."""
+    ran: dict[str, list[dict[str, Any]]] = {}
+    for node_id in touched_nodes(record.inverse):
+        if node_id not in cli_graph.nodes:
+            continue
+        who = canvas_undo_book.ran_since(record.project_id, node_id, since=record.mark,
+                                         agent_id=record.agent_id, active=_run_is_active)
+        if who:
+            ran[node_id] = who
+    return ran
+
+
+def _undo_left_text(skipped: list[dict[str, Any]]) -> str:
+    """The parts an undo left, in its reply's message."""
+    messages = [str(item.get("message") or item.get("reason") or "") for item in skipped]
+    return "Left as is: " + "; ".join(message for message in messages if message) + "."
+
+
 @app.post("/api/graph/apply/undo")
 async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     """An agent undoes one of its own edits: ``{token}``, the ``undo.token``
@@ -10272,11 +10632,18 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     open, within UNDO_TTL_SECONDS. Each part (a node it added, a param,
     name or position it changed, a node or wire it removed) goes back only
     if the canvas still has it as the edit left it; a part someone changed
-    since stays and is listed in ``skipped``. The rest goes through one
-    restore, as the canvas's Cmd+Z does, so it lands whole or not at all.
+    since stays and is listed in ``skipped``. A node someone ran since the
+    edit counts as changed (Q82): the person, another agent or an unnamed
+    client; only this agent's own runs don't. That node stays whole (not
+    removed, params, name and position not put back, no wire into it taken
+    away or put back) as one skipped item, reason "ran since", with
+    ``ranBy``. The rest goes through one restore, as the canvas's Cmd+Z
+    does, so it lands whole or not at all. ``message`` says what went back
+    and what was left and why.
 
     ``status`` is ``undone``; ``skipped`` when nothing could go back (the
-    token still works, say after the person puts a part back); or
+    token still works, say after the person puts a changed part back, but a
+    node someone ran since stays for good, and the message says which); or
     ``already-undone`` (by this agent, or by the person on the canvas) with
     ``undoneBy``. The journal tags each event ``edit: {id, undoes, of}`` and
     ends with ``edit.undone``.
@@ -10307,15 +10674,15 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
                 "undoneBy": by, "skipped": record.last_skipped,
                 "message": f"This edit was already undone by {who}; nothing changed."}
     plan = plan_undo(record.inverse, cli_graph.nodes, cli_graph.edges,
-                     cannot_remove=_undo_cannot_remove, refused_change=_undo_refused_change)
+                     cannot_remove=_undo_cannot_remove, refused_change=_undo_refused_change,
+                     ran=_undo_ran_since(record))
     owner = record.actor
     actor = actor_for_headers(headers)
     if plan.empty:
         if plan.skipped:
             return {"status": "skipped", "editId": record.edit_id, "added": [], "removed": [], "changed": [],
                     "renamed": [], "moved": [], "wired": [], "unwired": [], "skipped": plan.skipped,
-                    "message": ("Nothing went back: every part of this edit was changed since. The token still "
-                                "works if those parts are put back the way the edit left them.")}
+                    "message": nothing_went_back(plan.skipped, _undo_left_text(plan.skipped))}
         record.state, record.undone_by, record.last_skipped = "undone", actor_record(actor), []
         return {"status": "undone", "editId": record.edit_id, "undoId": None, "added": [], "removed": [],
                 "changed": [], "renamed": [], "moved": [], "wired": [], "unwired": [], "skipped": [],
@@ -10336,10 +10703,9 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         record.last_skipped = skipped
         canvas_undo_book.note_events(undo_id, canvas_events.seqs_of_edit(undo_id))
         link_entry = canvas_undo_book.link_of(record.edit_id)
-        counts = {key: len(result.get(key) or []) for key in ("added", "removed", "changed", "renamed", "moved")}
-        done = ", ".join(f"{verb} {counts[key]}" for key, verb in (
-            ("removed", "removed"), ("added", "put back"), ("changed", "reset"), ("renamed", "renamed"),
-            ("moved", "moved")) if counts[key])
+        counts = {key: len(result.get(key) or []) for key in (
+            "added", "removed", "changed", "renamed", "moved", "wired", "unwired")}
+        done = ", ".join(f"{verb} {counts[key]}" for key, verb in UNDONE_VERBS if counts[key])
         left = f"; left {len(skipped)} part{'s' if len(skipped) != 1 else ''} as is" if skipped else ""
         _journal("edit.undone", data={
             "editId": record.edit_id, "undoId": undo_id, "of": owner, "editKind": "edit",
@@ -10347,11 +10713,15 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             summary=f"undid {_undo_owner_text(owner, by=actor)} ({done or 'no change'}){left}")
     finally:
         _canvas_edit_link.reset(context)
-    publish_action(f"{identity.name} undid its edit: {done or 'no change'}{left}")
+    stays = [item["nodeId"] for item in skipped if item.get("reason") == "ran since"]
+    publish_action(f"{identity.name} undid its edit: {done or 'no change'}{left}"
+                   + (f" ({_listed(stays)} ran since, so {'it stays' if len(stays) == 1 else 'they stay'})"
+                      if stays else ""))
     return {"status": "undone", "editId": record.edit_id, "undoId": undo_id,
             **{key: result.get(key) for key in ("added", "removed", "changed", "renamed", "moved", "wired",
                                                  "unwired")},
-            "skipped": skipped}
+            "skipped": skipped,
+            "message": f"Undone: {done or 'no change'}." + (f" {_undo_left_text(skipped)}" if skipped else "")}
 
 
 @app.get("/api/graph/node/{node_id}/path")
@@ -10411,7 +10781,9 @@ def _raise_last_run_failed(node_id: str) -> None:
     failed = node_errors.get(node_id)
     if failed:
         hint = f" ({failed['hint']})" if failed.get("hint") else ""
-        raise HTTPException(status_code=409, detail=f"{node_id} has no output: its last run failed: {failed['error']}{hint}")
+        # An agent read: hide a key the provider quoted (services/key_echoes.py).
+        error = _hide_key_echoes(failed["error"], _agent_key_secrets())
+        raise HTTPException(status_code=409, detail=f"{node_id} has no output: its last run failed: {error}{hint}")
 
 
 def _preview_path(value: Any, node_id: str, port: str) -> Path:
@@ -10464,7 +10836,11 @@ def _last_run_error_header(node_id: str) -> dict[str, str] | None:
     """The node's output is from before a run that failed: view_output says
     so beside it, a picture (200) or a value (415) alike."""
     failed = node_errors.get(node_id)
-    return {"X-Nebula-Last-Run-Error": quote(failed["error"], safe=" :,.()'")} if failed else None
+    if not failed:
+        return None
+    # Hide a quoted key (services/key_echoes.py) before quote() encodes it.
+    error = _hide_key_echoes(failed["error"], _agent_key_secrets())
+    return {"X-Nebula-Last-Run-Error": quote(error, safe=" :,.()'")}
 
 
 def _resolve_primary_image_url(node: dict[str, Any]) -> str | None:
@@ -11488,12 +11864,22 @@ async def list_projects() -> dict[str, Any]:
 
 
 @app.get("/api/projects/{project_id}")
-async def get_saved_project(project_id: str) -> dict[str, Any]:
+async def get_saved_project(project_id: str, view: str | None = None) -> dict[str, Any]:
+    """The project the canvas loads. ``view=agent``: the same project as
+    agents read it (MCP get_project), redacted like look_at_canvas
+    (services/project_view.py)."""
+    if view not in (None, "agent"):
+        raise HTTPException(status_code=400, detail="view must be agent, or left out for the saved project")
     exported = await _projects_live_export()
     with project_store.transaction() as catalog:
         project = _project_id_or_404(project_id, catalog)
         if catalog["activeProjectId"] == project_id and _overlay_live_project(project, exported):
             project_store.commit(catalog)
+        if view == "agent":
+            from services.project_view import agent_project
+
+            return agent_project(project, node_registry.get_all(), open_id=catalog["activeProjectId"],
+                                 secrets=_agent_key_secrets())
         return public_project(project)
 
 
@@ -11562,6 +11948,7 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         project_store.commit(catalog)
         result = {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
     await _broadcast_projects_changed("created", recovery_id)
+    _journal_project_change("project.created", result["project"])
     return result
 
 
@@ -11620,6 +12007,33 @@ async def _broadcast_projects_changed(change: str, project_id: str | None = None
         pass
 
 
+_PROJECT_SUMMARIES = {
+    "project.created": 'made project "{name}"',
+    "project.renamed": 'renamed project "{previous}" to "{name}"',
+    "project.deleted": 'moved project "{name}" to Recently deleted',
+    "project.restored": 'restored project "{name}" from Recently deleted',
+}
+
+
+def _journal_project_change(kind: str, project: Mapping[str, Any], *, previous_name: str | None = None,
+                            was_open: bool | None = None) -> None:
+    """Journal a project made, renamed, deleted or restored (``project.*``),
+    in the name of whoever asked, so wait_for_canvas_change and `nebula
+    watch` see the person's changes and other agents'. Next to
+    _broadcast_projects_changed, which tells open tabs; opening, saving, the
+    cover and deleting for good aren't journaled here (an open is
+    ``canvas.replaced``). Never fails the route."""
+    name = str(project.get("name") or "")
+    data: dict[str, Any] = {"projectId": project.get("id"), "name": name}
+    if previous_name is not None:
+        data.update({"from": previous_name, "to": name})
+    if was_open is not None:
+        data["wasOpen"] = was_open
+    if kind == "project.created" and isinstance(project.get("createdBy"), dict):
+        data["createdBy"] = project["createdBy"].get("name")
+    _journal(kind, data=data, summary=_PROJECT_SUMMARIES[kind].format(name=name, previous=previous_name or ""))
+
+
 @app.post("/api/projects")
 async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, Any]:
     body = body or {}
@@ -11653,6 +12067,7 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
     await _broadcast_graph_sync(graph_replaced=True, reason="project-create",
                                 project_switch=_switch_notice(start, project, created=True))
     await _broadcast_projects_changed("created", project["id"])
+    _journal_project_change("project.created", project)
     # A bundle built for another version doesn't load it (projectStore.ts activate).
     return {"project": public_project(project), "workspaceRevision": revision, "paramsVersion": PARAMS_VERSION}
 
@@ -11757,6 +12172,8 @@ async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
     result = _save_project(project_id, body, ingress=verdict)
     # A save moves the card up and can change its picture and node count.
     await _broadcast_projects_changed("renamed" if "name" in body else "saved", project_id)
+    if "previousName" in result and result["previousName"] != result["project"]["name"]:
+        _journal_project_change("project.renamed", result["project"], previous_name=result["previousName"])
     return result
 
 
@@ -11793,6 +12210,7 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
             project["_nodeCounter"] = cli_graph._counter
             if catalog.get("migratedProjectId") == project_id:
                 catalog.pop("migratedProjectId", None)
+        previous_name = project["name"]
         if "name" in body:
             try:
                 project["name"] = project_name(body["name"])
@@ -11800,7 +12218,11 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
         refresh_metadata(project)
         project_store.commit(catalog)
-        return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
+        result = {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
+        if "name" in body:
+            # The name it had, so a rename can be undone (MCP rename_project).
+            result["previousName"] = previous_name
+        return result
 
 
 def _keep_person_viewport(staged: dict[str, Any], stored: dict[str, Any]) -> None:
@@ -11850,8 +12272,11 @@ async def list_project_covers(project_id: str) -> dict[str, Any]:
         project = _project_id_or_404(project_id, catalog)
         if catalog["activeProjectId"] == project_id and _overlay_live_project(project, exported):
             project_store.commit(catalog)
-        return {"images": project_cover.choices(project["snapshot"]), "pinned": project.get("coverPin"),
-                "cover": project.get("cover"), "pinnedBy": _cover_owner(project)}
+        images = project["snapshot"]
+        counts = project_cover.pin_counts(images, project.get("coverPin"))
+        return {"images": project_cover.choices(images), "pinned": project.get("coverPin") if counts else None,
+                "cover": project.get("cover"), "pinnedBy": _cover_owner(project, images),
+                "lostPin": _lost_pin(project, images)}
 
 
 @app.put("/api/projects/{project_id}/cover")
@@ -11862,23 +12287,44 @@ async def pin_project_cover(project_id: str, body: dict[str, Any]) -> dict[str, 
     The person may always. Anyone else (an agent, a script) may while the
     person hasn't pinned one; a cover the person pinned changes only through
     a proposal they accept on the Projects screen (``POST
-    /api/asset-proposals``, Justin's Q60 a, 2026-10-20). Who set the pin is
-    saved as ``coverBy``. The answer's ``previous`` ({"cover": url or null})
-    put back through this route undoes the change."""
+    /api/asset-proposals``, Justin's Q60 a, 2026-10-20). A pin whose image
+    left the project (its node deleted) no longer counts (Q90 a): the card is
+    automatic, so anyone may set it, and the person's next pin counts again.
+    Who set the pin is saved as ``coverBy``. The answer's ``previous``
+    ({"cover": url or null}, the cover the card showed) put back through this
+    route undoes the change."""
     return await _set_project_cover(project_id, body.get("url"))
 
 
-def _cover_owner(project: Mapping[str, Any]) -> dict[str, str] | None:
-    """Who pinned the project's cover, or None for the automatic one. A pin
-    saved before ``coverBy`` existed is the person's: only they could pin."""
-    if not project.get("coverPin"):
+def _cover_owner(project: Mapping[str, Any], images: Mapping[str, Any]) -> dict[str, str] | None:
+    """Who pinned the project's cover, or None for the automatic one: no pin,
+    or a pin whose image is no longer one of the project's (``images``: its
+    snapshot as it is now; Justin's Q90 a). A pin saved before ``coverBy``
+    existed is the person's: only they could pin."""
+    if not project_cover.pin_counts(dict(images), project.get("coverPin")):
         return None
-    by = project.get("coverBy")
-    return dict(by) if isinstance(by, dict) and by.get("kind") else {"kind": "person", "name": "You"}
+    return recorded_cover_owner(dict(project))
+
+
+def _lost_pin(project: Mapping[str, Any], images: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The stored pin while its image is gone ({url, by}), else None. It
+    counts again if the image comes back (an undo), so it isn't deleted."""
+    pin = project.get("coverPin")
+    if not pin or project_cover.pin_counts(dict(images), pin):
+        return None
+    return {"url": pin, "by": recorded_cover_owner(dict(project))}
+
+
+def _automatic_cover(images: Mapping[str, Any]) -> str | None:
+    """The image the card shows with no pin (its first, for a mosaic), or None."""
+    return project_cover.first_image(project_cover.cover(dict(images)))
 
 
 def _cover_state(project: Mapping[str, Any]) -> dict[str, Any]:
-    return {"cover": project.get("coverPin") or None, "coverBy": _cover_owner(project)}
+    """The stored pin as a proposal records it (``before``), counting or not:
+    the image leaving and coming back doesn't change it, so a proposal stays
+    open through an undo."""
+    return {"cover": project.get("coverPin") or None, "coverBy": recorded_cover_owner(dict(project))}
 
 
 def _cover_images_now(project: dict[str, Any], catalog: Mapping[str, Any], exported: dict[str, Any] | None) -> dict[str, Any]:
@@ -11904,24 +12350,30 @@ async def _set_project_cover(project_id: str, url: Any, *, expect: dict[str, Any
             _overlay_live_project(project, exported)
         if expect is not None and _cover_state(project) != expect:
             raise HTTPException(status_code=409, detail="The project's cover changed since it was proposed.")
-        owner = _cover_owner(project)
+        images = project["snapshot"]
+        owner = _cover_owner(project, images)
         if not person and owner is not None and owner.get("kind") == "person":
             require_person(headers, hint=(
                 f'The person pinned the cover of project "{project["name"]}", so only they can change it. '
                 f'To ask them, propose it: propose_asset_change(kind="project", id="{project_id}", '
                 'change={"cover": <url or null>}, note=...) (POST /api/asset-proposals); they decide on the '
                 "Projects screen."))
-        previous = project.get("coverPin") or None
+        recorded = _cover_state(project)
+        # What the card showed: a pin whose image is gone showed the automatic cover.
+        previous = project.get("coverPin") if owner is not None else None
         if url is None or url == "":
             url = None
-            project.pop("coverPin", None)
-            project.pop("coverBy", None)
+            # A lost pin is already the automatic cover; only the person's own
+            # reset drops it, so an undo can still bring it back otherwise.
+            if person or owner is not None:
+                project.pop("coverPin", None)
+                project.pop("coverBy", None)
         else:
-            if not isinstance(url, str) or not project_cover.is_choice(project["snapshot"], url):
+            if not isinstance(url, str) or not project_cover.is_choice(images, url):
                 raise HTTPException(status_code=400, detail="Pick one of this project's own images for its cover.")
             project["coverPin"] = url
             project["coverBy"] = actor_record(actor_for_headers(headers))
-        changed = previous != url or owner != _cover_owner(project)
+        changed = recorded != _cover_state(project)
         refresh_metadata(project, touch=False)
         project_store.commit(catalog)
         name = str(project.get("name") or "")
@@ -11972,6 +12424,7 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
     if deleting_active:
         await _broadcast_graph_sync(graph_replaced=True, reason="project-delete")
     await _broadcast_projects_changed("deleted", project_id)
+    _journal_project_change("project.deleted", result["trashedProject"], was_open=deleting_active)
     return result
 
 
@@ -12002,6 +12455,7 @@ async def restore_saved_project(project_id: str) -> dict[str, Any]:
         project_store.commit(catalog)
         result = {"project": project_metadata(project), "workspaceRevision": catalog["workspaceRevision"]}
     await _broadcast_projects_changed("restored", project_id)
+    _journal_project_change("project.restored", result["project"])
     return result
 
 
@@ -12232,7 +12686,8 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     # Checked last: a request refused for anything else must not count.
     _require_spend_approval(sub_nodes, sub_edges, run_id=run_id, settings=settings,
                             run_ids=[target] if target else _end_node_ids(sub_nodes, sub_edges))
-    canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
+    _note_run(run_id)
+    _note_run_nodes(run_id, sub_nodes)
     publish_action(
         f"Running {target}..." if target else f"Running {len(sub_nodes)} node(s)..."
     )
@@ -12256,7 +12711,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     _watch_for_cross_process_stop(run_id, task)
     _cli_runs.start(run_id, task, target, outcome)
-    return await _cli_run_response(run_id, None if wait is None else float(wait))
+    return _hide_run_key_echoes(await _cli_run_response(run_id, None if wait is None else float(wait)))
 
 
 async def _refused_cli_run(run_id: str, target: str | None, errors: list[ValidationErrorDetail]) -> dict[str, Any]:
@@ -12265,7 +12720,7 @@ async def _refused_cli_run(run_id: str, target: str | None, errors: list[Validat
     The canvas shows it as it shows a refused click on Run
     (_announce_validation_errors); the caller gets the run result's own
     shape with status "failed", each node's message in `errors`."""
-    canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
+    _note_run(run_id)
     await _announce_validation_errors(errors, run_id)
     messages = _validation_messages(errors)
     per_node = {node_id: message for node_id, message in messages.items() if node_id}
@@ -12387,6 +12842,8 @@ class _CliRuns:
 
     def start(self, run_id: str, task: asyncio.Task, target: str | None, outcome: dict[str, Any]) -> None:
         self._runs[run_id] = {"task": task, "target": target, "outcome": outcome, "started": _time_module.time()}
+        # Once forgotten here, get_run still answers from the run's events, as an agent's run.
+        _run_reports().mark_source(run_id, "agent")
         finished = [key for key, entry in self._runs.items() if entry["task"].done()]
         for key in finished[:max(0, len(finished) - self.KEEP_FINISHED)]:
             self._runs.pop(key, None)
@@ -12439,8 +12896,90 @@ async def _cli_run_response(run_id: str, wait: float | None, *, report_failure: 
 
 @app.get("/api/graph/runs/{run_id}")
 async def get_graph_run(run_id: str, wait: float = 0) -> dict[str, Any]:
-    """A CLI run's outcome; with ``wait`` (seconds, max 300), wait for it to finish first."""
-    return await _cli_run_response(run_id, max(0.0, min(float(wait), 300.0)), report_failure=True)
+    """A run's outcome; with ``wait`` (seconds, max 300), wait for it to finish first.
+
+    A run an agent or the CLI started answers as it always has. Any other run
+    (the person's Run on the canvas, an accepted proposal's run) answers from
+    the execution registry and the run's own events (services/run_reports.py),
+    in the same shape with `source: "canvas"` (`"agent"` for an agent's run
+    this route no longer keeps), `startedBy` (``{kind, name}``)
+    and `nodes`: each node's state, latest `progress`, streamed `partialText`
+    and `error`. A CLI run still going carries `nodes` too; once it ends it
+    answers exactly as its start did."""
+    wait = max(0.0, min(float(wait), 300.0))
+    reports = _run_reports()
+    if _cli_runs.get(run_id) is None and (execution_runs.get(run_id) is not None or reports.known(run_id)):
+        response = await _canvas_run_response(run_id, wait)
+        return _hide_run_key_echoes({**response, "startedBy": actor_record(canvas_events.run_actor(run_id)),
+                                     "nodes": reports.progress(run_id)})
+    response = await _cli_run_response(run_id, wait, report_failure=True)
+    if response.get("status") == "running" and reports.known(run_id):
+        response = {**response, "nodes": reports.progress(run_id),
+                    "startedBy": actor_record(canvas_events.run_actor(run_id))}
+    return _hide_run_key_echoes(response)
+
+
+def _agent_key_secrets() -> list[str]:
+    """The configured keys, for hiding wherever a provider quoted one in an
+    error agents read (services/key_echoes.py). Never fails the read."""
+    from services.key_echoes import configured_secrets
+
+    try:
+        return configured_secrets(load_settings().get("apiKeys"))
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _hide_key_echoes(text: Any, key_words: list[str]) -> Any:
+    from services.key_echoes import hide_key_echoes
+
+    return hide_key_echoes(text, key_words)
+
+
+def _hide_run_key_echoes(response: dict[str, Any]) -> dict[str, Any]:
+    from services.key_echoes import hide_in_run
+
+    return hide_in_run(response, _agent_key_secrets())
+
+
+def _run_reports():
+    from services.run_reports import run_reports
+
+    return run_reports
+
+
+_CANVAS_RUN_STATUS = {"completed": "finished", "failed": "failed", "cancelled": "cancelled",
+                      "running": "running", "cancelling": "running"}
+
+
+async def _canvas_run_response(run_id: str, wait: float) -> dict[str, Any]:
+    """A run the canvas started, as _cli_run_response words a CLI run."""
+    record = execution_runs.get(run_id)
+    if record is not None and not record.task.done():
+        # asyncio.wait never cancels the run, even when this request is cancelled.
+        await asyncio.wait({record.task}, timeout=wait)
+        await asyncio.sleep(0)  # the registry marks it terminal in a done callback
+    record = execution_runs.get(run_id)
+    made = _run_reports().outcome(run_id)
+    head = {"runId": run_id, "targetNodeId": None, "source": _run_reports().source(run_id) or "canvas"}
+    nodes_executed = made.pop("nodesExecuted", len(made["results"]) + len(made["errors"]))
+    if record is None:
+        # Pruned from the registry (it keeps the last 256): what its events said.
+        status = "failed" if made["errors"] else "finished"
+    else:
+        status = _CANVAS_RUN_STATUS.get(record.status, record.status)
+        if status == "finished" and made["errors"]:
+            status = "failed"
+    response = {**head, "status": status, **made, "nodesExecuted": nodes_executed}
+    if status == "failed" and made["errors"]:
+        failed = list(made["errors"])
+        response["error"] = (f"{failed[0]} failed: {made['errors'][failed[0]]}" if len(failed) == 1
+                             else f"{len(failed)} nodes failed: {', '.join(failed)} (errors has each message)")
+    elif status == "failed":
+        # The run raised before any node reported. Its exception stays in
+        # Nebula's log: its text can be anything, a provider's reply included.
+        response["error"] = "The run stopped with an error before any node reported one; Nebula's log has the details."
+    return response
 
 
 # Image reference suffixes recognized by /api/quick (matches the scalar
@@ -13110,9 +13649,20 @@ def _refuse_moodboard_layout(body: BaseModel) -> None:
 def _moodboard_out(board: dict) -> dict:
     """A board as the API returns it: the saved board plus ``brief``, what
     generators get from it (services/moodboard_brief.compose). ``brief`` is
-    computed on every read and never saved."""
+    computed on every read and never saved.
+
+    ``outsideImages`` (only when there are any): the ids of images that are
+    links to another site, which a board saved before writes were checked
+    can hold (services/stored_image_refs.py). They stay on the board, but
+    nothing in Nebula loads them: the app shows a placeholder, and runs and
+    the analysis leave them out. Computed on read, never saved."""
     from services.moodboard_brief import with_brief
-    return with_brief(board)
+    from services.stored_image_refs import outside_image_ids
+
+    out = with_brief(board)
+    if isinstance(out, dict) and (outside := outside_image_ids(out)):
+        out = {**out, "outsideImages": outside}
+    return out
 
 
 def _validate_project_id_param(project_id: str | None) -> None:

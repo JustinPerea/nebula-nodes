@@ -49,6 +49,7 @@ from commons.measure import ACCENT_MIN_CHROMA, ACCENT_SEPARATION, MERGE_DELTA_E,
 from services.file_access import ProtectedPathError, require_allowed_path
 from services.moodboard_brief import DEFECT_NEGATIVES, compose, generated_brief
 from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT
+from services.stored_image_refs import is_outside_link
 
 # 2: colours from Commons' measurement, ranked by weight × share, with accents
 # kept apart; the source hash leaves out the board's name.
@@ -150,8 +151,15 @@ def parse_thresholds(raw: dict[str, Any] | None) -> Thresholds:
 
 # Said when no image steers: every one is set aside or has weight 0.
 ALL_SET_ASIDE_WARNING = "Every reference is set aside, so none of them shapes the board."
+# An image saved before board writes were checked that links to another site.
+OUTSIDE_IMAGE_WARNING = ("#{number} is an image link from outside Nebula, so it wasn't analyzed and no generator "
+                         "gets it. Replace it with an upload in Moodboard Studio.")
 # The summary of a board with images none of which steers.
 NONE_STEER_SUMMARY = "No reference image steers this board: every one is set aside."
+# The same when the images that would steer are all links from outside Nebula
+# (a board saved before board writes were checked): none reaches a generator.
+OUTSIDE_ONLY_SUMMARY = ("No reference image steers this board: every one not set aside is an image link "
+                        "from outside Nebula.")
 
 
 def set_aside(image: dict[str, Any]) -> bool:
@@ -170,6 +178,16 @@ def steers(image: dict[str, Any]) -> bool:
     return not set_aside(image) and _clamp_float(image.get("weight"), 1.0, 0.0, 1.0) > 0
 
 
+def _is_outside(image: dict[str, Any]) -> bool:
+    return is_outside_link(str(image.get("url") or "").strip())
+
+
+def counts(image: dict[str, Any]) -> bool:
+    """Whether an image is one a summary counts: it steers, and it isn't a
+    link from outside Nebula (never analyzed, and no generator gets it)."""
+    return steers(image) and not _is_outside(image)
+
+
 def analyze_moodboard(moodboard: dict[str, Any], *, thresholds: Thresholds | None = None) -> dict[str, Any]:
     """Return a stable creative-direction analysis for a Moodboard dict.
 
@@ -184,8 +202,10 @@ def analyze_moodboard(moodboard: dict[str, Any], *, thresholds: Thresholds | Non
         if isinstance(img, dict)
     ]
     # The images that steer: what the summary counts and what may be
-    # representative. Weight 0 is set aside too, so it isn't counted.
-    images = [img for _, img in numbered if steers(img)]
+    # representative. Weight 0 is set aside too, so it isn't counted, and an
+    # outside link (never analyzed, never sent) isn't either.
+    images = [img for _, img in numbered if counts(img)]
+    outside_only = not images and any(steers(img) for _, img in numbered)
     notes = str(moodboard.get("notes") or "").strip()
     mode = str(moodboard.get("mode") or "look")
     strength = _clamp_float(moodboard.get("strength"), 0.7, 0.0, 1.0)
@@ -206,7 +226,6 @@ def analyze_moodboard(moodboard: dict[str, Any], *, thresholds: Thresholds | Non
         aside = set_aside(img)
         shapes = steers(img)
         any_steers |= shapes
-        local_path = resolve_moodboard_image_path(url)
         item: dict[str, Any] = {
             "number": number,
             "id": str(img.get("id") or ""),
@@ -216,6 +235,16 @@ def analyze_moodboard(moodboard: dict[str, Any], *, thresholds: Thresholds | Non
         }
         if aside:
             item["setAside"] = True
+        if is_outside_link(url):
+            # A board saved before writes were checked: the link stays on the
+            # board but is never fetched, so it isn't analyzed or representative.
+            item["status"] = "outside"
+            item["palette"] = []
+            if not aside:
+                warnings.append(OUTSIDE_IMAGE_WARNING.format(number=number))
+            per_image.append(item)
+            continue
+        local_path = resolve_moodboard_image_path(url)
         # A set-aside image that can't be read says so on its own entry; the
         # board's warnings stay those of the images that count.
         if local_path is None:
@@ -273,7 +302,8 @@ def analyze_moodboard(moodboard: dict[str, Any], *, thresholds: Thresholds | Non
         "mode": mode,
         "modeIntent": _MODE_LABELS.get(mode, _MODE_LABELS["look"]),
         "strength": strength,
-        "summary": _summary(mode, len(images), palette, accents, notes, has_images=bool(numbered)),
+        "summary": _summary(mode, len(images), palette, accents, notes, has_images=bool(numbered),
+                            outside_only=outside_only),
         "tasteProfile": _taste_profile(mode, keywords, palette),
         "styleBrief": style_brief,
         "negativePrompt": ", ".join(avoids),
@@ -413,10 +443,13 @@ _COUNTED = re.compile(r"^\d+ reference image\(s\) analyzed as ")
 _EMPTY_SUMMARY_START = "Empty moodboard;"
 
 
-def steering_count(moodboard: dict[str, Any]) -> tuple[int, bool]:
-    """How many of the board's images steer, and whether it has any."""
+def steering_count(moodboard: dict[str, Any]) -> tuple[int, bool, bool]:
+    """How many of the board's images a summary counts (they steer and
+    aren't links from outside Nebula), whether it has any images, and
+    whether every image that steers is such a link."""
     images = [img for img in moodboard.get("images") or [] if isinstance(img, dict)]
-    return sum(1 for img in images if steers(img)), bool(images)
+    count = sum(1 for img in images if counts(img))
+    return count, bool(images), count == 0 and any(steers(img) for img in images)
 
 
 def with_steering_count(moodboard: dict[str, Any]) -> dict[str, Any]:
@@ -436,9 +469,9 @@ def with_steering_count(moodboard: dict[str, Any]) -> dict[str, Any]:
     counted = _COUNTED.match(summary)
     if not counted and not summary.startswith(_EMPTY_SUMMARY_START):
         return moodboard
-    count, has_images = steering_count(moodboard)
+    count, has_images, outside_only = steering_count(moodboard)
     if count == 0:
-        fixed = NONE_STEER_SUMMARY if has_images else summary
+        fixed = OUTSIDE_ONLY_SUMMARY if outside_only else NONE_STEER_SUMMARY if has_images else summary
     elif counted:
         fixed = f"{count} reference image(s) analyzed as {summary[counted.end():]}"
     else:  # "Empty moodboard" over a board with images that steer: not this analysis's board
@@ -485,6 +518,11 @@ def resolve_moodboard_image_path(value: str) -> Path | None:
     """
     raw = str(value or "").strip()
     if not raw:
+        return None
+    # A link a browser would send to another site is never read, not even a
+    # local file behind its /api/outputs path: nothing in Nebula loads an
+    # outside link (services/stored_image_refs.py).
+    if is_outside_link(raw):
         return None
 
     parsed = urlparse(raw)
@@ -761,10 +799,14 @@ def _keywords_from_analysis(
 
 
 def _summary(mode: str, count: int, palette: list[str], accents: list[str], notes: str, *,
-             has_images: bool = False) -> str:
-    """``count``: the images that steer. ``has_images``: the board has any,
-    so none steering means every one is set aside, not an empty board."""
+             has_images: bool = False, outside_only: bool = False) -> str:
+    """``count``: the images that steer (outside links left out). ``has_images``:
+    the board has any, so none steering means every one is set aside, not an
+    empty board; ``outside_only``: the ones that would steer are all links
+    from outside Nebula."""
     if count == 0:
+        if outside_only:
+            return OUTSIDE_ONLY_SUMMARY
         if has_images:
             return NONE_STEER_SUMMARY
         return "Empty moodboard; add images before using this as a strong creative reference."

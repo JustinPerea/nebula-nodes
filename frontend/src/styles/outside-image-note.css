@@ -29,3 +29,35 @@
   justify-content: center;
   padding: 4px;
 }
+
+/* A board image that links to another site (Q98): the card, tile, side
+   panel, cover and Moodboard node keep their size and show the line in the
+   middle, in the colour of the box it sits in. */
+.moodboard-card__placeholder,
+.moodboard-tile__outside {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+  box-sizing: border-box;
+}
+
+.moodboard-tile__outside {
+  position: absolute;
+  inset: 0;
+}
+
+.moodboard-card__placeholder .outside-image-note,
+.moodboard-tile__outside .outside-image-note,
+.moodboard-board-panel__image .outside-image-note,
+.moodboard-def__cover .outside-image-note,
+.moodboard-node__preview .outside-image-note {
+  text-align: center;
+  padding: 4px;
+}
+
+.moodboard-board-panel__image .outside-image-note {
+  padding: 24px 8px;
+}

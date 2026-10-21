@@ -350,6 +350,7 @@ def test_nothing_left_to_undo_keeps_the_token(api):
     assert api.client.put(f"/api/graph/node/{prompt}", headers=PERSON, json={"params": {"value": "x"}}).status_code == 200
     result = _undone(api, token)
     assert result["status"] == "skipped" and api.graph.nodes[prompt]["params"]["value"] == "x"
+    assert "The token still works if those parts are put back" in result["message"]
     # The person puts it back the way the edit left it: now the undo goes through.
     assert api.client.put(f"/api/graph/node/{prompt}", headers=PERSON,
                           json={"params": {"value": "a fort"}}).status_code == 200
@@ -605,3 +606,290 @@ def test_an_edit_whose_canvas_is_cleared_while_it_finishes_gets_no_token(api, mo
     assert cleared["done"]
     assert applied["undo"]["token"] is None
     assert "cleared" in applied["undo"]["reason"]
+
+
+# -- a node someone ran since the edit stays (Q82) ----------------------------
+# Justin: "Your run counts as changed since: the agent's undo leaves that node
+# and says why. The agent's own runs don't count, so it can still undo its own
+# experiments." A run by the person, by another agent or by an unnamed client
+# counts; only runs the undoing agent started don't.
+
+def _ran(api, node_id: str, kind: str = "run.finished") -> bool:
+    return any(event["kind"] == kind and event.get("nodeId") == node_id for event in _events(api))
+
+
+def _person_runs(api, target: str) -> None:
+    """What the canvas sends when the person clicks Run on one node."""
+    import time
+
+    nodes = [{"id": node_id, "definitionId": node["definitionId"], "params": node.get("params") or {}, "outputs": {}}
+             for node_id, node in api.graph.nodes.items()]
+    edges = [{"id": edge["id"], "source": edge["source"], "sourceHandle": edge["sourceHandle"],
+              "target": edge["target"], "targetHandle": edge["targetHandle"]} for edge in api.graph.edges]
+    response = api.client.post("/api/execute-node", headers=CANVAS,
+                               json={"nodes": nodes, "edges": edges, "targetNodeId": target})
+    assert response.status_code == 200, response.text
+    deadline = time.monotonic() + 10
+    while not _ran(api, target) and time.monotonic() < deadline:
+        time.sleep(0.02)
+    assert _ran(api, target), f"{target} never finished: {[event['summary'] for event in _events(api)][-3:]}"
+
+
+def _agent_runs(api, target: str, headers=AGENT) -> None:
+    response = api.client.post("/api/graph/run", headers=headers, json={"wait": 10, "targetNodeId": target})
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "finished", response.text
+
+
+def _added_chain(api) -> tuple[str, str, str, dict]:
+    """n1 text-input (the person's); the agent adds +b combine-text fed by n1 and
+    +c reroute fed by +b."""
+    source = api.graph.add_node("text-input", {"value": "a lighthouse"}, position={"x": 0, "y": 0})
+    applied = _apply(api, {
+        "nodes": [{"ref": "+b", "definitionId": "combine-text"}, {"ref": "+c", "definitionId": "reroute"}],
+        "edges": [{"source": source, "sourceHandle": "text", "target": "+b", "targetHandle": "text1"},
+                  {"source": "+b", "sourceHandle": "text", "target": "+c", "targetHandle": "input"}],
+    })
+    return source, applied["idMap"]["+b"], applied["idMap"]["+c"], applied
+
+
+def test_a_node_the_person_ran_since_stays_with_its_input_wires_and_says_why(api):
+    source, combined, rerouted, applied = _added_chain(api)
+    _person_runs(api, combined)
+    output = api.graph.nodes[combined].get("outputs")
+    assert output, "the run left an output on the node"
+
+    result = _undone(api, applied["undo"]["token"])
+    assert result["status"] == "undone"
+    # The node that ran stays, with its output and the wire into it.
+    assert combined in api.graph.nodes and api.graph.nodes[combined].get("outputs") == output
+    assert (source, "text", combined, "text1") in _wires(api)
+    # The rest of the edit is still undone: the reroute and its wire go.
+    assert rerouted not in api.graph.nodes and result["removed"] == [rerouted]
+    assert (combined, "text", rerouted, "input") not in _wires(api)
+    # One skip, for the node that ran, saying who ran it.
+    assert [(item["nodeId"], item["part"], item["reason"]) for item in result["skipped"]] == [
+        (combined, "node", "ran since")]
+    item = result["skipped"][0]
+    assert item["ranBy"] == [{"kind": "person", "name": "You"}]
+    assert item["message"] == f"{combined} ran since (run by the person), so it stays"
+    assert item["message"] in result["message"]
+
+
+def test_the_agents_own_run_does_not_count(api):
+    source, combined, rerouted, applied = _added_chain(api)
+    _agent_runs(api, combined)
+    assert api.graph.nodes[combined].get("outputs")
+    result = _undone(api, applied["undo"]["token"])
+    assert result["status"] == "undone" and result["skipped"] == []
+    assert sorted(result["removed"]) == sorted([combined, rerouted])
+    assert set(api.graph.nodes) == {source} and api.graph.edges == []
+
+
+def test_another_agents_run_counts(api):
+    _source, combined, rerouted, applied = _added_chain(api)
+    _agent_runs(api, combined, headers=OTHER)
+    result = _undone(api, applied["undo"]["token"])
+    assert combined in api.graph.nodes and rerouted not in api.graph.nodes
+    [item] = result["skipped"]
+    assert (item["nodeId"], item["reason"]) == (combined, "ran since")
+    assert item["ranBy"] == [{"kind": "agent", "name": "Codex"}]
+    assert item["message"] == f"{combined} ran since (run by Codex), so it stays"
+
+
+def test_an_unnamed_clients_run_counts(api):
+    _source, combined, _rerouted, applied = _added_chain(api)
+    _agent_runs(api, combined, headers={})
+    result = _undone(api, applied["undo"]["token"])
+    assert combined in api.graph.nodes
+    [item] = result["skipped"]
+    assert item["reason"] == "ran since" and item["ranBy"] == [{"kind": "anonymous", "name": "Unnamed client"}]
+
+
+def test_a_run_that_started_before_the_edit_does_not_count(api):
+    """A run already going when the edit landed: its node starts after the
+    edit, but the run doesn't count (it was asked for before the edit)."""
+    prompt, _ = _seed(api)
+    api.book.run_started("run-early", actor={"kind": "person"}, project_id=api.project_id)
+    applied = _apply(api, {"params": [{"nodeId": prompt, "params": {"value": "a fort"}}]})
+    api.book.node_ran("run-early", prompt, actor={"kind": "person"}, project_id=api.project_id)
+    result = _undone(api, applied["undo"]["token"])
+    assert result["changed"] == [prompt] and result["skipped"] == []
+    assert api.graph.nodes[prompt]["params"] == {"value": "a lighthouse"}
+
+
+def test_a_run_still_going_when_the_undo_comes_counts(api, monkeypatch):
+    """Started after the edit and still running: its nodes count even before
+    the engine reaches them."""
+    import main as main_module
+
+    _source, combined, rerouted, applied = _added_chain(api)
+    api.book.run_started("run-late", actor={"kind": "person"}, project_id=api.project_id)
+    api.book.run_nodes("run-late", [combined])
+    monkeypatch.setattr(main_module, "_run_is_active", lambda run_id: run_id == "run-late")
+    result = _undone(api, applied["undo"]["token"])
+    assert combined in api.graph.nodes and rerouted not in api.graph.nodes
+    assert [item["reason"] for item in result["skipped"]] == ["ran since"]
+
+
+def test_a_finished_runs_planned_nodes_that_never_started_do_not_count(api):
+    _source, combined, rerouted, applied = _added_chain(api)
+    api.book.run_started("run-gated", actor={"kind": "person"}, project_id=api.project_id)
+    api.book.run_nodes("run-gated", [combined, rerouted])
+    result = _undone(api, applied["undo"]["token"])
+    assert result["skipped"] == [] and combined not in api.graph.nodes
+
+
+def test_changed_and_ran_is_one_skip(api):
+    """The person changed the added node and then ran it: one clear skip."""
+    _source, combined, _rerouted, applied = _added_chain(api)
+    api.graph.set_label(combined, "Mine")
+    _person_runs(api, combined)
+    result = _undone(api, applied["undo"]["token"])
+    assert [(item["nodeId"], item["reason"]) for item in result["skipped"]] == [(combined, "ran since")]
+    assert api.graph.nodes[combined]["label"] == "Mine"
+
+
+def test_an_existing_node_that_ran_keeps_the_agents_params_name_position_and_input_wires(api):
+    """The agent changed n2 (a node already there) and rewired its input; the
+    person ran n2 since: n2 stays exactly as it ran, in one skip, and the edit's
+    change to another node still goes back."""
+    first = api.graph.add_node("text-input", {"value": "a lighthouse"}, position={"x": 0, "y": 0})
+    second = api.graph.add_node("text-input", {"value": "a fort"}, position={"x": 0, "y": 200})
+    combined = api.graph.add_node("combine-text", {}, position={"x": 400, "y": 0})
+    other = api.graph.add_node("text-input", {"value": "spare"}, position={"x": 0, "y": 400})
+    api.graph.connect(first, "text", combined, "text1")
+    applied = _apply(api, {
+        "params": [{"nodeId": combined, "params": {"separator": " / "}},
+                   {"nodeId": other, "params": {"value": "changed"}}],
+        "rename": {combined: "Joined"},
+        "move": {combined: {"x": 600, "y": 100}},
+        "unwire": [{"source": first, "sourceHandle": "text", "target": combined, "targetHandle": "text1"}],
+        "edges": [{"source": second, "sourceHandle": "text", "target": combined, "targetHandle": "text1"}],
+    })
+    _person_runs(api, combined)
+    result = _undone(api, applied["undo"]["token"])
+    assert result["status"] == "undone"
+    node = api.graph.nodes[combined]
+    assert node["params"].get("separator") == " / " and node["label"] == "Joined"
+    assert node["position"] == {"x": 600.0, "y": 100.0}
+    assert (second, "text", combined, "text1") in _wires(api)
+    assert (first, "text", combined, "text1") not in _wires(api)
+    # second ran too (it feeds combined), but the edit didn't touch second itself.
+    ran = [item for item in result["skipped"] if item["reason"] == "ran since"]
+    assert [item["nodeId"] for item in ran] == [combined]
+    assert set(ran[0]["left"]) == {"params", "name", "position", "wires in"}
+    assert len(result["skipped"]) == 1
+    # The edit's other change still goes back.
+    assert result["changed"] == [other] and api.graph.nodes[other]["params"] == {"value": "spare"}
+
+
+def test_a_wire_out_of_a_node_that_ran_follows_the_usual_rules(api):
+    """The agent wired n1 (which the person then ran) into an existing reroute:
+    the wire is out of n1 and into a node that didn't run, so it goes."""
+    source = api.graph.add_node("text-input", {"value": "a lighthouse"}, position={"x": 0, "y": 0})
+    rerouted = api.graph.add_node("reroute", {}, position={"x": 400, "y": 0})
+    applied = _apply(api, {"params": [{"nodeId": source, "params": {"value": "a fort"}}],
+                           "edges": [{"source": source, "sourceHandle": "text",
+                                      "target": rerouted, "targetHandle": "input"}]})
+    _person_runs(api, source)
+    result = _undone(api, applied["undo"]["token"])
+    assert api.graph.nodes[source]["params"] == {"value": "a fort"}
+    assert api.graph.edges == [] and len(result["unwired"]) == 1
+    assert [(item["nodeId"], item["reason"]) for item in result["skipped"]] == [(source, "ran since")]
+
+
+def test_a_wire_out_of_an_added_node_that_ran_goes(api):
+    """The agent added +r and wired it into a reroute that was already there;
+    the person ran only +r. +r stays, but the wire out of it into a node that
+    didn't run is unwired, the same as for a node that was already there."""
+    rerouted = api.graph.add_node("reroute", {}, position={"x": 400, "y": 0})
+    applied = _apply(api, {"nodes": [{"ref": "+r", "definitionId": "text-input", "params": {"value": "a fort"}}],
+                           "edges": [{"source": "+r", "sourceHandle": "text",
+                                      "target": rerouted, "targetHandle": "input"}]})
+    source = applied["idMap"]["+r"]
+    _person_runs(api, source)
+    result = _undone(api, applied["undo"]["token"])
+    assert result["status"] == "undone"
+    assert source in api.graph.nodes and rerouted in api.graph.nodes
+    assert api.graph.edges == [] and len(result["unwired"]) == 1
+    assert [(item["nodeId"], item["reason"], item["left"]) for item in result["skipped"]] == [
+        (source, "ran since", ["node"])]
+    # The reply counts the wire it took away, and lists the node once.
+    assert result["message"] == f"Undone: unwired 1. Left as is: {source} ran since (run by the person), so it stays."
+
+
+@pytest.mark.parametrize("runner", ["person", "Codex"])
+def test_nothing_but_a_node_that_ran_is_skipped_and_retrying_wont_help(api, runner):
+    """A run can't be put back, so the reply doesn't promise the token will work
+    once parts are put back."""
+    source = api.graph.add_node("text-input", {"value": "a lighthouse"}, position={"x": 0, "y": 0})
+    applied = _apply(api, {"nodes": [{"ref": "+b", "definitionId": "combine-text"}],
+                           "edges": [{"source": source, "sourceHandle": "text", "target": "+b",
+                                      "targetHandle": "text1"}]})
+    combined = applied["idMap"]["+b"]
+    if runner == "person":
+        _person_runs(api, combined)
+    else:
+        _agent_runs(api, combined, headers=OTHER)
+    result = _undone(api, applied["undo"]["token"])
+    assert result["status"] == "skipped" and combined in api.graph.nodes
+    assert "run since" in result["message"]
+    assert [item["reason"] for item in result["skipped"]] == ["ran since"]
+    assert "still works" not in result["message"]
+    assert "stays for good" in result["message"]
+    assert result["message"].count(f"{combined} ran since") == 1
+
+
+def test_a_changed_part_and_a_node_that_ran_say_only_the_change_can_be_retried(api):
+    prompt, _ = _seed(api)
+    applied = _apply(api, {"params": [{"nodeId": prompt, "params": {"value": "a fort"}}],
+                           "nodes": [{"ref": "+b", "definitionId": "text-input", "params": {"value": "x"}}]})
+    added = applied["idMap"]["+b"]
+    assert api.client.put(f"/api/graph/node/{prompt}", headers=PERSON,
+                          json={"params": {"value": "mine"}}).status_code == 200
+    _person_runs(api, added)
+    result = _undone(api, applied["undo"]["token"])
+    assert result["status"] == "skipped"
+    assert sorted(item["reason"] for item in result["skipped"]) == ["changed since", "ran since"]
+    assert "still works if the parts that changed are put back" in result["message"]
+    assert "stays for good" in result["message"]
+
+
+def test_the_edits_undo_summary_says_runs_count(api):
+    _source, _combined, _rerouted, applied = _added_chain(api)
+    assert "changed or run since" in applied["undo"]["summary"]
+
+
+def test_the_book_tells_runs_since_an_edit_apart():
+    book = CanvasUndoBook()
+    person, codex = {"kind": "person"}, {"kind": "agent", "id": "agent-codex", "name": "Codex"}
+    claude = {"kind": "agent", "id": "agent-claude", "name": "Claude Code"}
+    book.run_started("before", actor=person, project_id="p1")
+    since = book.mark()
+    book.node_ran("before", "n3", actor=person, project_id="p1")
+    assert book.ran_since("p1", "n3", since=since, agent_id="agent-claude") == []
+    book.run_started("mine", actor=claude, project_id="p1")
+    book.node_ran("mine", "n3", actor=claude, project_id="p1")
+    assert book.ran_since("p1", "n3", since=since, agent_id="agent-claude") == []
+    book.run_started("theirs", actor=codex, project_id="p1")
+    book.node_ran("theirs", "n3", actor=codex, project_id="p1")
+    assert book.ran_since("p1", "n3", since=since, agent_id="agent-claude") == [
+        {"kind": "agent", "id": "agent-codex", "name": "Codex"}]
+    # Another project's n3 is another node.
+    assert book.ran_since("p2", "n3", since=since, agent_id="agent-claude") == []
+    # A run Nebula never saw start counts from when its node started.
+    later = book.mark()
+    book.node_ran("unknown", "n4", actor=person, project_id="p1")
+    assert book.ran_since("p1", "n4", since=later, agent_id="agent-claude") == [{"kind": "person"}]
+
+
+def test_the_mcp_tool_and_docs_say_runs_count():
+    from pathlib import Path
+
+    import mcp_server
+
+    assert "ran since" in (mcp_server.undo_canvas_edit.__doc__ or "")
+    root = Path(__file__).resolve().parents[2]
+    assert "ran since" in (root / "docs" / "MCP-SETUP.md").read_text()
+    assert "ran" in (root / "skills" / "nebula" / "SKILL.md").read_text().split("nebula undo <token>")[1][:600]

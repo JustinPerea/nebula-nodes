@@ -29,6 +29,7 @@ from cli.client import NebulaClient
 from cli.commands import moodboard as moodboard_cmd
 from cli.commands import trash as trash_cmd
 from nebula_api import NebulaAPI, NebulaAPIError
+from tests.conftest import stored_image_urls
 
 
 def _png(path: Path, color=(200, 80, 40), size=(24, 16)) -> Path:
@@ -251,7 +252,8 @@ def test_list_and_show_name_the_boards_project(app, tmp_path, canvas_project, ca
     assert label in _cli(app, ["moodboard", "list"], capsys)
     assert f"· {label}" in _cli(app, ["moodboard", "show", board["id"]], capsys)
     # A board under an id that isn't a canvas project shows the id.
-    stray = MoodboardStore().create(name="Stray", images=[{"url": "/api/outputs/a.png"}], projectId="nebula_nodes")
+    stray = MoodboardStore().create(name="Stray", images=[{"url": stored_image_urls(1, name="stray")[0]}],
+                                    projectId="nebula_nodes")
     assert "project nebula_nodes)" in _cli(app, ["moodboard", "list", "--project", "nebula_nodes"], capsys)
     assert "· project nebula_nodes\n" in _cli(app, ["moodboard", "show", stray["id"]], capsys)
 
@@ -398,10 +400,31 @@ def test_download_works_inside_a_running_event_loop():
 
 
 def test_the_backend_has_no_url_fetching_for_boards(app):
-    # A link handed to the backend directly stays a string: it isn't downloaded.
-    board = app.api.request("POST", "/api/moodboards", json={
-        "name": "Direct", "images": [{"url": "https://example.com/never-fetched.png"}]})
-    assert board["images"][0]["url"] == "https://example.com/never-fetched.png"
+    # A link handed to the backend directly is refused (Q98), not downloaded:
+    # only this process downloads, then uploads (services/stored_image_refs.py).
+    with pytest.raises(NebulaAPIError) as refused:
+        app.api.request("POST", "/api/moodboards", json={
+            "name": "Direct", "images": [{"url": "https://example.com/never-fetched.png"}]})
+    assert refused.value.status == 422
+    assert "outside Nebula" in str(refused.value)
+    assert boards.list_boards(app.api) == []
+
+
+def test_cli_add_with_a_link_downloads_and_uploads_it(app, web, tmp_path, capsys):
+    """`nebula moodboard add <board> <https link>` goes the MCP tools' way:
+    this process downloads the link and uploads the bytes, so the board
+    holds Nebula's own copy and the backend never sees the link."""
+    web_root, base = web
+    (web_root / "more.png").write_bytes(_png_bytes((40, 200, 120)))
+    first = _png(tmp_path / "first.png")
+    _cli(app, ["moodboard", "new", "Linked", str(first)], capsys)
+
+    _cli(app, ["moodboard", "add", "Linked", f"{base}/more.png"], capsys)
+
+    images = boards.get_board(app.api, "Linked")["images"]
+    assert len(images) == 2
+    assert all(image["url"].startswith("/api/outputs/chat-uploads/") for image in images)
+    assert not any(base in image["url"] for image in images)
 
 
 # -- agents' local files -----------------------------------------------------------

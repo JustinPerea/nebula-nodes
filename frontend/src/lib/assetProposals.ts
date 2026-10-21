@@ -23,8 +23,12 @@ export interface AssetProposalView {
   kind: AssetProposalKind;
   target: { kind: AssetProposalKind; id: string; name: string };
   change: {
-    /** A project's cover: `null` is the automatic one. */
-    cover?: { from: string | null; to: string | null; fromBy: { kind: string; name: string } | null };
+    /** A project's cover: `null` is the automatic one. `lostPin`: the pin it
+     * was proposed against while that pin's image is gone (it no longer
+     * counts, Q90 a), so `from` is the automatic cover. `auto`: the image the
+     * automatic cover shows now, or null when the project has none. */
+    cover?: { from: string | null; to: string | null; fromBy: { kind: string; name: string } | null;
+      lostPin?: { url: string; by: { kind: string; name: string } | null }; auto?: string | null };
     sendNotes?: { from: boolean; to: boolean };
     /** A Commons reference's edits (kind commons), the agent's own values. */
     edits?: CommonsEdit[];
@@ -38,6 +42,8 @@ export interface AssetProposalView {
   expiresAt: number;
   reason: string | null;
   applied: Record<string, unknown> | null;
+  /** The Update it posted in the corner (Q92 a), or null with no project open. */
+  update?: { id: string; projectId: string } | null;
 }
 
 /** Browser sockets only: a new proposal plus the key that lets this tab decide it. */

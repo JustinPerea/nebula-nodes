@@ -43,6 +43,8 @@ vi.mock('../src/lib/agentNotes', async (importOriginal) => ({
 const { CanvasAgentNotes } = await import('../src/components/agent-notes/AgentNotesCorner');
 const { useAgentNotesStore } = await import('../src/store/agentNotesStore');
 const { useUIStore } = await import('../src/store/uiStore');
+const { useProjectStore } = await import('../src/store/projectStore');
+const { useAssetProposalsStore } = await import('../src/store/assetProposalsStore');
 
 const CLAUDE = { kind: 'agent', id: 'claude', name: 'Claude', color: '#E8825A' } as const;
 const CODEX = { kind: 'agent', id: 'codex', name: 'Codex', color: '#5AA9E8' } as const;
@@ -385,5 +387,96 @@ describe('the corner on the canvas', () => {
     expect(document.body.classList.contains('agent-notes-reserved')).toBe(true);
     unmount();
     expect(document.body.classList.contains('agent-notes-reserved')).toBe(false);
+  });
+});
+
+describe('an asset proposal\'s Update (Q92 a)', () => {
+
+  function ask(target: 'project' | 'moodboard' | 'commons', targetId: string, overrides: Partial<AgentNote> = {}) {
+    const text = { project: 'Claude asks to change the cover of Dusk', moodboard: 'Claude asks to send Dusk board\'s notes to generators',
+      commons: 'Claude asks to change a reference in the Commons' }[target];
+    return note(`an_${target}`, {
+      source: 'nebula', about: 'proposal', text, parts: [{ text }], refs: [],
+      actions: [{ label: 'Review', op: { kind: 'proposal.review', proposalId: 'pa_1', target, targetId } }],
+      ...overrides,
+    });
+  }
+
+  function reviewIn(entry: HTMLElement) {
+    fireEvent.click(within(entry).getByRole('button', { name: 'Review' }));
+  }
+
+  function openEntry(): HTMLElement {
+    fireEvent.click(chip());
+    return within(screen.getByRole('dialog', { name: 'Updates' })).getAllByRole('listitem')[0];
+  }
+
+  beforeEach(() => {
+    useAssetProposalsStore.getState().clear();
+    useProjectStore.setState({ goHome: vi.fn(async () => {}) });
+  });
+
+  it('says it waits for the person and Review opens the Projects screen at that card', async () => {
+    render(<CanvasAgentNotes />);
+    sync([ask('project', 'dusk')]);
+    const entry = openEntry();
+    expect(entry.textContent).toContain('waiting for your OK');
+    expect(entry.textContent).toContain('Claude asks to change the cover of Dusk');
+    // Not a canvas proposal: never "Expired" for want of one on the canvas.
+    expect(entry.textContent).not.toContain('Expired');
+    reviewIn(entry);
+    await vi.waitFor(() => expect(useProjectStore.getState().goHome).toHaveBeenCalledTimes(1));
+    expect(useAssetProposalsStore.getState().review).toMatchObject({ kind: 'project', targetId: 'dusk' });
+  });
+
+  it('Review on a board\'s ask opens Moodboard Studio on that board', async () => {
+    const enter = vi.fn();
+    useUIStore.setState({ enterMoodboardEditor: enter });
+    render(<CanvasAgentNotes />);
+    sync([ask('moodboard', 'mb1')]);
+    reviewIn(openEntry());
+    await vi.waitFor(() => expect(enter).toHaveBeenCalledWith('mb1'));
+    expect(useAssetProposalsStore.getState().review).toMatchObject({ kind: 'moodboard', targetId: 'mb1' });
+  });
+
+  it('Review on a Commons ask opens the Commons on that reference, or says it is off', async () => {
+    const enterCommons = vi.fn();
+    useUIStore.setState({ enterCommons, commonsEnabled: true });
+    render(<CanvasAgentNotes />);
+    sync([ask('commons', 'ast_1')]);
+    reviewIn(openEntry());
+    await vi.waitFor(() => expect(enterCommons).toHaveBeenCalledTimes(1));
+    expect(useAssetProposalsStore.getState().review).toMatchObject({ kind: 'commons', targetId: 'ast_1' });
+
+    cleanup();
+    useAssetProposalsStore.getState().clear();
+    useUIStore.setState({ commonsEnabled: false });
+    render(<CanvasAgentNotes />);
+    sync([ask('commons', 'ast_1')]);
+    reviewIn(openEntry());
+    await vi.waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Commons'));
+    expect(useAssetProposalsStore.getState().review).toBeNull();
+  });
+
+  it('once the proposal closed, says how in place of Review, greyed', () => {
+    render(<CanvasAgentNotes />);
+    sync([ask('project', 'dusk', { readAt: '2026-10-20T12:30:00.000Z', resolvedAt: '2026-10-20T12:30:00.000Z',
+      outcome: 'Accepted: the cover changed' })]);
+    const entry = openEntry();
+    expect(within(entry).queryByRole('button', { name: 'Review' })).toBeNull();
+    expect(entry.textContent).toContain('Accepted: the cover changed');
+    expect(entry.textContent).not.toContain('waiting for your OK');
+    expect(entry.getAttribute('data-state')).toBe('done');
+  });
+
+  it('a resolved message from the socket replaces the open one', () => {
+    render(<CanvasAgentNotes />);
+    const open = ask('project', 'dusk');
+    sync([open]);
+    emit({ type: 'agentNotes', surface: 'canvas', op: 'resolved', projectId: 'p1', ids: [open.id], unread: 0, at: 3,
+      note: { ...open, readAt: '2026-10-20T12:30:00.000Z', resolvedAt: '2026-10-20T12:30:00.000Z', outcome: 'Withdrawn by Claude' } });
+    const entry = openEntry();
+    expect(entry.textContent).toContain('Withdrawn by Claude');
+    expect(within(entry).queryByRole('button', { name: 'Review' })).toBeNull();
   });
 });

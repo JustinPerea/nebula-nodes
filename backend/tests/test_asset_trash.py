@@ -24,6 +24,7 @@ from services.character_store import CharacterStore
 from services.moodboard_store import MoodboardStore
 from tests.conftest import FORGED_ORIGIN, PERSON
 from tests.test_asset_reference_params import AGENT, CHARACTER, MCP, _board, _changed, api  # noqa: F401
+from tests.conftest import stored_image_urls
 
 
 
@@ -32,7 +33,7 @@ from tests.test_asset_reference_params import AGENT, CHARACTER, MCP, _board, _ch
 def test_delete_moves_the_file_untouched_and_restore_puts_it_back(tmp_path, monkeypatch):
     monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path))
     store = MoodboardStore()
-    board = store.create(name="Warm", images=[{"url": "/api/outputs/a.png"}], projectId="proj1")
+    board = store.create(name="Warm", images=[{"url": stored_image_urls(1, name="trash")[0]}], projectId="proj1")
     live = tmp_path / "proj1" / f"{board['id']}.json"
     original = live.read_bytes()
 
@@ -75,7 +76,7 @@ def test_a_record_without_its_file_is_ignored(tmp_path, monkeypatch):
     """A crash between writing the record and moving the file leaves the board live."""
     monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path))
     store = MoodboardStore()
-    board = store.create(name="Half", images=[{"url": "/api/outputs/a.png"}])
+    board = store.create(name="Half", images=[{"url": stored_image_urls(1, name="trash")[0]}])
     (tmp_path / ".trash").mkdir()
     (tmp_path / ".trash" / f"{board['id']}{asset_trash.RECORD_SUFFIX}").write_text(json.dumps({"id": board["id"]}))
     assert store.trashed(board["id"]) is None
@@ -86,7 +87,7 @@ def test_a_record_without_its_file_is_ignored(tmp_path, monkeypatch):
 def test_restore_refuses_when_the_id_is_live_again(tmp_path, monkeypatch):
     monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path))
     store = MoodboardStore()
-    board = store.create(name="Twice", images=[{"url": "/api/outputs/a.png"}])
+    board = store.create(name="Twice", images=[{"url": stored_image_urls(1, name="trash")[0]}])
     store.delete(board["id"])
     (tmp_path / "_global" / f"{board['id']}.json").write_text(json.dumps(board))
     with pytest.raises(asset_trash.AlreadyLive):
@@ -202,7 +203,8 @@ def test_only_the_person_deletes_for_good(api, headers):
 def test_the_person_deletes_one_for_good_or_empties_a_scope(api):
     keep, purge, other = _board(api, "Keep"), _board(api, "Purge"), _board(api, "Other")
     project_board = api.client.post("/api/moodboards", json={
-        "name": "In project", "images": [{"url": "/api/outputs/x.png"}], "projectId": api.project_id}).json()
+        "name": "In project", "images": [{"url": stored_image_urls(1, name="trash")[0]}],
+        "projectId": api.project_id}).json()
     for board in (purge, other, project_board):
         api.client.delete(f"/api/moodboards/{board['id']}")
 

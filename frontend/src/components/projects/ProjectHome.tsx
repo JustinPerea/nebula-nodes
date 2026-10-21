@@ -20,6 +20,8 @@ export interface ProjectSummary {
   cover?: ProjectCover | null;
   /** Who pinned the cover; none on a pin from before it was recorded (the person's). */
   coverBy?: { kind: string; name: string };
+  /** A pin whose image left the project (Q90 a): it no longer counts, and the cover is automatic. */
+  coverLostPin?: { url: string; by: { kind: string; name: string } | null };
   createdBy?: { kind: 'agent'; name: string };
 }
 
@@ -119,6 +121,8 @@ function CoverPicker({ project, busy, load, onPin, onClose }: {
           onClick={() => { onPin(null); onClose(); }}>Automatic</button>
         <button type="button" className="project-home__cover-close" aria-label="Close cover picker" onClick={onClose}><X aria-hidden="true" /></button>
       </div>
+      {choices?.lostPin && <p className="project-home__cover-note">
+        {choices.lostPin.by?.kind === 'person' ? 'The image you pinned' : 'The pinned image'} is no longer in this project, so the cover is automatic.</p>}
       {failed ? <p className="project-home__cover-note">{failed}</p>
         : !choices ? <p className="project-home__cover-note">Loading images…</p>
           : choices.images.length === 0 ? <p className="project-home__cover-note">No images in this project yet.</p>

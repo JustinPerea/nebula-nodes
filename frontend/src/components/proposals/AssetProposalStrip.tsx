@@ -1,13 +1,16 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { ArrowRight } from 'lucide-react';
 import { backendAssetUrlSync } from '../../lib/backend';
+import { takeReview } from '../../store/assetProposalReviewRequest';
 import type { AssetProposalKind, AssetProposalView, CommonsEdit } from '../../lib/assetProposals';
 import { proposalsFor, useAssetProposalsStore, type AssetProposalEntry } from '../../store/assetProposalsStore';
 import '../../styles/asset-proposals.css';
 
 /** How often the strip rechecks expiry while one is showing. */
 const TICK_MS = 15_000;
+/** How long the Review ring stays on the strip (asset-proposals.css). */
+const REVIEW_RING_MS = 1600;
 
 /** Region and membership ids the screen can name (CommonsDetail: a region's label, a collection's name). */
 export type ProposalNames = Readonly<Record<string, string>>;
@@ -41,20 +44,31 @@ function CoverChange({ view }: { view: AssetProposalView }) {
   const cover = view.change.cover;
   if (!cover) return null;
   const by = cover.fromBy;
+  // A pin whose image left the project no longer counts (Q90 a): the backend
+  // sends `from: null` then, so this never says "You pinned" over a missing image.
   const caption = !cover.from ? 'Automatic now' : by?.kind === 'person' ? 'You pinned' : `${by?.name ?? 'An agent'} set`;
-  const side = (url: string | null, text: string, proposed: boolean) => (
-    <figure className={`asset-proposal__cover${proposed ? ' asset-proposal__cover--to' : ''}`}>
-      {url ? <img src={backendAssetUrlSync(url)} alt="" loading="lazy" draggable={false} />
-        : <span className="asset-proposal__cover-auto">Newest image</span>}
-      <figcaption>{text}</figcaption>
-    </figure>
-  );
+  const lost = cover.lostPin ? (cover.lostPin.by?.kind === 'person' ? 'The image you pinned'
+    : `The image ${cover.lostPin.by?.name ?? 'an agent'} set`) : null;
+  // The automatic side shows the image the automatic cover is now, when the project has one.
+  const side = (pick: string | null, text: string, proposed: boolean) => {
+    const url = pick ?? cover.auto ?? null;
+    return (
+      <figure className={`asset-proposal__cover${proposed ? ' asset-proposal__cover--to' : ''}`}>
+        {url ? <img src={backendAssetUrlSync(url)} alt="" loading="lazy" draggable={false} />
+          : <span className="asset-proposal__cover-auto">Newest image</span>}
+        <figcaption>{text}</figcaption>
+      </figure>
+    );
+  };
   return (
-    <div className="asset-proposal__covers">
-      {side(cover.from, caption, false)}
-      <ArrowRight className="asset-proposal__arrow" aria-hidden="true" />
-      {side(cover.to, cover.to ? 'Proposed' : 'Automatic', true)}
-    </div>
+    <>
+      <div className="asset-proposal__covers">
+        {side(cover.from, caption, false)}
+        <ArrowRight className="asset-proposal__arrow" aria-hidden="true" />
+        {side(cover.to, cover.to ? 'Proposed' : 'Automatic', true)}
+      </div>
+      {lost && <p className="asset-proposal__lost">{lost} is no longer in this project, so the cover is automatic.</p>}
+    </>
   );
 }
 
@@ -170,7 +184,7 @@ function ProposalCard({ entry, now, names }: { entry: AssetProposalEntry; now: n
   const words = labels(view);
   const busy = Boolean(pending || closing);
   return (
-    <div role="group" aria-label={`${view.agent.name} ${said}`}
+    <div role="group" aria-label={`${view.agent.name} ${said}`} tabIndex={-1}
       className={`asset-proposal${closing ? ' asset-proposal--closing' : ''}`}
       style={{ '--agent-color': view.agent.color } as CSSProperties}>
       <div className="asset-proposal__who">
@@ -204,6 +218,27 @@ export function AssetProposalStrip({ kind, targetId, names = NO_NAMES }: { kind:
   const entries = useAssetProposalsStore(useShallow((state) => proposalsFor(state, kind, targetId)));
   const [now, setNow] = useState(() => Date.now());
   const showing = entries.length > 0;
+  const root = useRef<HTMLDivElement>(null);
+  const asked = useAssetProposalsStore((state) => state.review?.kind === kind && state.review.targetId === targetId);
+  const ringTimer = useRef<number | null>(null);
+  // Review on this proposal's Update (Q92 a): come into view and take focus,
+  // with a ring that springs in and settles (asset-proposals.css).
+  useEffect(() => {
+    const element = root.current;
+    if (!asked || !showing || !element) return;
+    if (!takeReview(kind, targetId)) return;
+    element.scrollIntoView({ block: 'center', inline: 'nearest' });
+    element.querySelector<HTMLElement>('[role="group"]')?.focus({ preventScroll: true });
+    element.dataset.review = 'true';
+    if (ringTimer.current !== null) window.clearTimeout(ringTimer.current);
+    ringTimer.current = window.setTimeout(() => {
+      ringTimer.current = null;
+      delete element.dataset.review;
+    }, REVIEW_RING_MS);
+  }, [asked, showing, kind, targetId]);
+  useEffect(() => () => {
+    if (ringTimer.current !== null) window.clearTimeout(ringTimer.current);
+  }, []);
   useEffect(() => {
     if (!showing) return;
     const timer = window.setInterval(() => {
@@ -214,7 +249,7 @@ export function AssetProposalStrip({ kind, targetId, names = NO_NAMES }: { kind:
   }, [showing]);
   if (!showing) return null;
   return (
-    <div className="asset-proposals">
+    <div className="asset-proposals" ref={root}>
       {entries.map((entry) => <ProposalCard key={entry.view.id} entry={entry} now={now} names={names} />)}
     </div>
   );

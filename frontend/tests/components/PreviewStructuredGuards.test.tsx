@@ -17,10 +17,13 @@ import { cameraPoseFixture, worldV1Fixture } from '../fixtures/spatialValues';
 // already draws stay exactly as they were, and only undrawn values get the
 // structured block.
 
-vi.mock('../../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn(), disconnect: vi.fn() } }));
+vi.mock('../../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn(() => () => {}), disconnect: vi.fn() } }));
 vi.mock('../../src/lib/api', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../src/lib/api')>(),
   getSettings: vi.fn(async () => ({ favorites: {} })),
+  // The Moodboard node's settings list the boards it can pick.
+  fetchMoodboards: vi.fn(async () => []),
+  fetchMoodboard: vi.fn(async () => null),
 }));
 vi.mock('../../src/lib/worldDownload', () => ({ downloadWorldAsset: vi.fn() }));
 vi.mock('@xyflow/react', async (importOriginal) => ({
@@ -226,6 +229,27 @@ describe('Inspector last output', () => {
     const thumbs = within(section).getAllByRole('img');
     expect(thumbs).toHaveLength(6);
     for (const img of thumbs) expect(img).not.toHaveAttribute('loading', 'lazy');
+  });
+
+  // Q98: a Moodboard node run before board images were checked could save an
+  // old board's outside link in `representative_images`. Opening that
+  // project never loads it: the Last output shows the placeholder instead.
+  it('never loads an outside link a Moodboard node saved in its representative images', () => {
+    const { container } = renderInspector({
+      representative_images: { type: 'Array', value: ['https://example.com/x.png', '/api/outputs/a.png'] },
+    }, { definitionId: 'nebula-moodboard', label: 'Moodboard' });
+    const section = screen.getByRole('region', { name: 'Last output' });
+    const thumbs = within(section).getAllByRole('img');
+    expect(thumbs).toHaveLength(1);
+    expect(thumbs[0].getAttribute('src')).toContain('/api/outputs/a.png');
+    expect(within(section).getByText('Image link from outside Nebula')).toBeInTheDocument();
+    expect(container.innerHTML).not.toContain('example.com');
+  });
+
+  it('still draws a remote image another node returned', () => {
+    renderInspector({ out: { type: 'Array', value: ['https://cdn.example.com/a.png'] } });
+    const section = screen.getByRole('region', { name: 'Last output' });
+    expect(within(section).getByRole('img')).toHaveAttribute('src', 'https://cdn.example.com/a.png');
   });
 
   it('wraps a long board name whole instead of cutting it', () => {

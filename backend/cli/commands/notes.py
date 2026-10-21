@@ -40,10 +40,14 @@ def _clock(at: Any) -> str:
 def format_note(note: dict[str, Any]) -> str:
     """`12:14  Codex · since its last turn  You moved n2 (n2, n4)`."""
     author = (note.get("author") or {}).get("name") or "Agent"
-    label = _ABOUT_LABELS.get(str(note.get("about") or ""))
+    # A resolved proposal's Update waits for nothing any more.
+    label = None if note.get("resolvedAt") else _ABOUT_LABELS.get(str(note.get("about") or ""))
     who = f"{author} · {label}" if label else author
     state = ""
-    if note.get("dismissedAt"):
+    if note.get("outcome"):
+        # An asset proposal's Update once the proposal closed (Q92 a): how it ended.
+        state = f" [{note['outcome']}]"
+    elif note.get("dismissedAt"):
         state = " [dismissed]"
     elif not note.get("readAt"):
         state = " [unread]"

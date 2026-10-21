@@ -215,13 +215,16 @@ def _imported_membership(store, collection_id: str, url: str) -> dict | None:
     return dict(row) if row else None
 
 
-def import_moodboards(store, *, fetch=None) -> dict:
+def import_moodboards(store) -> dict:
     """Idempotent: an image a previous run imported into the board's collection
-    is neither re-read, re-fetched nor re-sighted. Calls asyncio.run for remote
-    URLs, so it must run in a worker thread, never on the event loop."""
+    is neither re-read nor re-sighted. Board images are Nebula's own files
+    (an upload or an output, read from the output folder); one that links to
+    another site, which a board saved before board writes were checked can
+    hold, is skipped and never fetched (services/stored_image_refs.py). It
+    reads files, so it runs in a worker thread, never on the event loop."""
     from commons import records
+    from services.stored_image_refs import is_outside_link
 
-    fetch = fetch or net.safe_fetch
     summary: dict[str, Any] = {"collections": 0, "added": 0, "skipped": [], "comments": 0}
     for board in _moodboards():
         collection = store.ensure_collection(board.get("name") or board["id"], "moodboard",
@@ -235,24 +238,28 @@ def import_moodboards(store, *, fetch=None) -> dict:
                 memberships.append(previous)
                 continue
             source = {"kind": "moodboard", "url": url, "source_date": board.get("createdAt")}
+            if is_outside_link(url):
+                # A board saved before board writes were checked can hold a
+                # link to another site: nothing in Nebula fetches one
+                # (services/stored_image_refs.py), this import included.
+                summary["skipped"].append({"url": url, "reason": (
+                    "an image link from outside Nebula, not fetched: upload the image to the board instead")})
+                continue
             try:
-                if url.startswith("/api/outputs/"):
-                    path = _output_path(url)
+                # Not outside, so an http(s) url here is a loopback one to /api/outputs.
+                output = urlsplit(url).path if url.lower().startswith(("http://", "https://")) else url
+                if output.startswith("/api/outputs/"):
+                    path = _output_path(output)
                     if path is None:
                         summary["skipped"].append({"url": url, "reason": "output file missing"})
                         continue
-                    made_by = "unknown" if url.startswith("/api/outputs/chat-uploads/") else "ai"
+                    made_by = "unknown" if output.startswith("/api/outputs/chat-uploads/") else "ai"
                     res = add_bytes(store, path.read_bytes(), filename=path.name, collection_id=collection["id"],
                                     actor=MOODBOARD_ACTOR, source=source, made_by=made_by)
-                elif url.startswith(("http://", "https://")):
-                    fetched = asyncio.run(fetch(url, max_bytes=media.IMAGE_CAP, accept="image/*"))
-                    res = add_bytes(store, fetched.data, filename=url.rsplit("/", 1)[-1][:200] or "image",
-                                    collection_id=collection["id"], actor=MOODBOARD_ACTOR,
-                                    source={**source, "fetched_at": now_iso()})
                 else:
                     summary["skipped"].append({"url": url, "reason": "unsupported url"})
                     continue
-            except (IntakeError, net.FetchBlocked, net.FetchError, OSError) as exc:
+            except (IntakeError, OSError) as exc:
                 summary["skipped"].append({"url": url, "reason": str(exc)})
                 continue
             memberships.append(res.membership)

@@ -290,10 +290,15 @@ function shouldRetryWithDiscovery(baseUrl: string, response?: Response): boolean
 // checked live in the desktop pass; the backend's opaque-origin CORS branch
 // only matters if that changes. See desktop_renderer_cors in backend/main.py.)
 const PERSON_READ_PREFIXES = ['/api/agent/spend', '/api/krea/', '/api/personal-agents'];
+// Settings answers saved keys' endings only to the person (Justin, Q55 a);
+// everyone else learns which keys are set.
+const PERSON_READ_PATHS = ['/api/settings'];
 
 function wantsPersonHeader(path: string, method: string): boolean {
   if (getInjectedApiBaseUrl()) return true;
-  return (method !== 'GET' && method !== 'HEAD') || PERSON_READ_PREFIXES.some((prefix) => path.startsWith(prefix));
+  if (method !== 'GET' && method !== 'HEAD') return true;
+  const route = path.split(/[?#]/, 1)[0];
+  return PERSON_READ_PATHS.includes(route) || PERSON_READ_PREFIXES.some((prefix) => path.startsWith(prefix));
 }
 
 function notePersonRequired(response: Response): void {

@@ -56,6 +56,8 @@ NEBULA_MCP_TOOLS = (
     "commons_collections", "commons_status", "commons_borrowings", "commons_fidelity", "commons_concentration",
     # MCP parity U10 and U14 (2026-10-20): universal-node catalogs, Krea discovery.
     "model_catalog", "model_schema", "krea_discovery_tools", "krea_discover",
+    # Projects without opening them, settings and providers (U3, U6).
+    "rename_project", "get_project", "get_settings", "provider_status",
 )
 # In-app Codex may wait this long for one tool call (run_nodes/get_run wait up
 # to 45 s by default and 300 s at most); Codex's own default is 60 s.

@@ -259,4 +259,17 @@ describe('ProjectHome', () => {
     fireEvent.click(button);
     expect(await screen.findByText('Cover · set by Codex (agent)')).toBeTruthy();
   });
+  it('says the cover went automatic when the pinned image left the project (Q90 a)', async () => {
+    const choices = { images: [{ url: '/api/outputs/b.png', kind: 'output' as const }], pinned: null,
+      cover: { source: 'output' as const, images: ['/api/outputs/b.png'] }, pinnedBy: null,
+      lostPin: { url: '/api/outputs/a.png', by: { kind: 'person', name: 'You' } } };
+    render(<ProjectHome {...props({
+      projects: [project({ cover: choices.cover, coverLostPin: choices.lostPin })],
+      loadCoverChoices: vi.fn().mockResolvedValue(choices), onPinCover: vi.fn() })} />);
+    const button = screen.getByRole('button', { name: 'Choose a cover for Glass campaign' });
+    expect(button.getAttribute('title')).toBe('Choose cover');
+    fireEvent.click(button);
+    expect(await screen.findByText('The image you pinned is no longer in this project, so the cover is automatic.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Automatic' }).getAttribute('aria-pressed')).toBe('true');
+  });
 });
