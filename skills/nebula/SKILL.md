@@ -126,9 +126,17 @@ out ...`.
   wires) for a model that takes images; `text` and/or `image` out for what it
   makes. An image model's `image` wires onward like any Image output.
 - Replicate: one port per file input, named as the model names it
-  (`input_image`, `image`, `audio`), and one output, `image` for a file or a
-  list of them, else `text`. The model's other inputs are params of the same
-  name: set them with `--param`, don't wire them.
+  (`input_image`, `image`, `audio`), and one output. A file output is typed
+  from the model's own data (a content hint in its schema, else the file its
+  `default_example` run returned): `video`, `audio`, `image`, `svg` or
+  `mesh`; a text model's is `text`. When nothing says, it is `image` with
+  `typeUnconfirmed`, and the apply prints a note (a run then keeps another
+  kind of file under that file's own port, not the guessed one; a node
+  saved before outputs were typed gets the same note: set its model again
+  with `--param model_id=...`). The run fills that port,
+  so wire a video model's `video` into a Video input. The model's other
+  inputs are params of the same name: set them with `--param`, don't wire
+  them.
 
 To see a model's ports before the apply, an agent on Nebula's MCP server
 calls `model_schema(provider, model_id)` (its `ports`, with types) or

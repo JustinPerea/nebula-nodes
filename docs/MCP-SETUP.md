@@ -1438,10 +1438,25 @@ model's file inputs are its ports. One backend module has the rules
   can't read, which leaves the definition's ports. (The person's picker drops
   them instead, as it always did.)
 - Replicate: a port per file input (`x-uploadable`, or a `uri` string),
-  named as the schema names it, and one output: `image` for a file URL or a
-  list of them, else `text` (as a run names it). Other inputs are params of
-  the same name; a wire to one is refused ("... are params of the same name:
-  set them with params instead of a wire").
+  named as the schema names it, and one output. A file output's schema is a
+  plain `uri` string whatever the file is, so its type comes from the
+  model's own data: a content hint in the output schema (`contentMediaType`,
+  an `x-` MIME hint, a MIME type or extension in its description), else the
+  file its `default_example` run returned (the schema route keeps it as
+  `default_example_output` from the model read it already makes; no extra
+  call). That gives `video` (Video), `audio` (Audio), `image` (Image), `svg`
+  or `mesh`; when nothing says, `image` with `typeUnconfirmed: true`, and
+  the reply's `modelPortNotes` (and `model_schema`'s `note`, `look_at_canvas`'s
+  `ports.unconfirmed` and `ports.note`) say so. Any other output is `text`
+  (`typeUnconfirmed` too when the model has no output schema and no example
+  file). A run fills that declared port; a returned file whose type
+  contradicts a confirmed port fails the run naming both. On an unconfirmed
+  port the file's own type wins: it goes out under `video`/`audio`/...,
+  shown and saved, but a wire on the guessed port gets nothing. A node
+  configured on 2026-10-20 (no `rev` in its `_model_ports`) shows its file
+  output as unconfirmed with a note: set its `model_id` again to re-read. Other inputs are params of the same name; a wire to one is
+  refused ("... are params of the same name: set them with params instead
+  of a wire").
 - `describe_node` on these nodes has `modelPorts`, a sentence with the rules;
   `look_at_canvas` lists a configured node's `ports` ({inputs, outputs}).
   Before an edit, `model_schema` (and `model_catalog`'s rows, as ids) give a
@@ -1452,7 +1467,10 @@ model's file inputs are its ports. One backend module has the rules
   run check read `_model_ports`, so the canvas draws the ports and wires an
   agent made without a reload. A node saved before 2026-10-20 has no
   `_model_ports` and keeps exactly the ports it had (its definition's) until
-  its model is set again.
+  its model is set again. A Replicate node configured on 2026-10-20, before
+  file outputs were typed (its stamp has no `rev`, every file output
+  `image`), keeps that port and runs as it did; sending its `model_id` again
+  (an edit or `PUT /api/graph/node/{id}`) reads the model again and types it.
 
 The canvas's pickers call `POST /api/graph/node/{id}/model {model}`, which
 configures the node with the same function, drops wires the model has no
@@ -1655,9 +1673,15 @@ so the three always agree:
   wires) for a model that takes images; `text` and/or `image` out for what
   it makes, as the model list says.
 - **Replicate:** a port per file input (`x-uploadable`, or a `uri` string),
-  named as the schema names it; one output, `image` for a file URL or a list
-  of them, else `text`. `model_schema`'s `params` are the other inputs: set
-  them as params of the same name; a wire to one is refused.
+  named as the schema names it; one output, for a file URL or a list of them
+  typed from the model's data (schema content hint, else its
+  `default_example` run's file) as `video`, `audio`, `image`, `svg` or
+  `mesh`, else `text`. With nothing to tell, it is `image` with
+  `typeUnconfirmed: true` and a `note`. The run fills that port, so
+  `model_schema("replicate", "<a video model>")` gives `outputs: [video]`
+  and one `edit_canvas` can set the model and wire `video` into a Video
+  input. `model_schema`'s `params` are the other inputs: set them as params
+  of the same name; a wire to one is refused.
 - **Quiver** nodes have fixed ports (`describe_node`); their catalog rows
   carry no `ports`.
 

@@ -344,8 +344,10 @@ def look_at_canvas(ctx: Context | None = None) -> dict[str, Any]:
     A node whose last run failed has `error`, the message its card shows
     (and `errorHint` when Nebula has a plainer reading of it). An OpenRouter,
     Nous Portal or Replicate node set up for its model has `ports`
-    ({inputs, outputs}: the ids to wire, which come from the model).
-    `events.cursor` is where wait_for_canvas_change should start (`since`).
+    ({inputs, outputs}: the ids to wire, which come from the model), plus
+    `unconfirmed` (port ids whose type is a guess) and a `note` saying what
+    to do (a node saved before Replicate outputs were typed: set its
+    model_id again). `events.cursor` is where wait_for_canvas_change should start (`since`).
     `pins` are short notes the person pinned for agents ("warmer", "redo this
     one"), open ones first, each anchored to a node or a canvas spot. Treat an
     open pin as the person's request: act on it, then answer with resolve_pin.
@@ -1964,8 +1966,15 @@ def model_schema(provider: str, model_id: str, ctx: Context | None = None) -> di
     draws these and edit_canvas accepts wires on them in the same edit that
     sets the model. OpenRouter / Nous Portal: `messages` always, `images`
     for a model that takes images, `text` and/or `image` out. Replicate: a
-    port per file input, named as the model names it, and one output, `image`
-    for a file URL or a list of them, else `text`.
+    port per file input, named as the model names it, and one output: for a
+    file URL or a list of them, typed from the model's own data (its output
+    schema's content hints, else the file its `default_example` run returned)
+    as `video` (Video), `audio` (Audio), `image` (Image), `svg` or `mesh`;
+    else `text`. When nothing says what file it is, the output is `image`
+    with `typeUnconfirmed: true` and the answer has a `note`; a run that
+    returns another kind of file then keeps it under that file's own port
+    (`video`, ...), so a wire on `image` gets nothing. A run fills the
+    declared port, so wire exactly these.
 
     "replicate" with `model_id` "owner/name": also the model's latest
     `versionId`, `params` (its other inputs, set as params of the same name:
@@ -1988,12 +1997,16 @@ def model_schema(provider: str, model_id: str, ctx: Context | None = None) -> di
         schema = _canvas_call("GET", f"/api/replicate/schema/{quote(owner, safe='')}/{quote(name, safe='')}",
                               ctx, timeout=70.0)
         configured = _model_ports("replicate-universal", model, schema)
-        return {"provider": "replicate", "node": "replicate-universal", "param": "model_id",
-                "modelId": schema.get("model_id") or model, "versionId": schema.get("version_id"),
-                "description": schema.get("description") or "",
-                "ports": {"inputs": configured.inputs, "outputs": configured.outputs},
-                "params": configured.dynamic_params,
-                "inputSchema": schema.get("input_schema") or {}, "outputSchema": schema.get("output_schema") or {}}
+        result = {"provider": "replicate", "node": "replicate-universal", "param": "model_id",
+                  "modelId": schema.get("model_id") or model, "versionId": schema.get("version_id"),
+                  "description": schema.get("description") or "",
+                  "ports": {"inputs": configured.inputs, "outputs": configured.outputs},
+                  "params": configured.dynamic_params,
+                  "inputSchema": schema.get("input_schema") or {}, "outputSchema": schema.get("output_schema") or {}}
+        note = _universal_ports.unconfirmed_note(model, configured.outputs)
+        if note:
+            result["note"] = note
+        return result
     key = _catalog_provider(key)
     _, node, param = _MODEL_CATALOGS[key]
     found = next((row for row in _catalog_models(key, ctx) if row.get("id") == model), None)
