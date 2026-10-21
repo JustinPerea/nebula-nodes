@@ -50,6 +50,10 @@ NEBULA_MCP_TOOLS = (
     "moodboard_list", "moodboard_get", "moodboard_create", "moodboard_add", "moodboard_update",
     "moodboard_edit", "moodboard_analyze", "moodboard_delete", "moodboard_move", "character_move",
     "style_list", "style_get", "style_create", "style_update", "style_delete",
+    # Outside the graph (U16): project covers and asset proposals.
+    "list_project_covers", "set_project_cover", "propose_asset_change",
+    # Commons reads that needed raw HTTP (Q63 b, U13); curation goes through propose_asset_change.
+    "commons_collections", "commons_status", "commons_borrowings", "commons_fidelity", "commons_concentration",
     # MCP parity U10 and U14 (2026-10-20): universal-node catalogs, Krea discovery.
     "model_catalog", "model_schema", "krea_discovery_tools", "krea_discover",
 )

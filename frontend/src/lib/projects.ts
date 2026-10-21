@@ -16,6 +16,8 @@ export interface ProjectSummary {
   thumbnail: string | null;
   /** Missing from a backend older than covers. */
   cover?: ProjectCover | null;
+  /** Who pinned the cover ({kind, name}); none on a pin from before it was recorded (the person's). */
+  coverBy?: { kind: string; name: string };
   /** Set when an agent made the project. */
   createdBy?: { kind: 'agent'; name: string };
 }
@@ -30,7 +32,11 @@ export function coverImages(project: Pick<ProjectSummary, 'cover' | 'thumbnail'>
   return { images: project.thumbnail ? [project.thumbnail] : [], mosaic: false };
 }
 export interface CoverChoice { url: string; kind: 'output' | 'reference' }
-export interface CoverChoices { images: CoverChoice[]; pinned: string | null; cover: ProjectCover | null }
+export interface CoverChoices {
+  images: CoverChoice[]; pinned: string | null; cover: ProjectCover | null;
+  /** Who pinned it: kind "person" is the person; missing from a backend before agents could set covers. */
+  pinnedBy?: { kind: string; name: string } | null;
+}
 export interface ProjectSnapshot {
   nodes: Node<NodeData>[]; edges: Edge[]; runHistory: RunRecord[];
   viewport: Viewport | null; createSessionId: string | null;

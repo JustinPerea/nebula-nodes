@@ -4,6 +4,7 @@ import { backendAssetUrlSync } from '../../lib/backend';
 import { coverImages, type CoverChoices, type ProjectCover } from '../../lib/projects';
 import { actorLabel } from '../../lib/trash';
 import { CrabMark } from '../brand/CrabMark';
+import { ProposalsFor } from '../proposals/ProposalsFor';
 import '../../styles/project-home.css';
 
 export interface ProjectSummary {
@@ -17,6 +18,8 @@ export interface ProjectSummary {
   thumbnail: string | null;
   /** Missing from a backend older than covers; then `thumbnail` is used. */
   cover?: ProjectCover | null;
+  /** Who pinned the cover; none on a pin from before it was recorded (the person's). */
+  coverBy?: { kind: string; name: string };
   createdBy?: { kind: 'agent'; name: string };
 }
 
@@ -105,11 +108,13 @@ function CoverPicker({ project, busy, load, onPin, onClose }: {
     return () => { live = false; };
   }, [load, project.id]);
   const pinned = choices?.pinned ?? null;
+  // An agent's pick says so; yours stays plain "Cover".
+  const setBy = pinned && choices?.pinnedBy && choices.pinnedBy.kind !== 'person' ? actorLabel(choices.pinnedBy) : null;
   return (
     <div className="project-home__cover-picker" role="group" aria-label={`Cover for ${project.name}`}
       onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); onClose(); } }}>
       <div className="project-home__cover-picker-head">
-        <span>Cover</span>
+        <span>{setBy ? `Cover · set by ${setBy}` : 'Cover'}</span>
         <button type="button" className="project-home__cover-auto" aria-pressed={!pinned} disabled={busy || !choices}
           onClick={() => { onPin(null); onClose(); }}>Automatic</button>
         <button type="button" className="project-home__cover-close" aria-label="Close cover picker" onClick={onClose}><X aria-hidden="true" /></button>
@@ -130,6 +135,11 @@ function CoverPicker({ project, busy, load, onPin, onClose }: {
             )}
     </div>
   );
+}
+
+function coverTitle(project: ProjectSummary): string {
+  if (project.cover?.source !== 'pinned') return 'Choose cover';
+  return project.coverBy && project.coverBy.kind !== 'person' ? `Cover: set by ${actorLabel(project.coverBy)}` : 'Cover: pinned';
 }
 
 function editedDate(value: string) {
@@ -170,7 +180,7 @@ function ProjectCard({ project, busy, onOpen, onRename, onDelete, loadCoverChoic
         <span className="project-home__card-actions">
           {loadCoverChoices && onPinCover && (
             <button type="button" className="project-home__rename" ref={coverButton} aria-label={`Choose a cover for ${project.name}`}
-              title={project.cover?.source === 'pinned' ? 'Cover: pinned' : 'Choose cover'} aria-expanded={choosingCover}
+              title={coverTitle(project)} aria-expanded={choosingCover}
               disabled={busy || editing} onClick={() => setChoosingCover(!choosingCover)}><ImageIcon aria-hidden="true" /></button>
           )}
           <button type="button" className="project-home__rename" ref={renameButton} aria-label={`Rename ${project.name}`} aria-expanded={editing} disabled={busy} onClick={() => {
@@ -181,6 +191,8 @@ function ProjectCard({ project, busy, onOpen, onRename, onDelete, loadCoverChoic
             title="Move to Recently deleted" disabled={busy || editing} onClick={() => onDelete(project.id)}><Trash2 aria-hidden="true" /></button>
         </span>
       </div>
+      {/* An agent asking to change the cover the person pinned (Q60 a). */}
+      <ProposalsFor kind="project" targetId={project.id} />
       {choosingCover && loadCoverChoices && onPinCover && (
         <CoverPicker project={project} busy={busy} load={loadCoverChoices} onPin={(url) => onPinCover(project.id, url)}
           onClose={() => { setChoosingCover(false); requestAnimationFrame(() => coverButton.current?.focus()); }} />

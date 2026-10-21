@@ -1,0 +1,258 @@
+/* An agent's proposal for a project or a board (components/proposals/
+ * AssetProposalStrip.tsx): the canvas decision bar's language (the agent's
+ * colour on the left edge, its dot and name, a quiet "asks" line) at the
+ * size of a card or a Studio field. It springs in on the agent log's spring
+ * (a short, slightly underdamped one) and fades out in 220ms
+ * (ASSET_PROPOSAL_EXIT_MS); no motion under reduced motion. */
+.asset-proposals {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.asset-proposal {
+  --agent-color: #5b9dff;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 10px 10px 12px;
+  border: 1px solid var(--sr-edge-strong, rgb(255 255 255 / 0.12));
+  border-left: 3px solid var(--agent-color);
+  border-radius: calc(var(--sr-node-media-radius, 14px) - 5px);
+  background: var(--sr-surface-control, rgb(255 255 255 / 0.04));
+  color: var(--sr-ink, rgb(255 255 255 / 0.92));
+  font-family: var(--sr-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  font-size: 12px;
+  transform-origin: 50% 0;
+  animation: asset-proposal-in 420ms var(--agent-log-spring, cubic-bezier(0.2, 0.9, 0.3, 1.2)) both;
+}
+
+.asset-proposal--closing {
+  pointer-events: none;
+  animation: asset-proposal-out 220ms var(--sr-motion-handle, cubic-bezier(0.32, 0.72, 0, 1)) forwards;
+}
+
+@keyframes asset-proposal-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+}
+
+@keyframes asset-proposal-out {
+  to { opacity: 0; transform: translateY(-4px) scale(0.98); }
+}
+
+.asset-proposal__who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.3;
+}
+
+.asset-proposal__dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--agent-color);
+}
+
+.asset-proposal__agent {
+  color: var(--agent-color);
+  font-weight: 600;
+}
+
+.asset-proposal__asks {
+  color: var(--sr-ink-light, rgb(255 255 255 / 0.55));
+}
+
+.asset-proposal__note {
+  margin: 0;
+  color: var(--sr-ink, #fff);
+  font-size: 12.5px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.asset-proposal__covers {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.asset-proposal__cover {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+}
+
+.asset-proposal__cover img,
+.asset-proposal__cover-auto {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border: 1px solid var(--sr-edge, rgb(255 255 255 / 0.06));
+  border-radius: calc(var(--sr-node-media-radius, 14px) - 8px);
+  object-fit: cover;
+  background: var(--sr-canvas, #000);
+}
+
+.asset-proposal__cover:not(.asset-proposal__cover--to) img {
+  opacity: 0.6;
+}
+
+.asset-proposal__cover--to img {
+  border-color: var(--agent-color);
+}
+
+.asset-proposal__cover-auto {
+  display: grid;
+  place-items: center;
+  color: var(--sr-ink-meta, rgb(255 255 255 / 0.4));
+  font-size: 11px;
+}
+
+.asset-proposal__cover figcaption {
+  overflow: hidden;
+  color: var(--sr-ink-meta, rgb(255 255 255 / 0.4));
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-proposal__arrow {
+  width: 14px;
+  height: 14px;
+  color: var(--sr-ink-meta, rgb(255 255 255 / 0.4));
+}
+
+/* A Commons reference's edits: one row each, the field on the left, the
+ * value now struck quiet and the proposed one in ink. */
+.asset-proposal__edits {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.asset-proposal__edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  min-width: 0;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.asset-proposal__edit-label {
+  flex-shrink: 0;
+  color: var(--sr-ink-meta, rgb(255 255 255 / 0.4));
+  font-size: 11px;
+}
+
+.asset-proposal__edit-from {
+  color: var(--sr-ink-light, rgb(255 255 255 / 0.55));
+  text-decoration: line-through;
+  text-decoration-color: var(--sr-ink-meta, rgb(255 255 255 / 0.4));
+}
+
+.asset-proposal__edit-arrow {
+  color: var(--sr-ink-meta, rgb(255 255 255 / 0.4));
+}
+
+.asset-proposal__edit-to {
+  color: var(--sr-ink, #fff);
+}
+
+.asset-proposal__edit-why {
+  flex-basis: 100%;
+  color: var(--sr-ink-light, rgb(255 255 255 / 0.55));
+  font-size: 11px;
+}
+
+.asset-proposal__error {
+  margin: 0;
+  color: var(--sr-danger, #ff8a80);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.asset-proposal__foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.asset-proposal__expires {
+  min-width: 0;
+  margin-right: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--sr-ink-meta, rgb(255 255 255 / 0.4));
+  font: 11px var(--sr-mono, ui-monospace, monospace);
+}
+
+.asset-proposal__button {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--sr-edge-strong, rgb(255 255 255 / 0.12));
+  border-radius: var(--sr-radius-control, 8px);
+  background: transparent;
+  color: var(--sr-ink, #fff);
+  font: 500 12px var(--sr-ui, inherit);
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background var(--sr-motion-fast, 120ms ease), border-color var(--sr-motion-fast, 120ms ease),
+    transform 320ms var(--agent-log-spring, ease);
+}
+
+.asset-proposal__button:hover:not(:disabled) {
+  background: var(--sr-surface-control-hover, rgb(255 255 255 / 0.08));
+}
+
+.asset-proposal__button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.asset-proposal__button--accept {
+  border-color: var(--sr-ink, #fff);
+  background: var(--sr-ink, #fff);
+  color: var(--sr-canvas, #000);
+  font-weight: 600;
+}
+
+.asset-proposal__button--accept:hover:not(:disabled) {
+  background: var(--sr-ink-bold, #fff);
+}
+
+.asset-proposal__button:disabled {
+  opacity: var(--sr-disabled-opacity, 0.45);
+  cursor: default;
+}
+
+.asset-proposal__button:focus-visible {
+  outline: 2px solid var(--sr-accent, #5b9dff);
+  outline-offset: 2px;
+}
+
+/* On a project card, inside its border, under the footer. */
+.project-home__card > .asset-proposals {
+  margin: 0 10px 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .asset-proposal,
+  .asset-proposal--closing {
+    animation: none;
+  }
+  .asset-proposal__button {
+    transition: none;
+  }
+}

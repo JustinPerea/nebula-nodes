@@ -177,6 +177,12 @@ The server exposes these tools for building and running (see
   the person's work. Clearing a project that has nodes needs an explicit
   force from anyone (`nebula clear --force`, or `DELETE /api/graph?force=true`);
   on an open canvas the person can undo it.
+- `list_project_covers` / `set_project_cover`: the images a project's card
+  can show (`images`, `pinned`, `pinnedBy`, `cover`) and setting its cover to
+  one of them (or `""` for the automatic one). An agent sets it while the
+  person hasn't pinned one; a cover the person pinned changes only through
+  `propose_asset_change`. See
+  [Proposals outside the canvas](#proposals-outside-the-canvas).
 - `moodboard_list`, `moodboard_get`, `moodboard_create`, `moodboard_add`,
   `moodboard_update`, `moodboard_edit`, `moodboard_analyze`, `moodboard_move`, `moodboard_delete`: the boards in
   Moodboard Studio, with their brief (Direction, Avoid, pinned colours, a
@@ -193,6 +199,21 @@ The server exposes these tools for building and running (see
 - `list_trash` / `restore_from_trash`: what's in Recently deleted (moodboards,
   characters, Styles, projects), and bring one back with the same id. See
   [Recently deleted](#recently-deleted).
+- The Commons (the smart moodboard's analyzed references; only with
+  `NEBULA_COMMONS_ENABLED=1`), all in the agent's brand scope (pass
+  `brand`): `commons_search` and `commons_get` read references;
+  `commons_add` adds one to a collection's inbox; `commons_comment` comments
+  (`membership_id` picks the collection's thread); `commons_borrow` records
+  an attribute taken from one. Since 2026-10-20 (Justin's Q63 b):
+  `commons_collections` lists the collections (`{"collections": [...]}`;
+  `commons_add` takes one's id), `commons_status` the analysis queue,
+  worker and meters, `commons_borrowings` the recorded borrowings
+  (`{"borrowings": [...]}`; `asset` narrows it),
+  `commons_concentration` each reference's share of them, and
+  `commons_fidelity` checks a borrowing against the output it was used in
+  and saves the result. Curating (corrections, regions, a reference's role,
+  why or inbox place) is the person's: agents propose it, see
+  [Commons curation](#commons-curation). Each has a `nebula commons` twin.
 - `style_list`, `style_get`, `style_create`, `style_update`, `style_delete`:
   the Styles in Create and the Assets panel (a prompt fragment, optionally a
   model and its settings). `style_update` returns `previous`, which undoes it
@@ -253,8 +274,14 @@ And these canvas tools:
   real node ids) and `runNodeIds` (what the canvas will run; don't run them
   yourself).
 - `withdraw_proposal`: takes back one of your open proposals.
+- `propose_asset_change`: proposes a change outside the canvas that is the
+  person's call: a project cover they pinned, a board's Send notes to
+  generators, or curating a Commons reference. They decide on the Projects
+  screen, in Moodboard Studio or in the Commons; `get_proposal` and
+  `withdraw_proposal` take its id. See
+  [Proposals outside the canvas](#proposals-outside-the-canvas).
 
-There is no accept tool. Only the person accepts, on the canvas.
+There is no accept tool. Only the person accepts, in Nebula.
 
 Selection is ephemeral. It is not written into `.nebula` graph files or
 `~/.nebula/state.json`. Unknown or deleted node IDs are reported only as stale
@@ -345,11 +372,13 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `run.skipped` | a gate upstream (Jev Decide's On Pass / On Fail) withheld the node's input, so it never ran | `runId`, `reason`, `gateNodeId` |
 | `canvas.replaced` | import, project opened or created; node ids restart | `reason` |
 | `canvas.cleared` | Clear canvas | |
+| `project.cover` | a project's cover was pinned, changed or set back to automatic, by the person, an agent, or an accepted proposal (its summary ends "(accepted from <agent>)") | `projectId`, `projectName`, `cover` (the url, or null for automatic) |
+| `commons.corrected` / `commons.region` / `commons.membership` | the person curated a Commons reference: a correction, a region drawn or changed, a membership's role, why or inbox place; or accepted an agent's [Commons proposal](#commons-curation) (the summary ends "(accepted from <agent>)") | `assetId`; `fieldPath`, `op` for a correction; `regionId`, `change` (`["added"]` or the fields changed) for a region; `membershipId`, `collectionId`, `change` (`["accepted"]` or the fields) for a membership. Never Commons text (no values, labels or whys) |
 | `pin.added` / `pin.removed` | the person left or deleted a note | `pinId`, `text`, `anchor` |
 | `pin.resolved` | an agent answered a note | `pinId`, `text`, `reply` |
 | `pin.detached` | a pinned node was deleted, or an import/clear removed it | `pinId`, `anchor` (where the node was) |
-| `proposal.created` | an agent proposed a change | `proposalId`, `note`, `adds`, `wires`, `sets`, `runs`, `paidRuns` |
-| `proposal.accepted` | the person accepted; the added nodes and wires follow as `node.added` / `edge.added` by the person | `proposalId`, `idMap`, `runNodeIds` |
+| `proposal.created` | an agent proposed a change | `proposalId`, `note`, `adds`, `wires`, `sets`, `runs`, `paidRuns`; for a [proposal outside the canvas](#proposals-outside-the-canvas) `kind`, `targetId`, `targetName`, `change` instead of the graph counts (the decisions after it carry `kind` and `targetId` too) |
+| `proposal.accepted` | the person accepted; the added nodes and wires follow as `node.added` / `edge.added` by the person (for a project cover, `project.cover` by the person) | `proposalId`, `idMap`, `runNodeIds`; outside the canvas `kind`, `targetId`, `targetName`, `applied` (what was set) |
 | `proposal.rejected` | the person rejected | `proposalId`, `reason` |
 | `proposal.withdrawn` / `proposal.expired` / `proposal.invalidated` | the agent took it back, 15 minutes passed, or the canvas changed under it | `proposalId`, `reason` |
 | `board.added` / `board.removed` / `board.frame` / `board.grouped` / `board.setAside` / `board.resized` / `board.noted` / `board.moved` / `board.cover` | a moodboard edit or save changed the board: one event per write, its kind the first of these that applies (`grouped` is a card into or out of a frame, `moved` 8 px or more, `cover` the image the board opens on) | `kinds` (every kind in the write), `refs` (`{number, id}` per image), `boardId`, `boardName`, `scope`; never any note text ("private note changed") |
@@ -767,6 +796,131 @@ shell can read the person token (see "Who counts as the person"), say hello
 on `/ws`, receive the keys and accept. These layers stop an agent from
 approving its own proposal through Nebula's tools and API; they are not a
 sandbox against hostile local code.
+
+### Proposals outside the canvas
+
+Some of the person's calls live on a project or a board, not on the graph
+(audit U16; Justin's Q60 a, 2026-10-20). An agent proposes those with
+`propose_asset_change(kind, id, change, note)` (`POST /api/asset-proposals`
+with the same four fields), and the person decides where they work on that
+thing:
+
+| `kind` | `change` | Decided | Applied through |
+|---|---|---|---|
+| `project` (a project id) | `{"cover": url}` (one of `list_project_covers`' images) or `{"cover": ""}` (automatic) | on the project's card on the Projects screen: the cover now and the one proposed, side by side, with **Keep mine** and **Use this cover** | `PUT /api/projects/{id}/cover`, as the person |
+| `moodboard` (a board's id or name) | `{"sendNotes": true}` | in Moodboard Studio, under the board's Send notes switch, with **Keep them here** and **Send them** | `PUT /api/moodboards/{id}`, as the person |
+| `commons` (a reference's id; the body may add `brand`) | one edit, or `{"edits": [...]}` (up to 8): see [Commons curation](#commons-curation) | in the Commons, on the reference's detail (each edit as it is now and as proposed; a line above the grid names the references waiting, and their tiles say "proposal"), with **Don't** and **Apply** (**Apply all** for several edits) | each edit's Commons route (`POST .../corrections`, `POST .../regions`, `PATCH /api/commons/regions/{id}`, `PATCH /api/commons/memberships/{id}`, `POST .../accept`), as the person |
+
+Characters and Styles have nothing only the person may change yet, so their
+kinds are refused by name (422).
+
+**Project covers.** The person may pin a project's cover, or reset it to the
+automatic one (its newest image), at any time. Anyone else (an agent, a
+script) may too while the person hasn't pinned one: `set_project_cover`
+(`PUT /api/projects/{id}/cover`) saves who set it as `coverBy` (`{kind,
+name}`, on the card and as `pinnedBy` in the covers listing; a pin saved
+before 2026-10-20 has none and is the person's) and returns `previous`
+(`{"cover": url or null}`), which put back through the same call undoes it.
+A cover the person pinned is refused for anyone else (403, `agent_refused`
+or `person_required`) with a sentence naming `propose_asset_change`. An
+accepted proposal pins the cover as the person's, so the next agent change
+asks again. The Projects screen shows "Cover: set by <agent> (agent)" on a
+cover an agent set. A board's own cover, the image a board opens on, is
+the board's setting rather than a pin of the person's, so it has no
+proposal: agents set it with the board's other fields.
+
+**Life cycle.** The same as canvas proposals: `open`, then `accepted`,
+`rejected` (with the person's reason), `withdrawn`, `expired` (15 minutes)
+or `invalidated`. Ids start with `pa_`; `GET /api/canvas/proposals/{id}`
+(with `?wait=`) and `DELETE /api/canvas/proposals/{id}` answer for them, so
+`get_proposal`, `withdraw_proposal` and `nebula proposal` work unchanged, and
+the journal uses the same `proposal.*` kinds with `kind` and `targetId` in
+`data`. `GET /api/asset-proposals?kind=&id=` lists the open ones. The view
+is `{id, status, agent, note, kind, target: {kind, id, name}, change:
+{<key>: {from, to}}, summary, decideIn, createdAt, expiresAt, reason,
+applied}` (`change.cover` also has `fromBy`; `applied` is what Accept set;
+a commons proposal's `change` is `{"edits": [...]}`, the agent's own edits).
+Caps: 3 open per agent and 12 in all (429 beyond), counted apart from canvas
+proposals; a 160-character note.
+
+**Checks.** A proposal is refused when its target is missing (404), the
+image isn't one of the project's (400, the open project read from the live
+canvas), or the change is already so (409: that cover, or notes already
+sent). `{"sendNotes": false}` needs no proposal (422: set it directly).
+Each proposal records its target as proposed (the pin and who set it,
+notes off). If that no longer holds before the person decides (they pinned
+another cover, an agent changed it, the image or the project or the board
+is gone, notes were turned on), it closes as `invalidated` with the reason:
+on any read or decision, after every cover change, and when the screen that
+shows it hears its project or board changed. Accept checks once more and
+answers 409 then.
+
+**Who decides.** Only the person, through the canvas proposals' two layers:
+`POST /api/asset-proposals/{id}/accept` and `/reject` need the person token
+and no agent marker, and the proposal's key in `X-Nebula-Proposal-Key`. The
+key goes only to `/ws` sockets that said hello with the person token
+(`assetProposalOpened` on creation, `assetProposalSync` after hello, on any
+screen), never to REST, the journal or MCP results. `assetProposalClosed`
+`{proposalId, status, reason, kind, targetId}` goes to every socket. The
+Agent log names the proposal ("Asks to make another image the cover of
+project "Dusk" (decide on the Projects screen)"), since no cursor can go
+there. Memory only: lost on restart.
+
+### Commons curation
+
+Curating the Commons is the person's (Justin's Q63 b, 2026-10-20; audit U13):
+correcting a reference's reading, drawing, renaming, confirming or deleting a
+region, and a reference's role, why or inbox place in a collection. Those
+routes stay person-only (403 for agents). An agent asks with
+`propose_asset_change(kind="commons", id=<reference>, change, note, brand)`
+(`POST /api/asset-proposals`, or `nebula commons propose <id> --edit <json>
+--note <why>`), a [proposal outside the canvas](#proposals-outside-the-canvas)
+like a cover's. `change` is one edit or `{"edits": [...]}`, up to 8, all on
+that reference, accepted or rejected together:
+
+| Edit | Takes | Applied through |
+|---|---|---|
+| `{"correction": {...}}` | `field_path` (`summary`, `subject`, `composition_notes`, `type_style`, `spacing_density`, `layout`, `medium`, `axes.<quiet_loud, warm_cold, geometric_humanist, dense_airy or polished_raw>`, with or without `.value`) and `value` (text up to 2,000 characters, one of the enum's values, a number from -1 to 1), op `set`; or `keywords` with op `add` or `remove` and one keyword; `reason` optional (300 characters) | `POST /api/commons/assets/{id}/corrections` |
+| `{"region": {"box": [x, y, w, h], "label": ...}}` | a new region, the box in fractions of the image | `POST /api/commons/assets/{id}/regions` |
+| `{"region": {"id": ..., ...}}` | one of the reference's regions: `label`, `note`, `status` (`confirmed`, or `deleted`, which the person can undo), `box` | `PATCH /api/commons/regions/{id}` |
+| `{"membership": {"id": ..., ...}}` | one of the reference's memberships in the agent's scope: `role` (`attract`, `avoid`, `evidence`, `neutral`), `why`, `accept: true` (out of the inbox, which queues it for analysis) | `PATCH /api/commons/memberships/{id}`, `POST .../accept` |
+
+**Checks.** The agent must see the reference in its brand scope, as
+`commons_get` does (404 otherwise, and for a region or membership that isn't
+the reference's or out of scope, or a region the person deleted). One edit
+per field, keyword, region or membership (422 for two). Parts of an edit
+that are already so are dropped from it; an edit with nothing left is
+refused (409). Each edit
+records its target as it was: the field's value or whether the keyword is
+there, the region, the membership. That is Commons text, so it goes only to
+the person's screen (`before` in `assetProposalOpened` / `assetProposalSync`);
+the view agents read holds only their own edits. Reading a commons proposal
+(`GET /api/canvas/proposals/{id}`, `GET /api/asset-proposals`) and
+withdrawing it are for the person, the session that proposed it, and
+callers who see the reference in the brand it was proposed for: a
+brand-bound agent session gets 404 for another brand's, as `commons_get`
+answers. Its `proposal.*` journal events and `assetProposalClosed` carry
+ids, not its note or the person's reason (`reason` is null there), since
+every agent on the canvas reads them. If it changes before the
+person decides (they corrected that field, the region or membership changed
+or went, the reference was deleted, the Commons was turned off), the
+proposal closes as `invalidated`; the person's own edits check the
+proposals on that reference at once.
+
+**Accept** makes each edit in order through its Commons route, as the person,
+so a correction is the person's and outranks the model's reading. The
+journal gets one `commons.*` event per edit by the person, ending "(accepted
+from <agent>)", then `proposal.accepted` with `applied: {"edits":
+[{"correction": <id>}, {"region": <id>}, {"membership": <id>}]}`. Should an
+edit fail midway (its target went in the instant between the check and the
+write), the ones before it stay made and the proposal closes as invalidated
+with the reason.
+
+Blind labeling (`/api/commons/evaluation...`) and the agent review
+(`/api/commons/review...`) stay the person's alone, with no proposal and no
+tool, exactly as before; Justin's answer changed only when agents get the
+Commons, not who decides. The GM Commons trial is on hold: nothing here calls
+a hosted Commons service.
 
 ### Spending limits
 

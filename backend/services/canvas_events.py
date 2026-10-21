@@ -108,6 +108,17 @@ EVENT_KINDS = frozenset({
     # services/canvas_undo.py.
     "edit.undone",
     "edit.redone",
+    # Projects outside the canvas graph: a cover pinned, changed or set back
+    # to automatic, with data {projectId, projectName, cover} (main
+    # _set_project_cover; U16).
+    "project.cover",
+    # Commons curation, by the person or an accepted proposal (routes/commons.py
+    # curation_listeners; Q63 b): data {assetId, fieldPath, op} for a
+    # correction, {assetId, regionId, change} for a region, {assetId,
+    # membershipId, collectionId, change} for a membership. Never Commons text.
+    "commons.corrected",
+    "commons.region",
+    "commons.membership",
 })
 EVENT_GROUPS = frozenset(kind.split(".", 1)[0] for kind in EVENT_KINDS)
 

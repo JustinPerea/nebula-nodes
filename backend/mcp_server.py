@@ -50,6 +50,7 @@ The loop:
 3. run_nodes: runs a node and what feeds it, within the person's spend limits.
 4. view_output: look at what it made.
 5. propose_change instead, for a run over a limit or without a list price, or reworking their graph: the person accepts or rejects it in Nebula; agents cannot accept.
+Off the canvas, ask with propose_asset_change: a cover the person pinned, a board's Send notes, Commons curation.
 
 Pins are the person's requests: act on one, then answer it with resolve_pin. wait_for_canvas_change waits for the next change instead of polling.
 When you start on a request, call point_at with a short say naming your own next step (under 8 words). What you noticed, a report or a suggestion goes in post_note: the person reads those in Updates, top right, not at your cursor.
@@ -628,7 +629,9 @@ def get_proposal(proposal_id: str, wait_seconds: float = 0, ctx: Context | None 
     or the canvas changed; `reason` says why). When accepted, `idMap` maps
     your refs to the new node ids and `runNodeIds` lists the nodes the canvas
     will run; don't start those runs yourself. `timedOut` is true when the
-    person hasn't decided yet.
+    person hasn't decided yet. It reads propose_asset_change's proposals
+    (ids pa_...) too: those have `kind` and `target`, and when accepted
+    `applied` (what was set).
     """
     from urllib.parse import quote
 
@@ -654,6 +657,100 @@ def withdraw_proposal(proposal_id: str, ctx: Context | None = None) -> dict[str,
     from urllib.parse import quote
 
     return _canvas_call("DELETE", f"/api/canvas/proposals/{quote(proposal_id, safe='')}", ctx)
+
+
+# -- outside the graph: project covers and asset proposals (U16) -------------------
+# Same routes as the Projects screen and Moodboard Studio; get_proposal and
+# withdraw_proposal take these proposals' ids (pa_...) too.
+
+@_tool(annotations=_READ)
+def list_project_covers(project_id: str, ctx: Context | None = None) -> dict[str, Any]:
+    """The images a project's card can show (ids from list_projects).
+
+    `images` are [{url, kind}]: what its nodes made, newest first, then its
+    input references. `cover` is what the card shows now, `pinned` the pinned
+    image's url (null: the automatic cover, its newest image) and `pinnedBy`
+    who pinned it ({kind, name}; kind "person" is the person, "agent" an
+    agent). Pass a url to set_project_cover.
+    """
+    from urllib.parse import quote
+
+    return _canvas_call("GET", f"/api/projects/{quote(project_id, safe='')}/covers", ctx)
+
+
+@_tool(annotations=_EDIT)
+def set_project_cover(project_id: str, url: str, ctx: Context | None = None) -> dict[str, Any]:
+    """Set a project's cover, the picture on its card on the Projects screen,
+    to one of its own images (`url` from list_project_covers), or "" for the
+    automatic one (its newest image).
+
+    You may while the person hasn't pinned a cover themselves (`pinnedBy`
+    isn't "person"); Nebula records that you set it. A cover the person
+    pinned is theirs: this is refused, and propose_asset_change(kind=
+    "project", id=project_id, change={"cover": url}, note=...) asks them.
+    Returns the project's card (`cover`, `coverBy`) and `previous`
+    ({"cover": url or null}): set_project_cover(project_id, previous.cover or
+    "") puts it back.
+    """
+    from urllib.parse import quote
+
+    return _canvas_call("PUT", f"/api/projects/{quote(project_id, safe='')}/cover", ctx,
+                        json={"url": url or None})
+
+
+@_tool(annotations=_EDIT)
+def propose_asset_change(kind: str, id: str, change: dict, note: str,  # noqa: A002 - the audit's name
+                         brand: str | None = None, ctx: Context | None = None) -> dict[str, Any]:
+    """Propose a change outside the canvas that is the person's call. They
+    decide where they work on that thing; nothing changes until they accept,
+    and you cannot accept it yourself.
+
+    - kind "project", `id` a project id, change {"cover": url} (an image from
+      list_project_covers) or {"cover": ""} (back to automatic): change a
+      cover the person pinned. Decided on the Projects screen. While they
+      haven't pinned one (list_project_covers' `pinnedBy` isn't "person"),
+      set_project_cover sets it directly.
+    - kind "moodboard", `id` a board's id or name, change {"sendNotes": true}:
+      send the board's notes to generators, which only the person may turn
+      on. Decided in Moodboard Studio. Turning it off needs no proposal
+      (moodboard_update(send_notes=false)).
+    - kind "commons", `id` a reference's id (commons_search / commons_get),
+      `brand` the brand you work on: curate the Commons, which only the
+      person may do. change is one edit or {"edits": [...]} (up to 8, all on
+      that reference, one per field, keyword, region or membership, decided
+      together):
+      {"correction": {"field_path": "summary" | "subject" | "composition_notes"
+      | "type_style" | "spacing_density" | "layout" | "medium" |
+      "axes.<axis>", "value": ..., "reason": "..."}} (op set), or
+      {"correction": {"field_path": "keywords", "op": "add" | "remove",
+      "value": "<keyword>"}}; {"region": {"box": [x, y, w, h], "label": ...}}
+      to draw one (fractions of the image), {"region": {"id": ..., "label"?,
+      "note"?, "status"?: "confirmed" | "deleted", "box"?}} to change one;
+      {"membership": {"id": ..., "role"?: "attract" | "avoid" | "evidence" |
+      "neutral", "why"?, "accept"?: true}} (accept takes it out of the
+      inbox). Decided in the Commons, on the reference. Blind labeling and
+      the agent review stay the person's alone.
+
+    `note` is one line (≤160 characters) saying why. Returns {"proposal"}
+    with `id`, `status`, `target` {kind, id, name}, `change` (each key's
+    `from` and `to`) and `decideIn`. Then get_proposal(id, wait_seconds=...)
+    waits for the decision: accepted (`applied` is what was set), rejected
+    (with their `reason`), withdrawn, expired (15 minutes) or invalidated
+    (the target changed first: another cover pinned, the board deleted).
+    withdraw_proposal takes it back. Three can be open per agent.
+    """
+    body_change = dict(change or {})
+    if "send_notes" in body_change and "sendNotes" not in body_change:
+        body_change["sendNotes"] = body_change.pop("send_notes")
+    target = str(id or "")
+    if kind == "moodboard":
+        import moodboard_client as boards
+
+        target = str(_board_call(boards.get_board, _api(), target, headers=_board_headers(ctx)).get("id") or target)
+    body: dict[str, Any] = {"kind": kind, "id": target, "change": body_change, "note": note}
+    if brand:
+        body["brand"] = brand
+    return _canvas_call("POST", "/api/asset-proposals", ctx, json=body)
 
 
 # -- building and running --------------------------------------------------------
@@ -1228,10 +1325,13 @@ def commons_add(source: str, collection: str, why: str, made_by: str = "unknown"
 
 @_tool(annotations=_EDIT)
 def commons_comment(id: str, text: str, region_id: str | None = None, brand: str | None = None,
-                    ctx: Context | None = None) -> dict:
-    """Comment on a reference (only with substance)."""
+                    membership_id: str | None = None, ctx: Context | None = None) -> dict:
+    """Comment on a reference (only with substance). A reference in several
+    collections has one thread per collection (commons_get's `memberships`);
+    `membership_id` picks that thread, else the first one in your scope."""
     return _commons_call("POST", "/api/commons/comments", _client_name(ctx),
-                         json={"asset_id": id, "text": text, "region_id": region_id, "brand": brand})
+                         json={"asset_id": id, "text": text, "region_id": region_id, "brand": brand,
+                               "membership_id": membership_id})
 
 
 @_tool(annotations=_EDIT)
@@ -1250,6 +1350,64 @@ def commons_borrow(id: str, attribute: str, value: Any, used_in: dict, why: str,
     return _commons_call("POST", "/api/commons/borrow", _client_name(ctx),
                          json={"id": id, "attribute": attribute, "value": value, "used_in": used_in, "why": why,
                                "region_id": region_id, "brand": brand})
+
+
+# Reads that used to need raw HTTP (Justin's Q63 b, audit U13). Each calls
+# the route the Commons UI uses, in your brand scope.
+
+@_tool(annotations=_READ)
+def commons_collections(brand: str | None = None, ctx: Context | None = None) -> dict:
+    """{"collections": [...]}: the collections you can add to and search,
+    each with `id`, `name`, `brand`, `kind`. commons_add takes a collection's
+    `id`. Pass the brand you work on; without one you see the collections
+    that have no brand."""
+    return {"collections": _commons_call("GET", "/api/commons/collections", _client_name(ctx),
+                                         params={"brand": brand} if brand else None)}
+
+
+@_tool(annotations=_READ)
+def commons_status(ctx: Context | None = None) -> dict:
+    """The analysis worker and queue: `queue` (queued, analyzing,
+    analysis_failed, held, ready), `worker`, today's reading `meter`,
+    `agent_adds` (what agents may still add today), and whether blind
+    labeling holds analysis (`evaluation_waiting`). A reference you just
+    added is read once it leaves the queue."""
+    return _commons_call("GET", "/api/commons/status", _client_name(ctx))
+
+
+@_tool(annotations=_READ)
+def commons_borrowings(asset: str | None = None, brand: str | None = None, ctx: Context | None = None) -> dict:
+    """{"borrowings": [...]}: recorded borrowings (commons_borrow), oldest first, each with
+    `attribute`, `value`, `used_in`, `why`, `actor` and `fidelity` (null
+    until checked). `asset` narrows it to one reference; you see the ones in
+    your brand scope."""
+    params = {k: v for k, v in {"asset": asset, "brand": brand}.items() if v}
+    # One object, so an empty listing still answers (a bare list reaches the
+    # client as one block per row, and as nothing when it is empty).
+    return {"borrowings": _commons_call("GET", "/api/commons/borrowings", _client_name(ctx), params=params or None)}
+
+
+@_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True,
+                                   openWorldHint=False))
+def commons_fidelity(borrowing_id: str, brand: str | None = None, ctx: Context | None = None) -> dict:
+    """Check that a borrowing shows in what it was used in, and save the
+    result on the borrowing: {"status": "pass" | "fail" | "pending" |
+    "unverifiable", ...} (a palette within dE00 5 gives `delta_e`). Only a
+    `nebula_output` image can be checked; free text and external work are
+    unverifiable."""
+    from urllib.parse import quote
+
+    return _commons_call("POST", f"/api/commons/borrowings/{quote(borrowing_id, safe='')}/fidelity",
+                         _client_name(ctx), params={"brand": brand} if brand else None)
+
+
+@_tool(annotations=_READ)
+def commons_concentration(brand: str | None = None, ctx: Context | None = None) -> dict:
+    """How borrowings spread over references, in your brand scope: `total`,
+    `by_asset` (each reference's share), `threshold` and `flagged` (the
+    references over it). Lean on a flagged reference less."""
+    return _commons_call("GET", "/api/commons/concentration", _client_name(ctx),
+                         params={"brand": brand} if brand else None)
 
 
 # -- moodboards (Moodboard Studio's boards) -------------------------------------
