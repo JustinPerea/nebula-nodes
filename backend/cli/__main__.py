@@ -228,15 +228,16 @@ def build_parser() -> argparse.ArgumentParser:
              "in the top right (your cursor's --say is for your own action)",
         description=(
             "Posts an update. The person reads it in the Updates list in the top right of every screen, saved "
-            "with the project. With --board it is kept with that board for `nebula notes --board <name>`, but a "
-            "board's updates are not on screen yet: leave out --board to reach the person. On a board, #12 "
+            "with the project. With --board it is kept with that board (`nebula notes --board <name>` lists "
+            "it): the person sees it in Moodboard Studio's corner under \"This board\" while that board is open, "
+            "and nowhere else, so leave out --board to reach them on any screen. On a board, #12 "
             "in the text names image 12 and "
             "always shows its current number; a number not on the board refuses the update. Never quote a "
             "private note. At most 6 a minute. Updates carry no buttons: make the change, or propose it."
         ),
     )
     note_p.add_argument("text", help="One plain line, 240 characters max")
-    note_p.add_argument("--board", help="A moodboard id or exact name: keep it with that board (not on screen yet; leave out to reach the person)")
+    note_p.add_argument("--board", help="A moodboard id or exact name: keep it with that board (shown in Moodboard Studio under This board while it is open; leave out to reach the person anywhere)")
     note_p.add_argument("--ref", dest="refs", action="append", default=[], metavar="IMAGE",
                         help="With --board: an image it is about, by number or id (repeatable, 12 max)")
     note_p.add_argument("--node", dest="nodes", action="append", default=[], metavar="nX",

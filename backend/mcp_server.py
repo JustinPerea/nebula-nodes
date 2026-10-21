@@ -404,12 +404,14 @@ def post_note(
       note (the person's own label on a board image): an update that does is
       refused.
     - `board`: a moodboard id or exact name to keep the update with that
-      board instead of the main canvas. A board's updates are not on screen
-      yet: the corner shows only the open project's list, even in Moodboard
-      Studio on that board, so you read them back with list_notes(board=...).
-      To reach the person, post without `board`. On a board `#12` in the text
-      names image 12: Nebula keeps it as that image and always shows its
-      current number; a number not on the board refuses the update.
+      board instead of the main canvas. A board's updates show in Moodboard
+      Studio's corner, under "This board" above the project's, while the
+      person has that board open; every other screen shows only the
+      project's list. To reach the person wherever they are, post without
+      `board`. You read a board's back with list_notes(board=...). On a board
+      `#12` in the text names image 12: Nebula keeps it as that image and
+      always shows its current number; a number not on the board refuses the
+      update.
     - `refs`: what it is about, outlined when the person looks: node ids
       ("n4") on the canvas, image ids or numbers on a board (at most 12).
       Unknown ones are dropped and listed in `dropped`.
@@ -444,8 +446,9 @@ def list_notes(board: str | None = None, unread: bool = False, ctx: Context | No
     list or dismissed one. `unread` is how many the person hasn't opened.
     The main canvas's list is kept with the open project (the person sees it
     in the Updates corner on every screen); pass `board` (an id or exact
-    name) for a moodboard's, which are not on screen yet (only you read
-    them here). `unread=True` lists only those.
+    name) for a moodboard's, which the person sees in Moodboard Studio's
+    corner under "This board" while that board is open. `unread=True` lists
+    only those.
     Only the person marks them read or dismisses them. Your proposals
     (propose_change and propose_asset_change) post their own Update (`about:
     "proposal"`); once the proposal closes it has `outcome`: "Accepted" (or

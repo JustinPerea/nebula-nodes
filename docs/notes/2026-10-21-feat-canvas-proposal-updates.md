@@ -122,3 +122,8 @@ Branch `feat/canvas-proposal-updates`, stacked on `feat/updates-corner-every-scr
   - Both merges were clean. The create route's early return, for a proposal that closed while its Update was being written, now goes through `agent_wording` too, so the agent's other open proposals that can't run still come back in `stillOpen` with the reminder.
   - `agent_wording` gives a proposal that is no longer open no `warning` or `withdrawWith` (there is nothing to withdraw). MCP and the CLI word the HTTP answer again through it, so this holds on every surface. Test first: `test_each_surface_names_its_own_withdraw_call` failed on the old wording.
   - The flood fix (a new proposal folds away the same agent's withdrawn Update) narrows "every one" for withdrawn proposals only. It went to Justin as Q115 before merge.
+- **Merging #159 (Q113 c, coordinator).** Three conflicts, all kept both sides:
+  - list_notes' docstring now says board Updates show in Moodboard Studio under "This board" (Q113), and that both propose_change and propose_asset_change post their own Update (Q112).
+  - The plan doc's §5.9 keeps the Q112 and Q113 paragraphs.
+  - The corner's imports.
+  A canvas proposal's Update sits in the project section, so its Review runs through the app adapter, as before. tsc and lint pass; the corner, board and proposal-bar tests 103/103; the proposal, notes and MCP backend tests 182/182.
