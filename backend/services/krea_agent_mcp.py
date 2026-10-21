@@ -5,6 +5,9 @@ Two servers, both started per turn by the agent's own CLI:
     tools. It is how in-app agents reach Nebula; Codex's shell has no network,
     so for it this is the only way.
   - `nebula_krea` (backend/krea_mcp_server.py): read-only Krea discovery.
+    The `nebula` server has the same calls too (krea_discovery_tools,
+    krea_discover, over the same routes and allow-list), so outside agents,
+    which get only the `nebula` server, have them.
 
 Each child only knows the local backend address. For the in-app chats the
 turn's agent token reaches the Nebula server by environment variable *name*
@@ -51,6 +54,8 @@ NEBULA_MCP_TOOLS = (
     "list_project_covers", "set_project_cover", "propose_asset_change",
     # Commons reads that needed raw HTTP (Q63 b, U13); curation goes through propose_asset_change.
     "commons_collections", "commons_status", "commons_borrowings", "commons_fidelity", "commons_concentration",
+    # MCP parity U10 and U14 (2026-10-20): universal-node catalogs, Krea discovery.
+    "model_catalog", "model_schema", "krea_discovery_tools", "krea_discover",
 )
 # In-app Codex may wait this long for one tool call (run_nodes/get_run wait up
 # to 45 s by default and 300 s at most); Codex's own default is 60 s.

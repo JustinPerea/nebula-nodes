@@ -134,6 +134,33 @@ The server exposes these tools for building and running (see
   `failed`, with each node's message in `errors` and what did finish in
   `results`; see [Building and running over MCP](#building-and-running-over-mcp).
 - `get_run` / `cancel_run`: collect or stop a run that is still going.
+  `cancel_run` stops only runs an agent started (its own, another agent's,
+  or an unnamed script's); a run the person started is theirs, and the
+  refusal tells the agent to ask them to press Stop. See
+  [Who may stop a run](#who-may-stop-a-run).
+- `model_catalog` / `model_schema`: the models the universal nodes run.
+  `model_catalog(provider, query, limit)` lists OpenRouter's, Nous Portal's
+  or Quiver's models (`/api/openrouter/models`, `/api/nous/models`,
+  `/api/quiver/models`, the routes the Inspector's pickers read), filtered by
+  every word of `query`, and names the node and the param (`model`) the id
+  goes in. `model_schema("replicate", "owner/name")` reads a Replicate
+  model's latest version (`/api/replicate/schema/{owner}/{name}`): each
+  input with `port: true` (a file input, wired into a port of that name on
+  the Replicate node) or `port: false` (set as a param of that name), and
+  the raw input and output schemas. For the other providers it returns that
+  model's catalog row. They use the person's key and cost nothing; without
+  the key the refusal names it. See
+  [Universal nodes over MCP](#universal-nodes-over-mcp) for what
+  `edit_canvas` can wire on them today.
+- `krea_discovery_tools` / `krea_discover`: the read-only Krea discovery
+  calls (`list_models`, `get_model_schema`, `get_prompting_guide`,
+  `list_styles`, `list_moodboards`, `get_node_apps`, `get_node_app_versions`,
+  `list_node_types`) on the Krea account connected in Nebula, through
+  `GET /api/krea/tools` and `POST /api/krea/tools/call`. They are the calls
+  in-app turns also get from the `nebula_krea` server, with the same
+  allow-list (`KREA_READONLY_TOOLS`), so an outside agent, which gets only
+  this server, has them too. None generates, uploads or spends; anything
+  else is refused before Krea is called.
 - `view_output`: a node's output as an image (videos as three frames, image
   lists as tiles), or as text. For a node whose last run failed it returns
   the error instead of "no output yet"; if an older output is still on the
@@ -340,7 +367,8 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `node.renamed` | a node got a new name on the canvas (or went back to its model name) | `from`, `to` |
 | `edge.added` / `edge.removed` | wired / unwired | source, target and handles |
 | `selection.changed` | the selected set changed | `nodeIds`, `count` |
-| `run.started` / `run.finished` / `run.failed` / `run.cancelled` | per node, attributed to whoever started the run | `runId`, `error` |
+| `run.started` / `run.finished` / `run.failed` | per node, attributed to whoever started the run | `runId`, `error` |
+| `run.cancelled` | a run stopped, attributed to whoever pressed Stop or called `cancel_run` (the starter when another backend took the Stop) | `runId`, `startedBy` (`kind`, `name`) |
 | `run.skipped` | a gate upstream (Jev Decide's On Pass / On Fail) withheld the node's input, so it never ran | `runId`, `reason`, `gateNodeId` |
 | `canvas.replaced` | import, project opened or created; node ids restart | `reason` |
 | `canvas.cleared` | Clear canvas | |
@@ -458,6 +486,32 @@ Person-only, refused with 403 `person_required` otherwise:
 
 Everything else, including running nodes, is open to agents and held to the
 spending limits. The person isn't limited.
+
+#### Who may stop a run
+
+Agents stop only runs an agent started (Justin, 2026-10-20). The backend
+records who started each run as it registers it (`ExecutionRunRecord.started_by`
+in `services/execution_runs.py`: the person, a named agent, or anonymous), and
+`DELETE /api/executions/{runId}` (the canvas's Stop, `cancel_run`, `nebula
+cancel`) checks it before it records anything:
+
+| Started by | The person stops it | A named agent stops it | Anonymous stops it |
+|---|---|---|---|
+| the person | yes | 403 `agent_refused` | 403 `person_required` |
+| a named agent | yes | yes (any agent) | yes |
+| anonymous | yes | yes | yes |
+
+Anonymous is a caller with no agent marker and no person token: the `nebula`
+CLI without `NEBULA_AGENT_NAME`, curl, a tab not connected as the person.
+Its runs count as an agent's, since nothing proves the person started them;
+its Stop is not the person's. So from the CLI by hand, `nebula cancel` still
+stops what the CLI (or any agent) started, and a run started from the canvas
+answers "ask them to press Stop in Nebula". A refused Stop leaves no durable
+Stop intent, so no other backend stops the run either. A run ID that no run
+here has used still takes the pre-admission Stop intent from anyone, as
+before; one whose `/api/execute` is still being admitted is judged by the
+journal's note of its starter. A run that already ended answers its status
+to anyone, since nothing is left to stop.
 
 Every process the backend starts (agents, the Commons reader, ffmpeg, the
 Remotion renderer, git, `open`, `ps`, `sips`, `brctl`) gets the backend's
@@ -1488,6 +1542,35 @@ constants it describes. Its import walk fails closed: relative imports are
 resolved, and dynamic imports or spawned processes count as network unless the
 module is listed with a reason. `frontend/tests/lib/nodeKeys.test.ts` keeps the
 canvas's TS copy of `providerVia` equal to the JSON one.
+
+### Universal nodes over MCP
+
+`model_catalog` and `model_schema` (above) say which models the OpenRouter,
+Nous Portal, Quiver and Replicate nodes can run. What `edit_canvas` can build
+with them today (checked 2026-10-20 against `/api/graph/apply`):
+
+- **Replicate** (`replicate-universal`) declares no ports, so the backend
+  accepts a wire to any input name. Set `model_id` to the owner/name, wire
+  each `port: true` input into the port of that name, and set the other
+  inputs as params; the run sends both to Replicate under those names
+  (`handlers/replicate_universal.py`). `_version_id` is the canvas's own:
+  without it the run asks Replicate for the latest version. It declares no
+  output ports either: a run names its output by what Replicate returns
+  (`image` for an image or other file URL or a list of URLs, `video` or
+  `audio` by file extension, `svg`/`mesh` for those data URIs, `text`
+  otherwise), so `model_schema`'s `output.port` says which handle to wire
+  onward from.
+- **OpenRouter** and **Nous Portal** keep the ports their definitions declare
+  (OpenRouter `messages` to `text`; Nous `messages` and `images` to `text`).
+  The vision input `images` on OpenRouter and the `image` output of an image
+  model are added only by the canvas's model picker
+  (`graphStore.configureOpenRouterModel`), with the internal `_output_image`
+  param, so `edit_canvas` refuses those wires and that param.
+- On the canvas, a model's ports come from the Inspector
+  (`configureOpenRouterModel`, `fetchReplicateSchemaAndConfigure`), which
+  keeps them in the browser only; the backend sends a universal node with its
+  definition's ports (`main.py` `_cli_node_to_rf`). Moving that into the
+  backend is open work (docs/notes/2026-10-20-feat-mcp-cancel-scope-catalogs-krea.md).
 
 ### In-app agents use this server
 
