@@ -78,7 +78,7 @@ flowchart LR
       providers only, so the generic `/api/settings/api-keys/{provider}` routes refuse the Hermes name.
       It is written and deleted only through the personal-agents route, behind `require_person`.
   - `GET /api/settings` has no person check (agents read it) and masks every `apiKeys` entry as
-    `***` plus the last 4. It must drop every `NON_PROVIDER_CREDENTIALS` name from `apiKeys` before
+    `***` plus the last 4 for the person, and a bare `***` for everyone else (Q55 a). It must drop every `NON_PROVIDER_CREDENTIALS` name from `apiKeys` before
     masking. The personal-agents routes return only `keySet: true|false`. Test: the key's tail never
     appears in either response.
 - **Keeps the address**, not secret, in `personal-agents.json` on the agent row: `url` (default

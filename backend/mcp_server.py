@@ -56,6 +56,7 @@ Off the canvas, ask with propose_asset_change: a cover the person pinned, a boar
 Pins are the person's requests: act on one, then answer it with resolve_pin. wait_for_canvas_change waits for the next change instead of polling.
 When you start on a request, call point_at with a short say naming your own next step (under 8 words). What you noticed, a report or a suggestion goes in post_note: the person reads those in Updates, top right, not at your cursor.
 Moodboards: see moodboard_get; moodboard_update(cover=...) picks the image a board opens on, and moodboard_edit moves, resizes and groups its cards in one checked edit its `undo` takes back. New work goes in a new project (new_project), not over theirs.
+get_project reads a saved project unopened; rename_project renames one. Which keys work: get_settings, provider_status.
 Styles (saved looks in Create): style_list, style_get, style_create, style_update (`previous` undoes it), style_delete.
 A run the person started is theirs: cancel_run stops only agents' runs, so ask them to press Stop.
 If you also use the `nebula` CLI, set NEBULA_AGENT_NAME so both share one name.
@@ -351,6 +352,13 @@ def look_at_canvas(ctx: Context | None = None) -> dict[str, Any]:
     `pins` are short notes the person pinned for agents ("warmer", "redo this
     one"), open ones first, each anchored to a node or a canvas spot. Treat an
     open pin as the person's request: act on it, then answer with resolve_pin.
+    `proposals` are the open ones waiting for the person (id, agent, note,
+    status); get_proposal reads one in full. `providerHolds` are paid starts
+    Nebula holds: `recoveries` (an accepted World Labs operation a rerun
+    resumes instead of paying again) and `startAmbiguities` (a start Nebula
+    couldn't confirm: the node won't start again until the person checks
+    Marble and clears it). You can't clear a hold; tell the person. A
+    `provider.hold` event says when one is held or cleared.
     """
     return _canvas_call("GET", "/api/canvas/snapshot", ctx)
 
@@ -497,6 +505,7 @@ def wait_for_canvas_change(
     timeout_seconds: float = 60,
     kinds: list[str] | None = None,
     include_self: bool = False,
+    journal: str | None = None,
     ctx: Context | None = None,
 ) -> dict[str, Any]:
     """Wait until the person (or another agent) changes the Nebula canvas, then say what changed.
@@ -516,6 +525,11 @@ def wait_for_canvas_change(
     result then carries a `note`).
     Pass the returned `cursor` back as `since` next time so
     nothing is missed; `look_at_canvas` also returns `events.cursor`.
+    Pass the `journal` that cursor came with too (the result's `journal`,
+    or look_at_canvas `events.journal`): if Nebula restarted in between,
+    the result has `reset` instead of reading the new journal from an old
+    cursor. Projects made, renamed, deleted or restored are `project.*`
+    events; a held paid start is `provider.hold`.
     `kinds` filters by group or exact kind, e.g. ["node", "run.failed"];
     ["board"] returns on any moodboard write. `board.fields` is a change to
     a board's own fields (Direction, Avoid, notes, strength...): its
@@ -526,7 +540,6 @@ def wait_for_canvas_change(
     budget = max(0.0, min(float(timeout_seconds), MAX_WAIT_SECONDS))
     deadline = _time.monotonic() + budget
     cursor = since
-    journal: str | None = None
     while True:
         _stop_if_cancelled()
         remaining = max(0.0, deadline - _time.monotonic())
@@ -929,13 +942,16 @@ def _edit_in_steps(plan: dict[str, Any], ctx: Context | None) -> dict[str, Any]:
 
 def _project_line(project: dict[str, Any], active: str | None) -> dict[str, Any]:
     return {"id": project.get("id"), "name": project.get("name"), "open": project.get("id") == active,
-            "nodes": project.get("nodeCount", 0), "updatedAt": project.get("updatedAt")}
+            "nodes": project.get("nodeCount", 0), "updatedAt": project.get("updatedAt"),
+            "cover": _cover_for_agents(project.get("cover"))}
 
 
 @_tool(annotations=_READ)
 def list_projects(ctx: Context | None = None) -> dict[str, Any]:
     """The person's saved projects, most recently edited first. `open` marks
-    the one on the canvas now."""
+    the one on the canvas now. `cover` is the picture on its card ({source:
+    pinned, output or references, images: URLs}; null when it has none);
+    get_project reads one in full without opening it."""
     listing = _canvas_call("GET", "/api/projects", ctx)
     active = listing.get("activeProjectId")
     return {"projects": [_project_line(project, active) for project in listing.get("projects") or []],
@@ -1082,7 +1098,8 @@ def _run_result(payload: dict[str, Any], ctx: Context | None) -> list:
     """The run as agents need it: status, outputs per node, errors, and previews."""
     status = payload.get("status")
     shown: dict[str, Any] = {key: payload[key] for key in ("status", "runId", "targetNodeId", "elapsed",
-                                                            "duration", "nodesExecuted", "error") if key in payload}
+                                                            "duration", "nodesExecuted", "error",
+                                                            "source", "startedBy", "nodes") if key in payload}
     if payload.get("results"):
         shown["outputs"] = {node: _brief_outputs(outputs) for node, outputs in payload["results"].items()}
     if payload.get("errors"):
@@ -1148,7 +1165,11 @@ async def run_nodes(node_id: str | None = None, wait_seconds: float = DEFAULT_RU
 async def get_run(run_id: str, wait_seconds: float = DEFAULT_RUN_WAIT, ctx: Context | None = None) -> list:
     """Collect a run that run_nodes reported as still running; waits up to
     `wait_seconds` (max 300) for it to finish. Same result shape as run_nodes.
-    Status is running, finished, cancelled or failed (a node failed: `errors`)."""
+    Status is running, finished, cancelled or failed (a node failed: `errors`).
+    It also reads a run the person started on the canvas (the `runId` of its
+    run.started events): that result has `source` "canvas" and `startedBy`.
+    A run still going has `nodes`: each node's state, latest `progress` (0
+    to 1), the text it has streamed so far (`partialText`) and `error`."""
     from urllib.parse import quote
 
     wait = max(0.0, min(float(wait_seconds), MAX_RUN_WAIT))
@@ -1224,21 +1245,31 @@ def get_spend_limits(ctx: Context | None = None) -> dict[str, Any]:
 # -- Recently deleted -----------------------------------------------------------
 
 @_tool(annotations=_READ)
-def list_trash(kind: str | None = None, ctx: Context | None = None) -> dict[str, Any]:
+def list_trash(kind: str | None = None, scope: str | None = None, project_id: str | None = None,
+               ctx: Context | None = None) -> dict[str, Any]:
     """List Recently deleted: moodboards, characters, Styles and projects, newest first.
 
     Deleted moodboards, characters, Styles and projects go to Recently
     deleted, and restore_from_trash brings one back with the same id.
     Deleting for good is the person's alone.
 
-    `kind` ("moodboard", "character", "style" or "project") narrows the list. Each item
+    `kind` ("moodboard", "character", "style" or "project") narrows the list.
+    `scope` narrows boards, characters and Styles as their lists do: "global"
+    (those in no project) or "project" with `project_id` (a project's id, or
+    "current" for the one open on the canvas; `project_id` alone means
+    "project"). With a scope, projects aren't listed. Each item
     has its id, name, when it was deleted and who deleted it (`deletedBy`:
     `kind` is person, agent, system or anonymous; an agent's `name` is the
     one it gave itself, so only kind "person" means the person). Projects also have
     `purgeAt`, when they are removed for good; boards, characters and Styles
     stay until the person deletes them for good."""
-    params = {"kind": kind} if kind else None
-    return _canvas_call("GET", "/api/trash", ctx, params=params)
+    params: dict[str, Any] = {"kind": kind} if kind else {}
+    if project_id:
+        params["projectId"] = _project_ref(project_id, ctx)
+        scope = scope or "project"
+    if scope:
+        params["scope"] = scope
+    return _canvas_call("GET", "/api/trash", ctx, params=params or None)
 
 
 @_tool(annotations=_EDIT)
@@ -2214,6 +2245,136 @@ def style_delete(style: str, ctx: Context | None = None) -> dict[str, Any]:
     import style_client as styles
 
     return _style_call(styles.delete_style, _api(), style, _board_headers(ctx))
+
+
+# -- projects without opening them, settings and providers (audit U3, U6) ------
+# Each goes through the route the canvas uses (PUT /api/projects/{id}, GET
+# /api/projects/{id}, /api/settings, /api/health/providers,
+# /api/krea/connection); only the reply is shaped for agents here.
+
+def _project_ref(project_id: str, ctx: Context | None) -> str:
+    """A project's id, or "current": the one open on the canvas."""
+    if project_id != "current":
+        return project_id
+    active = _canvas_call("GET", "/api/projects", ctx).get("activeProjectId")
+    if not isinstance(active, str) or not active:
+        raise RuntimeError("No project is open on the canvas: pass a project id from list_projects.")
+    return active
+
+
+def _cover_for_agents(cover: Any) -> dict[str, Any] | None:
+    """A card's picture as look_at_canvas shows links: a signed link keeps its
+    path only; Nebula's own outputs come back as full URLs."""
+    from services.selection_context import _safe_value
+
+    if not isinstance(cover, dict):
+        return None
+    shown = _safe_value(cover, key="cover")
+    images = shown.get("images") if isinstance(shown, dict) else None
+    if isinstance(images, list):
+        shown["images"] = [_absolute(image) for image in images if isinstance(image, str)]
+    return shown
+
+
+@_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True,
+                                   openWorldHint=False))
+def rename_project(project_id: str, name: str, ctx: Context | None = None) -> dict[str, Any]:
+    """Rename a saved project (an id from list_projects, or "current").
+
+    Returns `project` ({id, name}) and `previousName`: rename_project with
+    `previousName` puts the old name back. The name is trimmed, 1 to 120
+    characters. The person's canvas and Projects screen show it at once, and
+    other agents see a `project.renamed` event."""
+    from urllib.parse import quote
+
+    target = _project_ref(project_id, ctx)
+    result = _canvas_call("PUT", f"/api/projects/{quote(target, safe='')}", ctx, json={"name": name})
+    project = result.get("project") or {}
+    previous = result.get("previousName")
+    reply: dict[str, Any] = {"project": {"id": project.get("id"), "name": project.get("name")},
+                             "previousName": previous}
+    if isinstance(previous, str) and previous != project.get("name"):
+        reply["note"] = f"rename_project('{target}', {previous!r}) puts the old name back."
+    return reply
+
+
+@_tool(annotations=_READ)
+def get_project(project_id: str, ctx: Context | None = None) -> dict[str, Any]:
+    """Read a saved project without opening it (an id from list_projects, or "current").
+
+    Nodes come as look_at_canvas shows them (name, model, redacted params,
+    which outputs exist, wires in, state, position, and the last `error`),
+    with the wires, `cover` (as list_projects has it), `open`, and
+    `runHistory`: the newest 20 of `runHistoryCount` runs from the canvas's
+    Run History, each with what it ran (`nodeIds`), its status and timing,
+    and which outputs it made, never their values. view_output shows an
+    output once the project is open."""
+    from urllib.parse import quote
+
+    target = _project_ref(project_id, ctx)
+    view = _canvas_call("GET", f"/api/projects/{quote(target, safe='')}", ctx, params={"view": "agent"})
+    view["cover"] = _cover_for_agents(view.get("cover"))
+    return view
+
+
+_SETTINGS_SHOWN = ("executionMode", "batchSizeCap", "exportFolder", "kreaConnectionMode")
+
+
+@_tool(annotations=_READ)
+def get_settings(ctx: Context | None = None) -> dict[str, Any]:
+    """The person's Settings, as far as agents need them. `configured` says
+    which provider keys are set ({"OPENAI_API_KEY": true, ...}); no part of
+    a key ever comes back. Also `routing`, `executionMode`, `batchSizeCap`,
+    `exportFolder` and `kreaConnectionMode` (api-token or mcp: how Krea
+    nodes reach Krea). Only the person changes settings; find_nodes and
+    describe_node say what a missing key stops."""
+    settings = _canvas_call("GET", "/api/settings", ctx)
+    keys = settings.get("apiKeys")
+    routing = settings.get("routing")
+    return {
+        "configured": {str(name): bool(value) for name, value in keys.items()} if isinstance(keys, dict) else {},
+        "routing": ({str(node): choice for node, choice in routing.items() if isinstance(choice, str)}
+                    if isinstance(routing, dict) else {}),
+        **{key: settings.get(key) for key in _SETTINGS_SHOWN},
+    }
+
+
+@_tool(annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True), waits=True)
+def provider_status(refresh: bool = False, ctx: Context | None = None) -> dict[str, Any]:
+    """Whether each provider's key works, and whether the Krea account is connected.
+
+    `providers` maps each provider to {configured, status, lastChecked,
+    detail}: status is valid, invalid, unauthorized, insufficient_credits,
+    rate_limited, error, configured_unverified (no free check exists) or
+    not_configured. Nebula checks keys only with free, read-only calls
+    (never a generation) and keeps results for 5 minutes; `refresh` checks
+    again now. `krea` is the Krea account connection ({status: connected,
+    needs_auth, disconnected or error, signInPending, error}); only the
+    person connects it, in Settings."""
+    health = _canvas_call("GET", "/api/health/providers", ctx, timeout=60.0,
+                          params={"refresh": "true"} if refresh else None)
+    providers: dict[str, Any] = {}
+    for name, entry in (health.get("providers") or {}).items():
+        if not isinstance(entry, dict):
+            continue
+        row = {"configured": bool(entry.get("configured")), "status": entry.get("status"),
+               "lastChecked": entry.get("last_checked")}
+        if entry.get("detail"):
+            row["detail"] = entry["detail"]
+        providers[str(name)] = row
+    try:
+        connection = _canvas_call("GET", "/api/krea/connection", ctx)
+    except NebulaAPIError as exc:
+        krea: dict[str, Any] = {"status": "unknown", "error": exc.detail}
+    else:
+        # The sign-in link is the person's to open; an agent only learns one waits.
+        krea = {"status": connection.get("status")}
+        if connection.get("authorizationUrl"):
+            krea["signInPending"] = True
+        for key in ("error", "tools"):
+            if connection.get(key):
+                krea[key] = connection[key]
+    return {"providers": providers, "krea": krea}
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:

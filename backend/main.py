@@ -4291,11 +4291,15 @@ def _journal_execution_event(event: Any, run_id: str | None) -> None:
         if not canvas_events.first_run_event(run_id, node_id, kind):
             return
         data: dict[str, Any] = {"runId": run_id}
+        # Agents read these (wait_for_canvas_change, `nebula watch`): hide a key
+        # a provider quoted (services/key_echoes.py) before cutting to 200, so
+        # a key cut short can't slip under the 8-character run check.
         if isinstance(event, ErrorEvent):
-            error = event.friendly or event.error or ""
+            error = _hide_key_echoes(event.friendly or event.error or "", _agent_key_secrets())
             data["error"] = str(_journal_safe_value(error, key="error"))[:200]
         if isinstance(event, SkippedEvent):
-            data["reason"] = str(_journal_safe_value(event.reason, key="reason"))[:200]
+            reason = _hide_key_echoes(event.reason, _agent_key_secrets())
+            data["reason"] = str(_journal_safe_value(reason, key="reason"))[:200]
             if event.gate_node_id:
                 data["gateNodeId"] = event.gate_node_id
         _journal(
@@ -4395,10 +4399,11 @@ async def get_canvas_snapshot() -> dict[str, Any]:
     selected = selection_context.snapshot(cli_graph, node_registry).get("selectedNodeIds", [])
     snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=selected)
     # Why a node's last run failed, as its card says it (services/node_errors.py).
+    key_words = _agent_key_secrets()
     for node in snapshot.get("nodes") or []:
         failed = node_errors.get(node["id"])
         if failed:
-            node["error"] = failed["error"]
+            node["error"] = _hide_key_echoes(failed["error"], key_words)
             if failed.get("hint"):
                 node["errorHint"] = failed["hint"]
     # `nebula look` then `nebula watch --since <cursor>` leaves no gap.
@@ -4411,7 +4416,46 @@ async def get_canvas_snapshot() -> dict[str, Any]:
     # Proposals waiting for the person (one line each; never their accept keys).
     await _sweep_proposals()
     snapshot["proposals"] = [canvas_proposals.brief(p) for p in canvas_proposals.open_list()]
+    snapshot["providerHolds"] = _provider_holds_for_agents()
     return snapshot
+
+
+def _provider_holds_for_agents() -> dict[str, Any]:
+    """Paid starts Nebula holds, read-only (graph export has the same two
+    lists): `recoveries` are accepted World Labs operations a rerun resumes
+    instead of paying again; `startAmbiguities` are starts Nebula couldn't
+    confirm, which keep the node from starting again until someone checks
+    Marble and clears it. Agents have no tool to clear either."""
+    try:
+        recoveries = provider_recovery_store.list()
+    except Exception:  # noqa: BLE001 - a read surface never fails the snapshot
+        recoveries = []
+    try:
+        ambiguities = provider_start_guard.list()
+    except Exception:  # noqa: BLE001
+        ambiguities = []
+    return {
+        "recoveries": [{key: record.get(key) for key in ("runId", "nodeId", "resumeOperationId", "existingWorldId")}
+                       for record in recoveries],
+        "startAmbiguities": [{key: record.get(key) for key in ("runId", "nodeId", "kind", "message", "durable")}
+                             for record in ambiguities],
+    }
+
+
+def _journal_provider_hold(hold: str, change: str, *, run_id: str | None, node_id: str,
+                           kind: str | None = None, durable: bool | None = None,
+                           actor: dict[str, Any] | None = None) -> None:
+    """One ``provider.hold`` event: a paid start held (`change` "held") or
+    cleared ("cleared"). `hold` is "recovery" or "startAmbiguity"."""
+    data: dict[str, Any] = {"hold": hold, "change": change, "runId": run_id}
+    if kind:
+        data["kind"] = kind
+    if durable is not None:
+        data["durable"] = durable
+    what = "a paid start Nebula couldn't confirm" if hold == "startAmbiguity" else "a recovery checkpoint"
+    summary = (f"{_node_label(node_id)} ({node_id}) is held: {what}" if change == "held"
+               else f"{what} on {_node_label(node_id)} ({node_id}) was cleared")
+    _journal("provider.hold", node_id=node_id, data=data, summary=summary, actor=actor)
 
 
 def _start_node_notes(rows: list[dict[str, Any]], context: Mapping[str, Any], via: str) -> list[str]:
@@ -6332,8 +6376,12 @@ async def get_settings() -> dict:
     settings = load_settings()
     masked = dict(settings)
     if "apiKeys" in masked:
+        # Justin, Q55 a: "Only the app (your person token) gets the endings.
+        # Everything else learns which providers are set, and nothing more."
+        # An agent's curl or `nebula keys` sees a bare "***" for a set key.
+        person = _is_person_request()
         masked["apiKeys"] = {
-            k: ("***" + v[-4:] if len(v) > 4 else "***") if v else ""
+            k: (("***" + v[-4:] if len(v) > 4 else "***") if person else "***") if v else ""
             for k, v in masked["apiKeys"].items()
         }
     if agent_spend.CAPS_KEY in masked:
@@ -8004,6 +8052,8 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
                 }
             )
         await manager.broadcast(event)
+        _journal_provider_hold("startAmbiguity", "held", run_id=run_id, node_id=event.node_id, kind=event.kind,
+                               durable=event.durable, actor=canvas_events.run_actor(run_id))
         if run_id is not None:
             await _broadcast_graph_sync()
         return
@@ -8020,6 +8070,9 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
                 update={"durable": False, "warning": durability_warning}
             )
         await manager.broadcast(event)
+        _journal_provider_hold("recovery", "held", run_id=event.run_id or execution_run_id.get(),
+                               node_id=event.node_id, durable=event.durable,
+                               actor=canvas_events.run_actor(event.run_id or execution_run_id.get()))
         if changed or safety_hold_changed:
             await _broadcast_graph_sync()
         return
@@ -8050,6 +8103,8 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
                 for snapshot in event.batch_outputs
             ]
         event = event.model_copy(update=updates)
+    # What get_run reports for the run (services/run_reports.py).
+    _run_reports().observe(event, run_id)
     await manager.broadcast(event)
 
 
@@ -9344,6 +9399,8 @@ async def delete_provider_recovery(
                 current["params"] = params
                 cli_graph._maybe_persist()
     await _broadcast_graph_sync()
+    if removed:
+        _journal_provider_hold("recovery", "cleared", run_id=run_id, node_id=node_id)
     return {
         "status": "deleted",
         "runId": run_id,
@@ -9375,6 +9432,8 @@ async def acknowledge_provider_start_ambiguity(
             detail="Could not durably acknowledge World Labs paid-start hold",
         ) from exc
     await _broadcast_graph_sync()
+    if removed:
+        _journal_provider_hold("startAmbiguity", "cleared", run_id=run_id, node_id=node_id, kind=kind)
     return {
         "status": "acknowledged",
         "kind": kind,
@@ -10483,7 +10542,9 @@ def _raise_last_run_failed(node_id: str) -> None:
     failed = node_errors.get(node_id)
     if failed:
         hint = f" ({failed['hint']})" if failed.get("hint") else ""
-        raise HTTPException(status_code=409, detail=f"{node_id} has no output: its last run failed: {failed['error']}{hint}")
+        # An agent read: hide a key the provider quoted (services/key_echoes.py).
+        error = _hide_key_echoes(failed["error"], _agent_key_secrets())
+        raise HTTPException(status_code=409, detail=f"{node_id} has no output: its last run failed: {error}{hint}")
 
 
 def _preview_path(value: Any, node_id: str, port: str) -> Path:
@@ -10536,7 +10597,11 @@ def _last_run_error_header(node_id: str) -> dict[str, str] | None:
     """The node's output is from before a run that failed: view_output says
     so beside it, a picture (200) or a value (415) alike."""
     failed = node_errors.get(node_id)
-    return {"X-Nebula-Last-Run-Error": quote(failed["error"], safe=" :,.()'")} if failed else None
+    if not failed:
+        return None
+    # Hide a quoted key (services/key_echoes.py) before quote() encodes it.
+    error = _hide_key_echoes(failed["error"], _agent_key_secrets())
+    return {"X-Nebula-Last-Run-Error": quote(error, safe=" :,.()'")}
 
 
 def _resolve_primary_image_url(node: dict[str, Any]) -> str | None:
@@ -11560,12 +11625,22 @@ async def list_projects() -> dict[str, Any]:
 
 
 @app.get("/api/projects/{project_id}")
-async def get_saved_project(project_id: str) -> dict[str, Any]:
+async def get_saved_project(project_id: str, view: str | None = None) -> dict[str, Any]:
+    """The project the canvas loads. ``view=agent``: the same project as
+    agents read it (MCP get_project), redacted like look_at_canvas
+    (services/project_view.py)."""
+    if view not in (None, "agent"):
+        raise HTTPException(status_code=400, detail="view must be agent, or left out for the saved project")
     exported = await _projects_live_export()
     with project_store.transaction() as catalog:
         project = _project_id_or_404(project_id, catalog)
         if catalog["activeProjectId"] == project_id and _overlay_live_project(project, exported):
             project_store.commit(catalog)
+        if view == "agent":
+            from services.project_view import agent_project
+
+            return agent_project(project, node_registry.get_all(), open_id=catalog["activeProjectId"],
+                                 secrets=_agent_key_secrets())
         return public_project(project)
 
 
@@ -11634,6 +11709,7 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         project_store.commit(catalog)
         result = {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
     await _broadcast_projects_changed("created", recovery_id)
+    _journal_project_change("project.created", result["project"])
     return result
 
 
@@ -11692,6 +11768,33 @@ async def _broadcast_projects_changed(change: str, project_id: str | None = None
         pass
 
 
+_PROJECT_SUMMARIES = {
+    "project.created": 'made project "{name}"',
+    "project.renamed": 'renamed project "{previous}" to "{name}"',
+    "project.deleted": 'moved project "{name}" to Recently deleted',
+    "project.restored": 'restored project "{name}" from Recently deleted',
+}
+
+
+def _journal_project_change(kind: str, project: Mapping[str, Any], *, previous_name: str | None = None,
+                            was_open: bool | None = None) -> None:
+    """Journal a project made, renamed, deleted or restored (``project.*``),
+    in the name of whoever asked, so wait_for_canvas_change and `nebula
+    watch` see the person's changes and other agents'. Next to
+    _broadcast_projects_changed, which tells open tabs; opening, saving, the
+    cover and deleting for good aren't journaled here (an open is
+    ``canvas.replaced``). Never fails the route."""
+    name = str(project.get("name") or "")
+    data: dict[str, Any] = {"projectId": project.get("id"), "name": name}
+    if previous_name is not None:
+        data.update({"from": previous_name, "to": name})
+    if was_open is not None:
+        data["wasOpen"] = was_open
+    if kind == "project.created" and isinstance(project.get("createdBy"), dict):
+        data["createdBy"] = project["createdBy"].get("name")
+    _journal(kind, data=data, summary=_PROJECT_SUMMARIES[kind].format(name=name, previous=previous_name or ""))
+
+
 @app.post("/api/projects")
 async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, Any]:
     body = body or {}
@@ -11725,6 +11828,7 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
     await _broadcast_graph_sync(graph_replaced=True, reason="project-create",
                                 project_switch=_switch_notice(start, project, created=True))
     await _broadcast_projects_changed("created", project["id"])
+    _journal_project_change("project.created", project)
     # A bundle built for another version doesn't load it (projectStore.ts activate).
     return {"project": public_project(project), "workspaceRevision": revision, "paramsVersion": PARAMS_VERSION}
 
@@ -11829,6 +11933,8 @@ async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
     result = _save_project(project_id, body, ingress=verdict)
     # A save moves the card up and can change its picture and node count.
     await _broadcast_projects_changed("renamed" if "name" in body else "saved", project_id)
+    if "previousName" in result and result["previousName"] != result["project"]["name"]:
+        _journal_project_change("project.renamed", result["project"], previous_name=result["previousName"])
     return result
 
 
@@ -11865,6 +11971,7 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
             project["_nodeCounter"] = cli_graph._counter
             if catalog.get("migratedProjectId") == project_id:
                 catalog.pop("migratedProjectId", None)
+        previous_name = project["name"]
         if "name" in body:
             try:
                 project["name"] = project_name(body["name"])
@@ -11872,7 +11979,11 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
         refresh_metadata(project)
         project_store.commit(catalog)
-        return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
+        result = {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
+        if "name" in body:
+            # The name it had, so a rename can be undone (MCP rename_project).
+            result["previousName"] = previous_name
+        return result
 
 
 def _keep_person_viewport(staged: dict[str, Any], stored: dict[str, Any]) -> None:
@@ -12044,6 +12155,7 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
     if deleting_active:
         await _broadcast_graph_sync(graph_replaced=True, reason="project-delete")
     await _broadcast_projects_changed("deleted", project_id)
+    _journal_project_change("project.deleted", result["trashedProject"], was_open=deleting_active)
     return result
 
 
@@ -12074,6 +12186,7 @@ async def restore_saved_project(project_id: str) -> dict[str, Any]:
         project_store.commit(catalog)
         result = {"project": project_metadata(project), "workspaceRevision": catalog["workspaceRevision"]}
     await _broadcast_projects_changed("restored", project_id)
+    _journal_project_change("project.restored", result["project"])
     return result
 
 
@@ -12329,7 +12442,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     _watch_for_cross_process_stop(run_id, task)
     _cli_runs.start(run_id, task, target, outcome)
-    return await _cli_run_response(run_id, None if wait is None else float(wait))
+    return _hide_run_key_echoes(await _cli_run_response(run_id, None if wait is None else float(wait)))
 
 
 async def _refused_cli_run(run_id: str, target: str | None, errors: list[ValidationErrorDetail]) -> dict[str, Any]:
@@ -12460,6 +12573,8 @@ class _CliRuns:
 
     def start(self, run_id: str, task: asyncio.Task, target: str | None, outcome: dict[str, Any]) -> None:
         self._runs[run_id] = {"task": task, "target": target, "outcome": outcome, "started": _time_module.time()}
+        # Once forgotten here, get_run still answers from the run's events, as an agent's run.
+        _run_reports().mark_source(run_id, "agent")
         finished = [key for key, entry in self._runs.items() if entry["task"].done()]
         for key in finished[:max(0, len(finished) - self.KEEP_FINISHED)]:
             self._runs.pop(key, None)
@@ -12512,8 +12627,90 @@ async def _cli_run_response(run_id: str, wait: float | None, *, report_failure: 
 
 @app.get("/api/graph/runs/{run_id}")
 async def get_graph_run(run_id: str, wait: float = 0) -> dict[str, Any]:
-    """A CLI run's outcome; with ``wait`` (seconds, max 300), wait for it to finish first."""
-    return await _cli_run_response(run_id, max(0.0, min(float(wait), 300.0)), report_failure=True)
+    """A run's outcome; with ``wait`` (seconds, max 300), wait for it to finish first.
+
+    A run an agent or the CLI started answers as it always has. Any other run
+    (the person's Run on the canvas, an accepted proposal's run) answers from
+    the execution registry and the run's own events (services/run_reports.py),
+    in the same shape with `source: "canvas"` (`"agent"` for an agent's run
+    this route no longer keeps), `startedBy` (``{kind, name}``)
+    and `nodes`: each node's state, latest `progress`, streamed `partialText`
+    and `error`. A CLI run still going carries `nodes` too; once it ends it
+    answers exactly as its start did."""
+    wait = max(0.0, min(float(wait), 300.0))
+    reports = _run_reports()
+    if _cli_runs.get(run_id) is None and (execution_runs.get(run_id) is not None or reports.known(run_id)):
+        response = await _canvas_run_response(run_id, wait)
+        return _hide_run_key_echoes({**response, "startedBy": actor_record(canvas_events.run_actor(run_id)),
+                                     "nodes": reports.progress(run_id)})
+    response = await _cli_run_response(run_id, wait, report_failure=True)
+    if response.get("status") == "running" and reports.known(run_id):
+        response = {**response, "nodes": reports.progress(run_id),
+                    "startedBy": actor_record(canvas_events.run_actor(run_id))}
+    return _hide_run_key_echoes(response)
+
+
+def _agent_key_secrets() -> list[str]:
+    """The configured keys, for hiding wherever a provider quoted one in an
+    error agents read (services/key_echoes.py). Never fails the read."""
+    from services.key_echoes import configured_secrets
+
+    try:
+        return configured_secrets(load_settings().get("apiKeys"))
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _hide_key_echoes(text: Any, key_words: list[str]) -> Any:
+    from services.key_echoes import hide_key_echoes
+
+    return hide_key_echoes(text, key_words)
+
+
+def _hide_run_key_echoes(response: dict[str, Any]) -> dict[str, Any]:
+    from services.key_echoes import hide_in_run
+
+    return hide_in_run(response, _agent_key_secrets())
+
+
+def _run_reports():
+    from services.run_reports import run_reports
+
+    return run_reports
+
+
+_CANVAS_RUN_STATUS = {"completed": "finished", "failed": "failed", "cancelled": "cancelled",
+                      "running": "running", "cancelling": "running"}
+
+
+async def _canvas_run_response(run_id: str, wait: float) -> dict[str, Any]:
+    """A run the canvas started, as _cli_run_response words a CLI run."""
+    record = execution_runs.get(run_id)
+    if record is not None and not record.task.done():
+        # asyncio.wait never cancels the run, even when this request is cancelled.
+        await asyncio.wait({record.task}, timeout=wait)
+        await asyncio.sleep(0)  # the registry marks it terminal in a done callback
+    record = execution_runs.get(run_id)
+    made = _run_reports().outcome(run_id)
+    head = {"runId": run_id, "targetNodeId": None, "source": _run_reports().source(run_id) or "canvas"}
+    nodes_executed = made.pop("nodesExecuted", len(made["results"]) + len(made["errors"]))
+    if record is None:
+        # Pruned from the registry (it keeps the last 256): what its events said.
+        status = "failed" if made["errors"] else "finished"
+    else:
+        status = _CANVAS_RUN_STATUS.get(record.status, record.status)
+        if status == "finished" and made["errors"]:
+            status = "failed"
+    response = {**head, "status": status, **made, "nodesExecuted": nodes_executed}
+    if status == "failed" and made["errors"]:
+        failed = list(made["errors"])
+        response["error"] = (f"{failed[0]} failed: {made['errors'][failed[0]]}" if len(failed) == 1
+                             else f"{len(failed)} nodes failed: {', '.join(failed)} (errors has each message)")
+    elif status == "failed":
+        # The run raised before any node reported. Its exception stays in
+        # Nebula's log: its text can be anything, a provider's reply included.
+        response["error"] = "The run stopped with an error before any node reported one; Nebula's log has the details."
+    return response
 
 
 # Image reference suffixes recognized by /api/quick (matches the scalar
