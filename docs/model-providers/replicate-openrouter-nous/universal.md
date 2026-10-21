@@ -62,6 +62,17 @@ Correct. Output lives at `result["output"]`. The `_infer_output_type` helper
 correctly handles: single URL string (image/video/audio by extension), list of
 URL strings (returns first), plain string (Text), and dict (stringified Text).
 
+Since 2026-10-21 that naming applies only to a node never configured for its
+model. A configured node declares one output typed before the run from the
+model's data (`services/universal_ports.replicate_output`: the output schema's
+content hints, else the `default_example` run's file; `image` with
+`typeUnconfirmed` when nothing says), and `_fill_declared_port` puts the
+result under that port, failing the run naming both types when the returned
+file contradicts a confirmed port. On an unconfirmed port the file's own type
+wins (it goes out under its own port), and a node re-typed by a new model
+drops saved outputs its new port doesn't take (`main._drop_outputs_off_ports`,
+the pickers' `outputsOnPorts`), so its project still saves.
+
 ### Poll config
 
 - `terminal_success`: `{"succeeded"}` — correct

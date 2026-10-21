@@ -432,6 +432,11 @@ def test_an_agent_proposes_sending_a_boards_notes_and_the_person_accepts_in_stud
     changed = [m for m in api.sent if m.get("type") == "storedAssetChanged" and m.get("id") == board["id"]]
     assert changed and "tab" not in (changed[-1].get("edit") or {})
     assert _events(api, "proposal.accepted")[-1]["data"]["kind"] == "moodboard"
+    # Q91 a: the accepted change is journaled like any field write, by name only.
+    fields = _events(api, "board.fields")
+    assert [event["data"]["fields"] for event in fields] == [["sendNotes"]]
+    assert fields[0]["data"]["boardId"] == board["id"]
+    assert "Your notes say dusk" not in json.dumps(fields)
 
 
 @pytest.mark.parametrize(("change", "status", "words"), [

@@ -11,6 +11,8 @@ from execution.async_poll_runner import AsyncPollConfig, poll_until_terminal, _c
 from execution.stream_runner import ReplicateStreamOutputMode, stream_execute_replicate
 from services.cancellation import schedule_detached_cancel
 from execution.missing_credential import MissingCredentialError
+from services import universal_ports
+from services.media_types import MEDIA_PORT_IDS, media_of_value
 
 REPLICATE_API_BASE = "https://api.replicate.com/v1"
 
@@ -129,6 +131,71 @@ def _infer_output_type(output: Any) -> dict[str, Any]:
     return {"text": {"type": "Text", "value": str(output)}}
 
 
+def _first_value(output: Any) -> Any:
+    """The value a run passes on: the output, or a list's first item (a list
+    of files returns its first, as _infer_output_type always did)."""
+    return output[0] if isinstance(output, list) and output else output
+
+
+def _fill_declared_port(node: GraphNode, output: Any, task_id: str | None) -> dict[str, Any]:
+    """Put a run's output under the port its node declares.
+
+    A node configured for its model (services/universal_ports.py) declares one
+    output, typed before the run from the model's metadata, and the engine
+    passes outputs between nodes by that handle, so the run fills it:
+
+    - a Text port takes output that names no media type as text (plain text,
+      or a URL with no telling extension);
+    - a file port takes the returned file when the file's type agrees (or
+      can't be told, e.g. a URL with no telling extension);
+    - a port typed as a guess (`typeUnconfirmed`: the model's data said
+      nothing) takes the file's word for it: a file of another type goes out
+      under that type's own port (`video`, `audio`, ...), so a paid result is
+      kept and shown, though a wire on the guessed port gets nothing;
+    - anything else (a file of another type on a confirmed port, a media
+      file on a Text port, text on a file port) fails the run naming both, so
+      nothing is passed on silently under a type the next node can't take.
+
+    A node never configured keeps naming its output by the returned file, as
+    it always has, and so does a node whose kept ports were written before
+    file outputs were typed (#132's stamp: every file `image`): there a
+    contradicting file goes out under its own handle as before, and sending
+    the model again types the port (universal_ports.untyped_output_stamp)."""
+    declared = universal_ports.declared_output(node.definition_id, node.params)
+    inferred = _infer_output_type(output)
+    if declared is None:
+        return inferred
+    port_id, port_type = str(declared["id"]), str(declared["dataType"])
+    value = _first_value(output)
+    is_file = isinstance(value, str) and value.startswith(("http://", "https://", "data:"))
+    returned = media_of_value(value) if is_file else None
+    if port_type == "Text":
+        # Plain text, or a URL that names no media type, is text; a file whose
+        # type can be told (a data: URI's MIME type, a URL's extension) is not.
+        if returned is None:
+            text = output if isinstance(output, str) else next(iter(inferred.values()))["value"]
+            return {port_id: {"type": "Text", "value": text}}
+    elif is_file and (returned is None or returned == port_type):
+        return {port_id: {"type": port_type, "value": value}}
+    if universal_ports.untyped_output_stamp(node.definition_id, node.params):
+        return inferred
+    if declared.get("typeUnconfirmed") and returned:
+        # The port was a guess (no hint, no example run); the file says what it is.
+        return {MEDIA_PORT_IDS[returned]: {"type": returned, "value": value}}
+    model = str(node.params.get("model_id") or "this model")
+    what = (f"{'an' if returned[0] in 'AEIOU' else 'a'} {returned} file" if returned else "text (Text), not a file")
+    if declared.get("typeUnconfirmed"):
+        why = (f"Replicate's data for the model doesn't say what it returns, so Nebula typed that port "
+               f"{port_type}, unconfirmed, before the run")
+    else:
+        why = ("typed from the model's data before the run; if the model changed, pick it again (or set its "
+               "model_id again) to re-read its ports")
+    where = f" The result is still on Replicate (prediction {task_id})." if task_id else ""
+    raise RuntimeError(
+        f"{model} returned {what}, but this node's output `{port_id}` is {port_type} ({why}), so nothing was "
+        f"passed on.{where}")
+
+
 async def handle_replicate_universal(
     node: GraphNode,
     inputs: dict[str, PortValueDict],
@@ -231,7 +298,7 @@ async def handle_replicate_universal(
             # Preserve text-model behavior while routing streamed media through
             # the same type inference used by polled predictions so the engine
             # can materialize it into the run directory.
-            return _infer_output_type(text)
+            return _fill_declared_port(node, text, task_id)
 
         # Non-streaming output (images/video/audio/mesh/structured) — poll to terminal.
         result = await poll_until_terminal(client, config, task_id, node.id, emit_fn)
@@ -240,4 +307,4 @@ async def handle_replicate_universal(
     if output is None:
         raise RuntimeError("Replicate returned no output")
 
-    return _infer_output_type(output)
+    return _fill_declared_port(node, output, task_id)

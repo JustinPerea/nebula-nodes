@@ -90,6 +90,9 @@ FIELD_LABELS = {
     "sendNotes": "Send notes to generators", "coverImageId": "The cover",
     "briefOverride": "The hand-written brief",
 }
+# The fields a ``board.fields`` journal event names, in this order. The
+# cover is left out: it has its own event (``board.cover``, with the image).
+JOURNAL_FIELDS = tuple(key for key in FIELD_KEYS if key != "coverImageId")
 SETTING_LABELS = {"weight": "weight", "excluded": "Set aside switch", "notes": "notes",
                   "privateNote": "private note"}
 
@@ -1146,7 +1149,8 @@ def diff(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
     """What changed from ``before`` to ``after``: the slices that undo it,
     the ids it touched and what the journal says (kinds and the images
     named). Images, their cards, the frames and the board's own fields (a
-    ``fields`` slice); of those, only the board's notes are journaled."""
+    ``fields`` slice); ``fields`` names the board fields that changed, in
+    JOURNAL_FIELDS order, for the ``board.fields`` event (``fields_entry``)."""
     old, new = _images_by_id(before), _images_by_id(after)
     slices: list[dict[str, Any]] = []
     touched_images: list[str] = []
@@ -1214,8 +1218,6 @@ def diff(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
         touched_frames.append(frame_id)
     if touched_frames:
         kinds.setdefault("frame", [])
-    if before.get("notes") != after.get("notes") and "notes" in after:
-        kinds.setdefault("noted", [])
     was_cover, cover = field_value(before, "coverImageId"), field_value(after, "coverImageId")
     if was_cover != cover:
         # The journal names the new cover, or the one that went.
@@ -1225,10 +1227,11 @@ def diff(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
     fields = fields_slice(before, after)
     if fields is not None:
         slices.append(fields)
+    changed_fields = [key for key in JOURNAL_FIELDS if fields is not None and key in fields["expect"]]
 
     slices.sort(key=_phase)
     return {"slices": slices, "touched": {"images": touched_images, "frames": touched_frames, "looks": []},
-            "kinds": kinds, "private": private}
+            "kinds": kinds, "private": private, "fields": changed_fields}
 
 
 def holds_private_note(undo: Any) -> bool:
@@ -1283,9 +1286,10 @@ def board_where(board: Mapping[str, Any] | None, *fallbacks: Mapping[str, Any] |
 
 
 def journal_entry(changes: dict[str, Any], before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any] | None:
-    """The journal event for a change (``diff``'s), or None when nothing worth
-    journaling changed (a move under 8 px, a rename). Never any note text:
-    a private note changed is "private note changed"."""
+    """The journal event for a change to the board's images, cards or frames
+    (``diff``'s), or None when nothing of those worth journaling changed (a
+    move under 8 px; the board's own fields are ``fields_entry``'s). Never
+    any note text: a private note changed is "private note changed"."""
     kinds = [kind for kind in KIND_ORDER if kind in changes["kinds"]]
     if not kinds:
         return None
@@ -1325,9 +1329,7 @@ def journal_entry(changes: dict[str, Any], before: dict[str, Any], after: dict[s
         summary = cover_words(after, where)
     elif kind == "noted":
         noted = changes["kinds"]["noted"]
-        if not noted:
-            summary = f"changed the notes of {where}"
-        elif all(image_id in changes["private"] for image_id in noted):
+        if all(image_id in changes["private"] for image_id in noted):
             summary = f"private note changed on {_listed([f'#{number(i)}' for i in noted])} on {where}"
         else:
             summary = f"changed the notes on {_listed([f'#{number(i)}' for i in noted])} on {where}"
@@ -1337,6 +1339,47 @@ def journal_entry(changes: dict[str, Any], before: dict[str, Any], after: dict[s
         summary += " (private note changed)"
     return {"kind": f"board.{kind}", "kinds": [f"board.{k}" for k in kinds], "refs": refs[:50],
             "summary": summary}
+
+
+def field_label(key: str) -> str:
+    """A board field as a sentence names it mid-line: "Direction", "the
+    Avoid list", "Send notes to generators" (FIELD_LABELS, lower-cased "The")."""
+    label = FIELD_LABELS.get(key, key)
+    return "the " + label[4:] if label.startswith("The ") else label
+
+
+def listed_words(words: list[str]) -> str:
+    """"a", "a and b", "a, b and c"."""
+    return words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]
+
+
+# A ``board.fields`` summary names this many fields, then "and N more".
+MAX_SUMMARY_FIELDS = 4
+
+
+def fields_entry(changes: Mapping[str, Any], before: Mapping[str, Any],
+                 after: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The ``board.fields`` journal event for a change (``diff``'s): the
+    board fields that changed, by name, or None when none did. Never a
+    value, so no Direction, Avoid or notes text, no colour, no strength and
+    no switch's on or off (Justin's Q91: "the field names but none of your
+    text"): "changed Direction and the Avoid list on board Dusk"."""
+    fields = [key for key in JOURNAL_FIELDS if key in (changes.get("fields") or ())]
+    if not fields:
+        return None
+    words = [field_label(key) for key in fields]
+    if len(words) > MAX_SUMMARY_FIELDS:
+        words = [*words[:MAX_SUMMARY_FIELDS - 1], f"{len(words) - MAX_SUMMARY_FIELDS + 1} more fields"]
+    return {"kind": "board.fields", "fields": fields,
+            "summary": f"changed {listed_words(words)} on {board_where(dict(after), dict(before))}"}
+
+
+def journal_entries(changes: dict[str, Any], before: dict[str, Any], after: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every journal event for one board write, in order: the images, cards
+    and frames (``journal_entry``), then the board's own fields
+    (``fields_entry``). Empty when the write changed nothing worth saying."""
+    return [entry for entry in (journal_entry(changes, before, after), fields_entry(changes, before, after))
+            if entry is not None]
 
 
 def cover_words(after: dict[str, Any], where: str = "") -> str:
@@ -1424,6 +1467,7 @@ def apply_edits(board: dict[str, Any], ops: Any, *, by: str, now: str | None = N
                       touched=changes["touched"], changes=changes)
 
 
-__all__ = ["EditError", "EditResult", "FIELD_KEYS", "MAX_OPS", "OPS", "UNDO_BROADCAST_LIMIT", "apply_edits",
-           "board_where", "clean_say", "cover_words", "diff", "field_value", "fields_slice", "holds_private_note",
-           "journal_entry", "parse_ops", "steering"]
+__all__ = ["EditError", "EditResult", "FIELD_KEYS", "JOURNAL_FIELDS", "MAX_OPS", "OPS", "UNDO_BROADCAST_LIMIT",
+           "apply_edits", "board_where", "clean_say", "cover_words", "diff", "field_label", "field_value",
+           "fields_entry", "fields_slice", "holds_private_note", "journal_entries", "journal_entry", "listed_words",
+           "parse_ops", "steering"]
