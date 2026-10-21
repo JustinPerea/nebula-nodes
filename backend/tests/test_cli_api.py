@@ -746,6 +746,28 @@ class TestOutputsRestore:
         assert fetch.status_code == 200
         assert fetch.content == original_bytes
 
+    @pytest.mark.parametrize("where", ["position", "viewport"])
+    @pytest.mark.parametrize("token", ["1" + "0" * 400, "9" * 4301], ids=["10**400", "4301-digits"])
+    def test_restore_refuses_an_int_past_float_range(self, client, where, token):
+        """graph.json in a bundle is client JSON parsed outside Request.json().
+        float(10**400) raised OverflowError there: a 500 (2026-10-20)."""
+        graph = self._valid_graph()
+        if where == "position":
+            graph["nodes"] = [{"id": "n1", "type": "text-input", "position": {"x": 0, "y": 0},
+                               "data": {"label": "Text", "definitionId": "text-input", "params": {}, "outputs": {}}}]
+            raw = json.dumps(graph).replace('"x": 0', f'"x": {token}', 1)
+        else:
+            graph["viewport"] = {"x": 0, "y": 0, "zoom": 1}
+            raw = json.dumps(graph).replace('"x": 0', f'"x": {token}', 1)
+        assert token in raw
+        zip_bytes = self._make_zip_entries([("graph.json", raw.encode("utf-8"))])
+        resp = TestClient(client.app, raise_server_exceptions=False).post(
+            "/api/outputs/restore", content=zip_bytes, headers={"content-type": "application/zip"},
+        )
+        assert resp.status_code == 400, resp.text
+        detail = resp.json()["detail"]
+        assert detail.startswith("Invalid graph.json:") and "1.8e308" in detail and len(detail) < 200
+
     def test_restore_rejects_non_zip_body(self, client):
         resp = client.post(
             "/api/outputs/restore",
