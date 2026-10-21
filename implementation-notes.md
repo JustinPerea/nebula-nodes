@@ -5,8 +5,8 @@
 Branch `fix/krea-consent-expiry-flake` from origin/main 7fc3e512. Test-only.
 
 - **What failed.** `test_consent_expiry_closes_listener_and_does_not_sign_in_again` failed in the #137 lane's full suite under load average 23 ("assert 'connecting' == 'needs_auth'"). It set `CONSENT_TTL` to 0.02 s and slept 0.05 s, so the expiry task had 30 ms to run. Alone it passed 5 of 5.
-- **Fix.** The test awaits the connector's own expiry task (`asyncio.wait_for(connector._expiry_task, 5)`) and then checks the same things: status `needs_auth`, nothing pending, the listener closed, one registration, no token exchange. If the expiry never ran, the wait times out and the test fails.
-- **Checked.** The file passes 3 of 3 (56 tests).
+- **Fix.** The test awaits the connector's own expiry task (`asyncio.wait_for(connector._expiry_task, 5)`) and then checks the same things: status `needs_auth`, nothing pending, the listener closed, one registration, no token exchange. If the expiry task never finishes, the wait times out after 5 s; if none was created, the await fails at once. Either way the test fails.
+- **Checked.** The file passes 3 of 3 (56 tests). Review: four broken connectors (no listener close, no `needs_auth`, no expiry task, an expiry that hangs) each fail the new test; a 100 ms stall at the start of `_expire` fails the old test and passes the new one.
 
 ## 2026-10-20 — The project-open ping tests: a limit clear of pauses the open didn't cause
 
