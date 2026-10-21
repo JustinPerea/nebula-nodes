@@ -159,7 +159,8 @@ async def handle_replicate_universal(
             prediction_input[input_key] = input_val.value
 
     # Map node params (excluding our internal keys) to prediction input
-    INTERNAL_KEYS = {"model_id", "_version_id", "_schema_fetched"}
+    # `_model_ports` is the canvas's record of the model's ports (services/universal_ports.py).
+    INTERNAL_KEYS = {"model_id", "_version_id", "_schema_fetched", "_model_ports"}
     for param_key, param_val in node.params.items():
         if param_key not in INTERNAL_KEYS and param_val is not None and param_val != "":
             prediction_input[param_key] = param_val

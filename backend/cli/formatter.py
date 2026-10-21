@@ -752,8 +752,9 @@ def format_proposal(view: dict[str, Any], *, created: bool = False, now_ms: floa
     status = view.get("status") or "open"
     now = now_ms if now_ms is not None else _time.time() * 1000
     left = (float(view.get("expiresAt") or 0) - now) / 1000
+    where = _ASSET_DECIDE_IN.get(str(view.get("decideIn") or "")) if view.get("kind") else None
     if created:
-        head = f"Proposal {proposal_id} is on the canvas for the person (expires in {_minutes(left)})."
+        head = f"Proposal {proposal_id} is {where or 'on the canvas'} for the person (expires in {_minutes(left)})."
     else:
         agent = (view.get("agent") or {}).get("name") or "an agent"
         when = f", expires in {_minutes(left)}" if status == "open" else ""
@@ -761,6 +762,12 @@ def format_proposal(view: dict[str, Any], *, created: bool = False, now_ms: floa
         note = json.dumps(str(view.get("note") or ""), ensure_ascii=False)
         head = f"{proposal_id} by {agent} [{status}{when}]{reason}: {note}"
     lines = [head]
+    if view.get("kind"):
+        # A project's or a board's (services/asset_proposals.py): what it changes, no graph.
+        lines.extend(_asset_change_lines(view, where))
+        if created:
+            lines.append(f"Check the outcome: nebula proposal {proposal_id} --wait")
+        return "\n".join(lines)
     for node in view.get("nodes") or []:
         cost = (node.get("cost") or {}).get("label") or "?"
         pos = node.get("position") or {}
@@ -802,6 +809,14 @@ def format_applied(result: dict[str, Any], *, undo: bool = True) -> str:
     arrange = result.get("arrange")
     if isinstance(arrange, dict) and arrange.get("message"):
         lines.append(f"  Arrange: {arrange['message']}")
+    # Universal nodes (OpenRouter, Nous Portal, Replicate) whose model was set:
+    # the ports it gave them, or why they have only their basic ones.
+    for node_id, ports in (result.get("modelPorts") or {}).items():
+        if isinstance(ports, dict):
+            lines.append(f"  Ports of {node_id} ({ports.get('model')}): in {', '.join(ports.get('inputs') or []) or '-'}; "
+                         f"out {', '.join(ports.get('outputs') or []) or '-'}")
+    for node_id, note in (result.get("modelPortNotes") or {}).items():
+        lines.append(f"  Ports of {node_id}: {note}")
     token = (result.get("undo") or {}).get("token") if undo else None
     if token:
         minutes = int((result["undo"].get("expiresInSeconds") or 0) // 60)
@@ -849,9 +864,64 @@ def format_step_stop(number: int, total: int, reason: str, applied: list[dict[st
     return "\n".join(lines)
 
 
+# Where the person decides an asset proposal (its view's `decideIn`).
+_ASSET_DECIDE_IN = {"projects": "on the Projects screen", "moodboard-studio": "in Moodboard Studio",
+                    "commons": "in the Commons"}
+
+
+def _asset_value(value: Any) -> str:
+    if value is None:
+        return "automatic"
+    return ("on" if value else "off") if isinstance(value, bool) else str(value)
+
+
+def _commons_edit_line(edit: Any) -> str:
+    """One commons proposal edit (services/commons_proposals.py) in one line."""
+    if not isinstance(edit, dict) or len(edit) != 1:
+        return "  sets   ?"
+    what, body = next(iter(edit.items()))
+    body = body if isinstance(body, dict) else {}
+    if what == "correction":
+        leaf = str(body.get("field_path") or "?").removesuffix(".value")
+        value = json.dumps(body.get("value"), ensure_ascii=False)
+        if leaf == "keywords":
+            return f"  sets   keywords {'+' if body.get('op') == 'add' else '−'} {value}"
+        return f"  sets   {leaf} → {value}"
+    if what == "region" and "id" not in body:
+        return f"  sets   new region {json.dumps(str(body.get('label') or ''), ensure_ascii=False)} at {body.get('box')}"
+    # Text the agent wrote (label, note, why) is quoted; a role, status or box isn't.
+    parts = [f"{key} {json.dumps(value, ensure_ascii=False) if key in ('label', 'note', 'why') else value}"
+             for key, value in body.items() if key != "id"]
+    return f"  sets   {what} {body.get('id')}: {', '.join(parts)}"
+
+
+def _asset_change_lines(view: dict[str, Any], where: str | None) -> list[str]:
+    lines = [f"  asks   {view.get('summary') or 'a change'}"]
+    if view.get("kind") == "commons":
+        lines.extend(_commons_edit_line(edit) for edit in (view.get("change") or {}).get("edits") or [])
+    for key, values in (view.get("change") or {}).items():
+        if isinstance(values, dict):
+            label = {"cover": "cover", "sendNotes": "send notes"}.get(key, key)
+            lines.append(f"  sets   {label}: {_asset_value(values.get('from'))} → {_asset_value(values.get('to'))}")
+    if where and view.get("status", "open") == "open":
+        lines.append(f"  decide {where}")
+    return lines
+
+
 def format_proposal_outcome(view: dict[str, Any]) -> str:
     """The person's decision in one line, for `--wait`."""
     status = view.get("status")
+    if status == "accepted" and view.get("kind"):
+        applied = view.get("applied") or {}
+        if "cover" in applied:
+            return ("Accepted by the person: the cover is automatic again." if applied["cover"] is None
+                    else f"Accepted by the person: the cover is now {applied['cover']}.")
+        if applied.get("sendNotes"):
+            return "Accepted by the person: the board's notes now go to generators."
+        if isinstance(applied.get("edits"), list):
+            count = len(applied["edits"])
+            return f"Accepted by the person: {count} change{'' if count == 1 else 's'} made to the reference."
+        return "Accepted by the person."
     if status == "accepted":
         mapped = ", ".join(f"{ref} → {node_id}" for ref, node_id in (view.get("idMap") or {}).items())
         line = "Accepted by the person" + (f": {mapped}." if mapped else ".")

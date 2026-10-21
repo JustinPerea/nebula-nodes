@@ -1403,9 +1403,19 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
             try:
                 updated, took_base = _put_board(api, str(board["id"]), body, headers, refused_put)
                 previous.update(fields_undo)
-                fields = _fields_slice(at, updated) if took_base else None
-                if fields is not None:
-                    undo_slices.append(fields)
+                # The PUT answers with its own undo (the server's diff of the
+                # board it replaced); a Nebula from before that is read here
+                # the same way, from the board this call sent the PUT over.
+                answered = updated.pop("undo", None)
+                if not took_base:
+                    put_slices: list[dict[str, Any]] = []
+                elif isinstance(answered, dict) and isinstance(answered.get("ops"), list):
+                    put_slices = [item for op in answered["ops"] for item in op.get("slices") or []]
+                else:
+                    fields = _fields_slice(at, updated)
+                    put_slices = [fields] if fields is not None else []
+                if put_slices:
+                    undo_slices.extend(put_slices)
                     previous["undo"] = _undo_token(list(undo_slices))
                 break
             except NebulaAPIError as exc:
@@ -1471,7 +1481,9 @@ _OTHERS_SAVED = "The other changes were saved; `previous` puts them back."
 _PERSON_NOTES = ("Only the person can send this board's notes to generators: the notes are their words about "
                  "the board, for them, their team and agents. Nothing was changed: leave send_notes "
                  "(--send-notes) out to make the other changes, or ask the person to turn on \"Send these notes "
-                 "to generators\" in Moodboard Studio.")
+                 "to generators\" in Moodboard Studio: propose it with propose_asset_change(kind=\"moodboard\", "
+                 "id=<board id>, change={\"sendNotes\": true}, note=...) over MCP, or POST /api/asset-proposals, "
+                 "and they accept it there.")
 
 
 # The backend's cap on an image's private note (services/moodboard_store.py).

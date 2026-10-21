@@ -40,7 +40,9 @@ def build_parser() -> argparse.ArgumentParser:
     nodes_p.add_argument("--category", help="Only this category: an id (image-gen) or its short name (image)")
 
     info_p = sub.add_parser("info", help="Show full detail for a node", start_hint=True)
-    info_p.add_argument("node_id", help="Node definition ID")
+    info_p.add_argument("node_id",
+                        help="Node definition ID (nebula-moodboard), or a node's exact name (Moodboard, any case) "
+                             "when one node has it; it then says the id. apply, create and quick take ids only")
 
     sub.add_parser("keys", help="Show configured API keys")
 
@@ -373,6 +375,7 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("text")
     c.add_argument("--region")
     c.add_argument("--brand")
+    c.add_argument("--membership", help="The collection's thread (a membership id from `get`)")
     b = csub.add_parser("borrow", help="Record an attribute borrowed from a reference")
     b.add_argument("id")
     b.add_argument("--attribute", required=True)
@@ -382,6 +385,23 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--region")
     b.add_argument("--brand")
     csub.add_parser("status", help="Worker, meter and queue status")
+    # Twins of the commons_* reads and of curation proposals (Q63 b, U13).
+    cl = csub.add_parser("collections", help="The collections in your scope (add takes a collection id)")
+    cl.add_argument("--brand")
+    bw = csub.add_parser("borrowings", help="Recorded borrowings in your scope")
+    bw.add_argument("--asset", help="Only this reference's")
+    bw.add_argument("--brand")
+    fd = csub.add_parser("fidelity", help="Check a borrowing shows in its output, and save the result")
+    fd.add_argument("borrowing_id")
+    fd.add_argument("--brand")
+    cc = csub.add_parser("concentration", help="How borrowings spread over references")
+    cc.add_argument("--brand")
+    pr = csub.add_parser("propose", help="Propose curating a reference; the person decides in the Commons")
+    pr.add_argument("id", help="The reference's id")
+    pr.add_argument("--edit", action="append", required=True,
+                    help='JSON, repeatable: {"correction": {...}}, {"region": {...}} or {"membership": {...}}')
+    pr.add_argument("--note", required=True, help="One line saying why")
+    pr.add_argument("--brand")
 
     # -- Moodboards --
     from .commands import moodboard as moodboard_cmd

@@ -17,6 +17,7 @@ import type { ResultContext } from '../../lib/resultContext';
 import { applyPresetToComposer } from '../../lib/applyPreset';
 import { createPreset, type Preset } from '../../lib/createPresets';
 import { GRAPH_PARAMS_VERSION } from '../../lib/savedParamsUpgrades';
+import { storedImageView } from '../../lib/storedImage';
 import { CreateComposer } from './CreateComposer';
 import { PresetLibrary } from './PresetLibrary';
 import { ResultsGallery } from './ResultsGallery';
@@ -97,6 +98,7 @@ export function CreateView() {
   const [ask, promptElement] = usePrompt();
   const [savingStyle, setSavingStyle] = useState(false);
   const [styleSaveError, setStyleSaveError] = useState<string | null>(null);
+  const [styleNote, setStyleNote] = useState<string | null>(null);
   const [reusedDraft, setReusedDraft] = useState<{ previous: CreateDraftSeed; fingerprint: string; removedAttachments: boolean } | null>(null);
   const focusDraft = useRef(false);
   const composerArea = useRef<HTMLDivElement>(null);
@@ -127,10 +129,17 @@ export function CreateView() {
 
   const handleApplyPreset = (preset: Preset) => {
     const next = applyPresetToComposer(preset, { modelId, prompt, params }, apiKeys, normalizeKreaMode(kreaConnectionMode));
+    // Only Nebula's own files are attached and drawn (lib/storedImage.ts). A
+    // Style saved before Nebula checked its images can hold an outside link:
+    // it is left out, so neither the tray nor a run fetches it.
+    const outside = preset.refImages.filter((fp) => storedImageView(fp).outside).length;
+    setStyleNote(outside === 0 ? null
+      : `${outside} image link${outside === 1 ? '' : 's'} from outside Nebula in this Style ${outside === 1 ? 'was' : 'were'} left out.`);
     updateDraft((current) => ({
       modelId: next.modelId ?? current.modelId, prompt: next.prompt, params: next.params,
-      refs: [...current.refs, ...preset.refImages.filter((fp) => !current.refs.some((ref) => ref.filePath === fp))
-        .map((fp) => ({ filePath: fp, previewUrl: fp }))],
+      refs: [...current.refs, ...preset.refImages
+        .filter((fp) => !storedImageView(fp).outside && !current.refs.some((ref) => ref.filePath === fp))
+        .map((fp) => ({ filePath: fp, previewUrl: storedImageView(fp).src ?? '' }))],
     }));
   };
 
@@ -146,6 +155,11 @@ export function CreateView() {
     if (!modelDef || styleSavePending.current) return;
     if (uploads.length > 0) {
       setStyleSaveError('Finish attaching references or remove them before saving this style.');
+      return;
+    }
+    // A Style holds only Nebula's own images; the backend refuses others too.
+    if (refs.some((ref) => storedImageView(ref.filePath).outside)) {
+      setStyleSaveError('A reference is an image link from outside Nebula. Remove it, or upload the image, before saving this style.');
       return;
     }
     styleSavePending.current = true;
@@ -166,7 +180,7 @@ export function CreateView() {
           const node = nodes.find((n) => n.id === nodeId);
           if (!node || node.data.state !== 'complete') continue;
           for (const output of Object.values(node.data.outputs ?? {})) {
-            if (output?.type === 'Image' && typeof output.value === 'string' && output.value) {
+            if (output?.type === 'Image' && typeof output.value === 'string' && storedImageView(output.value).src) {
               thumbnail = output.value;
               break outer;
             }
@@ -196,6 +210,7 @@ export function CreateView() {
     useCreateDraftStore.getState().resetDraft(sessionId, defaultDraft());
     setGenerationError(null);
     setStyleSaveError(null);
+    setStyleNote(null);
     setReusedDraft(null);
   };
 
@@ -317,6 +332,7 @@ export function CreateView() {
         navigation={<WorkspaceModeNavigation />}>
         <button type="button" className="create-view__back" onClick={handleNewDraft}>New draft</button>
         {styleSaveError && <span className="create-view__save-error" role="alert">{styleSaveError}</span>}
+        {styleNote && <span className="create-view__style-note" role="status">{styleNote}</span>}
         {generationError && <span className="create-view__run-error" role="alert">{generationError}</span>}
         {createLaunchingIds.length > 0 && <span role="status">Preparing generation…</span>}
         {createLaunchingIds.map((genId) => {

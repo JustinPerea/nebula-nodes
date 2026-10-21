@@ -1,10 +1,12 @@
 """The personal-agent registry and its person-only routes."""
 from __future__ import annotations
 
+import json
 import re
 import stat
 import sys
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -29,6 +31,11 @@ ROUTES = [
     ("put", "/api/personal-agents/claude", {"enabled": True}),
     ("delete", "/api/personal-agents/mine", None),
     ("post", "/api/personal-agents/acknowledge-warning", None),
+    ("post", "/api/personal-agents/antigravity/install", None),
+    ("delete", "/api/personal-agents/antigravity/install", None),
+    ("post", "/api/personal-agents/antigravity/sign-in", None),
+    ("delete", "/api/personal-agents/antigravity/sign-in", None),
+    ("post", "/api/personal-agents/antigravity/sign-out", None),
 ]
 
 
@@ -50,7 +57,7 @@ def test_person_can_list_create_update_delete_and_acknowledge(client):
     listed = client.get("/api/personal-agents", headers=PERSON).json()
     assert listed["warningAcknowledged"] is False
     ids = [a["id"] for a in listed["agents"]]
-    assert ids == ["claude", "codex", "gemini", "hermes"]
+    assert ids == ["claude", "codex", "gemini", "antigravity", "hermes"]
     hermes = next(a for a in listed["agents"] if a["id"] == "hermes")
     assert hermes["status"] == "needs_setup" and hermes["startable"] is False
     assert all(not a["enabled"] for a in listed["agents"])
@@ -157,6 +164,99 @@ def test_npx_preset_launch_spec(tmp_path, monkeypatch):
 
 def test_spend_view_lists_personal_agents(client):
     response = client.get("/api/agent/spend/apps", headers=PERSON).json()
-    assert [p["id"] for p in response["personal"]] == ["claude", "codex", "gemini", "hermes"]
+    assert [p["id"] for p in response["personal"]] == ["claude", "codex", "gemini", "antigravity", "hermes"]
     assert all(p["spentUsd"] == 0 for p in response["personal"])
     assert PERSON_TOKEN  # the fixture's token is what PERSON carries
+
+
+# -- Gemini (your setup): the CLI's ACP flag, its login, and the opt-in key -------------------
+
+GEMINI_OLD_HELP = "Usage: gemini\n  --experimental-acp  Starts the agent in ACP mode  [boolean]\n"
+
+
+@pytest.fixture
+def gemini_bin(tmp_path, monkeypatch):
+    from services import agent_binaries, gemini_cli_setup
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "help.txt").write_text(GEMINI_OLD_HELP)
+    gemini = bin_dir / "gemini"
+    gemini.write_text(f"""#!/bin/sh
+case "$1" in --version) echo 0.25.2 ;; --help) cat "{bin_dir / 'help.txt'}" ;; *) exit 3 ;; esac
+""")
+    gemini.chmod(0o755)
+    monkeypatch.setattr(agent_binaries, "_FIXED_DIRS", ())
+    monkeypatch.setattr(agent_binaries, "login_shell_path", lambda: "")
+    monkeypatch.setenv("PATH", f"{bin_dir}:/usr/bin:/bin")
+    monkeypatch.setenv("GEMINI_CLI_SYSTEM_SETTINGS_PATH", str(tmp_path / "no-system.json"))
+    gemini_cli_setup.clear_probe_cache()
+    home = tmp_path / "home"
+    (home / ".gemini").mkdir(parents=True)
+    (home / ".gemini" / "settings.json").write_text('{"security": {"auth": {"selectedType": "oauth-personal"}}}')
+    return gemini, home
+
+
+def save_google_key(monkeypatch, value):
+    from services import settings
+    monkeypatch.setattr(settings, "get_api_key", lambda name: value if name == "GOOGLE_API_KEY" else None)
+
+
+def test_gemini_with_a_google_login_is_switched_off_with_the_reason(tmp_path, gemini_bin, monkeypatch):
+    _, home = gemini_bin
+    save_google_key(monkeypatch, None)
+    personal_agents.update_agent(tmp_path, "gemini", {"enabled": True}, home=home)
+    view = personal_agents.get_agent(tmp_path, "gemini", home=home)
+    assert view.status == "needs_setup" and view.version == "0.25.2" and view.args == ["--experimental-acp"]
+    assert "2026-06-18" in view.note and "paid Gemini API key" in view.note
+    assert view.keyOption == {"enabled": False, "keySaved": False, "billing": personal_agents.gemini_cli_setup.KEY_BILLING,
+                              "blocked": None}
+    with pytest.raises(personal_agents.PersonalAgentError) as info:
+        personal_agents.launch_spec(tmp_path, "gemini", home=home)
+    assert info.value.code == "personal_agent_needs_setup" and "2026-06-18" in info.value.message
+
+
+def test_gemini_key_choice_is_off_by_default_and_hands_over_the_key_only_when_on(tmp_path, gemini_bin, monkeypatch):
+    gemini, home = gemini_bin
+    key = "AIzaSy-test-key-0123456789"
+    save_google_key(monkeypatch, key)
+    personal_agents.update_agent(tmp_path, "gemini", {"enabled": True}, home=home)
+    assert personal_agents.get_agent(tmp_path, "gemini", home=home).keyOption["enabled"] is False
+    with pytest.raises(personal_agents.PersonalAgentError):
+        personal_agents.update_agent(tmp_path, "claude", {"useNebulaKey": True})
+    with pytest.raises(personal_agents.PersonalAgentError):
+        personal_agents.update_agent(tmp_path, "gemini", {"useNebulaKey": "yes"})
+    key_off = personal_agents.launch_key(tmp_path, "gemini")
+    view = personal_agents.update_agent(tmp_path, "gemini", {"useNebulaKey": True}, home=home)
+    assert view.status == "ready" and view.keyOption["enabled"] and view.keyOption["keySaved"]
+    assert key not in json.dumps(view.as_dict())
+    assert personal_agents.launch_key(tmp_path, "gemini") != key_off
+    spec = personal_agents.launch_spec(tmp_path, "gemini", home=home)
+    assert spec.argv == [str(gemini), "--experimental-acp"]
+    assert spec.env["GEMINI_API_KEY"] == key and spec.secrets == (key,)
+    overlay = Path(spec.env["GEMINI_CLI_SYSTEM_SETTINGS_PATH"])
+    assert json.loads(overlay.read_text())["security"]["auth"]["selectedType"] == "gemini-api-key"
+    assert key not in overlay.read_text() and key not in repr(spec)
+    # The person's own Gemini settings are left as they were.
+    assert "oauth-personal" in (home / ".gemini" / "settings.json").read_text()
+    personal_agents.update_agent(tmp_path, "gemini", {"useNebulaKey": False}, home=home)
+    with pytest.raises(personal_agents.PersonalAgentError):
+        personal_agents.launch_spec(tmp_path, "gemini", home=home)
+
+
+def test_a_shell_gemini_key_is_never_passed_on():
+    assert "GEMINI_API_KEY" in personal_agents.AGENT_ENV_DROP
+    assert "GOOGLE_API_KEY" in personal_agents.AGENT_ENV_DROP
+
+
+def test_the_key_overlay_keeps_the_real_system_defaults(tmp_path, gemini_bin, monkeypatch):
+    """Gemini CLI finds system-defaults.json next to its system settings file,
+    so pointing it at Nebula's overlay would drop an admin's defaults unless
+    Nebula also names the real defaults file."""
+    _, home = gemini_bin
+    save_google_key(monkeypatch, "AIzaSy-test-key-0123456789")
+    personal_agents.update_agent(tmp_path, "gemini", {"enabled": True, "useNebulaKey": True}, home=home)
+    spec = personal_agents.launch_spec(tmp_path, "gemini", home=home)
+    assert spec.env["GEMINI_CLI_SYSTEM_DEFAULTS_PATH"] == str(tmp_path / "system-defaults.json")
+    monkeypatch.setenv("GEMINI_CLI_SYSTEM_DEFAULTS_PATH", str(tmp_path / "admin" / "defaults.json"))
+    spec = personal_agents.launch_spec(tmp_path, "gemini", home=home)
+    assert spec.env["GEMINI_CLI_SYSTEM_DEFAULTS_PATH"] == str(tmp_path / "admin" / "defaults.json")

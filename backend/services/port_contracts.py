@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
+from services.universal_ports import stored_ports
+
 
 # These node definitions may receive provider-discovered ports at runtime.  A
 # direction is dynamic only when the registry declares no ports for that
@@ -72,6 +74,12 @@ PORT_TYPE_HINTS: dict[tuple[str, str], str] = {
 }
 
 
+# A configured Replicate node's ports are its model's file inputs; its other
+# inputs are params (services/universal_ports.replicate_inputs).
+_REPLICATE_PARAMS_HINT = (". The model's other inputs are params of the same name: "
+                          "set them with params instead of a wire")
+
+
 def port_types_compatible(source_type: str, target_type: str) -> bool:
     """Return whether a declared output may feed a declared input."""
 
@@ -97,6 +105,25 @@ def cinema_output_ports(params: Mapping[str, Any] | None) -> list[dict[str, Any]
     ]
 
 
+def node_ports(
+    definition_id: str,
+    params: Mapping[str, Any] | None,
+    definition: Mapping[str, Any] | None,
+    port_key: str,
+) -> list[dict[str, Any]]:
+    """The ports one node has (``port_key`` "inputPorts" or "outputPorts"):
+    Cinema's shot handles from its scene, a configured universal node's from
+    its model (services/universal_ports.py), else its definition's. The
+    canvas export, the wire checks and the run check all read this."""
+    if definition_id == "cinema-scene" and port_key == "outputPorts":
+        return cinema_output_ports(params)
+    stored = stored_ports(definition_id, params)
+    if stored is not None:
+        return stored[0] if port_key == "inputPorts" else stored[1]
+    raw = (definition or {}).get(port_key, [])
+    return raw if isinstance(raw, list) else []
+
+
 def _declared_port(
     definition_id: str,
     port_id: str | None,
@@ -109,11 +136,11 @@ def _declared_port(
     if definition is None:
         return _PortLookup(None)
 
-    raw_ports = (cinema_output_ports(params)
-                 if definition_id == "cinema-scene" and port_key == "outputPorts"
-                 else definition.get(port_key, []))
-    ports = raw_ports if isinstance(raw_ports, list) else []
-    if definition_id in DYNAMIC_PORT_DEFINITION_IDS and not ports:
+    ports = node_ports(definition_id, params, definition, port_key)
+    # A configured universal node declares exactly its model's ports, even
+    # none; only one never configured is open to any handle.
+    if (definition_id in DYNAMIC_PORT_DEFINITION_IDS and not ports
+            and stored_ports(definition_id, params) is None):
         return _PortLookup(None, dynamic=True)
 
     for port in ports:
@@ -260,6 +287,7 @@ def validate_edge_contracts(
             edge.target_handle,
             port_key="inputPorts",
             definitions=definitions,
+            params=target_node.params,
         )
 
         if source_definition is None:
@@ -275,9 +303,8 @@ def validate_edge_contracts(
                 )
             )
         elif source_port.definition is None and not source_port.dynamic:
-            valid_outputs = (cinema_output_ports(source_node.params)
-                             if source_node.definition_id == "cinema-scene"
-                             else source_definition.get("outputPorts", []))
+            valid_outputs = node_ports(source_node.definition_id, source_node.params,
+                                       source_definition, "outputPorts")
             edge_issues.append(
                 PortContractIssue(
                     node_id=edge.source,
@@ -304,6 +331,8 @@ def validate_edge_contracts(
                 )
             )
         elif target_port.definition is None and not target_port.dynamic:
+            valid_inputs = node_ports(target_node.definition_id, target_node.params,
+                                      target_definition, "inputPorts")
             edge_issues.append(
                 PortContractIssue(
                     node_id=edge.target,
@@ -311,7 +340,9 @@ def validate_edge_contracts(
                     message=(
                         f"Invalid target handle '{target_handle}' on node '{edge.target}' "
                         f"(definition '{target_node.definition_id}'). Valid inputPorts: "
-                        f"{_valid_port_ids(target_definition, 'inputPorts') or '(none)'}"
+                        f"{_valid_port_ids({'inputPorts': valid_inputs}, 'inputPorts') or '(none)'}"
+                        + (_REPLICATE_PARAMS_HINT if target_node.definition_id == "replicate-universal"
+                           and stored_ports(target_node.definition_id, target_node.params) is not None else "")
                     ),
                     edge_index=index,
                 )

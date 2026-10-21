@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
+import { targetsOf, useAssetProposalsStore } from '../../store/assetProposalsStore';
 import { useUIStore } from '../../store/uiStore';
 import { commonsApi, filtersToRequest, type UrlAddResult } from '../../lib/commonsApi';
 import { EMPTY_FILTERS, type Collection, type CommonsStatus, type FilterState, type SearchRow } from '../../lib/commonsTypes';
@@ -10,6 +12,7 @@ import { CommonsGrid } from './CommonsGrid';
 import { CommonsEvaluation } from './CommonsEvaluation';
 import { CommonsReview } from './CommonsReview';
 import { CommonsSettings } from './CommonsSettings';
+import { CommonsProposalsLine } from './CommonsProposalsLine';
 import { WorkspaceHeader } from '../WorkspaceHeader';
 import { workspaceLabel } from '../../lib/workspaceLabel';
 import '../../styles/commons.css';
@@ -88,6 +91,8 @@ export function CommonsView() {
   const [page, setPage] = useState<PageResult | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [ask, promptElement] = useCommonsPrompt();
+  const proposedIds = useAssetProposalsStore(useShallow((state) => targetsOf(state, 'commons')));
+  const proposed = useMemo(() => new Set(proposedIds), [proposedIds]);
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
@@ -229,6 +234,13 @@ export function CommonsView() {
     if (tab === 'settings') setTab('all');
   };
 
+  // A reference an agent asks to change: its detail, where the proposal waits.
+  const reviewProposal = (id: string) => {
+    if (labelingDirty) return;
+    setSelectedId(id);
+    if (tab !== 'all' && tab !== 'inbox') setTab('all');
+  };
+
   const emptyHint = tab === 'inbox'
     ? 'Nothing waiting in the inbox. Items agents add land here for you to accept.'
     : 'No matches. Drop images or videos here, or use Add.';
@@ -304,10 +316,11 @@ export function CommonsView() {
         />
       </WorkspaceHeader>
 
-      {(error || notice) && (
+      {(error || notice || proposed.size > 0) && (
         <div className="commons-messages">
           {error && <p className="commons-notice commons-notice--error" role="alert">{error}</p>}
           {!error && notice && <p className="commons-notice" role="status">{notice}</p>}
+          <CommonsProposalsLine onOpen={reviewProposal} />
         </div>
       )}
 
@@ -343,6 +356,7 @@ export function CommonsView() {
               emptyHint={emptyHint}
               onOpen={(row) => setSelectedId(row.id)}
               onDropFiles={(files) => void upload(files)}
+              proposed={proposed}
             />
             {rows.length === 20 && <p className="commons-meta">Showing the top 20. Narrow the search to see others.</p>}
           </main>

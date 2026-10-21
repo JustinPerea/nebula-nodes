@@ -77,7 +77,9 @@ EVENT_KINDS = frozenset({
     "proposal.expired",
     "proposal.invalidated",
     # Moodboards (services/moodboard_edits.py): one event per board edit
-    # batch or PUT, with data {boardId, boardName, scope, refs, kinds}.
+    # batch or PUT that changed its images, cards or frames, with data
+    # {boardId, boardName, scope, refs, kinds}, and one board.fields event
+    # when it changed the board's own fields.
     "board.added",
     "board.removed",
     "board.moved",
@@ -88,6 +90,10 @@ EVENT_KINDS = frozenset({
     "board.frame",
     # The image the board opens on changed (a cover pick; nothing moves).
     "board.cover",
+    # The board's own fields changed (Direction, Avoid, pinned colours, its
+    # notes, Send notes, strength...): data {boardId, boardName, scope,
+    # fields}, the field names only, never a value (Justin's Q91).
+    "board.fields",
     "board.sorted",
     "board.arranged",
     "board.suggested",
@@ -108,6 +114,17 @@ EVENT_KINDS = frozenset({
     # services/canvas_undo.py.
     "edit.undone",
     "edit.redone",
+    # Projects outside the canvas graph: a cover pinned, changed or set back
+    # to automatic, with data {projectId, projectName, cover} (main
+    # _set_project_cover; U16).
+    "project.cover",
+    # Commons curation, by the person or an accepted proposal (routes/commons.py
+    # curation_listeners; Q63 b): data {assetId, fieldPath, op} for a
+    # correction, {assetId, regionId, change} for a region, {assetId,
+    # membershipId, collectionId, change} for a membership. Never Commons text.
+    "commons.corrected",
+    "commons.region",
+    "commons.membership",
 })
 EVENT_GROUPS = frozenset(kind.split(".", 1)[0] for kind in EVENT_KINDS)
 

@@ -281,6 +281,15 @@ body.app-slava-restraint .commons-notice--error {
   color: var(--sr-error);
 }
 
+body.app-slava-restraint .commons-notice--proposal {
+  justify-content: space-between;
+  color: var(--sr-ink);
+}
+
+body.app-slava-restraint .commons-notice + .commons-notice {
+  margin-top: 6px;
+}
+
 body.app-slava-restraint .commons-candidates {
   grid-area: candidates;
   padding: 10px 16px;
@@ -548,6 +557,13 @@ body.app-slava-restraint .commons-badge--analyzing,
 body.app-slava-restraint .commons-badge--inbox {
   color: var(--sr-accent);
   border-color: var(--sr-accent-border);
+}
+
+/* An agent proposes changes to this reference (asset proposals, kind commons). */
+body.app-slava-restraint .commons-badge--proposal {
+  color: var(--sr-ink);
+  border-color: var(--sr-edge-strong);
+  background: var(--sr-surface-control);
 }
 
 body.app-slava-restraint .commons-badge--analysis_failed,

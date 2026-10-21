@@ -330,9 +330,6 @@ def test_the_person_pins_and_unpins_a_cover(workspace, person, clock):
     assert [image["url"] for image in choices["images"]] == ["/api/outputs/b.png", "/api/outputs/a.png"]
     assert choices["pinned"] is None
 
-    for headers in (AGENT, {}):
-        refused = client.put(f"/api/projects/{project_id}/cover", json={"url": "/api/outputs/a.png"}, headers=headers)
-        assert refused.status_code == 403
     outside = client.put(f"/api/projects/{project_id}/cover", json={"url": "/api/outputs/elsewhere.png"},
                          headers=person.headers)
     assert outside.status_code == 400
@@ -341,6 +338,11 @@ def test_the_person_pins_and_unpins_a_cover(workspace, person, clock):
     assert pinned.status_code == 200, pinned.text
     assert pinned.json()["project"]["cover"] == {"source": "pinned", "images": ["/api/outputs/a.png"]}
     assert client.get("/api/projects").json()["projects"][0]["cover"]["source"] == "pinned"
+    # Anyone else changes the person's pin only through a proposal (Q60 a,
+    # tests/test_asset_proposals.py has the rest).
+    for headers in (AGENT, {}):
+        refused = client.put(f"/api/projects/{project_id}/cover", json={"url": "/api/outputs/b.png"}, headers=headers)
+        assert refused.status_code == 403
 
     unpinned = client.put(f"/api/projects/{project_id}/cover", json={"url": None}, headers=person.headers)
     assert unpinned.json()["project"]["cover"] == {"source": "output", "images": ["/api/outputs/b.png"]}

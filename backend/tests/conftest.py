@@ -165,3 +165,22 @@ def person(fresh_person_session) -> PersonFixture:
     (FORGED_ORIGIN) as negatives."""
     fresh_person_session.set(PERSON_TOKEN)
     return PersonFixture(PERSON_TOKEN)
+
+
+def stored_image_urls(count: int = 3, *, name: str = "view") -> list[str]:
+    """``count`` small images in the test output folder, as /api/uploads
+    leaves them, and their /api/outputs URLs. A Character's referenceViews and
+    a Style's refImages and thumbnail must be Nebula's own files
+    (services/stored_image_refs.py). Call it where the test writes one, not at
+    import: some tests empty the output folder."""
+    from services.output import OUTPUT_ROOT
+
+    folder = OUTPUT_ROOT / "chat-uploads"
+    folder.mkdir(parents=True, exist_ok=True)
+    urls = []
+    for index in range(count):
+        path = folder / f"test-{name}-{index}.png"
+        if not path.exists():
+            path.write_bytes(b"\x89PNG\r\n\x1a\n" + bytes([index % 256]) * 16)
+        urls.append(f"/api/outputs/chat-uploads/{path.name}")
+    return urls

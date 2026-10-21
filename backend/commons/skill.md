@@ -24,5 +24,12 @@ Use the `commons_*` MCP tools.
   axes.<quiet_loud|warm_cold|geometric_humanist|dense_airy|polished_raw>, summary, subject,
   composition_notes, region (with a region id). The value must match the analysis or the borrow is rejected.
 - Cite borrowings in your reply: "spacing from ast_…, palette from ast_…".
-- Comment only with substance (`commons_comment`).
-- Add finds to the inbox with a reason (`commons_add`).
+- Comment only with substance (`commons_comment`; `membership_id` picks a collection's thread).
+- Add finds to the inbox with a reason (`commons_add`); `commons_collections` lists the collection ids.
+- `commons_status` shows the analysis queue; `commons_borrowings` and `commons_concentration` show what
+  has been borrowed and which references are leaned on too much; `commons_fidelity` checks a borrowing
+  against the image it was used in.
+- Curating is the person's: to correct a reading, draw, rename, confirm or delete a region, or change a
+  reference's role, why or inbox place, propose it with
+  `propose_asset_change(kind="commons", id=<reference>, change=..., note=..., brand=...)` and the person
+  decides in the Commons. Blind labeling (evaluation) and the agent review are theirs alone.
