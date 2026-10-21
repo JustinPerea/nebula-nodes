@@ -19,7 +19,9 @@ const api = vi.hoisted(() => ({ acceptProposal: vi.fn(), rejectProposal: vi.fn()
 vi.mock('../src/lib/wsClient', () => ({
   wsClient: { subscribe: (handler: (event: unknown) => void) => { ws.handlers.push(handler); return () => {}; } },
 }));
-vi.mock('../src/store/graphStore', () => ({ useGraphStore: { getState: () => graph.state } }));
+const syncs = vi.hoisted(() => ({ seen: new Set<string>(), stop: vi.fn() }));
+vi.mock('../src/store/graphStore', () => ({ useGraphStore: { getState: () => graph.state },
+  watchGraphSyncs: () => syncs }));
 vi.mock('../src/lib/canvasProposals', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/lib/canvasProposals')>()),
   acceptProposal: api.acceptProposal,
@@ -119,7 +121,9 @@ describe('canvas proposals store', () => {
     api.acceptProposal.mockResolvedValue(result);
     await useCanvasProposalsStore.getState().accept('p_a');
     expect(api.acceptProposal).toHaveBeenCalledWith('p_a', 'key-a', { '+up': { x: 900, y: -40 } });
-    expect(graph.state.adoptAcceptedProposal).toHaveBeenCalledWith(result, { undoStep: expect.any(Object) });
+    // With what syncs carried while the accept was out: those are the syncs' to keep or remove.
+    expect(graph.state.adoptAcceptedProposal).toHaveBeenCalledWith(result, { undoStep: expect.any(Object), synced: syncs.seen });
+    expect(syncs.stop).toHaveBeenCalled();
     // One undo step for the accept, taken before the request.
     expect(graph.state.beginUndoStep).toHaveBeenCalledTimes(1);
     expect(graph.state.cancelUndoStep).not.toHaveBeenCalled();

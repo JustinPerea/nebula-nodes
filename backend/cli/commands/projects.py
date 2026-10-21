@@ -1,11 +1,28 @@
+"""`nebula projects` and `nebula project new|open|rename|show`.
+
+`rename` and `show` are MCP rename_project and get_project, and `projects
+--json` is list_projects: each goes through project_client.py, which the tools
+share, so `--json` prints what the tool returns (hints in `nebula` words).
+"""
 from __future__ import annotations
 
+import json
 import sys
 
+import project_client
+
 from ..client import NebulaClient
+from ..formatter import format_project
 
 
-def run_list(client: NebulaClient) -> None:
+def _print_json(data) -> None:
+    print(json.dumps(data, indent=2, ensure_ascii=False))
+
+
+def run_list(client: NebulaClient, *, as_json: bool = False) -> None:
+    if as_json:
+        _print_json(client.shared(project_client.list_projects))
+        return
     listing = client.list_projects()
     active = listing.get("activeProjectId")
     projects = listing.get("projects") or []
@@ -47,3 +64,31 @@ def run_new(client: NebulaClient, name: str) -> None:
     if previous:
         print(f"{previous.get('name', previous_id)} is saved as it was: "
               f"`nebula project open {previous_id}` goes back to it.")
+
+
+def run_rename(client: NebulaClient, project_id: str, name: str, *, as_json: bool = False) -> None:
+    """Rename a saved project ("current" is the open one) through the canvas
+    header's route: it journals `project.renamed` as this agent
+    ($NEBULA_AGENT_NAME) and the person's canvas shows the name at once."""
+    result = client.shared(project_client.rename_project, project_id, name, via="cli")
+    if as_json:
+        _print_json(result)
+        return
+    project = result.get("project") or {}
+    new, previous = project.get("name"), result.get("previousName")
+    if previous == new:
+        print(f"{project.get('id')} is already named {json.dumps(new, ensure_ascii=False)}; nothing changed.")
+        return
+    print(f"Renamed {project.get('id')}: {json.dumps(previous, ensure_ascii=False)} → "
+          f"{json.dumps(new, ensure_ascii=False)}. The person's canvas and Projects screen show it now.")
+    if result.get("note"):
+        print(result["note"])
+
+
+def run_show(client: NebulaClient, project_id: str, *, as_json: bool = False) -> None:
+    """A saved project without opening it: MCP get_project."""
+    view = client.shared(project_client.get_project, project_id, via="cli")
+    if as_json:
+        _print_json(view)
+        return
+    print(format_project(view))

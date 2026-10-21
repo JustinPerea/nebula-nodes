@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import quote
 
 import httpx
@@ -37,19 +37,37 @@ class NebulaClient:
             headers.setdefault("X-Nebula-Agent", agent_name)
         return headers
 
+    def _fail(self, exc: NebulaAPIError, what: str) -> None:
+        if exc.kind == "connect":
+            message = f"cannot connect to Nebula backend at {self.base_url} — is the server running?"
+        elif exc.kind == "timeout":
+            message = (f"Nebula didn't answer {what} in time. A run keeps going on the "
+                       "backend; `nebula graph` shows what finished.")
+        else:
+            message = exc.detail
+        print(f"error: {message}", file=sys.stderr)
+        sys.exit(1)
+
     def _request(self, method: str, path: str, *, binary: bool = False, **kwargs: Any) -> Any:
         kwargs["headers"] = self._identity_headers(kwargs.get("headers"))
         try:
             return self.api.request(method, path, binary=binary, **kwargs)
         except NebulaAPIError as exc:
-            if exc.kind == "connect":
-                message = f"cannot connect to Nebula backend at {self.base_url} — is the server running?"
-            elif exc.kind == "timeout":
-                message = (f"Nebula didn't answer {method} {path} in time. A run keeps going on the "
-                           "backend; `nebula graph` shows what finished.")
-            else:
-                message = exc.detail
-            print(f"error: {message}", file=sys.stderr)
+            self._fail(exc, f"{method} {path}")
+
+    def shared(self, call: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        """Run one of the reads and writes the MCP tools share (project_client)
+        as this client: its identity headers, and a refusal printed as
+        `error: <detail>` with exit 1, as every other command does. Pass
+        via="cli" to calls that word a hint."""
+        import project_client
+
+        try:
+            return call(self.api, *args, headers=self._identity_headers(), **kwargs)
+        except NebulaAPIError as exc:
+            self._fail(exc, "the request")
+        except project_client.ProjectRefError as exc:
+            print(f"error: {exc}", file=sys.stderr)
             sys.exit(1)
 
     def commons_enabled(self) -> bool:
@@ -72,6 +90,19 @@ class NebulaClient:
 
     def get_nodes(self) -> dict[str, Any]:
         return self._request("GET", "/api/nodes")
+
+    # Every match: GET /api/agent/nodes' largest limit (main.AGENT_NODES_MAX).
+    ALL_NODES = 2000
+
+    def find_nodes(self, query: str = "", category: str = "", *, ready_only: bool = True,
+                   limit: int | None = None) -> dict[str, Any]:
+        """GET /api/agent/nodes, the route MCP's find_nodes reads: node types
+        best matches first, whether each runs here (`runsWith`, else
+        `missing`) and its list price. No `limit` asks for every match."""
+        return self._request("GET", "/api/agent/nodes", params={
+            "query": query, "category": category, "ready_only": str(bool(ready_only)).lower(),
+            "limit": max(1, min(int(limit), self.ALL_NODES)) if limit is not None else self.ALL_NODES,
+        })
 
     def get_node(self, node_id: str) -> dict[str, Any]:
         # An id, or a node type's display name (spaces, a slash: "Jev Decide (judge / classify / yes-no)").

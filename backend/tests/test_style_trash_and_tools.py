@@ -374,6 +374,8 @@ def test_cli_trash_takes_the_style_kind(styles, monkeypatch):
     client = NebulaClient("http://testserver")
     monkeypatch.setattr(client, "_request", lambda method, path, **kw: styles.client.request(
         method, path, headers=AGENT, params=kw.get("params")).json())
+    # `trash list` reads through project_client (MCP list_trash's code), on the client's connection.
+    client._client = styles.client
     out = io.StringIO()
     with redirect_stdout(out):
         assert trash.run_list(client, kind="style") == 0

@@ -32,7 +32,7 @@ Code's 10,000-token warning and its 50,000-character file cut:
 | `pins` | Open pins: id, text, anchor | The 10 newest, and `openCount` |
 | `proposals` | Open proposals, briefly | 5, and `count` |
 | `boards` | Every moodboard: id, name, `where` (`current`, `global` or the project's name), image count, analyzed or not, Direction cut to 80 characters. Boards in Recently deleted, or in a project there, are left out. `read` is how to read one (`moodboard_get(board="<id or exact name>")`; over the CLI `nebula moodboard show <id>`). `use` is how to put one on the canvas: the exact `edit_canvas` call for a Moodboard node (`nebula-moodboard`, the board in its `moodboard` param, sending from its `moodboard` port) wired to a Preview's `input` (or, over the CLI, the `nebula apply` flags) | 30 rows (this project, then Global, then the rest by last edit), `count`, and, when rows were cut, `more`: `moodboard_list(project_id=...)` lists a project's boards and Global's |
-| `nodes` | The node types that run here, by category: `{id: price}` (`"free"`, `[low, high]` USD or `null`), `runsWith` for those that don't run on a key, and notes on modes, providers and Krea | Categories in a fixed order, cut at the budget, `rest: {category: count}`, and "find_nodes(category=…) gives the rest" |
+| `nodes` | The node types that run here, by category: `{id: price}` (`"free"`, `[low, high]` USD or `null`), `runsWith` for those that don't run on a key, and notes on modes, providers and Krea | Categories in a fixed order, cut at the budget, `rest: {category: count}`, and "find_nodes(category=…) gives the rest" (over the CLI "`nebula nodes --category <category>` lists the rest with prices"; `nebula context` also prints how many more can't run here and that `nebula nodes --all` lists them) |
 | `spend` | The per-run limit, the budget kind, its limit and what is used, Krea plan runs. Outside agents share one 24-hour budget, so `usedUsd` is what all of them used; an app with a token also gets its own line (`limitUsd`, `usedUsd`) beside the shared one (`sharedLimitUsd`, `sharedUsedUsd`) | |
 | `next` | `events.cursor` and the journal id for `wait_for_canvas_change`, then one line each: `describe`, `build`, `propose`, `point` and `pins`. Each is the exact call, its arguments named as the tool takes them (`describe_node(definition_id=...)`, `point_at(node_id=..., say=...)`); `build` is a whole `edit_canvas` plan (nodes `{ref, definitionId, params}`, edges `{source, sourceHandle, target, targetHandle}`, `arrange`), and `propose` says `propose_change` takes the same nodes and edges plus `params` and `run`. Over the CLI they are `nebula` commands with their real flags, so a first build needs neither `nebula apply --help` nor `nebula info nebula-moodboard` | |
 
@@ -82,7 +82,17 @@ The server exposes these tools for building and running (see
   output, rounded up to a whole megapixel; priced from your image's size when
   you run it"). `ready_only=false` also lists nodes that can't run here, with what's
   `missing`. "free" is at the node's defaults: a row with `needsKeyFor` (the
-  Video QC nodes) calls a provider in another mode.
+  Video QC nodes) calls a provider in another mode. Every word of `query`
+  must be in the id, name or description. Its CLI twin is `nebula nodes`
+  (and `nebula find`), on the same route: by default the node types that
+  run here, by category, each with `runsWith` and its price, then one line
+  saying how many more need a key ("65 more need a key: `nebula nodes
+  --category image --all` lists them with what each needs"); `--all` lists
+  those too, each with its `missing`; `--json` prints the route's answer,
+  which equals find_nodes' for the same query, category, ready_only and
+  limit. find_nodes returns 20 rows by default (at most 100); `nebula nodes`
+  has no limit unless `--limit N`, because a terminal table is read whole or
+  piped and a category is never cut short.
 - `describe_node`: one node type's ports, params (options, defaults, ranges)
   and list prices by the params that set them (`price.byInputSize` and
   `multiplyBy` on a price read from the input file, `price.unconfirmed` when
@@ -223,7 +233,9 @@ The server exposes these tools for building and running (see
   rename. Returns `project` and `previousName`; renaming back to
   `previousName` undoes it. Open canvases and the Projects screen show the
   new name at once (`projectsChanged` with `change: "renamed"`), and the
-  journal gets `project.renamed` with `from` and `to`.
+  journal gets `project.renamed` with `from` and `to`. CLI: `nebula project
+  rename <id|current> <name>` (see
+  [Long runs and graph edits from the CLI](#long-runs-and-graph-edits-from-the-cli)).
 - `get_project`: reads a saved project without opening it, through
   `GET /api/projects/{id}?view=agent` (`services/project_view.py`). Nodes come
   exactly as `look_at_canvas` shows a live one
@@ -235,7 +247,8 @@ The server exposes these tools for building and running (see
   them all), each with its status, timing, `nodeIds` and which outputs it
   made, never its recipe's params or output values. Without `view` the route
   answers as before (the canvas loads it). Deleting a project over MCP waits
-  on a decision about the open project.
+  on a decision about the open project. CLI: `nebula project show
+  <id|current>` (`--json` prints this result).
 - `moodboard_list`, `moodboard_get`, `moodboard_create`, `moodboard_add`,
   `moodboard_update`, `moodboard_edit`, `moodboard_analyze`, `moodboard_move`, `moodboard_delete`: the boards in
   Moodboard Studio, with their brief (Direction, Avoid, pinned colours, a
@@ -254,7 +267,8 @@ The server exposes these tools for building and running (see
   `list_trash` takes `kind` (`moodboard`, `character`, `style` or `project`),
   and `scope` (`global`, or `project` with `project_id`, an id or
   `"current"`; `project_id` alone means `project`) as the route does. See
-  [Recently deleted](#recently-deleted).
+  [Recently deleted](#recently-deleted). CLI: `nebula trash list --scope
+  global|project --project <id|current>`.
 - The Commons (the smart moodboard's analyzed references; only with
   `NEBULA_COMMONS_ENABLED=1`), all in the agent's brand scope (pass
   `brand`): `commons_search` and `commons_get` read references;
@@ -281,7 +295,10 @@ The server exposes these tools for building and running (see
   No part of a key comes back. The route itself sends a set key's last 4
   characters only to the app (its person token); any other caller, `curl`
   or `nebula keys` included, gets a bare `***` (Justin, Q55 a). Only the
-  person changes settings.
+  person changes settings. CLI: `nebula keys` (set or not set; `--json`
+  prints this result). It turns each key into true or false as this tool
+  does, so even a reply that carried an ending would print none; the CLI
+  never has the person token.
 - `provider_status`: whether each key works, from `GET /api/health/providers`
   (free, read-only checks, never a generation; cached 5 minutes, `refresh`
   checks again), and the Krea account connection from
@@ -290,6 +307,7 @@ The server exposes these tools for building and running (see
   open. A probe's `detail` never quotes a key: when a saved key can't be sent
   (a pasted line break or space, which httpx's error would quote whole), the
   detail says so instead (`services/settings._probe_error_detail`).
+  CLI: `nebula providers` (`--refresh`, `--json`).
 
 And these canvas tools:
 
@@ -349,12 +367,15 @@ And these canvas tools:
   it before paid runs or reworking their graph. When a node the run needs
   can't run here (no key, no Krea sign-in, a route that can't take it), the
   reply has a `warning` naming each one, so the agent can say so or propose
-  another model. See [Proposals](#proposals).
+  another model. Such a proposal is kept, with the warning; if the agent
+  then proposes something else instead, it withdraws the first
+  (`withdrawWith` is the exact call). See [Proposals](#proposals).
 - `get_proposal`: reads one of your proposals; `wait_seconds` (up to 300)
   waits for the person's decision. On accept it returns `idMap` (your refs to
   real node ids) and `runNodeIds` (what the canvas will run; don't run them
   yourself).
-- `withdraw_proposal`: takes back one of your open proposals.
+- `withdraw_proposal`: takes back one of your open proposals. Withdraw one
+  that can't run here before proposing something else instead.
 - `propose_asset_change`: proposes a change outside the canvas that is the
   person's call: a project cover they pinned, a board's Send notes to
   generators, or curating a Commons reference. They decide on the Projects
@@ -816,13 +837,35 @@ a Krea sign-in, or why the chosen route can't take it), and the cost entry
 of such a node has the same `missing`. `propose_change` and `nebula propose`
 turn the list into a `warning` (`canvas_proposals.readiness_warning`), each
 pointing at its own way to find a node that runs here: `find_nodes` for MCP,
-`nebula context` for the CLI, and `GET /api/agent/nodes` in the HTTP reply. On
+`nebula nodes` for the CLI (its twin), and `GET /api/agent/nodes` in the HTTP reply. On
 the canvas the ghost shows the ⚠ a real node shows, with the same title, and
 the bar lists the nodes under its summary (three, then the rest in its
 details). Both re-check keys as the person adds them, so a line goes away
 once its key is set. Accept stays enabled, as the canvas's Run button does
 for a node without its key: the run is refused at that node before any
 provider is called, and the node shows why.
+
+**Withdraw it before proposing something else.** A proposal that can't run
+here is kept, with the warning (Justin's call, Q109: not refused, and
+nothing is withdrawn for the agent). The warning ends with the call that
+takes it back, and the reply's `withdrawWith` is that call on its own:
+`withdraw_proposal(proposal_id="p_…")` for MCP, `nebula proposal withdraw
+p_…` for the CLI (with `--as <name>` when the agent named itself with
+`--as`), `DELETE /api/canvas/proposals/p_…` over HTTP. If the agent then
+proposes something else instead, it withdraws the first, so the person has
+one proposal to answer, not two. As a reminder, while the same agent still
+has an open proposal on this canvas that can't run, its next proposal's
+reply lists it in `stillOpen` (`[{id, note, withdrawWith}]`) and says so in
+`reminder` ("Your proposal p_… is still open and can't run here; withdraw
+it if this one replaces it: …"); `nebula propose` prints it as a
+`reminder:` line. `nebula propose --json --wait` prints these as they
+stand after the wait: once the person has decided, `withdrawWith` and the
+warning's withdraw step are gone, and `stillOpen` keeps only proposals still
+open. Other agents' proposals, and the agent's proposals that
+can run, don't count. Open proposals in `start_here`, `nebula context` and
+`nebula look` carry `cantRun` (how many of the run's nodes can't run here,
+when any can't), so an agent that comes back later sees it too. The state
+is the one read when each proposal was made.
 
 Rules:
 
@@ -1566,7 +1609,9 @@ unnamed client) and when. Agents may delete boards, characters and Styles
   contents, so a Moodboard or Character node that points at it runs again. A
   project comes back closed. Agents may restore. Restoring one that is already
   back is a no-op (200, `alreadyRestored: true`). MCP: `list_trash` (with
-  `kind`, `scope` and `project_id`), `restore_from_trash`. CLI: `nebula trash list`, `nebula trash restore [kind] <id>`.
+  `kind`, `scope` and `project_id`), `restore_from_trash`. CLI: `nebula trash list`
+  (`--kind`, `--scope`, `--project`: list_trash's three; `--json` prints its
+  result), `nebula trash restore [kind] <id>`.
 - Deleting for good is person-only (see the list above). The person does it
   from Moodboard Studio, Character Studio, the Assets panel's Styles tab or
   Projects. Emptying sends what the
@@ -1799,14 +1844,21 @@ drops open requests; the nodes keep the positions they were placed at.
 #### The person can undo any agent edit
 
 Every graph edit an agent makes (`edit_canvas`, `remove_from_canvas`,
-`nebula apply`, `set`, `create`, `delete`, `wire`, `move`, `nebula graph
-load`, the layout route) is one undo step on each open canvas (a canvas
+`nebula apply`, `set`, `create`, `delete`, `wire`, `disconnect`, `move`,
+`nebula graph load`, the layout route) is one undo step on each open canvas (a canvas
 finishing an agent's `arrange` joins that agent's step instead; see above). The canvas shows "Claude changed the
 canvas" with an Undo button, and Cmd-Z works too. Undo puts back exactly
 what that edit changed: deleted nodes come back with their params, outputs,
 name and wires, and new nodes go away with their wires. Redo (Cmd-Shift-Z)
 applies the edit again. A run's results are never undo steps, so undoing a
 param change keeps the outputs a run made since.
+
+An open canvas draws exactly the backend's wires between backend nodes: a
+wire an agent took away (an unwire, `disconnect`, an undo, a node re-typed
+to other ports) leaves it at once, with no reload, and its next save doesn't
+put it back. Only the person's own wire still on its way (drawn, not yet
+answered) or one they just deleted stays as they have it until the backend
+answers.
 
 How it works: a graphSync caused by an edit request carries `edit` =
 `{actor, tab?, id?, undoes?}`. `id` names an agent's apply or undo (its
@@ -1865,7 +1917,9 @@ folder (external URLs are never fetched), downscales images to 512, 1024 or
 result at 25,000 tokens.
 
 `GET /api/agent/nodes` and `GET /api/agent/nodes/{id}` back `find_nodes` and
-`describe_node`. Both use `services/node_readiness.py`, the same rule
+`describe_node`; `nebula nodes` reads the first too, with `limit` up to
+`AGENT_NODES_MAX` (2,000, above the whole catalog) so `--all` gets every node
+type in one call. Both use `services/node_readiness.py`, the same rule
 `nebula context` uses, so the CLI and the MCP server agree on what can run.
 `apiProvider: utility` only means "no top-level key". A local node that still
 calls a provider says how in its definition's `providerVia` (`kind: model`
@@ -2058,12 +2112,18 @@ nebula delete n3 n4                 # nodes and their wires
 nebula disconnect n1:text n2:prompt
 nebula rename n2 "Hero shot"        # an empty name restores the model's
 nebula move n2=400,120 n3=400,320   # canvas coordinates
-nebula projects                     # saved projects; * is open
+nebula projects                     # saved projects; * is open (--json: list_projects)
 nebula project open <id>            # switch the canvas (not while a run is going)
 nebula project new "Logo ideas"     # start a new, empty project and open it
+nebula project rename current "Logo ideas, round 2"   # prints the command that renames it back
+nebula project show <id>            # a saved project unopened: nodes, wires, cover, runs (get_project)
 nebula clear                        # refused when the canvas has nodes
 nebula clear --force                # clears it anyway; the person can undo it
-nebula trash list                   # Recently deleted boards, characters, projects
+nebula trash list                   # Recently deleted boards, characters, Styles, projects
+nebula trash list --scope global    # boards, characters and Styles in no project
+nebula trash list --project current # the open project's (--scope project with it)
+nebula keys                         # which provider keys are set, never a key's ending
+nebula providers                    # whether each key works, and the Krea account (--refresh)
 nebula trash restore [kind] <id>    # bring one back with the same id
 ```
 
@@ -2071,6 +2131,15 @@ Opening or starting a project keeps the one that was open as it is. When an
 agent (or any script that isn't the person's own canvas) does it, the
 person's canvas follows, says who switched it, and offers a button back.
 The project's history names the agent.
+
+`rename`, `show`, `trash list`, `keys` and `providers` are the CLI twins of
+`rename_project`, `get_project`, `list_trash`, `get_settings` and
+`provider_status`. Each goes through the same route and the same shaping
+(`backend/project_client.py`), so its `--json` prints the tool's result, with
+hints worded as `nebula` commands. A rename is journaled as `project.renamed`
+under `$NEBULA_AGENT_NAME` (unnamed without it). The CLI is an agent surface
+and never has the person token, so `keys` and `providers` print set or not
+set and each provider's health, never any part of a key (Justin, Q55 a).
 
 `nebula clear` refuses when the open project has nodes and points to
 `nebula project new` instead, which keeps this project's work. `--force`
@@ -2502,3 +2571,8 @@ A copy records its checkout in `.installed-from`.
 
 `nebula context` lists the definition ids that can run here: with your keys,
 free, on the signed-in Krea account (marked `*`), or with a Nous sign-in.
+`nebula nodes` lists the same node types with how each runs and its price
+(words and `--category` narrow it), and `nebula nodes --all` adds the ones
+that can't run here, each with what it needs. Before 2026-10-21 `nebula
+nodes` listed every node type with no sign of which could run, and an agent
+in the Q104 rerun proposed FLUX.2 with no BFL or fal key set from it.

@@ -173,13 +173,13 @@ from services.canvas_proposals import (
     Proposal,
     ProposalError,
     ProposalSpec,
+    agent_wording,
     canvas_proposals,
     clean_note,
     clean_positions,
     cost_for,
     parse_spec,
     place_new_nodes,
-    readiness_warning,
     summarize_cost,
 )
 # Proposals outside the graph: a project's cover, a board's Send notes (U16).
@@ -3859,6 +3859,11 @@ def _agent_node_row(definition: Mapping[str, Any], context: Mapping[str, Any]) -
     return row
 
 
+# GET /api/agent/nodes' largest `limit`: above the catalog (308 node types,
+# 2026-10-21), so `nebula nodes --all` gets every one in one call.
+AGENT_NODES_MAX = 2000
+
+
 @app.get("/api/agent/nodes")
 async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool = True, limit: int = 20) -> dict[str, Any]:
     """Node types an agent can use, best matches first: whether each can run
@@ -3866,10 +3871,11 @@ async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool
 
     Every word of `query` must appear in the id, name or description.
     `category` is a category id (image-gen) or its short name (image),
-    services/node_categories.py."""
+    services/node_categories.py. `limit` goes up to AGENT_NODES_MAX: MCP's
+    find_nodes asks for at most 100 rows, `nebula nodes` for every match."""
     context = _agent_node_context()
     words = [word for word in query.lower().split() if word]
-    limit = max(1, min(int(limit), 100))
+    limit = max(1, min(int(limit), AGENT_NODES_MAX))
     definitions = context["definitions"]
     wanted = (node_categories.resolve(category, {str(d.get("category")) for d in definitions.values()}) or category
               if category else "")
@@ -5589,7 +5595,9 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
     except ProposalError as exc:
         raise _proposal_http_error(exc) from exc
     view = _proposal_view(proposal)
-    warning = readiness_warning(cost)
+    # The agent's other open proposals here that can't run: Justin (Q109)
+    # keeps them, and the agent is told to withdraw one this replaces.
+    still_open = [{"id": p.id, "note": p.spec.note} for p in canvas_proposals.open_unrunnable(proposal)]
     first_reference = next(iter(sorted(proposal.references, key=_node_order)), None)
     _journal(
         "proposal.created",
@@ -5626,8 +5634,9 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
     if target is not None:
         await _show_agent(target, action="click", say=spec.note)
     # Nodes of the run that can't run here, so the agent can say so or pick
-    # another model before the person accepts (the canvas shows it too).
-    return {"proposal": view, **({"warning": warning} if warning else {})}
+    # another model before the person accepts (the canvas shows it too), and
+    # the call that withdraws this one or an earlier one this replaces.
+    return agent_wording({"proposal": view, **({"stillOpen": still_open} if still_open else {})})
 
 
 @app.get("/api/canvas/proposals")

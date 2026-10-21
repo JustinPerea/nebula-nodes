@@ -75,7 +75,7 @@ import {
 } from '../lib/backend';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import {
-  RUNTIME_FIELDS, applySlice, diffCanvas, editArrivedText, foldArrange, foreignSource, isForeignEdit, isOwnEcho,
+  RUNTIME_FIELDS, applySlice, diffCanvas, edgeKey, editArrivedText, foldArrange, foreignSource, isForeignEdit, isOwnEcho,
   restoreRequest, undoNoticeText, type EditOrigin, type ForeignEdit,
 } from '../lib/canvasUndo';
 import { TAB_ID } from '../lib/tabId';
@@ -825,7 +825,7 @@ interface GraphState {
     nodes: Node<NodeData>[];
     edges: Edge[];
     updatedNodes: Node<NodeData>[];
-  }, options?: { undoStep?: object }) => void;
+  }, options?: { undoStep?: object; synced?: ReadonlySet<string> }) => void;
   deleteGeneration: (modelNodeIds: string[]) => void;
   duplicateNode: (nodeId: string) => void;
   deleteNode: (nodeId: string) => void;
@@ -1508,6 +1508,78 @@ function layoutNode(node: Node<NodeData>): LayoutNode {
 // that moved one of these nodes is the echo of an earlier write (or loses to the
 // one in flight), so the canvas keeps the position it has.
 const layoutWritesInFlight = new Map<string, number>();
+
+// Wire writes this tab has sent (a connect, a delete, an undo's restore), by
+// connection; `want`: whether the wire should be there. A wire between two
+// backend nodes is the backend's: a graphSync without it takes it off the
+// canvas, one with it draws it. Only while this tab's own write is out (and,
+// after its answer, until a sync agrees or one more sync has come) does a
+// sync that disagrees leave the wire as this tab has it.
+type WireWrite = { want: boolean; sending: number; agreed?: boolean; grace?: boolean };
+const wireWrites = new Map<string, WireWrite>();
+
+/** Send one wire write (after `after`); a refusal puts the canvas back and says why. */
+function sendWire(edge: Edge, want: boolean, set: GraphSet, after?: Promise<unknown>): Promise<unknown> {
+  const done = holdWire(edge, want);
+  const send = () => graphMutationFetch(want ? '/api/graph/connect' : '/api/graph/edge', {
+    method: want ? 'POST' : 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source: edge.source, sourceHandle: edge.sourceHandle ?? '',
+      target: edge.target, targetHandle: edge.targetHandle ?? '' }),
+  });
+  // Sent at once unless it waits for `after`, as these requests always were.
+  return (after ? after.then(send) : send()).then(async (response) => {
+    done(response.ok);
+    if (response.ok) return;
+    const text = `Couldn't ${want ? 'connect' : 'remove'} that wire. ${await backendRejectionReason(response, 'Refused')}`;
+    set((state) => ({
+      edges: want ? state.edges.filter((e) => e.id !== edge.id)
+        : state.edges.some((e) => edgeKey(e) === edgeKey(edge)) ? state.edges : [...state.edges, edge],
+      undoNotice: { id: ++undoNoticeSeq, text, offer: null },
+    }));
+  }, (err) => {
+    done(false);
+    console.warn('[nebula] Wire sync failed:', err);
+  });
+}
+
+/** Hold a wire write; call the result with whether the backend took it. */
+function holdWire(edge: Edge | { source: string; sourceHandle: string; target: string; targetHandle: string },
+  want: boolean): (took: boolean) => void {
+  const key = edgeKey(edge);
+  const write = wireWrites.get(key) ?? { want, sending: 0 };
+  Object.assign(write, { want, sending: write.sending + 1, agreed: false, grace: false });
+  wireWrites.set(key, write);
+  return (took) => {
+    write.sending -= 1;
+    if (wireWrites.get(key) === write && !write.sending && (!took || write.agreed)) wireWrites.delete(key);
+  };
+}
+
+/** What this sync must leave as this tab has it: connection -> want. */
+function heldWires(cliEdges: Edge[]): Map<string, boolean> {
+  const keys = new Set(cliEdges.map(edgeKey));
+  const held = new Map<string, boolean>();
+  for (const [key, write] of wireWrites) {
+    // Once a sync agreed the backend has taken it: a later one that differs is newer.
+    write.agreed ||= keys.has(key) === write.want;
+    if (!write.sending && (write.agreed || write.grace)) wireWrites.delete(key);
+    else if (!write.agreed) held.set(key, write.want);
+    if (!write.sending) write.grace = true;
+  }
+  return held;
+}
+
+// Requests whose answer adds what they made (node-and-connect, Create's
+// cluster, a proposal accept): the node ids and wires syncs carried while
+// each was out. What a sync already carried is the syncs' to keep or remove,
+// so the answer adds only what none has shown yet.
+const syncWatchers = new Set<Set<string>>();
+export function watchGraphSyncs(): { seen: ReadonlySet<string>; stop: () => void } {
+  const seen = new Set<string>();
+  syncWatchers.add(seen);
+  return { seen, stop: () => syncWatchers.delete(seen) };
+}
 
 function persistNodePositions(positions: Record<string, { x: number; y: number }>): void {
   const persisted = Object.fromEntries(
@@ -2606,8 +2678,10 @@ function sendRestore(
   const body = restoreRequest(action, prevNodes, prevEdges, nextNodes, nextEdges);
   if (!body) return restoreQueue;
   if (isForeignEdit(entry) && entry.editId) body.edit = entry.editId;
+  // The wires it puts back or takes off stay so until it lands (heldWires).
+  const holds = [...body.wire.map((w) => holdWire(w, true)), ...body.unwire.map((w) => holdWire(w, false))];
   const task = restoreQueue.then(async () => {
-    let response: Response;
+    let response: Response | null = null;
     try {
       response = await graphMutationFetch('/api/graph/restore', {
         method: 'POST',
@@ -2617,9 +2691,9 @@ function sendRestore(
     } catch (err) {
       // No answer: it may have landed. The next graphSync shows which.
       console.warn(`[nebula] ${action} didn't reach the backend:`, err);
-      return;
     }
-    if (response.ok) return;
+    for (const done of holds) done(Boolean(response?.ok));
+    if (!response || response.ok) return;
     const reason = await backendRejectionReason(response, `Couldn't ${action} that step`);
     console.warn(`[nebula] ${action} refused: ${reason}`);
     set((state) => {
@@ -2692,6 +2766,7 @@ wsClient.subscribe((event) => {
     if (graphReplaced) {
       canvasReplacementRevision += 1;
       pendingConnectedNodeCreationAttempt = null;
+      wireWrites.clear();
       unsavedParamEdits.clear();
       // The committed import can arrive before, or instead of, its HTTP ack.
       // Revoke old same-ID uploads/writes and suspended drafts before merging.
@@ -2727,6 +2802,11 @@ wsClient.subscribe((event) => {
     observePendingConnectedNodeCreation(cliNodes as Node<NodeData>[], cliEdges as Edge[]);
 
     const state = useGraphStore.getState();
+    const held = heldWires(cliEdges ?? []);
+    for (const seen of syncWatchers) {
+      for (const node of cliNodes) seen.add(node.id);
+      for (const edge of cliEdges ?? []) seen.add(edgeKey(edge));
+    }
 
     if (empty) {
       // cli_graph was cleared — drop only cli-origin nodes/edges; keep frontend work.
@@ -2879,26 +2959,19 @@ wsClient.subscribe((event) => {
     ));
     const mergedIds = new Set(merged.map((n) => n.id));
 
-    // Preserve frontend-only edges whose endpoints are still present. We dedupe
-    // by connection identity (source:handle -> target:handle) rather than edge
-    // id because onConnect issues a UUID edge optimistically and the cli
-    // version that comes back via graphSync has a different id. Using
-    // connection identity means the cli edge wins silently.
-    const edgeKey = (e: Edge): string =>
-      `${e.source}:${e.sourceHandle ?? ''}->${e.target}:${e.targetHandle ?? ''}`;
+    // A wire between two backend nodes is the backend's: one this sync lacks
+    // is gone (an agent's unwire or undo, a re-typed node's pruning), unless
+    // it is this tab's own connect on its way (heldWires). Wires on nodes only
+    // this tab has stay while both ends do. Matched by connection, not id:
+    // onConnect's optimistic wire has a UUID, the backend's copy an e-id.
     const cliEdgeKeys = new Set((cliEdges as Edge[]).map(edgeKey));
-    const confirmedMotion = useCinemaMotionStore.getState().handoffs.filter((item) => item.status === 'ready' && item.targetId);
     const mergedById = new Map(merged.map((n) => [n.id, n]));
     const frontendOnlyEdges = graphReplaced ? [] : state.edges.filter(
       (e) => !cliEdgeKeys.has(edgeKey(e)) && mergedIds.has(e.source) && mergedIds.has(e.target)
+        && (!CLI_ID_RE.test(e.source) || !CLI_ID_RE.test(e.target) || held.get(edgeKey(e)) === true)
         // A universal node whose model changed (the picker's route, which drops
         // these wires itself) no longer has the port: the wire can't stay.
-        && universalPortsHold(e, mergedById)
-        // A confirmed server-owned motion wire omitted by newer canonical
-        // state was removed. Keep other optimistic frontend edges unchanged.
-        && !confirmedMotion.some((item) => CLI_ID_RE.test(item.nodeId) && CLI_ID_RE.test(item.targetId!)
-          && e.source === item.nodeId && e.sourceHandle === shotPortId(item.shotId)
-          && e.target === item.targetId && e.targetHandle === 'image'),
+        && universalPortsHold(e, mergedById),
     );
     // Edges are matched by id and connection: the backend can hand two
     // edges the same id (cli_graph.connect numbers by count after a removal).
@@ -2908,7 +2981,7 @@ wsClient.subscribe((event) => {
       ...frontendOnlyEdges,
       // A selected wire stays selected (React Flow keeps `selected` on the
       // edge, `false` once deselected, which is kept too so the wire is unchanged).
-      ...(cliEdges as Edge[]).map((edge) => {
+      ...(cliEdges as Edge[]).filter((edge) => held.get(edgeKey(edge)) !== false).map((edge) => {
         const selected = existingEdges.get(edgeIdentity(edge))?.selected;
         return typeof selected === 'boolean' ? { ...edge, selected } : edge;
       }),
@@ -3454,6 +3527,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       originDefinitionId: origin.data.definitionId, connect: { ...connect }, phase: 'sending',
     };
     pendingConnectedNodeCreationAttempt = attempt;
+    const synced = watchGraphSyncs();
     let definiteOutcome = false;
     try {
       const res = await graphMutationFetch('/api/graph/node-and-connect', {
@@ -3502,11 +3576,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         type: nodeTypes[definitionId] ?? (dynamic ? 'dynamic-node' : definitionId.startsWith('qc-') ? 'videoQcNode' : 'model-node'),
         position: { ...position }, data };
       // A fast graphSync may already contain either item. Keep its canonical
-      // data, outputs and edge ID; otherwise expose the acknowledged pair now.
+      // data, outputs and edge ID (or its removal since: an agent's unwire);
+      // otherwise expose the acknowledged pair now.
       set((state) => ({
-        nodes: state.nodes.some((item) => item.id === nodeId) ? state.nodes : [...state.nodes, newNode],
-        edges: state.edges.some((item) => item.source === edge.source && item.sourceHandle === edge.sourceHandle
-          && item.target === edge.target && item.targetHandle === edge.targetHandle) ? state.edges : [...state.edges, edge],
+        nodes: synced.seen.has(nodeId) || state.nodes.some((item) => item.id === nodeId) ? state.nodes : [...state.nodes, newNode],
+        edges: synced.seen.has(edgeKey(edge)) || state.edges.some((item) => edgeKey(item) === edgeKey(edge))
+          ? state.edges : [...state.edges, edge],
         undoStack: [...state.undoStack, undoSnapshot].slice(-UNDO_CAP),
         redoStack: [],
       }));
@@ -3520,6 +3595,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         if (definiteOutcome || attempt.observedNodeId) pendingConnectedNodeCreationAttempt = null;
         else attempt.phase = 'uncertain';
       }
+      synced.stop();
       unsubscribe();
     }
   },
@@ -3584,6 +3660,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         if (!shortId) return;
         // Remap edges too so any connections drawn during the race window
         // keep pointing at the renamed node.
+        const drawn = new Set(get().edges.filter((e) => e.source === tempId || e.target === tempId).map((e) => e.id));
         set((state) => ({
           nodes: state.nodes.map((n) => (n.id === tempId ? { ...n, id: shortId } : n)),
           edges: state.edges.map((e) => ({
@@ -3592,6 +3669,11 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             target: e.target === tempId ? shortId : e.target,
           })),
         }));
+        // onConnect sent none of them (an end had no backend id yet): those
+        // between two backend nodes now go, held like any connect (sendWire).
+        for (const edge of get().edges) {
+          if (drawn.has(edge.id) && CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) void sendWire(edge, true, set);
+        }
       })
       .catch((err) => {
         console.warn('[nebula] addDynamicNode backend push failed — staying frontend-only:', err);
@@ -3652,18 +3734,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       for (const id of removedIds) {
         const edge = currentEdges.find((e) => e.id === id);
         if (!edge) continue;
-        if (CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) {
-          graphMutationFetch('/api/graph/edge', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              source: edge.source,
-              sourceHandle: edge.sourceHandle ?? '',
-              target: edge.target,
-              targetHandle: edge.targetHandle ?? '',
-            }),
-          }).catch((err) => console.warn('[nebula] DELETE edge failed:', err));
-        }
+        if (CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) void sendWire(edge, false, set);
       }
     }
     set((state) => {
@@ -3764,31 +3835,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     set((state) => ({ edges: [...state.edges.filter((edge) => !replacedIds.has(edge.id)), newEdge] }));
 
     if (CLI_ID_RE.test(connection.source) && CLI_ID_RE.test(connection.target)) {
-      (async () => {
-        for (const edge of edgesToReplace) {
-          if (!CLI_ID_RE.test(edge.source) || !CLI_ID_RE.test(edge.target)) continue;
-          await graphMutationFetch('/api/graph/edge', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              source: edge.source,
-              sourceHandle: edge.sourceHandle ?? '',
-              target: edge.target,
-              targetHandle: edge.targetHandle ?? '',
-            }),
-          });
-        }
-        await graphMutationFetch('/api/graph/connect', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            source: connection.source,
-            sourceHandle: connection.sourceHandle,
-            target: connection.target,
-            targetHandle: connection.targetHandle,
-          }),
-        });
-      })().catch((err) => console.warn('[nebula] onConnect backend push failed:', err));
+      // The wires it replaces go first; all are held from now (sendWire).
+      let sent: Promise<unknown> | undefined;
+      for (const edge of edgesToReplace) {
+        if (CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) sent = sendWire(edge, false, set, sent);
+      }
+      void sendWire(newEdge, true, set, sent);
     }
 
     // mask-painter only outputs a mask bitmap — inpaint nodes also need the base
@@ -4989,6 +5041,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     let idMap: Record<string, string> = {};
     let rfNodes: Node<NodeData>[] = [];
     let rfEdges: Edge[] = [];
+    const synced = watchGraphSyncs();
     try {
       const res = await graphMutationFetch('/api/graph/cluster', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -5000,6 +5053,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     } catch (err) {
       console.error('[nebula] authorGenerationCluster persist failed:', err);
       return { modelNodeIds: [], allNodeIds: [] };
+    } finally {
+      synced.stop();
     }
 
     const origin: CreateOriginTag = { sessionId: request.sessionId, genId: request.genId, ts: Date.now(), prompt: request.prompt };
@@ -5020,11 +5075,11 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           ? { ...n, data: { ...n.data, _createOrigin: incoming.data._createOrigin } }
           : n;
       });
-      const newNodes = taggedNodes.filter((n) => !existingIds.has(n.id));
+      const newNodes = taggedNodes.filter((n) => !existingIds.has(n.id) && !synced.seen.has(n.id));
       const existingEdgeIds = new Set(state.edges.map((e) => e.id));
       return {
         nodes: [...mergedNodes, ...newNodes],
-        edges: [...state.edges, ...rfEdges.filter((e) => !existingEdgeIds.has(e.id))],
+        edges: [...state.edges, ...rfEdges.filter((e) => !existingEdgeIds.has(e.id) && !synced.seen.has(edgeKey(e)))],
       };
     });
 
@@ -5051,9 +5106,11 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       });
       const existingIds = new Set(state.nodes.map((node) => node.id));
       const existingEdgeIds = new Set(state.edges.map((edge) => edge.id));
+      // What a sync already carried is the syncs' (an agent may have removed it since).
+      const synced = options?.synced ?? new Set<string>();
       return {
-        nodes: [...merged, ...incoming.filter((node) => !existingIds.has(node.id))],
-        edges: [...state.edges, ...incomingEdges.filter((edge) => !existingEdgeIds.has(edge.id))],
+        nodes: [...merged, ...incoming.filter((node) => !existingIds.has(node.id) && !synced.has(node.id))],
+        edges: [...state.edges, ...incomingEdges.filter((edge) => !existingEdgeIds.has(edge.id) && !synced.has(edgeKey(edge)))],
       };
     });
   },
@@ -5310,18 +5367,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const deadPortId = shotPortId(shotId);
     for (const edge of get().edges) {
       if (edge.source !== nodeId || edge.sourceHandle !== deadPortId) continue;
-      if (CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) {
-        graphMutationFetch('/api/graph/edge', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            source: edge.source,
-            sourceHandle: edge.sourceHandle ?? '',
-            target: edge.target,
-            targetHandle: edge.targetHandle ?? '',
-          }),
-        }).catch((err) => console.warn('[nebula] DELETE cinema shot edge failed:', err));
-      }
+      if (CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) void sendWire(edge, false, set);
     }
 
     applySceneToNode(set, nodeId, nextScene);
@@ -5342,18 +5388,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     for (const edge of get().edges) {
       if (edge.source !== nodeId || !edge.sourceHandle?.startsWith('shot_')) continue;
       if (validPortIds.has(edge.sourceHandle)) continue;
-      if (CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) {
-        graphMutationFetch('/api/graph/edge', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            source: edge.source,
-            sourceHandle: edge.sourceHandle ?? '',
-            target: edge.target,
-            targetHandle: edge.targetHandle ?? '',
-          }),
-        }).catch((err) => console.warn('[nebula] DELETE cinema shot edge failed:', err));
-      }
+      if (CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) void sendWire(edge, false, set);
     }
 
     applySceneToNode(set, nodeId, spec);

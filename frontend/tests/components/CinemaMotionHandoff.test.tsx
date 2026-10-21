@@ -155,11 +155,13 @@ describe('Cinema motion handoff', () => {
 
   it('drops only the confirmed motion wire removed by canonical sync while both endpoints remain', async () => {
     mocks.fetch.mockResolvedValueOnce(response()); await sendCinemaShotToMotion('n1', 'a');
-    useGraphStore.setState((state) => ({ edges: [...state.edges,
-      { id: 'optimistic', source: 'n1', sourceHandle: 'shot_b', target: 'n2', targetHandle: 'prompt' }] }));
+    // The person's own wire, its connect still on the way: it stays (graphStore's heldWires).
+    mocks.fetch.mockReturnValueOnce(new Promise(() => {}));
+    useGraphStore.getState().onConnect({ source: 'n1', sourceHandle: 'shot_b', target: 'n2', targetHandle: 'prompt' });
+    const optimistic = useGraphStore.getState().edges.find((edge) => edge.sourceHandle === 'shot_b')!.id;
     for (const listener of mocks.listeners) listener({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, nodes: [source(), result().node], edges: [], empty: false });
     expect(useGraphStore.getState().nodes).toHaveLength(2);
-    expect(useGraphStore.getState().edges.map((edge) => edge.id)).toEqual(['optimistic']);
+    expect(useGraphStore.getState().edges.map((edge) => edge.id)).toEqual([optimistic]);
     expect(handoffs()[0].status).toBe('error');
     viewCinemaMotionNode('n1', 'a'); expect(useUIStore.getState().canvasFocusRequest).toBeNull();
   });
