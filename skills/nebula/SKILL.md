@@ -47,6 +47,12 @@ prices, and your spending limits. Only use nodes it lists. `--json` prints
 the same as JSON. On a big canvas it shows the first nodes in full and says
 so; `nebula look` then gives every node.
 
+Its NEXT lines and the line under BOARDS are the exact commands for a first
+build: `nebula apply` with its flags, how to show a board in a Preview, and
+`nebula propose` for the paid run. Copy those instead of reading
+`nebula apply --help` or `nebula info nebula-moodboard`; use `nebula info`
+for a generator's own params and ports.
+
 Projects: `nebula projects` lists them; `*` is the one open on the canvas.
 Start new work in a new project (`nebula project new "<name>"`) or open the
 right one (`nebula project open <id>`). The person's canvas follows (from
@@ -89,6 +95,8 @@ nebula apply --note "Lighthouse, two takes" \
 It prints each new node's id. It never runs anything. Other edits:
 `--set n4.prompt=...`, `--move n4=400,120`, `--remove n7`,
 `--unwire n1:text n2:prompt`, or a whole plan with `--file plan.json`.
+A `--wire` end without a port (`--wire +mb +pv:input`) is refused with the
+ports that node has.
 
 It also prints `Undo: nebula undo <token>`. Run that to take your edit back
 (for 60 minutes, while that project is open): what you added goes, what you
@@ -160,7 +168,9 @@ Direction (what the board is for), Avoid (things to keep out), pinned colours
 (must appear / keep out) and an optional hand-written brief. A
 `nebula-moodboard` node puts a board on the canvas (param `moodboard` = the
 board id), with outputs `moodboard`, `style_brief`, `negative_prompt`,
-`representative_images` and `palette`.
+`representative_images` and `palette`. To show one in a Preview:
+`nebula apply --add +mb=nebula-moodboard --param +mb.moodboard=<board> --add +pv=preview --wire +mb:moodboard +pv:input`;
+wire `+mb:moodboard` to a generator's `moodboard` input to style it.
 
 ```bash
 nebula moodboard new "Nature + tech" ./refs https://example.com/ref.jpg --project current
@@ -409,6 +419,7 @@ nebula watch --once            # wait for the next change on the canvas
 nebula pins                    # notes the person pinned for agents
 nebula pin resolve <pin-id> --say "Warmed the grade on n7"
 nebula point n4 --say "Trying a tighter crop here"
+nebula point --say "Reading your board"   # no target: said where your cursor is, it doesn't move
 nebula note "n4 and n7 use different seeds; I'll match them" --node n4 --node n7
 nebula notes --unread          # your updates the person hasn't opened
 ```

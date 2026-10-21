@@ -123,6 +123,7 @@ from services.agent_profiles import (
     protected_agent_dirs,
 )
 from services.local_guard import LocalRequestGuard
+from services.json_number_guard import JsonNumberGuard, JsonNumberOutOfRange, loads_checked
 from services.agent_workspaces import AgentWorkspaceContext, WorkspaceSessions, WorkspaceSessionError, workspace_scope
 from services.chat_actions import publish_action
 from services import moodboard_actions
@@ -647,6 +648,11 @@ DYNAMIC_NODE_PROVIDER_BY_DEFINITION = {
     "fal-universal": "fal",
 }
 
+# Refuses a JSON body with NaN, Infinity or a number past float's range (422),
+# for every router, before any route parses it. Added before CORS and
+# LocalRequestGuard so it runs inside both: a foreign Host or Origin is refused
+# before the body is read, and the 422 carries CORS headers.
+app.add_middleware(JsonNumberGuard)
 app.add_middleware(
     CORSMiddleware,
     # Accept any localhost port for dev (Vite auto-bumps to 5174/5175 when 5173 is busy, etc.).
@@ -1201,13 +1207,9 @@ def _read_and_validate_restore_graph(
     )
     try:
         text = payload.decode("utf-8")
-        graph = json.loads(
-            text,
-            object_pairs_hook=_reject_duplicate_json_keys,
-            parse_constant=lambda value: (_ for _ in ()).throw(
-                ValueError(f"invalid JSON number: {value}")
-            ),
-        )
+        # NaN, Infinity and numbers past float's range are refused here:
+        # float(10**400) in the checks below would raise OverflowError.
+        graph = loads_checked(text, object_pairs_hook=_reject_duplicate_json_keys)
     except (UnicodeDecodeError, ValueError, RecursionError) as exc:
         raise HTTPException(status_code=400, detail=f"Invalid graph.json: {exc}") from exc
     return _validate_restore_graph(graph)
@@ -2847,8 +2849,10 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             if manager.is_browser(websocket):
                 continue
             try:
-                frame = json.loads(raw)
-            except json.JSONDecodeError:
+                # ValueError, not only JSONDecodeError: an int past 4,300
+                # digits (or NaN, 1e400) raised out of this loop and ended it.
+                frame = loads_checked(raw)
+            except (ValueError, RecursionError):
                 continue
             if not isinstance(frame, dict) or frame.get("type") != "hello":
                 continue
@@ -3094,8 +3098,13 @@ async def chat_websocket(websocket: WebSocket) -> None:
         while True:
             raw = await websocket.receive_text()
             try:
-                payload = json.loads(raw)
-            except json.JSONDecodeError:
+                payload = loads_checked(raw)
+            except JsonNumberOutOfRange as exc:
+                await send_event({"type": "error", "message": str(exc), "source": "system"})
+                continue
+            except (ValueError, RecursionError):
+                # ValueError, not only JSONDecodeError: an int past 4,300
+                # digits raised out of this loop and ended the socket.
                 await send_event({"type": "error", "message": "invalid JSON", "source": "system"})
                 continue
 
@@ -4127,9 +4136,14 @@ def _node_label(node_id: str) -> str:
 async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
     """Point the calling agent's cursor at a node, a port, or a canvas spot.
 
-    Body: {target: {nodeId, handle?} | {x, y}, from?: same shape,
+    Body: {target?: {nodeId, handle?} | {x, y}, from?: same shape,
     action?: move|click|drag|look, say?: text}. The caller must identify
     itself (agent token or X-Nebula-Agent).
+
+    With `say` and no target, the line shows where the agent's cursor
+    already is, without moving it; an agent with no cursor yet gets one at
+    the middle of the person's view (when the browser reported one), else
+    at (0, 0). `placed` says which: cursor, view or origin.
     """
     identity = identify_agent(current_request_headers())
     if identity is None:
@@ -4137,8 +4151,17 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
             status_code=400,
             detail="Identify the agent with an X-Nebula-Agent header (e.g. 'Claude Code') or an agent token",
         )
+    placed = "target"
     try:
-        target = parse_target(body.get("target"), cli_graph.nodes)
+        if body.get("target") is None:
+            if body.get("from") is not None:
+                raise PresenceError("a drag's `from` needs a target to drag to (nodeId, or x and y)")
+            if not str(body.get("say") or "").strip():
+                raise PresenceError("give a target (nodeId, or x and y), or only `say` to narrate where your "
+                                    "cursor is")
+            target, placed = agent_presence.here(identity)
+        else:
+            target = parse_target(body.get("target"), cli_graph.nodes)
         origin = parse_target(body["from"], cli_graph.nodes, "from") if body.get("from") is not None else None
         event = agent_presence.point(
             identity,
@@ -4150,7 +4173,8 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
     except PresenceError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     await manager.broadcast_raw(event)
-    return {"agent": identity.as_dict(), "target": target, "action": event["action"], "say": event["say"]}
+    return {"agent": identity.as_dict(), "target": target, "action": event["action"], "say": event["say"],
+            "placed": placed}
 
 
 @app.post("/api/canvas/view")
@@ -4674,6 +4698,22 @@ def _proposal_http_error(exc: ProposalError) -> HTTPException:
     return HTTPException(status_code=exc.status, detail=exc.detail)
 
 
+def _wire_end_ports(end: str, definition_id: str | None, kind: str) -> tuple[str, list[str]] | None:
+    """canvas_proposals.PortLookup over the canvas: the ports a wire's end
+    has, so a wire with no port gets them named in its error, as a wrong
+    port name does (port_contracts)."""
+    node = None if definition_id else cli_graph.nodes.get(end)
+    definition_id = definition_id or str((node or {}).get("definitionId") or "")
+    definition = node_registry.get(definition_id) if definition_id else None
+    if not definition:
+        return None
+    declared = (cinema_output_ports((node or {}).get("params"))
+                if kind == "outputPorts" and definition_id == "cinema-scene"
+                else definition.get(kind, []))
+    return definition_id, [str(port["id"]) for port in declared or []
+                           if isinstance(port, dict) and isinstance(port.get("id"), str)]
+
+
 def _proposal_closed_message(proposal: Proposal) -> dict[str, Any]:
     message: dict[str, Any] = {
         "type": "proposalClosed",
@@ -4974,7 +5014,7 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
     try:
         # A proposal is where an agent asks to change who bills a node
         # (_provider, _kreaAuth): direct edits refuse that (_refuse_agent_billing_change).
-        spec = parse_spec(body, internal_ok=BILLING_PARAMS)
+        spec = parse_spec(body, internal_ok=BILLING_PARAMS, ports=_wire_end_ports)
     except ProposalError as exc:
         raise _proposal_http_error(exc) from exc
     for node in spec.nodes:
@@ -5178,7 +5218,11 @@ async def _proposal_body(request: Request) -> dict[str, Any]:
     if not raw:
         return {}
     try:
-        body = json.loads(raw)
+        # Parsed whatever the content type, so a text/plain body skips
+        # JsonNumberGuard: check its numbers here.
+        body = loads_checked(raw)
+    except JsonNumberOutOfRange as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="body must be JSON") from exc
     if not isinstance(body, dict):
@@ -8567,7 +8611,7 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
     _validate_graph_ingress_complexity(body)
     try:
-        spec: EditSpec = parse_edit(body)
+        spec: EditSpec = parse_edit(body, ports=_wire_end_ports)
     except ProposalError as exc:
         raise _proposal_http_error(exc) from exc
     additions = spec.additions

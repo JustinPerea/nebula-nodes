@@ -35,23 +35,34 @@ def run_look(client: NebulaClient, *, as_json: bool = False) -> None:
     print(json.dumps(snapshot, indent=2, ensure_ascii=False) if as_json else format_snapshot(snapshot))
 
 
+# Where a line said with no target went (`placed` from POST /api/canvas/cursor).
+_PLACED = {"cursor": "where its cursor is", "view": "the middle of the person's view", "origin": "0,0"}
+
+
 def run_point(
     client: NebulaClient,
-    target: str,
+    target: str | None,
     *,
     say: str = "",
     origin: str | None = None,
     action: str | None = None,
     agent_name: str | None = None,
 ) -> None:
-    body: dict = {"target": _target(target), "say": say}
+    """Point the cursor; with no target, only `say`, shown where the cursor is (it doesn't move)."""
+    body: dict = {"say": say}
+    if target is not None:
+        body = {"target": _target(target), **body}
     if origin:
         body["from"] = _target(origin)
     body["action"] = action or ("drag" if origin else "move")
     result = client.point_cursor(body, agent_name=agent_name)
     agent = result.get("agent", {}).get("name", "agent")
+    said = f": {result.get('say')}" if result.get("say") else ""
+    if target is None:
+        print(f"{agent} ({_PLACED.get(str(result.get('placed')), 'where its cursor is')}){said}")
+        return
     where = target + (f" (from {origin})" if origin else "")
-    print(f"{agent} → {where}" + (f": {result.get('say')}" if result.get("say") else ""))
+    print(f"{agent} → {where}{said}")
 
 
 def run_watch(

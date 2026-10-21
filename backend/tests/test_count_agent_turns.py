@@ -144,6 +144,56 @@ def test_mcp_argument_errors_are_usage_failures(counter):
     assert _kinds(counter.count(t.lines())) == ["usage-error", "usage-error"]
 
 
+# PR26b: the argument errors the PR26 measurement's MCP runs hit (E1, E2, D2,
+# E3), in Nebula's words before PR26b, then in its one-line words after.
+@pytest.mark.parametrize("tool,result", [
+    ("point_at", "Error executing tool point_at: point_at needs node_id, or x and y"),
+    ("point_at", "Error executing tool point_at: point_at needs node_id, or x and y (both): you gave only x"),
+    ("edit_canvas", "Error executing tool edit_canvas: nodes[0].ref must look like +up (letters, digits, - or _): "
+                    'a node is {"ref": "+up", "definitionId": "...", "params": {...}}'),
+    ("moodboard_get", "Error executing tool moodboard_get: 1 validation error for moodboard_getArguments\nboard\n"
+                      "  Field required [type=missing, input_value={'id': '95660c6f4e7d'}, input_type=dict]"),
+    ("edit_canvas", "Error executing tool edit_canvas: nodes[0].definitionId must be a node definition id"),
+    ("edit_canvas", "Error executing tool edit_canvas: edges[0].source must be a node id (n4) or a ref (+up)"),
+    ("edit_canvas", "Error executing tool edit_canvas: edges[0].sourceHandle must be a port id"),
+    ("propose_change", "Error executing tool propose_change: Unknown param(s) for text-input: ['text']. "
+                       "Valid keys: ['value']"),
+    ("moodboard_get", "moodboard_get takes board (required), not id. Call moodboard_get(board=...)."),
+    ("run_nodes", "run_nodes takes node_id, wait_seconds, not node_ids (did you mean node_id?)."),
+    ("resolve_pin", "resolve_pin needs reply: it takes pin_id (required), reply (required). "
+                    "Call resolve_pin(pin_id=..., reply=...)."),
+    ("point_at", 'point_at: x must be a number, not "left". It takes node_id, port, x, y, say, action.'),
+    ("edit_canvas", 'edges[0] is a wire {source, sourceHandle, target, targetHandle}, not from/to: '
+                    '{"source": "+mb", "sourceHandle": "moodboard", "target": "+pv", "targetHandle": "input"}'),
+])
+def test_argument_errors_are_usage_failures(counter, tool, result):
+    t = Transcript().call(tool=f"mcp__nebula__{tool}", tool_input={}, error=True, result=result)
+    report = counter.count(t.lines())
+    assert _kinds(report) == ["usage-error"] and report["usageErrors"] == 1 and report["orientation"] == 1
+
+
+def test_loading_tool_schemas_is_orientation(counter):
+    """Claude Code defers MCP tool schemas: ToolSearch loads them. That is
+    reading how to call Nebula, not the person's work (kind `schema`)."""
+    t = (Transcript()
+         .call(tool="ToolSearch", tool_input={"query": "select:mcp__nebula__start_here", "max_results": 5})
+         .call(tool="mcp__nebula__start_here", tool_input={})
+         .reply("done"))
+    report = counter.count(t.lines())
+    assert _kinds(report) == ["schema", "lookup"] and report["orientation"] == 2
+    assert report["callsByKind"]["schema"] == 1 and "schema" in counter.ORIENTATION
+    # Beside a call that does the person's work, the turn stays needed.
+    mixed = Transcript()
+    for position, (name, tool_input) in enumerate([("ToolSearch", {"query": "select:mcp__nebula__edit_canvas"}),
+                                                   ("mcp__nebula__point_at", {"say": "Reading", "x": 0, "y": 0})]):
+        mixed.events.append({"type": "assistant", "message": {"id": "msg_mixed", "content": [
+            {"type": "tool_use", "id": f"toolu_m{position}", "name": name, "input": tool_input}]}})
+        mixed.events.append({"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": f"toolu_m{position}", "content": "ok"}]}})
+    report = counter.count(mixed.lines())
+    assert _kinds(report) == ["schema", "needed"] and report["orientation"] == 0
+
+
 def test_a_failure_that_isnt_usage_stays_needed(counter):
     # The work failed (a provider error), not the way the agent called Nebula.
     t = Transcript().call("nebula run n2", "Exit code 1\nerror: run r1 failed: provider timed out", error=True)

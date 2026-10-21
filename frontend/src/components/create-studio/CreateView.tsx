@@ -1,10 +1,10 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useLayoutEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { WorkspaceHeader } from '../WorkspaceHeader';
 import { WorkspaceModeNavigation } from '../CanvasTabs';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
-import { useCreateDraftStore, type CreateDraft, type CreateDraftSeed } from '../../store/createDraftStore';
+import { newCreateDraft, useCreateDraftStore, type CreateDraft, type CreateDraftSeed } from '../../store/createDraftStore';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { buildDefaultParamsForUi } from '../../lib/createParams';
 import { isCreateModel } from '../../lib/createModels';
@@ -62,12 +62,19 @@ export function CreateView() {
     params: buildDefaultParamsForUi(NODE_DEFINITIONS['nano-banana'], apiKeys, normalizeKreaMode(kreaConnectionMode)),
     refs: [], quantity: 1,
   });
-  const [seededDraft] = useState<CreateDraft>(() => {
-    const seed = { ...defaultDraft(), ...initial.prefill };
-    return sessionId ? useCreateDraftStore.getState().getOrCreateDraft(sessionId, seed)
-      : { ...seed, revision: 'uninitialized', uploads: [] };
-  });
-  const draft = useCreateDraftStore((state) => sessionId ? state.drafts[sessionId] : undefined) ?? seededDraft;
+  // The session's draft, or a new one from the selection, built without
+  // storing it: a store write while rendering re-rendered App mid-render (the
+  // autosave marks the project unsaved). The layout effect stores it before
+  // paint and before any edit, keeping its revision so the composer stays.
+  const [seeded] = useState<{ sessionId: string | null; draft: CreateDraft }>(() => ({
+    sessionId,
+    draft: (sessionId ? useCreateDraftStore.getState().drafts[sessionId] : undefined)
+      ?? newCreateDraft({ ...defaultDraft(), ...initial.prefill }),
+  }));
+  useLayoutEffect(() => {
+    if (seeded.sessionId) useCreateDraftStore.getState().adoptDraft(seeded.sessionId, seeded.draft);
+  }, [seeded]);
+  const draft = useCreateDraftStore((state) => sessionId ? state.drafts[sessionId] : undefined) ?? seeded.draft;
   const { modelId, prompt, params, refs, quantity, uploads } = draft;
   const updateDraft = (patch: Partial<CreateDraft> | ((current: CreateDraft) => Partial<CreateDraft>)) => {
     if (sessionId) useCreateDraftStore.getState().updateDraft(sessionId, patch);
