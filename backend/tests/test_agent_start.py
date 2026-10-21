@@ -30,7 +30,7 @@ from tests.conftest import PERSON
 
 CLAUDE = {"X-Nebula-Agent": "Claude Code"}
 # Part budgets in tokens, counted as characters / 4 (plan §5.10.1).
-BUDGETS = {"canvas": 2500, "pins": 400, "proposals": 300, "boards": 800, "nodes": 2500, "spend": 150, "next": 200}
+BUDGETS = {"canvas": 2500, "pins": 400, "proposals": 300, "boards": 800, "nodes": 2500, "spend": 150, "next": 300}
 TOTAL_CHARS = 28_000
 PARTS = ["canvas", "pins", "proposals", "boards", "nodes", "spend", "next"]
 
@@ -315,7 +315,8 @@ def test_truncated_parts_say_where_the_rest_is(start, monkeypatch):
     assert "look_at_canvas" in mcp["pins"]["more"]
     assert mcp["proposals"]["count"] == 12 and len(mcp["proposals"]["open"]) <= 5
     assert mcp["boards"]["count"] == 200 and len(mcp["boards"]["rows"]) <= 30
-    assert mcp["boards"]["more"] == "moodboard_get gives one in full"
+    assert mcp["boards"]["more"] == 'moodboard_list(project_id="<project-id>") lists a project\'s boards and Global\'s'
+    assert mcp["boards"]["read"] == 'moodboard_get(board="<id or exact name>") gives one in full'
     assert all(len(row.get("direction") or "") <= 80 for row in mcp["boards"]["rows"])
     # Current project first, then Global.
     ranks = [{"current": 0, "global": 1}.get(row["where"], 2) for row in mcp["boards"]["rows"]]
@@ -326,7 +327,9 @@ def test_truncated_parts_say_where_the_rest_is(start, monkeypatch):
 
     cli = _get(ctx, via="cli")
     assert cli["canvas"]["more"] == "`nebula look` gives every node"
-    assert cli["boards"]["more"] == "`nebula moodboard show <id>` gives one in full"
+    assert cli["boards"]["more"] == \
+        "`nebula moodboard list --project <project-id>` lists a project's boards and Global's"
+    assert cli["boards"]["read"] == "`nebula moodboard show <id>` gives one in full"
     assert cli["nodes"]["more"] == "`nebula nodes --category <category>` gives the rest"
     assert "nebula info" in cli["next"]["describe"]
 
@@ -455,7 +458,7 @@ def test_every_command_the_cli_answer_names_parses(start, monkeypatch):
     commands = sorted(set(re.findall(r"`(nebula [^`]+)`", text)))
     assert len(commands) >= 6, commands
     filled = {"<id>": "nano-banana", "<pin-id>": "pin_1", "<cursor>": "12", "<journal>": "j1", "<category>": "image",
-              "<board>": "mb1", '"..."': '"x"', "+ref=<id>": "+g=nano-banana", " ... ": " "}
+              "<board>": "mb1", "<node-id>": "n2", '"..."': '"x"', "+ref=<id>": "+g=nano-banana", " ... ": " "}
     for command in commands:
         argv = command
         for placeholder, value in filled.items():

@@ -177,7 +177,10 @@ def identify(
 def _finite(value: Any, label: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise PresenceError(f"{label} must be a number")
-    number = float(value)
+    try:
+        number = float(value)
+    except OverflowError:  # an int past float's range
+        number = math.inf
     if not math.isfinite(number) or abs(number) > 1e7:
         raise PresenceError(f"{label} must be a finite number")
     return number
@@ -257,6 +260,23 @@ class AgentPresence:
             event["from"] = origin
         self._agents[identity.id] = {**event, "_t": now}
         return event
+
+    def here(self, identity: AgentIdentity) -> tuple[dict[str, Any], str]:
+        """Where a line said with no target goes, and which place that is:
+        the agent's own cursor (`cursor`, so it doesn't move), else the
+        middle of the person's view when the browser reported one (`view`),
+        else (0, 0) (`origin`)."""
+        self.active()  # drops expired cursors first
+        current = self._agents.get(identity.id)
+        if current is not None:
+            return dict(current["target"]), "cursor"
+        view = self._view or {}
+        viewport, screen = view.get("viewport"), view.get("screen")
+        if viewport and screen:
+            zoom = viewport["zoom"]
+            return {"x": round((screen["width"] / 2 - viewport["x"]) / zoom, 1),
+                    "y": round((screen["height"] / 2 - viewport["y"]) / zoom, 1)}, "view"
+        return {"x": 0.0, "y": 0.0}, "origin"
 
     def active(self) -> list[dict[str, Any]]:
         now = self._clock()
