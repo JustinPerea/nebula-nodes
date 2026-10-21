@@ -935,7 +935,7 @@ def test_cli_builder_turns_flags_into_a_body():
         "run": ["+up"],
     }
     for kwargs in ({"add": ["up=x"]}, {"param": [["+ghost.k=v"]]}, {"set_params": ["+up.k=v"]},
-                   {"wire": [["n4", "+up:image"]]}, {"at": ["+up=1,2"]}):
+                   {"wire": [["n4:", "+up:image"]]}, {"at": ["+up=1,2"]}):
         with pytest.raises(proposals_cmd.BuildError):
             proposals_cmd.build_body(note="x", **kwargs)
 

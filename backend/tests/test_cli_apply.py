@@ -177,9 +177,12 @@ def test_builder_edits_existing_nodes():
         "unwire": [{"source": "n1", "sourceHandle": "text", "target": "n2", "targetHandle": "prompt"}],
     }
     for kwargs in ({"rename": ["n4"]}, {"rename": ["+ghost=x"]}, {"move": ["n4=1"]}, {"move": ["n4=a,b"]},
-                   {"remove": ["+up"]}, {"unwire": [["n1", "n2:prompt"]]}):
+                   {"remove": ["+up"]}, {"unwire": [["n1:", "n2:prompt"]]}):
         with pytest.raises(BuildError):
             build_body(**kwargs)
+    # A bare end has no port: it goes without one, and the backend names the ports n1 has (PR26b review).
+    assert build_body(unwire=[["n1", "n2:prompt"]])["unwire"] == [
+        {"source": "n1", "target": "n2", "targetHandle": "prompt"}]
 
 
 def test_flags_or_a_file_not_both():

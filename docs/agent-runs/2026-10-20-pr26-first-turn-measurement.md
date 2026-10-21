@@ -1,6 +1,6 @@
-# PR26 measurement: orientation turns before and after (not run yet)
+# PR26 measurement: orientation turns before and after
 
-**Status: waiting for Justin's OK** (the setup questions are settled, below). The fifteen runs start Claude Code sessions on Justin's Claude plan. GM's single run cost $0.226, so fifteen come to about $3.40 at that rate (MCP runs may differ). Nothing in Nebula is spent: no paid node runs (below). When they have run, the counts go in `implementation-notes.md` and plan §10, and this file keeps the sanitized table per run, as GM's record does (`2026-10-20-cli-headless.md`).
+**Status: run on 2026-10-20 with Justin's OK on the spend. PR26 missed its target on all three arms** ([Results](#results)). The runs were Claude Code sessions on Justin's Claude plan: $4.18 in all, under the $5 stop cap set for them. Nothing in Nebula was spent: no paid node ran, every connection sample was 0. The counts are also in `implementation-notes.md` and plan §10. This file keeps the sanitized table per run, as GM's record does (`2026-10-20-cli-headless.md`).
 
 Plan v2.7 §5.10.1 sets the method. This file is the exact commands.
 
@@ -95,11 +95,20 @@ SYSTEM='You are working on the person'"'"'s open Nebula Nodes canvas; they are w
 # Arm C only: the same text with `nebula apply --help` replaced by `nebula context`.
 PROMPT="Turn my Good Machines moodboard (it's in my Good Machines project) into a hero image for the site: a quiet lake at dawn. Show me what the board gives you first, and ask me before anything that costs money."
 
-mkdir -p $T/agentcwd && cd $T/agentcwd && PATH="$T/bin:$REPO/backend/.venv/bin:$PATH" NEBULA_URL=http://127.0.0.1:8787 NEBULA_DEMO_REPO=$REPO NEBULA_AGENT_NAME="Claude Code" \
+# Claude Code's Bash tool loads the login profile, which can put another `nebula` (one on ~/.local/bin,
+# say) ahead of $T/bin. CLAUDE_ENV_FILE runs before every Bash command, after the profile, so the guard
+# wins every time. The guard also logs each call (one line in $PR26_GUARD_LOG) so the run can prove it.
+printf 'export PATH="%s/bin:%s/backend/.venv/bin:$PATH"\nexport PR26_GUARD_LOG="%s/guard.log"\n' "$T" "$REPO" "$T" > $T/env.sh
+
+mkdir -p $T/agentcwd && cd $T/agentcwd && PATH="$T/bin:$REPO/backend/.venv/bin:$PATH" CLAUDE_ENV_FILE=$T/env.sh \
+  PR26_GUARD_LOG=$T/guard.log NEBULA_URL=http://127.0.0.1:8787 NEBULA_DEMO_REPO=$REPO NEBULA_AGENT_NAME="Claude Code" \
   claude -p "$PROMPT" --model claude-sonnet-5-5 --append-system-prompt "$SYSTEM" \
     --allowedTools "Bash(nebula:*)" --strict-mcp-config --mcp-config '{"mcpServers":{}}' \
     --max-budget-usd 0.6 --output-format stream-json --verbose > $T/run.jsonl
+# After the run: the `nebula` calls in the transcript's Bash commands must equal the lines in guard.log.
 ```
+
+The guard logs with one line after `a = sys.argv[1:]`: `open(os.environ["PR26_GUARD_LOG"], "a").write(json.dumps(a) + "\n")`. Nothing the agent sees changes.
 
 ### MCP arms (D, E)
 
@@ -143,4 +152,103 @@ The plan says "the same task on the MCP path" without giving the text, so this i
 
 ## Results
 
-Not run. One table per arm goes here (run, orientation/turns, usage errors, help reads, `num_turns`, duration, cost), then the median and range per arm, from `count_agent_turns.py`.
+Run on 2026-10-20, with the checkouts pinned at `466235b2^1` (baseline, arms A and D) and `466235b2` (#125's merge, arms B, C and E). Model `claude-sonnet-5-5`, one board of eight unanalyzed images, a fresh isolated stack per run. Counts are from `count_agent_turns.py` as merged with PR26.
+
+### Against the target
+
+The target for B, C and E (§5.10.1): at most 3 orientation turns and no usage error; no help read on C and E.
+
+| Arm | Orientation, median (range) | Usage errors, median | Help reads, median | Target |
+|---|---|---|---|---|
+| A. Baseline CLI | 2 (1 to 5) | 1 | 1 | (baseline) |
+| B. Branch CLI | 5 (2 to 5) | 0 | 2 | **Missed**: two of three runs took 5 orientation turns |
+| C. Branch CLI, swapped prompt | 3 (1 to 3) | 0 | 1 | **Missed**: every run read `nebula apply --help` |
+| D. Baseline MCP | 5 (3 to 6) | 0 | 0 | (baseline) |
+| E. Branch MCP | 2 (1 to 3) | 3 | 0 | **Missed**: E1 and E2 made three usage errors each |
+
+PR26 did cut MCP orientation (D's median 5 to E's 2). On the CLI the baseline was already at a median of 2, so B and C had little to gain, and B did worse.
+
+### What the transcripts show
+
+- **A doesn't reproduce GM's 8 of 16.** GM's run went to Justin's dev Nebula, with many projects and boards, an analyzed board, and the CLI of that morning. These runs start from one project, one unanalyzed board, and a CLI that already has #118 (the Undo line) and #123 (the cover). That is the likely reason: fewer things to look through, and better errors, leave less to orient on.
+- **B follows GM's system prompt, which says to read `nebula apply --help`.** Every B run did. The start line didn't send them to `nebula context` first: only B2 ran it, late, after `propose --help`. B1's usage error is `nebula point --say "..."` with no node or x and y.
+- **C: `nebula context` names `apply` but not its flags.** With the prompt pointing at `nebula context` instead, no run made a usage error and none took more than 3 orientation turns. But each still ran `nebula apply --help` to learn `--add`, `--param`, `--wire` and `--at`.
+- **E: `start_here` first means no tool schemas loaded.** Claude Code defers MCP tool schemas behind its ToolSearch tool. `start_here` takes no arguments, so in E1 and E2 the agent called it straight away, never loaded a schema, and guessed the argument names of the tools after it:
+  - `moodboard_get {"id": ...}` (it takes `board`);
+  - `describe_node {"id": ...}`, twice (it takes `definition_id`);
+  - `point_at` with only `say` (it needs `node_id`, or `x` and `y`);
+  - `edit_canvas` nodes with `type` and edges with `from`/`to` (it takes `definitionId`, and `source`, `sourceHandle`, `target`, `targetHandle`).
+
+  The pydantic errors were enough for the agent to fix each call, one turn later. E3, and every D run, called ToolSearch first and made none of these errors.
+- **The counter undercounts two things.** It counts ToolSearch as a needed call, though it is orientation. And it counts a failed call as a usage error only when the error text matches its patterns: the `point_at` and `edit_canvas` failures above, and the wrong `text` param on Text input (D2, E3), show up only in the "Other failed calls" column below.
+
+### Per run
+
+"Other failed calls" are failed calls the counter didn't class as usage errors. "ToolSearch" is how often the agent loaded tool schemas.
+
+#### A. Baseline CLI
+
+| Run | Orientation / turns | Usage errors | Help reads | Other failed calls | ToolSearch | `num_turns` | Duration | Cost |
+|---|---|---|---|---|---|---|---|---|
+| A1 | 5 / 12 | 2 | 2 | 0 | 0 | 14 | 24.2 s | $0.221 |
+| A2 | 1 / 7 | 1 | 1 | 0 | 0 | 11 | 30.5 s | $0.221 |
+| A3 | 2 / 8 | 0 | 1 | 0 | 0 | 9 | 23.2 s | $0.222 |
+
+Orientation median 2 (range 1 to 5); usage errors median 1; help reads median 1.
+
+#### B. Branch CLI
+
+| Run | Orientation / turns | Usage errors | Help reads | Other failed calls | ToolSearch | `num_turns` | Duration | Cost |
+|---|---|---|---|---|---|---|---|---|
+| B1 | 5 / 12 | 1 | 2 | 0 | 0 | 13 | 70.8 s | $0.259 |
+| B2 | 5 / 13 | 0 | 2 | 0 | 0 | 16 | 53.0 s | $0.288 |
+| B3 | 2 / 8 | 0 | 1 | 0 | 0 | 10 | 22.9 s | $0.223 |
+
+Orientation median 5 (range 2 to 5); usage errors median 0; help reads median 2.
+
+#### C. Branch CLI, swapped prompt
+
+| Run | Orientation / turns | Usage errors | Help reads | Other failed calls | ToolSearch | `num_turns` | Duration | Cost |
+|---|---|---|---|---|---|---|---|---|
+| C1 | 1 / 6 | 0 | 1 | 0 | 0 | 8 | 13.8 s | $0.183 |
+| C2 | 3 / 11 | 0 | 1 | 1 | 0 | 12 | 23.4 s | $0.220 |
+| C3 | 3 / 10 | 0 | 1 | 0 | 0 | 12 | 35.7 s | $0.245 |
+
+Orientation median 3 (range 1 to 3); usage errors median 0; help reads median 1.
+
+#### D. Baseline MCP
+
+| Run | Orientation / turns | Usage errors | Help reads | Other failed calls | ToolSearch | `num_turns` | Duration | Cost |
+|---|---|---|---|---|---|---|---|---|
+| D1 | 6 / 13 | 0 | 0 | 0 | 1 | 17 | 29.8 s | $0.300 |
+| D2 | 3 / 11 | 0 | 0 | 1 | 1 | 13 | 24.8 s | $0.276 |
+| D3 | 5 / 14 | 0 | 0 | 0 | 2 | 18 | 30.8 s | $0.293 |
+
+Orientation median 5 (range 3 to 6); usage errors median 0; help reads median 0.
+
+#### E. Branch MCP
+
+| Run | Orientation / turns | Usage errors | Help reads | Other failed calls | ToolSearch | `num_turns` | Duration | Cost |
+|---|---|---|---|---|---|---|---|---|
+| E1 | 3 / 10 | 3 | 0 | 3 | 0 | 15 | 31.0 s | $0.223 |
+| E2 | 1 / 9 | 3 | 0 | 4 | 0 | 16 | 21.7 s | $0.222 |
+| E3 | 2 / 12 | 0 | 0 | 1 | 2 | 17 | 27.9 s | $0.298 |
+
+Orientation median 2 (range 1 to 3); usage errors median 3; help reads median 0.
+
+### Isolation and the two reruns
+
+Every connection sample was 0, and no backend log had a provider attempt. Spend: $3.69 for the fifteen runs below, $0.48 for two runs set aside, and $0.006 for a check of the PATH fix: $4.18 in all.
+
+The first C1 and C2 ran the wrong CLI. Claude Code's Bash tool loads the login profile, and on this Mac that put another `nebula` ahead of the guard on PATH: a wrapper that runs the main checkout, which was older than either side. Those runs still reached only the isolated backend on 8787 (fresh project ids, the seeded board, and the dev backend's log shows only health checks over the window). But they skipped the guard and ran old code, so they were set aside. C1 and C2 were run again with `CLAUDE_ENV_FILE` and the guard log ([CLI arms](#cli-arms-a-b-c)): 7 of 7 and 11 of 11 `nebula` calls went through the guard. The other CLI runs had no guard log. Their transcripts carry text only code newer than the main checkout prints ("Undo: nebula undo", "Cover: #"). The two runs set aside have neither.
+
+### Next
+
+The fixes for what the transcripts show go in a follow-up, PR26b:
+- `nebula context` gives the `apply` flags in a few lines;
+- `start_here` shows the exact arguments of the calls that come next;
+- argument errors name the right parameters in one line;
+- `point --say` and `point_at(say=...)` work without a target;
+- the counter counts ToolSearch and argument failures as orientation.
+
+Then B, C and E run again: nine runs, about $2.20, after Justin's OK on that spend.
