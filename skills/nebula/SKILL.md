@@ -61,6 +61,13 @@ their Projects screen too), names you, and offers them a button back.
 `nebula clear` refuses on a canvas with nodes, and `--force` clears it
 anyway. With their canvas open that is one undo step for them; with none
 open it can't be undone yet. `nebula selection` is what they have selected.
+`nebula project rename <id> "<name>"` (or `current`) renames one, prints the
+old name and the command that puts it back. `nebula project show <id>` reads
+a saved project without opening it: nodes as `nebula look` shows them, wires,
+cover and the newest 20 runs (what each ran and made, never the values).
+Recently deleted: `nebula trash list` (`--kind`; `nebula trash list --scope
+global` or `--project current` narrows boards, characters and Styles) and
+`nebula trash restore [kind] <id>`.
 
 A mistyped command or option gets "Did you mean ...?" with that command's
 usage. MCP's names work too: `nebula find` is `nebula nodes`, `nebula
@@ -70,13 +77,16 @@ describe` is `nebula info`.
 
 | Command | What it does |
 |---|---|
-| `nebula nodes upscale` | Node types whose id or name has every word (`--category image` and so on) |
+| `nebula nodes upscale` | Node types that run here whose id, name or description has every word (`--category image` and so on), best matches first, each with how it runs (key, free, krea, nous) and its price per run at default settings. The last line says how many more need a key; `nebula nodes --all` lists those too, each with what it needs. `--json` prints MCP find_nodes' answer |
 | `nebula info <node-id>` | Ports, params, options, defaults and prices; on a node with a Moodboard port, what a wired board does there (`MOODBOARD:`). Takes a node's exact name too (`nebula info moodboard`), when one node has it, and says the id it used |
-| `nebula keys` | Which provider keys are set |
+| `nebula keys` | Which provider keys are set: set or not set, never any part of a key (only the app, with the person token, sees an ending; the CLI never has it) |
+| `nebula providers` | Whether each key works (free, read-only checks, cached 5 minutes; `--refresh`) and the Krea account connection |
 | `nebula spend` | The spending limits you work under, and what you used |
 
-Node ids and params change as models are added. Check `nebula info` instead
-of guessing. `nebula info` (and `describe`) also takes a node's exact name,
+Build only with node types `nebula nodes` lists without `--all`: one that
+`--all` marks `needs BFL_API_KEY or FAL_KEY ...` can't run here, so a run
+of it, or a proposal that runs it, fails. Node ids and params change
+as models are added. Check `nebula info` instead of guessing. `nebula info` (and `describe`) also takes a node's exact name,
 any case: `nebula info moodboard` answers for `nebula-moodboard` and says so
 on its first line. An id always wins, and a name two nodes share is refused
 with both ids. `apply`, `propose`, `create`, `quick` and `style new/set
@@ -183,7 +193,7 @@ key refuses the whole run before anything is called or spent). The card on
 the canvas shows the same error. `nebula look` prints a failed node's error
 under it, and `nebula path` says why there is no file. The error stays on the
 node, through reloads, project switches and restarts, until it runs again.
-Tell the person what to set up, or pick a node `nebula context` lists.
+Tell the person what to set up, or pick a node `nebula nodes` lists.
 
 ## Propose instead of doing
 
@@ -204,7 +214,7 @@ nebula propose --note "Upscale the wide take" \
 If a node the run needs can't run here, `nebula propose` prints a
 `warning:` line naming it and why (`--json` gives it as `warning`, with
 `--wait` too); Accept would fail at that node. Say so to
-the person, or propose a node that runs here instead (`nebula context` lists
+the person, or propose a node that runs here instead (`nebula nodes` lists
 them). The proposal is kept, with the warning: if you then propose
 something else instead, withdraw the first with the call the warning ends
 with (`nebula proposal withdraw <id>`; `--json` gives it as `withdrawWith`,

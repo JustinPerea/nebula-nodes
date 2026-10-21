@@ -286,9 +286,14 @@ def _cursor_name(ctx: Context | None) -> str:
     return "MCP agent" if client == "unknown" else client.replace("-", " ").replace("_", " ").title()
 
 
+def _agent_headers(ctx: Context | None) -> dict[str, str]:
+    """Who this agent is on the canvas (its cursor name); nebula_api adds the token."""
+    return {"X-Nebula-Agent": _cursor_name(ctx)}
+
+
 def _canvas_call(method: str, path: str, ctx: Context | None, timeout: float = 10.0, **kwargs: Any) -> dict[str, Any]:
     """A request as this agent. Errors carry Nebula's own detail, which says what to do next."""
-    headers = {"X-Nebula-Agent": _cursor_name(ctx)}
+    headers = _agent_headers(ctx)
     payload = _api().request(method, path, headers=headers, timeout=timeout, **kwargs)
     if not isinstance(payload, dict):
         raise RuntimeError("Nebula canvas endpoint returned an invalid response")
@@ -809,8 +814,8 @@ def find_nodes(query: str = "", category: str = "", ready_only: bool = True, lim
                ctx: Context | None = None) -> dict[str, Any]:
     """Find node types to build with, best matches first.
 
-    Every word of `query` must appear in the id or name ("upscale", "veo",
-    "image edit"). `category` narrows to one, e.g. image-gen, video-gen,
+    Every word of `query` must appear in the id, name or description
+    ("upscale", "veo", "image edit"). `category` narrows to one, e.g. image-gen, video-gen,
     audio-gen, text-gen, utility, universal. Each row has `id` (the
     definitionId for edit_canvas), `name`, `runsWith` (key, free, krea, nous)
     and `price` ("free", {"usd": [low, high]} per run at default settings, or
@@ -819,6 +824,7 @@ def find_nodes(query: str = "", category: str = "", ready_only: bool = True, lim
     mode, with no list price. With ready_only=false, nodes that can't run here
     are included with `missing` saying what to set up.
     """
+    # `nebula nodes` (cli/commands/nodes.py) reads the same route: keep them twins.
     params = {"query": query, "category": category, "ready_only": str(bool(ready_only)).lower(),
               "limit": max(1, min(int(limit), 100))}
     return _canvas_call("GET", "/api/agent/nodes", ctx, params=params)
@@ -961,22 +967,15 @@ def _edit_in_steps(plan: dict[str, Any], ctx: Context | None) -> dict[str, Any]:
 
 # -- projects ---------------------------------------------------------------------
 
-def _project_line(project: dict[str, Any], active: str | None) -> dict[str, Any]:
-    return {"id": project.get("id"), "name": project.get("name"), "open": project.get("id") == active,
-            "nodes": project.get("nodeCount", 0), "updatedAt": project.get("updatedAt"),
-            "cover": _cover_for_agents(project.get("cover"))}
-
-
 @_tool(annotations=_READ)
 def list_projects(ctx: Context | None = None) -> dict[str, Any]:
     """The person's saved projects, most recently edited first. `open` marks
     the one on the canvas now. `cover` is the picture on its card ({source:
     pinned, output or references, images: URLs}; null when it has none);
     get_project reads one in full without opening it."""
-    listing = _canvas_call("GET", "/api/projects", ctx)
-    active = listing.get("activeProjectId")
-    return {"projects": [_project_line(project, active) for project in listing.get("projects") or []],
-            "openProjectId": active}
+    import project_client
+
+    return project_client.list_projects(_api(), headers=_agent_headers(ctx))
 
 
 def _switch(path: str, body: dict[str, Any], ctx: Context | None) -> dict[str, Any]:
@@ -1284,13 +1283,10 @@ def list_trash(kind: str | None = None, scope: str | None = None, project_id: st
     one it gave itself, so only kind "person" means the person). Projects also have
     `purgeAt`, when they are removed for good; boards, characters and Styles
     stay until the person deletes them for good."""
-    params: dict[str, Any] = {"kind": kind} if kind else {}
-    if project_id:
-        params["projectId"] = _project_ref(project_id, ctx)
-        scope = scope or "project"
-    if scope:
-        params["scope"] = scope
-    return _canvas_call("GET", "/api/trash", ctx, params=params or None)
+    import project_client
+
+    return project_client.list_trash(_api(), kind=kind, scope=scope, project_id=project_id,
+                                     headers=_agent_headers(ctx))
 
 
 @_tool(annotations=_EDIT)
@@ -2284,31 +2280,8 @@ def style_delete(style: str, ctx: Context | None = None) -> dict[str, Any]:
 # -- projects without opening them, settings and providers (audit U3, U6) ------
 # Each goes through the route the canvas uses (PUT /api/projects/{id}, GET
 # /api/projects/{id}, /api/settings, /api/health/providers,
-# /api/krea/connection); only the reply is shaped for agents here.
-
-def _project_ref(project_id: str, ctx: Context | None) -> str:
-    """A project's id, or "current": the one open on the canvas."""
-    if project_id != "current":
-        return project_id
-    active = _canvas_call("GET", "/api/projects", ctx).get("activeProjectId")
-    if not isinstance(active, str) or not active:
-        raise RuntimeError("No project is open on the canvas: pass a project id from list_projects.")
-    return active
-
-
-def _cover_for_agents(cover: Any) -> dict[str, Any] | None:
-    """A card's picture as look_at_canvas shows links: a signed link keeps its
-    path only; Nebula's own outputs come back as full URLs."""
-    from services.selection_context import _safe_value
-
-    if not isinstance(cover, dict):
-        return None
-    shown = _safe_value(cover, key="cover")
-    images = shown.get("images") if isinstance(shown, dict) else None
-    if isinstance(images, list):
-        shown["images"] = [_absolute(image) for image in images if isinstance(image, str)]
-    return shown
-
+# /api/krea/connection); the reply is shaped in project_client.py, which the
+# `nebula` twins (project rename/show, trash list, keys, providers) share.
 
 @_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True,
                                    openWorldHint=False))
@@ -2319,17 +2292,9 @@ def rename_project(project_id: str, name: str, ctx: Context | None = None) -> di
     `previousName` puts the old name back. The name is trimmed, 1 to 120
     characters. The person's canvas and Projects screen show it at once, and
     other agents see a `project.renamed` event."""
-    from urllib.parse import quote
+    import project_client
 
-    target = _project_ref(project_id, ctx)
-    result = _canvas_call("PUT", f"/api/projects/{quote(target, safe='')}", ctx, json={"name": name})
-    project = result.get("project") or {}
-    previous = result.get("previousName")
-    reply: dict[str, Any] = {"project": {"id": project.get("id"), "name": project.get("name")},
-                             "previousName": previous}
-    if isinstance(previous, str) and previous != project.get("name"):
-        reply["note"] = f"rename_project('{target}', {previous!r}) puts the old name back."
-    return reply
+    return project_client.rename_project(_api(), project_id, name, headers=_agent_headers(ctx))
 
 
 @_tool(annotations=_READ)
@@ -2343,15 +2308,9 @@ def get_project(project_id: str, ctx: Context | None = None) -> dict[str, Any]:
     Run History, each with what it ran (`nodeIds`), its status and timing,
     and which outputs it made, never their values. view_output shows an
     output once the project is open."""
-    from urllib.parse import quote
+    import project_client
 
-    target = _project_ref(project_id, ctx)
-    view = _canvas_call("GET", f"/api/projects/{quote(target, safe='')}", ctx, params={"view": "agent"})
-    view["cover"] = _cover_for_agents(view.get("cover"))
-    return view
-
-
-_SETTINGS_SHOWN = ("executionMode", "batchSizeCap", "exportFolder", "kreaConnectionMode")
+    return project_client.get_project(_api(), project_id, headers=_agent_headers(ctx))
 
 
 @_tool(annotations=_READ)
@@ -2362,15 +2321,9 @@ def get_settings(ctx: Context | None = None) -> dict[str, Any]:
     `exportFolder` and `kreaConnectionMode` (api-token or mcp: how Krea
     nodes reach Krea). Only the person changes settings; find_nodes and
     describe_node say what a missing key stops."""
-    settings = _canvas_call("GET", "/api/settings", ctx)
-    keys = settings.get("apiKeys")
-    routing = settings.get("routing")
-    return {
-        "configured": {str(name): bool(value) for name, value in keys.items()} if isinstance(keys, dict) else {},
-        "routing": ({str(node): choice for node, choice in routing.items() if isinstance(choice, str)}
-                    if isinstance(routing, dict) else {}),
-        **{key: settings.get(key) for key in _SETTINGS_SHOWN},
-    }
+    import project_client
+
+    return project_client.get_settings(_api(), headers=_agent_headers(ctx))
 
 
 @_tool(annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True), waits=True)
@@ -2385,30 +2338,9 @@ def provider_status(refresh: bool = False, ctx: Context | None = None) -> dict[s
     again now. `krea` is the Krea account connection ({status: connected,
     needs_auth, disconnected or error, signInPending, error}); only the
     person connects it, in Settings."""
-    health = _canvas_call("GET", "/api/health/providers", ctx, timeout=60.0,
-                          params={"refresh": "true"} if refresh else None)
-    providers: dict[str, Any] = {}
-    for name, entry in (health.get("providers") or {}).items():
-        if not isinstance(entry, dict):
-            continue
-        row = {"configured": bool(entry.get("configured")), "status": entry.get("status"),
-               "lastChecked": entry.get("last_checked")}
-        if entry.get("detail"):
-            row["detail"] = entry["detail"]
-        providers[str(name)] = row
-    try:
-        connection = _canvas_call("GET", "/api/krea/connection", ctx)
-    except NebulaAPIError as exc:
-        krea: dict[str, Any] = {"status": "unknown", "error": exc.detail}
-    else:
-        # The sign-in link is the person's to open; an agent only learns one waits.
-        krea = {"status": connection.get("status")}
-        if connection.get("authorizationUrl"):
-            krea["signInPending"] = True
-        for key in ("error", "tools"):
-            if connection.get(key):
-                krea[key] = connection[key]
-    return {"providers": providers, "krea": krea}
+    import project_client
+
+    return project_client.provider_status(_api(), refresh=refresh, headers=_agent_headers(ctx))
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:

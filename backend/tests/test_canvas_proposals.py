@@ -1054,11 +1054,31 @@ def test_each_surface_names_its_own_way_to_find_a_node_that_runs_here():
     assert readiness_warning(cost).endswith("(GET /api/agent/nodes lists them).")
     assert readiness_warning(cost, lister=READY_NODES_HTTP) == readiness_warning(cost)
     assert readiness_warning(cost, lister=READY_NODES_MCP).endswith("(find_nodes lists them).")
-    assert readiness_warning(cost, lister=READY_NODES_CLI).endswith("(`nebula context` lists them).")
+    assert readiness_warning(cost, lister=READY_NODES_CLI).endswith("(`nebula nodes` lists them).")
     assert readiness_warning({"notReady": []}, lister=READY_NODES_CLI) is None
 
 
-def test_cli_propose_names_nebula_context_not_find_nodes():
+def test_the_warning_has_no_double_period_when_missing_ends_in_one():
+    """The route's `missing` reads "FLUX.2 needs BFL_API_KEY or FAL_KEY in
+    Settings > Providers." with its own period, and the warning printed
+    "Providers.. Tell the person" (seen in the 2026-10-21 live check)."""
+    from services.canvas_proposals import READY_NODES_CLI, readiness_warning
+
+    need = "FLUX.2 needs BFL_API_KEY or FAL_KEY in Settings > Providers."
+    one = {"notReady": [{"ref": "+g", "nodeId": None, "name": "FLUX.2", "missing": need}]}
+    warning = readiness_warning(one, lister=READY_NODES_CLI)
+    assert ".." not in warning
+    assert "+g: FLUX.2 needs BFL_API_KEY or FAL_KEY in Settings > Providers. Tell the person" in warning
+    two = {"notReady": [{"ref": "+g", "nodeId": None, "name": "FLUX.2", "missing": need},
+                        {"ref": "+h", "nodeId": None, "name": "FLUX.2", "missing": need}]}
+    warning = readiness_warning(two)
+    assert ".." not in warning and ".;" not in warning
+    assert "Settings > Providers; +h: FLUX.2 needs" in warning
+
+
+def test_cli_propose_names_nebula_nodes_not_find_nodes():
+    """`nebula nodes` is find_nodes' CLI twin, so the CLI warning names it,
+    not `nebula context`, whose node list is cut at a budget."""
     need = "needs OPENAI_API_KEY in Settings > Providers"
 
     class NotReady(FakeClient):
@@ -1074,8 +1094,9 @@ def test_cli_propose_names_nebula_context_not_find_nodes():
         assert proposals_cmd.run_propose(NotReady([]), _propose_args(wait=False, json=as_json), out=out) == 0
         text = out.getvalue()
         warning = json.loads(text)["warning"] if as_json else text
-        assert "(`nebula context` lists them)." in warning
+        assert "(`nebula nodes` lists them)." in warning
         assert "find_nodes" not in warning and "/api/agent/nodes" not in warning
+        assert "nebula context" not in warning
         assert f"+img (GPT Image 2) {need}" in warning
 
 
@@ -1097,7 +1118,7 @@ def test_cli_propose_json_wait_keeps_the_readiness_warning():
     answer = json.loads(out.getvalue())
     assert answer["proposal"]["status"] == "accepted"
     # Accepted: the warning still says why the run fails, but there is nothing left to withdraw.
-    assert answer["warning"].endswith("(`nebula context` lists them).")
+    assert answer["warning"].endswith("(`nebula nodes` lists them).")
     assert "withdraw" not in answer["warning"] and "withdrawWith" not in answer
     assert f"+img (GPT Image 2) {need}" in answer["warning"]
 
