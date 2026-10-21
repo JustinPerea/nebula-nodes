@@ -187,8 +187,11 @@ async def test_an_edited_character_reaches_the_next_run(monkeypatch, tmp_path) -
     from services.cache import ExecutionCache
 
     stored = _seed_character(monkeypatch, tmp_path)
-    # Views the cache can see (it drops an entry whose files are gone).
-    views = [f"https://example.com/char/{name}.png" for name in ("front", "side", "back")]
+    # Views the cache can see (it drops an entry whose files are gone): real
+    # files, since a run leaves out a view that is an outside link.
+    from tests.conftest import stored_image_urls
+
+    views = stored_image_urls(name="edited-character")
     CharacterStore().update(stored["id"], referenceViews=views)
     traits: list[str] = []
 

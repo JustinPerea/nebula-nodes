@@ -55,7 +55,12 @@ export async function createPreset(body: PresetCreateInput): Promise<Preset> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(resolvedBody),
   });
-  if (!res.ok) throw new Error(`Create preset failed: ${res.status}`);
+  if (!res.ok) {
+    // A refusal says why (an image that isn't one of Nebula's files, a
+    // project in Recently deleted), so Create can show it as it is.
+    const body = await res.json().catch(() => null) as { detail?: unknown } | null;
+    throw new Error(typeof body?.detail === 'string' ? body.detail : `Create preset failed: ${res.status}`);
+  }
   return res.json();
 }
 

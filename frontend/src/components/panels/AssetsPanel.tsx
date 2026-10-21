@@ -7,6 +7,8 @@ import { useGraphStore } from '../../store/graphStore';
 import { fetchCharacters, fetchMoodboards, moveStoredAsset } from '../../lib/api';
 import { fetchPresets, type Preset } from '../../lib/createPresets';
 import { backendAssetUrlSync } from '../../lib/backend';
+import { storedImageView } from '../../lib/storedImage';
+import { OutsideImageNote } from '../OutsideImageNote';
 import { CHARACTER_DRAG_MIME, MOODBOARD_DRAG_MIME } from '../../lib/dragMime';
 import { NEW_CHARACTER_SENTINEL, NEW_MOODBOARD_SENTINEL } from '../../lib/studioSentinels';
 import { findAvailableNodePosition } from '../../lib/nodePlacement';
@@ -279,6 +281,7 @@ export function AssetsPanel() {
                   name={c.name}
                   sub={`${c.referenceViews.length} views`}
                   thumbnail={c.thumbnail}
+                  localOnly
                   emptyThumb="◐"
                   selected={selected === `characters:${c.id}`}
                   onSelect={() => setSelected(`characters:${c.id}`)}
@@ -331,6 +334,7 @@ export function AssetsPanel() {
                   name={p.name}
                   sub={p.category}
                   thumbnail={p.thumbnail}
+                  localOnly
                   emptyThumb="✦"
                   selected={selected === `styles:${p.id}`}
                   onSelect={() => setSelected(`styles:${p.id}`)}
@@ -354,6 +358,7 @@ function AssetItem({
   name,
   sub,
   thumbnail,
+  localOnly = false,
   emptyThumb,
   selected,
   onSelect,
@@ -366,6 +371,9 @@ function AssetItem({
   name: string;
   sub: ReactNode;
   thumbnail?: string;
+  /** A Style's or Character's thumbnail: loaded only when it is one of
+   *  Nebula's own files (lib/storedImage.ts). */
+  localOnly?: boolean;
   emptyThumb: string;
   selected: boolean;
   onSelect: () => void;
@@ -377,6 +385,8 @@ function AssetItem({
   move?: ReactNode;
 }) {
   const label = name || 'Untitled';
+  const stored = localOnly ? storedImageView(thumbnail) : null;
+  const src = stored ? stored.src : thumbnail ? backendAssetUrlSync(thumbnail) : null;
   return (
     <div className={`assets-item${selected ? ' assets-item--selected' : ''}`}>
       <button
@@ -390,8 +400,8 @@ function AssetItem({
         title={onAdd ? 'Double-click to open · drag onto the canvas to add' : 'Double-click to use in Create'}
       >
         <span className="character-palette__thumb">
-          {thumbnail ? (
-            <img src={backendAssetUrlSync(thumbnail)} alt="" draggable={false} />
+          {src ? (
+            <img src={src} alt="" draggable={false} />
           ) : (
             <span className="character-palette__thumb-empty" aria-hidden="true">{emptyThumb}</span>
           )}
@@ -399,6 +409,7 @@ function AssetItem({
         <span className="character-palette__meta">
           <span className="character-palette__name">{label}</span>
           <span className="character-palette__sub">{sub}</span>
+          {stored?.outside && <OutsideImageNote />}
         </span>
       </button>
       {selected && (

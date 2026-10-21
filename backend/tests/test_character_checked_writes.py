@@ -15,11 +15,11 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.conftest import PERSON
+from tests.conftest import PERSON, stored_image_urls
 
 AGENT = {"X-Nebula-Agent": "Claude Code"}
 TAB = "tab-0123456789abcdef"
-BODY = {"name": "Rina", "subjectType": "human", "referenceViews": ["url_a", "url_b", "url_c"],
+BODY = {"name": "Rina", "subjectType": "human", "referenceViews": stored_image_urls(),
         "frozenTraitString": "late 20s, warm skin tone", "seed": 7, "consistencyStrength": 0.9}
 
 
@@ -39,6 +39,7 @@ def sent(monkeypatch) -> list[dict]:
 @pytest.fixture
 def client(tmp_path, monkeypatch, sent):
     monkeypatch.setenv("NEBULA_CHARACTER_ROOT", str(tmp_path / "characters"))
+    stored_image_urls()
     from main import app
     return TestClient(app)
 

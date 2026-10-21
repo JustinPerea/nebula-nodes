@@ -1476,6 +1476,20 @@ nebula moodboard delete <board>
   Studio shows the change live, keeps the person's unsaved edits, and names
   you when you both changed one field (contract 07, section 2.1). No MCP
   tool edits a Character's fields.
+- Images on a Character (`referenceViews`) or a Style (`refImages`,
+  `thumbnail`; `POST`/`PUT /api/presets`) must be Nebula's own files: an
+  output or an upload as `/api/outputs/<path>` (upload a file with
+  `POST /api/uploads` and use the `url` it returns; the file's path inside
+  the output folder works too) or a shipped Style thumbnail
+  `/api/presets/thumbnails/<name>`. An `http(s)` link to another site, a
+  `data:` URI or a file outside the output folder is refused with a 422 that
+  names the field, and nothing is saved: the app would otherwise fetch that
+  site whenever it shows the image. To use an image from the web, download it
+  and upload it first (moodboard_create and moodboard_add do that for a
+  board). Links a Character or Style already holds are kept, but the app
+  shows a placeholder for them, and a run of a Character node leaves such a
+  view out and says so in the run's notes (it stops when every view is one)
+  (contract 07, section 2.2).
 - A board is named by its id or exact name; an image by its number or id
   from `show`. `--json` prints the board as JSON (the MCP tools return the
   same shape).

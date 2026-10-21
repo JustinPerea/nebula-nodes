@@ -4,7 +4,8 @@ import { storedAssetId, useStoredAsset } from '../../store/storedAssetsStore';
 import { NodeSettingsAction } from './NodeSettingsAction';
 import { RestoreTrashedAsset } from './RestoreTrashedAsset';
 import { PORT_COLORS } from '../../lib/portCompatibility';
-import { backendAssetUrlSync } from '../../lib/backend';
+import { storedImageView } from '../../lib/storedImage';
+import { OutsideImageNote } from '../OutsideImageNote';
 import { useOpenOnDoubleClick } from './useOpenOnDoubleClick';
 import '../../styles/character-node.css';
 
@@ -23,7 +24,9 @@ export function CharacterNode({ id, data, selected }: NodeProps) {
   const character = entry?.summary ?? null;
   const status = characterId ? entry?.status ?? 'loading' : 'empty';
   const name = character?.name.trim() || (status === 'missing' ? 'Character not found' : 'Character');
-  const thumbUrl = character?.thumbnail ? backendAssetUrlSync(character.thumbnail) : null;
+  // Only Nebula's own files are loaded (lib/storedImage.ts).
+  const thumb = storedImageView(character?.thumbnail);
+  const thumbUrl = thumb.src;
 
   // Surface the id (short) so an unnamed-but-attached character is still
   // identifiable on the canvas.
@@ -46,7 +49,7 @@ export function CharacterNode({ id, data, selected }: NodeProps) {
         {thumbUrl ? (
           <img src={thumbUrl} alt="" className="character-node__thumb-img" draggable={false} />
         ) : (
-          <div className="character-node__thumb-placeholder">character</div>
+          <div className="character-node__thumb-placeholder">{thumb.outside ? <OutsideImageNote /> : 'character'}</div>
         )}
       </div>
 

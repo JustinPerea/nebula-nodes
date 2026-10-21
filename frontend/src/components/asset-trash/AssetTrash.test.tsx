@@ -40,6 +40,16 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); });
 
 describe('RecentlyDeletedAssets', () => {
+  it('never loads a deleted Character’s outside thumbnail and says why it shows none', async () => {
+    trash.fetchTrash.mockResolvedValue([board({ kind: 'character', id: 'c1', name: 'Old hero',
+      thumbnail: 'https://images.example.com/face.png' })]);
+    const { container } = render(<RecentlyDeletedAssets kind="character" scope="global" />);
+    fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
+    expect(screen.getByText('Old hero')).toBeTruthy();
+    expect(container.querySelector('img')).toBeNull();
+    expect(screen.getByText('Image link from outside Nebula')).toBeTruthy();
+  });
+
   it('stays hidden while nothing is in the trash', async () => {
     trash.fetchTrash.mockResolvedValue([]);
     const { container } = render(<RecentlyDeletedAssets kind="moodboard" scope="global" />);
