@@ -341,3 +341,42 @@ describe('two open tabs', () => {
     expect(useGraphStore.getState().undoNotice?.text).toBe('Undid an edit from another window');
   });
 });
+
+describe('the canvas names the edit its undo step came from (U1)', () => {
+  // n2's params, so the person's typing on n1 in earlier tests (kept until
+  // its save lands) can't hide the agent's change.
+  const wide = () => ({ ...imageNode('n2'), data: { ...imageNode('n2').data, params: { aspect_ratio: '16:9' } } });
+
+  it('undo and redo of an agent edit tell the backend which edit they revert', async () => {
+    const { nodes, edges } = start();
+    sync([nodes[0], wide()], edges, { edit: { ...CLAUDE, id: 'ed_00000000000000a1' } });
+    useGraphStore.getState().undo();
+    await flush();
+    useGraphStore.getState().redo();
+    await flush();
+    await flush();
+    expect(restores().map((body) => [body.action, (body as { edit?: string }).edit])).toEqual([
+      ['undo', 'ed_00000000000000a1'], ['redo', 'ed_00000000000000a1'],
+    ]);
+  });
+
+  it('a step without an edit id, and the person\'s own step, name none', async () => {
+    const { nodes, edges } = start();
+    sync([nodes[0], wide()], edges, { edit: CLAUDE });
+    useGraphStore.getState().undo();
+    await flush();
+    useGraphStore.getState().updateNodeData('n2', { params: { model: 'gemini-3-pro-image' } });
+    useGraphStore.getState().undo();
+    await flush();
+    await flush();
+    expect(restores()).toHaveLength(2);
+    expect(restores().every((body) => !('edit' in body))).toBe(true);
+  });
+
+  it('an agent undoing its own edit says so when it lands', () => {
+    const { nodes, edges } = start();
+    sync([...nodes, textNode('n3', 'fog', {}, 800)], edges,
+      { edit: { ...CLAUDE, id: 'ed_00000000000000b2', undoes: 'ed_00000000000000a1' } });
+    expect(useGraphStore.getState().undoNotice).toMatchObject({ text: 'Claude undid its edit', offer: 'undo' });
+  });
+});

@@ -201,8 +201,20 @@ A route-table node's price entry keys each route by its `pricing` key (default i
 2. Each route's `handler` names a client in `route_clients.ROUTE_CLIENTS` (see Route clients). Its endpoint must be a path that client has a request shape for. If not, add the shape first.
 3. Price it per route in `backend/data/model_pricing.json`, with sources (an `https` url and the quoted price line each).
 4. A Krea route on a model the Krea catalog has: add its endpoint to `scripts/sync-krea-catalog.py` `FOLDED` (`endpoint: (node id, route id, {port: Krea field})`) and run the script. The catalog entry gets `foldedInto` (and `portFields`); no Krea node or Krea price is generated for it, and `--check` (`folded_problems`) fails when the node's Krea route sends a param, value or port the entry's request schema doesn't take. A model not in the pinned catalog yet comes in alone with `--openapi <spec> --only <endpoint>` (or `--refresh --only`), which stamps that entry with its own `fetchedAt` and `openapiSha256` and leaves every other entry as pinned.
-5. Regenerate, in this order (the model reference reads `route_tables.json`): `backend/.venv/bin/python scripts/generate-route-tables.py`, then `node scripts/generate-model-reference.mjs`.
-6. Run `node scripts/check-node-contracts.mjs`.
+5. If it's an image, video or audio generator with a prompt, add a moodboard adapter entry (below), or list it in the table's `census` (`excluded` with a reason, or `pending` with the PR that gives it a port).
+6. Regenerate, in this order (the model reference reads `route_tables.json`): `backend/.venv/bin/python scripts/generate-route-tables.py`, then `node scripts/generate-model-reference.mjs`.
+7. Run `node scripts/check-node-contracts.mjs`.
+
+## Adding a moodboard adapter entry
+
+A node takes a wired Nebula moodboard on an input port `id: "moodboard"`, `dataType: "Moodboard"`, `maxConnections: 1`, declared in both definition files. How it takes the board is its entry in `backend/data/moodboard_adapters.json` (contract 07 section 1.16), keyed by node id and kept sorted:
+
+1. Read the provider's own docs for each image input: what it does (style or content), how many it takes on each route and model, whether items carry a strength and its range. Quote them in `sources` with the date; whatever no page says goes in `unconfirmed`.
+2. Classify every `Image` or `Any` input: a slot the board may fill (`slots`, with `max` no more than the port's `maxConnections` and every route's `rules.ports` max), `never` (frames, edit targets, masks, identity, non-image `Any` inputs), or `needsWired`. A model or route that differs gets a `byModel` (`"model=<value>"`) or `byRoute` (`"<route id>"`) override, checked on its own.
+3. Pick the channel and `default`: `text-only` (with a `reason`) when no input takes reference images; content references default to `text` (A1); style slots default to `images` only with a source that they are style.
+4. Give the weight form the slot needs (`native` for a per-image strength, with the range and `schema` from the Krea catalog; `select` with `rank` otherwise) and the prompt `syntax` (or `null` with a `syntaxReason`).
+5. A generated Krea catalog node gets its entry from `scripts/sync-krea-catalog.py` (add it to `BOARD_PORT_MODELS`, classify any new field in `SLOT_FIELDS` or `NEVER_FIELDS`, and add the model to `STYLE_VERIFIED` only with a source); never edit `moodboard_adapters_krea.json` by hand.
+6. Take the node off the `census` lists, then run `node scripts/check-node-contracts.mjs` and `backend/.venv/bin/python -m pytest tests/test_moodboard_adapters.py` (from `backend/`). The card's Moodboard line shows what the entry says.
 
 ## Tests
 

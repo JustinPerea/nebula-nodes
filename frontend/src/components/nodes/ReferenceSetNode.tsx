@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Handle, Position, type Edge, type NodeProps } from '@xyflow/react';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import {
   REFERENCE_ROLES,
@@ -12,6 +12,7 @@ import {
   type ReferenceRoleId,
 } from '../../lib/referenceRoles';
 import { useGraphStore } from '../../store/graphStore';
+import { edgesInto } from '../../lib/graphIndex';
 import '../../styles/reference-set-node.css';
 
 // The ReferenceSetNode is the canvas card for the reference-set utility node.
@@ -38,13 +39,21 @@ function readWeight(params: Record<string, unknown>, role: ReferenceRoleId): num
   return clampReferenceWeight(value);
 }
 
+/** The role ports these wires reach, in role order, joined. */
+function connectedRoleKey(incoming: readonly Edge[]): string {
+  const wired = new Set(incoming.map((edge) => edge.targetHandle));
+  return REFERENCE_ROLE_IDS.filter((role) => wired.has(role)).join(',');
+}
+
 function formatWeight(weight: number): string {
   return weight.toFixed(2);
 }
 
 export function ReferenceSetNode({ id, data, selected }: NodeProps) {
   const updateNodeData = useGraphStore((s) => s.updateNodeData);
-  const edges = useGraphStore((s) => s.edges);
+  // Which role ports have a wire in, as text, so wires elsewhere on the
+  // canvas don't re-render this card.
+  const connectedKey = useGraphStore((s) => connectedRoleKey(edgesInto(s.edges, id)));
 
   const weights = useMemo(() => {
     const params = (data as ReferenceSetNodeData).params ?? {};
@@ -55,15 +64,10 @@ export function ReferenceSetNode({ id, data, selected }: NodeProps) {
 
   // Which role ports currently have an incoming connection — the preview
   // mirrors what the backend handler packs (connected ports only).
-  const connectedRoles = useMemo(() => {
-    const set = new Set<ReferenceRoleId>();
-    for (const edge of edges) {
-      if (edge.target !== id) continue;
-      const handle = edge.targetHandle as ReferenceRoleId | null | undefined;
-      if (handle && (REFERENCE_ROLE_IDS as string[]).includes(handle)) set.add(handle);
-    }
-    return set;
-  }, [edges, id]);
+  const connectedRoles = useMemo(
+    () => new Set((connectedKey ? connectedKey.split(',') : []) as ReferenceRoleId[]),
+    [connectedKey],
+  );
 
   // Live ordered preview: connected roles sorted by weight descending, stable
   // for ties (port declaration order) — the same ordering the handler emits.

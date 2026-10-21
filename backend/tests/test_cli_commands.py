@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from cli.client import NebulaClient
 from cli.commands import execute, graph, projects, spend
-from cli.formatter import format_context, node_access
+from cli.formatter import format_start, node_access
 from models.events import ExecutedEvent
 
 
@@ -177,31 +177,62 @@ def test_node_access_matches_the_canvas(keys, krea, expected):
     assert {k: v for k, v in found.items() if v} == expected
 
 
-def test_context_counts_free_and_krea_nodes_and_lists_ids():
-    text = format_context({"apiKeys": {"OPENAI_API_KEY": "***abcd"}}, DEFINITIONS, "connected")
-    assert text.startswith("Nebula Nodes — 5 of 6 nodes can run here")
-    assert "1 with your keys, 1 free, 2 on the Krea account, 1 with a Nous sign-in" in text
-    assert "gpt-image-1-generate" in text and "krea-files*" in text
-    assert "--param _kreaAuth=mcp" not in text
-    assert "`nebula propose` the _kreaAuth=mcp change" in text
-    assert "Krea account: signed in" in text
+def _start_notes(api_keys: dict, krea: bool = False, via: str = "mcp") -> list[str]:
+    """The node notes `nebula context` and start_here print (main._start_node_notes)."""
+    import main
+
+    context = {"settings": {"apiKeys": api_keys}, "keys": {key for key, value in api_keys.items() if value},
+               "krea": krea, "pricing": main.model_pricing.load_pricing().get("nodes") or {},
+               "definitions": main.node_registry.get_all()}
+    rows = [main._agent_node_row(definition, context) for definition in context["definitions"].values()]
+    return main._start_node_notes(rows, context, via)
 
 
-def test_context_says_what_local_provider_nodes_need():
-    import json
-    from pathlib import Path
+def test_context_notes_say_what_local_provider_nodes_need():
+    """`nebula context` moved onto GET /api/agent/start (plan v2.7, PR26); its
+    notes say what the old context legend said."""
+    nothing = " ".join(_start_notes({}))
+    assert "qc-frame-review" in nothing and "free at the defaults" in nothing
+    assert "mode=vision-llm" in nothing and "no list price" in nothing
+    assert "mode=jev needs TYPESAFE_API_KEY and is priced per run" in nothing
+    assert "cinema-scene" not in nothing  # its base models all need a key, so it isn't ready
 
-    nodes = list(json.loads((Path(__file__).resolve().parent.parent / "data" / "node_definitions.json").read_text()).values())
-    nothing = format_context({"apiKeys": {}}, nodes)
-    listed = " ".join(line for line in nothing.splitlines() if line.startswith(("Cinema:", "Analyzer:")))
-    assert "cinema-scene" not in listed  # its base models all need a key
-    assert "qc-frame-review+" in listed
-    assert "+ free at its defaults; mode other than heuristic/opencv/jev calls a vision model with " \
-           "ANTHROPIC_API_KEY or OPENAI_API_KEY or GOOGLE_API_KEY. No list price" in nothing
-    assert "mode jev calls typesafe with TYPESAFE_API_KEY, priced per run." in nothing
-    assert "Utility (free)" not in nothing
-
-    google = format_context({"apiKeys": {"GOOGLE_API_KEY": "g"}}, nodes)
-    assert "cinema-scene" in google and "(set here)" in google
+    google = " ".join(_start_notes({"GOOGLE_API_KEY": "g"}))
     assert "cinema-scene: default seedream-4-5 needs BYTEPLUS_API_KEY or FAL_KEY; set scene.base.model to nano-banana" in google
-    assert "cinema-scene: default" not in format_context({"apiKeys": {"FAL_KEY": "f"}}, nodes)
+    assert "cinema-scene: default" not in " ".join(_start_notes({"FAL_KEY": "f"}))
+
+
+def test_context_notes_name_krea_plan_billing_and_routes_in_the_callers_words():
+    mcp = " ".join(_start_notes({"BFL_API_KEY": "b"}, krea=True))
+    assert "_kreaAuth" in mcp and "propose_change" in mcp and "_provider" in mcp and "describe_node" in mcp
+    cli = " ".join(_start_notes({"BFL_API_KEY": "b"}, krea=True, via="cli"))
+    assert "`nebula propose`" in cli and "`nebula info <id>`" in cli and "propose_change" not in cli
+
+
+def test_format_start_prints_every_part():
+    text = format_start({
+        "canvas": {"project": {"id": "p1", "name": "Good Machines"}, "view": {"stale": False}, "selection": ["n2"],
+                   "agents": [{"name": "Codex", "target": {"nodeId": "n1"}}], "nodeCount": 3,
+                   "nodes": [{"id": "n2", "name": "Hero", "definitionId": "nano-banana", "state": "complete",
+                              "inputsFrom": ["n1.text→prompt"], "params": {"aspect_ratio": "16:9"}}],
+                   "others": {"n3": "Preview"}, "truncated": True, "more": "`nebula look` gives every node"},
+        "pins": {"openCount": 1, "open": [{"id": "pin_1", "text": "warmer", "anchor": {"nodeId": "n2"}}]},
+        "proposals": {"count": 0, "open": []},
+        "boards": {"count": 1, "rows": [{"id": "mb1", "name": "Dusk", "where": "current", "images": 4,
+                                         "analyzed": True, "direction": "quiet"}]},
+        "nodes": {"ready": 2, "total": 300, "byCategory": {"utility": {"text-input": "free"},
+                                                           "image-gen": {"nano-banana": [0.039, 0.039]}},
+                  "runsWith": {"krea": ["krea-3"]}, "notes": ["a note"], "krea": "not signed in"},
+        "spend": {"budget": "shared", "perRunUsd": 1.0, "limitUsd": 10, "usedUsd": 0.23, "window": "24h",
+                  "kreaPlanRuns": {"used": 0, "limit": 10}},
+        "next": {"events": {"cursor": 4, "journal": "j1"}, "describe": "`nebula info <id>`: ...",
+                 "propose": "`nebula propose` ...", "pins": "`nebula pin resolve` ..."},
+    })
+    for expected in ("CANVAS: Good Machines (p1), 3 nodes, open in the browser", "selected: n2",
+                     "Codex's cursor is at n1", "n2  Hero (nano-banana) [complete] <- n1.text→prompt",
+                     'aspect_ratio="16:9"', "also: n3 Preview", "PINS (1 open)", 'pin_1 on n2: "warmer"',
+                     "mb1  Dusk [current] 4 images, analyzed — quiet", "Utility: text-input free",
+                     "Image: nano-banana $0.039", "runs with krea: krea-3", "a note",
+                     "SPEND: $1.00 per run; shared budget $0.23 of $10 used in the last 24h; Krea plan runs 0 of 10",
+                     "Events cursor 4 (journal j1)."):
+        assert expected in text, expected

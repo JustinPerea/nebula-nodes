@@ -333,7 +333,8 @@ export function proposalChanges(view: ProposalView, values?: ProposalPersonValue
     const params = values?.nodes[node.ref] ?? node.params ?? {};
     groups.push({
       id: node.ref,
-      title: `New ${node.name} (${node.ref})`,
+      // A name the agent gave it (`rename`) shows with the model it is.
+      title: `New ${node.name} (${node.model ? `${node.ref}, ${node.model}` : node.ref})`,
       kind: 'new',
       lines: Object.entries(params).map(([key, value]) => changeLine(key, value)),
     });

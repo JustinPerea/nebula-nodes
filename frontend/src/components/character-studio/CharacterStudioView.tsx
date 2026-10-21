@@ -18,7 +18,11 @@ import { useProjectName } from '../../hooks/useProjectName';
 import { assetHome, type AssetHome } from '../../lib/assetHome';
 import type { AssetScope } from '../../store/uiStore';
 import { useAssetStudioDraft } from '../../hooks/useAssetStudioDraft';
-import { assetStudioDraftKey, useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
+import { assetStudioDraftKey, resolveAssetStudioDraftKey, useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
+import { wsClient } from '../../lib/wsClient';
+import { TAB_ID } from '../../lib/tabId';
+import { CharacterVersionConflict, changedFields, characterFields, conflictNote, editedFields, editorLabel,
+  rebaseCharacterDraft, type CharacterConflict, type CharacterFields } from '../../lib/characterEdits';
 import { CharacterStudioToolbar } from './CharacterStudioToolbar';
 import { CharacterLibraryRail } from './CharacterLibraryRail';
 import { CharacterDefinitionPanel } from './CharacterDefinitionPanel';
@@ -36,6 +40,10 @@ export interface CharacterDraft {
   seed: number;
   consistencyStrength: number;
   projectId?: string;
+  // A saved Character's checked writes (lib/characterEdits): its fields as
+  // last read and that version. Never sent as they are.
+  base?: CharacterFields;
+  version?: number;
 }
 
 export type SaveState = 'idle' | 'saving' | 'saved' | 'error' | 'draft';
@@ -54,15 +62,29 @@ function emptyDraft(): CharacterDraft {
 function characterToDraft(c: Character): CharacterDraft {
   // Verbatim contract (spec §6): copy referenceViews + frozenTraitString
   // exactly — never reorder or paraphrase.
-  return {
+  const fields = {
     name: c.name,
     subjectType: c.subjectType,
     referenceViews: [...c.referenceViews],
     frozenTraitString: c.frozenTraitString,
     seed: c.seed,
     consistencyStrength: c.consistencyStrength,
-    projectId: c.projectId,
   };
+  return { ...fields, projectId: c.projectId, base: { ...fields, referenceViews: [...c.referenceViews] }, version: c.version };
+}
+
+/** A new Character's first save: its fields and project, no bookkeeping. */
+function createBody(draft: CharacterDraft) {
+  const body = { ...draft, name: draft.name.trim() };
+  delete body.base;
+  delete body.version;
+  return body;
+}
+
+/** Fields both sides changed, and who the other side was. */
+interface ConflictNote {
+  conflicts: CharacterConflict[];
+  who: string;
 }
 
 const MIN_REFERENCE_VIEWS = 3;
@@ -102,6 +124,78 @@ export function CharacterStudioView() {
       && useAssetStudioDraftStore.getState().entries[key]?.epoch === epoch;
   }, [characterEditorId, characterEditorScope, key, epoch, projectReady, projectId]);
 
+  // Outside edits (lib/characterEdits): a field both the person and someone
+  // else changed keeps the person's value, and this says so.
+  const [conflict, setConflict] = useState<ConflictNote | null>(null);
+  useEffect(() => { setConflict(null); }, [key, epoch]);
+  const entryNow = useCallback(() => {
+    const state = useAssetStudioDraftStore.getState();
+    return state.entries[resolveAssetStudioDraftKey(state, key)];
+  }, [key]);
+  const draftNow = useCallback(() => entryNow()?.draft as CharacterDraft | undefined, [entryNow]);
+  // The newest version an outside edit announced, and who made it, so a save
+  // in flight when it came reads the Character again once it lands.
+  const announced = useRef(0);
+  const lastEditor = useRef('Someone else');
+  // The draft key last read on open, so a kept draft reads its Character once.
+  const readOnOpen = useRef<string | null>(null);
+  /** `draft` moved onto `character` (see rebaseCharacterDraft). */
+  const moveDraft = useCallback((character: Character, asSent?: CharacterFields) => {
+    const entry = entryNow();
+    const current = entry?.draft as CharacterDraft | undefined;
+    if (!entry || !current) return;
+    const { draft: next, conflicts } = rebaseCharacterDraft(current, character, { asSent, dirty: entry.dirty });
+    useAssetStudioDraftStore.getState().patch(key, { draft: next, thumbnail: character.thumbnail });
+    if (!conflicts.length || !mounted.current) return;
+    const who = lastEditor.current;
+    setConflict((previous) => ({
+      who: previous && previous.who !== who ? 'Someone else' : who,
+      conflicts: [...(previous?.conflicts.filter((old) => !conflicts.some((c) => c.field === old.field)) ?? []), ...conflicts],
+    }));
+  }, [key, entryNow]);
+
+  /** Read the open Character again after someone else saved it; the person's
+   *  unsaved edits stay. Not mid-save: the save does it when it lands. */
+  const follow = useCallback(async () => {
+    const entry = entryNow();
+    if (!entry?.loaded || !entry.savedId || entry.pendingSaveId) return;
+    const found = await fetchCharacter(entry.savedId).catch(() => null);
+    const latest = entryNow();
+    if (!found || !mounted.current || !latest || latest.pendingSaveId || latest.savedId !== found.id) return;
+    if (found.version <= ((latest.draft as CharacterDraft).version ?? 0)) return;
+    moveDraft(found);
+  }, [entryNow, moveDraft]);
+
+  useEffect(() => wsClient.subscribe((event) => {
+    // Back after the socket was down: what was said meanwhile isn't replayed,
+    // so read the Character again (follow keeps it only if it's newer).
+    if (event.type === 'socketReconnected') {
+      lastEditor.current = 'Someone else';
+      void follow();
+      return;
+    }
+    if (event.type !== 'storedAssetChanged' || event.kind !== 'character' || event.deleted) return;
+    // A move says no version (keptDraftMoves follows it); this tab's own echo is skipped.
+    if (typeof event.version !== 'number' || (event.edit?.tab && event.edit.tab === TAB_ID)) return;
+    const entry = entryNow();
+    if (!entry?.loaded || entry.savedId !== event.id) return;
+    if (event.version <= ((entry.draft as CharacterDraft).version ?? 0)) return;
+    announced.current = Math.max(announced.current, event.version);
+    lastEditor.current = editorLabel(event.edit?.actor);
+    void follow();
+  }), [entryNow, follow]);
+
+  // A draft kept from an earlier visit loads without a fetch, so it may miss
+  // what changed while the Studio was closed: read the Character once.
+  useEffect(() => {
+    if (!loaded || !savedId) return;
+    const marker = `${key}:${epoch}:${savedId}`;
+    if (readOnOpen.current === marker) return;
+    readOnOpen.current = marker;
+    lastEditor.current = 'Someone else';
+    void follow();
+  }, [loaded, savedId, key, epoch, follow]);
+
   useEffect(() => {
     if (!projectReady || loaded) return;
     let cancelled = false;
@@ -133,13 +227,15 @@ export function CharacterStudioView() {
           return;
         }
         setRailScope(scope);
+        // Just read: the open's read (above) has nothing to add.
+        readOnOpen.current = `${key}:${epoch}:${found.id}`;
         initialize(characterToDraft(found), found.id, found.thumbnail);
       }).catch((err) => {
         if (current()) patch({ loadError: err instanceof Error ? err.message : 'Failed to load Character.' });
       });
     }
     return () => { cancelled = true; };
-  }, [key, revision, loaded, projectReady, projectId, characterEditorId, characterEditorScope, initialize, patch, isDraftId, isCurrent,
+  }, [key, epoch, revision, loaded, projectReady, projectId, characterEditorId, characterEditorScope, initialize, patch, isDraftId, isCurrent,
     enterCharacterEditor]);
 
   useEffect(() => {
@@ -155,12 +251,38 @@ export function CharacterStudioView() {
     if (!currentDraft || !currentDraft.name.trim() || currentDraft.referenceViews.length < MIN_REFERENCE_VIEWS) return;
     const attempt = store.beginSave(key);
     if (!attempt) return;
-    const body = { ...currentDraft, name: currentDraft.name.trim() };
     try {
-      const result = attempt.entry.savedId
-        ? await updateCharacter(attempt.entry.savedId, body) : await createCharacter(body);
-      if (!store.finishSave(key, attempt.id, attempt.revision, result.id, result.thumbnail)) return;
-      if (!attempt.entry.savedId) {
+      const savedId = attempt.entry.savedId;
+      let result: Character | null = null;
+      if (!savedId) {
+        result = await createCharacter(createBody(currentDraft));
+        moveDraft(result, characterFields(currentDraft));
+      } else {
+        // Only the fields the person changed since the last read, with that
+        // version. Someone else saved since (409): take the Character as it
+        // is, keep the person's edits on it, send again.
+        for (let tries = 0; ; tries += 1) {
+          const snapshot = draftNow();
+          if (!snapshot) return;
+          const fields = changedFields(snapshot);
+          if (!Object.keys(fields).length) break;
+          try {
+            result = await updateCharacter(savedId, { ...(fields as Partial<CharacterDraft>),
+              ...(snapshot.projectId ? { projectId: snapshot.projectId } : {}),
+              ...(snapshot.version === undefined ? {} : { baseVersion: snapshot.version }) });
+            moveDraft(result, Object.fromEntries(Object.keys(fields)
+              .map((field) => [field, (snapshot as CharacterFields)[field as keyof CharacterFields]])));
+            break;
+          } catch (err) {
+            if (!(err instanceof CharacterVersionConflict) || tries >= 2) throw err;
+            moveDraft(err.character);
+          }
+        }
+      }
+      const id = result?.id ?? savedId!;
+      if (!store.finishSave(key, attempt.id, attempt.revision, id, result?.thumbnail ?? attempt.entry.thumbnail)) return;
+      if (announced.current > (draftNow()?.version ?? 0)) void follow();
+      if (!savedId && result) {
         const createdScope: AssetScope = result.projectId ? 'project' : 'global';
         const selectedAtCompletion = isCurrent();
         store.copyTo(key, assetStudioDraftKey('character', createdScope, result.id, result.projectId));
@@ -172,7 +294,7 @@ export function CharacterStudioView() {
     } catch (err) {
       store.failSave(key, attempt.id, err instanceof Error ? err.message : 'Save failed. Retry?');
     }
-  }, [key, isCurrent, verifyProject, enterCharacterEditor]);
+  }, [key, isCurrent, verifyProject, enterCharacterEditor, moveDraft, draftNow, follow]);
 
   useEffect(() => {
     if (!loaded || !dirty || !isValid || pendingSaveId || saveState === 'error') return;
@@ -238,6 +360,14 @@ export function CharacterStudioView() {
       isOpen: () => mounted.current && useUIStore.getState().viewMode === 'character-editor'
         && useUIStore.getState().characterEditorId === id,
       open: (movedId, scope) => { setRailScope(scope); enterCharacterEditor(movedId, scope); } });
+  };
+  /** Put back the other side's value of each field both changed: an edit
+   *  of the person's, saved like any other. */
+  const useTheirs = () => {
+    if (!conflict || !isCurrent()) return;
+    const theirs = Object.fromEntries(conflict.conflicts.map(({ field, theirs: value }) => [field, value]));
+    setDraft((current) => ({ ...current, ...theirs }));
+    setConflict(null);
   };
   const undoDelete = async () => {
     const asset = await deleting.undo();
@@ -308,11 +438,22 @@ export function CharacterStudioView() {
               </div>
             )}
 
+            {conflict && (
+              <div className="character-studio-view__notice character-studio-view__notice--warn character-studio-view__notice--conflict"
+                role="status" aria-labelledby="character-studio-conflict">
+                <span id="character-studio-conflict">{conflictNote(conflict.conflicts, conflict.who)}</span>{' '}
+                <button type="button" className="character-studio-view__retry" onClick={useTheirs}>Use theirs</button>
+                <button type="button" className="character-studio-view__retry" onClick={() => setConflict(null)}>Dismiss</button>
+              </div>
+            )}
+
             <CharacterDefinitionPanel
               key={`${key}:${epoch}`}
               draft={draft}
               thumbnail={previewThumbnail}
-              onChange={(next) => { if (isCurrent()) setDraft(next); }}
+              // Only what this edit changed goes onto the draft as it is now,
+              // so an outside edit that landed since this render isn't undone.
+              onChange={(next) => { if (isCurrent()) setDraft((current) => ({ ...current, ...editedFields(draft, next) })); }}
               onAppendReferences={(urls) => { if (isCurrent()) setDraft((current) => ({
                 ...current, referenceViews: [...current.referenceViews, ...urls],
               })); }}

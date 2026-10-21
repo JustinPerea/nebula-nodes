@@ -191,6 +191,11 @@ off, so a chat never opens a sign-in page: if the login is gone, the chat says t
 under consumer plans", and its Additional Terms let Google suspend the Antigravity and Gemini CLI accounts that do it.
 Using a Google AI plan this way is your call and your account's risk.
 
+The `nebula` MCP server's instructions tell the agent to call `start_here` first: one answer with the open canvas,
+your pins, open proposals, every moodboard, the node types that run here with their prices, and the spending limits
+([MCP-SETUP.md](MCP-SETUP.md)). The instructions fit in the 4,096 characters Claude Code shows, so the commons guide's
+safety lines reach the agent too.
+
 Commons (`NEBULA_COMMONS_ENABLED=1`) keeps chat to the built-in Claude and Codex, so personal agents are refused there.
 
 ## Updating the adapter pins

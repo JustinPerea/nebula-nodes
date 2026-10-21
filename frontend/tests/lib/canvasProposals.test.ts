@@ -39,4 +39,12 @@ describe('proposalChanges', () => {
     expect(groups[0].lines).toEqual([{ key: 'Provider', to: 'replicate' }]);
     expect(groups[1].lines).toEqual([{ key: 'Provider', from: 'Auto', to: 'bfl' }]);
   });
+
+  it('names the model beside a name the agent gave a new node, so the person sees what Accept adds', () => {
+    const named = view();
+    named.nodes[0] = { ...named.nodes[0], name: 'Lake hero', model: 'Krea 2' };
+    expect(proposalChanges(named)[0].title).toBe('New Lake hero (+k, Krea 2)');
+    // An unnamed node's name is already the model's.
+    expect(proposalChanges(view())[0].title).toBe('New Krea 2 (+k)');
+  });
 });

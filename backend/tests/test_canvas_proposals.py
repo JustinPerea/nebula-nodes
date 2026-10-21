@@ -411,12 +411,13 @@ def test_websocket_sync_sends_keys_only_after_a_person_hello(api):
     proposal_id = _propose(api, _upscale_body(n1)).json()["proposal"]["id"]
     key = _key(api, proposal_id)
     with api.client.websocket_connect("/ws", headers=FORGED_ORIGIN) as ws:
-        messages = [ws.receive_json() for _ in range(2)]
+        messages = [ws.receive_json() for _ in range(3)]
         ws.send_json(PERSON_HELLO)
         messages.append(ws.receive_json())
-    assert [m["type"] for m in messages] == ["graphSync", "canvasPins", "proposalSync"]
-    assert messages[2]["proposals"][0]["id"] == proposal_id
-    assert messages[2]["proposals"][0]["acceptKey"] == key
+    # The open project's pins and Updates follow graphSync.
+    assert [m["type"] for m in messages] == ["graphSync", "canvasPins", "agentNotes", "proposalSync"]
+    assert messages[3]["proposals"][0]["id"] == proposal_id
+    assert messages[3]["proposals"][0]["acceptKey"] == key
 
     # A forged Origin, no hello, or a wrong token never get the key.
     for headers, hello in ((FORGED_ORIGIN, None), ({}, None), (FORGED_ORIGIN, {"type": "hello", "personToken": "x" * 43})):
@@ -424,10 +425,11 @@ def test_websocket_sync_sends_keys_only_after_a_person_hello(api):
         with api.client.websocket_connect("/ws", headers=headers) as ws:
             seen.append(ws.receive_json())
             seen.append(ws.receive_json())
+            seen.append(ws.receive_json())
             if hello is not None:
                 ws.send_json(hello)
                 seen.append(ws.receive_json())
-        assert [m["type"] for m in seen][:2] == ["graphSync", "canvasPins"]
+        assert [m["type"] for m in seen][:3] == ["graphSync", "canvasPins", "agentNotes"]
         assert "proposalSync" not in [m["type"] for m in seen]
         assert key not in json.dumps(seen)
 
@@ -933,7 +935,7 @@ def test_cli_builder_turns_flags_into_a_body():
         "run": ["+up"],
     }
     for kwargs in ({"add": ["up=x"]}, {"param": [["+ghost.k=v"]]}, {"set_params": ["+up.k=v"]},
-                   {"wire": [["n4", "+up:image"]]}, {"at": ["+up=1,2"]}):
+                   {"wire": [["n4:", "+up:image"]]}, {"at": ["+up=1,2"]}):
         with pytest.raises(proposals_cmd.BuildError):
             proposals_cmd.build_body(note="x", **kwargs)
 

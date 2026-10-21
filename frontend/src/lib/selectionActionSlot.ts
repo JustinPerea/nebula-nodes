@@ -20,8 +20,10 @@ function subscribe(listener: () => void) {
   return () => { listeners.delete(listener); };
 }
 
-/** The slot, if it is reserved for this node. */
+/** The slot, if it is reserved for this node. The snapshot is this node's
+ * own answer, so a new selection re-renders only the cards that gain or lose
+ * the slot. (SelectionToolbar keys the slot by node, so a new selection is a
+ * new element and always notifies.) */
 export function useSelectionActionSlot(nodeId: string): HTMLElement | null {
-  const element = useSyncExternalStore(subscribe, () => slot, () => null);
-  return element?.dataset.nodeId === nodeId ? element : null;
+  return useSyncExternalStore(subscribe, () => (slot?.dataset.nodeId === nodeId ? slot : null), () => null);
 }

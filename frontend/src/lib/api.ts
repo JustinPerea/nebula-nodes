@@ -3,6 +3,7 @@ import { resolveProjectId } from './currentProject';
 import type { Character, Moodboard } from '../types';
 import { actorLabel, type TrashedItem } from './trash';
 import { MoodboardVersionConflict, type MoodboardEditResult, type MoodboardOp } from './moodboardEdits';
+import { CharacterVersionConflict } from './characterEdits';
 import type {
   ProviderRecoveryCheckpoint,
   ProviderStartAmbiguity,
@@ -702,13 +703,29 @@ async function saveFailure(response: Response, kind: 'moodboard' | 'character', 
   return new Error(fallback);
 }
 
-export async function updateCharacter(id: string, body: CharacterUpdateInput): Promise<Character> {
+/** A 409 from a Character PUT sent with `baseVersion`: someone else saved it
+ *  since it was read. The answer carries the Character as it is now. */
+async function characterConflict(response: Response): Promise<CharacterVersionConflict | null> {
+  if (response.status !== 409) return null;
+  try {
+    const body = await response.clone().json() as { code?: string; character?: Character };
+    return body.code === 'version_conflict' && body.character ? new CharacterVersionConflict(body.character) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** With `baseVersion`, a Character saved elsewhere since is a
+ *  CharacterVersionConflict, not an overwrite. */
+export async function updateCharacter(id: string, body: CharacterUpdateInput & { baseVersion?: number }): Promise<Character> {
   const response = await apiFetch(`/api/characters/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!response.ok) throw await saveFailure(response, 'character', `Update character failed: ${response.status}`);
+  if (!response.ok) {
+    throw await characterConflict(response) ?? await saveFailure(response, 'character', `Update character failed: ${response.status}`);
+  }
   return response.json();
 }
 
