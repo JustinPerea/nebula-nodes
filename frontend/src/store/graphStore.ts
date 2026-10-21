@@ -927,6 +927,22 @@ function keptUniversalFields(existing: Node<NodeData>, incoming: Node<NodeData>)
   return { dynamicParams: before.dynamicParams ?? [], providerMeta: before.providerMeta ?? {} };
 }
 
+/** A re-typed universal node's saved outputs on the ports it now has: one on
+ * a port it no longer declares fails every project save (the backend's
+ * _validate_imported_outputs; it drops them too, _drop_outputs_off_ports). */
+function outputsOnPorts(outputs: NodeData['outputs'] | undefined, ports: ReadonlyArray<{ id: string }>): NodeData['outputs'] {
+  return Object.fromEntries(Object.entries(outputs ?? {}).filter(([id]) => ports.some((p) => p.id === id)));
+}
+
+/** The canvas's outputs a sync without outputs keeps: all of them, unless
+ * the backend re-typed the node (its `_model_ports` changed). */
+function keptOutputs(existing: Node<NodeData>, incoming: Node<NodeData>): NodeData['outputs'] {
+  const after = incoming.data.params._model_ports as { outputs?: { id: string }[] } | undefined;
+  if (!UNIVERSAL_MODEL_PARAM[incoming.data.definitionId] || !after
+    || JSON.stringify(existing.data.params._model_ports) === JSON.stringify(after)) return existing.data.outputs;
+  return outputsOnPorts(existing.data.outputs, after.outputs ?? []);
+}
+
 /** Whether a wire's ends on universal nodes are ports those nodes have. */
 function universalPortsHold(edge: Edge, nodesById: Map<string, Node<NodeData>>): boolean {
   const source = nodesById.get(edge.source)?.data as Partial<DynamicNodeData> | undefined;
@@ -2801,7 +2817,7 @@ wsClient.subscribe((event) => {
             ...existing.data,
             ...cliNode.data,
             ...keptUniversalFields(existing, cliNode),
-            outputs: hasCliOutputs ? cliOutputs : existing.data.outputs,
+            outputs: hasCliOutputs ? cliOutputs : keptOutputs(existing, cliNode),
             // The sync says "complete" for any node with outputs. Over the
             // same outputs it must not hide what a run's events said since:
             // a failure (an agent's run ends with a sync), a skip, or a run
@@ -5662,6 +5678,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
               providerType: dynamicProviderFor(data.definitionId),
               modelId,
               params: withEditsSinceRequest(nodeId, data.definitionId, result.params, data.params),
+              outputs: outputsOnPorts(data.outputs, result.dynamicOutputPorts),
               dynamicInputPorts: result.dynamicInputPorts,
               dynamicOutputPorts: result.dynamicOutputPorts,
               dynamicParams: data.dynamicParams ?? [],
@@ -5695,6 +5712,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             data: {
               ...data,
               params: withEditsSinceRequest(nodeId, data.definitionId, result.params, data.params),
+              outputs: outputsOnPorts(data.outputs, result.dynamicOutputPorts),
               dynamicInputPorts: result.dynamicInputPorts,
               dynamicOutputPorts: result.dynamicOutputPorts,
               dynamicParams: result.dynamicParams,

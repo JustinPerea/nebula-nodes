@@ -41,6 +41,10 @@ export interface AgentNote {
   actedAt: string | null;
   /** The label of the action that ran ("Undo the sort"), once one did. */
   actedWith: string | null;
+  /** An asset proposal's Update (Q92 a), once the proposal closed: when, and
+   * how it ended in one short line ("Accepted: the cover changed"). */
+  resolvedAt?: string | null;
+  outcome?: string | null;
 }
 
 export type AgentNotesSurface = { kind: 'canvas' } | { kind: 'board'; boardId: string };
@@ -57,7 +61,7 @@ export interface AgentNotesListing {
 export interface AgentNotesEvent {
   type: 'agentNotes';
   surface: 'canvas' | 'board';
-  op: 'sync' | 'added' | 'read' | 'dismissed' | 'acted';
+  op: 'sync' | 'added' | 'read' | 'dismissed' | 'acted' | 'resolved' | 'changed';
   projectId?: string | null;
   boardId?: string;
   note?: unknown;
@@ -148,6 +152,8 @@ export function sanitizeNote(raw: unknown): AgentNote | null {
     dismissedAt: str(note.dismissedAt),
     actedAt: str(note.actedAt),
     actedWith: str(note.actedWith),
+    resolvedAt: str(note.resolvedAt),
+    outcome: typeof note.outcome === 'string' && note.outcome ? note.outcome.slice(0, 80) : null,
   };
 }
 

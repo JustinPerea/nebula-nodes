@@ -18,15 +18,22 @@ stamp does too, until it is configured again.
 
 The rules are the pickers' (graphStore's configureOpenRouterModel and
 fetchReplicateSchemaAndConfigure on main 23f11b8e; pinned by
-contracts/fixtures/universal-ports/picker-cases.json), with one change: a
+contracts/fixtures/universal-ports/picker-cases.json), with two changes: a
 Replicate model whose output is a list of plain strings has a Text `text`
-output, as its run names it, where the picker drew an Image `image` port.
+output, as its run names it, where the picker drew an Image `image` port;
+and a Replicate file output is typed from the model's own metadata (its
+schema's content hints, else its example run's file) as `video`, `audio`,
+`image`, `svg` or `mesh`, where the picker called every file `image`
+(2026-10-21; replicate_output). The run fills that port
+(handlers/replicate_universal.py).
 """
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
 from typing import Any, Mapping
+
+from services.media_types import MEDIA_PORT_IDS, media_named_in_text, media_of_extension, media_of_mime, media_of_value
 
 MODEL_PARAM: dict[str, str] = {
     "openrouter-universal": "model",
@@ -40,6 +47,10 @@ PROVIDER: dict[str, str] = {
 }
 PROVIDER_NAME = {"openrouter": "OpenRouter", "nous": "Nous Portal", "replicate": "Replicate"}
 PORTS_PARAM = "_model_ports"
+# The stamp's revision. 2 (2026-10-21): a Replicate file output is typed from
+# the model's metadata. A Replicate stamp without it (written 2026-10-20 by
+# #132) called every file output Image `image`; untyped_output_stamp.
+PORTS_REV = 2
 # The canvas-owned params configuring writes, per node. A model change drops
 # the old model's values when the new model can't be read.
 DERIVED_PARAMS: dict[str, tuple[str, ...]] = {
@@ -149,21 +160,120 @@ def _js_string(value: Any) -> str:
     return str(value)
 
 
+def _hinted_media(node: Mapping[str, Any]) -> str | None:
+    """A media type one output-schema node states: `contentMediaType`, an
+    `x-` hint holding a MIME type or extension, or a MIME type / extension
+    written in its description or title. Not words alone."""
+    hint = node.get("contentMediaType")
+    if isinstance(hint, str) and media_of_mime(hint):
+        return media_of_mime(hint)
+    for key, value in node.items():
+        if isinstance(key, str) and key.startswith("x-") and isinstance(value, str):
+            found = media_of_mime(value) or (media_of_extension(value) if len(value) <= 6 else None)
+            if found:
+                return found
+    for key in ("description", "title"):
+        found = media_named_in_text(node.get(key))
+        if found:
+            return found
+    return None
+
+
+def _example_media(example: Any) -> str | None:
+    """The media type of the file the model's example run returned (a URL's
+    extension, a data: URI's MIME type; a list by its first file)."""
+    values = example if isinstance(example, list) else [example]
+    return next((found for found in map(media_of_value, values) if found), None)
+
+
+def replicate_file_media(schema: Mapping[str, Any]) -> tuple[str, str | None]:
+    """(media type, where it was read) for a Replicate model whose output is a
+    file or a list of files: "schema" (a content hint), "example" (the
+    model's `default_example` output, which the schema route keeps), or None
+    when nothing says, and the file is taken to be an Image, unconfirmed."""
+    output = schema.get("output_schema") if isinstance(schema.get("output_schema"), Mapping) else {}
+    items = output.get("items") if isinstance(output.get("items"), Mapping) else {}
+    found = _hinted_media(items) or _hinted_media(output)
+    if found:
+        return found, "schema"
+    found = _example_media(schema.get("default_example_output"))
+    if found:
+        return found, "example"
+    return "Image", None
+
+
+# Output-schema keys that say what a model returns; a schema with none of
+# them (no Output component at all, or only a title) says nothing.
+_SAYS_WHAT = ("type", "anyOf", "oneOf", "allOf", "$ref", "properties", "items", "enum", "const")
+
+
 def replicate_output(schema: Mapping[str, Any]) -> dict[str, Any]:
-    """The port a Replicate model's run fills: a file URL, or a list of them,
-    is `image`; anything else (text, a list of plain strings, an object) is
-    `text` (handlers/replicate_universal._infer_output_type)."""
+    """The port a Replicate model's run fills. A file URL, or a list of them,
+    is typed from the model's metadata (replicate_file_media): `video`,
+    `audio`, `image`, `svg` or `mesh`, with `typeUnconfirmed` when nothing
+    said (then `image`, as before). Anything else (text, a list of plain
+    strings, an object) is `text`. An output schema that says nothing is
+    typed by the model's example run's file when there is one, else `text`
+    marked `typeUnconfirmed` (a run that returns a file keeps it under that
+    file's own port: handlers/replicate_universal._fill_declared_port)."""
     output = schema.get("output_schema") if isinstance(schema.get("output_schema"), Mapping) else {}
     items = output.get("items") if isinstance(output.get("items"), Mapping) else {}
     is_file = (output.get("type") == "string" and output.get("format") == "uri") or (
         output.get("type") == "array" and items.get("format") == "uri")
     if is_file:
-        return {"id": "image", "label": "Output", "dataType": "Image", "required": False}
-    return {"id": "text", "label": "Output", "dataType": "Text", "required": False}
+        media, source = replicate_file_media(schema)
+        port: dict[str, Any] = {"id": MEDIA_PORT_IDS[media], "label": "Output", "dataType": media, "required": False}
+        if source is None:
+            port["typeUnconfirmed"] = True
+        return port
+    text: dict[str, Any] = {"id": "text", "label": "Output", "dataType": "Text", "required": False}
+    if not any(key in output for key in _SAYS_WHAT):
+        media = _example_media(schema.get("default_example_output"))
+        if media:
+            return {"id": MEDIA_PORT_IDS[media], "label": "Output", "dataType": media, "required": False}
+        text["typeUnconfirmed"] = True
+    return text
+
+
+def unconfirmed_note(model: str, outputs: list[dict[str, Any]]) -> str | None:
+    """What to tell an agent when a port's type is a guess (model_schema's
+    `note`, an edit's `modelPortNotes`, look_at_canvas, `nebula apply`)."""
+    guessed = [port for port in outputs if isinstance(port, Mapping) and port.get("typeUnconfirmed")]
+    if not guessed:
+        return None
+    port = guessed[0]
+    port_id = port.get("id")
+    what = ("what it returns (no output schema, no example run)" if port.get("dataType") == "Text" else
+            "what file it returns (no content hint in its output schema, no example run)")
+    return (f"Replicate's data for {model} doesn't say {what}, so its output `{port_id}` is typed "
+            f"{port.get('dataType')}, unconfirmed (`typeUnconfirmed`). A run that returns a file of another "
+            f"type keeps it under that type's own port (`video`, `audio`, ...), which this node doesn't declare, "
+            f"so a wire on `{port_id}` gets nothing then. Nebula doesn't guess the type from the model's name.")
+
+
+def stale_note(model: str) -> str:
+    """What to tell an agent about a node whose ports were kept before file
+    outputs were typed (untyped_output_stamp)."""
+    return (f"This node's ports for {model} were saved before Nebula typed Replicate file outputs from the "
+            "model's data, so its file output is a guess (`typeUnconfirmed`) and a run names the output by the "
+            "returned file (`video`, `audio`, ...), not by this port. Set its model_id again (edit_canvas) to "
+            "re-read them.")
+
+
+def stored_port_note(definition_id: str, params: Mapping[str, Any] | None) -> str | None:
+    """The note for a configured node's kept ports, or None: stale_note for
+    an untyped stamp, else unconfirmed_note for a guessed type."""
+    stored = stored_ports(definition_id, params)
+    if stored is None:
+        return None
+    model = model_of(definition_id, params or {})
+    if untyped_output_stamp(definition_id, params):
+        return stale_note(model)
+    return unconfirmed_note(model, stored[1])
 
 
 def _stamp(model: str, inputs: list[dict[str, Any]], outputs: list[dict[str, Any]]) -> dict[str, Any]:
-    return {"model": model, "inputs": inputs, "outputs": outputs}
+    return {"model": model, "inputs": inputs, "outputs": outputs, "rev": PORTS_REV}
 
 
 def configure(definition_id: str, params: Mapping[str, Any], model: str, data: Mapping[str, Any]) -> Configured:
@@ -203,6 +313,8 @@ def _clean_port(raw: Any) -> dict[str, Any] | None:
                             "dataType": data_type, "required": raw.get("required") is True}
     if raw.get("multiple") is True:
         port["multiple"] = True
+    if raw.get("typeUnconfirmed") is True:
+        port["typeUnconfirmed"] = True
     return port
 
 
@@ -231,7 +343,38 @@ def stored_ports(definition_id: str, params: Mapping[str, Any] | None) -> tuple[
     inputs, outputs = _clean_ports(raw.get("inputs")), _clean_ports(raw.get("outputs"))
     if inputs is None or outputs is None:
         return None
+    if definition_id == "replicate-universal" and raw.get("rev") != PORTS_REV:
+        # #132's stamp (2026-10-20) called every file output Image `image`
+        # without reading what the file is: a guess (untyped_output_stamp).
+        outputs = [{**port, "typeUnconfirmed": True} if port["dataType"] != "Text" else port for port in outputs]
     return inputs, outputs
+
+
+def untyped_output_stamp(definition_id: str, params: Mapping[str, Any] | None) -> bool:
+    """Whether a Replicate node's kept ports were written before its file
+    output was typed from the model's metadata (#132's stamp, 2026-10-20,
+    which called every file output Image `image`). Its run keeps naming the
+    output by the returned file, as it did (handlers/replicate_universal), and
+    sending its model again (an edit, PUT, or the picker) reads it again."""
+    if definition_id != "replicate-universal" or stored_ports(definition_id, params) is None:
+        return False
+    raw = params.get(PORTS_PARAM) if isinstance(params, Mapping) else None
+    return not (isinstance(raw, Mapping) and raw.get("rev") == PORTS_REV)
+
+
+def needs_configuring(definition_id: str, params: Mapping[str, Any] | None) -> bool:
+    """Whether a node's kept ports are stale for its model: never kept, kept
+    for another model, or kept before the current rules (untyped_output_stamp)."""
+    return stored_ports(definition_id, params) is None or untyped_output_stamp(definition_id, params)
+
+
+def declared_output(definition_id: str, params: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """The one output port a configured Replicate node declares, for its run
+    to fill; None when it was never configured for its model."""
+    stored = stored_ports(definition_id, params)
+    if stored is None or not stored[1]:
+        return None
+    return stored[1][0]
 
 
 # -- an agent's change ------------------------------------------------------

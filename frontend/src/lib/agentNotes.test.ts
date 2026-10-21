@@ -6,6 +6,7 @@ import {
   clockTime,
   cornerRight,
   noteControls,
+  noteLabel,
   noteText,
   offersNotNow,
   roomBelow,
@@ -59,6 +60,32 @@ describe('sanitizeNote', () => {
       ],
     });
     expect(kept?.actions.map((a) => a.label)).toEqual(['Accept', 'Reject']);
+  });
+});
+
+describe('an asset proposal\'s Update (Q92 a)', () => {
+  it('keeps how it ended, and treats it as done', () => {
+    const kept = sanitizeNote({
+      ...note({ source: 'nebula', about: 'proposal', refs: [] }),
+      actions: [{ label: 'Review', op: { kind: 'proposal.review', proposalId: 'pa_1', target: 'project', targetId: 'dusk' } }],
+      proposal: { id: 'pa_1', kind: 'project', targetId: 'dusk' },
+      resolvedAt: '2026-10-20T12:30:00.000Z', outcome: 'Accepted: the cover changed', readAt: '2026-10-20T12:30:00.000Z',
+    });
+    expect(kept?.outcome).toBe('Accepted: the cover changed');
+    expect(kept?.resolvedAt).toBe('2026-10-20T12:30:00.000Z');
+    const controls = noteControls(kept!, { showLabel: 'Show on canvas' });
+    expect(controls.state).toBe('Accepted: the cover changed');
+    expect(controls.buttons).toEqual([]);
+    expect(noteLabel(kept!)).toBe('');
+    expect(noteLabel({ about: kept!.about, resolvedAt: null })).toBe('waiting for your OK');
+  });
+
+  it('offers Review while the proposal is open', () => {
+    const open = note({ source: 'nebula', about: 'proposal', refs: [],
+      actions: [{ label: 'Review', op: { kind: 'proposal.review', proposalId: 'pa_1', target: 'project', targetId: 'dusk' } }] });
+    const controls = noteControls(open, { showLabel: 'Show on canvas' });
+    expect(controls.state).toBeNull();
+    expect(controls.buttons.map((b) => b.label)).toEqual(['Review']);
   });
 });
 

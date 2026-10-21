@@ -11,7 +11,7 @@ from tests.conftest import stored_image_urls
 
 CHARACTER = {"name": "Rina", "subjectType": "human", "referenceViews": stored_image_urls(),
              "frozenTraitString": "warm", "seed": 7, "consistencyStrength": 0.9}
-BOARD = {"name": "Warm", "images": [{"url": "/api/outputs/a.png"}]}
+BOARD = {"name": "Warm", "images": [{"url": stored_image_urls(1, name="board")[0]}]}
 STYLE = {"name": "Warm", "category": "My Styles", "prompt": "warm", "params": {}, "modelId": None,
          "refImages": [], "scope": "project", "paramsVersion": 0}
 

@@ -2,6 +2,8 @@ import { useId, type ReactNode } from 'react';
 import type { MoodboardAnalysis, MoodboardImage } from '../../types';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { overviewThumbnailUrl } from '../../lib/canvasOverview';
+import { storedImageView } from '../../lib/storedImage';
+import { OutsideImageNote } from '../OutsideImageNote';
 import { AutoGrowTextarea } from '../AutoGrowTextarea';
 import { ImageColors } from './MoodboardColors';
 import { PRIVATE_NOTE_LIMIT } from './MoodboardListView';
@@ -68,11 +70,13 @@ function Reference({ image, analysis, onUpdate, onRemove, onTextDone }: {
   onTextDone: () => void;
 }) {
   const hintId = useId();
-  const preview = overviewThumbnailUrl(image.url) ?? image.url;
+  // Only Nebula's own files are loaded (lib/storedImage.ts, Q98).
+  const view = storedImageView(image.url);
+  const preview = view.src ? backendAssetUrlSync(overviewThumbnailUrl(view.src) ?? view.src) : null;
   return (
     <div className="moodboard-board-panel__section">
       <div className="moodboard-board-panel__image">
-        <img src={backendAssetUrlSync(preview)} alt="" draggable={false} />
+        {preview ? <img src={preview} alt="" draggable={false} /> : view.outside && <OutsideImageNote />}
       </div>
       <ImageColors analysis={analysis} imageId={image.id} />
       <label className="moodboard-field">

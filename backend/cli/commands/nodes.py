@@ -37,8 +37,13 @@ def run_list(client: NebulaClient, query: str | None = None, category: str | Non
 
 
 def run_info(client: NebulaClient, node_id: str) -> None:
+    """`nebula info <id or name>`: an id, or a node type's exact display name
+    when one node has it; then the first line after the start line says which
+    id it used ("moodboard is the Moodboard node: nebula-moodboard")."""
     node = client.get_node(node_id)
     print(START_LINE)
+    if isinstance(node.get("lookup"), str):
+        print(node["lookup"])
     print(format_node_detail(node))
     try:
         price = format_price_line(client.get_agent_node(node_id))

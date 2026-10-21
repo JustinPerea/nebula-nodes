@@ -28,6 +28,7 @@ export function BriefPanel({
   saving,
   busy,
   onEdit,
+  onEditDone,
   onKeep,
   onRegenerate,
   onColorChoice,
@@ -39,6 +40,8 @@ export function BriefPanel({
   saving: boolean;
   busy: boolean;
   onEdit: (text: string) => void;
+  /** The brief's text box lost focus, or Write your own was pressed: one undo step (Q83). */
+  onEditDone?: () => void;
   onKeep: () => void;
   onRegenerate: () => void;
   onColorChoice?: (choice: ColorChoice, hex: string) => void;
@@ -64,7 +67,7 @@ export function BriefPanel({
           <label className="moodboard-field">
             <span>{byAgent ? "An agent's brief" : 'Your brief'}</span>
             <textarea rows={5} value={override.text} maxLength={BRIEF_LIMITS.override}
-              onChange={(event) => onEdit(event.target.value)} />
+              onChange={(event) => onEdit(event.target.value)} onBlur={onEditDone} />
           </label>
           {!stale && (
             <button type="button" className="moodboard-brief__action" onClick={onRegenerate} disabled={busy}>
@@ -80,7 +83,7 @@ export function BriefPanel({
           <button
             type="button"
             className="moodboard-brief__action"
-            onClick={() => onEdit(brief?.generatedStyleBrief ?? '')}
+            onClick={() => { onEdit(brief?.generatedStyleBrief ?? ''); onEditDone?.(); }}
             disabled={busy}
           >
             Write your own
@@ -219,6 +222,7 @@ export function BriefFields({
   pinnedColors,
   clashMode,
   onChange,
+  onTextDone,
 }: {
   direction: string;
   avoid: string[];
@@ -228,6 +232,8 @@ export function BriefFields({
   onChange: (fields: {
     direction?: string; avoid?: string[]; pinnedColors?: MoodboardPinnedColors; clashMode?: MoodboardClashMode;
   }) => void;
+  /** Direction lost focus: its edit is one undo step (Q83). */
+  onTextDone?: () => void;
 }) {
   const [avoidText, setAvoidText] = useState('');
   const [advanced, setAdvanced] = useState(false);
@@ -263,6 +269,7 @@ export function BriefFields({
             maxLength={BRIEF_LIMITS.direction}
             placeholder="Say what you want, e.g. warm editorial product shots with soft daylight."
             onChange={(event) => onChange({ direction: event.target.value })}
+            onBlur={onTextDone}
           />
         </label>
         <div className="moodboard-field">

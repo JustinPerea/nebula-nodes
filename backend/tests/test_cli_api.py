@@ -115,8 +115,8 @@ class TestGraphEndpoints:
         assert data["definitionId"] == "gpt-image-1-generate"
 
     def test_create_multiple_nodes(self, client):
-        r1 = client.post("/api/graph/node", json={"definitionId": "node-a", "params": {}})
-        r2 = client.post("/api/graph/node", json={"definitionId": "node-b", "params": {}})
+        r1 = client.post("/api/graph/node", json={"definitionId": "text-input", "params": {}})
+        r2 = client.post("/api/graph/node", json={"definitionId": "preview", "params": {}})
         assert r1.json()["id"] == "n1"
         assert r2.json()["id"] == "n2"
 
@@ -308,7 +308,7 @@ class TestGraphEndpoints:
         assert "n1:text" in resp.json()["connection"]
 
     def test_connect_unknown_node_400(self, client):
-        client.post("/api/graph/node", json={"definitionId": "node-a", "params": {}})
+        client.post("/api/graph/node", json={"definitionId": "text-input", "params": {}})
         resp = client.post("/api/graph/connect", json={
             "source": "n1", "sourceHandle": "out",
             "target": "n99", "targetHandle": "in",
@@ -387,21 +387,27 @@ class TestGraphEndpoints:
         assert len(graph["nodes"]) == 1
 
     def test_update_node_params(self, client):
-        client.post("/api/graph/node", json={"definitionId": "node-a", "params": {"x": 1}})
-        resp = client.put("/api/graph/node/n1", json={"params": {"x": 2, "y": 3}})
+        client.post("/api/graph/node", json={"definitionId": "text-input", "params": {"value": "a"}})
+        resp = client.put("/api/graph/node/n1", json={"params": {"value": "b"}})
         assert resp.status_code == 200
         graph = client.get("/api/graph").json()
         n1 = next(n for n in graph["nodes"] if n["id"] == "n1")
-        assert n1["params"]["x"] == 2
-        assert n1["params"]["y"] == 3
+        assert n1["params"]["value"] == "b"
+
+    def test_create_refuses_a_node_type_that_isnt_one(self, client):
+        """`nebula create` used to store a node of any type it was given."""
+        resp = client.post("/api/graph/node", json={"definitionId": "node-a", "params": {}})
+        assert resp.status_code == 400
+        assert resp.json()["detail"].startswith("unknown node definition 'node-a'")
+        assert client.get("/api/graph").json()["nodes"] == []
 
     def test_update_unknown_node_404(self, client):
         resp = client.put("/api/graph/node/n99", json={"params": {"x": 1}})
         assert resp.status_code == 404
 
     def test_update_layout_persists_all_positions_atomically(self, client):
-        client.post("/api/graph/node", json={"definitionId": "node-a", "params": {}})
-        client.post("/api/graph/node", json={"definitionId": "node-b", "params": {}})
+        client.post("/api/graph/node", json={"definitionId": "text-input", "params": {}})
+        client.post("/api/graph/node", json={"definitionId": "preview", "params": {}})
 
         failed = client.put("/api/graph/layout", json={"positions": {
             "n1": {"x": 100, "y": 200},
@@ -431,7 +437,7 @@ class TestGraphEndpoints:
         "not-an-object",
     ])
     def test_update_layout_rejects_malformed_positions(self, client, position):
-        client.post("/api/graph/node", json={"definitionId": "node-a", "params": {}})
+        client.post("/api/graph/node", json={"definitionId": "text-input", "params": {}})
         resp = client.put("/api/graph/layout", json={"positions": {"n1": position}})
         assert resp.status_code == 400
 
@@ -449,7 +455,7 @@ class TestGraphEndpoints:
         assert len(data["edges"]) == 1
 
     def test_clear_graph(self, client):
-        client.post("/api/graph/node", json={"definitionId": "node-a", "params": {}})
+        client.post("/api/graph/node", json={"definitionId": "text-input", "params": {}})
         # A project with nodes needs an explicit force, from any caller (D3).
         refused = client.delete("/api/graph")
         assert refused.status_code == 409

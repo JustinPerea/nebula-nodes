@@ -19,8 +19,19 @@ export interface AssetProposalEntry {
   closing?: Exclude<AssetProposalStatus, 'open'>;
 }
 
+/** Review on a proposal's Update (Q92 a): the strip for this target brings
+ * itself into view and takes it (lib/assetProposalReview.ts, deferred). */
+export interface ReviewRequest {
+  kind: AssetProposalKind;
+  targetId: string;
+  at: number;
+}
+
 interface AssetProposalsState {
   proposals: Record<string, AssetProposalEntry>;
+  review: ReviewRequest | null;
+  /** Newer views of open proposals (a relist), keeping keys and person-only `before`. */
+  refresh: (views: AssetProposalView[]) => void;
   pending: Record<string, 'accept' | 'reject'>;
   errors: Record<string, string>;
   sync: (list: Array<AssetProposalView & { acceptKey: string }>) => void;
@@ -60,6 +71,20 @@ function cancelExit(id: string): void {
 
 export const useAssetProposalsStore = create<AssetProposalsState>((set, get) => ({
   proposals: {},
+  review: null,
+
+  refresh: (views) => {
+    const current = get().proposals;
+    let next: Record<string, AssetProposalEntry> | null = null;
+    for (const raw of Array.isArray(views) ? views : []) {
+      const view = clean(raw);
+      const entry = view ? current[view.id] : undefined;
+      if (!view || !entry || entry.closing || view.status !== 'open') continue;
+      next ??= { ...current };
+      next[view.id] = { ...entry, view: { ...view, before: view.before ?? entry.view.before } };
+    }
+    if (next) set({ proposals: next });
+  },
   pending: {},
   errors: {},
 
@@ -113,7 +138,7 @@ export const useAssetProposalsStore = create<AssetProposalsState>((set, get) => 
 
   clear: () => {
     for (const id of exitTimers.keys()) cancelExit(id);
-    set({ proposals: {}, pending: {}, errors: {} });
+    set({ proposals: {}, pending: {}, errors: {}, review: null });
   },
 
   accept: async (id) => decide(id, 'accept'),

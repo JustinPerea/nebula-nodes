@@ -6,6 +6,7 @@ from typing import Any
 # The readiness rule lives with the backend so the CLI and MCP server agree.
 from services.node_readiness import node_access  # noqa: F401 (re-exported for tests and callers)
 from services.agent_params import ASSET_PARAM_TYPES
+from services.canvas_undo import UNDONE_VERBS, nothing_went_back
 from services.maker_sizes import rule_note
 from services.node_route import all_param_definitions, route_hides, route_param_definitions
 
@@ -839,12 +840,10 @@ def format_applied(result: dict[str, Any], *, undo: bool = True) -> str:
     token = (result.get("undo") or {}).get("token") if undo else None
     if token:
         minutes = int((result["undo"].get("expiresInSeconds") or 0) // 60)
-        lines.append(f"  Undo: nebula undo {token}  (for {minutes} minutes; parts changed since stay)")
+        lines.append(f"  Undo: nebula undo {token}  (for {minutes} minutes; parts changed or run since stay)")
     return "\n".join(lines)
 
 
-_UNDONE_VERBS = (("removed", "removed"), ("added", "put back"), ("changed", "reset"), ("renamed", "renamed"),
-                 ("moved", "moved"))
 
 
 def format_undone(result: dict[str, Any]) -> str:
@@ -853,10 +852,16 @@ def format_undone(result: dict[str, Any]) -> str:
     if status == "already-undone":
         return result.get("message") or "Already undone; nothing changed."
     if status == "skipped":
-        lines = [result.get("message") or "Nothing went back."]
+        # The server's message lists each part too (for MCP and HTTP callers);
+        # here they go on their own lines below, so line one leaves them out.
+        lines = [nothing_went_back(result.get("skipped") or [])]
     else:
-        done = ", ".join(f"{verb} {len(result.get(key) or [])}" for key, verb in _UNDONE_VERBS if result.get(key))
-        lines = [f"Undone: {done}." if done else (result.get("message") or "Undone: no change.")]
+        done = ", ".join(f"{verb} {len(result.get(key) or [])}" for key, verb in UNDONE_VERBS if result.get(key))
+        # Not the server's message when nothing was counted: it lists the parts
+        # left too, and they go on their own lines below.
+        lines = [f"Undone: {done}." if done else (
+            "Undone: no change." if result.get("skipped") or result.get("undoId") else
+            result.get("message") or "Undone: no change.")]
     for item in result.get("skipped") or []:
         lines.append(f"  Left as is: {item.get('message') or item.get('reason')}")
     return "\n".join(lines)
@@ -918,6 +923,9 @@ def _asset_change_lines(view: dict[str, Any], where: str | None) -> list[str]:
         if isinstance(values, dict):
             label = {"cover": "cover", "sendNotes": "send notes"}.get(key, key)
             lines.append(f"  sets   {label}: {_asset_value(values.get('from'))} → {_asset_value(values.get('to'))}")
+            lost = values.get("lostPin") if key == "cover" else None
+            if isinstance(lost, dict):
+                lines.append(f"  was    pinned {lost.get('url')}, whose image is gone: that pin no longer counts")
     if where and view.get("status", "open") == "open":
         lines.append(f"  decide {where}")
     return lines

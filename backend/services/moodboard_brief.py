@@ -687,10 +687,13 @@ def generator_analysis(board: dict[str, Any], analysis: dict[str, Any], brief: d
     among them and stays current while the board is unchanged."""
     from services.moodboard_analysis import _clamp_float, _summary, _taste_profile, steering_count, steers
 
+    from services.stored_image_refs import is_outside_link
+
     view = copy.deepcopy(analysis)
     if isinstance(view.get("images"), list):
         view["images"] = [item for item in view["images"] if not (isinstance(item, dict) and (
-            item.get("setAside") or _clamp_float(item.get("weight"), 1.0, 0.0, 1.0) <= 0))]
+            item.get("setAside") or _clamp_float(item.get("weight"), 1.0, 0.0, 1.0) <= 0
+            or is_outside_link(str(item.get("url") or ""))))]
     steering_urls = {str(img.get("url") or "").strip() for img in board.get("images") or []
                      if isinstance(img, dict) and steers(img)}
     # A URL no board image has is left as it was: only a set-aside one goes.
@@ -699,8 +702,10 @@ def generator_analysis(board: dict[str, Any], analysis: dict[str, Any], brief: d
     def steering_only(urls: Any) -> Any:
         if not isinstance(urls, list):
             return urls
-        return [url for url in urls if not isinstance(url, str) or url.strip() not in held_urls
-                or url.strip() in steering_urls]
+        # Never a link to another site (services/stored_image_refs.py): a
+        # board or analysis saved before writes were checked may name one.
+        return [url for url in urls if not (isinstance(url, str) and is_outside_link(url))
+                and (not isinstance(url, str) or url.strip() not in held_urls or url.strip() in steering_urls)]
 
     if "representativeImages" in view:
         view["representativeImages"] = steering_only(view["representativeImages"])
@@ -712,9 +717,10 @@ def generator_analysis(board: dict[str, Any], analysis: dict[str, Any], brief: d
     mode = str(analysis.get("mode") or board.get("mode") or "look")
     keywords = generator_keywords(analysis, notes_sent)
     palette, accents = list(brief.get("palette") or []), list(brief.get("accents") or [])
-    count, has_images = steering_count(board)
+    count, has_images, outside_only = steering_count(board)
     view["keywords"] = keywords
-    view["summary"] = _summary(mode, count, palette, accents, notes, has_images=has_images)
+    view["summary"] = _summary(mode, count, palette, accents, notes, has_images=has_images,
+                               outside_only=outside_only)
     view["tasteProfile"] = _taste_profile(mode, keywords, palette)
     if not notes_sent:
         view["subjectBias"] = []

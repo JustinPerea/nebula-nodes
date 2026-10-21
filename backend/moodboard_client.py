@@ -294,7 +294,7 @@ def expand_sources(sources: Iterable[str]) -> list[tuple[str, str]]:
         if source.startswith("/api/outputs/"):
             expanded.append(("output", source))
             continue
-        if "://" in source and not lowered.startswith("file://"):
+        if ("://" in source and not lowered.startswith("file://")) or lowered.startswith(("data:", "blob:", "javascript:")):
             raise MoodboardError(f"{source}: only http and https links can be added")
         path = _local_path(source)
         if path.is_dir():
@@ -1403,9 +1403,19 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
             try:
                 updated, took_base = _put_board(api, str(board["id"]), body, headers, refused_put)
                 previous.update(fields_undo)
-                fields = _fields_slice(at, updated) if took_base else None
-                if fields is not None:
-                    undo_slices.append(fields)
+                # The PUT answers with its own undo (the server's diff of the
+                # board it replaced); a Nebula from before that is read here
+                # the same way, from the board this call sent the PUT over.
+                answered = updated.pop("undo", None)
+                if not took_base:
+                    put_slices: list[dict[str, Any]] = []
+                elif isinstance(answered, dict) and isinstance(answered.get("ops"), list):
+                    put_slices = [item for op in answered["ops"] for item in op.get("slices") or []]
+                else:
+                    fields = _fields_slice(at, updated)
+                    put_slices = [fields] if fields is not None else []
+                if put_slices:
+                    undo_slices.extend(put_slices)
                     previous["undo"] = _undo_token(list(undo_slices))
                 break
             except NebulaAPIError as exc:
@@ -1770,6 +1780,23 @@ def cover_of(board: dict[str, Any]) -> dict[str, Any] | None:
     return {"number": 1, "id": images[0].get("id"), "chosen": False} if images else None
 
 
+# What an agent is told about a board image that links to another site.
+# Anyone who could reach the board routes could have saved the link, so an
+# agent never fetches it on its own: that would tell the host the person's
+# address, the leak the check closes.
+OUTSIDE_NOTE = ("Images marked `outside` are image links from outside Nebula, saved before board images were "
+                "checked: the app shows a placeholder for them, and no run or analysis uses them. Don't fetch "
+                "these links yourself: ask the person whether the link is theirs and they want it used. Only if "
+                "they say yes, add it with moodboard_add (`nebula moodboard add`), which downloads and uploads "
+                "it, then remove the old one. Otherwise they can replace it with an upload in Moodboard Studio.")
+OUTSIDE_PLACEHOLDER = "Image link from outside Nebula (not loaded)"
+# The same for `nebula moodboard show`, which marks such an image with the placeholder.
+OUTSIDE_NOTE_CLI = ("An image link from outside Nebula was saved before board images were checked: the app shows "
+                    "a placeholder for it, and no run or analysis uses it. Ask the person before fetching it; if "
+                    "they want it used, `nebula moodboard add <board> <its link>` (downloads and uploads it), then "
+                    "remove the old one, or they can replace it with an upload in Moodboard Studio.")
+
+
 def brief(board: dict[str, Any], *, layout: bool = False) -> dict[str, Any]:
     """A board as an agent needs it: settings, the brief fields, the brief
     generators get, numbered images, and the analysis.
@@ -1796,9 +1823,16 @@ def brief(board: dict[str, Any], *, layout: bool = False) -> dict[str, Any]:
     `cover` ({number, id}) is the image chosen to open the board on, its
     picture on the canvas card and in lists; with none chosen (or on a
     Nebula without covers) there is no `cover` and the board opens on #1.
-    It is only what the board shows: no generator gets it."""
+    It is only what the board shows: no generator gets it.
+
+    `outside: true` marks an image that is a link to another site, which a
+    board saved before board writes were checked can hold (the backend's
+    `outsideImages`). It stays on the board, but nothing in Nebula loads it:
+    the app shows a placeholder, and runs and the analysis leave it out.
+    `outsideNote` says what to do, once, when there are any."""
     analysis = board.get("analysis") or None
     composed = board.get("brief")
+    outside = {str(image_id) for image_id in board.get("outsideImages") or []}
     view = {
         "id": board.get("id"),
         "name": board.get("name"),
@@ -1818,9 +1852,11 @@ def brief(board: dict[str, Any], *, layout: bool = False) -> dict[str, Any]:
         "images": [
             {"number": index + 1, **{key: image.get(key) for key in ("id", "url", "weight", "notes", "excluded")},
              "setAside": is_set_aside(image),
-             **({"privateNote": image.get("privateNote") or ""} if "privateNote" in image else {})}
+             **({"privateNote": image.get("privateNote") or ""} if "privateNote" in image else {}),
+             **({"outside": True} if str(image.get("id")) in outside else {})}
             for index, image in enumerate(board.get("images") or [])
         ],
+        **({"outsideNote": OUTSIDE_NOTE} if outside else {}),
         # Only when one is chosen, so an old board's view is as it was (the
         # golden file pins it): no `cover` means it opens on #1.
         **({"cover": {key: chosen[key] for key in ("number", "id")}}

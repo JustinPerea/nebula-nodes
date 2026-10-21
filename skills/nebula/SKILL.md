@@ -71,12 +71,18 @@ describe` is `nebula info`.
 | Command | What it does |
 |---|---|
 | `nebula nodes upscale` | Node types whose id or name has every word (`--category image` and so on) |
-| `nebula info <node-id>` | Ports, params, options, defaults and prices (`PRICE:`: at default settings, or the rate a node priced from its input file is checked at); on a node with a Moodboard port, what a wired board does there (`MOODBOARD:`) |
+| `nebula info <node-id>` | Ports, params, options, defaults and prices (`PRICE:`: at default settings, or the rate a node priced from its input file is checked at); on a node with a Moodboard port, what a wired board does there (`MOODBOARD:`). Takes a node's exact name too (`nebula info moodboard`), when one node has it, and says the id it used |
 | `nebula keys` | Which provider keys are set |
 | `nebula spend` | The spending limits you work under, and what you used |
 
 Node ids and params change as models are added. Check `nebula info` instead
-of guessing.
+of guessing. `nebula info` (and `describe`) also takes a node's exact name,
+any case: `nebula info moodboard` answers for `nebula-moodboard` and says so
+on its first line. An id always wins, and a name two nodes share is refused
+with both ids. `apply`, `propose`, `create`, `quick` and `style new/set
+--model` take ids only; given
+a name, they refuse and name the id ("did you mean nebula-moodboard
+(Moodboard)?").
 
 ## Build: `nebula apply`
 
@@ -101,7 +107,10 @@ ports that node has.
 It also prints `Undo: nebula undo <token>`. Run that to take your edit back
 (for 60 minutes, while that project is open): what you added goes, what you
 changed or removed comes back, and anything the person changed since stays
-as it is (the output lists it). A plan of steps prints one line with every
+as it is (the output lists it). A run counts as a change: a node the person
+(or another agent) ran since your edit stays with its params, name and
+input wires ("n3 ran since (run by the person), so it stays"). Nodes only
+you ran still go, so you can undo your own experiments. A plan of steps prints one line with every
 step's token, newest first. Only your own `nebula apply` edits have tokens.
 
 Single edits also exist: `nebula create`, `connect`, `set`, `rename`, `move`,
@@ -126,9 +135,24 @@ out ...`.
   wires) for a model that takes images; `text` and/or `image` out for what it
   makes. An image model's `image` wires onward like any Image output.
 - Replicate: one port per file input, named as the model names it
-  (`input_image`, `image`, `audio`), and one output, `image` for a file or a
-  list of them, else `text`. The model's other inputs are params of the same
-  name: set them with `--param`, don't wire them.
+  (`input_image`, `image`, `audio`), and one output. A file output is typed
+  from the model's own data (a content hint in its schema, else the file its
+  `default_example` run returned): `video`, `audio`, `image`, `svg` or
+  `mesh`; a text model's is `text`. When nothing says, it is `image` with
+  `typeUnconfirmed`, and the apply prints a note (a run then keeps another
+  kind of file under that file's own port, not the guessed one; a node
+  saved before outputs were typed gets the same note: set its model again
+  with `--param model_id=...`). The run fills that port,
+  so wire a video model's `video` into a Video input. The model's other
+  inputs are params of the same name: set them with `--param`, don't wire
+  them.
+
+To see a model's ports before the apply, an agent on Nebula's MCP server
+calls `model_schema(provider, model_id)` (its `ports`, with types) or
+`model_catalog(provider, query)` (each row's `ports`, as ids). They come from
+the same function the apply configures the node with, so wiring exactly those
+ports in the apply that sets the model is accepted. There is no `nebula`
+command for the catalogs yet.
 
 Changing the model of a node with wires on ports the new model lacks (or
 clearing it, or naming one Nebula can't read, which leaves the basic ports)
@@ -377,7 +401,11 @@ nebula moodboard delete <board>
   agent: ask with `POST /api/asset-proposals` (`{"kind": "moodboard", "id":
   "<board id>", "change": {"sendNotes": true}, "note": "..."}`, or
   `propose_asset_change` over MCP), which the person decides in Moodboard
-  Studio; `nebula proposal <id> --wait --timeout 60` follows it. A Moodboard
+  Studio; `nebula proposal <id> --wait --timeout 60` follows it. Every such
+  proposal (a cover, Send notes, Commons curation) also posts an Update in
+  the person's Updates corner ("<you> asks to ...", with Review); a new one
+  on the same target replaces it, and `nebula notes` shows how it ended
+  (an expired one says "Expired" on time; ask again if you still want it). A Moodboard
   node's `send_notes` param (`board`, `yes`, `no`) can
   override it per node; moving it toward sending is also the person's, so
   propose it. That includes pointing a node on `yes` at another board: set
@@ -429,6 +457,15 @@ nebula moodboard delete <board>
   outside Nebula's output folder is refused (422, nothing saved); download
   and upload the image first. A Character saved earlier with a web link
   keeps it, but a run leaves that view out and its notes say so.
+- A board's images are Nebula's own files the same way: `POST`/`PUT
+  /api/moodboards` and the `add` board edit refuse a web link or a `data:`
+  URI (422, nothing saved). `nebula moodboard new`/`add` (and moodboard_create
+  / moodboard_add) download a link and upload it, so pass web images to them.
+  A board saved earlier with a web link keeps it: `show` marks it "[Image
+  link from outside Nebula (not loaded)]", `--json` gives `outside: true`,
+  and a run and the analysis leave it out. Don't fetch it on your own: ask
+  the person before re-adding its link with `add` (that fetches it), then
+  remove the old one; or they replace it with an upload in Moodboard Studio.
 - `set --json` returns `previous`: what your change changed, as it was
   before (only those settings, Direction, Avoid, pinned colours, your own
   hand-written brief, and only the image settings you changed), so undoing
@@ -437,7 +474,10 @@ nebula moodboard delete <board>
   pass `previous` to the MCP tool `moodboard_update` as it is (`undo`
   included). Its `undo` is one checked write: anything someone changed
   again since is left as they set it, and the result says so in `skipped`
-  ("Direction changed since, left as is"). Images you took off with
+  ("Direction changed since, left as is"). The person's own Cmd+Z in
+  Moodboard Studio never undoes your edits, so this is how you take back
+  yours (over HTTP, a `PUT /api/moodboards/{id}` answers with the same
+  `undo`; send its `ops` to `/edits`). Images you took off with
   `--remove` come back with it (an older Nebula's `previous` has no `undo`:
   add them back from `removed` with `nebula moodboard add <board> <url>`). If a `--keep-brief` fails after
   the other changes were saved, the error prints the `previous` that puts
@@ -491,7 +531,16 @@ for your own action. What you noticed, a report or a suggestion goes in
 `nebula note`: the person reads it under Updates in the top right, saved with
 the project (`--board <name>` for a moodboard's, where `#12` names image 12).
 One plain line, 240 characters, at most 6 a minute; never quote a private
-note; `--since-last-turn` for what they changed since your last turn.
+note; `--since-last-turn` for what they changed since your last turn. Your
+proposals outside the canvas post their own Update (you don't post one):
+`nebula notes` lists it with `[outcome]` once it closed.
+
+A project's cover: agents set it (MCP `set_project_cover`) while the person
+hasn't pinned one, and propose a change to the person's pin
+(`propose_asset_change`). A pin whose image is gone (its node deleted) no
+longer counts: `list_project_covers` says `lostPin`, and you may set it.
+A cover proposal's `change.cover.auto` is the image the automatic cover
+shows now (null when the project has none).
 
 ## Save and load
 

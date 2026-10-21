@@ -50,6 +50,15 @@ describe('RecentlyDeletedAssets', () => {
     expect(screen.getByText('Image link from outside Nebula')).toBeTruthy();
   });
 
+  it('never loads a deleted board’s outside thumbnail either (Q98)', async () => {
+    trash.fetchTrash.mockResolvedValue([board({ id: 'b9', name: 'Old board', thumbnail: 'https://example.com/x.png' })]);
+    const { container } = render(<RecentlyDeletedAssets kind="moodboard" scope="global" />);
+    fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
+    expect(screen.getByText('Old board')).toBeTruthy();
+    expect(container.querySelector('img')).toBeNull();
+    expect(screen.getByText('Image link from outside Nebula')).toBeTruthy();
+  });
+
   it('stays hidden while nothing is in the trash', async () => {
     trash.fetchTrash.mockResolvedValue([]);
     const { container } = render(<RecentlyDeletedAssets kind="moodboard" scope="global" />);

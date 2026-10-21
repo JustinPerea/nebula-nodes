@@ -16,6 +16,7 @@ import { viewportRevealing } from '../../lib/canvasFit';
 import { springViewport } from '../../lib/viewportSpring';
 import { selectCanvasList, useAgentNotesStore, type SurfaceList } from '../../store/agentNotesStore';
 import { useCanvasProposalsStore } from '../../store/canvasProposalsStore';
+import { reviewAssetProposal } from '../../lib/assetProposalReview';
 import { useUIStore } from '../../store/uiStore';
 import { AgentNoteCard, AgentNotesSummaryCard } from './AgentNoteCard';
 import { AgentNotesList } from './AgentNotesList';
@@ -554,6 +555,8 @@ function useCanvasAdapter(): AgentNotesAdapter {
       stopReveal.current = springViewport(viewport, target, (next) => { void setViewport(next); });
     },
     runAction: async (_note, action) => {
+      // An asset proposal's Update (Q92 a): go where the person decides it.
+      if (action.op.kind === 'proposal.review') return reviewAssetProposal(action.op);
       const proposals = useCanvasProposalsStore.getState();
       const id = typeof action.op.proposalId === 'string' ? action.op.proposalId : '';
       if (action.op.kind === 'proposal.accept' && proposals.proposals[id]) return proposals.accept(id);
@@ -561,7 +564,8 @@ function useCanvasAdapter(): AgentNotesAdapter {
       throw new Error(`"${action.label}" can't run from the canvas.`);
     },
     actionState: (action) => {
-      if (!action.op.kind.startsWith('proposal.')) return null;
+      // Review's proposal lives off the canvas; the backend resolves its Update when it closes.
+      if (action.op.kind !== 'proposal.accept' && action.op.kind !== 'proposal.reject') return null;
       const id = typeof action.op.proposalId === 'string' ? action.op.proposalId : '';
       return useCanvasProposalsStore.getState().proposals[id] ? null : 'Expired';
     },

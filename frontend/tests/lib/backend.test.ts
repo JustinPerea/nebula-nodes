@@ -766,22 +766,26 @@ describe('browser person link', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('sends the token on writes and the spend view, never on other reads', async () => {
+  it('sends the token on writes, the spend view and Settings, never on other reads', async () => {
     sessionStorage.setItem('nebula.person', JSON.stringify({ token: TOKEN, backend: 'http://127.0.0.1:8131' }));
     const backend = await importFresh();
-    await backend.apiFetch('/api/settings');
+    await backend.apiFetch('/api/graph');
     await backend.apiFetch('/api/agent/spend');
     await backend.apiFetch('/api/settings', { method: 'PUT', body: '{}' });
     await backend.apiFetch('/api/canvas/proposals/p_1/accept', { method: 'POST', body: '{}' });
+    // Only the app gets saved keys' endings (Justin, Q55 a), so its Settings read says it is the person.
+    await backend.apiFetch('/api/settings');
     const header = (index: number) => {
       const init = fetchSpy.mock.calls[index][1] as RequestInit | undefined;
       return init?.headers ? new Headers(init.headers).get('X-Nebula-Person') : null;
     };
-    expect(fetchSpy.mock.calls[0][0]).toBe('http://127.0.0.1:8131/api/settings');
+    expect(fetchSpy.mock.calls[0][0]).toBe('http://127.0.0.1:8131/api/graph');
     expect(header(0)).toBeNull();
     expect(header(1)).toBe(TOKEN);
     expect(header(2)).toBe(TOKEN);
     expect(header(3)).toBe(TOKEN);
+    expect(fetchSpy.mock.calls[4][0]).toBe('http://127.0.0.1:8131/api/settings');
+    expect(header(4)).toBe(TOKEN);
   });
 
   it('never rediscovers another backend after a failed read while pinned', async () => {

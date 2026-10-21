@@ -114,11 +114,13 @@ def test_model_schema_reads_a_replicate_model_into_ports_and_params(nebula):
     schema = mcp_server.model_schema("replicate", "black-forest-labs/flux-kontext-pro")
     assert schema["node"] == "replicate-universal" and schema["param"] == "model_id"
     assert schema["versionId"] == "v123"
-    inputs = {entry["key"]: entry for entry in schema["inputs"]}
-    assert inputs["input_image"]["port"] is True and inputs["prompt"]["port"] is False
-    assert inputs["prompt"]["required"] is True
-    assert inputs["aspect_ratio"]["options"] == ["match_input_image", "1:1", "16:9"]
-    assert inputs["seed"]["min"] == 0
+    # Ports and params from services/universal_ports.py (tests/test_mcp_catalog_ports.py pins the equality).
+    assert [port["id"] for port in schema["ports"]["inputs"]] == ["input_image"]
+    params = {entry["key"]: entry for entry in schema["params"]}
+    assert set(params) == {"prompt", "aspect_ratio", "seed"}
+    assert params["prompt"]["required"] is True
+    assert [option["value"] for option in params["aspect_ratio"]["options"]] == ["match_input_image", "1:1", "16:9"]
+    assert params["seed"]["min"] == 0
     assert schema["inputSchema"] == REPLICATE["input_schema"]
     assert schema["outputSchema"] == REPLICATE["output_schema"]
     with pytest.raises(ValueError, match="owner/name"):
@@ -133,14 +135,13 @@ def test_model_schema_reads_a_replicate_model_into_ports_and_params(nebula):
     ({}, "text"),
 ])
 def test_model_schema_says_which_output_port_to_wire_from(nebula, output_schema, port):
-    """The Replicate node declares no output ports: the run names its output by
-    what Replicate returns (handlers/replicate_universal.py _infer_output_type),
-    so an agent wiring the node onward needs to be told which handle to use."""
+    """The Replicate node's one output port, as the node gets it with this
+    model (services/universal_ports.replicate_output): an agent wiring the
+    node onward wires from it."""
     model_cache.set("replicate:schema:acme/model", {**REPLICATE, "model_id": "acme/model",
                                                    "output_schema": output_schema}, ttl=60)
     schema = mcp_server.model_schema("replicate", "acme/model")
-    assert schema["output"]["port"] == port
-    assert "video" in schema["output"]["note"] and "audio" in schema["output"]["note"]
+    assert [entry["id"] for entry in schema["ports"]["outputs"]] == [port]
 
 
 def test_model_schema_finds_one_catalog_model(nebula):
