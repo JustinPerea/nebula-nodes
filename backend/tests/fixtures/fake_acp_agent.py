@@ -13,6 +13,15 @@ Script keys (all optional):
   junkStdout:       print non-JSON lines on stdout before answering
   grandchild:       path; spawn a sleeping grandchild and write its pid there
   turns:            list of step lists, one per session/prompt (the last repeats)
+  authMethods:      what initialize lists (default [])
+  promptCapabilities: what initialize says prompts may carry (default {})
+  authenticate:     "ok" (default), "error", or "hang" (never answers)
+  configOptions:    session/new's configOptions; session/set_config_option
+                    sets currentValue and answers the full list
+  models:           session/new's legacy models field (session/set_model)
+  logoutCap:        advertise agentCapabilities.auth.logout (default false)
+  env_file:         path; on initialize write {BROWSER, GEMINI_API_KEY set?,
+                    GEMINI_CLI_SYSTEM_SETTINGS_PATH} there
 
 Steps (dicts, run in order):
   {"chunk": text} {"thought": text} {"plan": [entries]}
@@ -180,19 +189,49 @@ def main() -> None:
         params = message.get("params") or {}
         if method == "initialize":
             time.sleep(float(SCRIPT.get("initDelay") or 0))
-            caps = {"loadSession": False, "promptCapabilities": {}, "mcpCapabilities": {"http": False}}
+            caps = {"loadSession": False, "promptCapabilities": SCRIPT.get("promptCapabilities", {}),
+                    "mcpCapabilities": {"http": False}}
             if SCRIPT.get("closeCap", True):
                 caps["sessionCapabilities"] = {"close": {}}
+            if SCRIPT.get("logoutCap"):
+                caps["auth"] = {"logout": {}}
+            if SCRIPT.get("env_file"):
+                with open(SCRIPT["env_file"], "w", encoding="utf-8") as handle:
+                    json.dump({"BROWSER": os.environ.get("BROWSER"),
+                               "GEMINI_API_KEY": os.environ.get("GEMINI_API_KEY"),
+                               "GEMINI_CLI_SYSTEM_SETTINGS_PATH": os.environ.get("GEMINI_CLI_SYSTEM_SETTINGS_PATH")},
+                              handle)
             send({"id": rid, "result": {"protocolVersion": SCRIPT.get("protocolVersion", 1),
                                         "agentCapabilities": caps,
                                         "agentInfo": {"name": "fake-acp-agent", "version": "1.0.0"},
-                                        "authMethods": []}})
+                                        "authMethods": SCRIPT.get("authMethods", [])}})
+        elif method == "authenticate":
+            mode = SCRIPT.get("authenticate", "ok")
+            if mode == "error":
+                send({"id": rid, "error": {"code": -32000, "message": "Authentication failed"}})
+            elif mode != "hang":
+                send({"id": rid, "result": {}})
+        elif method == "logout":
+            send({"id": rid, "result": {}})
+        elif method == "session/set_config_option":
+            options = SCRIPT.get("configOptions") or []
+            for option in options:
+                if option.get("id") == params.get("configId"):
+                    option["currentValue"] = params.get("value")
+            send({"id": rid, "result": {"configOptions": options}})
+        elif method == "session/set_model":
+            send({"id": rid, "result": {}})
         elif method == "session/new":
             time.sleep(float(SCRIPT.get("sessionNewDelay") or 0))
             if SCRIPT.get("sessionNewError"):
                 send({"id": rid, "error": SCRIPT["sessionNewError"]})
             else:
-                send({"id": rid, "result": {"sessionId": session_id}})
+                result = {"sessionId": session_id}
+                if SCRIPT.get("configOptions") is not None:
+                    result["configOptions"] = SCRIPT["configOptions"]
+                if SCRIPT.get("models") is not None:
+                    result["models"] = SCRIPT["models"]
+                send({"id": rid, "result": result})
         elif method == "session/prompt":
             steps = turns[min(prompt_count, len(turns) - 1)]
             prompt_count += 1

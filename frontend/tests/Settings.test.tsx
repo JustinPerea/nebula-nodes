@@ -44,6 +44,7 @@ vi.mock('../src/lib/api', () => ({
   updatePersonalAgent: (...args: unknown[]) => updatePersonalAgentMock(...args),
   createPersonalAgent: (...args: unknown[]) => createPersonalAgentMock(...args),
   deletePersonalAgent: (...args: unknown[]) => deletePersonalAgentMock(...args),
+  antigravityAction: vi.fn(),
 }));
 
 vi.mock('../src/lib/kreaConnection', async (importOriginal) => ({

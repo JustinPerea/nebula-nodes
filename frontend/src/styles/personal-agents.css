@@ -171,3 +171,70 @@
   border-radius: 50%;
   vertical-align: middle;
 }
+
+/* Settings > Personal agents: an agent's own choices (Gemini's key, Antigravity's download and sign-in). */
+.personal-agents__option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.personal-agents__option-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--sr-ink, #f0f0f0);
+}
+
+.personal-agents__fine,
+.personal-agents__terms {
+  display: block;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--sr-ink-muted, #b8b8b8);
+}
+
+.personal-agents__terms {
+  margin-top: 4px;
+  padding: 4px 8px;
+  border-left: 2px solid var(--sr-accent-border, #8a7a3a);
+}
+
+.personal-agents__actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.personal-agents__progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--sr-ink-muted, #b8b8b8);
+}
+
+.personal-agents__progress progress { width: 140px; height: 6px; }
+
+.chat-panel__personal-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.chat-panel__personal-option {
+  max-width: 160px;
+  padding: 1px 4px;
+  border: 1px solid var(--sr-edge, #333);
+  border-radius: 4px;
+  background: var(--sr-canvas, #161616);
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+}
+
+/* The Google sign-in link shown while Antigravity's sign-in waits. */
+.personal-agents__fine a {
+  color: var(--sr-accent, #e8c46a);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

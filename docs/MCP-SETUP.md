@@ -1035,7 +1035,7 @@ also get `outsideSpent`, the shared 24-hour total.
 
 ### Personal agents' session tokens
 
-A personal agent (your own Claude Code, Codex, Gemini or custom ACP agent in the
+A personal agent (your own Claude Code, Codex, Gemini CLI, Antigravity or custom ACP agent in the
 chat panel, [PERSONAL-AGENTS.md](PERSONAL-AGENTS.md)) gets a session token
 that Nebula writes to a 0600 file (`<state dir>/agent-tokens/<pid>/<session>.token`).
 The `env` of this MCP server's entry in ACP `session/new` carries only the
@@ -1143,7 +1143,8 @@ a token file, revoke it in Settings and connect it again.
 
 #### Per app
 
-Formats checked against each app's docs on 2026-10-13.
+Formats checked against each app's docs on 2026-10-13 (Antigravity CLI on
+2026-10-20).
 
 - **Hermes** ([MCP config reference](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/reference/mcp-config-reference.md)).
   Add the entry under `mcp_servers` in `~/.hermes/config.yaml`, then run
@@ -1192,6 +1193,38 @@ Formats checked against each app's docs on 2026-10-13.
   `~/.codex/config.toml`. Add `tool_timeout_sec = 150` there: a run can take
   longer than Codex's 60-second default (`nebula mcp connect codex` sets it
   for you).
+- **Antigravity CLI (`agy`)** (`agy mcp add --help` in agy 1.4.3, checked
+  2026-10-20). In Settings > Connect your agent pick **Other MCP client**,
+  then run:
+
+  ```bash
+  agy mcp add --env NEBULA_URL=http://127.0.0.1:8000 \
+    --env NEBULA_APP_TOKEN_FILE=/Users/you/.nebula/app-tokens/<app id>.token \
+    nebula -- <repo>/backend/.venv/bin/python <repo>/backend/mcp_server.py
+  ```
+
+  Every flag goes before the name (agy rejects one after it), and `--` keeps
+  agy from reading the command's arguments as its own. It writes your
+  user-level `~/.gemini/config/mcp_config.json`. For one project only, put the
+  Other MCP client snippet, unchanged, in `<project>/.agents/mcp_config.json`
+  instead: agy loads `.agents/` from the folder it runs in, once you've trusted
+  that folder. `agy mcp list` shows only the user-level servers.
+
+  agy asks before each Nebula tool call. A headless run (`agy -p`) can't ask,
+  so it denies the call and prints the rule it needs. To allow them, add
+  `"mcp(nebula/*)"` to `permissions.allow` in
+  `~/.gemini/antigravity-cli/settings.json`; that allows every Nebula tool,
+  including the ones that run nodes, which still spend only inside the app's
+  daily limit.
+
+  To read a board, ask in plain words: "Use the nebula tools: call
+  look_at_canvas, then view_output on the image node, and tell me what it
+  shows", or for a moodboard, "call moodboard_list, then moodboard_get on my
+  board 'Autumn campaign' and summarise its brief". agy passes the images
+  `view_output` returns to its model: on 2026-10-20 agy 1.4.3 with
+  `gemini-3.8-flash-low`, set up from a project's `.agents/mcp_config.json`,
+  read three random capital letters from an image node that way (the
+  per-client image check the moodboard plan's PR10c asks for).
 - **Other MCP clients**: the usual `{"mcpServers": {"nebula": {command, args,
   env}}}` block.
 
