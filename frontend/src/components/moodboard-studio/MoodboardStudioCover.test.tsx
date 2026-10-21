@@ -285,4 +285,46 @@ describe('a cover picked on a board not saved yet', () => {
     expect(server.board.coverImageId).toBe('n2');
     expect(preview()).toBe('/api/outputs/n2.png');
   });
+
+  it('a pick and the removal of that image while the board is being made still save (never one refused batch)', async () => {
+    let made: (board: Moodboard) => void = () => {};
+    api.createMoodboard.mockImplementation((body: Partial<Moodboard>) => new Promise<Moodboard>((resolve) => {
+      made = resolve;
+      server.board = withThumbnail({ ...server.board, ...body, id: 'made1', version: 1 } as Moodboard);
+    }));
+    // The backend's rule (services/moodboard_edits.apply_edits): the batch's
+    // last cover pick must still be on the board after it.
+    const refused: MoodboardOp[][] = [];
+    const accept = api.editMoodboard.getMockImplementation()!;
+    api.editMoodboard.mockImplementation(async (id: string, ops: MoodboardOp[], baseVersion?: number) => {
+      const picks = ops.filter((op): op is Extract<MoodboardOp, { op: 'cover' }> => op.op === 'cover');
+      const last = picks[picks.length - 1];
+      const gone = ops.flatMap((op) => (op.op === 'remove' ? op.images : []));
+      if (last?.image && gone.includes(last.image)) {
+        refused.push(ops);
+        throw new Error(`ops[0] (cover): image can't be the cover and come off the board in one batch: pick one`);
+      }
+      return accept(id, ops, baseVersion);
+    });
+    act(() => { useUIStore.getState().enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, 'global'); });
+    render(<MoodboardStudioView />);
+    await screen.findByDisplayValue('Untitled Moodboard');
+    const key = assetStudioDraftKey('moodboard', 'global', NEW_MOODBOARD_SENTINEL, 'p1');
+    act(() => {
+      useAssetStudioDraftStore.getState().edit(key, (draft) => ({ ...(draft as object), name: 'Fresh',
+        images: [image('n1'), image('n2')] }));
+    });
+    await waitFor(() => expect(api.createMoodboard).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    // While the create is out: pick #2, then take #2 off.
+    fireEvent.click(await screen.findByRole('button', { name: 'Use #2 as cover' }));
+    fireEvent.click(document.querySelectorAll<HTMLButtonElement>('.moodboard-tile__remove')[1]);
+    expect(caption()).toBe('Cover: #1, the first image');
+    await act(async () => { made(clone(server.board)); });
+
+    await waitFor(() => expect(server.board.images.map((img) => img.id)).toEqual(['n1']), { timeout: 3000 });
+    expect(refused).toEqual([]);
+    expect(server.board.coverImageId).toBeNull();
+    expect(caption()).toBe('Cover: #1, the first image');
+    expect(document.querySelector('.moodboard-studio__notice--error')).toBeNull();
+  });
 });

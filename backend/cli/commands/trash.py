@@ -1,8 +1,9 @@
-"""`nebula trash list|restore`: Recently deleted moodboards, characters and projects.
+"""`nebula trash list|restore`: Recently deleted moodboards, characters, Styles and projects.
 
 Anyone may restore, agents included: a restore undoes a delete. Deleting for
 good can't be undone, so it is the person's alone and has no CLI command; the
-person does it in Nebula (Moodboard Studio, Character Studio or Projects).
+person does it in Nebula (Moodboard Studio, Character Studio, the Assets
+panel's Styles tab or Projects).
 """
 from __future__ import annotations
 
@@ -13,7 +14,7 @@ from typing import Any, TextIO
 
 from ..client import NebulaClient
 
-KINDS = ("moodboard", "character", "project")
+KINDS = ("moodboard", "character", "style", "project")
 
 
 def _who(item: dict[str, Any]) -> str:
@@ -50,7 +51,7 @@ def run_list(client: NebulaClient, *, kind: str | None = None, as_json: bool = F
     print(f"RECENTLY DELETED ({len(items)}):", file=out)
     for item in items:
         scope = ""
-        if item.get("kind") in ("moodboard", "character"):
+        if item.get("kind") in ("moodboard", "character", "style"):
             scope = f"  [project {item['projectId']}]" if item.get("projectId") else "  [global]"
         expiry = f", removed for good after {str(item['purgeAt'])[:10]}" if item.get("purgeAt") else ""
         print(f"  {item.get('kind', '?'):<9} {item.get('id')}  {item.get('name') or 'Untitled'}{scope}"
@@ -83,6 +84,8 @@ def run_restore(client: NebulaClient, target: list[str], *, out: TextIO | None =
     print(f"Restored {kind} {item_id} ({name}).", file=out)
     if kind == "project":
         print(f"It is back in the project list, closed. `nebula project open {item_id}` opens it.", file=out)
+    elif kind == "style":
+        print("It is back in the Styles list (Create and the Assets panel).", file=out)
     else:
         print("Nodes that point at it work again.", file=out)
     return 0

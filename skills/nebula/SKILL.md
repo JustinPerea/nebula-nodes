@@ -200,6 +200,9 @@ nebula moodboard set <board> --keep-anyway "#a6392d"     # put a left-out colour
 nebula moodboard set <board> --leave-out "#1c70f2"       # or --leave-out-flagged, --reset-color HEX
 nebula moodboard set <board> --clash-mode flag           # leave-out (default), flag, no-measured, keep-all
 nebula moodboard set <board> --restore set-output.json  # undo: the `set --json` output
+nebula moodboard edit <board> --place 12=200,40 --resize 3=0.6   # move and resize cards
+nebula moodboard edit <board> --in 5=Dither --link 5=Glass --say "Grouped the warm ones"
+nebula moodboard edit <board> --undo edit-output.json   # undo: the `edit --json` output
 nebula moodboard analyze <board>
 nebula moodboard analyze <board> --dry-run --merge-delta-e 8   # preview; saves nothing
 nebula moodboard analyze <board> --read-with gemini-4-argon --estimate          # the price; reads nothing
@@ -268,8 +271,18 @@ nebula moodboard delete <board>
   weight, and `frameId`, the frame it is in or null) and the board's
   `frames`. A card's size is its weight (full weight is 480x270). The layout
   never steers: it isn't in the analysis or the brief. New images land
-  after the last one, and `--weight` resizes the image's card. The CLI can't
-  move cards yet.
+  after the last one, and `--weight` resizes the image's card.
+- `edit` moves cards, the same checked edits the person's drags in the
+  Studio's Board view send: `--place CARD=X,Y` (top-left, board pixels),
+  `--resize CARD=0.6` or `CARD=480x270` (it keeps its aspect), `--in
+  CARD=LOOK`, `--link IMAGE=LOOK`, `--set-aside`, `--use`, `--note`,
+  `--private-note`, and `--ops FILE` for any other ops as JSON (contract 07
+  section 1.12; MCP `moodboard_edit(board, ops)`). A CARD is the image's
+  number when it has one card, else `12@Dither` or a card id from `show
+  --json`. Say what you did with `--say` (the person reads it in the Agent
+  log). It all lands or none of it, and an open Studio shows it at once. It
+  prints how to undo it; `--undo` with its `--json` output puts back only
+  what is still as you left it and says what changed since.
 - Your changes never overwrite the person's: `add` lands on the board as it
   is saved, and an open Moodboard Studio shows it at once and keeps what the
   person was typing. If a write says the board changed since you read it,
@@ -384,6 +397,32 @@ nebula moodboard delete <board>
   Recently deleted, a delete would be for good, so it's refused: ask the
   person, or take images off the board instead.
 - `--json` on any of them prints the board as JSON.
+
+## Styles
+
+A Style is a saved look the person applies in Create (and sees in the Assets
+panel's Styles tab): a prompt fragment, optionally with a model and its
+settings. Name one by id or exact name.
+
+```bash
+nebula style list                       # Global Styles plus the open project's
+nebula style show "Neon noir"
+nebula style new "Neon noir" --prompt "neon noir, wet streets" \
+  --model nano-banana --params '{"aspect_ratio": "3:4"}'
+nebula style set "Neon noir" --prompt "neon noir, rain" --json   # save this reply as undo.json
+nebula style set "Neon noir" --restore undo.json   # undo that change
+nebula style delete "Neon noir"         # to Recently deleted
+nebula trash restore style <id>         # bring it back, same id
+```
+
+- New Styles are Global unless `--project current` (or an id) keeps one in
+  a canvas project.
+- `set` is a checked write: if someone saved the Style since you read it,
+  nothing is written; read it again. `--params` replaces the settings whole.
+  `--restore` undoes your change and is refused once someone changed it again.
+- Who bills a Style's model (`_provider`, `_kreaAuth`) is the person's call:
+  leave those out. Internal `_` params are refused.
+- Deleting for good is the person's, in the app.
 
 ## Watch and answer the person
 

@@ -8761,7 +8761,7 @@ def _refuse_agent_internal_params(params: Mapping[str, Any], label: str) -> None
 
 
 def _stored_asset(kind: str, asset_id: str) -> dict[str, Any] | None:
-    store = _moodboard_store() if kind == "moodboard" else _char_store()
+    store = _asset_store(kind)
     try:
         return store.get(asset_id)
     except ValueError:  # not an id the store can hold
@@ -8774,7 +8774,7 @@ def _asset_out(kind: str, asset: dict[str, Any]) -> dict[str, Any]:
 
 
 def _trashed_asset(kind: str, asset_id: str) -> dict[str, Any] | None:
-    store = _moodboard_store() if kind == "moodboard" else _char_store()
+    store = _asset_store(kind)
     try:
         return store.trashed(asset_id)
     except ValueError:
@@ -12174,6 +12174,9 @@ class PresetUpdate(BaseModel):
     refImages: list[str] | None = None
     thumbnail: str | None = None
     paramsVersion: Any = None
+    # The Style's ``version`` the caller read: a checked write (409 when it
+    # moved on). The MCP's style_update and `nebula style set` send it.
+    baseVersion: Any = None
 
 
 def _preset_params_version(body: BaseModel, missing: int) -> int:
@@ -12275,8 +12278,9 @@ def _require_canvas_project(project_id: str | None) -> None:
 async def _broadcast_stored_asset(kind: str, asset: Mapping[str, Any] | None, asset_id: str = "",
                                   *, deleted: bool = False, moved: bool = False,
                                   edit: Mapping[str, Any] | None = None) -> None:
-    """Tell canvases a saved moodboard or character changed, so a card that
-    shows it (MoodboardNode, CharacterNode) fetches it again. A move also
+    """Tell canvases a saved moodboard, character or Style (kind "style")
+    changed, so a card that shows it (MoodboardNode, CharacterNode) or a list
+    of them (the Assets panel, Create's Styles) fetches it again. A move also
     says where it lives now (``projectId``, null for Global), so a Studio
     draft kept for it this session follows (frontend assetStudioDraftStore
     ``rehome``).
@@ -12988,7 +12992,10 @@ async def move_character(char_id: str, body: AssetMoveBody) -> dict:
 # until the person deletes them for good; projects keep their 30-day expiry
 # (services/project_store.py TRASH_RETENTION).
 
-TRASH_KINDS = ("moodboard", "character", "project")
+TRASH_KINDS = ("moodboard", "character", "style", "project")
+# The kinds kept in a store's own .trash folder (services/asset_trash.py);
+# projects keep theirs in the catalog. Styles joined 2026-10-20 (Q53 a).
+_ASSET_TRASH_KINDS = ("moodboard", "character", "style")
 _RESTORE_HINT = ("Deleting for good can't be undone, so only the person can. You can restore it instead: "
                  "nebula trash restore <kind> <id>, the restore_from_trash tool, or "
                  "POST /api/trash/<kind>/<id>/restore.")
@@ -13001,10 +13008,14 @@ def _trash_kind(kind: str) -> str:
 
 
 def _asset_store(kind: str):
+    if kind == "style":
+        return preset_store
     return _moodboard_store() if kind == "moodboard" else _char_store()
 
 
 def _asset_noun(kind: str) -> str:
+    if kind == "style":
+        return "Style"
     return "Moodboard" if kind == "moodboard" else "Character"
 
 
@@ -13048,7 +13059,7 @@ async def list_trash(kind: str | None = None, scope: str | None = None,
         _trash_kind(kind)
     _trash_scope(scope, projectId)
     items: list[dict[str, Any]] = []
-    for asset_kind in ("moodboard", "character"):
+    for asset_kind in _ASSET_TRASH_KINDS:
         if kind in (None, asset_kind):
             try:
                 items.extend(_asset_store(asset_kind).list_trash(scope=scope, projectId=projectId))
@@ -13085,6 +13096,8 @@ async def restore_trashed(kind: str, item_id: str) -> dict[str, Any]:
     await _broadcast_stored_asset(kind, asset)
     if kind == "moodboard":
         await _say_agent_action(moodboard_actions.describe_write("restored", asset))
+    if kind == "style":  # broadcast above
+        await _style_written("restored", asset, broadcast=False)
     # Read back through the store, as GET does (a board gets its brief).
     return {"restored": kind, "id": item_id, "asset": _asset_out(kind, _stored_asset(kind, item_id) or asset)}
 
@@ -13097,6 +13110,7 @@ async def purge_trashed(kind: str, item_id: str) -> dict[str, Any]:
     if kind == "project":
         await purge_trashed_project(item_id)
         return {"purged": "project", "id": item_id}
+    record = _trashed_asset(kind, item_id) if kind == "style" else None
     try:
         _asset_store(kind).purge(item_id)
     except ValueError as exc:
@@ -13105,6 +13119,8 @@ async def purge_trashed(kind: str, item_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail=f"{_asset_noun(kind)} '{item_id}' isn't in Recently deleted")
     # A card that showed it "in Recently deleted" now says it's gone.
     await _broadcast_stored_asset(kind, None, item_id, deleted=True)
+    if kind == "style":
+        _journal_style("purged", record, style_id=item_id)
     return {"purged": kind, "id": item_id}
 
 
@@ -13123,7 +13139,7 @@ async def empty_trash(kind: str | None = None, scope: str | None = None,
     require_person(current_request_headers(), hint=_RESTORE_HINT)
     shown = _shown_trash_items(body)
     purged = 0
-    for asset_kind in ("moodboard", "character"):
+    for asset_kind in _ASSET_TRASH_KINDS:
         if kind in (None, asset_kind):
             store = _asset_store(asset_kind)
             for record in store.list_trash(scope=scope, projectId=projectId):
@@ -13135,6 +13151,8 @@ async def empty_trash(kind: str | None = None, scope: str | None = None,
                     continue
                 purged += 1
                 await _broadcast_stored_asset(asset_kind, None, record["id"], deleted=True)
+                if asset_kind == "style":
+                    _journal_style("purged", record, style_id=record["id"])
     if kind in (None, "project") and scope is None:
         with project_store.transaction() as catalog:
             trash = catalog.get("trash") or {}
@@ -13190,19 +13208,23 @@ async def create_preset(body: PresetCreate) -> dict:
         _require_canvas_project(body.projectId)
     else:
         _validate_project_id_param(body.projectId)
-    # Create's "Save current" sends the version its draft is at. Main's bundle
-    # (a tab open across an update) POSTs without the key, and nothing else
-    # posts presets (no agent, CLI or MCP tool), so a body without it holds
+    # Create's "Save current" sends the version its draft is at, and so do
+    # the MCP's style_create and `nebula style new` (the version of the code
+    # they run). Main's bundle from before the marker (a tab open across an
+    # update) POSTs without the key, so a body without it is read as holding
     # params from before every upgrade: version 0 (services/saved_graph_upgrades.py).
     params_version = _preset_params_version(body, 0)
+    _check_style_write(body.name, body.modelId, body.params, None)
     try:
-        return preset_store.create(
+        preset = preset_store.create(
             name=body.name, category=body.category, prompt=body.prompt, params=body.params,
             modelId=body.modelId, refImages=body.refImages, scope=body.scope, projectId=body.projectId,
             thumbnail=body.thumbnail, params_version=params_version,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    await _style_written("created", preset)
+    return preset
 
 
 @app.get("/api/presets/thumbnails/{slug}")
@@ -13227,7 +13249,8 @@ async def get_preset_thumbnail(slug: str):
 async def get_preset(preset_id: str) -> dict:
     preset = preset_store.get(preset_id)
     if preset is None:
-        raise HTTPException(status_code=404, detail="preset not found")
+        # In Recently deleted: say so (code "in_trash", with the record).
+        return _asset_not_found("style", preset_id)
     return preset
 
 
@@ -13235,35 +13258,171 @@ async def get_preset(preset_id: str) -> dict:
 async def update_preset(preset_id: str, body: PresetUpdate) -> dict:
     # No bundle sends PUT (old or new), so a caller here is deliberate API use
     # writing params now: a body without the key is taken as current.
+    from services.preset_store import VersionConflict
+
     params_version = _preset_params_version(body, PARAMS_VERSION)
-    fields = body.model_dump(exclude_none=True, exclude={"paramsVersion"})
+    base_version = _style_base_version(body.baseVersion)
+    fields = body.model_dump(exclude_none=True, exclude={"paramsVersion", "baseVersion"})
+    before = preset_store.get(preset_id)
+    if before is None:
+        return _asset_not_found("style", preset_id)
+    if "params" in fields:
+        fields["params"] = _style_params_keeping_internal(before.get("params") or {}, fields["params"])
+    after_model = fields.get("modelId", before.get("modelId")) or None
+    _check_style_write(fields.get("name", before.get("name")), after_model,
+                       fields.get("params", before.get("params") or {}),
+                       before if after_model == (before.get("modelId") or None) else None,
+                       before_params=before.get("params") or {})
     try:
-        return preset_store.update(preset_id, params_version=params_version, **fields)
+        preset = preset_store.update(preset_id, params_version=params_version, base_version=base_version, **fields)
     except KeyError:
-        raise HTTPException(status_code=404, detail="preset not found")
+        # In Recently deleted since the read (an agent may have deleted it).
+        return _asset_not_found("style", preset_id)
+    except VersionConflict as exc:
+        return JSONResponse(status_code=409, content={
+            "detail": (f"The Style changed since you read it: it is at version {exc.preset.get('version')}. "
+                       "Read it again (the Style is in this answer), redo your change on it and send it "
+                       "with that baseVersion."),
+            "code": "version_conflict",
+            "version": exc.preset.get("version"),
+            "style": exc.preset,
+        })
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    from services.style_actions import changed_fields
+
+    await _style_written("updated", preset, fields=changed_fields(before, preset))
+    return preset
 
 
 @app.delete("/api/presets/{preset_id}")
 async def delete_preset(preset_id: str) -> dict:
+    """Move a Style to Recently deleted. Anyone, agents included, may: it
+    can be restored (POST /api/trash/style/{id}/restore). Deleting it for
+    good is the person's (DELETE /api/trash/style/{id})."""
     try:
-        preset_store.delete(preset_id)
-    except KeyError:
-        raise HTTPException(status_code=404, detail="preset not found")
-    return {"status": "deleted", "id": preset_id}
+        record = preset_store.delete(preset_id, deleted_by=actor_record(actor_for_headers(current_request_headers())))
+    except (KeyError, ValueError):
+        raise HTTPException(status_code=404, detail=f"Style '{preset_id}' not found")
+    await _style_written("deleted", record, deleted=True)
+    return {"status": "trashed", "id": preset_id, "trashed": record}
+
+
+# Styles: who may write what, and what every write tells the others.
+
+def _style_base_version(raw: Any) -> int | None:
+    if raw is None:
+        return None
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        raise HTTPException(status_code=422, detail="baseVersion must be a whole number: the Style's version you read")
+    return raw
+
+
+def _check_style_write(name: Any, model_id: str | None, params: Mapping[str, Any],
+                       before: Mapping[str, Any] | None, *, before_params: Mapping[str, Any] | None = None) -> None:
+    """The node routes' rules, for a Style's params: applying a Style in
+    Create puts its params on the draft, billing included, so a Style is
+    held to what a node edit is.
+
+    - An agent may not write an internal (``_``) param it didn't read back
+      unchanged (``_refuse_agent_internal_params``).
+    - Nobody but the person may make a Style that changes who bills its
+      model's run (``_provider``, ``_kreaAuth``; ``_refuse_agent_billing_change``).
+      ``before`` is the Style as it was when the model stays the same.
+    - An agent's ``modelId`` must be a node in the catalog."""
+    params = params if isinstance(params, Mapping) else {}
+    label = f"Style “{str(name or '')[:60]}”"
+    if has_agent_marker(current_request_headers()):
+        was = before_params if before_params is not None else {}
+        _refuse_agent_internal_params({key: value for key, value in params.items()
+                                       if key not in was or was.get(key) != value}, "style")
+        if model_id and node_registry.get(model_id) is None:
+            raise HTTPException(status_code=400, detail=(
+                f"style.modelId: there's no node {str(model_id)[:64]!r}; find_nodes (`nebula nodes`) lists them"))
+    if model_id:
+        try:
+            _refuse_agent_billing_change([(label, model_id, (before or {}).get("params") if before else None, params)])
+        except HTTPException as exc:
+            # The node sentences end "propose the change instead with
+            # propose_change"; a Style change can't be proposed.
+            if exc.status_code == 403 and isinstance(exc.detail, str):
+                exc.detail = _STYLE_PROPOSE_RE.sub(_STYLE_BILLING_INSTEAD, exc.detail)
+            raise
+
+
+_STYLE_PROPOSE_RE = re.compile(
+    r",? and propose the change instead with propose_change \(`nebula propose`\); "
+    r"the person accepts it on the canvas\.")
+_STYLE_BILLING_INSTEAD = (
+    " (or leave it out: the model's default). A Style change can't be proposed: ask the person to "
+    "pick it in Create and save the Style there.")
+
+
+def _style_params_keeping_internal(before: Mapping[str, Any], params: Any) -> Any:
+    """An agent's ``params`` for a Style, with the Style's internal (``_``)
+    params it left out put back. An agent can't write those (it may only send
+    them back unchanged), so it can't take them off either; then the
+    ``previous`` an update returns undoes it. Billing params aren't internal:
+    leaving them out is a billing change, which the billing rule judges. The
+    person's own save replaces the settings whole."""
+    if not isinstance(params, Mapping) or not has_agent_marker(current_request_headers()):
+        return params
+    kept = {key: before[key] for key in internal_keys(before) if key not in params}
+    return {**kept, **params} if kept else params
+
+
+def _journal_style(change: str, style: Mapping[str, Any] | None, *, style_id: str = "",
+                   fields: list[str] | None = None) -> str:
+    """One ``style.*`` journal event in the caller's name; returns its line."""
+    from services import style_actions
+
+    line = style_actions.describe(change, style, fields=fields, style_id=style_id)
+    _journal(f"style.{change}", data=style_actions.journal_data(style, fields=fields, style_id=style_id),
+             summary=line)
+    return line
+
+
+async def _style_written(change: str, style: Mapping[str, Any], *, fields: list[str] | None = None,
+                         deleted: bool = False, broadcast: bool = True) -> None:
+    """After a Style write: the journal, ``storedAssetChanged`` (kind
+    "style") so the Assets panel and Create's Styles list again, and, for an
+    agent, the same line in the Agent log."""
+    from services import style_actions
+
+    style_id = str(style.get("id") or "")
+    line = _journal_style(change, style, style_id=style_id, fields=fields)
+    if broadcast:
+        await _broadcast_stored_asset("style", None if deleted else style, style_id, deleted=deleted)
+    await _say_agent_action(style_actions.sentence(line))
 
 
 # ---------- Preset seeding (first-run starter styles) ----------
 
 _PRESET_SEED_PATH = Path(__file__).resolve().parent / "data" / "presets" / "seed.json"
+# A dot file in the preset root: the stores and the re-home skip dot names.
+_PRESET_SEEDED_MARKER = ".seeded"
+
+
+def _mark_presets_seeded(marker: Path) -> None:
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text("seeded starter Styles once; delete this file to seed them again\n", encoding="utf-8")
 
 
 def seed_presets_if_empty() -> None:
     """Populate the global preset store with shipped starter styles on first run.
     Idempotent: does nothing if any global preset already exists."""
     try:
-        if preset_store.list("global"):
+        # Once seeded, never again: the person may delete the starters, in
+        # Recently deleted or for good, and they mustn't come back on the next
+        # start. An install from before the marker that has a global Style
+        # (live or in Recently deleted) was seeded.
+        from services.preset_store import store_root as _preset_root
+
+        marker = _preset_root() / _PRESET_SEEDED_MARKER
+        if marker.exists():
+            return
+        if preset_store.list("global") or preset_store.list_trash(scope="global"):
+            _mark_presets_seeded(marker)
             return
         if not _PRESET_SEED_PATH.exists():
             return
@@ -13274,6 +13433,7 @@ def seed_presets_if_empty() -> None:
                 params=s.get("params", {}), modelId=s.get("modelId"), refImages=s.get("refImages", []),
                 scope="global", projectId=None, params_version=PARAMS_VERSION,
             )
+        _mark_presets_seeded(marker)
     except Exception as exc:  # never let seeding break boot
         print(f"[presets] seed failed: {exc}", flush=True)
 

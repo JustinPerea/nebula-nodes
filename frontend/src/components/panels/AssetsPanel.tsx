@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { DragEvent as ReactDragEvent, ReactNode } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { X } from 'lucide-react';
@@ -18,6 +19,8 @@ import { moveChoices } from '../../lib/assetMove';
 import { moodboardImagesLabel, setAsideCount } from '../../lib/moodboardCount';
 import { AssetMoveMenu } from '../asset-move/AssetMoveMenu';
 import { useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
+import { RecentlyDeletedAssets, UndoDeleteToast } from '../asset-trash/AssetTrash';
+import { useAssetDelete } from '../../hooks/useAssetDelete';
 import '../../styles/panels.css';
 import '../../styles/character-studio.css';
 import '../../styles/moodboard-studio.css';
@@ -42,7 +45,9 @@ const TABS: Array<{ id: Tab; label: string }> = [
  * "Add to canvas" (or dragging the item) puts a Character or Moodboard node
  * on the canvas through the existing add*Node paths + drag MIMEs. "Move"
  * files a Character or Moodboard under Global or the open project
- * (contract 07, 1.10).
+ * (contract 07, 1.10). Styles have no Studio, so their Delete is here: it
+ * moves the Style to Recently deleted with an Undo toast, and Recently
+ * deleted lists under the Styles, as in the Studios (Q53 a, 2026-10-20).
  */
 export function AssetsPanel() {
   const togglePanel = useUIStore((s) => s.togglePanel);
@@ -182,6 +187,15 @@ export function AssetsPanel() {
     setMovingId(null);
   };
 
+  // Delete a Style: it goes to Recently deleted, and Undo brings it back.
+  const deleting = useAssetDelete('style');
+  const deleteStyle = async (p: Preset) => {
+    const removed = await deleting.remove({ id: p.id, name: p.name, scope });
+    if (removed) setSelected(null);
+    setRelistKey((value) => value + 1);
+  };
+  const relist = () => setRelistKey((value) => value + 1);
+
   const applyStyle = (p: Preset) => {
     // Hand the preset to Create (consumed on mount) and switch surfaces.
     setPendingPreset(p);
@@ -268,6 +282,9 @@ export function AssetsPanel() {
           {moveError && (
             <div className="character-palette__empty character-palette__empty--error" role="alert">{moveError}</div>
           )}
+          {tab === 'styles' && deleting.error && !deleting.lastDeleted && (
+            <div className="character-palette__empty character-palette__empty--error" role="alert">{deleting.error}</div>
+          )}
 
           {!noProject && !busy && !failed && tab === 'characters' && (
             filteredCharacters.length === 0 ? (
@@ -336,12 +353,26 @@ export function AssetsPanel() {
                   onSelect={() => setSelected(`styles:${p.id}`)}
                   onOpen={() => applyStyle(p)}
                   openLabel="Use in Create"
+                  onDelete={() => { void deleteStyle(p); }}
+                  deleteBusy={deleting.busy}
                 />
               ))
             )
           )}
+          {!noProject && tab === 'styles' && (
+            <RecentlyDeletedAssets kind="style" scope={scope} refreshKey={deleting.refreshKey}
+              onRestored={relist} onTrashChanged={relist} />
+          )}
         </ScrollFade>
       </ScrollFade>
+      {/* On the page, not in the panel: the dock panel is a containing block
+          for fixed children, which would pin the toast to the panel's edge. */}
+      {deleting.lastDeleted && createPortal(
+        <UndoDeleteToast key={deleting.lastDeleted.id} name={deleting.lastDeleted.name} busy={deleting.busy}
+          error={deleting.error} onDismiss={deleting.dismiss}
+          onUndo={() => { void deleting.undo().then((asset) => { if (asset) relist(); }); }} />,
+        document.body,
+      )}
     </div>
   );
 }
@@ -362,6 +393,8 @@ function AssetItem({
   onAdd,
   onDragStart,
   move,
+  onDelete,
+  deleteBusy = false,
 }: {
   name: string;
   sub: ReactNode;
@@ -375,6 +408,9 @@ function AssetItem({
   onDragStart?: (e: ReactDragEvent<HTMLButtonElement>) => void;
   /** The Move menu (Characters and Moodboards). */
   move?: ReactNode;
+  /** Styles: move it to Recently deleted (an Undo toast follows). */
+  onDelete?: () => void;
+  deleteBusy?: boolean;
 }) {
   const label = name || 'Untitled';
   return (
@@ -412,6 +448,12 @@ function AssetItem({
             </button>
           )}
           {move}
+          {onDelete && (
+            <button type="button" className="assets-item__action" onClick={onDelete} disabled={deleteBusy}
+              title="Move to Recently deleted" aria-label={`Delete ${label}`}>
+              Delete
+            </button>
+          )}
         </div>
       )}
     </div>
