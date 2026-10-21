@@ -3,6 +3,7 @@ import { commonsEvaluationApi as api } from '../../lib/commonsApi';
 import { evaluationComplete } from '../../lib/commonsEvaluationTypes';
 import type { AccentPoint, EvaluationBatch, EvaluationItem, EvaluationLabels } from '../../lib/commonsEvaluationTypes';
 import { CommonsCloseBatch } from './CommonsCloseBatch';
+import { SectionEyebrow } from './CommonsSectionEyebrow';
 import '../../styles/commons-evaluation.css';
 
 const pretty = (value: string) => value === 'n_a' ? 'Not applicable' : value.replaceAll('_', ' ');
@@ -38,19 +39,19 @@ export function CommonsEvaluation({ onDirtyChange }: { onDirtyChange?: (dirty: b
     try { setBatch(await action()); setDirty(false); } catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
   }
-  // The panel's name, in full, at every width (GM review of p157: folded into
-  // More, the panel had no title anywhere). Under the page's h1, "Commons";
-  // the panel's own title and steps sit below it.
-  const title = <h2 id={headingId} className="commons-heading commons-panel-title">Blind labeling</h2>;
+  // The section's name is its h2, set as the eyebrow line and merged with
+  // the old eyebrow (GM review of PR #157, round 2), at every width. Under
+  // the page's h1, "Commons"; the display line is a styled p, and the steps
+  // are h3 under the h2.
+  const eyebrow = <SectionEyebrow id={headingId} name="Blind labeling" detail="C1 / C2 human ground truth" />;
   if (loading) return <section className="commons-evaluation" aria-labelledby={headingId}>
-    {title}
+    <header className="evaluation-heading"><div>{eyebrow}</div></header>
     <p className="commons-notice">Loading held-out references…</p>
   </section>;
   const count = batch?.items.filter((item) => evaluationComplete(item, batch)).length ?? 0;
   return <section className="commons-evaluation" aria-labelledby={headingId}>
-    {title}
     <header className="evaluation-heading">
-      <div><small>C1 / C2 · HUMAN GROUND TRUTH</small><h3 className="evaluation-title">A fresh pair of eyes.</h3>
+      <div>{eyebrow}<p className="evaluation-title">A fresh pair of eyes.</p>
         <p>Describe what you see. Accent observations come before palette swatches.</p></div>
       {batch && <button className="commons-button" disabled={busy || dirty} onClick={() => setReview(!review)}>
         {review ? 'Keep labeling' : `Review batch · ${count} / 15`}</button>}

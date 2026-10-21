@@ -85,7 +85,8 @@ body.app-slava-restraint .agent-notes-root {
   outline-offset: 2px;
 }
 
-/* The ring shows for as long as a card is up, in the newest author's colour. */
+/* The ring shows whenever there is anything unread and the list is closed,
+ * at any count (GM review of PR #157, round 2), in the newest author's colour. */
 .agent-notes-chip::after {
   content: '';
   position: absolute;
@@ -142,13 +143,17 @@ body.app-slava-restraint .agent-notes-root {
 .agent-notes-chip__count {
   margin-left: 4px;
   color: var(--an-ink-bold);
-  font: 700 12px/1 var(--an-mono);
+  font: 600 12px/1 var(--an-mono);
   font-variant-numeric: tabular-nums;
 }
 
+/* One face for every count (GM review of PR #157, round 2): the muted 0 dims
+ * by colour only. It used to drop to weight 500 while an unread count asked
+ * for 700, which the bundled JetBrains Mono doesn't ship (400, 500, 600), so
+ * the two were drawn from different instances of the face and read as two
+ * fonts. 600 is the heaviest weight shipped. */
 .agent-notes-chip__count[data-muted='true'] {
   color: var(--an-faint);
-  font-weight: 500;
 }
 
 .agent-notes-chip__count[data-pop='true'] {

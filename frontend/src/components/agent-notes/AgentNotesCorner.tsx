@@ -652,7 +652,10 @@ export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSecti
   const count = open ? 0 : unread;
   const authors = chipAuthors(notes);
   const unreadKinds = new Set(notes.filter(isUnread).map((n) => n.author.kind));
-  const ringed = Boolean(card) && !leaving && !open;
+  // The ring is the unread signal itself: on at any unread count, 1 included,
+  // while the list is closed (GM review of PR #157, round 2: it used to show
+  // only while a card was up, so a lone unread was left to a white figure).
+  const ringed = count > 0;
   const rootStyle = springCssVars() as CSSProperties;
 
   return (

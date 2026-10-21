@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import type { FocusEvent as ReactFocusEvent, RefObject } from 'react';
+import type { CSSProperties, FocusEvent as ReactFocusEvent, RefObject } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { targetsOf, useAssetProposalsStore } from '../../store/assetProposalsStore';
 import { openOnce } from '../../store/assetProposalReviewRequest';
@@ -151,12 +151,25 @@ const NEW_COLLECTION = '__new__';
 const STATUS_POLL_MS = 5000;
 const SEARCH_DEBOUNCE_MS = 250;
 
+/**
+ * The worker's status text. It is the one toolbar item whose length nobody
+ * picks ("Library analysis paused until reference labels are sealed" wrapped
+ * the header to two rows), so it gives way first: it truncates on one line
+ * down to a minimum that keeps its first words (commons.css), with the whole
+ * status as its own text (read by assistive tech) and its title (the tooltip).
+ */
+function StatusText({ text }: { text: string }) {
+  // Its length caps the room a short status reserves (commons.css).
+  const style = { '--commons-status-chars': [...text].length } as CSSProperties;
+  return <span className="commons-status__text" title={text} style={style}>{text}</span>;
+}
+
 export function StatusLine({ status, onStart, onStop }: { status: CommonsStatus | null; onStart: () => void; onStop: () => void }) {
-  if (!status) return <span className="commons-status">Connecting…</span>;
+  if (!status) return <span className="commons-status"><StatusText text="Connecting…" /></span>;
   if (status.evaluation_waiting) {
-    return <span className="commons-status">{status.evaluation_assisted
+    return <span className="commons-status"><StatusText text={status.evaluation_assisted
       ? 'Library analysis paused · close the agent review to resume'
-      : 'Library analysis paused until reference labels are sealed'}</span>;
+      : 'Library analysis paused until reference labels are sealed'} /></span>;
   }
   const waiting = status.queue.queued ?? 0;
   const held = status.queue.held ?? 0;
@@ -165,7 +178,7 @@ export function StatusLine({ status, onStart, onStop }: { status: CommonsStatus 
   if (!running && state !== 'budget_exhausted') {
     return (
       <span className="commons-status commons-status--stopped">
-        Worker stopped{waiting ? ` · ${waiting} queued` : ''}{tail}
+        <StatusText text={`Worker stopped${waiting ? ` · ${waiting} queued` : ''}${tail}`} />
         <button type="button" className="commons-button commons-button--primary" onClick={onStart}>Start</button>
       </span>
     );
@@ -184,7 +197,7 @@ export function StatusLine({ status, onStart, onStop }: { status: CommonsStatus 
   }
   return (
     <span className={`commons-status commons-status--${state}`}>
-      {text}{tail}
+      <StatusText text={`${text}${tail}`} />
       {running && <button type="button" className="commons-button" onClick={onStop}>Stop</button>}
     </span>
   );
@@ -463,7 +476,7 @@ export function CommonsView() {
             </div>
           )}
         </div>
-        <span className="commons-spacer" />
+        {/* The status takes the row's free room itself (commons.css): no spacer. */}
         <StatusLine
           status={status}
           onStart={() => workerAction(commonsApi.workerStart)}

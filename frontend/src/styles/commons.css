@@ -30,6 +30,10 @@ body.app-slava-restraint .commons-view--detail {
 /* -- toolbar ------------------------------------------------------------------ */
 
 body.app-slava-restraint .commons-toolbar {
+  /* The worker status's narrowest width: its first words and an ellipsis
+   * ("Library analysis paused…", "Paused: machine busy (l…"), measured at
+   * the status's 11 px (p157c). */
+  --commons-status-min: 12.5em;
   grid-area: toolbar;
   display: flex;
   align-items: center;
@@ -172,13 +176,39 @@ body.app-slava-restraint .commons-link:disabled {
   text-decoration: none;
 }
 
+/* The worker status gives way before the toolbar wraps (p157c): it takes the
+ * row's free room and right-aligns its text against its control; when the
+ * room runs short the text truncates on one line down to
+ * --commons-status-min (or its own length, if shorter). Only that minimum
+ * counts toward the row (inline-size containment), so no status length can
+ * wrap the header. Start / Stop never shrinks. The whole status stays the
+ * element's text and title (CommonsView). */
 body.app-slava-restraint .commons-status {
   display: inline-flex;
+  flex: 1 1 auto;
+  justify-content: flex-end;
   align-items: center;
   gap: 8px;
   color: var(--sr-ink-meta);
   font-size: 11px;
   white-space: nowrap;
+}
+
+body.app-slava-restraint .commons-status__text {
+  flex: 1 1 auto;
+  /* A short status reserves no more than its length: 1ch per character is
+   * wider than this face's average glyph at 11 px (6.9 px against 5.2-5.9
+   * measured), so "Worker stopped" never truncates. */
+  min-width: min(var(--commons-status-min), calc(var(--commons-status-chars, 99) * 1ch));
+  contain: inline-size;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: right;
+}
+
+body.app-slava-restraint .commons-status > .commons-button {
+  flex: none;
 }
 
 body.app-slava-restraint .commons-status--stopped,
@@ -296,11 +326,15 @@ body.app-slava-restraint .commons-heading {
   font-weight: 700;
 }
 
-/* A folded section's panel opens with its name (Settings, Blind labeling;
- * GM review of p157), set like the section titles above. Settings spaces it
- * with its column gap; Blind labeling's panel needs the same gap. */
-body.app-slava-restraint .commons-evaluation > .commons-panel-title {
-  margin: 0 0 16px;
+/* Settings opens with its name as its h2 (GM review of PR #157). It has no
+ * display line, so the h2 sits one step above its 13 px section titles (round
+ * 2: "about 20px against their 14"), at the Commons' existing step size and
+ * weight (commons-evaluation.css `.evaluation-step`, 22px / 450), not a new
+ * size. Blind labeling and Agent review set their h2 as the eyebrow line
+ * instead (`.commons-eyebrow`). */
+body.app-slava-restraint .commons-settings > .commons-panel-title {
+  font-size: 22px;
+  font-weight: 450;
 }
 
 /* -- messages + page candidates ---------------------------------------------- */

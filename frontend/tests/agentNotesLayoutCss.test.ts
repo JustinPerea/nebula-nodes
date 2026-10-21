@@ -233,6 +233,43 @@ describe('the Commons toolbar keeps one row with the chip (GM review of Q107 a)'
   });
 });
 
+// p157c: with the long worker status ("Library analysis paused until
+// reference labels are sealed") the Commons header still wrapped to 86 px at
+// 1280, 1366 and 1440. The status gives way first: its text truncates on one
+// line down to a minimum that keeps its first words, and only that minimum
+// counts toward the row (inline-size containment), so no status length can
+// push the controls or the header onto a second row. Start/Stop never shrinks.
+describe('the Commons worker status gives way before the toolbar wraps (p157c)', () => {
+  it('grows into the toolbar\'s free room and keeps its text at the control\'s side', () => {
+    const line = ruleIn(commonsCss, 'body.app-slava-restraint .commons-status');
+    expect(declared(line, 'flex')).toBe('1 1 auto');
+    expect(declared(line, 'justify-content')).toBe('flex-end');
+    expect(declared(line, 'white-space')).toBe('nowrap');
+  });
+
+  it('truncates its text on one line with an ellipsis, shrinking to a named minimum', () => {
+    const text = ruleIn(commonsCss, 'body.app-slava-restraint .commons-status__text');
+    expect(declared(text, 'white-space')).toBe('nowrap');
+    expect(declared(text, 'overflow')).toBe('hidden');
+    expect(declared(text, 'text-overflow')).toBe('ellipsis');
+    // Only the minimum counts toward the row: the text's own length never does.
+    expect(declared(text, 'contain')).toBe('inline-size');
+    expect(declared(text, 'flex')).toBe('1 1 auto');
+    // A short status ("Worker stopped") reserves no more than its own length
+    // (1ch per character is wider than this face's average glyph, measured),
+    // so it never truncates and the row keeps the room it had before.
+    expect(declared(text, 'min-width')).toBe('min(var(--commons-status-min), calc(var(--commons-status-chars, 99) * 1ch))');
+    expect(declared(text, 'text-align')).toBe('right');
+    const token = declared(ruleIn(commonsCss, 'body.app-slava-restraint .commons-toolbar'), '--commons-status-min');
+    expect(token, 'the minimum is a token on the toolbar').toMatch(/^\d+(\.\d+)?em$/);
+  });
+
+  it('never shrinks or wraps its Start / Stop control', () => {
+    const control = ruleIn(commonsCss, 'body.app-slava-restraint .commons-status > .commons-button');
+    expect(declared(control, 'flex')).toBe('none');
+  });
+});
+
 // Review of the fold: More's menu drew its two items the same, so a sighted
 // person could not see which folded section was open. A checked radio item
 // carries a visible mark; the Move menu (no `checked`) stays plain.
@@ -246,5 +283,79 @@ describe('the toolbar menu marks its checked item', () => {
     expect(mark).toMatch(/content:\s*"\u2713"/);
     expect(mark).toMatch(/position:\s*absolute/);
     expect(ruleIn(assetMoveCss, '.asset-move__item[aria-checked="true"]')).toMatch(/font-weight:\s*600/);
+  });
+});
+
+// GM review of PR #157, round 2 (count-forms.png): "the dim '0' is mono with
+// a slashed zero, but 1/9/12 look like Inter bold. Use one face for all of
+// them." The unread count asked for weight 700, which the bundled JetBrains
+// Mono doesn't ship (400, 500, 600: src/assets/fonts/README.md), and the
+// muted 0 for 500, so the two were drawn from two different instances. Every
+// count now uses one family at one shipped weight; the muted 0 dims by colour only.
+const fontsCss = readFileSync(join(__dirname, '../src/assets/fonts/fonts.css'), 'utf8');
+const slavaCss = readFileSync(join(__dirname, '../src/styles/slava-restraint.css'), 'utf8');
+
+describe('every count in the chip shares one face (GM review, round 2)', () => {
+  it('sets the count in the mono at a weight the bundled mono ships', () => {
+    const count = ruleIn(notesCss, '.agent-notes-chip__count');
+    const font = declared(count, 'font');
+    expect(font).toMatch(/^\d{3} 12px\/1 var\(--an-mono\)$/);
+    const weight = font!.split(' ')[0];
+    // The skin's mono is JetBrains Mono first, and the app ships that weight of it.
+    expect(declared(ruleIn(notesCss, 'body.app-slava-restraint .agent-notes-root'), '--an-mono')).toBe('var(--sr-mono)');
+    expect(slavaCss).toMatch(/--sr-mono:\s*'JetBrains Mono',/);
+    const faces = fontsCss.split('@font-face').filter((face) => /font-family:\s*'JetBrains Mono'/.test(face));
+    expect(faces.some((face) => new RegExp(`font-weight:\\s*${weight};`).test(face) && /U\+0000-00FF/.test(face))).toBe(true);
+    expect(count).toMatch(/font-variant-numeric:\s*tabular-nums/);
+  });
+
+  it('changes only the colour for the muted 0, and nothing of the face while it pops', () => {
+    for (const selector of [".agent-notes-chip__count[data-muted='true']", ".agent-notes-chip__count[data-pop='true']"]) {
+      expect(ruleIn(notesCss, selector)).not.toMatch(/font(-family|-weight|-style|-stretch|-variant[\w-]*)?:/);
+    }
+    expect(declared(ruleIn(notesCss, ".agent-notes-chip__count[data-muted='true']"), 'color')).toBe('var(--an-faint)');
+  });
+});
+
+// GM review of PR #157, round 2: one heading pattern for the Commons'
+// sections. The section's name is the h2 set as the eyebrow line (Blind
+// labeling, Agent review), in the eyebrow style Blind labeling already used;
+// the display line keeps its look as a p; Settings, which has no display
+// line, sets its h2 one step above its 13 px section titles, at the
+// Commons' existing step size (no new size).
+const evaluationCss = readFileSync(join(__dirname, '../src/styles/commons-evaluation.css'), 'utf8');
+
+describe('the Commons sections share one heading pattern (GM review, round 2)', () => {
+  it('sets the eyebrow line in the eyebrow style Blind labeling used, the h2 included', () => {
+    // The same rule as the old eyebrow (`small`), not a copy of it.
+    const eyebrow = ruleIn(evaluationCss, '.commons-evaluation small,\n.commons-eyebrow');
+    expect(declared(eyebrow, 'font-size')).toBe('10px');
+    expect(declared(eyebrow, 'letter-spacing')).toBe('1.5px');
+    expect(declared(eyebrow, 'color')).toBe('#a0b28f');
+    // The h2 takes the line's type: no heading size, weight or margin of its own.
+    const name = ruleIn(evaluationCss, '.commons-eyebrow h2');
+    expect(declared(name, 'font')).toBe('inherit');
+    expect(declared(name, 'margin')).toBe('0');
+    expect(declared(name, 'display')).toBe('inline');
+    // No other rule gives a heading in the evaluation panels the step size by tag.
+    expect(evaluationCss).not.toMatch(/\.commons-evaluation h[12]\b/);
+  });
+
+  it('keeps the display line\'s look as a p', () => {
+    const title = ruleIn(evaluationCss, '.commons-evaluation .evaluation-title');
+    expect(declared(title, 'font-size')).toBe('30px');
+    expect(declared(title, 'font-weight')).toBe('450');
+    // Not the panel's paragraph colour and line height.
+    expect(declared(title, 'color')).toBe('inherit');
+    expect(declared(title, 'line-height')).toBe('normal');
+  });
+
+  it('sets Settings\' h2 at the Commons\' step size, above its section titles', () => {
+    const step = declared(ruleIn(evaluationCss, '.commons-evaluation .evaluation-step'), 'font-size');
+    expect(step).toBe('22px');
+    const settings = ruleIn(commonsCss, 'body.app-slava-restraint .commons-settings > .commons-panel-title');
+    expect(declared(settings, 'font-size')).toBe(step);
+    expect(declared(settings, 'font-weight')).toBe(declared(ruleIn(evaluationCss, '.commons-evaluation .evaluation-step'), 'font-weight'));
+    expect(parseFloat(step!)).toBeGreaterThan(parseFloat(declared(ruleIn(commonsCss, 'body.app-slava-restraint .commons-heading'), 'font-size')!));
   });
 });
