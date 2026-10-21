@@ -500,6 +500,16 @@ def redacted_node(node_id: str, node: Mapping[str, Any], definition: Mapping[str
             entry["params"].pop(universal_ports.PORTS_PARAM, None)
         entry["ports"] = {"inputs": universal_ports.port_ids(model_ports[0]),
                           "outputs": universal_ports.port_ids(model_ports[1])}
+        # Ports typed without the model's data saying so (a Replicate
+        # file output with no hint or example): model_schema's `note`.
+        guessed = [str(port["id"]) for port in [*model_ports[0], *model_ports[1]]
+                   if port.get("typeUnconfirmed")]
+        if guessed:
+            entry["ports"]["unconfirmed"] = guessed
+            # What that means and what to do (re-send an old stamp's model).
+            note = universal_ports.stored_port_note(definition_id, node.get("params"))
+            if note:
+                entry["ports"]["note"] = note
     return entry
 
 

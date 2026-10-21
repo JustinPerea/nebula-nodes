@@ -14,7 +14,8 @@ can fix the refused step and send the rest on their own. The checks and
 that rule live in backend/apply_steps.py, shared with MCP edit_canvas.
 
 Every apply that changes something prints its undo: `nebula undo TOKEN`
-(MCP undo_canvas_edit) puts the parts nobody changed since back.
+(MCP undo_canvas_edit) puts the parts nobody changed or ran since back
+(a node only you ran since still goes).
 """
 from __future__ import annotations
 

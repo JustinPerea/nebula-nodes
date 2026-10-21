@@ -81,7 +81,21 @@ The server exposes these tools for building and running (see
   `missing`. "free" is at the node's defaults: a row with `needsKeyFor` (the
   Video QC nodes) calls a provider in another mode.
 - `describe_node`: one node type's ports, params (options, defaults, ranges)
-  and list prices by the params that set them. A local node that still calls
+  and list prices by the params that set them. `definition_id` is the id, or
+  the node type's exact display name (any case, outer spaces ignored) when
+  one node type has it: `describe_node(definition_id="Moodboard")` answers
+  for `nebula-moodboard`, starting with `lookup` ("Moodboard is the Moodboard
+  node: nebula-moodboard"). An id always wins; a name two node types share
+  is refused with both ids; anything else gets "No node type '...'" with
+  close matches, exact-name matches first. `nebula info` (and `nebula
+  describe`) does the same, printing the `lookup` line first. Writes stay
+  strict: `edit_canvas`, `propose_change`, `nebula apply`/`propose`/
+  `create`/`quick` and a Style's `model_id` (`style_create`/`style_update`,
+  `nebula style new/set --model`) take ids only, because they store and bill by id and a
+  display name can be renamed or come to be shared; given a name they refuse
+  with "unknown node definition 'moodboard': did you mean nebula-moodboard
+  (Moodboard)?". (Before, `nebula create` stored a node of any type it was
+  given and `nebula quick` tried to run it.) A local node that still calls
   a provider also has `runsWithOptions`: readiness per value of the param that
   picks the provider (Cinema Scene's `scene.base.model`, a QC node's `mode`),
   and a note when another value would run with the keys set here. A QC
@@ -127,7 +141,8 @@ The server exposes these tools for building and running (see
   outputs, names and wires.
 - `undo_canvas_edit`: takes one of your own edits back with its `undo.token`
   (or a steps plan's `undo.tokens`, newest first). A part someone changed
-  since stays as it is and is listed in `skipped`.
+  since stays as it is and is listed in `skipped`; so does a node someone
+  else ran since (reason `ran since`). Your own runs don't count.
 - `run_nodes`: runs a node and what feeds it (or the whole canvas) under the
   person's spending limits. Returns outputs with small inline previews, or
   `running` and a run id. A run in which any node failed comes back
@@ -146,15 +161,15 @@ The server exposes these tools for building and running (see
   or Quiver's models (`/api/openrouter/models`, `/api/nous/models`,
   `/api/quiver/models`, the routes the Inspector's pickers read), filtered by
   every word of `query`, and names the node and the param (`model`) the id
-  goes in. `model_schema("replicate", "owner/name")` reads a Replicate
-  model's latest version (`/api/replicate/schema/{owner}/{name}`): each
-  input with `port: true` (a file input, wired into a port of that name on
-  the Replicate node) or `port: false` (set as a param of that name), and
-  the raw input and output schemas. For the other providers it returns that
-  model's catalog row. They use the person's key and cost nothing; without
-  the key the refusal names it. See
-  [Universal nodes over MCP](#universal-nodes-over-mcp) for what
-  `edit_canvas` can wire on them today.
+  goes in; OpenRouter and Nous rows carry `ports` ({inputs, outputs}, port
+  ids). `model_schema(provider, model_id)` reads one model: its `ports`
+  ({inputs, outputs}, each {id, label, dataType, required, multiple?}), the
+  ports the node gets with that model, and the catalog row (`model`), or for
+  Replicate (`/api/replicate/schema/{owner}/{name}`) the latest
+  `versionId`, `params` (the other inputs, set as params of the same name)
+  and the raw input and output schemas. They use the person's key and cost
+  nothing; without the key the refusal names it. See
+  [Universal nodes over MCP](#universal-nodes-over-mcp).
 - `krea_discovery_tools` / `krea_discover`: the read-only Krea discovery
   calls (`list_models`, `get_model_schema`, `get_prompting_guide`,
   `list_styles`, `list_moodboards`, `get_node_apps`, `get_node_app_versions`,
@@ -431,7 +446,8 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `proposal.accepted` | the person accepted; the added nodes and wires follow as `node.added` / `edge.added` by the person (for a project cover, `project.cover` by the person) | `proposalId`, `idMap`, `runNodeIds`; outside the canvas `kind`, `targetId`, `targetName`, `applied` (what was set) |
 | `proposal.rejected` | the person rejected | `proposalId`, `reason` |
 | `proposal.withdrawn` / `proposal.expired` / `proposal.invalidated` | the agent took it back, 15 minutes passed, or the canvas changed under it | `proposalId`, `reason` |
-| `board.added` / `board.removed` / `board.frame` / `board.grouped` / `board.setAside` / `board.resized` / `board.noted` / `board.moved` / `board.cover` | a moodboard edit or save changed the board: one event per write, its kind the first of these that applies (`grouped` is a card into or out of a frame, `moved` 8 px or more, `cover` the image the board opens on) | `kinds` (every kind in the write), `refs` (`{number, id}` per image), `boardId`, `boardName`, `scope`; never any note text ("private note changed") |
+| `board.added` / `board.removed` / `board.frame` / `board.grouped` / `board.setAside` / `board.resized` / `board.noted` / `board.moved` / `board.cover` | a moodboard edit or save changed the board's images, cards or frames: one event per write, its kind the first of these that applies (`noted` an image's notes, `grouped` is a card into or out of a frame, `moved` 8 px or more, `cover` the image the board opens on) | `kinds` (every kind in the write), `refs` (`{number, id}` per image), `boardId`, `boardName`, `scope`; never any note text ("private note changed") |
+| `board.fields` | a moodboard edit, save or undo changed the board's own fields, by the person (Moodboard Studio, an accepted proposal) or an agent (`moodboard_update`, `moodboard_edit`'s `restore`, `nebula moodboard set`, `--restore`): one event per write, after the `board.*` event above when the same write changed images too; a write that changes no field writes none | `fields` (the names that changed, in this order: `name`, `notes`, `mode`, `strength`, `direction`, `avoid`, `pinnedColors`, `clashMode`, `colorChoices`, `sendNotes`, `briefOverride`), `boardId`, `boardName`, `scope`; never a value: no Direction, Avoid, notes or brief text, no colour, no strength, not which way Send notes went. The cover is `board.cover` |
 | `project.created` / `project.deleted` / `project.restored` | anyone made a project (new, or a stale tab's recovered copy), moved one to Recently deleted, or brought one back | `projectId`, `name`; `wasOpen` on a delete; `createdBy` when an agent made it |
 | `project.renamed` | a project's name changed (saving the same name again isn't journaled) | `projectId`, `from`, `to` |
 | `provider.hold` | a paid start was held (a World Labs recovery checkpoint, or a start Nebula couldn't confirm) or cleared, attributed to whoever started the run or cleared it | `hold` (`recovery` or `startAmbiguity`), `change` (`held` or `cleared`), `runId`, `kind`, `durable` |
@@ -1490,19 +1506,39 @@ model's file inputs are its ports. One backend module has the rules
   can't read, which leaves the definition's ports. (The person's picker drops
   them instead, as it always did.)
 - Replicate: a port per file input (`x-uploadable`, or a `uri` string),
-  named as the schema names it, and one output: `image` for a file URL or a
-  list of them, else `text` (as a run names it). Other inputs are params of
-  the same name; a wire to one is refused ("... are params of the same name:
-  set them with params instead of a wire").
+  named as the schema names it, and one output. A file output's schema is a
+  plain `uri` string whatever the file is, so its type comes from the
+  model's own data: a content hint in the output schema (`contentMediaType`,
+  an `x-` MIME hint, a MIME type or extension in its description), else the
+  file its `default_example` run returned (the schema route keeps it as
+  `default_example_output` from the model read it already makes; no extra
+  call). That gives `video` (Video), `audio` (Audio), `image` (Image), `svg`
+  or `mesh`; when nothing says, `image` with `typeUnconfirmed: true`, and
+  the reply's `modelPortNotes` (and `model_schema`'s `note`, `look_at_canvas`'s
+  `ports.unconfirmed` and `ports.note`) say so. Any other output is `text`
+  (`typeUnconfirmed` too when the model has no output schema and no example
+  file). A run fills that declared port; a returned file whose type
+  contradicts a confirmed port fails the run naming both. On an unconfirmed
+  port the file's own type wins: it goes out under `video`/`audio`/...,
+  shown and saved, but a wire on the guessed port gets nothing. A node
+  configured on 2026-10-20 (no `rev` in its `_model_ports`) shows its file
+  output as unconfirmed with a note: set its `model_id` again to re-read. Other inputs are params of the same name; a wire to one is
+  refused ("... are params of the same name: set them with params instead
+  of a wire").
 - `describe_node` on these nodes has `modelPorts`, a sentence with the rules;
   `look_at_canvas` lists a configured node's `ports` ({inputs, outputs}).
+  Before an edit, `model_schema` (and `model_catalog`'s rows, as ids) give a
+  model's ports from the same function.
 - `POST /api/universal/ports {definitionId, model, params?}` returns a
   model's ports without a node (and, for Replicate, its params and version).
 - The canvas export, the wire checks (`port_contracts.node_ports`) and the
   run check read `_model_ports`, so the canvas draws the ports and wires an
   agent made without a reload. A node saved before 2026-10-20 has no
   `_model_ports` and keeps exactly the ports it had (its definition's) until
-  its model is set again.
+  its model is set again. A Replicate node configured on 2026-10-20, before
+  file outputs were typed (its stamp has no `rev`, every file output
+  `image`), keeps that port and runs as it did; sending its `model_id` again
+  (an edit or `PUT /api/graph/node/{id}`) reads the model again and types it.
 
 The canvas's pickers call `POST /api/graph/node/{id}/model {model}`, which
 configures the node with the same function, drops wires the model has no
@@ -1527,16 +1563,32 @@ TOKEN`, `POST /api/graph/apply/undo {token}`) takes the edit back:
   whose input has taken another wire since, stays out.
 - A wire it added is unwired; one it took away is wired back.
 
+A run counts as a change. A node the edit touched that someone ran after
+the edit (the person, another agent, or a client that didn't name itself)
+stays whole: it isn't removed, its params, name and position aren't put
+back, and no wire into it is taken away or put back, because those inputs
+made its result. It is one `skipped` item with reason `ran since`,
+`ranBy` (`[{kind, name}]`), `left` (the parts it kept: `node`, `params`,
+`name`, `position`, `wires in`) and a message such as "n3 ran since (run
+by the person), so it stays". Wires out of it follow the rules above. Only
+runs the undoing agent started itself don't count, so an agent can still
+undo its own experiments. A run counts if it was asked for after the edit
+landed, including one still going when the undo comes (all the nodes it
+set out to run count); a run asked for before the edit doesn't, even if it
+reached the node after. The person's own Cmd+Z is unchanged.
+
 Each part someone changed since is left as it is and listed in `skipped`
-(`{nodeId, part, keys?, wire?, reason, message}`), as a moodboard restore
-does. A param only the person may change back (opening a Moodboard node's
+(`{nodeId, part, keys?, wire?, reason, message}`, plus `ranBy` and `left`
+for `ran since`), as a moodboard restore does. A param only the person may change back (opening a Moodboard node's
 "send notes" again) is skipped too. The rest is one restore through the
 same staging as the canvas's Cmd+Z, so it lands whole or not at all, and
 the person can undo the undo. `status` is `undone`; `skipped` when nothing
-could go back (the token keeps working, for when the person puts a part
-back); or `already-undone`, with `undoneBy` (you, or the person with Cmd+Z,
-which the backend learns from the canvas's restore). Calling it twice
-changes nothing the second time.
+could go back (the token keeps working, for when the person puts a changed
+part back; a node someone ran since stays for good, since a run can't be
+taken back, and the message says so); or `already-undone`, with `undoneBy` (you, or the person with Cmd+Z,
+which the backend learns from the canvas's restore). `message` says what
+went back and each part left, and why. Calling it twice changes nothing
+the second time.
 
 The backend keeps each inverse in memory (`services/canvas_undo.py`): for
 60 minutes, the last 100 edits, at most 16 MB each and 64 MB in all. A
@@ -1703,31 +1755,37 @@ comes from the `run.started` journal events (`wait_for_canvas_change`).
 ### Universal nodes over MCP
 
 `model_catalog` and `model_schema` (above) say which models the OpenRouter,
-Nous Portal, Quiver and Replicate nodes can run. What `edit_canvas` can build
-with them today (checked 2026-10-20 against `/api/graph/apply`):
+Nous Portal, Quiver and Replicate nodes can run, and for the three universal
+nodes which ports each model gives the node. Those ports come from
+`services/universal_ports.py`, the same function `edit_canvas` configures a
+node with, the canvas draws from and `look_at_canvas` reads (see
+[Universal nodes: ports from the model](#universal-nodes-ports-from-the-model)),
+so the three always agree:
 
-- **Replicate** (`replicate-universal`) declares no ports, so the backend
-  accepts a wire to any input name. Set `model_id` to the owner/name, wire
-  each `port: true` input into the port of that name, and set the other
-  inputs as params; the run sends both to Replicate under those names
-  (`handlers/replicate_universal.py`). `_version_id` is the canvas's own:
-  without it the run asks Replicate for the latest version. It declares no
-  output ports either: a run names its output by what Replicate returns
-  (`image` for an image or other file URL or a list of URLs, `video` or
-  `audio` by file extension, `svg`/`mesh` for those data URIs, `text`
-  otherwise), so `model_schema`'s `output.port` says which handle to wire
-  onward from.
-- **OpenRouter** and **Nous Portal** keep the ports their definitions declare
-  (OpenRouter `messages` to `text`; Nous `messages` and `images` to `text`).
-  The vision input `images` on OpenRouter and the `image` output of an image
-  model are added only by the canvas's model picker
-  (`graphStore.configureOpenRouterModel`), with the internal `_output_image`
-  param, so `edit_canvas` refuses those wires and that param.
-- On the canvas, a model's ports come from the Inspector
-  (`configureOpenRouterModel`, `fetchReplicateSchemaAndConfigure`), which
-  keeps them in the browser only; the backend sends a universal node with its
-  definition's ports (`main.py` `_cli_node_to_rf`). Moving that into the
-  backend is open work (docs/notes/2026-10-20-feat-mcp-cancel-scope-catalogs-krea.md).
+1. `model_schema("openrouter", "google/gemini-3-pro-image")` returns
+   `ports: {inputs: [messages, images], outputs: [text, image]}` (each port
+   with its `dataType`).
+2. One `edit_canvas` call creates the node with `params: {model: ...}` (or
+   `model_id` on Replicate) and wires those ports: `images` in, `image` out,
+   or a Replicate model's file inputs by name. The reply's `modelPorts` lists
+   the same ids, `look_at_canvas` shows them as the node's `ports`, and the
+   canvas draws them without a reload.
+
+- **OpenRouter / Nous Portal:** `messages` always; `images` (Image, several
+  wires) for a model that takes images; `text` and/or `image` out for what
+  it makes, as the model list says.
+- **Replicate:** a port per file input (`x-uploadable`, or a `uri` string),
+  named as the schema names it; one output, for a file URL or a list of them
+  typed from the model's data (schema content hint, else its
+  `default_example` run's file) as `video`, `audio`, `image`, `svg` or
+  `mesh`, else `text`. With nothing to tell, it is `image` with
+  `typeUnconfirmed: true` and a `note`. The run fills that port, so
+  `model_schema("replicate", "<a video model>")` gives `outputs: [video]`
+  and one `edit_canvas` can set the model and wire `video` into a Video
+  input. `model_schema`'s `params` are the other inputs: set them as params
+  of the same name; a wire to one is refused.
+- **Quiver** nodes have fixed ports (`describe_node`); their catalog rows
+  carry no `ports`.
 
 ### In-app agents use this server
 
@@ -1801,7 +1859,7 @@ nebula apply --note "Two takes" \
 #   +p → n8  Text Input
 #   +wide → n9  Wide
 #   +tight → n10  Nano Banana
-#   Undo: nebula undo 3f9c…  (for 60 minutes; parts changed since stay)
+#   Undo: nebula undo 3f9c…  (for 60 minutes; parts changed or run since stay)
 nebula undo 3f9c…                   # take it back (see Undoing your own edit)
 nebula apply --file plan.json       # or --file - to read standard input
 nebula apply --file plan.json --arrange        # or --arrange down
@@ -2046,7 +2104,10 @@ nebula moodboard delete <board>
   `add` op, applied to the board as it is saved, and an open Moodboard
   Studio shows it without a reload and keeps its own unsaved edits (it
   sends image changes as ops and only the board fields it changed). Each
-  write is journaled as a `board.*` event in the writer's name.
+  write is journaled as a `board.*` event in the writer's name, and a change
+  to the board's own fields as `board.fields` (the field names, never their
+  values), so `wait_for_canvas_change(kinds=["board"])` returns on the
+  person's Direction edit at once.
 - `moodboard_add` (and `add --json`) returns `addedIds` and `undo` (the
   batch that takes them off again); the CLI prints the `nebula moodboard
   set <id> --remove ...` line that does it. A URL already on the board is
@@ -2233,7 +2294,11 @@ nebula moodboard delete <board>
   changed again since is left as they set it, and the result's `skipped`
   says so ("Direction changed since, left as is", "#2's weight changed
   since, left as is"; the CLI prints each line). Images the change took off
-  come back with it. The other keys are what an older Nebula puts back
+  come back with it. Its board-field part is the `undo` the server's `PUT`
+  answered with: a direct `PUT /api/moodboards/{id}` answers with the board
+  plus `undo`, and sending its `ops` to `POST /api/moodboards/{id}/edits`
+  is the same checked undo. The person's Cmd+Z in Moodboard Studio never
+  takes back your edit, so take back your own this way. The other keys are what an older Nebula puts back
   instead; a `previous` without `undo` is put back as arguments, and the
   images it took off come back from `removed` (`moodboard_add` / `nebula
   moodboard add`).

@@ -1,6 +1,6 @@
 # PR26 measurement: orientation turns before and after
 
-**Status: run on 2026-10-20 with Justin's OK on the spend. PR26 missed its target on all three arms** ([Results](#results)). The runs were Claude Code sessions on Justin's Claude plan: $4.18 in all, under the $5 stop cap set for them. Nothing in Nebula was spent: no paid node ran, every connection sample was 0. The counts are also in `implementation-notes.md` and plan §10. This file keeps the sanitized table per run, as GM's record does (`2026-10-20-cli-headless.md`).
+**Status: run on 2026-10-20 with Justin's OK on the spend. PR26 missed its target on all three arms** ([Results](#results)). **Rerun on 2026-10-21 after PR26b (#134): every run met the orientation target; four of nine still made a usage error** ([Rerun after PR26b](#rerun-after-pr26b-2026-10-21)). The runs were Claude Code sessions on Justin's Claude plan: $4.18 in all, under the $5 stop cap set for them; the rerun cost $1.96, under its $3 cap. Nothing in Nebula was spent: no paid node ran, every connection sample was 0. The counts are also in `implementation-notes.md` and plan §10. This file keeps the sanitized table per run, as GM's record does (`2026-10-20-cli-headless.md`).
 
 Plan v2.7 §5.10.1 sets the method. This file is the exact commands.
 
@@ -252,3 +252,56 @@ The fixes for what the transcripts show go in a follow-up, PR26b:
 - the counter counts ToolSearch and argument failures as orientation.
 
 Then B, C and E run again: nine runs, about $2.20, after Justin's OK on that spend.
+
+## Rerun after PR26b (2026-10-21)
+
+Justin's Q94 a: "Yes, all nine, stop at $3." Arms B, C and E ran three times each, with the "after" checkout pinned at `772cabc6` (#134's merge, PR26b) and everything else as above: the same prompts, model, seed, guard wrapper, dead proxy and spend lock. The driver stopped before any run that could take the total past $3. The nine runs cost $1.96. Every connection sample was 0 (263 samples), no backend log had a provider attempt, and in every CLI run each `nebula` call in the transcript went through the guard (6 of 6 runs).
+
+The machine was heavily loaded by other work (load average 20 to 54 on 18 cores), so durations are longer than yesterday's (up to twelve times) and aren't comparable. Turns and calls don't depend on load.
+
+### Same counter, before and after
+
+PR26b changed the counter: ToolSearch now counts as orientation (`schema`), and an MCP argument error counts as a usage error. So the 2026-10-20 runs are recounted here with the same script (`count_agent_turns.py` as merged with #134). That changes yesterday's D and E numbers from the tables above; A, B and C are unchanged.
+
+| Arm | Before (2026-10-20): orientation, median (range) | After (2026-10-21) | Usage errors, before → after (per run) | Help reads, before → after (per run) |
+|---|---|---|---|---|
+| A. Baseline CLI | 2 (1 to 5) | (not rerun) | 2, 1, 0 | 2, 1, 1 |
+| B. Branch CLI | 5 (2 to 5) | **3 (2 to 3)** | 1, 0, 0 → 0, 1, 0 | 2, 2, 1 → 1, 2, 1 |
+| C. Branch CLI, swapped prompt | 3 (1 to 3) | **1 (0 to 3)** | 0, 0, 0 → 1, 1, 0 | 1, 1, 1 → 1, 0, 0 |
+| D. Baseline MCP | 6 (5 to 7) | (not rerun) | 0, 1, 0 | 0, 0, 0 |
+| E. Branch MCP | 4 (4 to 6) | **2 (1 to 3)** | 6, 7, 1 → 0, 0, 3 | 0 → 0 |
+
+### Against the target
+
+The target for B, C and E: at most 3 orientation turns and no usage error; no help read on C and E.
+
+- **Orientation: met in all nine runs** (at most 3 each).
+- **Usage errors: four runs missed.** Three of them are the same call: `nebula info moodboard` (B2, C1, C2). The Moodboard node's id is `nebula-moodboard`; the error lists it, and the agent used it the next turn. The fourth is E3, below.
+- **Help reads: C1 read help** (`nebula apply --help`). C2, C3 and every E run read none.
+
+### What the transcripts show
+
+- **`nebula info moodboard`.** To show what the board gives, the agent wires a Moodboard node into a Preview. Five of the six CLI runs looked up `nebula info nebula-moodboard` for its ports, and three of those first guessed `nebula info moodboard`. `nebula context` already names the node and the wiring ("To show one: `nebula apply --add +mb=nebula-moodboard ...`"), and so does `start_here`, but those three guessed before reading it: B2 and C1 never ran `nebula context`, and C2 ran it the turn after.
+- **E3 called tools by their bare names.** After `start_here`, it called `point_at`, `edit_canvas` and `moodboard_get`, with the right argument names this time (though `edit_canvas` got `nodes` as a JSON string, not a list), but as `point_at` rather than `mcp__nebula__point_at`, before loading their schemas. Claude Code refused all three ("No such tool available"), the agent loaded them with ToolSearch and made the same calls, which worked. That is the client's tool deferral, not a Nebula error; E1 and E2 loaded the schemas first.
+- **B3 pointed at "canvas".** `nebula point canvas --say "..."` failed ("target.nodeId 'canvas' is not on the canvas"); since PR26b, `nebula point --say "..."` needs no target. The counter doesn't class this one as a usage error.
+- **No run made the argument mistakes that cost E1 and E2 three turns each yesterday** (`moodboard_get(id=)`, `describe_node(id=)`, edges with `from`/`to`).
+
+### Per run (2026-10-21)
+
+| Run | Orientation / turns | Usage errors | Help reads | ToolSearch | `num_turns` | Duration | Cost |
+|---|---|---|---|---|---|---|---|
+| B1 | 3 / 10 | 0 | 1 | 0 | 12 | 248.3 s | $0.245 |
+| B2 | 3 / 10 | 1 | 2 | 0 | 14 | 164.9 s | $0.251 |
+| B3 | 2 / 9 | 0 | 1 | 0 | 10 | 108.5 s | $0.227 |
+| C1 | 3 / 10 | 1 | 1 | 0 | 12 | 160.2 s | $0.203 |
+| C2 | 1 / 7 | 1 | 0 | 0 | 10 | 49.1 s | $0.186 |
+| C3 | 0 / 6 | 0 | 0 | 0 | 7 | 87.1 s | $0.176 |
+| E1 | 2 / 7 | 0 | 0 | 1 | 11 | 85.9 s | $0.239 |
+| E2 | 1 / 5 | 0 | 0 | 1 | 8 | 29.7 s | $0.209 |
+| E3 | 3 / 6 | 3 | 0 | 1 | 10 | 56.7 s | $0.222 |
+
+### Next
+
+- **A node's exact name as its id.** `nebula info moodboard` and `describe_node("Moodboard")` could take a node type's exact display name when only one node has it, and say which id they used. That alone would have removed three of the four usage errors.
+- **E3's bare names** come from the client, so no Nebula change fixes them directly.
+- Any further rerun is new spend and needs Justin's OK.
