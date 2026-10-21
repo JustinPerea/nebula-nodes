@@ -567,10 +567,12 @@ def summarize_cost(
 
 # Where each surface's agent finds a node that runs here. The HTTP answer
 # names the route; propose_change (MCP) and `nebula propose` (CLI) word the
-# warning again from cost.notReady for their own reader.
+# warning again from cost.notReady for their own reader. The CLI names
+# `nebula nodes`, find_nodes' twin on the same route: by default it lists only
+# what runs here, and `nebula context`'s list is cut at its budget.
 READY_NODES_HTTP = "GET /api/agent/nodes"
 READY_NODES_MCP = "find_nodes"
-READY_NODES_CLI = "`nebula context`"
+READY_NODES_CLI = "`nebula nodes`"
 
 
 def readiness_warning(cost: Mapping[str, Any], *, lister: str = READY_NODES_HTTP) -> str | None:
@@ -585,7 +587,8 @@ def readiness_warning(cost: Mapping[str, Any], *, lister: str = READY_NODES_HTTP
     lines = []
     for row in rows[:6]:
         label = str(row.get("ref") or row.get("nodeId") or "?")
-        need = str(row.get("missing") or "can't run here")
+        # Route messages end in their own period; the join below adds the punctuation.
+        need = str(row.get("missing") or "can't run here").rstrip().rstrip(".")
         name = str(row.get("name") or "")
         # Route messages already start with the node's name.
         lines.append(f"{label}: {need}" if name and need.startswith(name) else f"{label} ({name}) {need}")

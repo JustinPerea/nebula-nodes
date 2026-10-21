@@ -8,40 +8,73 @@ from services.node_readiness import node_access  # noqa: F401 (re-exported for t
 from services.agent_params import ASSET_PARAM_TYPES
 from services.canvas_undo import UNDONE_VERBS, nothing_went_back
 from services.maker_sizes import rule_note
+from services import node_categories
 from services.node_route import all_param_definitions, route_hides, route_param_definitions
 
 
-def format_node_table(nodes: list[dict[str, Any]]) -> str:
-    """Format nodes as an aligned table grouped by category."""
-    by_cat: dict[str, list[dict[str, Any]]] = {}
-    for n in nodes:
-        cat = n.get("category", "other")
-        by_cat.setdefault(cat, []).append(n)
+_CATEGORY_HEADINGS = {
+    "image-gen": "IMAGE GENERATION",
+    "video-gen": "VIDEO GENERATION",
+    "text-gen": "TEXT / CHAT",
+    "audio-gen": "AUDIO",
+    "3d-gen": "3D GENERATION",
+    "transform": "TRANSFORM",
+    "analyzer": "ANALYZER",
+    "utility": "UTILITY",
+    "universal": "UNIVERSAL",
+}
 
-    cat_names = {
-        "image-gen": "IMAGE GENERATION",
-        "video-gen": "VIDEO GENERATION",
-        "text-gen": "TEXT / CHAT",
-        "audio-gen": "AUDIO",
-        "3d-gen": "3D GENERATION",
-        "transform": "TRANSFORM",
-        "analyzer": "ANALYZER",
-        "utility": "UTILITY",
-        "universal": "UNIVERSAL",
-    }
+
+def agent_node_price(value: Any) -> str:
+    """A GET /api/agent/nodes `price` ("free", {"usd": [low, high]}, null) as
+    `nebula context` prints prices: free, $0.04, $0.01–0.25, no list price."""
+    if isinstance(value, dict):
+        value = value.get("usd")
+    return _price(value)
+
+
+def format_agent_nodes(rows: list[dict[str, Any]], *, ranked: bool,
+                       counts: dict[str, tuple[int, int]] | None = None) -> str:
+    """`nebula nodes`: GET /api/agent/nodes rows as a table by category.
+
+    A row that runs here shows how (key, free, krea, nous) and its list price
+    at default settings; one that doesn't shows what it's `missing`. Rows keep
+    the route's order inside a category (ready first, then best matches).
+    `ranked` (a word search) lists categories in the order their best match
+    comes, so the first row is the route's first; otherwise in
+    node_categories.ORDER. `counts` is category -> (run here, match) for
+    the heading."""
+    by_cat: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        by_cat.setdefault(str(row.get("category") or "other"), []).append(row)
+    order = list(by_cat) if ranked else node_categories.ordered(by_cat)
+    id_width = max([len(str(row.get("id"))) for row in rows] + [20])
+    name_width = min(max([len(str(row.get("name") or "")) for row in rows] + [12]), 32)
 
     lines: list[str] = []
-    for cat, cat_nodes in by_cat.items():
-        display_cat = cat_names.get(cat, cat.upper())
-        lines.append(f"{display_cat} ({len(cat_nodes)})")
-        for n in sorted(cat_nodes, key=lambda x: x["id"]):
-            nid = n["id"]
-            name = n.get("displayName", nid)
-            provider = n.get("apiProvider", "")
-            lines.append(f"  {nid:<30} {name:<25} {provider}")
+    for category in order:
+        members = by_cat[category]
+        heading = _CATEGORY_HEADINGS.get(category, category.upper())
+        ready, matched = (counts or {}).get(category, (sum(1 for row in members if row.get("runsWith")),
+                                                       len(members)))
+        lines.append(f"{heading} ({ready} of {matched} run here)" if ready != matched
+                     else f"{heading} ({matched})")
+        for row in members:
+            head = f"  {str(row.get('id')):<{id_width}}  {str(row.get('name') or ''):<{name_width}}"
+            if row.get("runsWith"):
+                line = f"{head}  {str(row['runsWith']):<5} {agent_node_price(row.get('price'))}"
+                if row.get("needsKeyFor"):
+                    line += f"  (at its defaults; {_cli_words(str(row['needsKeyFor']))})"
+            else:
+                line = f"{head}  {row.get('missing') or 'needs setup'}"
+            lines.append(line.rstrip())
         lines.append("")
+    return "\n".join(lines).rstrip("\n")
 
-    return "\n".join(lines)
+
+def _cli_words(text: str) -> str:
+    """An agent route's MCP words in `nebula` words (main._cli_words)."""
+    return text.replace("describe_node", "`nebula info <id>`")
 
 
 def _route_takes(node: dict[str, Any], route: dict[str, Any]) -> str:
@@ -432,6 +465,10 @@ def format_start(start: dict[str, Any]) -> str:
         lines.append(f"  Krea account: {nodes['krea']}")
     if nodes.get("more"):
         lines.append(f"  ({nodes['more']})")
+    unready = int(nodes.get("total") or 0) - int(nodes.get("ready") or 0)
+    if unready > 0:
+        # `nebula nodes` is find_nodes' twin: what runs here by default, the rest with --all.
+        lines.append(f"  ({unready} more can't run here yet: `nebula nodes --all` lists them with what each needs)")
 
     spend = start.get("spend") or {}
     lines.append("")

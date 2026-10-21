@@ -104,7 +104,7 @@ HINTS: dict[str, dict[str, str]] = {
         "proposals": "`nebula proposals` lists every open proposal",
         "boards": "`nebula moodboard list --project <project-id>` lists a project's boards and Global's",
         "read": "`nebula moodboard show <id>` gives one in full",
-        "nodes": "`nebula nodes --category <category>` gives the rest",
+        "nodes": "`nebula nodes --category <category>` lists the rest with prices",
         "describe": "`nebula info <id>`: a node type's ports, params and prices, before you wire or set it.",
         "build": ("`nebula apply --note \"...\" --add +p=text-input --param +p.value=\"a lake at dawn\" "
                   "--add +g=<id> --wire +p:text +g:prompt --arrange` adds and wires in one step and prints "
