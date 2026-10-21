@@ -868,6 +868,24 @@ def test_accept_rejects_bad_positions(api):
     assert api.book.get(proposal_id).status == "open" and len(api.graph.nodes) == 1
 
 
+def test_accept_refuses_a_huge_int_position_in_any_content_type(api):
+    """_proposal_body parses the raw body itself, whatever its content type, so
+    a text/plain body skips the JSON number guard; it uses the guard's checked
+    parse. float(10**400) in clean_positions was a 500 (2026-10-20)."""
+    n1 = api.graph.add_node("text-input", {"value": "a cat"})
+    proposal_id = _propose(api, _upscale_body(n1)).json()["proposal"]["id"]
+    key = _key(api, proposal_id)
+    huge = "1" + "0" * 400
+    client = TestClient(api.main.app, raise_server_exceptions=False)
+    for content_type in ("text/plain", "application/json"):
+        response = client.post(f"/api/canvas/proposals/{proposal_id}/accept",
+                               headers={**PERSON, KEY: key, "content-type": content_type},
+                               content=('{"positions": {"+img": {"x": %s, "y": 0}}}' % huge).encode())
+        assert response.status_code == 422, (content_type, response.text)
+        assert huge[:40] in response.json()["detail"] and "1.8e308" in response.json()["detail"]
+    assert api.book.get(proposal_id).status == "open" and len(api.graph.nodes) == 1
+
+
 def test_withdraw_is_for_the_proposing_agent_only(api):
     n1 = api.graph.add_node("text-input", {"value": "a cat"})
     proposal_id = _propose(api, _upscale_body(n1)).json()["proposal"]["id"]
