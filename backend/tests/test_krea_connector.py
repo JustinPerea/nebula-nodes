@@ -190,7 +190,8 @@ async def test_consent_expiry_closes_listener_and_does_not_sign_in_again(connect
         _, _, registration, exchange = oauth(router)
         await connector.connect()
         port = urlsplit(connector._pending["redirect"]).port
-        await asyncio.sleep(0.05)
+        # Wait for the expiry itself, not a fixed 50 ms (a 30 ms margin failed under load).
+        await asyncio.wait_for(connector._expiry_task, 5)
         assert connector.status()["status"] == "needs_auth"
         assert connector._pending is connector._server is None
         with pytest.raises(OSError):

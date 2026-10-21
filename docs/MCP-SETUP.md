@@ -445,6 +445,26 @@ shell has no network; see "In-app agents use this server") and any client that r
 CLI or API. It does not bind an outside agent with its own shell and network.
 It is not a sandbox against hostile local code.
 
+### Numbers in request bodies
+
+Every JSON request body (`application/json`, `application/*+json`, any
+other type that starts with `application/json` such as
+`application/json-seq`, which some routes accept, or no content type) is
+checked once before any route reads it
+(`backend/services/json_number_guard.py`, added inside the Host/Origin guard
+and inside CORS). `NaN`, `Infinity`, `-Infinity`, and numbers too big for a
+float (`1e400`, an integer like `10**400`, or one over 4,300 digits) get a
+422 with one line, for example `{"detail": "JSON number out of range: 1e400.
+Send a finite number between about -1.8e308 and 1.8e308."}`. Only number
+tokens count: a string holding "NaN" or 400 digits is fine, and a body that
+isn't JSON at all gets the route's own error. A body whose first character
+rules out a JSON number (a zip sent with no content type) streams through
+unread. Places that parse client JSON
+themselves follow the same rule through `loads_checked`: the `/ws` and
+`/ws/chat` frames (the chat socket answers an `error` event), proposal
+accept and reject bodies, and `graph.json` in a restore bundle (400 "Invalid
+graph.json: ...").
+
 ### Pins
 
 The person can pin a short note to a node or to a spot on the canvas for

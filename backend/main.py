@@ -123,6 +123,7 @@ from services.agent_profiles import (
     protected_agent_dirs,
 )
 from services.local_guard import LocalRequestGuard
+from services.json_number_guard import JsonNumberGuard, JsonNumberOutOfRange, loads_checked
 from services.agent_workspaces import AgentWorkspaceContext, WorkspaceSessions, WorkspaceSessionError, workspace_scope
 from services.chat_actions import publish_action
 from services import moodboard_actions
@@ -647,6 +648,11 @@ DYNAMIC_NODE_PROVIDER_BY_DEFINITION = {
     "fal-universal": "fal",
 }
 
+# Refuses a JSON body with NaN, Infinity or a number past float's range (422),
+# for every router, before any route parses it. Added before CORS and
+# LocalRequestGuard so it runs inside both: a foreign Host or Origin is refused
+# before the body is read, and the 422 carries CORS headers.
+app.add_middleware(JsonNumberGuard)
 app.add_middleware(
     CORSMiddleware,
     # Accept any localhost port for dev (Vite auto-bumps to 5174/5175 when 5173 is busy, etc.).
@@ -1201,13 +1207,9 @@ def _read_and_validate_restore_graph(
     )
     try:
         text = payload.decode("utf-8")
-        graph = json.loads(
-            text,
-            object_pairs_hook=_reject_duplicate_json_keys,
-            parse_constant=lambda value: (_ for _ in ()).throw(
-                ValueError(f"invalid JSON number: {value}")
-            ),
-        )
+        # NaN, Infinity and numbers past float's range are refused here:
+        # float(10**400) in the checks below would raise OverflowError.
+        graph = loads_checked(text, object_pairs_hook=_reject_duplicate_json_keys)
     except (UnicodeDecodeError, ValueError, RecursionError) as exc:
         raise HTTPException(status_code=400, detail=f"Invalid graph.json: {exc}") from exc
     return _validate_restore_graph(graph)
@@ -2847,8 +2849,10 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             if manager.is_browser(websocket):
                 continue
             try:
-                frame = json.loads(raw)
-            except json.JSONDecodeError:
+                # ValueError, not only JSONDecodeError: an int past 4,300
+                # digits (or NaN, 1e400) raised out of this loop and ended it.
+                frame = loads_checked(raw)
+            except (ValueError, RecursionError):
                 continue
             if not isinstance(frame, dict) or frame.get("type") != "hello":
                 continue
@@ -3097,8 +3101,13 @@ async def chat_websocket(websocket: WebSocket) -> None:
         while True:
             raw = await websocket.receive_text()
             try:
-                payload = json.loads(raw)
-            except json.JSONDecodeError:
+                payload = loads_checked(raw)
+            except JsonNumberOutOfRange as exc:
+                await send_event({"type": "error", "message": str(exc), "source": "system"})
+                continue
+            except (ValueError, RecursionError):
+                # ValueError, not only JSONDecodeError: an int past 4,300
+                # digits raised out of this loop and ended the socket.
                 await send_event({"type": "error", "message": "invalid JSON", "source": "system"})
                 continue
 
@@ -5300,7 +5309,11 @@ async def _proposal_body(request: Request) -> dict[str, Any]:
     if not raw:
         return {}
     try:
-        body = json.loads(raw)
+        # Parsed whatever the content type, so a text/plain body skips
+        # JsonNumberGuard: check its numbers here.
+        body = loads_checked(raw)
+    except JsonNumberOutOfRange as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="body must be JSON") from exc
     if not isinstance(body, dict):
