@@ -128,6 +128,10 @@ nebula status
 Runs spend the person's own provider credits. A run over their limits, or
 with a node that has no list price, is refused: send it as a proposal.
 
+`nebula cancel` stops runs an agent or the CLI started. A run the person
+started from the canvas is theirs to stop: the CLI refuses it, so tell them
+to press Stop in Nebula.
+
 A run where any node failed exits 1 and prints each node's error (a missing
 key refuses the whole run before anything is called or spent). The card on
 the canvas shows the same error. `nebula look` prints a failed node's error

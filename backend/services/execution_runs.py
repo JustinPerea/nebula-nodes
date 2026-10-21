@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
-from typing import Callable, Literal
+from dataclasses import dataclass, field
+from typing import Any, Callable, Literal, Mapping
 
 
 ExecutionRunStatus = Literal[
@@ -28,6 +28,11 @@ class ExecutionRunRecord:
     task: asyncio.Task[None]
     status: ExecutionRunStatus = "running"
     had_error: bool = False
+    # Who started it and who first asked to stop it: {"kind": "person"},
+    # {"kind": "agent", "name": ...} or {"kind": "anonymous"} (see
+    # stop_refusal below). Attribution and the Stop rule, nothing else.
+    started_by: dict[str, Any] = field(default_factory=lambda: dict(ANONYMOUS_STARTER))
+    stopped_by: dict[str, Any] | None = None
 
 
 class ExecutionRunRegistry:
@@ -38,6 +43,7 @@ class ExecutionRunRegistry:
         self._cancel_before_start: dict[str, None] = {}
         self._max_records = max_records
         self._terminal_callback: Callable[[str, ExecutionRunStatus], None] | None = None
+        self._starter_source: Callable[[], Mapping[str, Any]] | None = None
 
     def set_terminal_callback(
         self,
@@ -45,7 +51,13 @@ class ExecutionRunRegistry:
     ) -> None:
         self._terminal_callback = callback
 
-    def register(self, run_id: str, task: asyncio.Task[None]) -> ExecutionRunRecord:
+    def set_starter_source(self, source: Callable[[], Mapping[str, Any]] | None) -> None:
+        """Who is starting a run, asked once as it registers (main.py reads
+        the request's headers). A run registered with ``started_by`` keeps that."""
+        self._starter_source = source
+
+    def register(self, run_id: str, task: asyncio.Task[None], *,
+                 started_by: Mapping[str, Any] | None = None) -> ExecutionRunRecord:
         if not run_id or len(run_id) > 128:
             raise ValueError("runId must be between 1 and 128 characters")
         if run_id in self._records:
@@ -56,7 +68,10 @@ class ExecutionRunRegistry:
             task.cancel()
             raise
         self._prune()
-        record = ExecutionRunRecord(run_id=run_id, task=task)
+        if started_by is None and self._starter_source is not None:
+            started_by = self._starter_source()
+        record = ExecutionRunRecord(run_id=run_id, task=task,
+                                    started_by=dict(started_by or ANONYMOUS_STARTER))
         self._records[run_id] = record
         task.add_done_callback(lambda completed, rid=run_id: self._finish(rid, completed))
         return record
@@ -169,3 +184,29 @@ class ExecutionRunRegistry:
         ]
         for run_id in terminal[:excess]:
             self._records.pop(run_id, None)
+
+
+# -- who may stop a run (Justin, 2026-10-20, MCP parity Q61 a) -------------------
+
+ANONYMOUS_STARTER: dict[str, Any] = {"kind": "anonymous"}
+
+PERSONS_RUN_REFUSAL = (
+    "The person started this run, so only they can stop it: ask them to press Stop "
+    "in Nebula (the toolbar, or the run in Run history). Agents stop only runs an agent started."
+)
+
+
+def stop_refusal(started_by: Mapping[str, Any] | None, *, caller_is_person: bool) -> str | None:
+    """Why this caller may not stop a run, or None when it may.
+
+    The person (their launch token, services/person_gate.py) stops any run.
+    Anyone else, a named agent or an unnamed caller such as the `nebula` CLI
+    without NEBULA_AGENT_NAME, stops only runs that weren't the person's: a
+    Stop can't be undone, and the person's run is theirs to end. An unnamed
+    caller's runs count as an agent's, since nothing proves the person
+    started them, so the CLI by hand still stops what it started."""
+    if caller_is_person:
+        return None
+    if (started_by or {}).get("kind") == "person":
+        return PERSONS_RUN_REFUSAL
+    return None
