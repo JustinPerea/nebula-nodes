@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from services.output import OUTPUT_ROOT
+from tests.conftest import stored_image_urls
 
 
 @pytest.fixture
@@ -45,7 +46,7 @@ def _create(client, **body) -> dict:
 
 
 def test_a_board_of_32_images_keeps_all_32(client):
-    urls = [f"/api/outputs/chat-uploads/{n}.png" for n in range(32)]
+    urls = stored_image_urls(32, name="big")
     created = client.post("/api/moodboards", json={"name": "Big", "images": [{"url": u} for u in urls]}).json()
 
     assert [img["url"] for img in created["images"]] == urls
@@ -64,7 +65,7 @@ def test_create_refuses_fields_it_does_not_know(client, body, field):
 
 
 def test_a_blank_image_url_is_refused_not_dropped(client):
-    created = client.post("/api/moodboards", json={"name": "Board", "images": [{"url": "/api/outputs/a.png"}, {"url": "  "}]})
+    created = client.post("/api/moodboards", json={"name": "Board", "images": [{"url": _url()}, {"url": "  "}]})
     assert created.status_code == 422 and created.json()["detail"] == "images[1].url is empty"
 
     board = _create(client)

@@ -2124,6 +2124,21 @@ nebula moodboard delete <board>
   shows a placeholder for them, and a run of a Character node leaves such a
   view out and says so in the run's notes (it stops when every view is one)
   (contract 07, section 2.2).
+- Images on a board must be Nebula's own files too (the same rule, without
+  the shipped Style thumbnails): `POST /api/moodboards`, a `PUT` that adds or
+  replaces an image, and the `add` board edit refuse an `http(s)` link, a
+  `data:` URI or a file outside the output folder with a 422 that names the
+  image (`images[1].url is an image link from outside Nebula ...`), and
+  nothing is saved. `nebula moodboard new`/`add` and moodboard_create /
+  moodboard_add download a link and upload it first, so use them for web
+  images. A board saved before the check keeps its links: the board read
+  lists them in `outsideImages`, `show --json` and moodboard_get mark each
+  one `outside: true` (with an `outsideNote`), `show` prints "[Image link from
+  outside Nebula (not loaded)]" before it, the app shows a placeholder, and
+  a run and the analysis leave it out and don't count it (contract 07,
+  section 1.19). Anyone who could reach the routes could have saved such a
+  link, so don't fetch it on your own: ask the person first, and only with
+  their OK re-add it with `add` (which fetches it), then remove the old one.
 - A board is named by its id or exact name; an image by its number or id
   from `show`. `--json` prints the board as JSON (the MCP tools return the
   same shape).

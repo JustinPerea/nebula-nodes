@@ -619,7 +619,9 @@ export interface MoodboardAnalysisImage {
   id: string;
   url: string;
   weight: number;
-  status: 'analyzed' | 'unresolved' | 'error';
+  /** `outside`: an image link from outside Nebula on a board saved before
+   *  board images were checked (contract 07 §1.19), never fetched. */
+  status: 'analyzed' | 'unresolved' | 'error' | 'outside';
   /** Set aside (version 5 on): measured, never steers. Absent otherwise. */
   setAside?: boolean;
   colors?: Array<{ hex: string; share: number; accent: boolean }>;
@@ -721,6 +723,10 @@ export interface Moodboard {
   coverImageId?: string | null;
   /** The server's: the cover image's url, else #1's. */
   thumbnail: string;
+  /** The server's, on read only: ids of images that are links to another
+   *  site (a board saved before images were checked). Never loaded: the app
+   *  draws board images through lib/storedImage.ts. */
+  outsideImages?: string[];
   projectId?: string;
   createdAt: string;
   updatedAt: string;

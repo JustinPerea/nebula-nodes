@@ -324,6 +324,7 @@ export function AssetsPanel() {
                   name={m.name}
                   sub={`${moodboardImagesLabel(m.images.length, setAsideCount(m.images))} · ${m.mode}`}
                   thumbnail={m.thumbnail}
+                  localOnly
                   emptyThumb="▦"
                   selected={selected === `moodboards:${m.id}`}
                   onSelect={() => setSelected(`moodboards:${m.id}`)}

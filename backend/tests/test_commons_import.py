@@ -44,7 +44,9 @@ def test_moodboard_import_is_idempotent_and_marks_ai_outputs(store, tmp_path, mo
     first = intake.import_moodboards(store)
     second = intake.import_moodboards(store)
     assert first["added"] == 2 and second["added"] == 0
-    assert [s["reason"] for s in first["skipped"]] == ["unsupported url"]
+    # blob: is a link the browser holds, never one of Nebula's files (Q98).
+    assert [s["url"] for s in first["skipped"]] == ["blob:xyz"]
+    assert "outside Nebula" in first["skipped"][0]["reason"]
     (col,) = [c for c in store.list_collections() if c["kind"] == "moodboard"]
     assert col["name"] == "Warm editorial" and col["source_ref"] == "mb1"
     made = {}
@@ -113,11 +115,16 @@ def test_moodboard_reimport_adds_no_sightings_and_refetches_nothing(store, tmp_p
         calls.append(url)
         return net.Fetched(url, url, "image/png", png(20), 200)
 
-    intake.import_moodboards(store, fetch=fake_fetch)
-    intake.import_moodboards(store, fetch=fake_fetch)
+    monkeypatch.setattr(net, "safe_fetch", fake_fetch)
+    first = intake.import_moodboards(store)
+    intake.import_moodboards(store)
+    # Q98: a board image that is a link to another site is never fetched
+    # (nothing in Nebula loads one); the import skips it and says why.
     with store.db.read() as conn:
-        assert conn.execute("SELECT count(*) FROM sightings").fetchone()[0] == 1
-    assert calls == ["https://img.example/a.png"]
+        assert conn.execute("SELECT count(*) FROM sightings").fetchone()[0] == 0
+    assert calls == []
+    assert [item["url"] for item in first["skipped"]] == ["https://img.example/a.png"]
+    assert "outside Nebula" in first["skipped"][0]["reason"]
 
 
 @pytest.mark.asyncio

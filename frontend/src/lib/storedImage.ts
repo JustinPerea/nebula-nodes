@@ -31,7 +31,9 @@ export function storedImageView(value: unknown): StoredImageView {
   if (typeof value !== 'string' || !value.trim()) return NONE;
   const text = value.trim();
   if (served(text)) return { src: backendAssetUrlSync(text), outside: false };
-  if (text.startsWith('//')) return OUTSIDE;
+  // As a browser reads it (and the backend's is_outside_link): tabs and
+  // newlines dropped, a backslash a slash, so `/\host` is protocol-relative.
+  if (text.replace(/[\t\n\r]/g, '').replaceAll('\\', '/').startsWith('//')) return OUTSIDE;
   // A file path (POSIX or Windows): drawn only when it is inside an output folder.
   if (text.startsWith('/') || /^[A-Za-z]:[\\/]/.test(text)) {
     const normalized = text.replaceAll('\\', '/');
