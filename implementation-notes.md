@@ -1,5 +1,15 @@
 # Implementation Notes
 
+## 2026-10-20 — The project-open ping tests: a limit clear of pauses the open didn't cause
+
+Branch `fix/reopen-ping-flake` from origin/main 772cabc6. Test-only.
+
+- **What failed.** #128's CI, after its merge with main, failed `test_a_ping_answers_while_the_open_project_is_reopened`: "a ping waited 0.35s behind the reopen", against a fixed 0.3 s limit. #128 doesn't touch the open path, and the other four PRs re-merged at the same time passed it. Locally the same ping waits 1 to 3 ms, alone or with the file. The CI log shows the check ran once, in the worker thread.
+- **Why (likely, not proven).** A pause the open didn't cause. The ping is due 0.1 s in, while the open is still in its first loop work (middleware, `workspace()`, the live export, a small deepcopy), before the check's thread starts. The commit's disk work (flock, write, fsync) can't be it: it runs only after the check's DELAY, when the ping has long answered. *I first blamed the fsync; the review refuted it with a timed probe: 0.4 s added to every fsync left the ping at 3 ms, while 0.45 s of blocking before the thread starts reproduced 0.359 s.* Nothing in that early part is heavy on a 1-node project, so the likely cause is a full garbage-collection pass in the 8,800-test process (or the runner pausing it).
+- **Fix.** `DELAY` goes to 1.2 s, so a check on the loop holds the ping at least 1.1 s, and the four ping tests use `PING_LIMIT = DELAY / 2` (0.6 s). The thread check (`not any(slow_check)`, the direct proof that the check ran in a worker) now comes before the latency one, so a failure names the cause. `_ping_during` runs `gc.collect()` before the window. The file takes about 12 s instead of 6.
+- **What's looser.** Other blocking work on the loop before the thread starts now fails only above about 0.6 s instead of 0.3 s. The test was built to catch the check, which still fails both assertions; on a 1-node project a real regression elsewhere would rarely sit between the two. Work after the thread (staging, commit) was never inside the window.
+- **Checked.** The file passes twice. With `asyncio.to_thread` patched to run inline (the bug back), all four ping tests fail with "the whole-snapshot check ran on the event loop" (the import one: "whole-graph").
+
 ## 2026-10-20 — PR26b: first-turn fixes from the PR26 measurement
 
 Branch `feat/first-turn-fixes` from origin/main f94ce4f2. The fixes the PR26 measurement (15 `claude -p` runs; PR #131's doc, not edited here) asked for. No paid provider was called and no measurement run was made.

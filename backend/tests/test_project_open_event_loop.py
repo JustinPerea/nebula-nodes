@@ -15,6 +15,7 @@ its refusals keep their order (a 404 or a stale revision still answers first).
 from __future__ import annotations
 
 import asyncio
+import gc
 import json
 import sys
 import time
@@ -36,7 +37,12 @@ from services.provider_start_guard import ProviderStartGuard
 
 AGENT = {"X-Nebula-Agent": "Claude Code"}
 SLOW = "slow-check-marker"
-DELAY = 0.6
+DELAY = 1.2
+# A check on the event loop holds a ping at least DELAY - 0.1 s (the thread
+# assertions are the direct proof). The limit sits halfway, clear of a pause
+# the open didn't cause: CI held one ping 0.35 s before the check's thread had
+# even started, most likely a garbage-collection pass in the full suite.
+PING_LIMIT = DELAY / 2
 
 
 @pytest.fixture
@@ -110,6 +116,7 @@ async def _ping_during(request, *, after=0.1):
     """Send ``request`` and, ``after`` seconds in, a ping. Returns (response,
     ping latency measured from when it was due, whether the request was still
     in flight when the ping answered)."""
+    gc.collect()  # now, rather than inside the window
     started = time.monotonic()
     task = asyncio.ensure_future(request)
 
@@ -135,10 +142,10 @@ async def test_a_ping_answers_while_a_large_project_opens(workspace, slow_check)
         response, latency, in_flight = await _ping_during(
             client.post(f"/api/projects/{big}/open", json={"workspaceRevision": small["workspaceRevision"]}))
     assert response.status_code == 200, response.text
-    assert latency < 0.3, f"a ping waited {latency:.2f}s behind the open"
+    assert slow_check and not any(slow_check), "the whole-snapshot check ran on the event loop"
+    assert latency < PING_LIMIT, f"a ping waited {latency:.2f}s behind the open"
     assert in_flight, "the open finished before the ping, so it proves nothing"
     assert store.read()["activeProjectId"] == big
-    assert slow_check and not any(slow_check), "the whole-snapshot check ran on the event loop"
 
 
 @pytest.mark.asyncio
@@ -153,8 +160,8 @@ async def test_a_ping_answers_while_the_open_project_is_reopened(workspace, slow
             client.post(f"/api/projects/{made['project']['id']}/open", json={"workspaceRevision": made["workspaceRevision"]},
                         headers=AGENT))
     assert response.status_code == 200, response.text
-    assert in_flight and latency < 0.3, f"a ping waited {latency:.2f}s behind the reopen"
     assert not any(slow_check), "the whole-snapshot check ran on the event loop"
+    assert in_flight and latency < PING_LIMIT, f"a ping waited {latency:.2f}s behind the reopen"
     assert [node["params"]["value"] for node in graph.nodes.values()] == [SLOW]
 
 
@@ -167,8 +174,8 @@ async def test_a_ping_answers_while_a_stale_tab_is_recovered(workspace, slow_che
             "sourceProjectId": made["project"]["id"], "recoveryId": uuid4().hex,
             "snapshot": _snapshot(SLOW), "paramsVersion": main_module.PARAMS_VERSION}))
     assert response.status_code == 200, response.text
-    assert in_flight and latency < 0.3, f"a ping waited {latency:.2f}s behind the recovery"
     assert not any(slow_check), "the whole-snapshot check ran on the event loop"
+    assert in_flight and latency < PING_LIMIT, f"a ping waited {latency:.2f}s behind the recovery"
     assert len(store.read()["projects"]) == 2
 
 
@@ -180,8 +187,8 @@ async def test_a_ping_answers_while_a_graph_file_is_imported(workspace, slow_che
         response, latency, in_flight = await _ping_during(client.post("/api/graph/import", json={
             "nodes": [{"id": "a", "definitionId": "text-input", "params": {"value": SLOW}}], "edges": []}))
     assert response.status_code == 200, response.text
-    assert in_flight and latency < 0.3, f"a ping waited {latency:.2f}s behind the import"
     assert not any(slow_check), "the whole-graph check ran on the event loop"
+    assert in_flight and latency < PING_LIMIT, f"a ping waited {latency:.2f}s behind the import"
     assert [node["params"]["value"] for node in graph.nodes.values()] == [SLOW]
 
 
