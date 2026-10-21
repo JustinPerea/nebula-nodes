@@ -143,15 +143,15 @@ The server exposes these tools for building and running (see
   or Quiver's models (`/api/openrouter/models`, `/api/nous/models`,
   `/api/quiver/models`, the routes the Inspector's pickers read), filtered by
   every word of `query`, and names the node and the param (`model`) the id
-  goes in. `model_schema("replicate", "owner/name")` reads a Replicate
-  model's latest version (`/api/replicate/schema/{owner}/{name}`): each
-  input with `port: true` (a file input, wired into a port of that name on
-  the Replicate node) or `port: false` (set as a param of that name), and
-  the raw input and output schemas. For the other providers it returns that
-  model's catalog row. They use the person's key and cost nothing; without
-  the key the refusal names it. See
-  [Universal nodes over MCP](#universal-nodes-over-mcp) for what
-  `edit_canvas` can wire on them today.
+  goes in; OpenRouter and Nous rows carry `ports` ({inputs, outputs}, port
+  ids). `model_schema(provider, model_id)` reads one model: its `ports`
+  ({inputs, outputs}, each {id, label, dataType, required, multiple?}), the
+  ports the node gets with that model, and the catalog row (`model`), or for
+  Replicate (`/api/replicate/schema/{owner}/{name}`) the latest
+  `versionId`, `params` (the other inputs, set as params of the same name)
+  and the raw input and output schemas. They use the person's key and cost
+  nothing; without the key the refusal names it. See
+  [Universal nodes over MCP](#universal-nodes-over-mcp).
 - `krea_discovery_tools` / `krea_discover`: the read-only Krea discovery
   calls (`list_models`, `get_model_schema`, `get_prompting_guide`,
   `list_styles`, `list_moodboards`, `get_node_apps`, `get_node_app_versions`,
@@ -1444,6 +1444,8 @@ model's file inputs are its ports. One backend module has the rules
   set them with params instead of a wire").
 - `describe_node` on these nodes has `modelPorts`, a sentence with the rules;
   `look_at_canvas` lists a configured node's `ports` ({inputs, outputs}).
+  Before an edit, `model_schema` (and `model_catalog`'s rows, as ids) give a
+  model's ports from the same function.
 - `POST /api/universal/ports {definitionId, model, params?}` returns a
   model's ports without a node (and, for Replicate, its params and version).
 - The canvas export, the wire checks (`port_contracts.node_ports`) and the
@@ -1633,31 +1635,31 @@ canvas's TS copy of `providerVia` equal to the JSON one.
 ### Universal nodes over MCP
 
 `model_catalog` and `model_schema` (above) say which models the OpenRouter,
-Nous Portal, Quiver and Replicate nodes can run. What `edit_canvas` can build
-with them today (checked 2026-10-20 against `/api/graph/apply`):
+Nous Portal, Quiver and Replicate nodes can run, and for the three universal
+nodes which ports each model gives the node. Those ports come from
+`services/universal_ports.py`, the same function `edit_canvas` configures a
+node with, the canvas draws from and `look_at_canvas` reads (see
+[Universal nodes: ports from the model](#universal-nodes-ports-from-the-model)),
+so the three always agree:
 
-- **Replicate** (`replicate-universal`) declares no ports, so the backend
-  accepts a wire to any input name. Set `model_id` to the owner/name, wire
-  each `port: true` input into the port of that name, and set the other
-  inputs as params; the run sends both to Replicate under those names
-  (`handlers/replicate_universal.py`). `_version_id` is the canvas's own:
-  without it the run asks Replicate for the latest version. It declares no
-  output ports either: a run names its output by what Replicate returns
-  (`image` for an image or other file URL or a list of URLs, `video` or
-  `audio` by file extension, `svg`/`mesh` for those data URIs, `text`
-  otherwise), so `model_schema`'s `output.port` says which handle to wire
-  onward from.
-- **OpenRouter** and **Nous Portal** keep the ports their definitions declare
-  (OpenRouter `messages` to `text`; Nous `messages` and `images` to `text`).
-  The vision input `images` on OpenRouter and the `image` output of an image
-  model are added only by the canvas's model picker
-  (`graphStore.configureOpenRouterModel`), with the internal `_output_image`
-  param, so `edit_canvas` refuses those wires and that param.
-- On the canvas, a model's ports come from the Inspector
-  (`configureOpenRouterModel`, `fetchReplicateSchemaAndConfigure`), which
-  keeps them in the browser only; the backend sends a universal node with its
-  definition's ports (`main.py` `_cli_node_to_rf`). Moving that into the
-  backend is open work (docs/notes/2026-10-20-feat-mcp-cancel-scope-catalogs-krea.md).
+1. `model_schema("openrouter", "google/gemini-3-pro-image")` returns
+   `ports: {inputs: [messages, images], outputs: [text, image]}` (each port
+   with its `dataType`).
+2. One `edit_canvas` call creates the node with `params: {model: ...}` (or
+   `model_id` on Replicate) and wires those ports: `images` in, `image` out,
+   or a Replicate model's file inputs by name. The reply's `modelPorts` lists
+   the same ids, `look_at_canvas` shows them as the node's `ports`, and the
+   canvas draws them without a reload.
+
+- **OpenRouter / Nous Portal:** `messages` always; `images` (Image, several
+  wires) for a model that takes images; `text` and/or `image` out for what
+  it makes, as the model list says.
+- **Replicate:** a port per file input (`x-uploadable`, or a `uri` string),
+  named as the schema names it; one output, `image` for a file URL or a list
+  of them, else `text`. `model_schema`'s `params` are the other inputs: set
+  them as params of the same name; a wire to one is refused.
+- **Quiver** nodes have fixed ports (`describe_node`); their catalog rows
+  carry no `ports`.
 
 ### In-app agents use this server
 
