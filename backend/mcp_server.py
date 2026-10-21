@@ -59,7 +59,95 @@ Styles (saved looks in Create): style_list, style_get, style_create, style_updat
 If you also use the `nebula` CLI, set NEBULA_AGENT_NAME so both share one name.
 """
 
-mcp = FastMCP("Nebula Nodes", instructions=INSTRUCTIONS + "\n" + COMMONS_MCP_GUIDE)
+# -- argument errors in one line ------------------------------------------------------
+# FastMCP checks a call's arguments with pydantic and hands the agent its raw
+# report ("1 validation error for moodboard_getArguments\nboard\n  Field
+# required [type=missing, ...]"), and it ignores names a tool doesn't take
+# when the required ones are there. Claude Code defers MCP tool schemas
+# behind ToolSearch, so an agent that calls start_here first guesses the next
+# tools' argument names: the PR26 measurement's runs sent moodboard_get(id=),
+# describe_node(id=) and run_nodes(node_ids=), which ran the whole canvas.
+# So every tool's arguments are checked here first, against the tool's own
+# schema, and a wrong one gets one line naming the real ones.
+_SIGNATURE_NAMES = 12
+_TYPE_WORDS = {"string": "text", "number": "a number", "integer": "a whole number", "boolean": "true or false",
+               "array": "a list", "object": "an object"}
+
+
+def _type_words(schema: dict[str, Any]) -> str:
+    """A param's JSON schema type in plain words: "a number", "text or a list"."""
+    options = schema.get("anyOf") or [schema]
+    words = [_TYPE_WORDS[option["type"]] + (" of objects" if option.get("type") == "array"
+                                            and (option.get("items") or {}).get("type") == "object" else "")
+             for option in options if option.get("type") in _TYPE_WORDS]
+    return " or ".join(dict.fromkeys(words)) or "another type"
+
+
+def _signature(schema: dict[str, Any], keep: list[str]) -> str:
+    """The tool's params, required ones marked, cut after _SIGNATURE_NAMES (but
+    always keeping `keep`, the names an error suggests)."""
+    properties = list((schema.get("properties") or {}))
+    required = set(schema.get("required") or [])
+    shown = [param for param in properties if param in required or param in keep]
+    shown += [param for param in properties if param not in shown][:max(0, _SIGNATURE_NAMES - len(shown))]
+    shown.sort(key=properties.index)
+    words = [f"{param} (required)" if param in required else param for param in shown]
+    if len(shown) < len(properties):
+        words.append(f"and {len(properties) - len(shown)} more")
+    return ", ".join(words) if words else "no arguments"
+
+
+def _example(name: str, schema: dict[str, Any]) -> str:
+    required = [param for param in (schema.get("properties") or {}) if param in set(schema.get("required") or [])]
+    return f" Call {name}({', '.join(f'{param}=...' for param in required)})." if required else ""
+
+
+def argument_problem(tool: Any, arguments: dict[str, Any]) -> str | None:
+    """One line saying what is wrong with `arguments` for `tool` (a FastMCP
+    Tool), or None when FastMCP would accept them."""
+    import difflib
+
+    from pydantic import ValidationError
+
+    schema = tool.parameters or {}
+    properties = schema.get("properties") or {}
+    unknown = [key for key in arguments if key not in properties]
+    missing = [param for param in properties if param in set(schema.get("required") or []) and param not in arguments]
+    if unknown:
+        close = {key: (difflib.get_close_matches(key, list(properties), n=1, cutoff=0.6) or [None])[0]
+                 for key in unknown}
+        names = ", ".join(f"{key} (did you mean {close[key]}?)" if close[key] else key for key in unknown)
+        keep = [value for value in close.values() if value]
+        return f"{tool.name} takes {_signature(schema, keep)}, not {names}.{_example(tool.name, schema)}"
+    if missing:
+        return (f"{tool.name} needs {' and '.join(missing)}: it takes {_signature(schema, [])}."
+                f"{_example(tool.name, schema)}")
+    metadata = tool.fn_metadata
+    try:
+        metadata.arg_model.model_validate(metadata.pre_parse_json(dict(arguments)))
+    except ValidationError as exc:
+        param = str((exc.errors()[0].get("loc") or ("?",))[0])
+        got = _json.dumps(arguments.get(param), ensure_ascii=False, default=str)
+        got = got if len(got) <= 40 else got[:39] + "…"
+        return (f"{tool.name}: {param} must be {_type_words(properties.get(param) or {})}, not {got}. "
+                f"It takes {_signature(schema, [param])}.")
+    return None
+
+
+class _NebulaMCP(FastMCP):
+    """FastMCP whose tools refuse wrong arguments in one line (argument_problem)."""
+
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+        from mcp.server.fastmcp.exceptions import ToolError
+
+        tool = self._tool_manager.get_tool(name)
+        problem = argument_problem(tool, arguments or {}) if tool is not None else None
+        if problem:
+            raise ToolError(problem)
+        return await super().call_tool(name, arguments)
+
+
+mcp = _NebulaMCP("Nebula Nodes", instructions=INSTRUCTIONS + "\n" + COMMONS_MCP_GUIDE)
 
 _READ = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
 _EDIT = ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=False)
@@ -221,7 +309,9 @@ def start_here(ctx: Context | None = None) -> str:
     - `proposals`: open proposals waiting for the person, and `count`.
     - `boards`: every moodboard, the current project's first, then Global,
       then other projects (`where`), with its image count, whether it is
-      analyzed and its Direction. moodboard_get gives one in full.
+      analyzed and its Direction; `read` is the moodboard_get call that
+      gives one in full, `use` the edit_canvas call that puts one on the
+      canvas.
     - `nodes`: the node types that run here, `byCategory` (id -> price in
       USD per run at defaults: [low, high], "free", or null for no list
       price); `runsWith` lists those that run other than with a key; `notes`
@@ -230,8 +320,10 @@ def start_here(ctx: Context | None = None) -> str:
     - `spend`: the per-run limit, this budget's kind, limit and use (for
       outside agents, what all of them used together), and Krea plan runs
       (get_spend_limits has per-model limits).
-    - `next`: `events` (cursor and journal for wait_for_canvas_change) and
-      how to describe a node, propose, and answer a pin.
+    - `next`: `events` (cursor and journal for wait_for_canvas_change), then
+      the exact calls, arguments named as each tool takes them: `describe`,
+      `build` (a whole edit_canvas plan), `propose`, `point` (with or
+      without a target) and `pins`.
     Nothing private: no image notes, private notes, board notes or replies."""
     return _json.dumps(_canvas_call("GET", "/api/agent/start", ctx), ensure_ascii=False)
 
@@ -359,20 +451,31 @@ def point_at(
     Point at a node (`node_id`), one of its ports (`node_id` + `port`), or a
     spot in flow coordinates (`x`, `y`). `say` shows a short line beside the
     cursor for a few seconds: your own action only ("Trying a tighter crop
-    here"). Give `from_node_id` (and `from_port`) with action "drag" to show a
-    wire being pulled. Graph edits made through Nebula's API move your cursor
-    on their own; use this to point while explaining, or to show what you are
-    about to change. What you noticed, a report or a suggestion goes in
-    post_note, which the person reads in the Updates list, not at your cursor.
+    here"). With only `say` (without node_id or x and y), the line shows
+    where your cursor already is and it doesn't move; with no cursor yet, it
+    starts at the middle of the person's view, or at (0, 0) when no canvas
+    has reported its view (`placed` says which). Give `from_node_id` (and `from_port`)
+    with action "drag" to show a wire being pulled. Graph edits made through
+    Nebula's API move your cursor on their own; use this to point while
+    explaining, or to show what you are about to change. What you noticed, a
+    report or a suggestion goes in post_note, which the person reads in the
+    Updates list, not at your cursor.
     """
-    def anchor(node: str | None, handle: str | None, px: float | None, py: float | None) -> dict[str, Any]:
+    def anchor(node: str | None, handle: str | None, px: float | None, py: float | None) -> dict[str, Any] | None:
         if node:
             return {"nodeId": node, **({"handle": handle} if handle else {})}
         if px is not None and py is not None:
             return {"x": px, "y": py}
-        raise ValueError("point_at needs node_id, or x and y")
+        return None
 
-    body: dict[str, Any] = {"target": anchor(node_id, port, x, y), "say": say, "action": action}
+    if not node_id and (x is None) != (y is None):
+        raise ValueError(f"point_at needs node_id, or x and y (both): you gave only {'x' if y is None else 'y'}")
+    target = anchor(node_id, port, x, y)
+    if target is None and (from_node_id or not say.strip()):
+        raise ValueError("point_at needs node_id, or x and y; or only say, to narrate where your cursor is")
+    body: dict[str, Any] = {"say": say, "action": action}
+    if target is not None:
+        body = {"target": target, **body}
     if from_node_id:
         body["from"] = anchor(from_node_id, from_port, None, None)
     return _canvas_call("POST", "/api/canvas/cursor", ctx, json=body)

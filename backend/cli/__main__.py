@@ -110,8 +110,14 @@ def build_parser() -> argparse.ArgumentParser:
     look_p = sub.add_parser("look", help="Read the canvas as data: what's on screen, states, wires, agent cursors")
     look_p.add_argument("--json", action="store_true", help="Print the raw snapshot JSON")
 
-    point_p = sub.add_parser("point", help="Move your cursor on the canvas so the user sees where you are working")
-    point_p.add_argument("target", help="Node (n2), port (n2.prompt) or flow coordinates (120,-40)")
+    point_p = sub.add_parser(
+        "point", help="Move your cursor on the canvas so the user sees where you are working",
+        description="Point at a node, a port or a spot. With only --say (no target) the line shows where your "
+                    "cursor already is, and it doesn't move; with no cursor yet it starts at the middle of the "
+                    "person's view, or at 0,0 when no canvas has reported its view.")
+    point_p.add_argument("target", nargs="?", default=None,
+                         help="Node (n2), port (n2.prompt) or flow coordinates (120,-40); leave it out to say "
+                              "something where your cursor is")
     point_p.add_argument("--say", default="",
                          help="Short line shown next to your cursor: your own action only "
                               "(what you noticed goes in `nebula note`)")
@@ -483,9 +489,24 @@ def default_url(environ: dict[str, str] | None = None, *, strict: bool = True) -
     return "http://localhost:8000"
 
 
+def _subparser(parser: argparse.ArgumentParser, name: str) -> argparse.ArgumentParser:
+    """A command's own parser, so its error prints its usage, not the top one."""
+    for action in parser._actions:  # noqa: SLF001 - argparse keeps subparsers only here
+        if isinstance(action, argparse._SubParsersAction) and name in action.choices:
+            return action.choices[name]
+    return parser
+
+
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
+    if args.command == "point" and args.target is None:
+        # One actionable line, with that command's usage (cli/parser.py).
+        if args.origin:
+            _subparser(parser, "point").error("--from needs a target to drag to (n2, n2.prompt or 120,-40)")
+        if not args.say.strip():
+            _subparser(parser, "point").error("give a target (n2, n2.prompt or 120,-40), or only --say \"...\" "
+                                              "to narrate where your cursor is")
     if args.command == "skill":
         # Installs files on this machine; needs no backend.
         from .commands import skill

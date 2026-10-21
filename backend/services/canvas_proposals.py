@@ -29,6 +29,7 @@ Memory-only: open and recently decided proposals are lost on restart.
 from __future__ import annotations
 
 import copy
+import json
 import re
 import secrets
 import time
@@ -147,6 +148,17 @@ def clean_note(raw: Any, *, limit: int = MAX_NOTE, label: str = "note") -> str:
         raise ProposalError(422, exc.detail) from exc
 
 
+def _placeable(value: Any) -> bool:
+    """A number position takes: finite and under COORD_LIMIT (an int past float's range isn't)."""
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        number = float(value)
+    except OverflowError:
+        return False
+    return number == number and abs(number) < COORD_LIMIT
+
+
 def _point(raw: Any, label: str) -> dict[str, float]:
     if not isinstance(raw, Mapping):
         raise ProposalError(422, f"{label} must be an object with x and y")
@@ -155,10 +167,9 @@ def _point(raw: Any, label: str) -> dict[str, float]:
         value = raw.get(axis)
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ProposalError(422, f"{label}.{axis} must be a number")
-        number = float(value)
-        if number != number or abs(number) >= COORD_LIMIT:
+        if not _placeable(value):
             raise ProposalError(422, f"{label}.{axis} must be a finite canvas coordinate")
-        result[axis] = round(number, 2)
+        result[axis] = round(float(value), 2)
     return result
 
 
@@ -186,10 +197,125 @@ def _end(raw: Any, refs: set[str], label: str) -> str:
     return raw
 
 
-def _handle(raw: Any, label: str) -> str:
+# A wire end's ports, for the line a missing port gets: called with the end
+# (a node id, or a ref of this request), the ref's definition id (None for a
+# node id) and "outputPorts" or "inputPorts"; it gives (definition id, port
+# ids), or None when it can't tell. main passes one that reads the canvas.
+PortLookup = Callable[[str, "str | None", str], "tuple[str, list[str]] | None"]
+HINT_PORTS = 12
+
+
+def _handle(raw: Any, label: str, ports: PortLookup | None = None, end: str = "",
+            definitions: Mapping[str, str] | None = None, kind: str = "") -> str:
     if not isinstance(raw, str) or not raw.strip() or len(raw) > MAX_HANDLE:
-        raise ProposalError(422, f"{label} must be a port id")
+        raise ProposalError(422, f"{label} must be a port id{_ports_hint(ports, end, definitions or {}, kind)}")
     return raw
+
+
+def _ports_hint(ports: PortLookup | None, end: str, definitions: Mapping[str, str], kind: str) -> str:
+    """". Valid outputPorts on +mb (nebula-moodboard): ['moodboard']", as a wrong port name's error says."""
+    found = ports(end, definitions.get(end), kind) if ports and end else None
+    if not found:
+        return ""
+    definition_id, ids = found
+    more = f" and {len(ids) - HINT_PORTS} more" if len(ids) > HINT_PORTS else ""
+    return f". Valid {kind} on {end} ({_short(definition_id, 128)}): {ids[:HINT_PORTS] or '(none)'}{more}"
+
+
+# Shapes agents guess for a node's type and a wire's ends (the PR26
+# measurement's runs sent `type` and `from`/`to`): the error names the right
+# field and, when it can, gives the agent's own node or wire rewritten.
+_DEFINITION_ALIASES = ("type", "definition", "kind", "definition_id", "definitionID", "nodeType", "node_type",
+                       "model")
+_EDGE_KEYS = ("source", "sourceHandle", "target", "targetHandle")
+_EDGE_ALIASES = {
+    "source": ("from", "sourceId", "source_id", "fromNode"),
+    "sourceHandle": ("sourcePort", "source_handle", "fromPort", "fromHandle", "sourceOutput", "output"),
+    "target": ("to", "targetId", "target_id", "toNode"),
+    "targetHandle": ("targetPort", "target_handle", "toPort", "toHandle", "targetInput", "input"),
+}
+WIRE_SHAPE = "{source, sourceHandle, target, targetHandle}"
+# The hints copy the agent's node back, but stay one short line whatever it
+# holds (a data URL in a param, a 50,000-character type).
+HINT_PARAMS = 8
+HINT_VALUE_CHARS = 40
+
+
+def _short(text: str, limit: int) -> str:
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+_NODE_KEYS = frozenset({"ref", "definitionId", "params", "position"})
+_NAME_KEYS = ("name", "label", "title")
+
+
+def _node_field_error(index: int, raw: Mapping[str, Any]) -> str | None:
+    """A node field parse_spec doesn't take, in one line saying where it goes
+    (E1 and E2 sent "x": 0, which was dropped without a word)."""
+    unknown = sorted(str(key) for key in raw if key not in _NODE_KEYS)
+    if not unknown:
+        return None
+    if "x" in raw or "y" in raw:
+        # The agent's numbers only when position would take them (finite, under COORD_LIMIT).
+        point = {axis: raw[axis] for axis in ("x", "y") if _placeable(raw.get(axis))}
+        shown = json.dumps(point) if len(point) == 2 else '{"x": ..., "y": ...}'
+        return (f"nodes[{index}] puts its place in position {shown}, not x and y "
+                "(or leave it out: new nodes are placed for you)")
+    name_key = next((key for key in _NAME_KEYS if key in raw), None)
+    if name_key is not None:
+        ref = _short(str(raw.get("ref")), 30)
+        name = raw[name_key]
+        shown = json.dumps(_short(name, 60)) if isinstance(name, str) else '"..."'
+        return f'nodes[{index}] is named with rename={{"{ref}": {shown}}}, not {name_key}'
+    return (f"nodes[{index}] has unknown field '{_short(unknown[0], 40)}': "
+            "a node is {ref, definitionId, params, position}")
+
+
+def _definition_hint(raw: Mapping[str, Any]) -> str:
+    """After "nodes[i].definitionId must be a node definition id": where the agent put it instead."""
+    alias = next((key for key in _DEFINITION_ALIASES if isinstance(raw.get(key), str) and raw.get(key)), None)
+    ref = _short(raw["ref"], 30) if isinstance(raw.get("ref"), str) else "+img"
+    if alias is None:
+        return f': a node is {{"ref": "{ref}", "definitionId": "nano-banana", "params": {{...}}}}'
+    example: dict[str, Any] = {"ref": ref, "definitionId": _short(raw[alias], 128)}
+    params = raw.get("params")
+    more = ""
+    if isinstance(params, dict) and params:
+        # Short values as sent, the rest as "...", and at most HINT_PARAMS keys.
+        example["params"] = {
+            _short(str(key), HINT_VALUE_CHARS):
+                value if len(json.dumps(value, ensure_ascii=False, default=str)) <= HINT_VALUE_CHARS else "..."
+            for key, value in list(params.items())[:HINT_PARAMS]}
+        if len(params) > HINT_PARAMS:
+            more = f" (and {len(params) - HINT_PARAMS} more params)"
+    return f"; the node type goes in definitionId, not {alias}: {json.dumps(example, ensure_ascii=False)}{more}"
+
+
+def wire_shape_error(raw: Mapping[str, Any], label: str) -> str | None:
+    """A wire written with other keys (from/to, sourcePort/targetPort), in one
+    line naming the four fields, with the agent's own wire rewritten when its
+    ends can be read ("+mb.moodboard" or "+mb:moodboard" is node and port).
+    None when the wire has all four fields or none of those other keys
+    (then the field's own error says what is wrong)."""
+    if all(key in raw for key in _EDGE_KEYS):
+        return None
+    aliases = {alias for options in _EDGE_ALIASES.values() for alias in options}
+    others = [str(key) for key in raw if key in aliases]
+    if not others:
+        return None
+    ends: dict[str, Any] = {}
+    for node_key, handle_key in (("source", "sourceHandle"), ("target", "targetHandle")):
+        node = next((raw[key] for key in (node_key, *_EDGE_ALIASES[node_key]) if isinstance(raw.get(key), str)), None)
+        handle = next((raw[key] for key in (handle_key, *_EDGE_ALIASES[handle_key])
+                       if isinstance(raw.get(key), str)), None)
+        if node and handle is None and re.search(r"[.:]", node):
+            node, handle = re.split(r"[.:]", node, maxsplit=1)
+        ends[node_key], ends[handle_key] = node, handle
+    message = f"{label} is a wire {WIRE_SHAPE}, not {'/'.join(others)}"
+    # Rewritten only when every end is short enough to be a real one.
+    if all(isinstance(ends[key], str) and ends[key] and len(ends[key]) <= MAX_HANDLE for key in _EDGE_KEYS):
+        message += ": " + json.dumps({key: ends[key] for key in _EDGE_KEYS}, ensure_ascii=False)
+    return message
 
 
 def _params(raw: Any, label: str, internal_ok: frozenset[str] = frozenset()) -> dict[str, Any]:
@@ -206,7 +332,8 @@ def _params(raw: Any, label: str, internal_ok: frozenset[str] = frozenset()) -> 
     return dict(raw)
 
 
-def parse_spec(body: Any, *, internal_ok: frozenset[str] = frozenset(), capped: bool = True) -> ProposalSpec:
+def parse_spec(body: Any, *, internal_ok: frozenset[str] = frozenset(), capped: bool = True,
+               ports: PortLookup | None = None) -> ProposalSpec:
     """Shape-check and sanitise a proposal body. Graph validation happens in main.
 
     `internal_ok` names underscore params a caller may set anyway: proposals
@@ -218,7 +345,9 @@ def parse_spec(body: Any, *, internal_ok: frozenset[str] = frozenset(), capped: 
     MAX_PARAM_NODES, MAX_RUN). The person reviews a proposal item by item, so
     it stays small. A direct edit (services/canvas_edits.py) passes False: it
     is bounded only by the canvas's own size limits, which main checks on the
-    staged graph."""
+    staged graph.
+
+    `ports` (PortLookup) lets a wire with no port name the ports its end has."""
     if not isinstance(body, dict):
         raise ProposalError(422, "the proposal must be a JSON object")
     unknown = sorted(set(body) - _ALLOWED_KEYS)
@@ -228,18 +357,24 @@ def parse_spec(body: Any, *, internal_ok: frozenset[str] = frozenset(), capped: 
 
     nodes: list[ProposedNode] = []
     refs: set[str] = set()
+    definitions: dict[str, str] = {}
     for index, raw in enumerate(_list(body, "nodes", MAX_NODES if capped else None)):
         if not isinstance(raw, dict):
             raise ProposalError(422, f"nodes[{index}] must be an object")
         ref = raw.get("ref")
         if not isinstance(ref, str) or not REF_RE.fullmatch(ref):
-            raise ProposalError(422, f"nodes[{index}].ref must look like +up (letters, digits, - or _)")
+            raise ProposalError(422, f"nodes[{index}].ref must look like +up (letters, digits, - or _): a node is "
+                                     '{"ref": "+up", "definitionId": "...", "params": {...}}')
         if ref in refs:
             raise ProposalError(400, f"duplicate ref '{ref}'")
         refs.add(ref)
         definition_id = raw.get("definitionId")
         if not isinstance(definition_id, str) or not definition_id or len(definition_id) > 128:
-            raise ProposalError(422, f"nodes[{index}].definitionId must be a node definition id")
+            raise ProposalError(422, f"nodes[{index}].definitionId must be a node definition id{_definition_hint(raw)}")
+        field_error = _node_field_error(index, raw)
+        if field_error:
+            raise ProposalError(422, field_error)
+        definitions[ref] = definition_id
         position = raw.get("position")
         nodes.append(ProposedNode(
             ref=ref,
@@ -252,12 +387,17 @@ def parse_spec(body: Any, *, internal_ok: frozenset[str] = frozenset(), capped: 
     for index, raw in enumerate(_list(body, "edges", MAX_EDGES if capped else None)):
         if not isinstance(raw, dict):
             raise ProposalError(422, f"edges[{index}] must be an object")
-        edges.append(ProposedEdge(
-            source=_end(raw.get("source"), refs, f"edges[{index}].source"),
-            source_handle=_handle(raw.get("sourceHandle"), f"edges[{index}].sourceHandle"),
-            target=_end(raw.get("target"), refs, f"edges[{index}].target"),
-            target_handle=_handle(raw.get("targetHandle"), f"edges[{index}].targetHandle"),
-        ))
+        shape = wire_shape_error(raw, f"edges[{index}]")
+        if shape:
+            raise ProposalError(422, shape)
+        source = _end(raw.get("source"), refs, f"edges[{index}].source")
+        source_handle = _handle(raw.get("sourceHandle"), f"edges[{index}].sourceHandle", ports, source, definitions,
+                                "outputPorts")
+        target = _end(raw.get("target"), refs, f"edges[{index}].target")
+        target_handle = _handle(raw.get("targetHandle"), f"edges[{index}].targetHandle", ports, target, definitions,
+                                "inputPorts")
+        edges.append(ProposedEdge(source=source, source_handle=source_handle, target=target,
+                                  target_handle=target_handle))
 
     changes: list[ParamChange] = []
     seen_nodes: set[str] = set()

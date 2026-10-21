@@ -392,17 +392,18 @@ How each node takes a wired board lives in one table, not in the node definition
 
 ### 1.18 Every board in an agent's first answer
 
-`GET /api/agent/start` (MCP `start_here`, `nebula context`; plan v2.7 PR26, MCP-SETUP.md) lists the person's boards in its `boards` part, so an agent needn't list each project's boards first. It comes from `MoodboardStore.summaries()` (`backend/services/moodboard_store.py`), a walk of the store's folders: `_global` and each canvas project's folder; dot folders (`.trash`, `.notes`) and folders whose name isn't a safe project id are skipped. It reads each board's JSON for its name, image count, whether it has an analysis, Direction and `updatedAt`, never the images or any note.
+`GET /api/agent/start` (MCP `start_here`, `nebula context`; plan v2.7 PR26, MCP-SETUP.md) lists the person's boards in its `boards` part, so an agent needn't list each project's boards first; when there are any, `read` gives the call that reads one in full (`moodboard_get(board="<id or exact name>")`, or `nebula moodboard show <id>` with `via=cli`) and `use` gives the exact call that puts one on the canvas (a `nebula-moodboard` node, the board in its `moodboard` param, its `moodboard` port wired to a Preview's `input`; `nebula apply` flags with `via=cli`). It comes from `MoodboardStore.summaries()` (`backend/services/moodboard_store.py`), a walk of the store's folders: `_global` and each canvas project's folder; dot folders (`.trash`, `.notes`) and folders whose name isn't a safe project id are skipped. It reads each board's JSON for its name, image count, whether it has an analysis, Direction and `updatedAt`, never the images or any note.
 
 ```json
 {"count": 41, "rows": [
   {"id": "mb_1", "name": "Good Machines", "where": "current", "images": 12, "analyzed": true, "direction": "quiet, warm, early light"}
-], "truncated": true, "more": "moodboard_get gives one in full"}
+], "truncated": true, "more": "moodboard_list(project_id=\"<project-id>\") lists a project's boards and Global's",
+ "read": "moodboard_get(board=\"<id or exact name>\") gives one in full", "use": "To show one: edit_canvas(...)"}
 ```
 
 - **`where`.** `current` for the open project (1.9), `global`, or the project's name from the catalog.
 - **Left out.** Boards in Recently deleted, boards filed under a project that is in Recently deleted, and boards in a folder that isn't a project in the catalog (an old-style folder the re-home hasn't moved yet, 1.9).
-- **Order and limits.** The current project's, then Global's, then the rest, each newest edit first; 30 rows at most, Direction cut to 80 characters, the whole part kept within 800 tokens (characters / 4). `count` is every board listed before the cut. `truncated` and `more` appear when rows were cut; `more` alone when every row fits but a Direction was cut short. The `via=cli` answer says "`nebula moodboard show <id>` gives one in full" instead.
+- **Order and limits.** The current project's, then Global's, then the rest, each newest edit first; 30 rows at most, Direction cut to 80 characters, the whole part kept within 800 tokens (characters / 4). `count` is every board listed before the cut. `truncated` and `more` appear when rows were cut (a Direction cut short is in full in `read`'s answer). The `via=cli` answer says "`nebula moodboard list --project <project-id>` lists a project's boards and Global's" and "`nebula moodboard show <id>` gives one in full" instead.
 
 ## 2. Character
 
@@ -455,3 +456,4 @@ A Style is what the person saves from Create ("Save current") and finds in Creat
 | 2026-10-20 | Moodboard adapters (plan PR13, A5): one table for how each node takes a board, the generated Krea part, `GET /api/moodboard/adapters`, the card line, the contract in the backend suite and `check-node-contracts.mjs`; Krea 2's `moodboard` port is `Moodboard` (saved wires valid under `Any` are kept; a run refuses them with where the id goes) (1.4, 1.16) |
 | 2026-10-20 | Moodboard Studio: the Board view (preview) behind a Board / List switch, its side panel, `place` per drag, files dropped at the pointer, Delete, the Studio's Cmd+Z / Shift+Cmd+Z / Cmd+S, and one `/edits` batch per undo step (1.7, 1.12); agents move cards with MCP `moodboard_edit` and CLI `nebula moodboard edit`, and the client's layout view carries `version` (1.12) |
 | 2026-10-20 | Styles (3): Recently deleted (kind `style`), `baseVersion` and 409 on `PUT`, the billing and internal-param rules for Style writes, `style.*` journal events and `storedAssetChanged` kind `style`, Delete with Undo and Recently deleted in the Assets panel, `nebula style`, `style_*` MCP tools (Q53 a) |
+| 2026-10-20 | Agents (PR26b): the start call's `boards.read` and `boards.use` say how to read a board and put one on the canvas (1.18) |
