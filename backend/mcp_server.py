@@ -46,7 +46,7 @@ Call start_here first: the canvas, open pins and proposals, every moodboard, the
 
 The loop:
 1. describe_node: a node type's ports, params and prices (find_nodes searches them).
-2. edit_canvas: new nodes ("+img" refs), wires, params, names, moves and removals in one call; all of it lands or none of it (or send `steps`). remove_from_canvas deletes nodes or wires. Each edit returns an undo token: undo_canvas_edit takes your own edit back.
+2. edit_canvas: new nodes ("+img" refs), wires, params, names, moves and removals in one call; all of it lands or none of it (or send `steps`). remove_from_canvas deletes nodes or wires. Each edit returns an undo token: undo_canvas_edit takes your own edit back (a node someone else ran since stays).
 3. run_nodes: runs a node and what feeds it, within the person's spend limits.
 4. view_output: look at what it made.
 5. propose_change instead, for a run over a limit or without a list price, or reworking their graph: the person accepts or rejects it in Nebula; agents cannot accept.
@@ -888,9 +888,17 @@ def undo_canvas_edit(token: str | list[str], ctx: Context | None = None) -> dict
     changed return to their earlier values, and nodes you removed come back
     with their params, outputs, name and wires. A part the person (or anyone)
     changed since stays as it is and is listed in `skipped` with the reason.
-    Returns `{status, added, removed, changed, renamed, moved, skipped}`;
+    A run counts as a change: a node the person, another agent or an unnamed
+    client ran since your edit stays whole (not removed; its params, name,
+    position and the wires into it stay as they ran) as one `skipped` item,
+    reason "ran since", with `ranBy` and a message such as "n3 ran since (run
+    by the person), so it stays". Your own runs don't count, so you can still
+    undo your own experiments.
+    Returns `{status, added, removed, changed, renamed, moved, skipped,
+    message}` (`message` says what went back and what was left, and why);
     `status` is "undone", "skipped" (nothing could go back; the token still
-    works) or "already-undone" (by you, or by the person with Cmd+Z, in
+    works if a changed part is put back, but a node someone ran since stays
+    for good) or "already-undone" (by you, or by the person with Cmd+Z, in
     `undoneBy`). A token works for 60 minutes, only for you, only while the
     project you edited is open. Calling it twice changes nothing the second
     time. The person sees the undo as your edit and can undo it in turn.

@@ -101,7 +101,10 @@ ports that node has.
 It also prints `Undo: nebula undo <token>`. Run that to take your edit back
 (for 60 minutes, while that project is open): what you added goes, what you
 changed or removed comes back, and anything the person changed since stays
-as it is (the output lists it). A plan of steps prints one line with every
+as it is (the output lists it). A run counts as a change: a node the person
+(or another agent) ran since your edit stays with its params, name and
+input wires ("n3 ran since (run by the person), so it stays"). Nodes only
+you ran still go, so you can undo your own experiments. A plan of steps prints one line with every
 step's token, newest first. Only your own `nebula apply` edits have tokens.
 
 Single edits also exist: `nebula create`, `connect`, `set`, `rename`, `move`,
