@@ -567,20 +567,46 @@ def summarize_cost(
 
 # Where each surface's agent finds a node that runs here. The HTTP answer
 # names the route; propose_change (MCP) and `nebula propose` (CLI) word the
-# warning again from cost.notReady for their own reader. The CLI names
+# warning again from cost.notReady for their own reader (agent_wording). The CLI names
 # `nebula nodes`, find_nodes' twin on the same route: by default it lists only
 # what runs here, and `nebula context`'s list is cut at its budget.
 READY_NODES_HTTP = "GET /api/agent/nodes"
 READY_NODES_MCP = "find_nodes"
 READY_NODES_CLI = "`nebula nodes`"
 
+# How each surface's agent withdraws a proposal ({id} is the proposal's id).
+# A proposal that can't run here is kept with its warning (Justin, Q109: "Keep
+# it with the warning, and tell the agent to withdraw it before proposing
+# something else"), so the warning and the reminder name the exact call.
+WITHDRAW_HTTP = "DELETE /api/canvas/proposals/{id}"
+WITHDRAW_MCP = 'withdraw_proposal(proposal_id="{id}")'
+WITHDRAW_CLI = "nebula proposal withdraw {id}"
 
-def readiness_warning(cost: Mapping[str, Any], *, lister: str = READY_NODES_HTTP) -> str | None:
+
+def cli_withdraw_form(agent_name: str | None) -> str:
+    """WITHDRAW_CLI, with `--as <name>` when the agent named itself that way
+    (withdrawing needs the same name the proposal was made under)."""
+    if not agent_name:
+        return WITHDRAW_CLI
+    import shlex
+
+    return f"{WITHDRAW_CLI} --as {shlex.quote(agent_name)}"
+
+
+def withdraw_call(proposal_id: str, form: str = WITHDRAW_HTTP) -> str:
+    return form.replace("{id}", proposal_id)
+
+
+def readiness_warning(cost: Mapping[str, Any], *, lister: str = READY_NODES_HTTP,
+                      proposal_id: str | None = None, withdraw: str = WITHDRAW_HTTP) -> str | None:
     """One paragraph for the agent naming the run's nodes that can't run here, or None.
 
     propose_change and `nebula propose` show it, so the agent can tell the
     person what to set up, or propose a model that runs here, before Accept.
-    ``lister`` is what lists the nodes that run here on the caller's surface."""
+    ``lister`` is what lists the nodes that run here on the caller's surface;
+    with ``proposal_id`` it ends with the call (``withdraw``, the caller's
+    surface) that takes this proposal back before the agent proposes
+    something else, so the person isn't left two to answer."""
     rows = [row for row in cost.get("notReady") or [] if isinstance(row, Mapping)]
     if not rows:
         return None
@@ -594,9 +620,43 @@ def readiness_warning(cost: Mapping[str, Any], *, lister: str = READY_NODES_HTTP
         lines.append(f"{label}: {need}" if name and need.startswith(name) else f"{label} ({name}) {need}")
     more = f" and {len(rows) - 6} more" if len(rows) > 6 else ""
     count = f"{len(rows)} node{'s' if len(rows) != 1 else ''}"
+    then = (f" If you propose something else instead, withdraw this one first: "
+            f"`{withdraw_call(proposal_id, withdraw)}`." if proposal_id else "")
     return (f"If the person accepts, the run fails: {count} can't run here as set up. "
             f"{'; '.join(lines)}{more}. Tell the person what to set up, or propose a node that runs here "
-            f"({lister} lists them).")
+            f"({lister} lists them).{then}")
+
+
+def still_open_reminder(rows: Iterable[Mapping[str, Any]], *, withdraw: str = WITHDRAW_HTTP) -> str | None:
+    """The line a new proposal's answer carries when the same agent still has
+    an open proposal here that can't run (ProposalBook.open_unrunnable)."""
+    lines = [f"Your proposal {row['id']} is still open and can't run here; withdraw it if this one replaces it: "
+             f"`{withdraw_call(str(row['id']), withdraw)}`." for row in rows]
+    return " ".join(lines) or None
+
+
+def agent_wording(response: Mapping[str, Any], *, lister: str = READY_NODES_HTTP,
+                  withdraw: str = WITHDRAW_HTTP) -> dict[str, Any]:
+    """A propose answer's agent lines in one surface's words: `warning` and
+    `withdrawWith` for this proposal, `stillOpen` and `reminder` for the
+    agent's other open proposals that can't run. main words them for HTTP;
+    propose_change and `nebula propose` again for their own reader."""
+    out = dict(response)
+    view = out.get("proposal") if isinstance(out.get("proposal"), Mapping) else {}
+    proposal_id = str(view.get("id") or "") or None
+    warning = readiness_warning(view.get("cost") or {}, lister=lister, proposal_id=proposal_id, withdraw=withdraw)
+    out.pop("withdrawWith", None)
+    if warning:
+        out["warning"] = warning
+        if proposal_id:
+            out["withdrawWith"] = withdraw_call(proposal_id, withdraw)
+    # A warning the cost can't word again (an older backend) is kept as sent.
+    rows = [row for row in out.pop("stillOpen", None) or [] if isinstance(row, Mapping) and row.get("id")]
+    out.pop("reminder", None)
+    if rows:
+        out["stillOpen"] = [{**row, "withdrawWith": withdraw_call(str(row["id"]), withdraw)} for row in rows]
+        out["reminder"] = still_open_reminder(rows, withdraw=withdraw)
+    return out
 
 
 # -- placement ----------------------------------------------------------------
@@ -730,6 +790,11 @@ def person_value(value: Any, *, key: str = "", depth: int = 0) -> Any:
     return str(value)[:200]
 
 
+def cant_run(proposal: Proposal) -> int:
+    """How many of the proposal's run nodes can't run here (cost.notReady, read when it was made)."""
+    return sum(1 for row in (proposal.cost or {}).get("notReady") or [] if isinstance(row, Mapping))
+
+
 def new_proposal_id() -> str:
     return "p_" + secrets.token_hex(4)
 
@@ -791,6 +856,14 @@ class ProposalBook:
 
     def open_list(self) -> list[Proposal]:
         return [p for p in self._items.values() if p.is_open]
+
+    def open_unrunnable(self, proposal: Proposal) -> list[Proposal]:
+        """The same agent's other open proposals on this canvas (project) whose
+        run can't run here, as read when each was made (cost.notReady). Another
+        agent's proposals, and ones that can run, are not this agent's to withdraw."""
+        return [p for p in self.open_list()
+                if p.id != proposal.id and p.agent.id == proposal.agent.id
+                and p.project_id == proposal.project_id and cant_run(p)]
 
     def close(
         self,
@@ -928,13 +1001,17 @@ class ProposalBook:
         return {"nodes": nodes, "params": params}
 
     def brief(self, proposal: Proposal) -> dict[str, Any]:
-        """The one-line form `nebula look` lists."""
+        """The one-line form `nebula look`, `nebula context` and start_here list.
+        `cantRun` counts the run's nodes that can't run here, when any do, so an
+        agent that comes back later sees it should withdraw that one."""
+        missing = cant_run(proposal)
         return {
             "id": proposal.id,
             "agent": proposal.agent.name,
             "note": proposal.spec.note,
             "status": proposal.status,
             "expiresInSeconds": max(0, int(proposal.expires_at - self._clock())),
+            **({"cantRun": missing} if missing else {}),
         }
 
 

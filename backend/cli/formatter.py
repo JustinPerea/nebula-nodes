@@ -470,7 +470,7 @@ def format_start(start: dict[str, Any]) -> str:
         for proposal in proposals.get("open") or []:
             note = json.dumps(str(proposal.get("note") or ""), ensure_ascii=False)
             lines.append(f"  {proposal.get('id')} by {proposal.get('agent')}: {note} "
-                         f"(expires in {_minutes(proposal.get('expiresInSeconds'))})")
+                         f"(expires in {_minutes(proposal.get('expiresInSeconds'))}{_cant_run(proposal)})")
         if proposals.get("more"):
             lines.append(f"  ({proposals['more']})")
 
@@ -660,7 +660,7 @@ def format_snapshot(snapshot: dict[str, Any]) -> str:
         lines.append(f"PROPOSALS ({len(proposals)} waiting for the person):")
         for proposal in proposals:
             left = proposal.get("expiresInSeconds")
-            expires = f" (expires in {_minutes(left)})" if isinstance(left, (int, float)) else ""
+            expires = f" (expires in {_minutes(left)}{_cant_run(proposal)})" if isinstance(left, (int, float)) else ""
             note = json.dumps(str(proposal.get("note") or ""), ensure_ascii=False)
             lines.append(f"  {proposal.get('id', '?')} by {proposal.get('agent') or 'an agent'}: {note}{expires}")
         lines.append("  (nebula proposal <id> --wait to hear the decision)")
@@ -799,6 +799,14 @@ def format_event(event: dict[str, Any]) -> str:
 
 def format_events(response: dict[str, Any]) -> str:
     return "\n".join(format_event(event) for event in response.get("events") or [])
+
+
+def _cant_run(proposal: dict[str, Any]) -> str:
+    """"; 1 node can't run here" for a proposal brief with `cantRun` (canvas_proposals.brief)."""
+    count = proposal.get("cantRun")
+    if not isinstance(count, int) or isinstance(count, bool) or count <= 0:
+        return ""
+    return f"; {count} node{'s' if count != 1 else ''} can't run here"
 
 
 def _minutes(seconds: Any) -> str:
