@@ -161,9 +161,9 @@ def test_describe_change_is_the_journal_summary_with_the_fields_it_leaves_out():
     both = _board(direction="warm dusk")
     both["images"] = aside["images"]
     assert _describe(before, both) == "Set aside #1 on board Dusk; changed Direction"
-    # The board's notes are the journal's own words, named once.
-    assert _describe(before, _board(notes="calm")) == "Changed the notes of board Dusk"
-    # ...and named as a field when the journal's summary is about something else.
+    # The board's notes are a field, named as the board.fields event names them (Q91).
+    assert _describe(before, _board(notes="calm")) == "Changed the board's notes on board Dusk"
+    # ...and named after the journal's summary when it is about something else.
     added_and_noted = _board(notes="calm")
     added_and_noted["images"] = added["images"]
     assert _describe(before, added_and_noted) == "Added #3 to board Dusk; changed the board's notes"
