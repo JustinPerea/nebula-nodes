@@ -808,6 +808,14 @@ def format_applied(result: dict[str, Any], *, undo: bool = True) -> str:
     arrange = result.get("arrange")
     if isinstance(arrange, dict) and arrange.get("message"):
         lines.append(f"  Arrange: {arrange['message']}")
+    # Universal nodes (OpenRouter, Nous Portal, Replicate) whose model was set:
+    # the ports it gave them, or why they have only their basic ones.
+    for node_id, ports in (result.get("modelPorts") or {}).items():
+        if isinstance(ports, dict):
+            lines.append(f"  Ports of {node_id} ({ports.get('model')}): in {', '.join(ports.get('inputs') or []) or '-'}; "
+                         f"out {', '.join(ports.get('outputs') or []) or '-'}")
+    for node_id, note in (result.get("modelPortNotes") or {}).items():
+        lines.append(f"  Ports of {node_id}: {note}")
     token = (result.get("undo") or {}).get("token") if undo else None
     if token:
         minutes = int((result["undo"].get("expiresInSeconds") or 0) // 60)

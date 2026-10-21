@@ -114,6 +114,28 @@ Lay out branches as a grid: columns are stages (sources, prompts, models,
 outputs) about 400 px apart, rows are branches about 250 px apart. Use
 `--at +ref=x,y` when adding.
 
+### OpenRouter, Nous Portal and Replicate: ports come from the model
+
+These three nodes take their ports from their model. Set the model in the
+same `nebula apply` (`--param +eye.model=openai/gpt-4o`, or `model_id=owner/name`
+on Replicate) and Nebula reads the model's data (free, with the person's key)
+and gives the node its ports; the output prints `Ports of n5 (model): in ...;
+out ...`.
+
+- OpenRouter / Nous Portal: `messages` always; `images` (Image, several
+  wires) for a model that takes images; `text` and/or `image` out for what it
+  makes. An image model's `image` wires onward like any Image output.
+- Replicate: one port per file input, named as the model names it
+  (`input_image`, `image`, `audio`), and one output, `image` for a file or a
+  list of them, else `text`. The model's other inputs are params of the same
+  name: set them with `--param`, don't wire them.
+
+Changing the model of a node with wires on ports the new model lacks (or
+clearing it, or naming one Nebula can't read, which leaves the basic ports)
+is refused: `--unwire` them in the same apply. Without the provider's key the
+node keeps its basic ports, and a wire to any other port is refused with the
+reason (only the person can add a key).
+
 ## Run
 
 ```bash

@@ -1,0 +1,312 @@
+{
+ "edges": [
+  {
+   "data": {
+    "dataType": "Text"
+   },
+   "id": "e1",
+   "source": "n1",
+   "sourceHandle": "text",
+   "target": "n3",
+   "targetHandle": "messages",
+   "type": "typed-edge"
+  },
+  {
+   "data": {
+    "dataType": "Text"
+   },
+   "id": "e2",
+   "source": "n1",
+   "sourceHandle": "text",
+   "target": "n4",
+   "targetHandle": "messages",
+   "type": "typed-edge"
+  },
+  {
+   "data": {
+    "dataType": "Text"
+   },
+   "id": "e3",
+   "source": "n1",
+   "sourceHandle": "text",
+   "target": "n6",
+   "targetHandle": "messages",
+   "type": "typed-edge"
+  },
+  {
+   "data": {
+    "dataType": "Image"
+   },
+   "id": "e4",
+   "source": "n2",
+   "sourceHandle": "image",
+   "target": "n6",
+   "targetHandle": "images",
+   "type": "typed-edge"
+  },
+  {
+   "data": {
+    "dataType": "Image"
+   },
+   "id": "e5",
+   "source": "n2",
+   "sourceHandle": "image",
+   "target": "n7",
+   "targetHandle": "input_image",
+   "type": "typed-edge"
+  },
+  {
+   "data": {
+    "dataType": "Text"
+   },
+   "id": "e6",
+   "source": "n3",
+   "sourceHandle": "text",
+   "target": "n7",
+   "targetHandle": "prompt",
+   "type": "typed-edge"
+  }
+ ],
+ "nodes": [
+  {
+   "data": {
+    "definitionId": "text-input",
+    "label": "Text Input",
+    "outputs": {},
+    "params": {
+     "value": "Describe the picture"
+    },
+    "state": "idle"
+   },
+   "id": "n1",
+   "type": "model-node"
+  },
+  {
+   "data": {
+    "definitionId": "image-input",
+    "label": "Image Input",
+    "outputs": {},
+    "params": {
+     "_previewUrl": "",
+     "imagePath": ""
+    },
+    "state": "idle"
+   },
+   "id": "n2",
+   "type": "model-node"
+  },
+  {
+   "data": {
+    "definitionId": "openrouter-universal",
+    "dynamicInputPorts": [
+     {
+      "dataType": "Text",
+      "id": "messages",
+      "label": "Messages",
+      "required": true
+     }
+    ],
+    "dynamicOutputPorts": [
+     {
+      "dataType": "Text",
+      "id": "text",
+      "label": "Text",
+      "required": false
+     }
+    ],
+    "dynamicParams": [],
+    "isDynamic": true,
+    "label": "OpenRouter",
+    "modelId": "anthropic/claude-sonnet-4.5",
+    "outputs": {},
+    "params": {
+     "_output_image": false,
+     "max_tokens": 4096,
+     "model": "anthropic/claude-sonnet-4.5",
+     "prompt_caching": false,
+     "response_format": "text",
+     "temperature": 1
+    },
+    "providerMeta": {},
+    "providerType": "openrouter",
+    "state": "idle"
+   },
+   "id": "n3",
+   "type": "dynamic-node"
+  },
+  {
+   "data": {
+    "definitionId": "openrouter-universal",
+    "dynamicInputPorts": [
+     {
+      "dataType": "Text",
+      "id": "messages",
+      "label": "Messages",
+      "required": true
+     }
+    ],
+    "dynamicOutputPorts": [
+     {
+      "dataType": "Text",
+      "id": "text",
+      "label": "Text",
+      "required": false
+     }
+    ],
+    "dynamicParams": [],
+    "isDynamic": true,
+    "label": "OpenRouter",
+    "modelId": "google/gemini-2.5-flash-image",
+    "outputs": {},
+    "params": {
+     "_output_image": true,
+     "max_tokens": 4096,
+     "model": "google/gemini-2.5-flash-image",
+     "prompt_caching": false,
+     "response_format": "text",
+     "temperature": 1
+    },
+    "providerMeta": {},
+    "providerType": "openrouter",
+    "state": "idle"
+   },
+   "id": "n4",
+   "type": "dynamic-node"
+  },
+  {
+   "data": {
+    "definitionId": "openrouter-universal",
+    "dynamicInputPorts": [
+     {
+      "dataType": "Text",
+      "id": "messages",
+      "label": "Messages",
+      "required": true
+     }
+    ],
+    "dynamicOutputPorts": [
+     {
+      "dataType": "Text",
+      "id": "text",
+      "label": "Text",
+      "required": false
+     }
+    ],
+    "dynamicParams": [],
+    "isDynamic": true,
+    "label": "OpenRouter",
+    "modelId": null,
+    "outputs": {},
+    "params": {
+     "max_tokens": 4096,
+     "model": "",
+     "prompt_caching": false,
+     "response_format": "text",
+     "temperature": 1
+    },
+    "providerMeta": {},
+    "providerType": "openrouter",
+    "state": "idle"
+   },
+   "id": "n5",
+   "type": "dynamic-node"
+  },
+  {
+   "data": {
+    "definitionId": "nous-portal-universal",
+    "dynamicInputPorts": [
+     {
+      "dataType": "Text",
+      "id": "messages",
+      "label": "Messages",
+      "required": true
+     },
+     {
+      "dataType": "Image",
+      "id": "images",
+      "label": "Images",
+      "multiple": true,
+      "required": false
+     }
+    ],
+    "dynamicOutputPorts": [
+     {
+      "dataType": "Text",
+      "id": "text",
+      "label": "Text",
+      "required": false
+     }
+    ],
+    "dynamicParams": [],
+    "isDynamic": true,
+    "label": "Nous Portal",
+    "modelId": "moonshotai/kimi-k2.6",
+    "outputs": {},
+    "params": {
+     "_output_image": false,
+     "max_tokens": 4096,
+     "model": "moonshotai/kimi-k2.6",
+     "temperature": 1
+    },
+    "providerMeta": {},
+    "providerType": "nous",
+    "state": "idle"
+   },
+   "id": "n6",
+   "type": "dynamic-node"
+  },
+  {
+   "data": {
+    "definitionId": "replicate-universal",
+    "dynamicInputPorts": [],
+    "dynamicOutputPorts": [],
+    "dynamicParams": [],
+    "isDynamic": true,
+    "label": "Replicate",
+    "modelId": "black-forest-labs/flux-kontext-pro",
+    "outputs": {},
+    "params": {
+     "_schema_fetched": true,
+     "_version_id": "v-kontext",
+     "aspect_ratio": "match_input_image",
+     "model_id": "black-forest-labs/flux-kontext-pro",
+     "output_format": "png",
+     "prompt": "make it dusk",
+     "safety_tolerance": 2
+    },
+    "providerMeta": {},
+    "providerType": "replicate",
+    "state": "idle"
+   },
+   "id": "n7",
+   "type": "dynamic-node"
+  },
+  {
+   "data": {
+    "definitionId": "replicate-universal",
+    "dynamicInputPorts": [],
+    "dynamicOutputPorts": [],
+    "dynamicParams": [],
+    "isDynamic": true,
+    "label": "Replicate",
+    "modelId": null,
+    "outputs": {},
+    "params": {
+     "model_id": ""
+    },
+    "providerMeta": {},
+    "providerType": "replicate",
+    "state": "idle"
+   },
+   "id": "n8",
+   "type": "dynamic-node"
+  }
+ ],
+ "runErrors": [
+  [
+   "n5",
+   "messages",
+   "Required input port 'messages' is not connected"
+  ]
+ ]
+}

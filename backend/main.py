@@ -102,8 +102,10 @@ from services.port_contracts import (
     ContractEdge,
     ContractNode,
     cinema_output_ports,
+    node_ports,
     validate_edge_contracts,
 )
+from services import universal_ports
 from services.file_access import ProtectedPathError, require_allowed_path, validate_file_references
 from services.qc_common import extract_frames
 from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT, resolve_output_ref, portable_output_ref, ManifestError, find_output_record, read_manifest
@@ -1596,8 +1598,7 @@ def _validate_imported_outputs(
     """Reject fabricated output handles/types before staging graph state."""
 
     definition = node_registry.get(definition_id) or {}
-    output_ports = (cinema_output_ports(params) if definition_id == "cinema-scene"
-                    else definition.get("outputPorts", []) or [])
+    output_ports = node_ports(definition_id, params, definition, "outputPorts")
     # displayOutputs are values a node keeps only to show on its card (Image
     # Compare's two inputs). They are saved with the node but never wired.
     declared_ports = {
@@ -1607,6 +1608,7 @@ def _validate_imported_outputs(
     }
     handles_are_dynamic = (
         definition_id in _DYNAMIC_OUTPUT_DEFINITION_IDS and not declared_ports
+        and universal_ports.stored_ports(definition_id, params) is None
     )
     for handle, port in outputs.items():
         if not isinstance(handle, str) or not handle:
@@ -3809,6 +3811,24 @@ def _brief_param(param: dict[str, Any]) -> dict[str, Any]:
     return brief
 
 
+_CHAT_MODEL_PORTS = (
+    "These ports follow the node's `model`: `messages` always; `images` (Image, several wires) when the model "
+    "takes images; `text` when it writes text and `image` (Image) when it makes images. Set `model` with "
+    "edit_canvas and the node gets that model's ports (the edit's `modelPorts` lists them; look_at_canvas shows "
+    "a node's `ports`). Nebula reads the model list with the person's key, which costs nothing; without it the "
+    "edit says so and the node keeps the ports above.")
+_MODEL_PORTS_NOTES = {
+    "openrouter-universal": _CHAT_MODEL_PORTS,
+    "nous-portal-universal": _CHAT_MODEL_PORTS,
+    "replicate-universal": (
+        "No ports until `model_id` (owner/name) is set. Set it with edit_canvas and the node gets the model's "
+        "version and defaults, a port for each file input (named as the model names it) and one output: `image` "
+        "when the model returns a file or a list of them, else `text`. The model's other inputs are params of "
+        "the same name. The edit's `modelPorts` lists the ports; look_at_canvas shows a node's `ports`. Nebula "
+        "reads the schema with the person's Replicate token, which costs nothing; without it the edit says so."),
+}
+
+
 @app.get("/api/agent/nodes/{definition_id}")
 async def agent_describe_node(definition_id: str) -> dict[str, Any]:
     """One node type, in what an agent needs to wire and set it: ports, params
@@ -3843,6 +3863,9 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
     }
     if definition.get("description"):
         result["description"] = definition["description"]
+    if definition_id in _MODEL_PORTS_NOTES:
+        # Its ports come from its model (services/universal_ports.py).
+        result["modelPorts"] = _MODEL_PORTS_NOTES[definition_id]
     shown = lambda key: [_brief_param(param) for param in definition.get(key) or []  # noqa: E731
                          if not str(param.get("key", "")).startswith("_") and not param.get("hidden")]
     # A dual-route node lists its shared params here and each route's own
@@ -4767,12 +4790,88 @@ def _proposal_view(proposal: Proposal) -> dict[str, Any]:
     return canvas_proposals.view(proposal, registry=node_registry)
 
 
+def _spec_models_wanted(spec: ProposalSpec) -> list[tuple[str, str]]:
+    """(definition id, model) for each universal node a proposal or edit
+    creates with a model or sets the model of: what _look_up_models reads."""
+    wanted: list[tuple[str, str]] = []
+    for node in spec.nodes:
+        if universal_ports.is_universal(node.definition_id):
+            wanted.append((node.definition_id, universal_ports.model_of(node.definition_id, node.params)))
+    for change in spec.params:
+        node = cli_graph.nodes.get(change.node_id) or {}
+        definition_id = str(node.get("definitionId") or "")
+        key = universal_ports.MODEL_PARAM.get(definition_id)
+        if key and key in change.params:
+            wanted.append((definition_id, universal_ports.model_of(
+                definition_id, {**(node.get("params") or {}), **change.params})))
+    return wanted
+
+
+async def _look_up_models(wanted: Iterable[tuple[str, str]]) -> dict[tuple[str, str], Any]:
+    """The provider's data (or why there is none) for each wanted model,
+    read before staging: staging can't wait on the network. Cached by the
+    model-list routes, so a second edit with the same model reads nothing."""
+    found: dict[tuple[str, str], Any] = {}
+    for definition_id, model in wanted:
+        if model and (definition_id, model) not in found:
+            found[(definition_id, model)] = await universal_ports.look_up(definition_id, model)
+    return found
+
+
+def _basic_ports_line(definition_id: str, params: Mapping[str, Any]) -> str:
+    definition = node_registry.get(definition_id) or {}
+    inputs = universal_ports.port_ids(node_ports(definition_id, params, definition, "inputPorts"))
+    outputs = universal_ports.port_ids(node_ports(definition_id, params, definition, "outputPorts"))
+    if not inputs and not outputs:
+        return "no ports"
+    return f"inputs {', '.join(inputs) or '(none)'}; outputs {', '.join(outputs) or '(none)'}"
+
+
+def _refuse_orphaned_wires(graph: CLIGraph, node_id: str, name: str | None = None, reason: str = "") -> None:
+    """400 when a node's model change leaves wires on ports it no longer has:
+    the new model's, or, when the model was cleared or can't be read
+    (``reason``), its definition's. An agent's edit is all or nothing, so the
+    wires aren't dropped for it: it unwires them in the same edit (the picker
+    drops them for the person). Left in place they would fail every save."""
+    node = graph.nodes.get(node_id) or {}
+    definition_id = str(node.get("definitionId") or "")
+    params = node.get("params") or {}
+    definition = node_registry.get(definition_id) or {}
+    inputs = node_ports(definition_id, params, definition, "inputPorts")
+    outputs = node_ports(definition_id, params, definition, "outputPorts")
+    configured = universal_ports.stored_ports(definition_id, params) is not None
+    # A node never configured with no declared ports in a direction takes any
+    # handle there (port_contracts.DYNAMIC_PORT_DEFINITION_IDS): Replicate.
+    def fits(edge: dict[str, Any]) -> bool:
+        if edge.get("source") == node_id and (outputs or configured):
+            return edge.get("sourceHandle") in universal_ports.port_ids(outputs)
+        if edge.get("target") == node_id and (inputs or configured):
+            return edge.get("targetHandle") in universal_ports.port_ids(inputs)
+        return True
+    orphans = [edge for edge in graph.edges if not fits(edge)]
+    if orphans:
+        wires = ", ".join(f"{e['source']}.{e['sourceHandle']} → {e['target']}.{e['targetHandle']}" for e in orphans[:6])
+        model = universal_ports.model_of(definition_id, params)
+        who = name or node_id
+        if configured:
+            why = f"{who}'s new model {model} doesn't have the ports these wires use"
+        elif model:
+            why = (f"{reason}, so Nebula can't tell which ports {model} has and {who} keeps only "
+                   f"{_basic_ports_line(definition_id, params)}; these wires use others")
+        else:
+            why = f"Without a model {who} has {_basic_ports_line(definition_id, params)}; these wires use others"
+        raise HTTPException(status_code=400, detail=(
+            f"{why}: {wires}. Unwire them in the same edit (`unwire`), or pick a model that takes them."))
+
+
 def _stage_proposal(
     spec: ProposalSpec,
     *,
     positions: dict[str, dict[str, float]] | None = None,
     base: CLIGraph | None = None,
     what: str = "a proposal",
+    models: Mapping[tuple[str, str], Any] | None = None,
+    report: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[CLIGraph, dict[str, str], list[str], list[str]]:
     """Stage a proposal on a clone of the live graph with the cluster validators.
 
@@ -4782,11 +4881,20 @@ def _stage_proposal(
     committed. Missing referenced nodes raise 409 (the canvas moved on).
     `base` stages onto an already-staged candidate instead (direct edits
     remove nodes first); `what` names the change in refusals.
+
+    `models` (from _look_up_models) configures each universal node whose
+    model the spec sets, as the canvas's picker does: its ports follow the
+    model (services/universal_ports.py). A wire to a port that can't be
+    known (no key, unknown model) is refused with the reason. `report`, when
+    given, gets `ports` {node id: {model, inputs, outputs}} and `notes`
+    {node id: reason} for those nodes.
     """
     candidate = base if base is not None else cli_graph.clone()
     for node_id in sorted(spec.references):
         if node_id not in candidate.nodes:
             raise HTTPException(status_code=409, detail=f"{node_id} is no longer on the canvas")
+    # node id -> why its model's ports are unknown ("" when they are known).
+    configured: dict[str, str] = {}
     # Existing nodes first: their ports can depend on their params.
     for change in spec.params:
         node = candidate.nodes[change.node_id]
@@ -4796,8 +4904,14 @@ def _stage_proposal(
         if uses_durable_recovery(definition_id, provider="worldlabs"):
             raise HTTPException(status_code=400, detail=f"World Labs nodes can't be changed by {what}; add a new node instead")
         _validate_params(definition_id, change.params)
-        candidate.update_params(change.node_id, migrate_param_update(
-            definition_id, node.get("params"), _coerce_params(definition_id, change.params)))
+        update = migrate_param_update(definition_id, node.get("params"), _coerce_params(definition_id, change.params))
+        model_key = universal_ports.MODEL_PARAM.get(definition_id)
+        if models is not None and model_key and model_key in change.params:
+            full, reason = universal_ports.agent_update(definition_id, node.get("params") or {}, update, models)
+            candidate.set_params(change.node_id, full)
+            configured[change.node_id] = reason or ""
+        else:
+            candidate.update_params(change.node_id, update)
     names = spec.names
     raw_nodes = [
         {
@@ -4812,20 +4926,64 @@ def _stage_proposal(
     ]
     raw_nodes, raw_edges, _warnings, _folded = _migrate_ingress(
         raw_nodes, [edge.as_dict() for edge in spec.edges], reference_key="tempId")
+    configured_refs: dict[str, str] = {}
+    for raw in raw_nodes:
+        definition_id = str(raw.get("definitionId") or "")
+        params = raw.get("params")
+        if (models is not None and universal_ports.is_universal(definition_id) and isinstance(params, dict)
+                and universal_ports.model_of(definition_id, params)):
+            raw["params"], reason = universal_ports.agent_update(definition_id, {}, params, models)
+            configured_refs[str(raw.get("tempId"))] = reason or ""
     id_map = _stage_graph_nodes(candidate, raw_nodes, reference_key="tempId", include_outputs=False)
+    configured.update({id_map[ref]: reason for ref, reason in configured_refs.items() if ref in id_map})
     new_ids = set(id_map.values())
     refs: dict[str, str] = {node_id: node_id for node_id in candidate.nodes if node_id not in new_ids}
     refs.update(id_map)
+    ref_for = {new_id: ref for ref, new_id in id_map.items()}
+    # A wire to a port the model's data would have to say exists: refused in
+    # plain words when that data can't be read (a missing key, say).
+    for raw in raw_edges:
+        for end, handle_key, port_key in (("source", "sourceHandle", "outputPorts"),
+                                          ("target", "targetHandle", "inputPorts")):
+            node_id = refs.get(raw.get(end)) if isinstance(raw.get(end), str) else None
+            reason = configured.get(node_id or "")
+            if not reason:
+                continue
+            node = candidate.nodes[node_id]
+            definition_id = str(node.get("definitionId") or "")
+            ports = node_ports(definition_id, node.get("params"), node_registry.get(definition_id) or {}, port_key)
+            handle = raw.get(handle_key)
+            if handle not in universal_ports.port_ids(ports):
+                name = ref_for.get(node_id, node_id)
+                model = universal_ports.model_of(definition_id, node.get("params"))
+                raise HTTPException(status_code=400, detail=(
+                    f"Can't wire {name}.{handle}: {reason}, so Nebula can't tell which ports {model} has. "
+                    f"Until it can, {name} has {_basic_ports_line(definition_id, node.get('params') or {})}."))
     try:
         edge_ids = _stage_graph_edges(candidate, raw_edges, refs)
+        for node_id, reason in configured.items():
+            _refuse_orphaned_wires(candidate, node_id, reason=reason)
     except HTTPException as exc:
         # The validators name nodes by id; a new node's staged id (n12) means
         # nothing to the agent, which wrote +img.
-        ref_for = {new_id: ref for ref, new_id in id_map.items()}
         detail = exc.detail
         if isinstance(detail, str) and ref_for:
             detail = re.sub(r"\bn\d+\b", lambda match: ref_for.get(match.group(0), match.group(0)), detail)
         raise HTTPException(status_code=exc.status_code, detail=detail) from exc
+    if report is not None:
+        for node_id, reason in configured.items():
+            node = candidate.nodes[node_id]
+            definition_id = str(node.get("definitionId") or "")
+            stored = universal_ports.stored_ports(definition_id, node.get("params"))
+            if stored is not None:
+                report.setdefault("ports", {})[node_id] = {
+                    "model": universal_ports.model_of(definition_id, node.get("params")),
+                    "inputs": universal_ports.port_ids(stored[0]), "outputs": universal_ports.port_ids(stored[1])}
+            elif reason:
+                report.setdefault("notes", {})[node_id] = (
+                    f"{reason}, so Nebula can't tell which ports "
+                    f"{universal_ports.model_of(definition_id, node.get('params'))} has; until it can, the node has "
+                    f"{_basic_ports_line(definition_id, node.get('params') or {})}")
     run_ids: list[str] = []
     for item in spec.run:
         if item not in refs:
@@ -5032,8 +5190,9 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         _check_provider(str(current.get("definitionId") or ""), change.params, change.node_id)
         _check_asset_refs(str(current.get("definitionId") or ""), change.params, change.node_id,
                           before=current.get("params") or {}, must_exist=True)
+    models = await _look_up_models(_spec_models_wanted(spec))
     try:
-        candidate, id_map, _edge_ids, run_ids = _stage_proposal(spec)
+        candidate, id_map, _edge_ids, run_ids = _stage_proposal(spec, models=models)
     except HTTPException as exc:
         # A missing node is a bad proposal here (the agent's view is stale), not a conflict.
         raise HTTPException(status_code=400 if exc.status_code == 409 else exc.status_code,
@@ -5251,6 +5410,8 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
     proposal = await _decidable_proposal(proposal_id)
     _check_workspace_revision()
     body = await _proposal_body(request)
+    # The models it sets, read now: nothing below may await.
+    models = await _look_up_models(_spec_models_wanted(proposal.spec))
     # Reading the body can yield to the event loop, and in that gap the agent
     # may withdraw, the sweep may expire it, or a second tab may accept it.
     # Check again here. From this line to close() below nothing awaits, so no
@@ -5265,7 +5426,7 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
     with _paid_graph_mutation("accept a proposal"):
         try:
             _refuse_overwriting_later_edits(proposal)
-            candidate, id_map, edge_ids, run_ids = _stage_proposal(proposal.spec, positions=positions)
+            candidate, id_map, edge_ids, run_ids = _stage_proposal(proposal.spec, positions=positions, models=models)
             _refuse_changed_runs(proposal, candidate, id_map, run_ids)
         except HTTPException as exc:
             # cli_graph is only replaced at commit, so nothing changed.
@@ -8147,6 +8308,12 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
     _refuse_agent_internal_params(params, str(definition_id))
     _check_provider(str(definition_id), params, str(definition_id))
     params = migrate_params(definition_id, _coerce_params(definition_id, params))
+    if (not _is_person_request() and universal_ports.is_universal(str(definition_id))
+            and universal_ports.model_of(str(definition_id), params)):
+        # Anyone but the person (an agent, the unnamed CLI) gets the node
+        # configured for its model, as the picker would.
+        models = await _look_up_models([(str(definition_id), universal_ports.model_of(str(definition_id), params))])
+        params, _reason = universal_ports.agent_update(str(definition_id), {}, params, models)
     _check_asset_refs(str(definition_id), params, str(definition_id))
     _refuse_agent_billing_change([(str(definition_id), str(definition_id), None, params)])
     carries_recovery = bool(
@@ -8303,9 +8470,7 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     if edge is not None:
         source_node = candidate.nodes[src]
         source_def = node_registry.get(source_node["definitionId"]) or {}
-        source_ports = (cinema_output_ports(source_node.get("params"))
-                        if source_node["definitionId"] == "cinema-scene"
-                        else source_def.get("outputPorts", []))
+        source_ports = node_ports(source_node["definitionId"], source_node.get("params"), source_def, "outputPorts")
         data_type = next((port["dataType"] for port in source_ports
                           if port["id"] == edge["sourceHandle"]), "Any")
         rf_edge = {**copy.deepcopy(edge), "type": "typed-edge", "data": {"dataType": data_type}}
@@ -8552,6 +8717,22 @@ def _keep_recovery_checkpoint(node: dict[str, Any], params: dict[str, Any]) -> b
 async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]) -> dict:
     _check_workspace_revision()
     _validate_graph_ingress_complexity(body)
+    # Anyone but the person (an agent, the unnamed CLI) who sets a universal
+    # node's model reconfigures it (its ports follow the model): when the model
+    # changes, or its ports are stale (a node saved before ports were kept).
+    # The same model again reads nothing. The canvas's own pushes are stored
+    # as sent; its picker uses /model.
+    models: dict[tuple[str, str], Any] | None = None
+    current = cli_graph.nodes.get(node_id) or {}
+    current_definition = str(current.get("definitionId") or "")
+    current_params = current.get("params") or {}
+    model_key = universal_ports.MODEL_PARAM.get(current_definition)
+    if (model_key and not _is_person_request() and isinstance(body.get("params"), dict)
+            and model_key in body["params"]):
+        model = universal_ports.model_of(current_definition, {**current_params, **body["params"]})
+        if (model != universal_ports.model_of(current_definition, current_params)
+                or universal_ports.stored_ports(current_definition, current_params) is None):
+            models = await _look_up_models([(current_definition, model)])
     with _paid_graph_mutation("update graph node parameters"):
         node = cli_graph.nodes.get(node_id)
         if not node:
@@ -8570,25 +8751,34 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
         _check_asset_refs(str(node.get("definitionId") or ""), params, node_id, before=params_before)
         _refuse_agent_billing_change([(node_id, str(node.get("definitionId") or ""), params_before,
                                             {**params_before, **params})])
-        _guard_approved_runs(lambda probe: probe.update_params(node_id, copy.deepcopy(params)))
-        _author_cinema_scene(cli_graph, node_id, node, params)
-        recovery_update = _keep_recovery_checkpoint(node, params)
-        if recovery_update:
-            candidate = cli_graph.clone()
-            try:
-                candidate.update_params(node_id, params)
-            except ValueError:
-                raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
-            _commit_graph_candidate_with_recoveries(
-                candidate,
-                [candidate.nodes[node_id]],
-                source="update",
-            )
+        if models is not None and node.get("definitionId") == current_definition:
+            # Universal nodes carry no recovery checkpoint or Cinema scene.
+            full, reason = universal_ports.agent_update(current_definition, params_before, params, models)
+            probe = cli_graph.clone()
+            probe.set_params(node_id, full)
+            _refuse_orphaned_wires(probe, node_id, reason=reason or "")
+            _guard_approved_runs(lambda probe: probe.set_params(node_id, copy.deepcopy(full)))
+            cli_graph.set_params(node_id, full)
         else:
-            try:
-                cli_graph.update_params(node_id, params)
-            except ValueError:
-                raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+            _guard_approved_runs(lambda probe: probe.update_params(node_id, copy.deepcopy(params)))
+            _author_cinema_scene(cli_graph, node_id, node, params)
+            recovery_update = _keep_recovery_checkpoint(node, params)
+            if recovery_update:
+                candidate = cli_graph.clone()
+                try:
+                    candidate.update_params(node_id, params)
+                except ValueError:
+                    raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+                _commit_graph_candidate_with_recoveries(
+                    candidate,
+                    [candidate.nodes[node_id]],
+                    source="update",
+                )
+            else:
+                try:
+                    cli_graph.update_params(node_id, params)
+                except ValueError:
+                    raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
     await _broadcast_graph_sync(edit=True)
     publish_action(f"Updated {node_id} params")
     changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
@@ -8602,6 +8792,104 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
     changed = ", ".join(sorted(str(key) for key in params)[:4])
     await _show_agent({"nodeId": node_id}, say=f"Set {changed}" if changed else f"Updated {node_id}")
     return cli_graph.nodes[node_id]
+
+
+def _universal_request(body: Any, definition_id: str | None = None) -> tuple[str, str]:
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="body must be an object")
+    definition_id = definition_id if definition_id is not None else str(body.get("definitionId") or "")
+    if not universal_ports.is_universal(definition_id):
+        raise HTTPException(status_code=400, detail=(
+            "Only the OpenRouter, Nous Portal and Replicate nodes take their ports from a model"))
+    model = body.get("model")
+    if not isinstance(model, str) or not model.strip() or len(model) > 300:
+        raise HTTPException(status_code=400, detail="model must be a model id")
+    return definition_id, model.strip()
+
+
+async def _universal_data(definition_id: str, model: str) -> dict[str, Any]:
+    found = await universal_ports.look_up(definition_id, model)
+    if isinstance(found, str):
+        raise HTTPException(status_code=400, detail=found[0].upper() + found[1:] + ".")
+    return found
+
+
+@app.post("/api/universal/ports")
+async def universal_model_ports(body: dict[str, Any]) -> dict[str, Any]:
+    """The ports and settings a universal node has for one model, without a node.
+
+    Body: {definitionId: "openrouter-universal" | "nous-portal-universal" |
+    "replicate-universal", model, params?}. Reads the provider's model list or
+    schema with the person's key (cached; nothing billed). Returns `inputs`,
+    `outputs` (the canvas's port shape), `nodeParams` (`params`, or {},
+    configured for the model as the picker sets them), `providerMeta` and,
+    for Replicate, `params` (the model's other inputs, set as params) and
+    `versionId`."""
+    _validate_graph_ingress_complexity(body)
+    definition_id, model = _universal_request(body)
+    base = body.get("params") if isinstance(body.get("params"), dict) else {}
+    configured = universal_ports.configure(definition_id, base, model, await _universal_data(definition_id, model))
+    result: dict[str, Any] = {"definitionId": definition_id, "model": model,
+                              "inputs": configured.inputs, "outputs": configured.outputs,
+                              "nodeParams": configured.params, "providerMeta": configured.provider_meta}
+    if definition_id == "replicate-universal":
+        result["params"] = configured.dynamic_params
+        result["versionId"] = configured.provider_meta.get("version_id")
+    return result
+
+
+@app.post("/api/graph/node/{node_id}/model")
+async def configure_universal_node(node_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    """The canvas's model picker: set a universal node's model and the ports,
+    params and Inspector controls that come with it (services/universal_ports.py).
+
+    Body: {model}. Writes the node's params as the picker always did, drops
+    wires on ports the new model doesn't have, and syncs the canvas. Returns
+    the node's `params`, `dynamicInputPorts`, `dynamicOutputPorts`,
+    `dynamicParams`, `providerMeta` (additions) and `removedEdges`. Only the
+    person: it drops wires, past the approved-run and billing checks an edit
+    gets. Anyone else (agents, the unnamed CLI, a tab without the person
+    link) sets the model with an edit (edit_canvas, `nebula apply`) or PUT
+    /api/graph/node/{id}, which configure the node the same way and refuse
+    rather than drop wires."""
+    require_person(current_request_headers(), hint=(
+        "Set a universal node's model with an edit (edit_canvas or `nebula apply`, params {model: ...}) "
+        "or PUT /api/graph/node/{id}: its ports follow the model."))
+    _check_workspace_revision()
+    node = cli_graph.nodes.get(node_id)
+    if node is None:
+        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+    definition_id, model = _universal_request(body, str(node.get("definitionId") or ""))
+    data = await _universal_data(definition_id, model)
+    with _paid_graph_mutation("set a node's model"):
+        node = cli_graph.nodes.get(node_id)
+        if node is None or node.get("definitionId") != definition_id:
+            raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+        params_before = copy.deepcopy(node.get("params") or {})
+        configured = universal_ports.configure(definition_id, params_before, model, data)
+        removed = [copy.deepcopy(edge) for edge in cli_graph.edges
+                   if not universal_ports.edge_fits(node_id, edge, configured.inputs, configured.outputs)]
+        candidate = cli_graph.clone()
+        for edge in removed:
+            candidate.remove_edge(edge["source"], edge["sourceHandle"], edge["target"], edge["targetHandle"])
+        candidate.set_params(node_id, configured.params)
+        _commit_graph_candidate_with_recoveries(candidate, [candidate.nodes[node_id]], source="update")
+    await _broadcast_graph_sync(edit=True)
+    publish_action(f"Set {node_id}'s model to {model}")
+    changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
+    if changes:
+        _journal("node.params", node_id=node_id, data=changes,
+                 summary=f"set {_listed(changes['keys'], 4)} on {_node_label(node_id)} ({node_id})")
+    for edge in removed:
+        _journal_edge("edge.removed", edge)
+    return {
+        "params": configured.params,
+        "dynamicInputPorts": configured.inputs,
+        "dynamicOutputPorts": configured.outputs,
+        "dynamicParams": configured.dynamic_params,
+        "providerMeta": configured.provider_meta,
+        "removedEdges": [{"id": edge.get("id"), **_edge_data(edge)} for edge in removed],
+    }
 
 
 @app.put("/api/graph/node/{node_id}/label")
@@ -9189,6 +9477,8 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             {**((cli_graph.nodes.get(change.node_id) or {}).get("params") or {}), **change.params})
            for change in additions.params])
 
+    models = await _look_up_models(_spec_models_wanted(additions))
+    model_report: dict[str, dict[str, Any]] = {}
     positions: dict[str, dict[str, float]] = {}
     if additions.nodes:
         known, visible_area = _proposal_layout_hints()
@@ -9227,7 +9517,8 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         if additions.nodes or additions.edges or additions.params:
             try:
                 candidate, id_map, edge_ids, _ = _stage_proposal(
-                    additions, positions=positions, base=candidate, what="an edit"
+                    additions, positions=positions, base=candidate, what="an edit",
+                    models=models, report=model_report,
                 )
             except HTTPException as exc:
                 # A missing node means the agent's view is stale.
@@ -9346,6 +9637,10 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         "removed": [gone["id"] for gone in removed],
         "unwired": [edge.as_dict() for edge in spec.unwire],
         **({"arrange": _arrange_reply(arrange)} if arrange is not None else {}),
+        # Universal nodes whose model this edit set: the ports they have now,
+        # or why they can't be known yet (services/universal_ports.py).
+        **({"modelPorts": model_report["ports"]} if model_report.get("ports") else {}),
+        **({"modelPortNotes": model_report["notes"]} if model_report.get("notes") else {}),
         "undo": undo,
     }
 
@@ -10490,7 +10785,7 @@ def _rf_created(node_ids: list[str], edge_ids: list[str]) -> dict[str, list[dict
         src_node = cli_graph.nodes.get(e["source"], {})
         src_def = all_defs.get(src_node.get("definitionId", ""), {})
         data_type = "Any"
-        for port in src_def.get("outputPorts", []):
+        for port in node_ports(str(src_node.get("definitionId") or ""), src_node.get("params"), src_def, "outputPorts"):
             if port["id"] == e["sourceHandle"]:
                 data_type = port["dataType"]
                 break
@@ -10646,8 +10941,10 @@ def _cli_node_to_rf(n: dict[str, Any], position: dict[str, float], all_defs: dic
             "isDynamic": True,
             "providerType": DYNAMIC_NODE_PROVIDER_BY_DEFINITION[definition_id],
             "modelId": params.get("model") or params.get("model_id") or params.get("endpoint_id"),
-            "dynamicInputPorts": defn.get("inputPorts", []),
-            "dynamicOutputPorts": defn.get("outputPorts", []),
+            # A configured universal node's ports are its model's
+            # (services/universal_ports.py); otherwise the definition's.
+            "dynamicInputPorts": node_ports(definition_id, params, defn, "inputPorts"),
+            "dynamicOutputPorts": node_ports(definition_id, params, defn, "outputPorts"),
             "dynamicParams": [],
             "providerMeta": {},
         })
@@ -11662,9 +11959,7 @@ async def export_graph_for_frontend() -> dict:
         src_node = cli_graph.nodes.get(e["source"], {})
         src_def = all_defs.get(src_node.get("definitionId", ""), {})
         data_type = "Any"
-        src_ports = (cinema_output_ports(src_node.get("params"))
-                     if src_node.get("definitionId") == "cinema-scene"
-                     else src_def.get("outputPorts", []))
+        src_ports = node_ports(str(src_node.get("definitionId") or ""), src_node.get("params"), src_def, "outputPorts")
         for port in src_ports:
             if port["id"] == e["sourceHandle"]:
                 data_type = port["dataType"]

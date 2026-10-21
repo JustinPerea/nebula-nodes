@@ -1371,6 +1371,59 @@ undo}`, or `{status: "stopped", failedStep, steps, error, applied, idMap,
 undo}` when a step is refused, and refuses a plan whose refs don't add up
 before anything is sent.
 
+#### Universal nodes: ports from the model
+
+The OpenRouter, Nous Portal and Replicate nodes have no fixed ports: a
+vision model takes `images`, an image model outputs `image`, a Replicate
+model's file inputs are its ports. One backend module has the rules
+(`services/universal_ports.py`), and every path uses it:
+
+- An edit (`edit_canvas`, `nebula apply`, a proposal when the person
+  accepts it, and `nebula create` / `set` with an agent name) that creates
+  one of these nodes with a model, or sets its `model` (`model_id` on
+  Replicate), configures it as the canvas's model picker does. Nebula reads
+  the model's catalog row or schema through `/api/openrouter/models`,
+  `/api/nous/models` or `/api/replicate/schema/{owner}/{name}` (cached 5
+  minutes, a Replicate schema an hour; reading costs nothing) and writes the
+  node's canvas-owned params: `_output_image`, or `_version_id`,
+  `_schema_fetched` and the schema's defaults, plus `_model_ports` (the ports,
+  stamped with the model). The agent's own values in the same edit win over
+  the schema's defaults; setting the model a node already has keeps its
+  current values. Agents still can't send `_` params themselves.
+- The reply has `modelPorts` ({node id: {model, inputs, outputs}}) for each
+  node it configured. When the model's data can't be read (the key isn't
+  set, the model doesn't exist, the provider is down) the node keeps its
+  definition's ports (OpenRouter: `messages` in, `text` out; Nous Portal adds
+  `images`; Replicate none), the reply says why in `modelPortNotes`, and a
+  wire to any other port of it is refused with that reason, for example
+  "Nebula can't read OpenRouter's model list because OPENROUTER_API_KEY isn't
+  set, and only the person can add it (Settings in Nebula)".
+- A model change that leaves wires on ports the node no longer has is
+  refused and names them; `unwire` them in the same edit. That covers a new
+  model without those ports, and clearing the model or naming one Nebula
+  can't read, which leaves the definition's ports. (The person's picker drops
+  them instead, as it always did.)
+- Replicate: a port per file input (`x-uploadable`, or a `uri` string),
+  named as the schema names it, and one output: `image` for a file URL or a
+  list of them, else `text` (as a run names it). Other inputs are params of
+  the same name; a wire to one is refused ("... are params of the same name:
+  set them with params instead of a wire").
+- `describe_node` on these nodes has `modelPorts`, a sentence with the rules;
+  `look_at_canvas` lists a configured node's `ports` ({inputs, outputs}).
+- `POST /api/universal/ports {definitionId, model, params?}` returns a
+  model's ports without a node (and, for Replicate, its params and version).
+- The canvas export, the wire checks (`port_contracts.node_ports`) and the
+  run check read `_model_ports`, so the canvas draws the ports and wires an
+  agent made without a reload. A node saved before 2026-10-20 has no
+  `_model_ports` and keeps exactly the ports it had (its definition's) until
+  its model is set again.
+
+The canvas's pickers call `POST /api/graph/node/{id}/model {model}`, which
+configures the node with the same function, drops wires the model has no
+port for, and returns the params, ports, Inspector controls
+(`dynamicParams`, Replicate) and `providerMeta`. It is the canvas's (403 for
+an agent).
+
 #### Undoing your own edit
 
 Every apply that changes something replies with `undo: {token, editId,
