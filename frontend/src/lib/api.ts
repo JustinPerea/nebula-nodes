@@ -812,8 +812,11 @@ async function moodboardConflict(response: Response): Promise<MoodboardVersionCo
 
 /** Board fields only (the Studio sends images as checked edits, below).
  *  With `baseVersion`, a board saved elsewhere since is a
- *  MoodboardVersionConflict, not an overwrite. */
-export async function updateMoodboard(id: string, body: MoodboardUpdateInput & { baseVersion?: number }): Promise<Moodboard> {
+ *  MoodboardVersionConflict, not an overwrite. The answer is the board plus
+ *  `undo`, the `restore` that takes this write back (absent on an older
+ *  backend). */
+export async function updateMoodboard(id: string, body: MoodboardUpdateInput & { baseVersion?: number }):
+  Promise<Moodboard & { undo?: MoodboardEditResult['undo'] }> {
   const response = await apiFetch(`/api/moodboards/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
