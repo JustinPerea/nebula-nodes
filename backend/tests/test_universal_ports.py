@@ -455,9 +455,15 @@ def test_the_picker_route_configures_the_node_and_prunes_its_wires(api):
     assert api.graph.nodes[eye]["params"] == expected.params
     assert any(message.get("type") == "graphSync" for message in api.sent)
 
-    # Agents set the model with edit_canvas; this route is the canvas's.
+    # Agents set the model with edit_canvas; this route is the person's canvas's.
     assert api.client.post(f"/api/graph/node/{eye}/model", headers=AGENT,
                            json={"model": "openai/gpt-4o"}).status_code == 403
+    # So is anyone else who isn't the person (the unnamed CLI, curl, a tab
+    # without the person link): it would drop wires past the checks an edit gets.
+    unnamed = api.client.post(f"/api/graph/node/{eye}/model", json={"model": "openai/gpt-4o"})
+    assert unnamed.status_code == 403, unnamed.text
+    assert unnamed.json()["code"] == "person_required"
+    assert "PUT /api/graph/node" in unnamed.json()["detail"]
 
 
 def test_the_picker_route_for_replicate_returns_the_inspectors_controls(api):

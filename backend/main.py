@@ -8245,12 +8245,15 @@ async def configure_universal_node(node_id: str, body: dict[str, Any]) -> dict[s
     Body: {model}. Writes the node's params as the picker always did, drops
     wires on ports the new model doesn't have, and syncs the canvas. Returns
     the node's `params`, `dynamicInputPorts`, `dynamicOutputPorts`,
-    `dynamicParams`, `providerMeta` (additions) and `removedEdges`. Agents
-    set the model with an edit instead (edit_canvas, `nebula apply`), which
-    configures the node the same way and refuses rather than drops wires."""
-    if has_agent_marker(current_request_headers()):
-        raise HTTPException(status_code=403, detail=(
-            "Agents set a universal node's model with edit_canvas (params {model: ...}); its ports follow"))
+    `dynamicParams`, `providerMeta` (additions) and `removedEdges`. Only the
+    person: it drops wires, past the approved-run and billing checks an edit
+    gets. Anyone else (agents, the unnamed CLI, a tab without the person
+    link) sets the model with an edit (edit_canvas, `nebula apply`) or PUT
+    /api/graph/node/{id}, which configure the node the same way and refuse
+    rather than drop wires."""
+    require_person(current_request_headers(), hint=(
+        "Set a universal node's model with an edit (edit_canvas or `nebula apply`, params {model: ...}) "
+        "or PUT /api/graph/node/{id}: its ports follow the model."))
     _check_workspace_revision()
     node = cli_graph.nodes.get(node_id)
     if node is None:
