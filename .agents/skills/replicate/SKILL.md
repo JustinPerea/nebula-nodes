@@ -76,9 +76,32 @@ There are **no other declared params and no input ports**. Everything else a mod
 
 Internal-only keys (not user-facing controls): `_version_id` (a pinned version hash, normally unset so the latest is resolved) and `_schema_fetched` (a caching flag). Don't set these manually.
 
-**Output-type inference** (from `_infer_output_type` in the handler) — the result's shape decides the port:
+**Output port typing** (`universal_ports.replicate_output`, before any run): a Replicate file output's schema is a plain `uri` string whatever the file is, so Nebula types it from the model's own data, in this order:
 
-| Prediction `output` | Inferred Nebula port |
+1. A content hint in the output schema (or its `items`, for a list): `contentMediaType`, an `x-` key holding a MIME type or extension, or a MIME type / file extension written in its description (`video/mp4`, `.wav`). Words alone ("a video of...") don't count.
+2. The file the model's `default_example` run returned (its URL's extension, or a data URI's MIME type). The schema route (`/api/replicate/schema/{owner}/{name}`) keeps it as `default_example_output` from the model read it already makes: no extra call.
+3. Nothing says: `image` (Image) with `typeUnconfirmed: true`; `model_schema` adds a `note`, an edit's `modelPortNotes` and `look_at_canvas` (`ports.unconfirmed` and `ports.note`) say so too.
+
+An output schema that says nothing at all (no Output component) is typed by the `default_example` run's file when there is one, else it is `text` (Text) with `typeUnconfirmed: true`.
+
+| What the model's data says | Output port |
+|---|---|
+| `.mp4` / `.mov` / `.webm` / `.m4v` / `.mkv` / `.avi`, or `video/*` | **Video** (`video`) |
+| `.mp3` / `.wav` / `.flac` / `.ogg` / `.m4a` / `.aac`, or `audio/*` | **Audio** (`audio`) |
+| `.png` / `.jpg` / `.jpeg` / `.webp` / `.gif`, or `image/*` | **Image** (`image`) |
+| `.svg`, or `image/svg+xml` | **SVG** (`svg`) |
+| `.glb` / `.gltf` / `.obj` / `.fbx` / `.stl` / `.usdz` / `.3mf`, or `model/gltf-*` | **Mesh** (`mesh`) |
+| Nothing (file schema) | **Image** (`image`), `typeUnconfirmed` |
+| No output schema at all, and no example file | **Text** (`text`), `typeUnconfirmed` |
+| Output schema not a file (text, a list of plain strings, an object) | **Text** (`text`) |
+
+A list of files is typed by its items. The extension table is `services/media_types.py`, the same one the run directory uses.
+
+**The run fills the declared port** (`_fill_declared_port` in the handler): the output goes out under the node's declared port, so a wire from it gets the file. A list of files passes on its first item (a current limitation). A file whose own type contradicts a confirmed port (a `.png` from a `video` port, a `.mp4` URL from a `text` port), or text from a file port, fails the run with a message naming both and the prediction id; nothing is passed on under a type the next node can't take. A URL with no telling extension can't contradict, so it goes out as declared; a Text port takes it as text. On a guessed port (`typeUnconfirmed`) the file's own type wins: a `.mp4` from an unconfirmed `image` port goes out under `video`, so the paid result is saved and shown, but a wire on `image` gets nothing. The project still saves with it.
+
+Old saved nodes: a node never configured for its model (saved before 2026-10-20) names its output from the returned file, as it always has (`_infer_output_type`, table below). A node configured on 2026-10-20 (#132's stamp, every file output `image`, no `rev`) runs as it did too: a matching file fills `image`, a contradicting one goes out under its own handle. Its file port shows as `typeUnconfirmed`, and `look_at_canvas` (`ports.note`) and an edit that wires it say the ports are stale. Sending its `model_id` again (an edit, `PUT /api/graph/node/{id}`, or the picker) reads the model again and types the port; a saved output the new port doesn't take is dropped then (the run history keeps it), so the project still saves.
+
+| Prediction `output` (never-configured node) | Port the run names |
 |---|---|
 | String URL ending `.png` / `.jpg` / `.jpeg` / `.webp` / `.gif` | **Image** (`image`) |
 | String URL ending `.mp4` / `.mov` / `.webm` | **Video** (`video`) |
@@ -91,9 +114,9 @@ Internal-only keys (not user-facing controls): `_version_id` (a pinned version h
 | List of non-URLs, dict, or anything else | **Text** (`text`), stringified |
 
 Implications to tell the user:
-- A model that returns a **list of images** only yields its **first** image downstream. If they need all of them, that's a current limitation.
-- A model that returns a **dict** (structured output) is flattened to a Text port (stringified) — not parsed into typed fields.
-- A file with an unusual extension (e.g. a `.glb`/`.obj` 3D mesh, or a query-string-laden signed URL) may be mislabeled as **Image** because only the listed extensions are special-cased. Chain it where the URL itself is what matters, or be aware the port type is a best-guess.
+- A model that returns a **list of files** only yields its **first** file downstream. If they need all of them, that's a current limitation.
+- A model that returns a **dict** (structured output) is flattened to a Text port (stringified) — not parsed into typed fields, even when its fields are files.
+- A model with no example run and no schema hint gets an unconfirmed `image` port; if it really returns video or audio, the run keeps the file under `video`/`audio` (shown on the card), but nothing wired to `image` receives it.
 
 ## Recipes
 
@@ -130,11 +153,11 @@ Prices are per route in `backend/data/model_pricing.json`: FLUX 3 Image $0.0205 
 ## In the nebula_nodes context
 
 - **Node id:** `replicate-universal` (display "Replicate"), category `universal`, `apiProvider: replicate`, `executionPattern: async-poll`, `envKeyName: REPLICATE_API_TOKEN`, `apiEndpoint: https://api.replicate.com/v1/predictions`.
-- **Handler:** `backend/handlers/replicate_universal.py` (`handle_replicate_universal`). Version resolve helper `_resolve_version`; output typing `_infer_output_type`. Async polling runs through `backend/execution/async_poll_runner.py` (`async_poll_execute` / `AsyncPollConfig`) — submit accepts 200/201, polls require 200, 2 s interval, 300-poll cap, failure reads the prediction's `error` field.
-- **Input ports:** none declared. You add ports at graph-build time and **name them to the model's input fields**. Each connected port's value is forwarded into the prediction `input` under that exact name.
-- **Output ports:** none declared; a single port is produced at runtime, typed `image` / `video` / `audio` / `text` per the inference table. There is no `task_id` output port (unlike Meshy) — chaining is by the inferred media port only.
-- **Chaining rules:** map an upstream media output into the downstream model's file-input field by name (Image → `image`/`input_image`, Audio → `audio`, Text → `prompt`/`system_prompt`). Upstream outputs are served URLs that Replicate fetches directly — no re-upload.
-- **How outputs render:** Image/Video/Audio ports render in the canvas's standard media previews; Text ports show as text. Mislabeled ports (see inference caveats) still carry the raw URL/string.
+- **Handler:** `backend/handlers/replicate_universal.py` (`handle_replicate_universal`). Version resolve helper `_resolve_version`; the run fills the declared output port (`_fill_declared_port`; `_infer_output_type` names it for a node never configured). Async polling runs through `backend/execution/async_poll_runner.py` (`async_poll_execute` / `AsyncPollConfig`) — submit accepts 200/201, polls require 200, 2 s interval, 300-poll cap, failure reads the prediction's `error` field.
+- **Input ports:** set from the model once `model_id` is set (`services/universal_ports.replicate_inputs`): one Image port per file input (`x-uploadable` or a `uri` string), named after the input field. Every other input (`prompt`, seeds, enums) is a param of the same name: set it in `params`, don't wire it. Read the ports with `model_schema("replicate", "<owner/name>")` (`ports.inputs`). `edit_canvas` refuses a wire to any other handle.
+- **Output ports:** exactly one (`universal_ports.replicate_output`): for a file URL or a list of them, typed from the model's data before the run (schema content hint, else the `default_example` run's file) as `video`, `audio`, `image`, `svg` or `mesh`; `image` with `typeUnconfirmed` when nothing says; otherwise `text`. There is no `task_id` port. The run fills that port, so wire exactly what `model_schema` lists (`ports.outputs`).
+- **Chaining rules:** wire an upstream media output into one of the model's file-input ports by name (Image → `image`/`input_image`). Text goes into the `prompt`/`system_prompt` params, not a wire. Upstream outputs are served URLs that Replicate fetches directly, with no re-upload.
+- **How outputs render:** Image/Video/Audio/SVG/Mesh ports render in the canvas's standard media previews; Text ports show as text.
 
 ### Capability boundaries (what Replicate's API can do that Nebula does NOT expose)
 

@@ -19,6 +19,7 @@ from uuid import uuid4
 from services.ffmpeg import ffprobe_video
 from services.settings import load_settings
 from services.file_access import require_allowed_path
+from services.media_types import MEDIA_EXTENSIONS
 
 logger = logging.getLogger(__name__)
 
@@ -286,13 +287,9 @@ async def save_mesh_from_url(url: str, run_dir: Path, extension: str = "glb") ->
     return await _validate_and_correct_extension(file_path)
 
 
-_MEDIA_EXTENSIONS: dict[str, set[str]] = {
-    "Image": {"png", "jpg", "jpeg", "webp", "gif"},
-    "Video": {"mp4", "webm", "mov", "m4v", "mkv", "avi"},
-    "Audio": {"mp3", "wav", "flac", "ogg", "m4a", "aac", "pcm"},
-    "Mesh": {"glb", "gltf", "obj", "fbx", "stl", "usdz", "3mf"},
-    "SVG": {"svg"},
-}
+# The one extension table (services/media_types.py): a Replicate port is typed
+# from it before a run, and a saved file's extension is picked from it here.
+_MEDIA_EXTENSIONS: dict[str, set[str]] = MEDIA_EXTENSIONS
 
 _CONTENT_TYPE_EXTENSIONS: dict[str, str] = {
     "image/png": "png",

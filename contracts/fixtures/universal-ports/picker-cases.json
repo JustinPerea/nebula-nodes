@@ -11,6 +11,42 @@
     }
    ],
    "why": "A Replicate model that returns a list of plain strings (a streaming text model) gives a run a `text` output (handlers/replicate_universal.py), so the picker's Image `image` port never received anything; model_schema names `text` too."
+  },
+  "replicate image edit": {
+   "dynamicOutputPorts": [
+    {
+     "id": "image",
+     "label": "Output",
+     "dataType": "Image",
+     "required": false,
+     "typeUnconfirmed": true
+    }
+   ],
+   "why": "A Replicate file output is typed from the model's own data (its output schema's content hints, else its `default_example` run's file, which the schema route keeps as `default_example_output`), and the run fills that port (handlers/replicate_universal.py). This case's schema has neither, so the output stays Image `image`, marked `typeUnconfirmed` so agents know it is a guess (2026-10-21)."
+  },
+  "replicate list of file urls": {
+   "dynamicOutputPorts": [
+    {
+     "id": "image",
+     "label": "Output",
+     "dataType": "Image",
+     "required": false,
+     "typeUnconfirmed": true
+    }
+   ],
+   "why": "A Replicate file output is typed from the model's own data (its output schema's content hints, else its `default_example` run's file, which the schema route keeps as `default_example_output`), and the run fills that port (handlers/replicate_universal.py). This case's schema has neither, so the output stays Image `image`, marked `typeUnconfirmed` so agents know it is a guess (2026-10-21)."
+  },
+  "replicate empty schema": {
+   "dynamicOutputPorts": [
+    {
+     "id": "text",
+     "label": "Output",
+     "dataType": "Text",
+     "required": false,
+     "typeUnconfirmed": true
+    }
+   ],
+   "why": "A Replicate model with no Output schema says nothing about what it returns. Its output is typed by its `default_example` run's file when there is one, else stays Text `text`, marked `typeUnconfirmed` so agents know it is a guess; a run that returns a file keeps it under that file's own port (handlers/replicate_universal.py, 2026-10-21 review)."
   }
  },
  "cases": [

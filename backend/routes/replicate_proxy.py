@@ -12,6 +12,34 @@ router = APIRouter(prefix="/api/replicate", tags=["replicate"])
 
 REPLICATE_API_BASE = "https://api.replicate.com/v1"
 CACHE_TTL = 3600.0  # 1 hour — schemas don't change often
+# How much of the model's example output is kept with its schema: enough to
+# read a file's type (services/universal_ports.replicate_output), never a whole
+# inline file or a long text.
+_EXAMPLE_ITEMS = 8
+_EXAMPLE_URL_CHARS = 2048
+_EXAMPLE_TEXT_CHARS = 200
+
+
+def _example_output(value: Any, depth: int = 0) -> Any:
+    """The model's `default_example.output`, cut down to what says its type:
+    a URL (its extension), a data: URI's header, a short slice of text; the
+    first few items of a list or keys of an object."""
+    if isinstance(value, str):
+        if value.startswith("data:"):
+            return value.partition(",")[0][:120] + ","
+        if value.startswith(("http://", "https://")):
+            return value[:_EXAMPLE_URL_CHARS]
+        return value[:_EXAMPLE_TEXT_CHARS]
+    if depth >= 2:
+        return None
+    if isinstance(value, list):
+        return [_example_output(item, depth + 1) for item in value[:_EXAMPLE_ITEMS]]
+    if isinstance(value, dict):
+        return {str(key)[:64]: _example_output(item, depth + 1)
+                for key, item in list(value.items())[:_EXAMPLE_ITEMS]}
+    if isinstance(value, (int, float, bool)) or value is None:
+        return value
+    return None
 
 
 @router.get("/schema/{owner}/{name}")
@@ -76,6 +104,12 @@ async def get_model_schema(owner: str, name: str) -> dict[str, Any]:
         "input_schema": input_schema,
         "output_schema": output_schema,
         "description": model_data.get("description", ""),
+        # What the model's own example run returned, from the model data read
+        # above (no extra call): it types a file output whose schema is a
+        # plain `uri` (services/universal_ports.replicate_output).
+        "default_example_output": _example_output(
+            (model_data.get("default_example") or {}).get("output")
+            if isinstance(model_data.get("default_example"), dict) else None),
     }
 
     model_cache.set(cache_key, result, ttl=CACHE_TTL)

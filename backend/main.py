@@ -10,7 +10,6 @@ _env_check.run_startup_checks()
 
 import asyncio
 import copy
-import difflib
 import hashlib
 import json
 import logging
@@ -85,7 +84,7 @@ from services.settings import (
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
-from services import agent_start, node_categories
+from services import agent_start, node_categories, node_lookup
 from services import output_thumbnail
 from services.node_errors import NodeErrors
 from services import project_cover
@@ -106,6 +105,7 @@ from services.port_contracts import (
     validate_edge_contracts,
 )
 from services import universal_ports
+from services.media_types import MEDIA_PORT_IDS
 from services.file_access import ProtectedPathError, require_allowed_path, validate_file_references
 from services.qc_common import extract_frames
 from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT, resolve_output_ref, portable_output_ref, ManifestError, find_output_record, read_manifest
@@ -164,7 +164,8 @@ from services.person_gate import (
 from services.canvas_edits import INTERNAL_OK as BILLING_PARAMS, EditSpec, parse_edit
 from services.canvas_arrange import canvas_arrange
 from services.canvas_undo import (
-    EDIT_ID_RE, CanvasUndoBook, UndoError, build_inverse, capture_before, plan_undo,
+    EDIT_ID_RE, UNDONE_VERBS, CanvasUndoBook, UndoError, build_inverse, capture_before, nothing_went_back,
+    plan_undo, touched_nodes,
 )
 from services.agent_params import ASSET_PARAM_TYPES, asset_params, internal_keys, internal_refusal
 from services.canvas_proposals import (
@@ -1610,7 +1611,21 @@ def _validate_imported_outputs(
     handles_are_dynamic = (
         definition_id in _DYNAMIC_OUTPUT_DEFINITION_IDS and not declared_ports
         and universal_ports.stored_ports(definition_id, params) is None
+    ) or (
+        # A Replicate node configured before its file output was typed (every
+        # file `image`): its run named the output by the returned file, as it
+        # still does, so a saved `video`/`audio` output is its own.
+        definition_id in _DYNAMIC_OUTPUT_DEFINITION_IDS
+        and universal_ports.untyped_output_stamp(definition_id, params)
     )
+    guessed = (universal_ports.declared_output(definition_id, params)
+               if definition_id in _DYNAMIC_OUTPUT_DEFINITION_IDS else None)
+    if guessed and guessed.get("typeUnconfirmed"):
+        # The port was a guess (the model's data said nothing): its run keeps
+        # a file of another type under that type's own port
+        # (handlers/replicate_universal._fill_declared_port).
+        for media, port_id in MEDIA_PORT_IDS.items():
+            declared_ports.setdefault(port_id, media)
     for handle, port in outputs.items():
         if not isinstance(handle, str) or not handle:
             raise ValueError(f"nodes[{node_index}] has an invalid output handle")
@@ -1632,6 +1647,25 @@ def _validate_imported_outputs(
                 f"nodes[{node_index}] output '{handle}' declares type {actual_type}, "
                 f"but definition '{definition_id}' outputs {declared_type or 'a known dynamic type'}"
             )
+
+
+def _drop_outputs_off_ports(graph: CLIGraph, node_id: str, params: dict[str, Any]) -> None:
+    """Before a universal node takes ``params`` (another model, or its model
+    read again), drop each saved output its new ports don't take: one left on
+    a port the node no longer declares fails every save of the project
+    (_validate_imported_outputs). The run history keeps the old result."""
+    node = graph.nodes.get(node_id)
+    if not node or not isinstance(node.get("outputs"), dict) or not node["outputs"]:
+        return
+    definition_id = str(node.get("definitionId") or "")
+    kept: dict[str, Any] = {}
+    for handle, value in node["outputs"].items():
+        try:
+            _validate_imported_outputs(definition_id, {handle: value}, node_index=0, params=params)
+        except ValueError:
+            continue
+        kept[handle] = value
+    node["outputs"] = kept
 
 
 def _import_external_image_to_output_root(file_path_value: str) -> tuple[Path, str] | None:
@@ -3915,22 +3949,35 @@ _MODEL_PORTS_NOTES = {
     "nous-portal-universal": _CHAT_MODEL_PORTS,
     "replicate-universal": (
         "No ports until `model_id` (owner/name) is set. Set it with edit_canvas and the node gets the model's "
-        "version and defaults, a port for each file input (named as the model names it) and one output: `image` "
-        "when the model returns a file or a list of them, else `text`. The model's other inputs are params of "
+        "version and defaults, a port for each file input (named as the model names it) and one output: for a "
+        "file or a list of them, typed from the model's data (its schema's content hints, else its "
+        "`default_example` run's file) as `video`, `audio`, `image`, `svg` or `mesh` (`image` with "
+        "`typeUnconfirmed` when nothing says; a run then keeps a file of another type under that type's own port), "
+        "else `text`; a run fills that port. A node whose ports were saved before outputs were typed shows its file "
+        "output as `typeUnconfirmed` with a note: set its model_id again. The model's other inputs are params of "
         "the same name. The edit's `modelPorts` lists the ports; look_at_canvas shows a node's `ports`. Nebula "
         "reads the schema with the person's Replicate token, which costs nothing; without it the edit says so."),
 }
 
 
-@app.get("/api/agent/nodes/{definition_id}")
+# `{...:path}`: a display name may hold a slash ("Jev Decide (judge / classify / yes-no)").
+@app.get("/api/agent/nodes/{definition_id:path}")
 async def agent_describe_node(definition_id: str) -> dict[str, Any]:
     """One node type, in what an agent needs to wire and set it: ports, params
-    (options, defaults, ranges), whether it can run here, and its list prices."""
-    definition = node_registry.get(definition_id)
-    if definition is None:
-        hint = ", ".join(_suggest_node_ids(definition_id, list(node_registry.get_all())))
+    (options, defaults, ranges), whether it can run here, and its list prices.
+    Takes an id, or the exact display name of one node type (ignoring case
+    and outer spaces); a name answer starts with `lookup`, saying the id."""
+    found = node_lookup.resolve(definition_id, node_registry.get_all())
+    if found.definition_id is None:
+        if len(found.named) > 1:
+            line = node_lookup.shared_name_line(definition_id, found.named, node_registry.get_all())
+            raise HTTPException(status_code=404, detail=f"No node type '{definition_id}': {line}: "
+                                f"{', '.join(found.named)}. Use one of those ids.")
+        hint = ", ".join(_suggest_node_ids(definition_id, node_registry.get_all()))
         raise HTTPException(status_code=404, detail=f"No node type '{definition_id}'." + (
             f" Close matches: {hint}." if hint else " find_nodes lists them."))
+    definition_id = found.definition_id
+    definition = node_registry.get(definition_id)
     settings = load_settings()
     try:
         krea_signed_in = _krea_connector().status().get("status") == "connected"
@@ -3947,6 +3994,8 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
         for port in definition.get(key) or []
     ]
     result: dict[str, Any] = {
+        # A name, not the id, picked it: say which id (first, so it's read first).
+        **({"lookup": found.note} if found.note else {}),
         "id": definition["id"],
         "name": definition.get("displayName") or definition["id"],
         "category": definition.get("category"),
@@ -4194,6 +4243,41 @@ _RUN_EVENT_KINDS: dict[type, str] = {
 }
 _RUN_EVENT_VERBS = {"run.started": "started", "run.finished": "finished", "run.failed": "failed",
                     "run.skipped": "skipped"}
+
+
+def _note_run(run_id: str) -> None:
+    """Who asked for a run, and when: the journal credits its node events to
+    them, and an agent's undo (POST /api/graph/apply/undo) leaves a node
+    someone else ran after the agent's edit (services/canvas_undo.py)."""
+    actor = actor_for_headers(current_request_headers())
+    canvas_events.note_run(run_id, actor)
+    try:
+        canvas_undo_book.run_started(run_id, actor=actor, project_id=_workspace_context()["activeProjectId"])
+    except Exception:  # noqa: BLE001 - never refuse a run over undo bookkeeping
+        pass
+
+
+def _note_run_nodes(run_id: str, nodes: list[GraphNode]) -> None:
+    """The canvas nodes a run set out to run: while it is going they count as
+    run for an agent's undo, before the engine reaches them."""
+    canvas_undo_book.run_nodes(run_id, [node.id for node in nodes])
+
+
+def _run_is_active(run_id: str) -> bool:
+    record = execution_runs.get(run_id)
+    return record is not None and record.status in {"running", "cancelling"}
+
+
+def _note_node_ran(event: Any, run_id: str | None) -> None:
+    """A run started a canvas node (its ExecutingEvent), for an agent's undo."""
+    node_id = getattr(event, "node_id", None)
+    if not isinstance(event, ExecutingEvent) or not isinstance(node_id, str) or node_id not in cli_graph.nodes:
+        return
+    try:
+        project_id = (_execution_workspace_context.get() or _workspace_context())["activeProjectId"]
+        canvas_undo_book.node_ran(run_id, node_id, actor=canvas_events.run_actor(run_id), project_id=project_id)
+    except Exception:  # noqa: BLE001 - never break execution over undo bookkeeping
+        pass
 
 
 def _journal_execution_event(event: Any, run_id: str | None) -> None:
@@ -5007,6 +5091,7 @@ def _stage_proposal(
         model_key = universal_ports.MODEL_PARAM.get(definition_id)
         if models is not None and model_key and model_key in change.params:
             full, reason = universal_ports.agent_update(definition_id, node.get("params") or {}, update, models)
+            _drop_outputs_off_ports(candidate, change.node_id, full)
             candidate.set_params(change.node_id, full)
             configured[change.node_id] = reason or ""
         else:
@@ -5075,14 +5160,32 @@ def _stage_proposal(
             definition_id = str(node.get("definitionId") or "")
             stored = universal_ports.stored_ports(definition_id, node.get("params"))
             if stored is not None:
+                model = universal_ports.model_of(definition_id, node.get("params"))
                 report.setdefault("ports", {})[node_id] = {
-                    "model": universal_ports.model_of(definition_id, node.get("params")),
+                    "model": model,
                     "inputs": universal_ports.port_ids(stored[0]), "outputs": universal_ports.port_ids(stored[1])}
+                # A port typed without the model's data saying so (Replicate),
+                # or kept before file outputs were typed.
+                guessed = universal_ports.stored_port_note(definition_id, node.get("params"))
+                if guessed:
+                    report.setdefault("notes", {})[node_id] = guessed
             elif reason:
                 report.setdefault("notes", {})[node_id] = (
                     f"{reason}, so Nebula can't tell which ports "
                     f"{universal_ports.model_of(definition_id, node.get('params'))} has; until it can, the node has "
                     f"{_basic_ports_line(definition_id, node.get('params') or {})}")
+        # A wire this edit makes on a node already there whose port is a guess
+        # (a Replicate stamp kept before file outputs were typed, say): the
+        # agent learns it now, not from a run that fills another port.
+        for raw in raw_edges:
+            for end in ("source", "target"):
+                node_id = refs.get(raw.get(end)) if isinstance(raw.get(end), str) else None
+                node = candidate.nodes.get(node_id or "")
+                if node is None or node_id in new_ids or node_id in report.get("notes", {}):
+                    continue
+                guessed = universal_ports.stored_port_note(str(node.get("definitionId") or ""), node.get("params"))
+                if guessed:
+                    report.setdefault("notes", {})[node_id] = guessed
     run_ids: list[str] = []
     for item in spec.run:
         if item not in refs:
@@ -6875,10 +6978,11 @@ async def execute(request: ExecuteRequest) -> dict:
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
-    canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
+    _note_run(run_id)
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
     nodes = _normalize_execute_nodes(request.nodes)
+    _note_run_nodes(run_id, nodes)
     submitted = _submitted_params(nodes)
     _validate_cinema_base_models(nodes)
 
@@ -7013,7 +7117,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
-    canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
+    _note_run(run_id)
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
     nodes = _normalize_execute_nodes(request.nodes)
@@ -7029,6 +7133,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
             status_code=404,
             detail=f"Node '{request.target_node_id}' not found in graph",
         )
+    _note_run_nodes(run_id, sub_nodes)
 
     _validate_cinema_base_models(sub_nodes)
 
@@ -7595,7 +7700,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
-    canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
+    _note_run(run_id)
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
     nodes = _normalize_execute_nodes(request.nodes)
@@ -7629,6 +7734,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     sub_nodes, sub_edges = get_subgraph(patched_nodes, request.edges, request.node_id)
     if not sub_nodes:
         raise HTTPException(status_code=404, detail=f"Node '{request.node_id}' not found in graph")
+    _note_run_nodes(run_id, sub_nodes)
     fresh_paid_ancestors = _fresh_paid_worldlabs_claims(sub_nodes)
     if fresh_paid_ancestors:
         blocked_ids = ", ".join(node_id for _kind, node_id in fresh_paid_ancestors)
@@ -7844,28 +7950,30 @@ async def list_nodes() -> dict:
     return {"nodes": nodes_list, "categories": categories}
 
 
-def _suggest_node_ids(query: str, all_ids: list[str]) -> list[str]:
-    """Find candidate definition ids for a failed `nebula info` lookup.
-
-    Prefix match first (catches family names: `gpt-image-2` → four variants);
-    falls back to difflib close matches for typos. Returns [] if nothing is
-    close enough — callers should skip the 'Did you mean:' block in that case
-    rather than pad the 404 with noise.
-    """
-    prefix = sorted(nid for nid in all_ids if nid.startswith(query) and nid != query)
-    if prefix:
-        return prefix
-    return difflib.get_close_matches(query, all_ids, n=5, cutoff=0.6)
+def _suggest_node_ids(query: str, definitions: Mapping[str, Mapping[str, Any]]) -> list[str]:
+    """Candidate definition ids for a failed lookup (services/node_lookup.py):
+    the node types the text is the exact name of first, then ids it starts
+    (a family name: `gpt-image-2` lists its four variants), else difflib close
+    matches for a typo. [] when nothing is close: callers then skip the
+    'Did you mean:' block rather than pad the 404 with noise."""
+    return node_lookup.suggestions(query, definitions)
 
 
-@app.get("/api/nodes/{node_id}")
+# `{...:path}`: a display name may hold a slash ("Jev Decide (judge / classify / yes-no)").
+@app.get("/api/nodes/{node_id:path}")
 async def get_node(node_id: str) -> dict:
-    node = node_registry.get(node_id)
-    if node is None:
-        all_nodes = node_registry.get_all()
-        suggestions = _suggest_node_ids(node_id, list(all_nodes.keys()))
+    """One node definition, for `nebula info`. Takes an id, or the exact
+    display name of one node type (ignoring case and outer spaces); a name
+    answer starts with `lookup`, the line saying which id it used."""
+    all_nodes = node_registry.get_all()
+    found = node_lookup.resolve(node_id, all_nodes)
+    if found.definition_id is None:
+        suggestions = _suggest_node_ids(node_id, all_nodes)
+        head = f"Node '{node_id}' not found"
+        if len(found.named) > 1:
+            head += f": {node_lookup.shared_name_line(node_id, found.named, all_nodes)}"
         if suggestions:
-            lines = [f"Node '{node_id}' not found. Did you mean:"]
+            lines = [f"{head}. Did you mean:"]
             for nid in suggestions:
                 meta = all_nodes.get(nid, {})
                 display = meta.get("displayName", "")
@@ -7873,11 +7981,13 @@ async def get_node(node_id: str) -> dict:
                 lines.append(f"  - {nid:32s} {display:24s} {category}")
             detail = "\n".join(lines)
         else:
-            detail = f"Node '{node_id}' not found"
+            detail = head
         raise HTTPException(status_code=404, detail=detail)
+    node = all_nodes[found.definition_id]
     board = _moodboard_adapter(node)
-    # `nebula info` prints it; the definition itself stays as registered.
-    return {**node, "moodboardAdapter": board} if board is not None else node
+    # `nebula info` prints them; the definition itself stays as registered.
+    lookup = {"lookup": found.note} if found.note else {}
+    return {**lookup, **node, **({"moodboardAdapter": board} if board is not None else {})}
 
 
 def _moodboard_adapter(definition: Mapping[str, Any], settings: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
@@ -8153,6 +8263,7 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
     if record is not None and record.status in {"cancelling", "cancelled"}:
         return
     _journal_execution_event(event, run_id)
+    _note_node_ran(event, run_id)
     node_errors.observe(event)
     if isinstance(event, ErrorEvent) and run_id is not None:
         # The engine reports per-node failures as events and then returns
@@ -8623,6 +8734,7 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
     definition_id = body.get("definitionId", "")
     if message := retired_message(str(definition_id)):
         raise HTTPException(status_code=400, detail=message)
+    _refuse_unknown_definition(definition_id)
     raw_params = body.get("params", {})
     params = {} if raw_params is None else raw_params
     if not isinstance(params, dict):
@@ -8715,6 +8827,7 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     definition_id = body.get("definitionId", "")
     if message := retired_message(str(definition_id)):
         raise HTTPException(status_code=400, detail=message)
+    _refuse_unknown_definition(definition_id)
     raw_params = body.get("params", {})
     params = {} if raw_params is None else raw_params
     if not isinstance(params, dict):
@@ -9043,7 +9156,8 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
     _validate_graph_ingress_complexity(body)
     # Anyone but the person (an agent, the unnamed CLI) who sets a universal
     # node's model reconfigures it (its ports follow the model): when the model
-    # changes, or its ports are stale (a node saved before ports were kept).
+    # changes, or its ports are stale (a node saved before ports were kept, or
+    # a Replicate node whose file output was kept untyped: universal_ports.needs_configuring).
     # The same model again reads nothing. The canvas's own pushes are stored
     # as sent; its picker uses /model.
     models: dict[tuple[str, str], Any] | None = None
@@ -9055,7 +9169,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
             and model_key in body["params"]):
         model = universal_ports.model_of(current_definition, {**current_params, **body["params"]})
         if (model != universal_ports.model_of(current_definition, current_params)
-                or universal_ports.stored_ports(current_definition, current_params) is None):
+                or universal_ports.needs_configuring(current_definition, current_params)):
             models = await _look_up_models([(current_definition, model)])
     with _paid_graph_mutation("update graph node parameters"):
         node = cli_graph.nodes.get(node_id)
@@ -9082,6 +9196,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
             probe.set_params(node_id, full)
             _refuse_orphaned_wires(probe, node_id, reason=reason or "")
             _guard_approved_runs(lambda probe: probe.set_params(node_id, copy.deepcopy(full)))
+            _drop_outputs_off_ports(cli_graph, node_id, full)
             cli_graph.set_params(node_id, full)
         else:
             _guard_approved_runs(lambda probe: probe.update_params(node_id, copy.deepcopy(params)))
@@ -9196,6 +9311,7 @@ async def configure_universal_node(node_id: str, body: dict[str, Any]) -> dict[s
         candidate = cli_graph.clone()
         for edge in removed:
             candidate.remove_edge(edge["source"], edge["sourceHandle"], edge["target"], edge["targetHandle"])
+        _drop_outputs_off_ports(candidate, node_id, configured.params)
         candidate.set_params(node_id, configured.params)
         _commit_graph_candidate_with_recoveries(candidate, [candidate.nodes[node_id]], source="update")
     await _broadcast_graph_sync(edit=True)
@@ -10316,7 +10432,8 @@ def _canvas_undo_after(before: dict[str, Any], added: list[str]) -> dict[str, An
     another request changed while this one was still broadcasting."""
     project_id, project_name = _open_project_brief()
     return {"inverse": build_inverse(before, cli_graph.nodes, cli_graph.edges, added=added),
-            "projectId": project_id, "projectName": project_name, "epoch": canvas_undo_book.epoch(project_id)}
+            "projectId": project_id, "projectName": project_name, "epoch": canvas_undo_book.epoch(project_id),
+            "mark": canvas_undo_book.mark()}
 
 
 def _canvas_undo_keep(identity: Any, after: dict[str, Any]) -> dict[str, Any] | None:
@@ -10328,7 +10445,8 @@ def _canvas_undo_keep(identity: Any, after: dict[str, Any]) -> dict[str, Any] | 
     canvas_undo_book.link(edit_id, kind="edit", actor=actor)
     canvas_undo_book.note_events(edit_id, canvas_events.seqs_of_edit(edit_id))
     return canvas_undo_book.keep(edit_id=edit_id, actor=actor, agent_id=identity.id, project_id=after["projectId"],
-                                 project_name=after["projectName"], inverse=after["inverse"], epoch=after["epoch"])
+                                 project_name=after["projectName"], inverse=after["inverse"], epoch=after["epoch"],
+                                 mark=after.get("mark"))
 
 
 def _forget_canvas_undo(why: str) -> None:
@@ -10420,6 +10538,26 @@ def _journal_restored_edit(link: dict[str, Any], action: str) -> None:
                                               else ("undone", actor_record(target.actor)))
 
 
+def _undo_ran_since(record: Any) -> dict[str, list[dict[str, Any]]]:
+    """The nodes an edit touched that someone other than its agent ran since
+    the edit (the person, another agent, an unnamed client), with who."""
+    ran: dict[str, list[dict[str, Any]]] = {}
+    for node_id in touched_nodes(record.inverse):
+        if node_id not in cli_graph.nodes:
+            continue
+        who = canvas_undo_book.ran_since(record.project_id, node_id, since=record.mark,
+                                         agent_id=record.agent_id, active=_run_is_active)
+        if who:
+            ran[node_id] = who
+    return ran
+
+
+def _undo_left_text(skipped: list[dict[str, Any]]) -> str:
+    """The parts an undo left, in its reply's message."""
+    messages = [str(item.get("message") or item.get("reason") or "") for item in skipped]
+    return "Left as is: " + "; ".join(message for message in messages if message) + "."
+
+
 @app.post("/api/graph/apply/undo")
 async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     """An agent undoes one of its own edits: ``{token}``, the ``undo.token``
@@ -10429,11 +10567,18 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     open, within UNDO_TTL_SECONDS. Each part (a node it added, a param,
     name or position it changed, a node or wire it removed) goes back only
     if the canvas still has it as the edit left it; a part someone changed
-    since stays and is listed in ``skipped``. The rest goes through one
-    restore, as the canvas's Cmd+Z does, so it lands whole or not at all.
+    since stays and is listed in ``skipped``. A node someone ran since the
+    edit counts as changed (Q82): the person, another agent or an unnamed
+    client; only this agent's own runs don't. That node stays whole (not
+    removed, params, name and position not put back, no wire into it taken
+    away or put back) as one skipped item, reason "ran since", with
+    ``ranBy``. The rest goes through one restore, as the canvas's Cmd+Z
+    does, so it lands whole or not at all. ``message`` says what went back
+    and what was left and why.
 
     ``status`` is ``undone``; ``skipped`` when nothing could go back (the
-    token still works, say after the person puts a part back); or
+    token still works, say after the person puts a changed part back, but a
+    node someone ran since stays for good, and the message says which); or
     ``already-undone`` (by this agent, or by the person on the canvas) with
     ``undoneBy``. The journal tags each event ``edit: {id, undoes, of}`` and
     ends with ``edit.undone``.
@@ -10464,15 +10609,15 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
                 "undoneBy": by, "skipped": record.last_skipped,
                 "message": f"This edit was already undone by {who}; nothing changed."}
     plan = plan_undo(record.inverse, cli_graph.nodes, cli_graph.edges,
-                     cannot_remove=_undo_cannot_remove, refused_change=_undo_refused_change)
+                     cannot_remove=_undo_cannot_remove, refused_change=_undo_refused_change,
+                     ran=_undo_ran_since(record))
     owner = record.actor
     actor = actor_for_headers(headers)
     if plan.empty:
         if plan.skipped:
             return {"status": "skipped", "editId": record.edit_id, "added": [], "removed": [], "changed": [],
                     "renamed": [], "moved": [], "wired": [], "unwired": [], "skipped": plan.skipped,
-                    "message": ("Nothing went back: every part of this edit was changed since. The token still "
-                                "works if those parts are put back the way the edit left them.")}
+                    "message": nothing_went_back(plan.skipped, _undo_left_text(plan.skipped))}
         record.state, record.undone_by, record.last_skipped = "undone", actor_record(actor), []
         return {"status": "undone", "editId": record.edit_id, "undoId": None, "added": [], "removed": [],
                 "changed": [], "renamed": [], "moved": [], "wired": [], "unwired": [], "skipped": [],
@@ -10493,10 +10638,9 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         record.last_skipped = skipped
         canvas_undo_book.note_events(undo_id, canvas_events.seqs_of_edit(undo_id))
         link_entry = canvas_undo_book.link_of(record.edit_id)
-        counts = {key: len(result.get(key) or []) for key in ("added", "removed", "changed", "renamed", "moved")}
-        done = ", ".join(f"{verb} {counts[key]}" for key, verb in (
-            ("removed", "removed"), ("added", "put back"), ("changed", "reset"), ("renamed", "renamed"),
-            ("moved", "moved")) if counts[key])
+        counts = {key: len(result.get(key) or []) for key in (
+            "added", "removed", "changed", "renamed", "moved", "wired", "unwired")}
+        done = ", ".join(f"{verb} {counts[key]}" for key, verb in UNDONE_VERBS if counts[key])
         left = f"; left {len(skipped)} part{'s' if len(skipped) != 1 else ''} as is" if skipped else ""
         _journal("edit.undone", data={
             "editId": record.edit_id, "undoId": undo_id, "of": owner, "editKind": "edit",
@@ -10504,11 +10648,15 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             summary=f"undid {_undo_owner_text(owner, by=actor)} ({done or 'no change'}){left}")
     finally:
         _canvas_edit_link.reset(context)
-    publish_action(f"{identity.name} undid its edit: {done or 'no change'}{left}")
+    stays = [item["nodeId"] for item in skipped if item.get("reason") == "ran since"]
+    publish_action(f"{identity.name} undid its edit: {done or 'no change'}{left}"
+                   + (f" ({_listed(stays)} ran since, so {'it stays' if len(stays) == 1 else 'they stay'})"
+                      if stays else ""))
     return {"status": "undone", "editId": record.edit_id, "undoId": undo_id,
             **{key: result.get(key) for key in ("added", "removed", "changed", "renamed", "moved", "wired",
                                                  "unwired")},
-            "skipped": skipped}
+            "skipped": skipped,
+            "message": f"Undone: {done or 'no change'}." + (f" {_undo_left_text(skipped)}" if skipped else "")}
 
 
 @app.get("/api/graph/node/{node_id}/path")
@@ -10819,6 +10967,18 @@ def _folded_billing_baseline(reference: str, folded: set[str]) -> dict[str, Any]
     return {node_route.PROVIDER_PARAM: "krea"} if reference in folded else None
 
 
+def _refuse_unknown_definition(definition_id: Any) -> None:
+    """400 for a node type the registry doesn't have, on every path that
+    stores or runs one (create, node-and-connect, quick, and every staged
+    import, cluster, restore, edit and proposal). Writes take ids only, never
+    a display name (services/node_lookup.py), so what a saved command adds
+    can't change when names do; the refusal names the node the text is the
+    name of ("did you mean nebula-moodboard (Moodboard)?")."""
+    if not isinstance(definition_id, str) or node_registry.get(definition_id) is None:
+        raise HTTPException(status_code=400,
+                            detail=node_lookup.unknown_definition(str(definition_id), node_registry.get_all()))
+
+
 def _validated_ingress_node(
     raw: dict[str, Any],
     index: int,
@@ -10845,11 +11005,7 @@ def _validated_ingress_node(
     # A retired definition (its provider shut the model down) becomes its
     # replacement, so saved graphs and exports still load.
     definition_id, params, retired_label = migrate_node(definition_id, params)
-    if node_registry.get(definition_id) is None:
-        raise HTTPException(
-            status_code=400,
-            detail=f"unknown node definition '{definition_id}'",
-        )
+    _refuse_unknown_definition(definition_id)
     _validate_params(definition_id, params)
     params = _coerce_params(definition_id, params)
     if definition_id == "image-input" and normalize_image_inputs:
@@ -12411,7 +12567,8 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     # Checked last: a request refused for anything else must not count.
     _require_spend_approval(sub_nodes, sub_edges, run_id=run_id, settings=settings,
                             run_ids=[target] if target else _end_node_ids(sub_nodes, sub_edges))
-    canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
+    _note_run(run_id)
+    _note_run_nodes(run_id, sub_nodes)
     publish_action(
         f"Running {target}..." if target else f"Running {len(sub_nodes)} node(s)..."
     )
@@ -12444,7 +12601,7 @@ async def _refused_cli_run(run_id: str, target: str | None, errors: list[Validat
     The canvas shows it as it shows a refused click on Run
     (_announce_validation_errors); the caller gets the run result's own
     shape with status "failed", each node's message in `errors`."""
-    canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
+    _note_run(run_id)
     await _announce_validation_errors(errors, run_id)
     messages = _validation_messages(errors)
     per_node = {node_id: message for node_id, message in messages.items() if node_id}
@@ -12734,6 +12891,7 @@ async def quick_execute(body: dict[str, Any]) -> dict:
     definition_id = body.get("definitionId", "")
     if message := retired_message(str(definition_id)):
         raise HTTPException(status_code=400, detail=message)
+    _refuse_unknown_definition(definition_id)
     if not quick_execution_allowed(definition_id):
         raise HTTPException(
             status_code=409,
@@ -13559,20 +13717,26 @@ def _moodboard_conflict(exc: Any) -> JSONResponse:
 
 
 def _journal_board_change(before: dict, after: dict, changes: dict, *, say: str = "") -> None:
-    """One ``board.*`` journal event for a board write (plan section 5.2):
-    an edit batch or a PUT. Tagged with the open canvas project; the board's
-    own scope is in ``data`` (a Global board is in every project). Never any
-    note text."""
-    from services.moodboard_edits import journal_entry
+    """The journal events for a board write (plan section 5.2): an edit
+    batch or a PUT. One ``board.*`` event for its images, cards and frames,
+    and one ``board.fields`` event naming the board fields it changed
+    (Justin's Q91). Every board write goes through here (the Studio, MCP,
+    the CLI, an undo's ``restore``, an accepted proposal's PUT), so none is
+    missed. Tagged with the open canvas project; the board's own scope is in
+    ``data`` (a Global board is in every project). Never any note text, and
+    never a field's value."""
+    from services.moodboard_edits import journal_entries
 
-    entry = journal_entry(changes, before, after)
-    if entry is None:
-        return
-    data = {"boardId": after.get("id"), "boardName": after.get("name"),
-            "scope": after.get("projectId") or "global", "refs": entry["refs"], "kinds": entry["kinds"]}
-    if say:
-        data["say"] = say
-    _journal(entry["kind"], data=data, summary=entry["summary"])
+    for entry in journal_entries(changes, before, after):
+        data: dict[str, Any] = {"boardId": after.get("id"), "boardName": after.get("name"),
+                                "scope": after.get("projectId") or "global"}
+        if entry["kind"] == "board.fields":
+            data["fields"] = entry["fields"]
+        else:
+            data.update({"refs": entry["refs"], "kinds": entry["kinds"]})
+        if say:
+            data["say"] = say
+        _journal(entry["kind"], data=data, summary=entry["summary"])
 
 
 async def _say_agent_board_change(before: dict, after: dict, changes: dict, *, say: str = "",
@@ -13636,7 +13800,12 @@ async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
     _journal_board_change(before, moodboard, changes)
     await _broadcast_stored_asset("moodboard", moodboard, edit={"touched": changes["touched"], "undo": None})
     await _say_agent_board_change(before, moodboard, changes)
-    return _moodboard_out(moodboard)
+    # The answer is the board plus `undo`, the `restore` that takes this
+    # write back (the shape `/edits` answers with), made from the same diff:
+    # Moodboard Studio's field steps undo with it, and so can any caller.
+    # Only the caller gets it; the broadcast's stays null.
+    undo = {"ops": [{"op": "restore", "slices": changes["slices"]}]} if changes["slices"] else {"ops": []}
+    return {**_moodboard_out(moodboard), "undo": undo}
 
 
 @app.post("/api/moodboards/{moodboard_id}/edits")
@@ -14405,7 +14574,8 @@ def _check_style_write(name: Any, model_id: str | None, params: Mapping[str, Any
     - Nobody but the person may make a Style that changes who bills its
       model's run (``_provider``, ``_kreaAuth``; ``_refuse_agent_billing_change``).
       ``before`` is the Style as it was when the model stays the same.
-    - An agent's ``modelId`` must be a node in the catalog."""
+    - An agent's ``modelId`` must be a node id in the catalog; a display
+      name is refused naming its id (``node_lookup.unknown_definition``)."""
     params = params if isinstance(params, Mapping) else {}
     label = f"Style “{str(name or '')[:60]}”"
     if has_agent_marker(current_request_headers()):
@@ -14413,8 +14583,11 @@ def _check_style_write(name: Any, model_id: str | None, params: Mapping[str, Any
         _refuse_agent_internal_params({key: value for key, value in params.items()
                                        if key not in was or was.get(key) != value}, "style")
         if model_id and node_registry.get(model_id) is None:
+            # Strict like the node writes (a Style stores its modelId and Create
+            # applies it), and the refusal names the exact-name match the same way.
             raise HTTPException(status_code=400, detail=(
-                f"style.modelId: there's no node {str(model_id)[:64]!r}; find_nodes (`nebula nodes`) lists them"))
+                f"style.modelId: {node_lookup.unknown_definition(str(model_id)[:64], node_registry.get_all())}; "
+                "find_nodes (`nebula nodes`) lists them"))
     if model_id:
         try:
             _refuse_agent_billing_change([(label, model_id, (before or {}).get("params") if before else None, params)])

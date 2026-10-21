@@ -1,0 +1,118 @@
+{
+  "about": "Replicate API shapes (GET /v1/models/{owner}/{name} and GET /v1/models/{owner}/{name}/versions/{id}) for made-up models, as routes/replicate_proxy.get_model_schema reads them. A file output's schema is a plain `uri` string whatever the file is; the model's `default_example.output` (its URL's extension) or a content hint in the schema says which. Used by tests/test_replicate_media_ports.py and the live check; nothing here is a real model.",
+  "models": {
+    "acme/clipmaker": {
+      "model": {
+        "owner": "acme", "name": "clipmaker", "description": "Text to video", "visibility": "public",
+        "default_example": {"id": "ex-clip", "status": "succeeded", "input": {"prompt": "a fox in snow"},
+                            "output": "https://replicate.delivery/xezq/abc123/output.mp4"},
+        "latest_version": {"id": "v-clip"}
+      },
+      "version": {"id": "v-clip", "openapi_schema": {"components": {"schemas": {
+        "Input": {"type": "object", "required": ["prompt"], "properties": {
+          "prompt": {"type": "string", "description": "What to film"},
+          "first_frame": {"type": "string", "format": "uri", "description": "Optional first frame"},
+          "duration": {"type": "integer", "default": 5, "minimum": 1, "maximum": 10}}},
+        "Output": {"type": "string", "format": "uri", "title": "Output"}}}}}
+    },
+    "acme/voicebox": {
+      "model": {
+        "owner": "acme", "name": "voicebox", "description": "Text to speech", "visibility": "public",
+        "default_example": {"id": "ex-voice", "status": "succeeded", "input": {"text": "hello"},
+                            "output": "https://replicate.delivery/pbxt/def456/speech.mp3"},
+        "latest_version": {"id": "v-voice"}
+      },
+      "version": {"id": "v-voice", "openapi_schema": {"components": {"schemas": {
+        "Input": {"type": "object", "properties": {"text": {"type": "string"}}},
+        "Output": {"type": "string", "format": "uri", "title": "Output"}}}}}
+    },
+    "acme/songsmith": {
+      "model": {
+        "owner": "acme", "name": "songsmith", "description": "Music from a prompt", "visibility": "public",
+        "default_example": {"id": "ex-song", "status": "succeeded", "input": {"prompt": "lofi"},
+                            "output": "https://replicate.delivery/pbxt/ghi789/out.wav?download=1"},
+        "latest_version": {"id": "v-song"}
+      },
+      "version": {"id": "v-song", "openapi_schema": {"components": {"schemas": {
+        "Input": {"type": "object", "properties": {"prompt": {"type": "string"}}},
+        "Output": {"type": "string", "format": "uri", "title": "Output"}}}}}
+    },
+    "acme/painter": {
+      "model": {
+        "owner": "acme", "name": "painter", "description": "Text to image", "visibility": "public",
+        "default_example": {"id": "ex-paint", "status": "succeeded", "input": {"prompt": "a cat"},
+                            "output": ["https://replicate.delivery/yhqm/jkl012/out-0.webp"]},
+        "latest_version": {"id": "v-paint"}
+      },
+      "version": {"id": "v-paint", "openapi_schema": {"components": {"schemas": {
+        "Input": {"type": "object", "properties": {"prompt": {"type": "string"}}},
+        "Output": {"type": "array", "items": {"type": "string", "format": "uri"}, "title": "Output"}}}}}
+    },
+    "acme/mystery": {
+      "model": {
+        "owner": "acme", "name": "mystery", "description": "Makes a file", "visibility": "public",
+        "default_example": null,
+        "latest_version": {"id": "v-mystery"}
+      },
+      "version": {"id": "v-mystery", "openapi_schema": {"components": {"schemas": {
+        "Input": {"type": "object", "properties": {"prompt": {"type": "string"}}},
+        "Output": {"type": "string", "format": "uri", "title": "Output"}}}}}
+    },
+    "acme/reels": {
+      "model": {
+        "owner": "acme", "name": "reels", "description": "Several clips", "visibility": "public",
+        "default_example": {"id": "ex-reels", "status": "succeeded", "input": {},
+                            "output": ["https://replicate.delivery/a/1.mp4", "https://replicate.delivery/a/2.mp4"]},
+        "latest_version": {"id": "v-reels"}
+      },
+      "version": {"id": "v-reels", "openapi_schema": {"components": {"schemas": {
+        "Input": {"type": "object", "properties": {"prompt": {"type": "string"}}},
+        "Output": {"type": "array", "items": {"type": "string", "format": "uri"}, "title": "Output"}}}}}
+    },
+    "acme/hinted": {
+      "model": {
+        "owner": "acme", "name": "hinted", "description": "Schema says audio", "visibility": "public",
+        "default_example": {"id": "ex-hint", "status": "succeeded", "input": {},
+                            "output": "https://replicate.delivery/b/cover.png"},
+        "latest_version": {"id": "v-hint"}
+      },
+      "version": {"id": "v-hint", "openapi_schema": {"components": {"schemas": {
+        "Input": {"type": "object", "properties": {"prompt": {"type": "string"}}},
+        "Output": {"type": "string", "format": "uri", "contentMediaType": "audio/wav", "title": "Output"}}}}}
+    },
+    "acme/vectorist": {
+      "model": {
+        "owner": "acme", "name": "vectorist", "description": "Text to SVG", "visibility": "public",
+        "default_example": {"id": "ex-svg", "status": "succeeded", "input": {},
+                            "output": "https://replicate.delivery/c/logo.svg"},
+        "latest_version": {"id": "v-svg"}
+      },
+      "version": {"id": "v-svg", "openapi_schema": {"components": {"schemas": {
+        "Input": {"type": "object", "properties": {"prompt": {"type": "string"}}},
+        "Output": {"type": "string", "format": "uri", "title": "Output"}}}}}
+    },
+    "acme/sculptor": {
+      "model": {
+        "owner": "acme", "name": "sculptor", "description": "Image to 3D", "visibility": "public",
+        "default_example": {"id": "ex-mesh", "status": "succeeded", "input": {},
+                            "output": "https://replicate.delivery/d/model.glb"},
+        "latest_version": {"id": "v-mesh"}
+      },
+      "version": {"id": "v-mesh", "openapi_schema": {"components": {"schemas": {
+        "Input": {"type": "object", "properties": {"image": {"type": "string", "format": "uri"}}},
+        "Output": {"type": "string", "format": "uri", "title": "Output"}}}}}
+    },
+    "acme/chatter": {
+      "model": {
+        "owner": "acme", "name": "chatter", "description": "An LLM", "visibility": "public",
+        "default_example": {"id": "ex-chat", "status": "succeeded", "input": {"prompt": "hi"},
+                            "output": ["Hello", " there"]},
+        "latest_version": {"id": "v-chat"}
+      },
+      "version": {"id": "v-chat", "openapi_schema": {"components": {"schemas": {
+        "Input": {"type": "object", "properties": {"prompt": {"type": "string"}}},
+        "Output": {"type": "array", "items": {"type": "string"}, "x-cog-array-type": "iterator",
+                   "x-cog-array-display": "concatenate", "title": "Output"}}}}}
+    }
+  }
+}

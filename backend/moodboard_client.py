@@ -1403,9 +1403,19 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
             try:
                 updated, took_base = _put_board(api, str(board["id"]), body, headers, refused_put)
                 previous.update(fields_undo)
-                fields = _fields_slice(at, updated) if took_base else None
-                if fields is not None:
-                    undo_slices.append(fields)
+                # The PUT answers with its own undo (the server's diff of the
+                # board it replaced); a Nebula from before that is read here
+                # the same way, from the board this call sent the PUT over.
+                answered = updated.pop("undo", None)
+                if not took_base:
+                    put_slices: list[dict[str, Any]] = []
+                elif isinstance(answered, dict) and isinstance(answered.get("ops"), list):
+                    put_slices = [item for op in answered["ops"] for item in op.get("slices") or []]
+                else:
+                    fields = _fields_slice(at, updated)
+                    put_slices = [fields] if fields is not None else []
+                if put_slices:
+                    undo_slices.extend(put_slices)
                     previous["undo"] = _undo_token(list(undo_slices))
                 break
             except NebulaAPIError as exc:

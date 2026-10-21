@@ -516,9 +516,14 @@ def test_nous_reads_its_catalog_through_the_hermes_sign_in(api, monkeypatch):
 
 # -- the run sends what it sent ---------------------------------------------
 
+class _Seen(list):
+    """The requests sent; ``replicate_output`` is what a prediction returns."""
+    replicate_output: object = "https://x.test/a.png"
+
+
 @pytest.fixture
 def provider_requests(monkeypatch):
-    seen: list[dict] = []
+    seen = _Seen()
 
     def answer(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content) if request.content else None
@@ -531,7 +536,7 @@ def provider_requests(monkeypatch):
                 {"image_url": {"url": "data:image/png;base64,iVBORw0KGgo="}}]}}]})
         if request.url.host == "api.replicate.com":
             return httpx.Response(201 if request.method == "POST" else 200, json={
-                "id": "p1", "status": "succeeded", "output": "https://x.test/a.png", "urls": {}})
+                "id": "p1", "status": "succeeded", "output": seen.replicate_output, "urls": {}})
         return httpx.Response(418)
 
     original = httpx.AsyncClient.__init__
@@ -558,6 +563,10 @@ async def test_a_configured_node_runs_as_the_pickers_did(name, provider_requests
     monkeypatch.setattr(openrouter_handler, "save_base64_image", lambda *a, **k: str(tmp_path / "out.png"),
                         raising=False)
     case = next(item for item in PICKER["cases"] if item["name"] == name)
+    if name == "replicate uploadable audio, object output":
+        # What the model returns: its run fills the Text port it declares
+        # (a .png there would fail the run, as a contradiction).
+        provider_requests.replicate_output = {"transcription": "hi"}
     legacy = case["expected"]["params"]
     backend = _backend_result(case)["params"]
     configured = universal_ports.configure(

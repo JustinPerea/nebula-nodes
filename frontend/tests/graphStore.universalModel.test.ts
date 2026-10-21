@@ -177,6 +177,46 @@ describe('a sync after the picker', () => {
   });
 });
 
+describe('a saved output on a port the node no longer has', () => {
+  // A project save refuses an output on a port the node doesn't declare
+  // (backend _validate_imported_outputs), so a re-typed node keeps only the
+  // outputs its new ports take (2026-10-21 review).
+  const ran = { video: { type: 'Video', value: 'https://replicate.delivery/x/out.mp4' } };
+  const stamp = (model: string, port: string, dataType: string) => ({
+    model, inputs: [], outputs: [{ id: port, label: 'Output', dataType, required: false }], rev: 2 });
+
+  it('goes when the picker sets a model whose ports don\'t take it', async () => {
+    const start = universal('n7', 'replicate-universal',
+      { model_id: 'acme/clipmaker', _model_ports: stamp('acme/clipmaker', 'video', 'Video') });
+    (start.data as unknown as DynamicNodeData).outputs = ran as DynamicNodeData['outputs'];
+    useGraphStore.setState({ nodes: [start], edges: [] });
+    backend.answer = () => json({
+      params: { model_id: 'acme/voicebox', _model_ports: stamp('acme/voicebox', 'audio', 'Audio') },
+      dynamicInputPorts: [], dynamicOutputPorts: [{ id: 'audio', label: 'Output', dataType: 'Audio', required: false }],
+      dynamicParams: [], providerMeta: {}, removedEdges: [] });
+
+    await useGraphStore.getState().fetchReplicateSchemaAndConfigure('n7', 'acme', 'voicebox');
+
+    expect(dataOf('n7').outputs).toEqual({});
+  });
+
+  it('goes when an agent re-typed the node and the backend sync has no outputs', () => {
+    const start = universal('n7', 'replicate-universal',
+      { model_id: 'acme/clipmaker', _model_ports: stamp('acme/clipmaker', 'video', 'Video') });
+    (start.data as unknown as DynamicNodeData).outputs = ran as DynamicNodeData['outputs'];
+    useGraphStore.setState({ nodes: [start], edges: [] });
+
+    // The same ports: the canvas keeps its outputs, as before.
+    sync([universal('n7', 'replicate-universal',
+      { model_id: 'acme/clipmaker', _model_ports: stamp('acme/clipmaker', 'video', 'Video') })]);
+    expect(dataOf('n7').outputs).toEqual(ran);
+
+    sync([universal('n7', 'replicate-universal',
+      { model_id: 'acme/voicebox', _model_ports: stamp('acme/voicebox', 'audio', 'Audio') })]);
+    expect(dataOf('n7').outputs).toEqual({});
+  });
+});
+
 describe('the picker and the person\'s unsent edits', () => {
   it('sends a waiting edit before the model and keeps one typed while the model is read', async () => {
     vi.useFakeTimers();
