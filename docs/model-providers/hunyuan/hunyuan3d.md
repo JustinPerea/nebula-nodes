@@ -116,7 +116,7 @@ inputs.
 Before building a Hunyuan3D graph:
 
 1. Read the shared Hunyuan3D reference.
-2. Run `nebula nodes` to confirm the current node IDs.
+2. Run `nebula nodes hunyuan` to confirm the current node IDs and which run here (`--all` adds the ones that need a key).
 3. Run `nebula info <node_id>` to confirm the live input/param schema.
 4. Build one stage at a time, download/inspect the GLB, then continue.
 

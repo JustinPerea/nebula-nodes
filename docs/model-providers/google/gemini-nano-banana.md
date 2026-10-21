@@ -292,7 +292,7 @@ When choosing a Gemini-family node:
 Before building a graph:
 
 1. Read the shared Gemini reference.
-2. Run `nebula nodes` to confirm node IDs.
+2. Run `nebula nodes nano banana` to confirm node IDs and which run here (`--all` adds the ones that need a key).
 3. Run `nebula info <node_id>` to confirm the live param schema.
 4. For image work that needs grounding, thinking control, or chat-mode
    editing, prefer the native Gemini SDK outside Nebula until the missing

@@ -3793,6 +3793,11 @@ def _agent_node_row(definition: Mapping[str, Any], context: Mapping[str, Any]) -
     return row
 
 
+# GET /api/agent/nodes' largest `limit`: above the catalog (308 node types,
+# 2026-10-21), so `nebula nodes --all` gets every one in one call.
+AGENT_NODES_MAX = 2000
+
+
 @app.get("/api/agent/nodes")
 async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool = True, limit: int = 20) -> dict[str, Any]:
     """Node types an agent can use, best matches first: whether each can run
@@ -3800,10 +3805,11 @@ async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool
 
     Every word of `query` must appear in the id, name or description.
     `category` is a category id (image-gen) or its short name (image),
-    services/node_categories.py."""
+    services/node_categories.py. `limit` goes up to AGENT_NODES_MAX: MCP's
+    find_nodes asks for at most 100 rows, `nebula nodes` for every match."""
     context = _agent_node_context()
     words = [word for word in query.lower().split() if word]
-    limit = max(1, min(int(limit), 100))
+    limit = max(1, min(int(limit), AGENT_NODES_MAX))
     definitions = context["definitions"]
     wanted = (node_categories.resolve(category, {str(d.get("category")) for d in definitions.values()}) or category
               if category else "")

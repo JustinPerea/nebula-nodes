@@ -801,8 +801,8 @@ def find_nodes(query: str = "", category: str = "", ready_only: bool = True, lim
                ctx: Context | None = None) -> dict[str, Any]:
     """Find node types to build with, best matches first.
 
-    Every word of `query` must appear in the id or name ("upscale", "veo",
-    "image edit"). `category` narrows to one, e.g. image-gen, video-gen,
+    Every word of `query` must appear in the id, name or description
+    ("upscale", "veo", "image edit"). `category` narrows to one, e.g. image-gen, video-gen,
     audio-gen, text-gen, utility, universal. Each row has `id` (the
     definitionId for edit_canvas), `name`, `runsWith` (key, free, krea, nous)
     and `price` ("free", {"usd": [low, high]} per run at default settings, or
@@ -811,6 +811,7 @@ def find_nodes(query: str = "", category: str = "", ready_only: bool = True, lim
     mode, with no list price. With ready_only=false, nodes that can't run here
     are included with `missing` saying what to set up.
     """
+    # `nebula nodes` (cli/commands/nodes.py) reads the same route: keep them twins.
     params = {"query": query, "category": category, "ready_only": str(bool(ready_only)).lower(),
               "limit": max(1, min(int(limit), 100))}
     return _canvas_call("GET", "/api/agent/nodes", ctx, params=params)

@@ -32,7 +32,7 @@ Code's 10,000-token warning and its 50,000-character file cut:
 | `pins` | Open pins: id, text, anchor | The 10 newest, and `openCount` |
 | `proposals` | Open proposals, briefly | 5, and `count` |
 | `boards` | Every moodboard: id, name, `where` (`current`, `global` or the project's name), image count, analyzed or not, Direction cut to 80 characters. Boards in Recently deleted, or in a project there, are left out. `read` is how to read one (`moodboard_get(board="<id or exact name>")`; over the CLI `nebula moodboard show <id>`). `use` is how to put one on the canvas: the exact `edit_canvas` call for a Moodboard node (`nebula-moodboard`, the board in its `moodboard` param, sending from its `moodboard` port) wired to a Preview's `input` (or, over the CLI, the `nebula apply` flags) | 30 rows (this project, then Global, then the rest by last edit), `count`, and, when rows were cut, `more`: `moodboard_list(project_id=...)` lists a project's boards and Global's |
-| `nodes` | The node types that run here, by category: `{id: price}` (`"free"`, `[low, high]` USD or `null`), `runsWith` for those that don't run on a key, and notes on modes, providers and Krea | Categories in a fixed order, cut at the budget, `rest: {category: count}`, and "find_nodes(category=…) gives the rest" |
+| `nodes` | The node types that run here, by category: `{id: price}` (`"free"`, `[low, high]` USD or `null`), `runsWith` for those that don't run on a key, and notes on modes, providers and Krea | Categories in a fixed order, cut at the budget, `rest: {category: count}`, and "find_nodes(category=…) gives the rest" (over the CLI "`nebula nodes --category <category>` lists the rest with prices"; `nebula context` also prints how many more can't run here and that `nebula nodes --all` lists them) |
 | `spend` | The per-run limit, the budget kind, its limit and what is used, Krea plan runs. Outside agents share one 24-hour budget, so `usedUsd` is what all of them used; an app with a token also gets its own line (`limitUsd`, `usedUsd`) beside the shared one (`sharedLimitUsd`, `sharedUsedUsd`) | |
 | `next` | `events.cursor` and the journal id for `wait_for_canvas_change`, then one line each: `describe`, `build`, `propose`, `point` and `pins`. Each is the exact call, its arguments named as the tool takes them (`describe_node(definition_id=...)`, `point_at(node_id=..., say=...)`); `build` is a whole `edit_canvas` plan (nodes `{ref, definitionId, params}`, edges `{source, sourceHandle, target, targetHandle}`, `arrange`), and `propose` says `propose_change` takes the same nodes and edges plus `params` and `run`. Over the CLI they are `nebula` commands with their real flags, so a first build needs neither `nebula apply --help` nor `nebula info nebula-moodboard` | |
 
@@ -79,7 +79,17 @@ The server exposes these tools for building and running (see
   `runsWith` (key, free, krea, nous) and a list `price` at default settings.
   `ready_only=false` also lists nodes that can't run here, with what's
   `missing`. "free" is at the node's defaults: a row with `needsKeyFor` (the
-  Video QC nodes) calls a provider in another mode.
+  Video QC nodes) calls a provider in another mode. Every word of `query`
+  must be in the id, name or description. Its CLI twin is `nebula nodes`
+  (and `nebula find`), on the same route: by default the node types that
+  run here, by category, each with `runsWith` and its price, then one line
+  saying how many more need a key ("65 more need a key: `nebula nodes
+  --category image --all` lists them with what each needs"); `--all` lists
+  those too, each with its `missing`; `--json` prints the route's answer,
+  which equals find_nodes' for the same query, category, ready_only and
+  limit. find_nodes returns 20 rows by default (at most 100); `nebula nodes`
+  has no limit unless `--limit N`, because a terminal table is read whole or
+  piped and a category is never cut short.
 - `describe_node`: one node type's ports, params (options, defaults, ranges)
   and list prices by the params that set them. `definition_id` is the id, or
   the node type's exact display name (any case, outer spaces ignored) when
@@ -798,7 +808,7 @@ a Krea sign-in, or why the chosen route can't take it), and the cost entry
 of such a node has the same `missing`. `propose_change` and `nebula propose`
 turn the list into a `warning` (`canvas_proposals.readiness_warning`), each
 pointing at its own way to find a node that runs here: `find_nodes` for MCP,
-`nebula context` for the CLI, and `GET /api/agent/nodes` in the HTTP reply. On
+`nebula nodes` for the CLI (its twin), and `GET /api/agent/nodes` in the HTTP reply. On
 the canvas the ghost shows the ⚠ a real node shows, with the same title, and
 the bar lists the nodes under its summary (three, then the rest in its
 details). Both re-check keys as the person adds them, so a line goes away
@@ -1781,7 +1791,9 @@ folder (external URLs are never fetched), downscales images to 512, 1024 or
 result at 25,000 tokens.
 
 `GET /api/agent/nodes` and `GET /api/agent/nodes/{id}` back `find_nodes` and
-`describe_node`. Both use `services/node_readiness.py`, the same rule
+`describe_node`; `nebula nodes` reads the first too, with `limit` up to
+`AGENT_NODES_MAX` (2,000, above the whole catalog) so `--all` gets every node
+type in one call. Both use `services/node_readiness.py`, the same rule
 `nebula context` uses, so the CLI and the MCP server agree on what can run.
 `apiProvider: utility` only means "no top-level key". A local node that still
 calls a provider says how in its definition's `providerVia` (`kind: model`
@@ -2418,3 +2430,8 @@ A copy records its checkout in `.installed-from`.
 
 `nebula context` lists the definition ids that can run here: with your keys,
 free, on the signed-in Krea account (marked `*`), or with a Nous sign-in.
+`nebula nodes` lists the same node types with how each runs and its price
+(words and `--category` narrow it), and `nebula nodes --all` adds the ones
+that can't run here, each with what it needs. Before 2026-10-21 `nebula
+nodes` listed every node type with no sign of which could run, and an agent
+in the Q104 rerun proposed FLUX.2 with no BFL or fal key set from it.
