@@ -116,6 +116,19 @@ body.app-slava-restraint .agent-notes-root {
   white-space: nowrap;
 }
 
+/* Below about 1360 px wide the chip shows only its author dots and the count
+ * (GM review of Q107 a: at 1280 the full chip wrapped the Commons toolbar to
+ * two rows). Its name ("Updates, 3 unread"), height and the list it opens
+ * stay; every screen's header reserves this compact width
+ * (--agent-notes-chip-w, layouts.css, same breakpoint). The canvas follows
+ * the same rule, so the one chip looks the same as the person moves between
+ * screens. */
+@media (max-width: 1359px) {
+  .agent-notes-chip__label {
+    display: none;
+  }
+}
+
 .agent-notes-chip__count {
   min-width: 22px;
   box-sizing: border-box;
