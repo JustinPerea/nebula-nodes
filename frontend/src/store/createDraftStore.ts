@@ -40,6 +40,13 @@ export interface CreateDraftState {
   drafts: Record<string, CreateDraft>;
   /** Canvas selection is a seed, never an implicit replacement on reopening. */
   getOrCreateDraft: (sessionId: string, seed: CreateDraftSeed) => CreateDraft;
+  /** Stores `draft` (revision and all) as the session's first draft; a
+   * session that already has one keeps it. Returns the session's draft.
+   * CreateView builds its first draft while rendering (newCreateDraft) and
+   * stores it from a layout effect: a store write during render re-renders
+   * the components reading the project store (the autosave marks the project
+   * unsaved) in the middle of CreateView's render. */
+  adoptDraft: (sessionId: string, draft: CreateDraft) => CreateDraft;
   updateDraft: (sessionId: string, change: DraftChange) => void;
   /** Keep the session/history identity; callers supply blank/default values. */
   resetDraft: (sessionId: string, defaults: CreateDraftSeed) => void;
@@ -139,6 +146,11 @@ function newDraft(seed: CreateDraftSeed): CreateDraft {
   return { ...seed, revision: uuidv4(), uploads: seed.uploads ?? [] };
 }
 
+/** A new draft from a seed, without storing it (pure: safe while rendering). */
+export function newCreateDraft(seed: CreateDraftSeed): CreateDraft {
+  return newDraft(seed);
+}
+
 function persistedDraft(draft: CreateDraft): CreateDraft {
   // Keep File/controller/preview metadata owned by the upload coordinator out
   // of storage even if a caller passes an object with extra runtime fields.
@@ -174,6 +186,10 @@ export function createCreateDraftStore(storage: DraftStorage | null = browserSto
       drafts: loadDrafts(storage),
       getOrCreateDraft: (sessionId, seed) => {
         if (!Object.hasOwn(get().drafts, sessionId)) save(sessionId, newDraft(seed));
+        return get().drafts[sessionId];
+      },
+      adoptDraft: (sessionId, draft) => {
+        if (!Object.hasOwn(get().drafts, sessionId)) save(sessionId, draft);
         return get().drafts[sessionId];
       },
       updateDraft: (sessionId, change) => {

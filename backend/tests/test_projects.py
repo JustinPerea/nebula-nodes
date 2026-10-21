@@ -298,7 +298,8 @@ def test_non_finite_and_protected_snapshot_refs_are_rejected(workspace):
     before = store.path.read_bytes()
     payload = {"workspaceRevision": created["workspaceRevision"], "snapshot": {"nodes": [], "edges": [], "viewport": {"x": float("inf"), "y": 0, "zoom": 1}}}
     response = client.put(f"/api/projects/{project_id}", content=json.dumps(payload), headers={"Content-Type": "application/json"})
-    assert response.status_code == 400
+    # json.dumps writes inf as Infinity, which JsonNumberGuard refuses before the route (2026-10-20).
+    assert response.status_code == 422 and "Infinity" in response.json()["detail"]
     payload["snapshot"] = {"nodes": [node()], "edges": [], "runHistory": []}
     from services.agent_profiles import default_secret_paths
     payload["snapshot"]["nodes"][0]["data"]["params"]["value"] = str(default_secret_paths()[0])
