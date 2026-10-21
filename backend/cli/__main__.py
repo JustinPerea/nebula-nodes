@@ -65,7 +65,21 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Node definition ID (nebula-moodboard), or a node's exact name (Moodboard, any case) "
                              "when one node has it; it then says the id. apply, create and quick take ids only")
 
-    sub.add_parser("keys", help="Show configured API keys")
+    keys_p = sub.add_parser(
+        "keys", help="Which provider keys are set, and the Settings agents read (never a key's ending)",
+        description="Which provider keys are set, as MCP get_settings says it: set or not set, never any part "
+                    "of a key. The app alone gets a key's last characters, with the person token, and the CLI "
+                    "never has the person token. Also the Settings agents read: execution mode, batch cap, "
+                    "Krea connection, export folder, routing. `nebula providers` says whether the keys work.")
+    keys_p.add_argument("--json", action="store_true", help="Print it as JSON, as MCP get_settings returns it")
+    providers_p = sub.add_parser(
+        "providers", help="Whether each provider's key works, and the Krea account connection",
+        description="Whether each provider's key works (MCP provider_status): Nebula checks keys with free, "
+                    "read-only calls only, never a generation, and keeps the results 5 minutes. No part of a "
+                    "key is ever shown (the CLI has no person token), and a pending Krea sign-in link stays "
+                    "with the person.")
+    providers_p.add_argument("--refresh", action="store_true", help="Check again now instead of the 5-minute cache")
+    providers_p.add_argument("--json", action="store_true", help="Print it as JSON, as MCP provider_status returns it")
 
     # -- Graph --
     create_p = sub.add_parser("create", help="Create a node in the graph")
@@ -104,8 +118,10 @@ def build_parser() -> argparse.ArgumentParser:
     move_p.add_argument("moves", nargs="+", metavar="node=x,y",
                         help="Where to put each node, in canvas coordinates (e.g. n2=400,120)")
 
-    sub.add_parser("projects", help="List saved projects")
-    project_p = sub.add_parser("project", help="Start a new project, or open a saved one, on the canvas")
+    projects_p = sub.add_parser("projects", help="List saved projects")
+    projects_p.add_argument("--json", action="store_true", help="Print it as JSON, as MCP list_projects returns it")
+    project_p = sub.add_parser(
+        "project", help="Start a new project or open a saved one on the canvas; rename or read a saved one")
     project_sub = project_p.add_subparsers(dest="project_command", required=True)
     project_new_p = project_sub.add_parser(
         "new", help="Start a new, empty project and open it on the canvas",
@@ -114,12 +130,39 @@ def build_parser() -> argparse.ArgumentParser:
     project_new_p.add_argument("name", nargs="+", help="Project name")
     project_open_p = project_sub.add_parser("open", help="Switch the canvas to a saved project")
     project_open_p.add_argument("project_id", help="Project id (from `nebula projects`)")
+    project_rename_p = project_sub.add_parser(
+        "rename", help="Rename a saved project (the canvas header shows it at once)",
+        description="Rename a saved project, as the canvas header does (MCP rename_project). The name is "
+                    "trimmed, 1 to 120 characters; put -- before a name that starts with a dash "
+                    "(nebula project rename <id> -- -draft). It prints the old and new names and the "
+                    "command that puts the old one back; other agents see a project.renamed event "
+                    "under your $NEBULA_AGENT_NAME.")
+    project_rename_p.add_argument("project_id", help="Project id (from `nebula projects`), or current: the open one")
+    project_rename_p.add_argument("name", nargs="+", help="New name")
+    project_rename_p.add_argument("--json", action="store_true", help="Print it as JSON, as MCP rename_project returns it")
+    project_show_p = project_sub.add_parser(
+        "show", help="Read a saved project without opening it: nodes, wires, cover, run history",
+        description="Read a saved project without opening it (MCP get_project). Nodes come as `nebula look` "
+                    "shows them: name, model, params with secrets hidden, a universal node's ports, which "
+                    "outputs exist (never their values), state and the last error, with any key a provider "
+                    "quoted hidden. Then the wires, the cover and the newest 20 runs: what each ran and made.")
+    project_show_p.add_argument("project_id", help="Project id (from `nebula projects`), or current: the open one")
+    project_show_p.add_argument("--json", action="store_true", help="Print it as JSON, as MCP get_project returns it")
 
     trash_p = sub.add_parser(
         "trash", help="Recently deleted moodboards, characters, Styles and projects: list them or restore one")
     trash_sub = trash_p.add_subparsers(dest="trash_cmd", required=True)
     trash_list_p = trash_sub.add_parser("list", help="What's in Recently deleted, newest first")
     trash_list_p.add_argument("--kind", choices=["moodboard", "character", "style", "project"], help="Only this kind")
+    trash_list_p.add_argument(
+        "--scope", choices=["global", "project"],
+        help="Narrow boards, characters and Styles as their lists do: global (those in no project) or project "
+             "(with --project). With a scope, projects aren't listed")
+    trash_list_p.add_argument("--project", dest="project", metavar="ID",
+                              help="A project's id, or current for the one open on the canvas; alone it means "
+                                   "--scope project")
+    # MCP's name for it (list_trash(project_id=...)); hidden so the help doesn't grow.
+    trash_list_p.add_argument("--project-id", dest="project", help=argparse.SUPPRESS)
     trash_list_p.add_argument("--json", action="store_true", help="Print the raw JSON")
     trash_restore_p = trash_sub.add_parser(
         "restore", help="Bring one back with the same id (nodes that point at it work again)")
@@ -513,6 +556,18 @@ def default_url(environ: dict[str, str] | None = None, *, strict: bool = True) -
     return "http://localhost:8000"
 
 
+def _project_command(client: NebulaClient, args: argparse.Namespace) -> None:
+    from .commands import projects
+
+    if args.project_command == "new":
+        return projects.run_new(client, " ".join(args.name))
+    if args.project_command == "open":
+        return projects.run_open(client, args.project_id)
+    if args.project_command == "rename":
+        return projects.run_rename(client, args.project_id, " ".join(args.name), as_json=args.json)
+    return projects.run_show(client, args.project_id, as_json=args.json)
+
+
 def _subparser(parser: argparse.ArgumentParser, name: str) -> argparse.ArgumentParser:
     """A command's own parser, so its error prints its usage, not the top one."""
     for action in parser._actions:  # noqa: SLF001 - argparse keeps subparsers only here
@@ -555,7 +610,7 @@ def main() -> None:
 
     from .commands import (
         apply, canvas, character, commons, context, nodes, keys, graph, execute, moodboard, quick, path, pins,
-        projects, proposals, selection, spend, trash,
+        projects, proposals, providers, selection, spend, trash,
     )
     from .commands import notes as notes_cmd
     from .commands import style
@@ -570,7 +625,8 @@ def main() -> None:
                                         category=args.category, show_all=args.show_all, limit=args.limit,
                                         as_json=args.json),
         "info": lambda: nodes.run_info(client, args.node_id),
-        "keys": lambda: keys.run(client),
+        "keys": lambda: keys.run(client, as_json=args.json),
+        "providers": lambda: providers.run(client, refresh=args.refresh, as_json=args.json),
         "create": lambda: graph.run_create(client, args.node_id, parse_kv_list(args.param)),
         "connect": lambda: graph.run_connect(client, args.src, args.dst),
         "set": lambda: graph.run_set(client, args.node_ref, parse_kv_list(args.params)),
@@ -578,10 +634,9 @@ def main() -> None:
         "disconnect": lambda: graph.run_disconnect(client, args.src, args.dst),
         "rename": lambda: graph.run_rename(client, args.node_ref, " ".join(args.label)),
         "move": lambda: graph.run_move(client, args.moves),
-        "projects": lambda: projects.run_list(client),
+        "projects": lambda: projects.run_list(client, as_json=args.json),
         "trash": lambda: trash.run(client, args),
-        "project": lambda: (projects.run_new(client, " ".join(args.name)) if args.project_command == "new"
-                            else projects.run_open(client, args.project_id)),
+        "project": lambda: _project_command(client, args),
         "graph": lambda: graph.run_show(client),
         "selection": lambda: selection.run(client),
         "look": lambda: canvas.run_look(client, as_json=args.json),

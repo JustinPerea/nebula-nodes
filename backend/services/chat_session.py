@@ -117,7 +117,7 @@ NEBULA_MCP_PRIMER = (
 CLAUDE_CLI_PRIMER = (
     "THE NEBULA CLI. You also have the `nebula` command through Bash. Prefer the "
     "MCP tools above (they return previews and act all at once); use the CLI "
-    "for what they don't cover: `nebula save` / `nebula load`, `nebula keys`, and `nebula commons fetch` "
+    "for what they don't cover: `nebula save` / `nebula load` and `nebula commons fetch` "
     "to download a reference. Never `nebula quick`: it is disabled here and its "
     "results never reach the canvas. Both carry your chat's token, so they "
     "count as you and share your spending budget."

@@ -218,7 +218,9 @@ The server exposes these tools for building and running (see
   rename. Returns `project` and `previousName`; renaming back to
   `previousName` undoes it. Open canvases and the Projects screen show the
   new name at once (`projectsChanged` with `change: "renamed"`), and the
-  journal gets `project.renamed` with `from` and `to`.
+  journal gets `project.renamed` with `from` and `to`. CLI: `nebula project
+  rename <id|current> <name>` (see
+  [Long runs and graph edits from the CLI](#long-runs-and-graph-edits-from-the-cli)).
 - `get_project`: reads a saved project without opening it, through
   `GET /api/projects/{id}?view=agent` (`services/project_view.py`). Nodes come
   exactly as `look_at_canvas` shows a live one
@@ -230,7 +232,8 @@ The server exposes these tools for building and running (see
   them all), each with its status, timing, `nodeIds` and which outputs it
   made, never its recipe's params or output values. Without `view` the route
   answers as before (the canvas loads it). Deleting a project over MCP waits
-  on a decision about the open project.
+  on a decision about the open project. CLI: `nebula project show
+  <id|current>` (`--json` prints this result).
 - `moodboard_list`, `moodboard_get`, `moodboard_create`, `moodboard_add`,
   `moodboard_update`, `moodboard_edit`, `moodboard_analyze`, `moodboard_move`, `moodboard_delete`: the boards in
   Moodboard Studio, with their brief (Direction, Avoid, pinned colours, a
@@ -249,7 +252,8 @@ The server exposes these tools for building and running (see
   `list_trash` takes `kind` (`moodboard`, `character`, `style` or `project`),
   and `scope` (`global`, or `project` with `project_id`, an id or
   `"current"`; `project_id` alone means `project`) as the route does. See
-  [Recently deleted](#recently-deleted).
+  [Recently deleted](#recently-deleted). CLI: `nebula trash list --scope
+  global|project --project <id|current>`.
 - The Commons (the smart moodboard's analyzed references; only with
   `NEBULA_COMMONS_ENABLED=1`), all in the agent's brand scope (pass
   `brand`): `commons_search` and `commons_get` read references;
@@ -276,7 +280,10 @@ The server exposes these tools for building and running (see
   No part of a key comes back. The route itself sends a set key's last 4
   characters only to the app (its person token); any other caller, `curl`
   or `nebula keys` included, gets a bare `***` (Justin, Q55 a). Only the
-  person changes settings.
+  person changes settings. CLI: `nebula keys` (set or not set; `--json`
+  prints this result). It turns each key into true or false as this tool
+  does, so even a reply that carried an ending would print none; the CLI
+  never has the person token.
 - `provider_status`: whether each key works, from `GET /api/health/providers`
   (free, read-only checks, never a generation; cached 5 minutes, `refresh`
   checks again), and the Krea account connection from
@@ -285,6 +292,7 @@ The server exposes these tools for building and running (see
   open. A probe's `detail` never quotes a key: when a saved key can't be sent
   (a pasted line break or space, which httpx's error would quote whole), the
   detail says so instead (`services/settings._probe_error_detail`).
+  CLI: `nebula providers` (`--refresh`, `--json`).
 
 And these canvas tools:
 
@@ -1492,7 +1500,9 @@ unnamed client) and when. Agents may delete boards, characters and Styles
   contents, so a Moodboard or Character node that points at it runs again. A
   project comes back closed. Agents may restore. Restoring one that is already
   back is a no-op (200, `alreadyRestored: true`). MCP: `list_trash` (with
-  `kind`, `scope` and `project_id`), `restore_from_trash`. CLI: `nebula trash list`, `nebula trash restore [kind] <id>`.
+  `kind`, `scope` and `project_id`), `restore_from_trash`. CLI: `nebula trash list`
+  (`--kind`, `--scope`, `--project`: list_trash's three; `--json` prints its
+  result), `nebula trash restore [kind] <id>`.
 - Deleting for good is person-only (see the list above). The person does it
   from Moodboard Studio, Character Studio, the Assets panel's Styles tab or
   Projects. Emptying sends what the
@@ -1986,12 +1996,18 @@ nebula delete n3 n4                 # nodes and their wires
 nebula disconnect n1:text n2:prompt
 nebula rename n2 "Hero shot"        # an empty name restores the model's
 nebula move n2=400,120 n3=400,320   # canvas coordinates
-nebula projects                     # saved projects; * is open
+nebula projects                     # saved projects; * is open (--json: list_projects)
 nebula project open <id>            # switch the canvas (not while a run is going)
 nebula project new "Logo ideas"     # start a new, empty project and open it
+nebula project rename current "Logo ideas, round 2"   # prints the command that renames it back
+nebula project show <id>            # a saved project unopened: nodes, wires, cover, runs (get_project)
 nebula clear                        # refused when the canvas has nodes
 nebula clear --force                # clears it anyway; the person can undo it
-nebula trash list                   # Recently deleted boards, characters, projects
+nebula trash list                   # Recently deleted boards, characters, Styles, projects
+nebula trash list --scope global    # boards, characters and Styles in no project
+nebula trash list --project current # the open project's (--scope project with it)
+nebula keys                         # which provider keys are set, never a key's ending
+nebula providers                    # whether each key works, and the Krea account (--refresh)
 nebula trash restore [kind] <id>    # bring one back with the same id
 ```
 
@@ -1999,6 +2015,15 @@ Opening or starting a project keeps the one that was open as it is. When an
 agent (or any script that isn't the person's own canvas) does it, the
 person's canvas follows, says who switched it, and offers a button back.
 The project's history names the agent.
+
+`rename`, `show`, `trash list`, `keys` and `providers` are the CLI twins of
+`rename_project`, `get_project`, `list_trash`, `get_settings` and
+`provider_status`. Each goes through the same route and the same shaping
+(`backend/project_client.py`), so its `--json` prints the tool's result, with
+hints worded as `nebula` commands. A rename is journaled as `project.renamed`
+under `$NEBULA_AGENT_NAME` (unnamed without it). The CLI is an agent surface
+and never has the person token, so `keys` and `providers` print set or not
+set and each provider's health, never any part of a key (Justin, Q55 a).
 
 `nebula clear` refuses when the open project has nodes and points to
 `nebula project new` instead, which keeps this project's work. `--force`

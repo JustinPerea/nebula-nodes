@@ -61,6 +61,13 @@ their Projects screen too), names you, and offers them a button back.
 `nebula clear` refuses on a canvas with nodes, and `--force` clears it
 anyway. With their canvas open that is one undo step for them; with none
 open it can't be undone yet. `nebula selection` is what they have selected.
+`nebula project rename <id> "<name>"` (or `current`) renames one, prints the
+old name and the command that puts it back. `nebula project show <id>` reads
+a saved project without opening it: nodes as `nebula look` shows them, wires,
+cover and the newest 20 runs (what each ran and made, never the values).
+Recently deleted: `nebula trash list` (`--kind`; `nebula trash list --scope
+global` or `--project current` narrows boards, characters and Styles) and
+`nebula trash restore [kind] <id>`.
 
 A mistyped command or option gets "Did you mean ...?" with that command's
 usage. MCP's names work too: `nebula find` is `nebula nodes`, `nebula
@@ -72,7 +79,8 @@ describe` is `nebula info`.
 |---|---|
 | `nebula nodes upscale` | Node types that run here whose id, name or description has every word (`--category image` and so on), best matches first, each with how it runs (key, free, krea, nous) and its price per run at default settings. The last line says how many more need a key; `nebula nodes --all` lists those too, each with what it needs. `--json` prints MCP find_nodes' answer |
 | `nebula info <node-id>` | Ports, params, options, defaults and prices; on a node with a Moodboard port, what a wired board does there (`MOODBOARD:`). Takes a node's exact name too (`nebula info moodboard`), when one node has it, and says the id it used |
-| `nebula keys` | Which provider keys are set |
+| `nebula keys` | Which provider keys are set: set or not set, never any part of a key (only the app, with the person token, sees an ending; the CLI never has it) |
+| `nebula providers` | Whether each key works (free, read-only checks, cached 5 minutes; `--refresh`) and the Krea account connection |
 | `nebula spend` | The spending limits you work under, and what you used |
 
 Build only with node types `nebula nodes` lists without `--all`: one that

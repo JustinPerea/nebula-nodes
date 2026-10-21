@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import quote
 
 import httpx
@@ -37,19 +37,37 @@ class NebulaClient:
             headers.setdefault("X-Nebula-Agent", agent_name)
         return headers
 
+    def _fail(self, exc: NebulaAPIError, what: str) -> None:
+        if exc.kind == "connect":
+            message = f"cannot connect to Nebula backend at {self.base_url} — is the server running?"
+        elif exc.kind == "timeout":
+            message = (f"Nebula didn't answer {what} in time. A run keeps going on the "
+                       "backend; `nebula graph` shows what finished.")
+        else:
+            message = exc.detail
+        print(f"error: {message}", file=sys.stderr)
+        sys.exit(1)
+
     def _request(self, method: str, path: str, *, binary: bool = False, **kwargs: Any) -> Any:
         kwargs["headers"] = self._identity_headers(kwargs.get("headers"))
         try:
             return self.api.request(method, path, binary=binary, **kwargs)
         except NebulaAPIError as exc:
-            if exc.kind == "connect":
-                message = f"cannot connect to Nebula backend at {self.base_url} — is the server running?"
-            elif exc.kind == "timeout":
-                message = (f"Nebula didn't answer {method} {path} in time. A run keeps going on the "
-                           "backend; `nebula graph` shows what finished.")
-            else:
-                message = exc.detail
-            print(f"error: {message}", file=sys.stderr)
+            self._fail(exc, f"{method} {path}")
+
+    def shared(self, call: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        """Run one of the reads and writes the MCP tools share (project_client)
+        as this client: its identity headers, and a refusal printed as
+        `error: <detail>` with exit 1, as every other command does. Pass
+        via="cli" to calls that word a hint."""
+        import project_client
+
+        try:
+            return call(self.api, *args, headers=self._identity_headers(), **kwargs)
+        except NebulaAPIError as exc:
+            self._fail(exc, "the request")
+        except project_client.ProjectRefError as exc:
+            print(f"error: {exc}", file=sys.stderr)
             sys.exit(1)
 
     def commons_enabled(self) -> bool:
