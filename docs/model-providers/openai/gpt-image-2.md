@@ -92,7 +92,7 @@ No changes required to gpt-image-2 nodes in this audit cycle.
 Before building a `gpt-image-2-*` graph:
 
 1. Read the shared GPT Image 2 model reference.
-2. Use `nebula nodes` to confirm the current node IDs.
+2. Use `nebula nodes gpt image` to confirm the current node IDs and which run here (`--all` adds the ones that need a key).
 3. Use `nebula info <node_id>` to confirm the live param schema.
 4. Create one stage, run it, inspect the output, then continue downstream.
 

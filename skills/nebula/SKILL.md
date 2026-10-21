@@ -77,14 +77,16 @@ describe` is `nebula info`.
 
 | Command | What it does |
 |---|---|
-| `nebula nodes upscale` | Node types whose id or name has every word (`--category image` and so on) |
+| `nebula nodes upscale` | Node types that run here whose id, name or description has every word (`--category image` and so on), best matches first, each with how it runs (key, free, krea, nous) and its price per run at default settings. The last line says how many more need a key; `nebula nodes --all` lists those too, each with what it needs. `--json` prints MCP find_nodes' answer |
 | `nebula info <node-id>` | Ports, params, options, defaults and prices; on a node with a Moodboard port, what a wired board does there (`MOODBOARD:`). Takes a node's exact name too (`nebula info moodboard`), when one node has it, and says the id it used |
 | `nebula keys` | Which provider keys are set: set or not set, never any part of a key (only the app, with the person token, sees an ending; the CLI never has it) |
 | `nebula providers` | Whether each key works (free, read-only checks, cached 5 minutes; `--refresh`) and the Krea account connection |
 | `nebula spend` | The spending limits you work under, and what you used |
 
-Node ids and params change as models are added. Check `nebula info` instead
-of guessing. `nebula info` (and `describe`) also takes a node's exact name,
+Build only with node types `nebula nodes` lists without `--all`: one that
+`--all` marks `needs BFL_API_KEY or FAL_KEY ...` can't run here, so a run
+of it, or a proposal that runs it, fails. Node ids and params change
+as models are added. Check `nebula info` instead of guessing. `nebula info` (and `describe`) also takes a node's exact name,
 any case: `nebula info moodboard` answers for `nebula-moodboard` and says so
 on its first line. An id always wins, and a name two nodes share is refused
 with both ids. `apply`, `propose`, `create`, `quick` and `style new/set
@@ -191,7 +193,7 @@ key refuses the whole run before anything is called or spent). The card on
 the canvas shows the same error. `nebula look` prints a failed node's error
 under it, and `nebula path` says why there is no file. The error stays on the
 node, through reloads, project switches and restarts, until it runs again.
-Tell the person what to set up, or pick a node `nebula context` lists.
+Tell the person what to set up, or pick a node `nebula nodes` lists.
 
 ## Propose instead of doing
 
@@ -212,7 +214,7 @@ nebula propose --note "Upscale the wide take" \
 If a node the run needs can't run here, `nebula propose` prints a
 `warning:` line naming it and why (`--json` gives it as `warning`, with
 `--wait` too); Accept would fail at that node. Say so to
-the person, or propose a node that runs here instead (`nebula context` lists
+the person, or propose a node that runs here instead (`nebula nodes` lists
 them).
 
 `nebula proposals` lists open ones; `nebula proposal withdraw <id>` takes one
@@ -400,7 +402,11 @@ nebula moodboard delete <board>
   agent: ask with `POST /api/asset-proposals` (`{"kind": "moodboard", "id":
   "<board id>", "change": {"sendNotes": true}, "note": "..."}`, or
   `propose_asset_change` over MCP), which the person decides in Moodboard
-  Studio; `nebula proposal <id> --wait --timeout 60` follows it. A Moodboard
+  Studio; `nebula proposal <id> --wait --timeout 60` follows it. Every such
+  proposal (a cover, Send notes, Commons curation) also posts an Update in
+  the person's Updates corner ("<you> asks to ...", with Review); a new one
+  on the same target replaces it, and `nebula notes` shows how it ended
+  (an expired one says "Expired" on time; ask again if you still want it). A Moodboard
   node's `send_notes` param (`board`, `yes`, `no`) can
   override it per node; moving it toward sending is also the person's, so
   propose it. That includes pointing a node on `yes` at another board: set
@@ -452,6 +458,15 @@ nebula moodboard delete <board>
   outside Nebula's output folder is refused (422, nothing saved); download
   and upload the image first. A Character saved earlier with a web link
   keeps it, but a run leaves that view out and its notes say so.
+- A board's images are Nebula's own files the same way: `POST`/`PUT
+  /api/moodboards` and the `add` board edit refuse a web link or a `data:`
+  URI (422, nothing saved). `nebula moodboard new`/`add` (and moodboard_create
+  / moodboard_add) download a link and upload it, so pass web images to them.
+  A board saved earlier with a web link keeps it: `show` marks it "[Image
+  link from outside Nebula (not loaded)]", `--json` gives `outside: true`,
+  and a run and the analysis leave it out. Don't fetch it on your own: ask
+  the person before re-adding its link with `add` (that fetches it), then
+  remove the old one; or they replace it with an upload in Moodboard Studio.
 - `set --json` returns `previous`: what your change changed, as it was
   before (only those settings, Direction, Avoid, pinned colours, your own
   hand-written brief, and only the image settings you changed), so undoing
@@ -517,7 +532,16 @@ for your own action. What you noticed, a report or a suggestion goes in
 `nebula note`: the person reads it under Updates in the top right, saved with
 the project (`--board <name>` for a moodboard's, where `#12` names image 12).
 One plain line, 240 characters, at most 6 a minute; never quote a private
-note; `--since-last-turn` for what they changed since your last turn.
+note; `--since-last-turn` for what they changed since your last turn. Your
+proposals outside the canvas post their own Update (you don't post one):
+`nebula notes` lists it with `[outcome]` once it closed.
+
+A project's cover: agents set it (MCP `set_project_cover`) while the person
+hasn't pinned one, and propose a change to the person's pin
+(`propose_asset_change`). A pin whose image is gone (its node deleted) no
+longer counts: `list_project_covers` says `lostPin`, and you may set it.
+A cover proposal's `change.cover.auto` is the image the automatic cover
+shows now (null when the project has none).
 
 ## Save and load
 

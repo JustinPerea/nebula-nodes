@@ -23,6 +23,7 @@ from services.provider_recovery import ProviderRecoveryStore
 from services.provider_start_guard import ProviderStartGuard
 from services.selection_context import SelectionContextStore
 from tests.conftest import FORGED_ORIGIN, PERSON
+from tests.conftest import stored_image_urls
 
 AGENT = {"X-Nebula-Agent": "Claude Code"}
 CODEX_HEADERS = {"X-Nebula-Agent": "Codex CLI"}
@@ -431,7 +432,7 @@ def test_purging_a_board_removes_its_updates_file(notes, tmp_path, monkeypatch):
     monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path / "moodboards"))
     service, *_ = notes
     store = MoodboardStore()
-    board = store.create("Dusk", images=[{"url": "/api/outputs/a.png"}])
+    board = store.create("Dusk", images=[{"url": stored_image_urls(1, name="notes")[0]}])
     service.board_post(CLAUDE, board, {"text": "#1 reads warm"})
     assert service.board_path(board["id"]).exists()
     store.delete(board["id"])
@@ -449,7 +450,7 @@ def test_a_board_move_keeps_its_updates(notes, tmp_path, monkeypatch, canvas_pro
     monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path / "moodboards"))
     service, *_ = notes
     store = MoodboardStore()
-    board = store.create("Dusk", images=[{"url": "/api/outputs/a.png"}])
+    board = store.create("Dusk", images=[{"url": stored_image_urls(1, name="notes")[0]}])
     service.board_post(CLAUDE, board, {"text": "kept on the move"})
     _before, moved, _ = store.move(board["id"], canvas_project)
     assert moved["projectId"] == canvas_project
@@ -643,8 +644,8 @@ def test_an_import_into_the_open_project_keeps_its_list_without_a_sync(api):
 
 def test_board_routes_and_the_board_put_refuses_agent_notes(api, tmp_path):
     client, _graph, journal, sent, *_ = api
-    created = client.post("/api/moodboards", json={"name": "Dusk", "images": [{"url": "/api/outputs/a.png"},
-                                                                               {"url": "/api/outputs/b.png"}]})
+    created = client.post("/api/moodboards", json={"name": "Dusk", "images": [{"url": url} for url in
+                                                                                stored_image_urls(2, name="notes")]})
     board = created.json()
     path = f"/api/moodboards/{board['id']}/agent-notes"
     posted = client.post(path, headers=AGENT, json={"text": "#2 is the heaviest", "refs": ["1"]})

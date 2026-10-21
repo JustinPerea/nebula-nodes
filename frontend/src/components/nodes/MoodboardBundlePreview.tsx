@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { backendAssetUrlSync } from '../../lib/backend';
+import { storedImageView } from '../../lib/storedImage';
 import {
   moodboardLeftOut,
   moodboardMeta,
@@ -32,8 +32,11 @@ export function MoodboardBundlePreview({ value, variant = 'card' }: { value: unk
   const bundle = useMemo(() => parseMoodboardBundle(value), [value]);
   if (!bundle) return null;
   const limits = LIMITS[variant];
-  const shown = bundle.thumbnails.slice(0, limits.thumbnails);
-  const more = bundle.thumbnails.length - shown.length;
+  // Only Nebula's own files are drawn (lib/storedImage.ts): a run saved
+  // before Q98 may name an old board's link to another site.
+  const drawable = bundle.thumbnails.flatMap((url) => storedImageView(url).src ?? []);
+  const shown = drawable.slice(0, limits.thumbnails);
+  const more = drawable.length - shown.length;
   const status = moodboardStatus(bundle);
 
   return (
@@ -48,7 +51,7 @@ export function MoodboardBundlePreview({ value, variant = 'card' }: { value: unk
         <div className={`structured-preview__thumbs structured-preview__thumbs--${Math.min(shown.length, 4)}`}>
           {shown.map((url, index) => (
             <span key={url} className="structured-preview__thumb">
-              <OverviewImage src={backendAssetUrlSync(url)} alt={`Board image ${index + 1}`}
+              <OverviewImage src={url} alt={`Board image ${index + 1}`}
                 loading={thumbnailLoading(variant)} draggable={false} />
               {more > 0 && index === shown.length - 1 && (
                 <span className="structured-preview__thumb-more" aria-label={`${more} more images`}>+{more}</span>

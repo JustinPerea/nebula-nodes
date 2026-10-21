@@ -698,7 +698,10 @@ def list_project_covers(project_id: str, ctx: Context | None = None) -> dict[str
     input references. `cover` is what the card shows now, `pinned` the pinned
     image's url (null: the automatic cover, its newest image) and `pinnedBy`
     who pinned it ({kind, name}; kind "person" is the person, "agent" an
-    agent). Pass a url to set_project_cover.
+    agent). A pin whose image is gone (its node deleted) no longer counts:
+    `pinned` and `pinnedBy` are null and `lostPin` ({url, by}) names it; it
+    counts again if the image comes back (an undo). Pass a url to
+    set_project_cover.
     """
     from urllib.parse import quote
 
@@ -715,9 +718,11 @@ def set_project_cover(project_id: str, url: str, ctx: Context | None = None) -> 
     isn't "person"); Nebula records that you set it. A cover the person
     pinned is theirs: this is refused, and propose_asset_change(kind=
     "project", id=project_id, change={"cover": url}, note=...) asks them.
-    Returns the project's card (`cover`, `coverBy`) and `previous`
-    ({"cover": url or null}): set_project_cover(project_id, previous.cover or
-    "") puts it back.
+    A pin whose image is gone (its node deleted) no longer counts, so you may
+    set the cover then; the person's next pin counts again. Returns the
+    project's card (`cover`, `coverBy`) and `previous` ({"cover": url or
+    null}, what the card showed): set_project_cover(project_id,
+    previous.cover or "") puts it back.
     """
     from urllib.parse import quote
 
@@ -736,7 +741,10 @@ def propose_asset_change(kind: str, id: str, change: dict, note: str,  # noqa: A
       list_project_covers) or {"cover": ""} (back to automatic): change a
       cover the person pinned. Decided on the Projects screen. While they
       haven't pinned one (list_project_covers' `pinnedBy` isn't "person"),
-      set_project_cover sets it directly.
+      set_project_cover sets it directly; a pin whose image is gone no
+      longer counts (`lostPin`; the proposal's `change.cover.lostPin`).
+      The proposal's `change.cover.auto` is the image the automatic cover
+      shows now (null when the project has none).
     - kind "moodboard", `id` a board's id or name, change {"sendNotes": true}:
       send the board's notes to generators, which only the person may turn
       on. Decided in Moodboard Studio. Turning it off needs no proposal
@@ -758,9 +766,14 @@ def propose_asset_change(kind: str, id: str, change: dict, note: str,  # noqa: A
       inbox). Decided in the Commons, on the reference. Blind labeling and
       the agent review stay the person's alone.
 
-    `note` is one line (≤160 characters) saying why. Returns {"proposal"}
-    with `id`, `status`, `target` {kind, id, name}, `change` (each key's
-    `from` and `to`) and `decideIn`. Then get_proposal(id, wait_seconds=...)
+    `note` is one line (≤160 characters) saying why. Each proposal also
+    posts an Update in the person's Updates corner ("<you> asks to change
+    the cover of <project>", with Review), one per target: a new proposal on
+    the same target replaces it. When the proposal closes, the Update's
+    `outcome` says how (list_notes). Returns {"proposal"} with `id`,
+    `status`, `target` {kind, id, name}, `change` (each key's `from` and
+    `to`), `decideIn` and `update` ({id, projectId} of that Update, or null
+    with no project open). Then get_proposal(id, wait_seconds=...)
     waits for the decision: accepted (`applied` is what was set), rejected
     (with their `reason`), withdrawn, expired (15 minutes) or invalidated
     (the target changed first: another cover pinned, the board deleted).
@@ -793,8 +806,8 @@ def find_nodes(query: str = "", category: str = "", ready_only: bool = True, lim
                ctx: Context | None = None) -> dict[str, Any]:
     """Find node types to build with, best matches first.
 
-    Every word of `query` must appear in the id or name ("upscale", "veo",
-    "image edit"). `category` narrows to one, e.g. image-gen, video-gen,
+    Every word of `query` must appear in the id, name or description
+    ("upscale", "veo", "image edit"). `category` narrows to one, e.g. image-gen, video-gen,
     audio-gen, text-gen, utility, universal. Each row has `id` (the
     definitionId for edit_canvas), `name`, `runsWith` (key, free, krea, nous)
     and `price` ("free", {"usd": [low, high]} per run at default settings, or
@@ -803,6 +816,7 @@ def find_nodes(query: str = "", category: str = "", ready_only: bool = True, lim
     mode, with no list price. With ready_only=false, nodes that can't run here
     are included with `missing` saying what to set up.
     """
+    # `nebula nodes` (cli/commands/nodes.py) reads the same route: keep them twins.
     params = {"query": query, "category": category, "ready_only": str(bool(ready_only)).lower(),
               "limit": max(1, min(int(limit), 100))}
     return _canvas_call("GET", "/api/agent/nodes", ctx, params=params)
@@ -1534,6 +1548,14 @@ def moodboard_get(board: str, ctx: Context | None = None) -> dict[str, Any]:
     {number, id} is the image chosen to open the board on (no `cover`: it
     opens on #1); moodboard_update(cover=...) changes it.
 
+    An image marked `outside: true` (the API's `outsideImages`) is an image
+    link from outside Nebula, saved before board images were checked. It
+    stays on the board, but nothing loads it: Moodboard Studio and the node
+    show a placeholder, and runs and the analysis leave it out (a run says
+    so in its notes). `outsideNote` says how to replace it: don't fetch the
+    link yourself; ask the person first, and only with their OK moodboard_add
+    its link (downloaded and uploaded), then remove the old one.
+
     `brief` is what generators get, as Nebula composed it: `styleBrief` (the
     hand-written brief when there is one, else the generated one),
     `negativePrompt`, `avoidPrompt`, `palette`/`accents` and `override`
@@ -1590,8 +1612,10 @@ async def moodboard_create(name: str, sources: list[str] | None = None, project_
     canvas; else a project id from list_projects); by default it's Global and every project can use it. `mode`:
     look, world or subject. `strength` and image weights run 0 to 1. Run
     moodboard_analyze after to get its palette and brief. The board then holds
-    Nebula's own copies ("/api/outputs/..."), the only images a Character or a
-    Style takes too.
+    Nebula's own copies ("/api/outputs/..."), the only images a board, a
+    Character or a Style takes: an outside link (http, https, data:) sent to
+    POST/PUT /api/moodboards or a board edit directly is refused with a 422
+    and nothing is saved, so pass links here and this tool uploads them.
     """
     import moodboard_client as boards
 
@@ -1606,7 +1630,8 @@ async def moodboard_create(name: str, sources: list[str] | None = None, project_
 @_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True))
 async def moodboard_add(board: str, sources: list[str], ctx: Context | None = None) -> dict[str, Any]:
     """Add images to a moodboard: files, folders, http(s) image links or Nebula
-    outputs, as in moodboard_create. Images already on the board are skipped.
+    outputs, as in moodboard_create (links are downloaded and uploaded here:
+    the board routes refuse an outside link). Images already on the board are skipped.
     They go on as one checked board edit, so nothing the person changes in
     Moodboard Studio meanwhile is overwritten, and an open Studio shows them
     at once. Adding clears the board's analysis; run moodboard_analyze again.
@@ -1736,7 +1761,9 @@ def moodboard_edit(board: str, ops: list[dict], base_version: int | None = None,
     {"op": "note", "image": 12, "notes": "..."} (or "privateNote", the
     person's own label, never sent to generators); {"op": "cover", "image":
     12} (the image the board opens on; null for #1); {"op": "add", "urls": [...],
-    "at": {"x", "y"}} and {"op": "remove", "images": [12]}; looks are frames:
+    "at": {"x", "y"}} (Nebula's own files only, "/api/outputs/...": an
+    outside link is refused; moodboard_add uploads links) and
+    {"op": "remove", "images": [12]}; looks are frames:
     "frame.create" ({"name", "x", "y", "w", "h"} or {"around": [cards]}),
     "frame.update", "frame.delete" (its cards stay) and "frame.merge"
     ({"frame", "into"}). A CARD is a card id from moodboard_get's

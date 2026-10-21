@@ -26,6 +26,14 @@ edit it without first removing a link they may never have seen.
 A Style's ``params`` can carry an image too (``_previewUrl``, or a ``file``
 param of its node); there only outside links are refused, since a local path
 in a param is the canvas's to check when it runs (``validate_file_references``).
+
+A moodboard's images follow the same rule (Q98, Justin 2026-10-21: "the same
+check, and the same placeholder for old boards"), without the shipped Style
+thumbnails: ``board_image_problem`` is what services/moodboard_store.py runs
+on every image a board write stores, with ``BOARD_ALLOWED`` as the answer;
+``check_board_analysis`` refuses an outside link in a board's ``analysis``;
+``outside_image_ids`` names an old board's outside images on read. A url the
+board already holds isn't checked again.
 """
 from __future__ import annotations
 
@@ -44,11 +52,20 @@ ALLOWED = (
     "Outside links (http, https, data:) aren't accepted: upload the image first and use the url it returns."
 )
 
+# A moodboard's images (Q98, Justin 2026-10-21: "the same check"): the same
+# rule and answer, without the shipped Style thumbnails.
+BOARD_ALLOWED = (
+    "Images on a moodboard must be Nebula's own files: an output or an upload as /api/outputs/<path> "
+    "(POST /api/uploads returns one as `url`; that file's path inside Nebula's output folder works too). "
+    "Outside links (http, https, data:) aren't accepted: upload the image first and use the url it returns "
+    "(moodboard_create, moodboard_add and `nebula moodboard new`/`add` download a link and upload it for you)."
+)
+
 _SHIPPED_PREFIX = "/api/presets/thumbnails/"
 
 
 class StoredImageError(ValueError):
-    """A Style or Character write names an image that isn't Nebula's own file."""
+    """A Style, Character or moodboard write names an image that isn't Nebula's own file."""
 
 
 def _as_a_browser_reads_it(value: str) -> str:
@@ -152,3 +169,70 @@ def check(fields: Mapping[str, Any], *, image_fields: Iterable[str], before: Map
         value = params.get(key)
         if isinstance(value, str) and value and value != held_params.get(key) and is_outside_link(value):
             raise StoredImageError(f"params.{key} is an image link from outside Nebula ({_shown(value)!r}). {ALLOWED}")
+
+
+# -- moodboards ----------------------------------------------------------------
+
+def board_image_problem(value: Any, where: str) -> str | None:
+    """The refusal for one image a board write would store (``where`` names
+    it: ``images[1].url``), in #133's shape, or None for one of Nebula's
+    files. A board takes no shipped Style thumbnail."""
+    reason = problem(value, shipped_thumbnail=lambda _value: False)
+    return f"{where} {reason} ({_shown(value)!r}). {BOARD_ALLOWED}" if reason else None
+
+
+def analysis_links(analysis: Any) -> list[tuple[str, str]]:
+    """Every image a board's ``analysis`` names, as (where, value): its
+    images' urls, ``representativeImages`` and each provider hint's. These
+    reach generators (a Krea style reference) and so are checked on a write
+    too, for outside links only: an analysis names the board's own images."""
+    found: list[tuple[str, str]] = []
+    if not isinstance(analysis, Mapping):
+        return found
+    images = analysis.get("images")
+    for index, item in enumerate(images if isinstance(images, list) else []):
+        if isinstance(item, Mapping) and isinstance(item.get("url"), str):
+            found.append((f"analysis.images[{index}].url", item["url"]))
+
+    def urls(where: str, value: Any) -> None:
+        if isinstance(value, list):
+            found.extend((f"{where}[{i}]", item) for i, item in enumerate(value) if isinstance(item, str))
+
+    urls("analysis.representativeImages", analysis.get("representativeImages"))
+    hints = analysis.get("providerHints")
+    if isinstance(hints, Mapping):
+        for name, hint in hints.items():
+            if isinstance(hint, Mapping):
+                urls(f"analysis.providerHints.{name}.representativeImages", hint.get("representativeImages"))
+    return found
+
+
+def check_board_analysis(analysis: Any, held: Iterable[str] = ()) -> None:
+    """StoredImageError for the first outside link an analysis names that the
+    board doesn't already hold (``held``: the urls on the board as stored and
+    in its saved analysis)."""
+    kept = set(held)
+    for where, value in analysis_links(analysis):
+        if value not in kept and is_outside_link(value):
+            raise StoredImageError(f"{where} is an image link from outside Nebula ({_shown(value)!r}). {BOARD_ALLOWED}")
+
+
+def board_held_urls(board: Mapping[str, Any] | None) -> set[str]:
+    """The image urls a board as stored holds, on it or in its saved analysis:
+    not checked again, so a board saved before the check keeps saving."""
+    held: set[str] = set()
+    if not isinstance(board, Mapping):
+        return held
+    for image in board.get("images") or []:
+        if isinstance(image, Mapping) and isinstance(image.get("url"), str):
+            held.add(image["url"])
+            held.add(image["url"].strip())
+    held.update(value for _where, value in analysis_links(board.get("analysis")))
+    return held
+
+
+def outside_image_ids(board: Mapping[str, Any]) -> list[str]:
+    """The ids of a board's images that are links to another site: nothing
+    in Nebula loads them (the app shows #133's placeholder)."""
+    return [str(image.get("id")) for image in board.get("images") or []
+            if isinstance(image, Mapping) and isinstance(image.get("url"), str) and is_outside_link(image["url"])]

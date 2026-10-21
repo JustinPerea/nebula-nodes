@@ -30,12 +30,23 @@ describe('storedImageView', () => {
     'blob:https://example.com/123',
     'http://localhost:8000/api/moodboards/x',
     'https://evil.example/api/outputs/a.png',
+    // Read as a browser reads them, as the backend's is_outside_link does
+    // (backslashes are slashes, tabs and newlines dropped): protocol-relative.
+    '/\\images.example.com/a.png',
+    '\\\\images.example.com/a.png',
+    '/\t/images.example.com/a.png',
+    '/\n/images.example.com/a.png',
   ])('never draws %s and calls it an outside link', (value) => {
     expect(storedImageView(value)).toEqual({ src: null, outside: true });
   });
 
   it.each(['', '   ', null, undefined, 42])('draws nothing for an empty value (%s)', (value) => {
     expect(storedImageView(value)).toEqual({ src: null, outside: false });
+  });
+
+  it('still draws a Windows upload path from the output folder', () => {
+    expect(storedImageView('C:\\Users\\me\\nebula\\output\\chat-uploads\\a.png'))
+      .toEqual({ src: backendAssetUrlSync('/api/outputs/chat-uploads/a.png'), outside: false });
   });
 
   it('draws nothing for a local path it can’t serve, without calling it outside', () => {

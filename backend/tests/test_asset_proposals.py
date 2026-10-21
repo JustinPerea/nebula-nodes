@@ -30,6 +30,7 @@ from services.project_store import ProjectStore, make_project
 from services.provider_recovery import ProviderRecoveryStore
 from services.provider_start_guard import ProviderStartGuard
 from services.execution_runs import ExecutionRunRegistry
+from tests.conftest import stored_image_urls
 
 CLAUDE = {"X-Nebula-Agent": "Claude Code"}
 CODEX = {"X-Nebula-Agent": "Codex"}
@@ -218,7 +219,8 @@ def test_an_agent_proposes_a_new_cover_for_a_pinned_project(api):
     assert view["status"] == "open"
     assert view["kind"] == "project"
     assert view["target"] == {"kind": "project", "id": api.dusk, "name": "Dusk"}
-    assert view["change"] == {"cover": {"from": A, "to": C, "fromBy": {"kind": "person", "name": "You"}}}
+    # auto: the image the automatic cover would show (the newest, C).
+    assert view["change"] == {"cover": {"from": A, "to": C, "fromBy": {"kind": "person", "name": "You"}, "auto": C}}
     assert view["agent"]["name"] == "Claude Code"
     assert view["decideIn"] == "projects"
     assert "acceptKey" not in json.dumps(made.json())
@@ -274,7 +276,7 @@ def test_who_may_propose(api):
 def test_an_agent_may_ask_before_setting_an_unpinned_cover(api):
     made = _propose(api, {"cover": B})
     assert made.status_code == 201, made.text
-    assert made.json()["proposal"]["change"]["cover"] == {"from": None, "to": B, "fromBy": None}
+    assert made.json()["proposal"]["change"]["cover"] == {"from": None, "to": B, "fromBy": None, "auto": C}
 
 
 def test_open_proposals_are_capped_per_agent(api):
@@ -398,8 +400,10 @@ def test_the_persons_canvas_gets_open_asset_proposals_with_keys_on_hello(api):
 # -- moodboards: Send notes to generators ------------------------------------------------
 
 def _board(api, *, send_notes=False) -> dict:
+    # A board's images are Nebula's own files (Q98): a real upload.
     made = api.client.post("/api/moodboards", json={
-        "name": "Dusk board", "images": [{"url": A}], "projectId": api.active, "sendNotes": send_notes,
+        "name": "Dusk board", "images": [{"url": stored_image_urls(1, name="dusk")[0]}], "projectId": api.active,
+        "sendNotes": send_notes,
     }, headers=api.person)
     assert made.status_code == 200, made.text
     return made.json()

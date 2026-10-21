@@ -10,6 +10,7 @@ from models.graph import GraphNode, PortValueDict
 from services.moodboard_analysis import analysis_is_current, analyze_moodboard, rank_representative_images, steers
 from services.moodboard_brief import NODE_NOTES_CHOICES, compose, generator_analysis
 from services.moodboard_store import MoodboardStore, output_image
+from services.stored_image_refs import is_outside_link
 
 
 def _in_trash(moodboard_id: str) -> bool:
@@ -71,11 +72,22 @@ async def handle_moodboard_node(
     # Image notes go only when the board's notes do (gap 18, P4). Set-aside
     # images (the switch, or weight 0: plan section 4.4) never steer, so no
     # generator gets them.
+    # An image saved before board writes were checked that links to another
+    # site stays on the board but goes to no generator (the bundle is also
+    # what the Inspector's Last output draws), as a Character's outside view
+    # doesn't (handlers/character_node.py); the run says so.
+    steering = [img for img in moodboard.get("images", []) if isinstance(img, dict) and steers(img)]
+    outside = [img for img in steering if is_outside_link(str(img.get("url") or ""))]
     images = [
         output_image(img) if notes_sent else {**output_image(img), "notes": ""}
-        for img in moodboard.get("images", [])
-        if isinstance(img, dict) and steers(img)
+        for img in steering if not any(img is gone for gone in outside)
     ]
+    if outside:
+        count = len(outside)
+        add_run_note(f"{count} image{'s' if count != 1 else ''} on Moodboard '{moodboard.get('name')}' "
+                     f"{'are image links' if count != 1 else 'is an image link'} from outside Nebula, so "
+                     f"{'they were' if count != 1 else 'it was'} left out. Replace "
+                     f"{'them' if count != 1 else 'it'} with an upload in Moodboard Studio.")
     # What a generator (or an LLM on an Any port) may read of the analysis:
     # no notes unless sent, colour sentences without left-out colours, and
     # representative images that steer. The saved analysis is left as it was.

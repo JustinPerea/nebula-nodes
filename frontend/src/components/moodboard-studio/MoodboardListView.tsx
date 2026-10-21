@@ -1,6 +1,7 @@
 import type { DragEvent as ReactDragEvent } from 'react';
 import type { MoodboardAnalysis, MoodboardImage } from '../../types';
-import { backendAssetUrlSync } from '../../lib/backend';
+import { storedImageView } from '../../lib/storedImage';
+import { OutsideImageNote } from '../OutsideImageNote';
 import type { BoardCover } from '../../lib/moodboardCover';
 import { AutoGrowTextarea } from '../AutoGrowTextarea';
 import { ImageColors } from './MoodboardColors';
@@ -63,10 +64,13 @@ export function MoodboardListView({ images, analysis, cover, uploading, onFiles,
       <div className="moodboard-grid">
         {images.map((img, index) => {
           const isCover = cover?.id === img.id;
+          // Only Nebula's own files are loaded (lib/storedImage.ts, Q98).
+          const view = storedImageView(img.url);
           return (
           <div key={img.id} className={`moodboard-tile ${isSetAside(img) ? 'moodboard-tile--set-aside' : ''}`}>
             <div className="moodboard-tile__image">
-              <img src={backendAssetUrlSync(img.url)} alt="" draggable={false} />
+              {view.src ? <img src={view.src} alt="" draggable={false} />
+                : view.outside && <span className="moodboard-tile__outside"><OutsideImageNote /></span>}
               <span className="moodboard-tile__number" aria-label={`Image ${index + 1}`}>#{index + 1}</span>
               {isCover && (
                 <span className={`moodboard-tile__cover${cover.chosen ? '' : ' moodboard-tile__cover--first'}`}

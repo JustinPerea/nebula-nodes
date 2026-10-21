@@ -6,6 +6,7 @@ vi.mock('../../lib/backend', () => ({ backendAssetUrlSync: (url: string) => `htt
 const { AssetProposalStrip } = await import('./AssetProposalStrip');
 const { useAssetProposalsStore } = await import('../../store/assetProposalsStore');
 const { commonsProposal, coverProposal } = await import('../../test/assetProposalFixtures');
+const { requestReview } = await import('../../store/assetProposalReviewRequest');
 
 describe('AssetProposalStrip', () => {
   beforeEach(() => useAssetProposalsStore.getState().clear());
@@ -96,6 +97,89 @@ describe('AssetProposalStrip', () => {
       expect(screen.getByRole('group').textContent).toContain('15 min left');
     } finally {
       vi.useRealTimers();
+    }
+  });
+  it('never says "You pinned" over an image that is gone (Q90 a): the pin no longer counts', () => {
+    useAssetProposalsStore.getState().open(coverProposal({
+      change: { cover: { from: null, to: '/api/outputs/c.png', fromBy: null,
+        lostPin: { url: '/api/outputs/a.png', by: { kind: 'person', name: 'You' } } } },
+    }), 'k1');
+    render(<AssetProposalStrip kind="project" targetId="dusk" />);
+    const strip = screen.getByRole('group', { name: 'Claude Code proposes a new cover' });
+    expect(strip.textContent).not.toContain('You pinned');
+    expect(strip.textContent).toContain('Automatic now');
+    expect(strip.textContent).toContain('The image you pinned is no longer in this project');
+    // The gone image isn't drawn.
+    expect([...strip.querySelectorAll('img')].map((img) => img.getAttribute('src'))).toEqual([
+      'http://127.0.0.1:8060/api/outputs/c.png']);
+    expect(screen.getByRole('button', { name: 'Keep this one' })).toBeTruthy();
+  });
+
+  it('shows the image the automatic cover would be, not a placeholder', () => {
+    useAssetProposalsStore.getState().open(coverProposal({
+      change: { cover: { from: null, to: '/api/outputs/c.png', fromBy: null, auto: '/api/outputs/b.png',
+        lostPin: { url: '/api/outputs/a.png', by: { kind: 'person', name: 'You' } } } },
+    }), 'k1');
+    render(<AssetProposalStrip kind="project" targetId="dusk" />);
+    const strip = screen.getByRole('group', { name: 'Claude Code proposes a new cover' });
+    expect([...strip.querySelectorAll('img')].map((img) => img.getAttribute('src'))).toEqual([
+      'http://127.0.0.1:8060/api/outputs/b.png', 'http://127.0.0.1:8060/api/outputs/c.png']);
+    expect(strip.textContent).toContain('Automatic now');
+    expect(strip.textContent).not.toContain('Newest image');
+  });
+
+  it('shows the automatic cover\'s image on the proposed side of "back to automatic"', () => {
+    useAssetProposalsStore.getState().open(coverProposal({
+      change: { cover: { from: '/api/outputs/a.png', to: null, fromBy: { kind: 'person', name: 'You' },
+        auto: '/api/outputs/c.png' } },
+    }), 'k1');
+    render(<AssetProposalStrip kind="project" targetId="dusk" />);
+    const strip = screen.getByRole('group', { name: 'Claude Code proposes the automatic cover' });
+    expect([...strip.querySelectorAll('img')].map((img) => img.getAttribute('src'))).toEqual([
+      'http://127.0.0.1:8060/api/outputs/a.png', 'http://127.0.0.1:8060/api/outputs/c.png']);
+  });
+
+  it('keeps the "Newest image" text when the project has no image for the automatic cover', () => {
+    useAssetProposalsStore.getState().open(coverProposal({
+      change: { cover: { from: '/api/outputs/a.png', to: null, fromBy: { kind: 'person', name: 'You' }, auto: null } },
+    }), 'k1');
+    render(<AssetProposalStrip kind="project" targetId="dusk" />);
+    const strip = screen.getByRole('group', { name: 'Claude Code proposes the automatic cover' });
+    expect(strip.querySelectorAll('img')).toHaveLength(1);
+    expect(strip.textContent).toContain('Newest image');
+  });
+
+  it('comes into view when the person clicks Review on its Update (Q92 a)', () => {
+    const scrolled = vi.fn();
+    const original = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = scrolled;
+    try {
+      useAssetProposalsStore.getState().open(coverProposal(), 'k1');
+      requestReview({ kind: 'project', targetId: 'dusk' });
+      render(<AssetProposalStrip kind="project" targetId="dusk" />);
+      expect(scrolled).toHaveBeenCalledTimes(1);
+      expect(scrolled.mock.contexts[0]).toBe(document.querySelector('.asset-proposals'));
+      expect(document.activeElement?.getAttribute('role')).toBe('group');
+      expect(document.querySelector('.asset-proposals')?.getAttribute('data-review')).toBe('true');
+      // Handled once.
+      expect(useAssetProposalsStore.getState().review).toBeNull();
+    } finally {
+      HTMLElement.prototype.scrollIntoView = original;
+    }
+  });
+
+  it('ignores a Review for another target', () => {
+    const scrolled = vi.fn();
+    const original = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = scrolled;
+    try {
+      useAssetProposalsStore.getState().open(coverProposal(), 'k1');
+      requestReview({ kind: 'project', targetId: 'other' });
+      render(<AssetProposalStrip kind="project" targetId="dusk" />);
+      expect(scrolled).not.toHaveBeenCalled();
+      expect(useAssetProposalsStore.getState().review).not.toBeNull();
+    } finally {
+      HTMLElement.prototype.scrollIntoView = original;
     }
   });
 });

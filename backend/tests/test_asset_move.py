@@ -76,7 +76,7 @@ def env(tmp_path, monkeypatch):
                 store.commit(data)
 
         def create(self, kind, project_id=None, name=None):
-            body = ({"name": name or "Warm", "images": [{"url": "/api/outputs/a.png"}]} if kind == "moodboard"
+            body = ({"name": name or "Warm", "images": [{"url": stored_image_urls(1, name="move")[0]}]} if kind == "moodboard"
                     else {**CHARACTER, "name": name or "Rina"})
             made = self.client.post(KINDS[kind][0], json={**body, **({"projectId": project_id} if project_id else {})})
             assert made.status_code == 200, made.text

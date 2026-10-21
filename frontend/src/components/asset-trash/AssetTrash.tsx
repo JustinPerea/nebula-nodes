@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronRight, RotateCcw, X } from 'lucide-react';
-import { backendAssetUrlSync } from '../../lib/backend';
 import { storedImageView } from '../../lib/storedImage';
 import { OutsideImageNote } from '../OutsideImageNote';
 import {
@@ -32,11 +31,10 @@ const NOUNS: Record<AssetKind, { one: string; many: string }> = {
 
 export const UNDO_VISIBLE_MS = 8000;
 
-/** A deleted item's picture: a Character's only when it is one of Nebula's
- *  own files (lib/storedImage.ts); a board's as before. */
+/** A deleted item's picture, only when it is one of Nebula's own files
+ *  (lib/storedImage.ts): a Character's and, since Q98, a board's. */
 function thumbnailOf(item: TrashedItem): string | null {
-  if (item.kind === 'character') return storedImageView(item.thumbnail).src;
-  return item.thumbnail ? backendAssetUrlSync(item.thumbnail) : null;
+  return storedImageView(item.thumbnail).src;
 }
 
 function deletedLine(item: TrashedItem): string {
@@ -174,7 +172,7 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
                 <span className="asset-trash__meta">
                   <span className="asset-trash__name">{item.name || 'Untitled'}</span>
                   <span className="asset-trash__sub">{deletedLine(item)}</span>
-                  {item.kind === 'character' && storedImageView(item.thumbnail).outside && <OutsideImageNote />}
+                  {storedImageView(item.thumbnail).outside && <OutsideImageNote />}
                 </span>
                 <span className="asset-trash__actions">
                   <button type="button" className="asset-trash__button" disabled={busy}

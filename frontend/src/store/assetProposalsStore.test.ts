@@ -100,4 +100,23 @@ describe('assetProposalsStore', () => {
     expect(proposals.pa_00000003.closing).toBe('invalidated');
     expect(proposals.pa_00000001.closing).toBeUndefined();
   });
+  it('refreshes open views from a relist, keeping the key and what only the person got', () => {
+    const store = useAssetProposalsStore.getState();
+    store.open(commonsProposal(), 'k1');
+    store.open(coverProposal({ id: 'pa_00000002' }), 'k2');
+    store.refresh([
+      // A relist's view (REST): no `before`.
+      { ...commonsProposal(), before: undefined, note: 'changed' },
+      coverProposal({ id: 'pa_00000002', change: { cover: { from: null, to: '/api/outputs/c.png', fromBy: null } } }),
+      coverProposal({ id: 'pa_00000099' }),
+    ]);
+    const { proposals } = useAssetProposalsStore.getState();
+    expect(proposals.pa_0000c001.acceptKey).toBe('k1');
+    expect(proposals.pa_0000c001.view.before).toEqual(commonsProposal().before);
+    expect(proposals.pa_0000c001.view.note).toBe('changed');
+    expect(proposals.pa_00000002.view.change.cover?.from).toBeNull();
+    // One this tab has no key for isn't added.
+    expect(proposals.pa_00000099).toBeUndefined();
+  });
+
 });

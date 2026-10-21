@@ -32,7 +32,7 @@ Code's 10,000-token warning and its 50,000-character file cut:
 | `pins` | Open pins: id, text, anchor | The 10 newest, and `openCount` |
 | `proposals` | Open proposals, briefly | 5, and `count` |
 | `boards` | Every moodboard: id, name, `where` (`current`, `global` or the project's name), image count, analyzed or not, Direction cut to 80 characters. Boards in Recently deleted, or in a project there, are left out. `read` is how to read one (`moodboard_get(board="<id or exact name>")`; over the CLI `nebula moodboard show <id>`). `use` is how to put one on the canvas: the exact `edit_canvas` call for a Moodboard node (`nebula-moodboard`, the board in its `moodboard` param, sending from its `moodboard` port) wired to a Preview's `input` (or, over the CLI, the `nebula apply` flags) | 30 rows (this project, then Global, then the rest by last edit), `count`, and, when rows were cut, `more`: `moodboard_list(project_id=...)` lists a project's boards and Global's |
-| `nodes` | The node types that run here, by category: `{id: price}` (`"free"`, `[low, high]` USD or `null`), `runsWith` for those that don't run on a key, and notes on modes, providers and Krea | Categories in a fixed order, cut at the budget, `rest: {category: count}`, and "find_nodes(category=…) gives the rest" |
+| `nodes` | The node types that run here, by category: `{id: price}` (`"free"`, `[low, high]` USD or `null`), `runsWith` for those that don't run on a key, and notes on modes, providers and Krea | Categories in a fixed order, cut at the budget, `rest: {category: count}`, and "find_nodes(category=…) gives the rest" (over the CLI "`nebula nodes --category <category>` lists the rest with prices"; `nebula context` also prints how many more can't run here and that `nebula nodes --all` lists them) |
 | `spend` | The per-run limit, the budget kind, its limit and what is used, Krea plan runs. Outside agents share one 24-hour budget, so `usedUsd` is what all of them used; an app with a token also gets its own line (`limitUsd`, `usedUsd`) beside the shared one (`sharedLimitUsd`, `sharedUsedUsd`) | |
 | `next` | `events.cursor` and the journal id for `wait_for_canvas_change`, then one line each: `describe`, `build`, `propose`, `point` and `pins`. Each is the exact call, its arguments named as the tool takes them (`describe_node(definition_id=...)`, `point_at(node_id=..., say=...)`); `build` is a whole `edit_canvas` plan (nodes `{ref, definitionId, params}`, edges `{source, sourceHandle, target, targetHandle}`, `arrange`), and `propose` says `propose_change` takes the same nodes and edges plus `params` and `run`. Over the CLI they are `nebula` commands with their real flags, so a first build needs neither `nebula apply --help` nor `nebula info nebula-moodboard` | |
 
@@ -79,7 +79,17 @@ The server exposes these tools for building and running (see
   `runsWith` (key, free, krea, nous) and a list `price` at default settings.
   `ready_only=false` also lists nodes that can't run here, with what's
   `missing`. "free" is at the node's defaults: a row with `needsKeyFor` (the
-  Video QC nodes) calls a provider in another mode.
+  Video QC nodes) calls a provider in another mode. Every word of `query`
+  must be in the id, name or description. Its CLI twin is `nebula nodes`
+  (and `nebula find`), on the same route: by default the node types that
+  run here, by category, each with `runsWith` and its price, then one line
+  saying how many more need a key ("65 more need a key: `nebula nodes
+  --category image --all` lists them with what each needs"); `--all` lists
+  those too, each with its `missing`; `--json` prints the route's answer,
+  which equals find_nodes' for the same query, category, ready_only and
+  limit. find_nodes returns 20 rows by default (at most 100); `nebula nodes`
+  has no limit unless `--limit N`, because a terminal table is read whole or
+  piped and a category is never cut short.
 - `describe_node`: one node type's ports, params (options, defaults, ranges)
   and list prices by the params that set them. `definition_id` is the id, or
   the node type's exact display name (any case, outer spaces ignored) when
@@ -200,7 +210,8 @@ The server exposes these tools for building and running (see
   can show (`images`, `pinned`, `pinnedBy`, `cover`) and setting its cover to
   one of them (or `""` for the automatic one). An agent sets it while the
   person hasn't pinned one; a cover the person pinned changes only through
-  `propose_asset_change`. See
+  `propose_asset_change`. A pin whose image is gone (its node deleted) no
+  longer counts (`pinned` and `pinnedBy` null, `lostPin` names it). See
   [Proposals outside the canvas](#proposals-outside-the-canvas).
 - `rename_project`: renames a saved project (`project_id` or `"current"`,
   `name`) through `PUT /api/projects/{id}` `{name}`, the canvas header's own
@@ -689,7 +700,9 @@ nebula notes --unread                                   # the list, newest first
 
 Over MCP: `post_note(text, board?, refs?, about?)` and
 `list_notes(board?, unread?)`. The words "note" stay in the tool names; on
-screen they are Updates.
+screen they are Updates. A proposal outside the canvas (`propose_asset_change`)
+posts its own Update with **Review**, and marks it with how it ended; see
+[Proposals outside the canvas](#proposals-outside-the-canvas).
 
 Rules:
 
@@ -803,7 +816,7 @@ a Krea sign-in, or why the chosen route can't take it), and the cost entry
 of such a node has the same `missing`. `propose_change` and `nebula propose`
 turn the list into a `warning` (`canvas_proposals.readiness_warning`), each
 pointing at its own way to find a node that runs here: `find_nodes` for MCP,
-`nebula context` for the CLI, and `GET /api/agent/nodes` in the HTTP reply. On
+`nebula nodes` for the CLI (its twin), and `GET /api/agent/nodes` in the HTTP reply. On
 the canvas the ghost shows the ⚠ a real node shows, with the same title, and
 the bar lists the nodes under its summary (three, then the rest in its
 details). Both re-check keys as the person adds them, so a line goes away
@@ -902,9 +915,33 @@ A cover the person pinned is refused for anyone else (403, `agent_refused`
 or `person_required`) with a sentence naming `propose_asset_change`. An
 accepted proposal pins the cover as the person's, so the next agent change
 asks again. The Projects screen shows "Cover: set by <agent> (agent)" on a
-cover an agent set. A board's own cover, the image a board opens on, is
-the board's setting rather than a pin of the person's, so it has no
-proposal: agents set it with the board's other fields.
+cover an agent set.
+
+A pin whose image is no longer in the project (its node deleted, or its
+output gone from the project's snapshot; the same test as the cover
+picker's list) no longer counts (Justin's Q90 a, 2026-10-21): the card shows
+the automatic cover, the covers listing has `pinned: null`, `pinnedBy: null`
+and `lostPin: {url, by}`, the card has `coverLostPin` and no `coverBy`, and
+anyone may set the cover (`previous` is then `{"cover": null}`, what the card
+showed). The stored pin isn't deleted: if the image comes back (Cmd+Z on the
+canvas, saved by autosave) the pin counts again. An agent's reset to
+automatic leaves a lost pin as it is (the cover is automatic already); the
+person's reset drops it. The person's next pin counts as before. A proposal
+made against a pin that has since lost its image stays open: its
+`change.cover` reads `from: null`, `fromBy: null` and `lostPin`, so the strip
+shows it against the automatic cover (never "You pinned" over a missing
+image), and Accept applies it as before. The exception is a proposal back to
+automatic (`{"cover": ""}`): once the pin's image is gone it would change
+nothing, so it closes as `invalidated` ("No longer fits"), the same way a new
+one is refused with 409, and the stored pin stays for an undo. The open
+project's cover proposals follow its live canvas: a node deleted, undone or
+removed by an agent re-checks them at once, so the person's screen updates
+(or the proposal closes) without waiting for the autosave.
+
+A board's own cover, the image a board opens on, is the board's setting
+rather than a pin of the person's, so it has no proposal: agents set it with
+the board's other fields. Taking that image off the board clears the cover
+(the board opens on #1), so a board cover never outlives its image.
 
 **Life cycle.** The same as canvas proposals: `open`, then `accepted`,
 `rejected` (with the person's reason), `withdrawn`, `expired` (15 minutes)
@@ -915,8 +952,14 @@ the journal uses the same `proposal.*` kinds with `kind` and `targetId` in
 `data`. `GET /api/asset-proposals?kind=&id=` lists the open ones. The view
 is `{id, status, agent, note, kind, target: {kind, id, name}, change:
 {<key>: {from, to}}, summary, decideIn, createdAt, expiresAt, reason,
-applied}` (`change.cover` also has `fromBy`; `applied` is what Accept set;
-a commons proposal's `change` is `{"edits": [...]}`, the agent's own edits).
+applied, update}` (`change.cover` also has `fromBy`, `auto` (the image the
+automatic cover shows now, the newest one, or null when the project has no
+image; the strip shows it on the automatic side), and `lostPin` while the
+pin it was proposed against has lost its image; `applied` is what Accept set;
+a commons proposal's `change` is `{"edits": [...]}`, the agent's own edits;
+`update` is `{id, projectId}` of its Update, below, or null). `start_here`'s
+`proposals` part lists open asset proposals too, with `kind`, `targetId` and
+`update` (the Update's id).
 Caps: 3 open per agent and 12 in all (429 beyond), counted apart from canvas
 proposals; a 160-character note.
 
@@ -942,6 +985,34 @@ screen), never to REST, the journal or MCP results. `assetProposalClosed`
 Agent log names the proposal ("Asks to make another image the cover of
 project "Dusk" (decide on the Projects screen)"), since no cursor can go
 there. Memory only: lost on restart.
+
+**The Update.** Each asset proposal also posts an Update in the Updates
+corner (Justin's Q92 a, 2026-10-21), on the open project's list, written by
+Nebula in the strip's words and attributed to the agent (`author` is the
+agent, `source: "nebula"`, `about: "proposal"`): "Claude Code asks to change
+the cover of Dusk", "Claude Code asks to send Dusk board's notes to
+generators", "Claude Code asks to change a reference in the Commons" (or
+"asks to make 3 changes to a reference in the Commons", "asks to take a
+reference out of the inbox"). Names only: never the agent's note, a board's
+notes, a private note or Commons text. It carries `proposal: {id, kind,
+targetId}` and one **Review** action (`proposal.review`), which takes the
+person to the Projects screen with that card's strip in view, to Moodboard
+Studio on that board, or to the Commons on that reference. One per agent and
+target: a new proposal on the same target replaces the agent's earlier
+Update (the socket's `removed`), and while the agent still has another
+proposal open there, closing one leaves the Update asking about the other.
+When the last one closes the Update gets `resolvedAt`, `resolvedBy` (`person`,
+the agent, or `system`), `readAt` and a short `outcome` ("Accepted: the cover
+changed", "You kept your cover", "You kept the notes here", "Applied",
+"Withdrawn by Claude Code", "Expired", "No longer fits"), and shows that in
+place of Review. Expiry lands on time, even when nobody reads proposals:
+Nebula checks each proposal when it is due, and `list_notes` never lists an
+expired one as waiting. After a restart (proposals are memory only) an
+Update whose proposal is gone resolves as "Expired". The socket sends `agentNotes` op `resolved` (op `changed`
+when it moved to the other proposal) for the open project. With no project
+open there is no Update (`update: null`); the Agent log line still is.
+Agents read it with `list_notes` / `nebula notes` and through the view's
+`update`.
 
 ### Commons curation
 
@@ -1730,7 +1801,9 @@ folder (external URLs are never fetched), downscales images to 512, 1024 or
 result at 25,000 tokens.
 
 `GET /api/agent/nodes` and `GET /api/agent/nodes/{id}` back `find_nodes` and
-`describe_node`. Both use `services/node_readiness.py`, the same rule
+`describe_node`; `nebula nodes` reads the first too, with `limit` up to
+`AGENT_NODES_MAX` (2,000, above the whole catalog) so `--all` gets every node
+type in one call. Both use `services/node_readiness.py`, the same rule
 `nebula context` uses, so the CLI and the MCP server agree on what can run.
 `apiProvider: utility` only means "no top-level key". A local node that still
 calls a provider says how in its definition's `providerVia` (`kind: model`
@@ -2088,6 +2161,21 @@ nebula moodboard delete <board>
   shows a placeholder for them, and a run of a Character node leaves such a
   view out and says so in the run's notes (it stops when every view is one)
   (contract 07, section 2.2).
+- Images on a board must be Nebula's own files too (the same rule, without
+  the shipped Style thumbnails): `POST /api/moodboards`, a `PUT` that adds or
+  replaces an image, and the `add` board edit refuse an `http(s)` link, a
+  `data:` URI or a file outside the output folder with a 422 that names the
+  image (`images[1].url is an image link from outside Nebula ...`), and
+  nothing is saved. `nebula moodboard new`/`add` and moodboard_create /
+  moodboard_add download a link and upload it first, so use them for web
+  images. A board saved before the check keeps its links: the board read
+  lists them in `outsideImages`, `show --json` and moodboard_get mark each
+  one `outside: true` (with an `outsideNote`), `show` prints "[Image link from
+  outside Nebula (not loaded)]" before it, the app shows a placeholder, and
+  a run and the analysis leave it out and don't count it (contract 07,
+  section 1.19). Anyone who could reach the routes could have saved such a
+  link, so don't fetch it on your own: ask the person first, and only with
+  their OK re-add it with `add` (which fetches it), then remove the old one.
 - A board is named by its id or exact name; an image by its number or id
   from `show`. `--json` prints the board as JSON (the MCP tools return the
   same shape).
@@ -2367,3 +2455,8 @@ A copy records its checkout in `.installed-from`.
 
 `nebula context` lists the definition ids that can run here: with your keys,
 free, on the signed-in Krea account (marked `*`), or with a Nous sign-in.
+`nebula nodes` lists the same node types with how each runs and its price
+(words and `--category` narrow it), and `nebula nodes --all` adds the ones
+that can't run here, each with what it needs. Before 2026-10-21 `nebula
+nodes` listed every node type with no sign of which could run, and an agent
+in the Q104 rerun proposed FLUX.2 with no BFL or fal key set from it.

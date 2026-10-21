@@ -91,6 +91,19 @@ class NebulaClient:
     def get_nodes(self) -> dict[str, Any]:
         return self._request("GET", "/api/nodes")
 
+    # Every match: GET /api/agent/nodes' largest limit (main.AGENT_NODES_MAX).
+    ALL_NODES = 2000
+
+    def find_nodes(self, query: str = "", category: str = "", *, ready_only: bool = True,
+                   limit: int | None = None) -> dict[str, Any]:
+        """GET /api/agent/nodes, the route MCP's find_nodes reads: node types
+        best matches first, whether each runs here (`runsWith`, else
+        `missing`) and its list price. No `limit` asks for every match."""
+        return self._request("GET", "/api/agent/nodes", params={
+            "query": query, "category": category, "ready_only": str(bool(ready_only)).lower(),
+            "limit": max(1, min(int(limit), self.ALL_NODES)) if limit is not None else self.ALL_NODES,
+        })
+
     def get_node(self, node_id: str) -> dict[str, Any]:
         # An id, or a node type's display name (spaces, a slash: "Jev Decide (judge / classify / yes-no)").
         return self._request("GET", f"/api/nodes/{quote(node_id, safe='')}")

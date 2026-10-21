@@ -20,6 +20,16 @@ export function aboutLabel(about: AgentNoteAbout): string {
   }
 }
 
+/** The header label for this update: none once an asset proposal's Update has resolved. */
+export function noteLabel(note: Pick<AgentNote, 'about' | 'resolvedAt'>): string {
+  return note.resolvedAt ? '' : aboutLabel(note.about);
+}
+
+/** Whether the update is greyed: dismissed, acted on, or its proposal closed. */
+export function noteDone(note: Pick<AgentNote, 'dismissedAt' | 'actedAt' | 'resolvedAt'>): boolean {
+  return Boolean(note.dismissedAt || note.actedAt || note.resolvedAt);
+}
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** "12:14" today; "Oct 19, 16:02" on an earlier day (24-hour, as GM's still). */
@@ -92,6 +102,9 @@ const PRIMARY_KINDS = new Set(['suggestion.accept', 'proposal.accept']);
 
 /** What a greyed update says in place of its edit actions, or null while they stand. */
 export function stateLabel(note: AgentNote, actionState?: (action: AgentNoteAction) => string | null): string | null {
+  // An asset proposal's Update: how the proposal ended, in place of Review.
+  if (note.outcome) return note.outcome;
+  if (note.resolvedAt) return 'Done';
   if (note.actedAt) return (note.actedWith && ACTED_STATE[note.actedWith]) || 'Done';
   if (note.dismissedAt) return 'Not now';
   if (actionState) {
@@ -108,7 +121,7 @@ export function noteControls(
   note: AgentNote,
   options: { showLabel: string; actionState?: (action: AgentNoteAction) => string | null },
 ): NoteControls {
-  const state = note.actions.length > 0 || note.dismissedAt || note.actedAt
+  const state = note.actions.length > 0 || noteDone(note)
     ? stateLabel(note, options.actionState)
     : null;
   const buttons: NoteButton[] = [];
