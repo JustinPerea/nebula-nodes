@@ -414,6 +414,15 @@ nebula moodboard delete <board>
   outside Nebula's output folder is refused (422, nothing saved); download
   and upload the image first. A Character saved earlier with a web link
   keeps it, but a run leaves that view out and its notes say so.
+- A board's images are Nebula's own files the same way: `POST`/`PUT
+  /api/moodboards` and the `add` board edit refuse a web link or a `data:`
+  URI (422, nothing saved). `nebula moodboard new`/`add` (and moodboard_create
+  / moodboard_add) download a link and upload it, so pass web images to them.
+  A board saved earlier with a web link keeps it: `show` marks it "[Image
+  link from outside Nebula (not loaded)]", `--json` gives `outside: true`,
+  and a run and the analysis leave it out. Don't fetch it on your own: ask
+  the person before re-adding its link with `add` (that fetches it), then
+  remove the old one; or they replace it with an upload in Moodboard Studio.
 - `set --json` returns `previous`: what your change changed, as it was
   before (only those settings, Direction, Avoid, pinned colours, your own
   hand-written brief, and only the image settings you changed), so undoing

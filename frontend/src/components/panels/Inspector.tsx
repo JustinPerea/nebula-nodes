@@ -1139,7 +1139,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           return (
             <section className="inspector__section inspector__last-output" aria-label="Last output">
               <div className="inspector__label">Last output</div>
-              <StructuredOutputs outputs={entries} variant="full" labels={labels} />
+              <StructuredOutputs outputs={entries} variant="full" labels={labels} definitionId={nodeData.definitionId} />
             </section>
           );
         })()}

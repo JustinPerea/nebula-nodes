@@ -13025,9 +13025,20 @@ def _refuse_moodboard_layout(body: BaseModel) -> None:
 def _moodboard_out(board: dict) -> dict:
     """A board as the API returns it: the saved board plus ``brief``, what
     generators get from it (services/moodboard_brief.compose). ``brief`` is
-    computed on every read and never saved."""
+    computed on every read and never saved.
+
+    ``outsideImages`` (only when there are any): the ids of images that are
+    links to another site, which a board saved before writes were checked
+    can hold (services/stored_image_refs.py). They stay on the board, but
+    nothing in Nebula loads them: the app shows a placeholder, and runs and
+    the analysis leave them out. Computed on read, never saved."""
     from services.moodboard_brief import with_brief
-    return with_brief(board)
+    from services.stored_image_refs import outside_image_ids
+
+    out = with_brief(board)
+    if isinstance(out, dict) and (outside := outside_image_ids(out)):
+        out = {**out, "outsideImages": outside}
+    return out
 
 
 def _validate_project_id_param(project_id: str | None) -> None:

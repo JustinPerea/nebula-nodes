@@ -57,7 +57,9 @@ describe('a card on the board', () => {
     expect(wideFrom([270, 480, 600], 2)).toBe(270);
   });
 
-  it("a link to another site has no thumbnail: the image as it is", () => {
-    expect(src(mount({ url: 'https://example.com/a.jpg' }).container)).toBe('https://example.com/a.jpg');
+  it('a link to another site is never loaded: the placeholder says why (Q98)', () => {
+    const { container } = mount({ url: 'https://example.com/a.jpg' });
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.textContent).toContain('Image link from outside Nebula');
   });
 });

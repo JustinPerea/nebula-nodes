@@ -9,6 +9,7 @@ import pytest
 import mcp_server
 from nebula_api import NebulaAPI
 from services import krea_agent_mcp
+from tests.conftest import stored_image_urls
 from tests.test_asset_proposals import A, B, C, _key, _pin, _saved, api  # noqa: F401 - the fixture
 
 
@@ -75,7 +76,8 @@ def test_an_agent_withdraws_an_asset_proposal(tools):
 
 
 def test_a_board_is_named_by_id_or_name(tools):
-    made = tools.client.post("/api/moodboards", json={"name": "Dusk board", "images": [{"url": A}],
+    made = tools.client.post("/api/moodboards", json={"name": "Dusk board",
+                                                      "images": [{"url": stored_image_urls(1, name="dusk")[0]}],
                                                       "projectId": tools.active}, headers=tools.person).json()
     by_name = mcp_server.propose_asset_change("moodboard", "dusk board", {"sendNotes": True}, "Your notes say dusk")
     assert by_name["proposal"]["target"]["id"] == made["id"]

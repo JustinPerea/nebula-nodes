@@ -30,6 +30,7 @@ from services.project_store import ProjectStore, make_project
 from services.provider_recovery import ProviderRecoveryStore
 from services.provider_start_guard import ProviderStartGuard
 from services.execution_runs import ExecutionRunRegistry
+from tests.conftest import stored_image_urls
 
 CLAUDE = {"X-Nebula-Agent": "Claude Code"}
 CODEX = {"X-Nebula-Agent": "Codex"}
@@ -398,8 +399,10 @@ def test_the_persons_canvas_gets_open_asset_proposals_with_keys_on_hello(api):
 # -- moodboards: Send notes to generators ------------------------------------------------
 
 def _board(api, *, send_notes=False) -> dict:
+    # A board's images are Nebula's own files (Q98): a real upload.
     made = api.client.post("/api/moodboards", json={
-        "name": "Dusk board", "images": [{"url": A}], "projectId": api.active, "sendNotes": send_notes,
+        "name": "Dusk board", "images": [{"url": stored_image_urls(1, name="dusk")[0]}], "projectId": api.active,
+        "sendNotes": send_notes,
     }, headers=api.person)
     assert made.status_code == 200, made.text
     return made.json()

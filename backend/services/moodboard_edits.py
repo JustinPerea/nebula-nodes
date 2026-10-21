@@ -336,8 +336,10 @@ class _Batch:
         urls = op.get("urls") or []
         if not isinstance(urls, list):
             raise EditError("urls must be a list")
-        for url in urls:
+        labels: list[str] = []  # each item's place in the op, for a refusal
+        for position, url in enumerate(urls):
             items.append({"url": _text(url, "each url")})
+            labels.append(f"urls[{position}]")
         raw_images = op.get("images") or []
         if not isinstance(raw_images, list):
             raise EditError("images must be a list of {url, ...}")
@@ -350,6 +352,7 @@ class _Batch:
             if raw.get("id") is not None and (not isinstance(raw["id"], str) or not _ID_RE.fullmatch(raw["id"])):
                 raise EditError("an added image's id must be 1 to 64 letters, digits, - or _")
             items.append(dict(raw))
+            labels.append(f"images[{len(labels) - len(urls)}].url")
         if not items:
             raise EditError("add needs urls or images")
         for item in items:
@@ -367,6 +370,16 @@ class _Batch:
 
         on_board = {str(img.get("url")) for img in self.images}
         ids = {str(img.get("id")) for img in self.images}
+        # Only Nebula's own files (services/stored_image_refs.py), named as
+        # this op names them; a url the board already holds isn't checked
+        # again. The store checks every write once more (_normalize_images).
+        from services.stored_image_refs import board_image_problem
+
+        held = {url.strip() for url in on_board}
+        for item, label in zip(items, labels):
+            refused = None if item["url"].strip() in held else board_image_problem(item["url"].strip(), label)
+            if refused:
+                raise EditError(refused)
         fresh: list[dict[str, Any]] = []
         skipped = 0
         for item in items:
@@ -739,6 +752,12 @@ class _Batch:
                 continue
             if item["part"] == "settings":
                 outcome = self._restore_settings(item, skipped)
+            elif (refused := self._not_nebulas(item)) is not None:
+                # Putting back an image that isn't one of Nebula's files (an
+                # old board's outside link, or a made-up slice) would store
+                # it again: left off, saying why; the rest goes back.
+                skipped.append(self._skip_report(item, refused))
+                continue
             else:
                 outcome = self._restore(item)
                 if outcome == "skipped":
@@ -853,6 +872,10 @@ class _Batch:
                 report["number"] = self.number(img)
             elif image_id in self.numbers:
                 report["number"] = self.numbers.index(image_id) + 1
+            elif item["part"] == "image" and isinstance(item.get("index"), int) and not isinstance(item["index"], bool):
+                # Gone before this batch (an undo of its removal): the number
+                # it had, which the slice keeps as its place.
+                report["number"] = item["index"] + 1
             label = f"#{report['number']}" if "number" in report else "An image"
         else:
             report["frame"] = item.get("frame")
@@ -860,6 +883,23 @@ class _Batch:
         report["reason"] = reason
         report["message"] = f"{label} {reason}, left as is"
         return report
+
+    def _not_nebulas(self, item: dict[str, Any]) -> str | None:
+        """Why an image slice can't go back (its url isn't one of Nebula's
+        files and the board doesn't hold it now), or None. As every other
+        board write (services/stored_image_refs.py): a url the board holds
+        isn't checked again."""
+        from services.stored_image_refs import board_image_problem, is_outside_link
+
+        before = item.get("before")
+        if item["part"] != "image" or not isinstance(before, dict):
+            return None
+        url = str(before.get("url") or "").strip()
+        if url in {str(img.get("url") or "").strip() for img in self.images}:
+            return None
+        if board_image_problem(url, "url") is None:
+            return None
+        return "is an image link from outside Nebula" if is_outside_link(url) else "isn't one of Nebula's own files"
 
     def _restore(self, item: dict[str, Any]) -> str:
         """Put one slice back: "applied", "unchanged" (already as it was) or "skipped"."""

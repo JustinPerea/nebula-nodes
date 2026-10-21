@@ -1488,6 +1488,14 @@ def moodboard_get(board: str, ctx: Context | None = None) -> dict[str, Any]:
     {number, id} is the image chosen to open the board on (no `cover`: it
     opens on #1); moodboard_update(cover=...) changes it.
 
+    An image marked `outside: true` (the API's `outsideImages`) is an image
+    link from outside Nebula, saved before board images were checked. It
+    stays on the board, but nothing loads it: Moodboard Studio and the node
+    show a placeholder, and runs and the analysis leave it out (a run says
+    so in its notes). `outsideNote` says how to replace it: don't fetch the
+    link yourself; ask the person first, and only with their OK moodboard_add
+    its link (downloaded and uploaded), then remove the old one.
+
     `brief` is what generators get, as Nebula composed it: `styleBrief` (the
     hand-written brief when there is one, else the generated one),
     `negativePrompt`, `avoidPrompt`, `palette`/`accents` and `override`
@@ -1544,8 +1552,10 @@ async def moodboard_create(name: str, sources: list[str] | None = None, project_
     canvas; else a project id from list_projects); by default it's Global and every project can use it. `mode`:
     look, world or subject. `strength` and image weights run 0 to 1. Run
     moodboard_analyze after to get its palette and brief. The board then holds
-    Nebula's own copies ("/api/outputs/..."), the only images a Character or a
-    Style takes too.
+    Nebula's own copies ("/api/outputs/..."), the only images a board, a
+    Character or a Style takes: an outside link (http, https, data:) sent to
+    POST/PUT /api/moodboards or a board edit directly is refused with a 422
+    and nothing is saved, so pass links here and this tool uploads them.
     """
     import moodboard_client as boards
 
@@ -1560,7 +1570,8 @@ async def moodboard_create(name: str, sources: list[str] | None = None, project_
 @_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True))
 async def moodboard_add(board: str, sources: list[str], ctx: Context | None = None) -> dict[str, Any]:
     """Add images to a moodboard: files, folders, http(s) image links or Nebula
-    outputs, as in moodboard_create. Images already on the board are skipped.
+    outputs, as in moodboard_create (links are downloaded and uploaded here:
+    the board routes refuse an outside link). Images already on the board are skipped.
     They go on as one checked board edit, so nothing the person changes in
     Moodboard Studio meanwhile is overwritten, and an open Studio shows them
     at once. Adding clears the board's analysis; run moodboard_analyze again.
@@ -1689,7 +1700,9 @@ def moodboard_edit(board: str, ops: list[dict], base_version: int | None = None,
     {"op": "note", "image": 12, "notes": "..."} (or "privateNote", the
     person's own label, never sent to generators); {"op": "cover", "image":
     12} (the image the board opens on; null for #1); {"op": "add", "urls": [...],
-    "at": {"x", "y"}} and {"op": "remove", "images": [12]}; looks are frames:
+    "at": {"x", "y"}} (Nebula's own files only, "/api/outputs/...": an
+    outside link is refused; moodboard_add uploads links) and
+    {"op": "remove", "images": [12]}; looks are frames:
     "frame.create" ({"name", "x", "y", "w", "h"} or {"around": [cards]}),
     "frame.update", "frame.delete" (its cards stay) and "frame.merge"
     ({"frame", "into"}). A CARD is a card id from moodboard_get's

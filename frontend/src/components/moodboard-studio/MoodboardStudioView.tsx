@@ -13,7 +13,9 @@ import {
 } from '../../lib/api';
 import { RecentlyDeletedAssets, UndoDeleteToast } from '../asset-trash/AssetTrash';
 import { useAssetDelete } from '../../hooks/useAssetDelete';
-import { apiFetch, backendAssetUrlSync } from '../../lib/backend';
+import { apiFetch } from '../../lib/backend';
+import { storedImageView } from '../../lib/storedImage';
+import { OutsideImageNote } from '../OutsideImageNote';
 import { WorkspaceHeader } from '../WorkspaceHeader';
 import { useAssetStudioDraft } from '../../hooks/useAssetStudioDraft';
 import { assetStudioDraftKey, resolveAssetStudioDraftKey, useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
@@ -863,6 +865,9 @@ export function MoodboardStudioView() {
   // cover, else #1, from the draft so a pick shows before it is saved.
   const cover = boardCover(draft.images, draft.coverImageId);
   const previewThumbnail = cover ? draft.images[cover.number - 1].url : '';
+  // Only Nebula's own files are loaded (lib/storedImage.ts): an old board's
+  // link to another site gets the placeholder (Q98).
+  const previewView = storedImageView(previewThumbnail);
   const analysis = draft.analysis;
 
   const header = (
@@ -1098,10 +1103,10 @@ export function MoodboardStudioView() {
             <section className="moodboard-def">
               <div className="moodboard-def__cover-col">
                 <div className="moodboard-def__cover">
-                  {previewThumbnail ? (
+                  {previewView.src ? (
                     // Keyed by the image, so a new cover enters on the spring.
-                    <img key={previewThumbnail} src={backendAssetUrlSync(previewThumbnail)} alt="" draggable={false} />
-                  ) : (
+                    <img key={previewThumbnail} src={previewView.src} alt="" draggable={false} />
+                  ) : previewView.outside ? <OutsideImageNote /> : (
                     <span>No images</span>
                   )}
                 </div>
@@ -1255,7 +1260,9 @@ function MoodboardRail({
         {!busy && !failed && shown.length === 0 && (
           <div className="moodboard-rail__empty">{emptyRailMessage('moodboard', scope, boardHome, !noProject)}</div>
         )}
-        {shown.map((m) => (
+        {shown.map((m) => {
+          const thumb = storedImageView(m.thumbnail);
+          return (
           <button
             key={m.id}
             type="button"
@@ -1263,16 +1270,18 @@ function MoodboardRail({
             onClick={() => onSelect(m.id, scope)}
           >
             <span className="moodboard-rail__thumb">
-              {m.thumbnail ? <img src={backendAssetUrlSync(m.thumbnail)} alt="" draggable={false} /> : <span>MB</span>}
+              {thumb.src ? <img src={thumb.src} alt="" draggable={false} /> : <span>MB</span>}
             </span>
             <span className="moodboard-rail__meta">
               <span className="moodboard-rail__name">{m.name || 'Untitled'}</span>
               <span className="moodboard-rail__sub">
                 {moodboardImagesLabel(m.images.length, setAsideCount(m.images))} · {m.mode}
               </span>
+              {thumb.outside && <OutsideImageNote />}
             </span>
           </button>
-        ))}
+          );
+        })}
       </div>
       <RecentlyDeletedAssets kind="moodboard" scope={scope} refreshKey={`${String(refreshKey)}:${activeId}`}
         onRestored={(item) => onSelect(item.id, scope)} onTrashChanged={relist} />

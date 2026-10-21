@@ -229,8 +229,13 @@ def _normalize_images(images: list[dict[str, Any]] | None, *, stored: list[Any] 
     A new image takes the ``placements`` it asks for (checked; ``placedBy``
     is ``by``), else Nebula places it after the last-added card. ``board``
     gives the frames and the saved analysis (for aspect ratios)."""
+    from services.stored_image_refs import StoredImageError, board_image_problem
+
     board = board or {}
     saved: dict[str, deque[dict[str, Any]]] = {}
+    # The urls the board holds: not checked again, so a board saved before
+    # writes were checked keeps saving (services/stored_image_refs.py).
+    held = {str(image.get("url") or "").strip() for image in stored or [] if isinstance(image, dict)}
     for image in stored or []:
         if isinstance(image, dict) and image.get("id"):
             saved.setdefault(str(image["id"]), deque()).append(image)
@@ -251,6 +256,11 @@ def _normalize_images(images: list[dict[str, Any]] | None, *, stored: list[Any] 
         url = str(merged.get("url") or "").strip()
         if not url:
             raise ValueError(f"images[{index}].url is empty")
+        # Only Nebula's own files (an upload or an output): the app loads a
+        # board's images, so an outside link would make it fetch that site.
+        refused = None if url in held else board_image_problem(url, f"images[{index}].url")
+        if refused:
+            raise StoredImageError(refused)
         image: dict[str, Any] = {
             **(before or {}),
             "id": str(merged.get("id") or uuid4().hex[:12]),
@@ -555,9 +565,14 @@ def apply_fields(moodboard: dict[str, Any], fields: dict[str, Any], *, by: str) 
     ``sendNotes`` on (BriefOverrideProtected, NotesOptInProtected); other
     bad values are a ValueError. The caller refreshes the colour check and
     stamps the version."""
+    from services.stored_image_refs import board_held_urls, check_board_analysis
+
     brief = _brief()
     fields = dict(fields)
     immutable = {"id", "createdAt", "projectId"}
+    # What the board holds before this write (its images and its analysis's):
+    # an analysis sent back as it was read isn't checked again.
+    held = board_held_urls(moodboard)
     override_sent = "briefOverride" in fields
     override_value = fields.pop("briefOverride", None)
     if "sendNotes" in fields:
@@ -584,6 +599,7 @@ def apply_fields(moodboard: dict[str, Any], fields: dict[str, Any], *, by: str) 
         elif key == "strength":
             moodboard[key] = max(0.0, min(1.0, float(value)))
         elif key == "analysis":
+            check_board_analysis(value, held)
             moodboard[key] = _normalize_analysis(value)
         elif key == "direction":
             moodboard[key] = brief.normalize_direction(value)
@@ -682,6 +698,8 @@ class MoodboardStore:
         moodboard_id = uuid4().hex[:12]
         now = _now_iso()
         normalized_images = _normalize_images(images, by=by)
+        from services.stored_image_refs import check_board_analysis
+        check_board_analysis(analysis)
         moodboard: dict[str, Any] = {
             "id": moodboard_id,
             "name": name,

@@ -189,7 +189,8 @@ def test_a_set_aside_image_that_cant_be_read_is_listed_without_a_warning() -> No
     analysis = analyze_moodboard(board)
 
     far = analysis["images"][1]
-    assert far["status"] == "unresolved" and far["setAside"] is True and far["palette"] == []
+    # An outside link is never read (Q98): "outside", with no warning when set aside.
+    assert far["status"] == "outside" and far["setAside"] is True and far["palette"] == []
     # The warnings are the steering board's: what it would say without it.
     assert analysis["warnings"] == []
 

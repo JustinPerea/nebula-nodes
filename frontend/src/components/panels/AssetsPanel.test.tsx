@@ -212,6 +212,14 @@ describe.each([
 // A Character or Style saved before Nebula checked its images can hold an
 // outside link: the row keeps it listed but never loads that picture.
 describe('Assets panel images from outside Nebula', () => {
+  it('a board row shows its placeholder and says why (Q98)', async () => {
+    api.fetchMoodboards.mockResolvedValue([{ ...board, thumbnail: 'https://example.com/x.png' }]);
+    await openTab('Moodboards');
+    expect(await screen.findByText('Image link from outside Nebula')).toBeTruthy();
+    expect(document.querySelector('img[src^="https://"]')).toBeNull();
+    expect(screen.getByText('Warm editorial')).toBeTruthy();
+  });
+
   it('a Character row shows its placeholder and says why', async () => {
     api.fetchCharacters.mockResolvedValue([{ ...character, thumbnail: 'https://images.example.com/face.png' }]);
     const view = renderPanel();
