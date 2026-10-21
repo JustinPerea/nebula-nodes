@@ -1396,7 +1396,7 @@ with them today (checked 2026-10-20 against `/api/graph/apply`):
   (`configureOpenRouterModel`, `fetchReplicateSchemaAndConfigure`), which
   keeps them in the browser only; the backend sends a universal node with its
   definition's ports (`main.py` `_cli_node_to_rf`). Moving that into the
-  backend is open work (implementation-notes.md, 2026-10-20).
+  backend is open work (docs/notes/2026-10-20-feat-mcp-cancel-scope-catalogs-krea.md).
 
 ### In-app agents use this server
 
