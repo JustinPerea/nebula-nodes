@@ -31,15 +31,40 @@ Code's 10,000-token warning and its 50,000-character file cut:
 | `canvas` | The open project, `view.stale`, the selection, other agents' cursors, and each node's id, name, `definitionId`, state, `onScreen`, `inputsFrom` and up to 8 params (each cut to 60 characters, redacted as `look_at_canvas` redacts them) | The first nodes in full (selected, then on screen), the rest as `others: {id: name}`, `truncated: true`, and "look_at_canvas gives every node" |
 | `pins` | Open pins: id, text, anchor | The 10 newest, and `openCount` |
 | `proposals` | Open proposals, briefly | 5, and `count` |
-| `boards` | Every moodboard: id, name, `where` (`current`, `global` or the project's name), image count, analyzed or not, Direction cut to 80 characters. Boards in Recently deleted, or in a project there, are left out | 30 rows (this project, then Global, then the rest by last edit), `count`, and "moodboard_get gives one in full" |
+| `boards` | Every moodboard: id, name, `where` (`current`, `global` or the project's name), image count, analyzed or not, Direction cut to 80 characters. Boards in Recently deleted, or in a project there, are left out. `read` is how to read one (`moodboard_get(board="<id or exact name>")`; over the CLI `nebula moodboard show <id>`). `use` is how to put one on the canvas: the exact `edit_canvas` call for a Moodboard node (`nebula-moodboard`, the board in its `moodboard` param, sending from its `moodboard` port) wired to a Preview's `input` (or, over the CLI, the `nebula apply` flags) | 30 rows (this project, then Global, then the rest by last edit), `count`, and, when rows were cut, `more`: `moodboard_list(project_id=...)` lists a project's boards and Global's |
 | `nodes` | The node types that run here, by category: `{id: price}` (`"free"`, `[low, high]` USD or `null`), `runsWith` for those that don't run on a key, and notes on modes, providers and Krea | Categories in a fixed order, cut at the budget, `rest: {category: count}`, and "find_nodes(category=…) gives the rest" |
 | `spend` | The per-run limit, the budget kind, its limit and what is used, Krea plan runs. Outside agents share one 24-hour budget, so `usedUsd` is what all of them used; an app with a token also gets its own line (`limitUsd`, `usedUsd`) beside the shared one (`sharedLimitUsd`, `sharedUsedUsd`) | |
-| `next` | `events.cursor` and the journal id for `wait_for_canvas_change`, and how to describe a node, propose and answer a pin | |
+| `next` | `events.cursor` and the journal id for `wait_for_canvas_change`, then one line each: `describe`, `build`, `propose`, `point` and `pins`. Each is the exact call, its arguments named as the tool takes them (`describe_node(definition_id=...)`, `point_at(node_id=..., say=...)`); `build` is a whole `edit_canvas` plan (nodes `{ref, definitionId, params}`, edges `{source, sourceHandle, target, targetHandle}`, `arrange`), and `propose` says `propose_change` takes the same nodes and edges plus `params` and `run`. Over the CLI they are `nebula` commands with their real flags, so a first build needs neither `nebula apply --help` nor `nebula info nebula-moodboard` | |
 
 No private note, image note, board note or pin reply history goes in. The
 route is `GET /api/agent/start` (`?via=cli` words the hints for the CLI);
 `nebula context` prints the same, and `nebula context --json` prints it as
 it comes. Later turns use `look_at_canvas`, which stays the full snapshot.
+
+A call with wrong arguments is refused before it runs, in one line naming
+the tool's real ones, for every tool: `moodboard_get(id=...)` gets
+"moodboard_get takes board (required), not id. Call
+moodboard_get(board=...).", a name it doesn't take is refused even beside
+the right ones ("run_nodes takes node_id, wait_seconds, ..., not node_ids
+(did you mean node_id?)."), and a wrong type names the type ("point_at: x
+must be a number, not "left". It takes ..."). Before, FastMCP sent
+pydantic's report and ignored names a tool doesn't take. A node or wire in
+another shape gets the same kind of line from `edit_canvas`,
+`propose_change` and `nebula apply`/`propose --file`: a node with `type`
+(or `kind`, `definition`, ...) is told the type goes in `definitionId`, and
+a wire with `from`/`to` (or `sourcePort`/`targetPort`) is told it is
+`{source, sourceHandle, target, targetHandle}`, with its own ends rewritten
+when they read as node and port (`"+mb.moodboard"`). A wire with no port
+(`{source, target}`, or `--wire +mb +pv:input`) is told the ports that end
+has ("edges[0].sourceHandle must be a port id. Valid outputPorts on +mb
+(nebula-moodboard): ['moodboard', ...]"), as a wrong port name is. These
+lines copy back at most a few short params of the agent's node, never a
+whole data URL. `point_at` with only `x` or only `y` is refused ("point_at
+needs node_id, or x and y (both): you gave only x"). A node field `edit_canvas` and `propose_change` don't take is refused too, in one line: `x`/`y` are
+told the place goes in `position` (or is left to Nebula), `name`/`label`/
+`title` that a new node is named with `rename`, and anything else gets
+the node shape `{ref, definitionId, params, position}`. Before, they
+were dropped without a word.
 
 The server's instructions stay under 3,000 characters, inside the 4,096
 Claude Code shows, with the commons guide's two safety lines first in its
@@ -162,7 +187,11 @@ And these canvas tools:
 - `point_at`: moves the agent's cursor on the canvas to a node, a port or a
   flow-space point, with an optional short line beside it (`say`, the
   agent's own action only) and an optional drag gesture
-  (`from_node_id`/`from_port`). The cursor is named after
+  (`from_node_id`/`from_port`). With only `say`, the line shows where the
+  cursor already is and it doesn't move; an agent with no cursor yet gets
+  one at the middle of the person's view, or at (0, 0) when no canvas has
+  reported a view (the result's `placed` is `cursor`, `view` or `origin`;
+  `nebula point --say "..."` does the same). The cursor is named after
   `$NEBULA_AGENT_NAME`, or the MCP client's own name. What the agent
   noticed goes in `post_note` instead (see [Updates](#updates)).
 - `post_note` / `list_notes`: post what the agent noticed, a report or a
@@ -243,7 +272,8 @@ whole canvas ("Running 4 nodes"); neither has one place on the canvas, so
 they move no cursor. The log is in the browser's memory only: the last 50
 entries, gone on reload.
 
-The REST surface is `POST /api/canvas/cursor`, `GET /api/canvas/snapshot`, and
+The REST surface is `POST /api/canvas/cursor` (a `target`, or only `say` to
+narrate where the cursor is; it answers with `placed`), `GET /api/canvas/snapshot`, and
 `POST /api/canvas/view` (the browser's own report of viewport, node bounds and
 run states; never persisted), plus `GET /api/canvas/events` (the change
 journal, below), `/api/canvas/pins` (the person's notes, below) and

@@ -21,6 +21,7 @@ from typing import Any, Mapping
 
 from services.canvas_proposals import (
     NODE_ID_RE,
+    PortLookup,
     ProposalError,
     ProposalSpec,
     ProposedEdge,
@@ -29,6 +30,7 @@ from services.canvas_proposals import (
     _point,
     clean_note,
     parse_spec,
+    wire_shape_error,
 )
 from services.node_route import BILLING_PARAMS
 
@@ -116,7 +118,7 @@ def _target(raw: Any, refs: set[str], label: str) -> str:
     return _node_id(raw, label)
 
 
-def parse_edit(body: Any) -> EditSpec:
+def parse_edit(body: Any, *, ports: PortLookup | None = None) -> EditSpec:
     if not isinstance(body, dict):
         raise ProposalError(422, "the edit must be a JSON object")
     unknown = sorted(set(body) - _ALLOWED_KEYS)
@@ -124,7 +126,7 @@ def parse_edit(body: Any) -> EditSpec:
         raise ProposalError(422, f"unknown edit field '{str(unknown[0])[:40]}'")
     adding = {key: body[key] for key in ("nodes", "edges", "params") if body.get(key)}
     note = body.get("note") or "edit"
-    additions = (parse_spec({"note": note, **adding}, internal_ok=INTERNAL_OK, capped=False)
+    additions = (parse_spec({"note": note, **adding}, internal_ok=INTERNAL_OK, capped=False, ports=ports)
                  if adding else ProposalSpec(note=clean_note(note)))
     refs = additions.refs
 
@@ -152,12 +154,17 @@ def parse_edit(body: Any) -> EditSpec:
     for index, raw in enumerate(unwire_raw):
         if not isinstance(raw, dict):
             raise ProposalError(422, f"unwire[{index}] must be {{source, sourceHandle, target, targetHandle}}")
-        unwire.append(ProposedEdge(
-            source=_node_id(raw.get("source"), f"unwire[{index}].source"),
-            source_handle=_handle(raw.get("sourceHandle"), f"unwire[{index}].sourceHandle"),
-            target=_node_id(raw.get("target"), f"unwire[{index}].target"),
-            target_handle=_handle(raw.get("targetHandle"), f"unwire[{index}].targetHandle"),
-        ))
+        shape = wire_shape_error(raw, f"unwire[{index}]")
+        if shape:
+            raise ProposalError(422, shape)
+        source = _node_id(raw.get("source"), f"unwire[{index}].source")
+        source_handle = _handle(raw.get("sourceHandle"), f"unwire[{index}].sourceHandle", ports, source, None,
+                                "outputPorts")
+        target = _node_id(raw.get("target"), f"unwire[{index}].target")
+        target_handle = _handle(raw.get("targetHandle"), f"unwire[{index}].targetHandle", ports, target, None,
+                                "inputPorts")
+        unwire.append(ProposedEdge(source=source, source_handle=source_handle, target=target,
+                                   target_handle=target_handle))
 
     gone = set(remove)
     clash = sorted(gone & (additions.references | {k for k in {**rename, **move} if not k.startswith("+")}))

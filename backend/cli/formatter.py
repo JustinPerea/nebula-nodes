@@ -344,7 +344,10 @@ def _price(value: Any) -> str:
 def format_start(start: dict[str, Any]) -> str:
     """Render GET /api/agent/start (services/agent_start.py) for `nebula context`:
     the canvas, pins, proposals, boards, the nodes that run here with prices,
-    the spend limits and what to do next."""
+    the spend limits and what to do next. The boards' `read` and `use` lines
+    and NEXT's build, propose and point lines are the exact commands, so a
+    first build needs neither `nebula apply --help` nor `nebula info
+    nebula-moodboard`."""
     from services import node_categories
 
     lines: list[str] = []
@@ -405,6 +408,10 @@ def format_start(start: dict[str, Any]) -> str:
                      f"{row.get('images', 0)} images, {analyzed}{direction}")
     if boards.get("more"):
         lines.append(f"  ({boards['more']})")
+    if boards.get("read"):
+        lines.append(f"  {boards['read']}.")
+    if boards.get("use"):
+        lines.append(f"  {boards['use']}")
 
     nodes = start.get("nodes") or {}
     lines.append("")
@@ -453,7 +460,7 @@ def format_start(start: dict[str, Any]) -> str:
     events = nxt.get("events") or {}
     lines.append("")
     lines.append("NEXT:")
-    for key in ("describe", "propose", "pins"):
+    for key in ("describe", "build", "propose", "point", "pins"):
         if nxt.get(key):
             lines.append(f"  {nxt[key]}")
     lines.append(f"  Events cursor {events.get('cursor')} (journal {events.get('journal')}).")

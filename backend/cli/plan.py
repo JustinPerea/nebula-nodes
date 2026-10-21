@@ -45,12 +45,14 @@ def _flatten(items: list) -> list[str]:
     return out
 
 
-def _endpoint(text: str, flag: str) -> tuple[str, str]:
-    """`n4:image` or `+up:image` → ("n4", "image")."""
+def _endpoint(text: str, flag: str) -> tuple[str, str | None]:
+    """`n4:image` or `+up:image` → ("n4", "image"). A bare `+up` or `n4` has
+    no port: it is sent without one, and the backend's refusal names the
+    ports that node has."""
     node, sep, port = (text or "").partition(":")
-    if not sep or not node or not port:
+    if not node or (sep and not port):
         raise BuildError(f"{flag} needs node:port (e.g. n4:image or +up:image), got '{text}'")
-    return node, port
+    return node, port or None
 
 
 def _wire(pair: list[str], flag: str) -> dict[str, str]:
@@ -58,7 +60,8 @@ def _wire(pair: list[str], flag: str) -> dict[str, str]:
         raise BuildError(f"{flag} takes two arguments: SRC:port DST:port")
     source, source_handle = _endpoint(pair[0], flag)
     target, target_handle = _endpoint(pair[1], flag)
-    return {"source": source, "sourceHandle": source_handle, "target": target, "targetHandle": target_handle}
+    wire = {"source": source, "sourceHandle": source_handle, "target": target, "targetHandle": target_handle}
+    return {key: value for key, value in wire.items() if value is not None}
 
 
 def _point(coords: str, flag: str, item: str) -> dict[str, float]:
