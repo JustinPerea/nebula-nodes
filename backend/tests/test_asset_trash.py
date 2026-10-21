@@ -356,6 +356,8 @@ def test_cli_lists_and_restores(api, monkeypatch):
     client = NebulaClient("http://testserver")
     monkeypatch.setattr(client, "_request", lambda method, path, **kw: api.client.request(
         method, path, headers=AGENT, params=kw.get("params")).json())
+    # `trash list` reads through project_client (MCP list_trash's code), on the client's connection.
+    client._client = api.client
 
     out = io.StringIO()
     with redirect_stdout(out):
@@ -383,6 +385,7 @@ def test_cli_parser_has_trash_list_and_restore_only():
 
 def test_mcp_tools_list_and_restore(api, monkeypatch):
     import mcp_server
+    from nebula_api import NebulaAPI
 
     board = _board(api)
     api.client.delete(f"/api/moodboards/{board['id']}")
@@ -393,6 +396,8 @@ def test_mcp_tools_list_and_restore(api, monkeypatch):
         return api.client.request(method, path, headers=AGENT, params=kwargs.get("params")).json()
 
     monkeypatch.setattr(mcp_server, "_canvas_call", fake_call)
+    # list_trash goes through project_client (shared with `nebula trash list`) on mcp_server._api().
+    monkeypatch.setattr(mcp_server, "_api", lambda: NebulaAPI("http://testserver", client=api.client))
     assert mcp_server.list_trash("moodboard")["items"][0]["id"] == board["id"]
     assert mcp_server.restore_from_trash("moodboard", board["id"])["restored"] == "moodboard"
     assert calls[-1][:2] == ("POST", f"/api/trash/moodboard/{board['id']}/restore")
