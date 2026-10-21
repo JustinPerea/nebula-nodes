@@ -296,11 +296,15 @@ body.app-slava-restraint .commons-heading {
   font-weight: 700;
 }
 
-/* A folded section's panel opens with its name (Settings, Blind labeling;
- * GM review of p157), set like the section titles above. Settings spaces it
- * with its column gap; Blind labeling's panel needs the same gap. */
-body.app-slava-restraint .commons-evaluation > .commons-panel-title {
-  margin: 0 0 16px;
+/* Settings opens with its name as its h2 (GM review of PR #157). It has no
+ * display line, so the h2 sits one step above its 13 px section titles (round
+ * 2: "about 20px against their 14"), at the Commons' existing step size and
+ * weight (commons-evaluation.css `.evaluation-step`, 22px / 450), not a new
+ * size. Blind labeling and Agent review set their h2 as the eyebrow line
+ * instead (`.commons-eyebrow`). */
+body.app-slava-restraint .commons-settings > .commons-panel-title {
+  font-size: 22px;
+  font-weight: 450;
 }
 
 /* -- messages + page candidates ---------------------------------------------- */

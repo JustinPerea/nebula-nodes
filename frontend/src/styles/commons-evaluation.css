@@ -16,22 +16,36 @@
   gap:20px;
   margin-bottom:26px;
 }
-.commons-evaluation small {
+.commons-evaluation small,
+.commons-eyebrow {
   letter-spacing:1.5px;
   color:#a0b28f;
   font-size:10px;
 }
-/* Blind labeling's own title and steps sit under the panel's "Blind labeling"
- * heading (an h2, GM review of p157), so they are h3/h4 there; Agent review
- * keeps its h1/h2. Same sizes either way. */
-.commons-evaluation h1,
+/* A section's eyebrow line: its name (the h2) and its descriptor, in the
+ * eyebrow style above (GM review of PR #157, round 2). The words are written
+ * in sentence case and shown in capitals, as the old eyebrow was. */
+.commons-eyebrow {
+  margin:0;
+  text-transform:uppercase;
+}
+.commons-eyebrow h2 {
+  display:inline;
+  margin:0;
+  font:inherit;
+}
+/* The section's display line ("A fresh pair of eyes.", "Does this read
+ * right?") is a styled p under the section's h2, not a heading: its old h1
+ * look, kept clear of the panel's paragraph colour and line height. The steps
+ * are h3 and their parts h4, at their old h2/h3 sizes. */
 .commons-evaluation .evaluation-title {
   font-size:30px;
   letter-spacing:-.8px;
   font-weight:450;
   margin:10px 0;
+  color:inherit;
+  line-height:normal;
 }
-.commons-evaluation h2:not(.commons-panel-title),
 .commons-evaluation .evaluation-step {
   font-size:22px;
   font-weight:450;
