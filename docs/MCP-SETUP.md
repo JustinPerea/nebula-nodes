@@ -134,6 +134,33 @@ The server exposes these tools for building and running (see
   `failed`, with each node's message in `errors` and what did finish in
   `results`; see [Building and running over MCP](#building-and-running-over-mcp).
 - `get_run` / `cancel_run`: collect or stop a run that is still going.
+  `cancel_run` stops only runs an agent started (its own, another agent's,
+  or an unnamed script's); a run the person started is theirs, and the
+  refusal tells the agent to ask them to press Stop. See
+  [Who may stop a run](#who-may-stop-a-run).
+- `model_catalog` / `model_schema`: the models the universal nodes run.
+  `model_catalog(provider, query, limit)` lists OpenRouter's, Nous Portal's
+  or Quiver's models (`/api/openrouter/models`, `/api/nous/models`,
+  `/api/quiver/models`, the routes the Inspector's pickers read), filtered by
+  every word of `query`, and names the node and the param (`model`) the id
+  goes in. `model_schema("replicate", "owner/name")` reads a Replicate
+  model's latest version (`/api/replicate/schema/{owner}/{name}`): each
+  input with `port: true` (a file input, wired into a port of that name on
+  the Replicate node) or `port: false` (set as a param of that name), and
+  the raw input and output schemas. For the other providers it returns that
+  model's catalog row. They use the person's key and cost nothing; without
+  the key the refusal names it. See
+  [Universal nodes over MCP](#universal-nodes-over-mcp) for what
+  `edit_canvas` can wire on them today.
+- `krea_discovery_tools` / `krea_discover`: the read-only Krea discovery
+  calls (`list_models`, `get_model_schema`, `get_prompting_guide`,
+  `list_styles`, `list_moodboards`, `get_node_apps`, `get_node_app_versions`,
+  `list_node_types`) on the Krea account connected in Nebula, through
+  `GET /api/krea/tools` and `POST /api/krea/tools/call`. They are the calls
+  in-app turns also get from the `nebula_krea` server, with the same
+  allow-list (`KREA_READONLY_TOOLS`), so an outside agent, which gets only
+  this server, has them too. None generates, uploads or spends; anything
+  else is refused before Krea is called.
 - `view_output`: a node's output as an image (videos as three frames, image
   lists as tiles), or as text. For a node whose last run failed it returns
   the error instead of "no output yet"; if an older output is still on the
@@ -150,6 +177,12 @@ The server exposes these tools for building and running (see
   the person's work. Clearing a project that has nodes needs an explicit
   force from anyone (`nebula clear --force`, or `DELETE /api/graph?force=true`);
   on an open canvas the person can undo it.
+- `list_project_covers` / `set_project_cover`: the images a project's card
+  can show (`images`, `pinned`, `pinnedBy`, `cover`) and setting its cover to
+  one of them (or `""` for the automatic one). An agent sets it while the
+  person hasn't pinned one; a cover the person pinned changes only through
+  `propose_asset_change`. See
+  [Proposals outside the canvas](#proposals-outside-the-canvas).
 - `moodboard_list`, `moodboard_get`, `moodboard_create`, `moodboard_add`,
   `moodboard_update`, `moodboard_edit`, `moodboard_analyze`, `moodboard_move`, `moodboard_delete`: the boards in
   Moodboard Studio, with their brief (Direction, Avoid, pinned colours, a
@@ -166,6 +199,21 @@ The server exposes these tools for building and running (see
 - `list_trash` / `restore_from_trash`: what's in Recently deleted (moodboards,
   characters, Styles, projects), and bring one back with the same id. See
   [Recently deleted](#recently-deleted).
+- The Commons (the smart moodboard's analyzed references; only with
+  `NEBULA_COMMONS_ENABLED=1`), all in the agent's brand scope (pass
+  `brand`): `commons_search` and `commons_get` read references;
+  `commons_add` adds one to a collection's inbox; `commons_comment` comments
+  (`membership_id` picks the collection's thread); `commons_borrow` records
+  an attribute taken from one. Since 2026-10-20 (Justin's Q63 b):
+  `commons_collections` lists the collections (`{"collections": [...]}`;
+  `commons_add` takes one's id), `commons_status` the analysis queue,
+  worker and meters, `commons_borrowings` the recorded borrowings
+  (`{"borrowings": [...]}`; `asset` narrows it),
+  `commons_concentration` each reference's share of them, and
+  `commons_fidelity` checks a borrowing against the output it was used in
+  and saves the result. Curating (corrections, regions, a reference's role,
+  why or inbox place) is the person's: agents propose it, see
+  [Commons curation](#commons-curation). Each has a `nebula commons` twin.
 - `style_list`, `style_get`, `style_create`, `style_update`, `style_delete`:
   the Styles in Create and the Assets panel (a prompt fragment, optionally a
   model and its settings). `style_update` returns `previous`, which undoes it
@@ -226,8 +274,14 @@ And these canvas tools:
   real node ids) and `runNodeIds` (what the canvas will run; don't run them
   yourself).
 - `withdraw_proposal`: takes back one of your open proposals.
+- `propose_asset_change`: proposes a change outside the canvas that is the
+  person's call: a project cover they pinned, a board's Send notes to
+  generators, or curating a Commons reference. They decide on the Projects
+  screen, in Moodboard Studio or in the Commons; `get_proposal` and
+  `withdraw_proposal` take its id. See
+  [Proposals outside the canvas](#proposals-outside-the-canvas).
 
-There is no accept tool. Only the person accepts, on the canvas.
+There is no accept tool. Only the person accepts, in Nebula.
 
 Selection is ephemeral. It is not written into `.nebula` graph files or
 `~/.nebula/state.json`. Unknown or deleted node IDs are reported only as stale
@@ -313,15 +367,18 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `node.renamed` | a node got a new name on the canvas (or went back to its model name) | `from`, `to` |
 | `edge.added` / `edge.removed` | wired / unwired | source, target and handles |
 | `selection.changed` | the selected set changed | `nodeIds`, `count` |
-| `run.started` / `run.finished` / `run.failed` / `run.cancelled` | per node, attributed to whoever started the run | `runId`, `error` |
+| `run.started` / `run.finished` / `run.failed` | per node, attributed to whoever started the run | `runId`, `error` |
+| `run.cancelled` | a run stopped, attributed to whoever pressed Stop or called `cancel_run` (the starter when another backend took the Stop) | `runId`, `startedBy` (`kind`, `name`) |
 | `run.skipped` | a gate upstream (Jev Decide's On Pass / On Fail) withheld the node's input, so it never ran | `runId`, `reason`, `gateNodeId` |
 | `canvas.replaced` | import, project opened or created; node ids restart | `reason` |
 | `canvas.cleared` | Clear canvas | |
+| `project.cover` | a project's cover was pinned, changed or set back to automatic, by the person, an agent, or an accepted proposal (its summary ends "(accepted from <agent>)") | `projectId`, `projectName`, `cover` (the url, or null for automatic) |
+| `commons.corrected` / `commons.region` / `commons.membership` | the person curated a Commons reference: a correction, a region drawn or changed, a membership's role, why or inbox place; or accepted an agent's [Commons proposal](#commons-curation) (the summary ends "(accepted from <agent>)") | `assetId`; `fieldPath`, `op` for a correction; `regionId`, `change` (`["added"]` or the fields changed) for a region; `membershipId`, `collectionId`, `change` (`["accepted"]` or the fields) for a membership. Never Commons text (no values, labels or whys) |
 | `pin.added` / `pin.removed` | the person left or deleted a note | `pinId`, `text`, `anchor` |
 | `pin.resolved` | an agent answered a note | `pinId`, `text`, `reply` |
 | `pin.detached` | a pinned node was deleted, or an import/clear removed it | `pinId`, `anchor` (where the node was) |
-| `proposal.created` | an agent proposed a change | `proposalId`, `note`, `adds`, `wires`, `sets`, `runs`, `paidRuns` |
-| `proposal.accepted` | the person accepted; the added nodes and wires follow as `node.added` / `edge.added` by the person | `proposalId`, `idMap`, `runNodeIds` |
+| `proposal.created` | an agent proposed a change | `proposalId`, `note`, `adds`, `wires`, `sets`, `runs`, `paidRuns`; for a [proposal outside the canvas](#proposals-outside-the-canvas) `kind`, `targetId`, `targetName`, `change` instead of the graph counts (the decisions after it carry `kind` and `targetId` too) |
+| `proposal.accepted` | the person accepted; the added nodes and wires follow as `node.added` / `edge.added` by the person (for a project cover, `project.cover` by the person) | `proposalId`, `idMap`, `runNodeIds`; outside the canvas `kind`, `targetId`, `targetName`, `applied` (what was set) |
 | `proposal.rejected` | the person rejected | `proposalId`, `reason` |
 | `proposal.withdrawn` / `proposal.expired` / `proposal.invalidated` | the agent took it back, 15 minutes passed, or the canvas changed under it | `proposalId`, `reason` |
 | `board.added` / `board.removed` / `board.frame` / `board.grouped` / `board.setAside` / `board.resized` / `board.noted` / `board.moved` / `board.cover` | a moodboard edit or save changed the board's images, cards or frames: one event per write, its kind the first of these that applies (`noted` an image's notes, `grouped` is a card into or out of a frame, `moved` 8 px or more, `cover` the image the board opens on) | `kinds` (every kind in the write), `refs` (`{number, id}` per image), `boardId`, `boardName`, `scope`; never any note text ("private note changed") |
@@ -430,6 +487,32 @@ Person-only, refused with 403 `person_required` otherwise:
 
 Everything else, including running nodes, is open to agents and held to the
 spending limits. The person isn't limited.
+
+#### Who may stop a run
+
+Agents stop only runs an agent started (Justin, 2026-10-20). The backend
+records who started each run as it registers it (`ExecutionRunRecord.started_by`
+in `services/execution_runs.py`: the person, a named agent, or anonymous), and
+`DELETE /api/executions/{runId}` (the canvas's Stop, `cancel_run`, `nebula
+cancel`) checks it before it records anything:
+
+| Started by | The person stops it | A named agent stops it | Anonymous stops it |
+|---|---|---|---|
+| the person | yes | 403 `agent_refused` | 403 `person_required` |
+| a named agent | yes | yes (any agent) | yes |
+| anonymous | yes | yes | yes |
+
+Anonymous is a caller with no agent marker and no person token: the `nebula`
+CLI without `NEBULA_AGENT_NAME`, curl, a tab not connected as the person.
+Its runs count as an agent's, since nothing proves the person started them;
+its Stop is not the person's. So from the CLI by hand, `nebula cancel` still
+stops what the CLI (or any agent) started, and a run started from the canvas
+answers "ask them to press Stop in Nebula". A refused Stop leaves no durable
+Stop intent, so no other backend stops the run either. A run ID that no run
+here has used still takes the pre-admission Stop intent from anyone, as
+before; one whose `/api/execute` is still being admitted is judged by the
+journal's note of its starter. A run that already ended answers its status
+to anyone, since nothing is left to stop.
 
 Every process the backend starts (agents, the Commons reader, ffmpeg, the
 Remotion renderer, git, `open`, `ps`, `sips`, `brctl`) gets the backend's
@@ -715,6 +798,131 @@ on `/ws`, receive the keys and accept. These layers stop an agent from
 approving its own proposal through Nebula's tools and API; they are not a
 sandbox against hostile local code.
 
+### Proposals outside the canvas
+
+Some of the person's calls live on a project or a board, not on the graph
+(audit U16; Justin's Q60 a, 2026-10-20). An agent proposes those with
+`propose_asset_change(kind, id, change, note)` (`POST /api/asset-proposals`
+with the same four fields), and the person decides where they work on that
+thing:
+
+| `kind` | `change` | Decided | Applied through |
+|---|---|---|---|
+| `project` (a project id) | `{"cover": url}` (one of `list_project_covers`' images) or `{"cover": ""}` (automatic) | on the project's card on the Projects screen: the cover now and the one proposed, side by side, with **Keep mine** and **Use this cover** | `PUT /api/projects/{id}/cover`, as the person |
+| `moodboard` (a board's id or name) | `{"sendNotes": true}` | in Moodboard Studio, under the board's Send notes switch, with **Keep them here** and **Send them** | `PUT /api/moodboards/{id}`, as the person |
+| `commons` (a reference's id; the body may add `brand`) | one edit, or `{"edits": [...]}` (up to 8): see [Commons curation](#commons-curation) | in the Commons, on the reference's detail (each edit as it is now and as proposed; a line above the grid names the references waiting, and their tiles say "proposal"), with **Don't** and **Apply** (**Apply all** for several edits) | each edit's Commons route (`POST .../corrections`, `POST .../regions`, `PATCH /api/commons/regions/{id}`, `PATCH /api/commons/memberships/{id}`, `POST .../accept`), as the person |
+
+Characters and Styles have nothing only the person may change yet, so their
+kinds are refused by name (422).
+
+**Project covers.** The person may pin a project's cover, or reset it to the
+automatic one (its newest image), at any time. Anyone else (an agent, a
+script) may too while the person hasn't pinned one: `set_project_cover`
+(`PUT /api/projects/{id}/cover`) saves who set it as `coverBy` (`{kind,
+name}`, on the card and as `pinnedBy` in the covers listing; a pin saved
+before 2026-10-20 has none and is the person's) and returns `previous`
+(`{"cover": url or null}`), which put back through the same call undoes it.
+A cover the person pinned is refused for anyone else (403, `agent_refused`
+or `person_required`) with a sentence naming `propose_asset_change`. An
+accepted proposal pins the cover as the person's, so the next agent change
+asks again. The Projects screen shows "Cover: set by <agent> (agent)" on a
+cover an agent set. A board's own cover, the image a board opens on, is
+the board's setting rather than a pin of the person's, so it has no
+proposal: agents set it with the board's other fields.
+
+**Life cycle.** The same as canvas proposals: `open`, then `accepted`,
+`rejected` (with the person's reason), `withdrawn`, `expired` (15 minutes)
+or `invalidated`. Ids start with `pa_`; `GET /api/canvas/proposals/{id}`
+(with `?wait=`) and `DELETE /api/canvas/proposals/{id}` answer for them, so
+`get_proposal`, `withdraw_proposal` and `nebula proposal` work unchanged, and
+the journal uses the same `proposal.*` kinds with `kind` and `targetId` in
+`data`. `GET /api/asset-proposals?kind=&id=` lists the open ones. The view
+is `{id, status, agent, note, kind, target: {kind, id, name}, change:
+{<key>: {from, to}}, summary, decideIn, createdAt, expiresAt, reason,
+applied}` (`change.cover` also has `fromBy`; `applied` is what Accept set;
+a commons proposal's `change` is `{"edits": [...]}`, the agent's own edits).
+Caps: 3 open per agent and 12 in all (429 beyond), counted apart from canvas
+proposals; a 160-character note.
+
+**Checks.** A proposal is refused when its target is missing (404), the
+image isn't one of the project's (400, the open project read from the live
+canvas), or the change is already so (409: that cover, or notes already
+sent). `{"sendNotes": false}` needs no proposal (422: set it directly).
+Each proposal records its target as proposed (the pin and who set it,
+notes off). If that no longer holds before the person decides (they pinned
+another cover, an agent changed it, the image or the project or the board
+is gone, notes were turned on), it closes as `invalidated` with the reason:
+on any read or decision, after every cover change, and when the screen that
+shows it hears its project or board changed. Accept checks once more and
+answers 409 then.
+
+**Who decides.** Only the person, through the canvas proposals' two layers:
+`POST /api/asset-proposals/{id}/accept` and `/reject` need the person token
+and no agent marker, and the proposal's key in `X-Nebula-Proposal-Key`. The
+key goes only to `/ws` sockets that said hello with the person token
+(`assetProposalOpened` on creation, `assetProposalSync` after hello, on any
+screen), never to REST, the journal or MCP results. `assetProposalClosed`
+`{proposalId, status, reason, kind, targetId}` goes to every socket. The
+Agent log names the proposal ("Asks to make another image the cover of
+project "Dusk" (decide on the Projects screen)"), since no cursor can go
+there. Memory only: lost on restart.
+
+### Commons curation
+
+Curating the Commons is the person's (Justin's Q63 b, 2026-10-20; audit U13):
+correcting a reference's reading, drawing, renaming, confirming or deleting a
+region, and a reference's role, why or inbox place in a collection. Those
+routes stay person-only (403 for agents). An agent asks with
+`propose_asset_change(kind="commons", id=<reference>, change, note, brand)`
+(`POST /api/asset-proposals`, or `nebula commons propose <id> --edit <json>
+--note <why>`), a [proposal outside the canvas](#proposals-outside-the-canvas)
+like a cover's. `change` is one edit or `{"edits": [...]}`, up to 8, all on
+that reference, accepted or rejected together:
+
+| Edit | Takes | Applied through |
+|---|---|---|
+| `{"correction": {...}}` | `field_path` (`summary`, `subject`, `composition_notes`, `type_style`, `spacing_density`, `layout`, `medium`, `axes.<quiet_loud, warm_cold, geometric_humanist, dense_airy or polished_raw>`, with or without `.value`) and `value` (text up to 2,000 characters, one of the enum's values, a number from -1 to 1), op `set`; or `keywords` with op `add` or `remove` and one keyword; `reason` optional (300 characters) | `POST /api/commons/assets/{id}/corrections` |
+| `{"region": {"box": [x, y, w, h], "label": ...}}` | a new region, the box in fractions of the image | `POST /api/commons/assets/{id}/regions` |
+| `{"region": {"id": ..., ...}}` | one of the reference's regions: `label`, `note`, `status` (`confirmed`, or `deleted`, which the person can undo), `box` | `PATCH /api/commons/regions/{id}` |
+| `{"membership": {"id": ..., ...}}` | one of the reference's memberships in the agent's scope: `role` (`attract`, `avoid`, `evidence`, `neutral`), `why`, `accept: true` (out of the inbox, which queues it for analysis) | `PATCH /api/commons/memberships/{id}`, `POST .../accept` |
+
+**Checks.** The agent must see the reference in its brand scope, as
+`commons_get` does (404 otherwise, and for a region or membership that isn't
+the reference's or out of scope, or a region the person deleted). One edit
+per field, keyword, region or membership (422 for two). Parts of an edit
+that are already so are dropped from it; an edit with nothing left is
+refused (409). Each edit
+records its target as it was: the field's value or whether the keyword is
+there, the region, the membership. That is Commons text, so it goes only to
+the person's screen (`before` in `assetProposalOpened` / `assetProposalSync`);
+the view agents read holds only their own edits. Reading a commons proposal
+(`GET /api/canvas/proposals/{id}`, `GET /api/asset-proposals`) and
+withdrawing it are for the person, the session that proposed it, and
+callers who see the reference in the brand it was proposed for: a
+brand-bound agent session gets 404 for another brand's, as `commons_get`
+answers. Its `proposal.*` journal events and `assetProposalClosed` carry
+ids, not its note or the person's reason (`reason` is null there), since
+every agent on the canvas reads them. If it changes before the
+person decides (they corrected that field, the region or membership changed
+or went, the reference was deleted, the Commons was turned off), the
+proposal closes as `invalidated`; the person's own edits check the
+proposals on that reference at once.
+
+**Accept** makes each edit in order through its Commons route, as the person,
+so a correction is the person's and outranks the model's reading. The
+journal gets one `commons.*` event per edit by the person, ending "(accepted
+from <agent>)", then `proposal.accepted` with `applied: {"edits":
+[{"correction": <id>}, {"region": <id>}, {"membership": <id>}]}`. Should an
+edit fail midway (its target went in the instant between the check and the
+write), the ones before it stay made and the proposal closes as invalidated
+with the reason.
+
+Blind labeling (`/api/commons/evaluation...`) and the agent review
+(`/api/commons/review...`) stay the person's alone, with no proposal and no
+tool, exactly as before; Justin's answer changed only when agents get the
+Commons, not who decides. The GM Commons trial is on hold: nothing here calls
+a hosted Commons service.
+
 ### Spending limits
 
 The person decides what agents may spend, in **Settings > Preferences**:
@@ -828,7 +1036,7 @@ also get `outsideSpent`, the shared 24-hour total.
 
 ### Personal agents' session tokens
 
-A personal agent (your own Claude Code, Codex, Gemini or custom ACP agent in the
+A personal agent (your own Claude Code, Codex, Gemini CLI, Antigravity or custom ACP agent in the
 chat panel, [PERSONAL-AGENTS.md](PERSONAL-AGENTS.md)) gets a session token
 that Nebula writes to a 0600 file (`<state dir>/agent-tokens/<pid>/<session>.token`).
 The `env` of this MCP server's entry in ACP `session/new` carries only the
@@ -936,7 +1144,8 @@ a token file, revoke it in Settings and connect it again.
 
 #### Per app
 
-Formats checked against each app's docs on 2026-10-13.
+Formats checked against each app's docs on 2026-10-13 (Antigravity CLI on
+2026-10-20).
 
 - **Hermes** ([MCP config reference](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/reference/mcp-config-reference.md)).
   Add the entry under `mcp_servers` in `~/.hermes/config.yaml`, then run
@@ -985,6 +1194,38 @@ Formats checked against each app's docs on 2026-10-13.
   `~/.codex/config.toml`. Add `tool_timeout_sec = 150` there: a run can take
   longer than Codex's 60-second default (`nebula mcp connect codex` sets it
   for you).
+- **Antigravity CLI (`agy`)** (`agy mcp add --help` in agy 1.4.3, checked
+  2026-10-20). In Settings > Connect your agent pick **Other MCP client**,
+  then run:
+
+  ```bash
+  agy mcp add --env NEBULA_URL=http://127.0.0.1:8000 \
+    --env NEBULA_APP_TOKEN_FILE=/Users/you/.nebula/app-tokens/<app id>.token \
+    nebula -- <repo>/backend/.venv/bin/python <repo>/backend/mcp_server.py
+  ```
+
+  Every flag goes before the name (agy rejects one after it), and `--` keeps
+  agy from reading the command's arguments as its own. It writes your
+  user-level `~/.gemini/config/mcp_config.json`. For one project only, put the
+  Other MCP client snippet, unchanged, in `<project>/.agents/mcp_config.json`
+  instead: agy loads `.agents/` from the folder it runs in, once you've trusted
+  that folder. `agy mcp list` shows only the user-level servers.
+
+  agy asks before each Nebula tool call. A headless run (`agy -p`) can't ask,
+  so it denies the call and prints the rule it needs. To allow them, add
+  `"mcp(nebula/*)"` to `permissions.allow` in
+  `~/.gemini/antigravity-cli/settings.json`; that allows every Nebula tool,
+  including the ones that run nodes, which still spend only inside the app's
+  daily limit.
+
+  To read a board, ask in plain words: "Use the nebula tools: call
+  look_at_canvas, then view_output on the image node, and tell me what it
+  shows", or for a moodboard, "call moodboard_list, then moodboard_get on my
+  board 'Autumn campaign' and summarise its brief". agy passes the images
+  `view_output` returns to its model: on 2026-10-20 agy 1.4.3 with
+  `gemini-3.8-flash-low`, set up from a project's `.agents/mcp_config.json`,
+  read three random capital letters from an image node that way (the
+  per-client image check the moodboard plan's PR10c asks for).
 - **Other MCP clients**: the usual `{"mcpServers": {"nebula": {command, args,
   env}}}` block.
 
@@ -1164,6 +1405,59 @@ undo}`, or `{status: "stopped", failedStep, steps, error, applied, idMap,
 undo}` when a step is refused, and refuses a plan whose refs don't add up
 before anything is sent.
 
+#### Universal nodes: ports from the model
+
+The OpenRouter, Nous Portal and Replicate nodes have no fixed ports: a
+vision model takes `images`, an image model outputs `image`, a Replicate
+model's file inputs are its ports. One backend module has the rules
+(`services/universal_ports.py`), and every path uses it:
+
+- An edit (`edit_canvas`, `nebula apply`, a proposal when the person
+  accepts it, and `nebula create` / `set` with an agent name) that creates
+  one of these nodes with a model, or sets its `model` (`model_id` on
+  Replicate), configures it as the canvas's model picker does. Nebula reads
+  the model's catalog row or schema through `/api/openrouter/models`,
+  `/api/nous/models` or `/api/replicate/schema/{owner}/{name}` (cached 5
+  minutes, a Replicate schema an hour; reading costs nothing) and writes the
+  node's canvas-owned params: `_output_image`, or `_version_id`,
+  `_schema_fetched` and the schema's defaults, plus `_model_ports` (the ports,
+  stamped with the model). The agent's own values in the same edit win over
+  the schema's defaults; setting the model a node already has keeps its
+  current values. Agents still can't send `_` params themselves.
+- The reply has `modelPorts` ({node id: {model, inputs, outputs}}) for each
+  node it configured. When the model's data can't be read (the key isn't
+  set, the model doesn't exist, the provider is down) the node keeps its
+  definition's ports (OpenRouter: `messages` in, `text` out; Nous Portal adds
+  `images`; Replicate none), the reply says why in `modelPortNotes`, and a
+  wire to any other port of it is refused with that reason, for example
+  "Nebula can't read OpenRouter's model list because OPENROUTER_API_KEY isn't
+  set, and only the person can add it (Settings in Nebula)".
+- A model change that leaves wires on ports the node no longer has is
+  refused and names them; `unwire` them in the same edit. That covers a new
+  model without those ports, and clearing the model or naming one Nebula
+  can't read, which leaves the definition's ports. (The person's picker drops
+  them instead, as it always did.)
+- Replicate: a port per file input (`x-uploadable`, or a `uri` string),
+  named as the schema names it, and one output: `image` for a file URL or a
+  list of them, else `text` (as a run names it). Other inputs are params of
+  the same name; a wire to one is refused ("... are params of the same name:
+  set them with params instead of a wire").
+- `describe_node` on these nodes has `modelPorts`, a sentence with the rules;
+  `look_at_canvas` lists a configured node's `ports` ({inputs, outputs}).
+- `POST /api/universal/ports {definitionId, model, params?}` returns a
+  model's ports without a node (and, for Replicate, its params and version).
+- The canvas export, the wire checks (`port_contracts.node_ports`) and the
+  run check read `_model_ports`, so the canvas draws the ports and wires an
+  agent made without a reload. A node saved before 2026-10-20 has no
+  `_model_ports` and keeps exactly the ports it had (its definition's) until
+  its model is set again.
+
+The canvas's pickers call `POST /api/graph/node/{id}/model {model}`, which
+configures the node with the same function, drops wires the model has no
+port for, and returns the params, ports, Inspector controls
+(`dynamicParams`, Replicate) and `providerMeta`. It is the canvas's (403 for
+an agent).
+
 #### Undoing your own edit
 
 Every apply that changes something replies with `undo: {token, editId,
@@ -1335,6 +1629,35 @@ constants it describes. Its import walk fails closed: relative imports are
 resolved, and dynamic imports or spawned processes count as network unless the
 module is listed with a reason. `frontend/tests/lib/nodeKeys.test.ts` keeps the
 canvas's TS copy of `providerVia` equal to the JSON one.
+
+### Universal nodes over MCP
+
+`model_catalog` and `model_schema` (above) say which models the OpenRouter,
+Nous Portal, Quiver and Replicate nodes can run. What `edit_canvas` can build
+with them today (checked 2026-10-20 against `/api/graph/apply`):
+
+- **Replicate** (`replicate-universal`) declares no ports, so the backend
+  accepts a wire to any input name. Set `model_id` to the owner/name, wire
+  each `port: true` input into the port of that name, and set the other
+  inputs as params; the run sends both to Replicate under those names
+  (`handlers/replicate_universal.py`). `_version_id` is the canvas's own:
+  without it the run asks Replicate for the latest version. It declares no
+  output ports either: a run names its output by what Replicate returns
+  (`image` for an image or other file URL or a list of URLs, `video` or
+  `audio` by file extension, `svg`/`mesh` for those data URIs, `text`
+  otherwise), so `model_schema`'s `output.port` says which handle to wire
+  onward from.
+- **OpenRouter** and **Nous Portal** keep the ports their definitions declare
+  (OpenRouter `messages` to `text`; Nous `messages` and `images` to `text`).
+  The vision input `images` on OpenRouter and the `image` output of an image
+  model are added only by the canvas's model picker
+  (`graphStore.configureOpenRouterModel`), with the internal `_output_image`
+  param, so `edit_canvas` refuses those wires and that param.
+- On the canvas, a model's ports come from the Inspector
+  (`configureOpenRouterModel`, `fetchReplicateSchemaAndConfigure`), which
+  keeps them in the browser only; the backend sends a universal node with its
+  definition's ports (`main.py` `_cli_node_to_rf`). Moving that into the
+  backend is open work (docs/notes/2026-10-20-feat-mcp-cancel-scope-catalogs-krea.md).
 
 ### In-app agents use this server
 
@@ -1598,6 +1921,20 @@ nebula moodboard delete <board>
   Studio shows the change live, keeps the person's unsaved edits, and names
   you when you both changed one field (contract 07, section 2.1). No MCP
   tool edits a Character's fields.
+- Images on a Character (`referenceViews`) or a Style (`refImages`,
+  `thumbnail`; `POST`/`PUT /api/presets`) must be Nebula's own files: an
+  output or an upload as `/api/outputs/<path>` (upload a file with
+  `POST /api/uploads` and use the `url` it returns; the file's path inside
+  the output folder works too) or a shipped Style thumbnail
+  `/api/presets/thumbnails/<name>`. An `http(s)` link to another site, a
+  `data:` URI or a file outside the output folder is refused with a 422 that
+  names the field, and nothing is saved: the app would otherwise fetch that
+  site whenever it shows the image. To use an image from the web, download it
+  and upload it first (moodboard_create and moodboard_add do that for a
+  board). Links a Character or Style already holds are kept, but the app
+  shows a placeholder for them, and a run of a Character node leaves such a
+  view out and says so in the run's notes (it stops when every view is one)
+  (contract 07, section 2.2).
 - A board is named by its id or exact name; an image by its number or id
   from `show`. `--json` prints the board as JSON (the MCP tools return the
   same shape).

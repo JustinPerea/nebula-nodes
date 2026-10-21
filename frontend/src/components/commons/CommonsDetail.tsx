@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
 import { commonsApi } from '../../lib/commonsApi';
+import { wsClient } from '../../lib/wsClient';
+import { ProposalsFor } from '../proposals/ProposalsFor';
 import { CommonsMedia } from './CommonsMedia';
 import {
   AXES, AXIS_LABELS, ENUMS, ROLES, TEXT_FIELDS,
@@ -177,6 +179,23 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
     return () => { cancelled = true; };
   }, [assetId]);
 
+  // An agent's proposal for this reference was accepted (here or in another
+  // tab): the reading changed under the open detail, so read it again.
+  useEffect(() => wsClient.subscribe((event) => {
+    if (event.type === 'assetProposalClosed' && event.kind === 'commons' && event.targetId === assetId
+      && event.status === 'accepted') {
+      void load().then(onChanged);
+    }
+  }), [assetId, load, onChanged]);
+
+  // The strip names a region by its label and a membership by its collection.
+  const proposalNames = useMemo(() => {
+    const names: Record<string, string> = {};
+    for (const region of detail?.regions ?? []) names[region.id] = region.label;
+    for (const membership of detail?.memberships ?? []) names[membership.id] = membership.collection_name;
+    return names;
+  }, [detail]);
+
   const run = useCallback(async (work: () => Promise<unknown>) => {
     try {
       await work();
@@ -281,6 +300,8 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
       </div>
 
       {error && <p className="commons-notice commons-notice--error" role="alert">{error}</p>}
+
+      <ProposalsFor kind="commons" targetId={assetId} names={proposalNames} />
 
       {asset.analysis_state === 'analysis_failed' && (
         <div className="commons-notice commons-notice--error">

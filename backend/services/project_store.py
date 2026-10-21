@@ -66,6 +66,10 @@ def metadata(project: dict[str, Any]) -> dict[str, Any]:
     found["cover"] = copy.deepcopy(project.get("cover"))
     if project.get("createdBy"):
         found["createdBy"] = copy.deepcopy(project["createdBy"])
+    # Who pinned the cover ({kind, name}); a pin from before it was recorded
+    # has none and is the person's (main._cover_owner).
+    if project.get("coverPin") and isinstance(project.get("coverBy"), dict):
+        found["coverBy"] = copy.deepcopy(project["coverBy"])
     return found
 
 

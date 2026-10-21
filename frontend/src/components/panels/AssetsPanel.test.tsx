@@ -36,6 +36,7 @@ beforeEach(() => {
   trash.fetchTrash.mockResolvedValue([]);
   trash.restoreTrashed.mockResolvedValue(undefined);
   api.fetchMoodboards.mockReset().mockResolvedValue([board]);
+  presets.fetchPresets.mockReset().mockResolvedValue([]);
   api.fetchCharacters.mockReset().mockResolvedValue([character]);
   api.moveStoredAsset.mockReset().mockImplementation(async (_kind: string, _id: string, to: string | null) =>
     ({ status: 'moved', from: null, to, fromName: 'Global', toName: to ? 'Shoot A' : 'Global', detail: '', asset: {} }));
@@ -205,6 +206,31 @@ describe.each([
     fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Global' }));
     expect(await screen.findByText('Move failed: No project has the id')).toBeTruthy();
     expect(api.moveStoredAsset).toHaveBeenCalledWith(kind, id, null);
+  });
+});
+
+// A Character or Style saved before Nebula checked its images can hold an
+// outside link: the row keeps it listed but never loads that picture.
+describe('Assets panel images from outside Nebula', () => {
+  it('a Character row shows its placeholder and says why', async () => {
+    api.fetchCharacters.mockResolvedValue([{ ...character, thumbnail: 'https://images.example.com/face.png' }]);
+    const view = renderPanel();
+    fireEvent.click(screen.getByRole('tab', { name: 'Characters' }));
+    expect(await screen.findByText('Image link from outside Nebula')).toBeTruthy();
+    expect(view.container.querySelector('img[src^="https://"]')).toBeNull();
+    expect(screen.getByRole('button', { name: /^Nari/ })).toBeTruthy();
+  });
+
+  it('a Style row shows its placeholder and says why', async () => {
+    presets.fetchPresets.mockImplementation(async (scope: string) => scope === 'global' ? [{
+      id: 's1', name: 'Old noir', category: 'My Styles', prompt: '', params: {}, modelId: 'nano-banana',
+      refImages: [], thumbnail: 'https://images.example.com/noir.png', version: 1, scope: 'global', projectId: null,
+      createdAt: '', updatedAt: '' }] : []);
+    const view = renderPanel();
+    fireEvent.click(screen.getByRole('tab', { name: 'Styles' }));
+    expect(await screen.findByText('Old noir')).toBeTruthy();
+    expect(screen.getByText('Image link from outside Nebula')).toBeTruthy();
+    expect(view.container.querySelector('img[src^="https://"]')).toBeNull();
   });
 });
 

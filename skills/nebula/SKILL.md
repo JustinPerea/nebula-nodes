@@ -114,6 +114,28 @@ Lay out branches as a grid: columns are stages (sources, prompts, models,
 outputs) about 400 px apart, rows are branches about 250 px apart. Use
 `--at +ref=x,y` when adding.
 
+### OpenRouter, Nous Portal and Replicate: ports come from the model
+
+These three nodes take their ports from their model. Set the model in the
+same `nebula apply` (`--param +eye.model=openai/gpt-4o`, or `model_id=owner/name`
+on Replicate) and Nebula reads the model's data (free, with the person's key)
+and gives the node its ports; the output prints `Ports of n5 (model): in ...;
+out ...`.
+
+- OpenRouter / Nous Portal: `messages` always; `images` (Image, several
+  wires) for a model that takes images; `text` and/or `image` out for what it
+  makes. An image model's `image` wires onward like any Image output.
+- Replicate: one port per file input, named as the model names it
+  (`input_image`, `image`, `audio`), and one output, `image` for a file or a
+  list of them, else `text`. The model's other inputs are params of the same
+  name: set them with `--param`, don't wire them.
+
+Changing the model of a node with wires on ports the new model lacks (or
+clearing it, or naming one Nebula can't read, which leaves the basic ports)
+is refused: `--unwire` them in the same apply. Without the provider's key the
+node keeps its basic ports, and a wire to any other port is refused with the
+reason (only the person can add a key).
+
 ## Run
 
 ```bash
@@ -127,6 +149,10 @@ nebula status
 
 Runs spend the person's own provider credits. A run over their limits, or
 with a node that has no list price, is refused: send it as a proposal.
+
+`nebula cancel` stops runs an agent or the CLI started. A run the person
+started from the canvas is theirs to stop: the CLI refuses it, so tell them
+to press Stop in Nebula.
 
 A run where any node failed exits 1 and prints each node's error (a missing
 key refuses the whole run before anything is called or spent). The card on
@@ -159,6 +185,16 @@ them).
 
 `nebula proposals` lists open ones; `nebula proposal withdraw <id>` takes one
 back.
+
+Curating the Commons (when it is on) is the person's too: correcting a
+reference's reading, its regions, or its role, why or inbox place in a
+collection. Ask with `nebula commons propose <id> --edit '{"correction":
+{"field_path": "summary", "value": "..."}}' --note "..."` (repeat `--edit`,
+up to 8; `--brand` for the brand you work on); the person decides in the
+Commons and `nebula proposal <proposal id> --wait` follows it.
+`nebula commons collections`, `status`, `borrowings`, `fidelity <id>` and
+`concentration` read the rest. Blind labeling and the agent review stay the
+person's alone.
 
 ## Moodboards
 
@@ -329,7 +365,11 @@ nebula moodboard delete <board>
   and you: generators don't get them unless the person turns on "Send these
   notes to generators" (`sendNotes`, `brief.notesSent`). `--no-send-notes`
   turns it off; `--send-notes` is the person's call and refused for an
-  agent. A Moodboard node's `send_notes` param (`board`, `yes`, `no`) can
+  agent: ask with `POST /api/asset-proposals` (`{"kind": "moodboard", "id":
+  "<board id>", "change": {"sendNotes": true}, "note": "..."}`, or
+  `propose_asset_change` over MCP), which the person decides in Moodboard
+  Studio; `nebula proposal <id> --wait --timeout 60` follows it. A Moodboard
+  node's `send_notes` param (`board`, `yes`, `no`) can
   override it per node; moving it toward sending is also the person's, so
   propose it. That includes pointing a node on `yes` at another board: set
   `send_notes` to `board` or `no` in the same edit, or propose it.
@@ -373,6 +413,13 @@ nebula moodboard delete <board>
   so you never write over the person's edit; a 409 `version_conflict`
   carries the Character as it is now. The person's unsaved edits stay, and
   if you both changed one field the Studio tells them, naming you.
+- A Character's `referenceViews` and a Style's `refImages` and `thumbnail`
+  take only Nebula's own files: `/api/outputs/...` (upload a file with
+  `POST /api/uploads` and use its `url`) or a shipped Style thumbnail
+  `/api/presets/thumbnails/<name>`. A web link, a `data:` URI or a file
+  outside Nebula's output folder is refused (422, nothing saved); download
+  and upload the image first. A Character saved earlier with a web link
+  keeps it, but a run leaves that view out and its notes say so.
 - `set --json` returns `previous`: what your change changed, as it was
   before (only those settings, Direction, Avoid, pinned colours, your own
   hand-written brief, and only the image settings you changed), so undoing

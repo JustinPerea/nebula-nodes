@@ -10,6 +10,8 @@ interface Props {
   emptyHint: string;
   onOpen: (row: SearchRow) => void;
   onDropFiles: (files: File[]) => void;
+  /** References an agent proposes to change (open asset proposals of kind commons). */
+  proposed?: ReadonlySet<string>;
 }
 
 function columnCount(grid: HTMLElement | null): number {
@@ -18,7 +20,7 @@ function columnCount(grid: HTMLElement | null): number {
   return Math.max(1, template.split(' ').filter(Boolean).length);
 }
 
-export function CommonsGrid({ rows, selectedId, loading, emptyHint, onOpen, onDropFiles }: Props) {
+export function CommonsGrid({ rows, selectedId, loading, emptyHint, onOpen, onDropFiles, proposed }: Props) {
   const gridRef = useRef<HTMLDivElement | null>(null);
   const [focusIndex, setFocusIndex] = useState(0);
   const [dragging, setDragging] = useState(false);
@@ -92,6 +94,9 @@ export function CommonsGrid({ rows, selectedId, loading, emptyHint, onOpen, onDr
                 )}
                 {row.role !== 'neutral' && <span className={`commons-badge commons-badge--role-${row.role}`}>{row.role}</span>}
                 {row.in_inbox && <span className="commons-badge commons-badge--inbox">inbox</span>}
+                {proposed?.has(row.id) && (
+                  <span className="commons-badge commons-badge--proposal" aria-label="An agent proposes changes">proposal</span>
+                )}
                 {row.media === 'video' && <span className="commons-badge">video</span>}
                 {row.comment_count > 0 && (
                   <span className="commons-badge commons-badge--count" aria-label={`${row.comment_count} comments`}>

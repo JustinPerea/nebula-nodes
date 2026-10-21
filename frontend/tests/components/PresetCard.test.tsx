@@ -52,6 +52,14 @@ describe('PresetCard', () => {
     expect(container.querySelector('img.preset-card__thumb')).toBeNull();
   });
 
+  it('never loads a thumbnail from outside Nebula: gradient and a short note instead', () => {
+    const preset = makePreset({ thumbnail: 'https://images.example.com/noir.png' });
+    const { container, getByText } = render(<PresetCard preset={preset} onApply={() => {}} />);
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.querySelector('.preset-card__gradient')).not.toBeNull();
+    expect(getByText('Image link from outside Nebula')).toBeTruthy();
+  });
+
   it('calls onApply with the preset when clicked', () => {
     const preset = makePreset();
     let applied: Preset | null = null;

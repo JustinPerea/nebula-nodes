@@ -14,4 +14,4 @@ This is a local CLI integration. Subscription availability remains governed by e
 
 ## Personal agents
 
-The chat picker can also list **your own** agents: Claude Code, Codex or Gemini with your full setup (hooks, MCP servers, memory), or any Agent Client Protocol agent you add. Switch them on in Settings > Preferences > Personal agents. They pick their own model, so the model and effort controls are hidden for them, and they aren't sandboxed. Nebula shows a one-time notice before the first one starts. See [PERSONAL-AGENTS.md](PERSONAL-AGENTS.md).
+The chat picker can also list **your own** agents: Claude Code, Codex, Gemini CLI or Antigravity with your full setup (hooks, MCP servers, memory), or any Agent Client Protocol agent you add. Switch them on in Settings > Preferences > Personal agents. They pick their own model, so Nebula's model and effort controls are hidden for them (an agent that offers its own models shows them under its name once the session starts), and they aren't sandboxed. Nebula shows a one-time notice before the first one starts. See [PERSONAL-AGENTS.md](PERSONAL-AGENTS.md).
