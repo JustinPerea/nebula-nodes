@@ -40,7 +40,7 @@ vi.mock('../src/lib/agentNotes', async (importOriginal) => ({
   ...api,
 }));
 
-const { CanvasAgentNotes } = await import('../src/components/agent-notes/AgentNotesCorner');
+const { AppAgentNotes } = await import('../src/components/agent-notes/AgentNotesCorner');
 const { useAgentNotesStore } = await import('../src/store/agentNotesStore');
 const { useUIStore } = await import('../src/store/uiStore');
 const { useProjectStore } = await import('../src/store/projectStore');
@@ -87,7 +87,9 @@ function chip() {
 
 beforeEach(() => {
   useAgentNotesStore.getState().reset();
-  useUIStore.setState({ agentLogEnabled: true, agentLogOpen: false });
+  // On the canvas (tests/AgentNotesEveryScreen.test.tsx covers the other screens).
+  useProjectStore.setState({ screen: 'workspace' });
+  useUIStore.setState({ agentLogEnabled: true, agentLogOpen: false, viewMode: 'canvas' });
   api.fetchAgentNotes.mockReset().mockResolvedValue({ projectId: 'p1', notes: [], unread: 0, keptWith: 'project' });
   api.markAgentNotesRead.mockReset().mockImplementation(async () => ({ ids: [], unread: 0, projectId: 'p1' }));
   api.dismissAgentNote.mockReset().mockImplementation(async () => ({ unread: 0, projectId: 'p1' }));
@@ -105,7 +107,7 @@ afterEach(() => {
 
 describe('the Updates chip', () => {
   it('is always there, with both author dots and a muted 0', () => {
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([]);
     const button = chip();
     expect(button.textContent).toContain('Updates');
@@ -116,7 +118,7 @@ describe('the Updates chip', () => {
   });
 
   it('counts unread updates in the newest author\'s colour', () => {
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([note('an_2', { author: CODEX }), note('an_1', { readAt: '2026-10-20T12:00:00.000Z' })]);
     const count = chip().querySelector<HTMLElement>('.agent-notes-chip__count')!;
     expect(count.textContent).toBe('1');
@@ -128,7 +130,7 @@ describe('the Updates chip', () => {
 
 describe('the list (GM\'s still)', () => {
   it('opens from the chip, marks every update read and shows the header GM drew', async () => {
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     const newest = note('an_3');
     sync([newest, note('an_2'), note('an_1', { readAt: '2026-10-20T12:00:00.000Z' })]);
     fireEvent.click(chip());
@@ -149,7 +151,7 @@ describe('the list (GM\'s still)', () => {
   });
 
   it('greys a dismissed update and keeps it in the list', () => {
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([note('an_2', { dismissedAt: '2026-10-20T12:30:00.000Z' }), note('an_1')]);
     fireEvent.click(chip());
     const entries = within(screen.getByRole('dialog', { name: 'Updates' })).getAllByRole('listitem');
@@ -158,7 +160,7 @@ describe('the list (GM\'s still)', () => {
   });
 
   it('ends with "See all actions →", which opens the Agent log', () => {
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([note('an_1')]);
     fireEvent.click(chip());
     fireEvent.click(screen.getByRole('button', { name: 'See all actions →' }));
@@ -169,14 +171,14 @@ describe('the list (GM\'s still)', () => {
 
   it('has no "See all actions →" while the Agent log is switched off', () => {
     useUIStore.setState({ agentLogEnabled: false });
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([note('an_1')]);
     fireEvent.click(chip());
     expect(screen.queryByRole('button', { name: 'See all actions →' })).toBeNull();
   });
 
   it('says what Not now does only while an entry offers it', () => {
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([note('an_1')]);
     fireEvent.click(chip());
     expect(screen.queryByText('Not now hides a suggestion for good')).toBeNull();
@@ -193,7 +195,7 @@ describe('the list (GM\'s still)', () => {
   });
 
   it('closes on Escape and gives focus back to the chip', () => {
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([note('an_1')]);
     chip().focus();
     fireEvent.click(chip());
@@ -205,7 +207,7 @@ describe('the list (GM\'s still)', () => {
   });
 
   it('closes on a click outside', () => {
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([note('an_1')]);
     fireEvent.click(chip());
     fireEvent.pointerDown(document.body);
@@ -213,7 +215,7 @@ describe('the list (GM\'s still)', () => {
   });
 
   it('takes a new update on top while open, marks it read and drops no card', () => {
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([note('an_1')]);
     fireEvent.click(chip());
     api.markAgentNotesRead.mockClear();
@@ -230,7 +232,7 @@ describe('the list (GM\'s still)', () => {
   });
 
   it('Show brings the nodes an update names into view on a spring and outlines them', async () => {
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([note('an_1')]);
     fireEvent.click(chip());
     fireEvent.click(screen.getByRole('button', { name: 'Show on canvas' }));
@@ -243,7 +245,7 @@ describe('the list (GM\'s still)', () => {
   });
 
   it('a click on a row does what Show does', () => {
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([note('an_1')]);
     fireEvent.click(chip());
     const entry = within(screen.getByRole('dialog', { name: 'Updates' })).getAllByRole('listitem')[0];
@@ -252,7 +254,7 @@ describe('the list (GM\'s still)', () => {
   });
 
   it('hovering a row outlines its refs at once', () => {
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([note('an_1')]);
     fireEvent.click(chip());
     const entry = within(screen.getByRole('dialog', { name: 'Updates' })).getAllByRole('listitem')[0];
@@ -265,7 +267,7 @@ describe('the list (GM\'s still)', () => {
 describe('the card', () => {
   it('drops for a new update, outlines what it names and leaves by itself without marking it read', () => {
     vi.useFakeTimers();
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([]);
     added(note('an_1', { text: 'The upscaler reads the wrong image', parts: [{ text: 'The upscaler reads the wrong image' }] }), 1);
     tick(600);
@@ -282,7 +284,7 @@ describe('the card', () => {
 
   it('holds while hovered', () => {
     vi.useFakeTimers();
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([]);
     added(note('an_1'), 1);
     tick(600);
@@ -293,7 +295,7 @@ describe('the card', () => {
 
   it('× dismisses the update; it stays in the list', () => {
     vi.useFakeTimers();
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([]);
     added(note('an_1'), 1);
     tick(600);
@@ -303,7 +305,7 @@ describe('the card', () => {
 
   it('clicking the card marks it read', () => {
     vi.useFakeTimers();
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([]);
     added(note('an_1'), 1);
     tick(600);
@@ -314,7 +316,7 @@ describe('the card', () => {
 
   it('drops arrivals one after another', () => {
     vi.useFakeTimers();
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([]);
     added(note('an_1'), 1);
     added(note('an_2'), 2);
@@ -327,7 +329,7 @@ describe('the card', () => {
 
   it('turns four or more at once into one card that opens the list', () => {
     vi.useFakeTimers();
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([]);
     // An agent's burst: separate posts a few hundred ms apart still count as at once.
     for (let i = 1; i <= 4; i += 1) {
@@ -342,7 +344,7 @@ describe('the card', () => {
 
   it('folds a slower burst into one card: the card up becomes "4 new updates"', () => {
     vi.useFakeTimers();
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([]);
     // An MCP agent's posts land 1 to 3 s apart, too slow for the gather window.
     added(note('an_1'), 1);
@@ -359,7 +361,7 @@ describe('the card', () => {
 
   it('never swaps the card under the pointer', () => {
     vi.useFakeTimers();
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([]);
     added(note('an_1'), 1);
     tick(600);
@@ -372,7 +374,7 @@ describe('the card', () => {
   it('drops nothing in a hidden tab, though the count still rises', () => {
     vi.useFakeTimers();
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([]);
     added(note('an_1'), 1);
     tick(500);
@@ -383,7 +385,7 @@ describe('the card', () => {
 
 describe('the corner on the canvas', () => {
   it('reserves the top-right corner so the docked chat starts below the chip', () => {
-    const { unmount } = render(<CanvasAgentNotes />);
+    const { unmount } = render(<AppAgentNotes />);
     expect(document.body.classList.contains('agent-notes-reserved')).toBe(true);
     unmount();
     expect(document.body.classList.contains('agent-notes-reserved')).toBe(false);
@@ -417,7 +419,7 @@ describe('an asset proposal\'s Update (Q92 a)', () => {
   });
 
   it('says it waits for the person and Review opens the Projects screen at that card', async () => {
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([ask('project', 'dusk')]);
     const entry = openEntry();
     expect(entry.textContent).toContain('waiting for your OK');
@@ -432,7 +434,7 @@ describe('an asset proposal\'s Update (Q92 a)', () => {
   it('Review on a board\'s ask opens Moodboard Studio on that board', async () => {
     const enter = vi.fn();
     useUIStore.setState({ enterMoodboardEditor: enter });
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([ask('moodboard', 'mb1')]);
     reviewIn(openEntry());
     await vi.waitFor(() => expect(enter).toHaveBeenCalledWith('mb1'));
@@ -442,7 +444,7 @@ describe('an asset proposal\'s Update (Q92 a)', () => {
   it('Review on a Commons ask opens the Commons on that reference, or says it is off', async () => {
     const enterCommons = vi.fn();
     useUIStore.setState({ enterCommons, commonsEnabled: true });
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([ask('commons', 'ast_1')]);
     reviewIn(openEntry());
     await vi.waitFor(() => expect(enterCommons).toHaveBeenCalledTimes(1));
@@ -451,7 +453,7 @@ describe('an asset proposal\'s Update (Q92 a)', () => {
     cleanup();
     useAssetProposalsStore.getState().clear();
     useUIStore.setState({ commonsEnabled: false });
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([ask('commons', 'ast_1')]);
     reviewIn(openEntry());
     await vi.waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Commons'));
@@ -459,7 +461,7 @@ describe('an asset proposal\'s Update (Q92 a)', () => {
   });
 
   it('once the proposal closed, says how in place of Review, greyed', () => {
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     sync([ask('project', 'dusk', { readAt: '2026-10-20T12:30:00.000Z', resolvedAt: '2026-10-20T12:30:00.000Z',
       outcome: 'Accepted: the cover changed' })]);
     const entry = openEntry();
@@ -470,7 +472,7 @@ describe('an asset proposal\'s Update (Q92 a)', () => {
   });
 
   it('a resolved message from the socket replaces the open one', () => {
-    render(<CanvasAgentNotes />);
+    render(<AppAgentNotes />);
     const open = ask('project', 'dusk');
     sync([open]);
     emit({ type: 'agentNotes', surface: 'canvas', op: 'resolved', projectId: 'p1', ids: [open.id], unread: 0, at: 3,

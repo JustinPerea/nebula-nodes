@@ -245,7 +245,8 @@ def test_an_update_whose_proposal_is_gone_after_a_restart_resolves(api, monkeypa
     monkeypatch.setattr(api.main, "asset_proposals", asset_proposals.AssetProposalBook(api.clock))
     listed = api.client.get("/api/canvas/agent-notes", headers=CLAUDE).json()["notes"]
     (note,) = [n for n in listed if n["about"] == "proposal"]
-    assert note["outcome"] == "Expired" and note["resolvedBy"] == {"kind": "system"}
+    # Q108 a: it says what happened (tests/test_proposal_restart_outcome.py).
+    assert note["outcome"] == "Closed: Nebula restarted" and note["resolvedBy"] == {"kind": "system"}
 
 
 def test_an_open_proposals_update_is_left_alone_by_list_notes(api):

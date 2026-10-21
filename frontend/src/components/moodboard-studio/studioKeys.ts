@@ -15,7 +15,10 @@ export function isStudioShortcutTarget(target: EventTarget | null, action?: Stud
   const owns = action === 'undo' || action === 'redo' ? '[role="dialog"], [aria-modal="true"]'
     : 'input, textarea, select, [role="dialog"], [aria-modal="true"]';
   if (target.closest(owns)) return false;
-  return target.closest('.moodboard-studio-view') !== null;
+  // The Updates chip and its card sit outside the Studio's tree (App mounts
+  // them on every screen, Q107 a) but take no keys but Escape: focus there
+  // leaves Cmd+Z the Studio's. Their open list is a dialog (above).
+  return target.closest('.moodboard-studio-view, .agent-notes-chip, .agent-note-card') !== null;
 }
 
 // Inputs that take typing, so the browser keeps an undo for them.

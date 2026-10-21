@@ -1456,6 +1456,8 @@ Every one of these ends in `MoodboardStore.update` or the `/edits` commit. PR7e 
 
 Justin (relayed by GM - Design, 2026-10-20): "it should have a dedicated area on the canvas so it's out of the way and we are not seeing text at it's cursor everytime it notices something. Like maybe little area in the top right." His follow-ups: an agent's own actions stay at the cursor; updates persist; Argon's results go into updates; the main canvas uses the same component. Count = unread was GM's recommendation; Justin confirmed it (Q31 a, 2026-10-20).
 
+**Every screen (Justin's Q107 a, 2026-10-21):** "Show it on every screen, with the open project's Updates." The corner now shows on Projects, the studios and the Commons too, always with the open project's list (no corner while no project is open). Off the canvas each screen's header keeps the chip's room at its top right, and Review and "Show on canvas" go to their screen from wherever the person is. Notes: `docs/notes/2026-10-21-feat-updates-corner-every-screen.md`.
+
 Version 2.5 (Justin, relayed by GM - Design, 2026-10-20):
 
 - The chip and the list are called **"Updates"**. "Notes" clashed with image notes, the brief's NOTES row and pins (§3.5). Image notes, private notes, board notes and the NOTES row keep their names. One item in the list is "an update".

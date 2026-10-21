@@ -47,6 +47,10 @@
   /* The Updates chip in the canvas's top right, level with the header pill. */
   --agent-notes-chip-top: 24px;
   --agent-notes-chip-h: 40px;
+  /* Off the canvas each screen's header keeps a slot this size for the chip
+   * (Q107 a); the corner writes the chip's measured width here. */
+  --agent-notes-chip-w: 112px;
+  --agent-notes-slot-h: 32px;
   --chat-launcher-size: 42px;
   /* A short, slightly underdamped spring, the undo notice's. */
   --agent-log-spring: linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1);
@@ -186,6 +190,53 @@ body:not(.app-slava-restraint) .panel-launcher--active {
  * of it (components/agent-notes). */
 body.agent-notes-reserved .chat-panel {
   --chat-dock-top: calc(var(--agent-notes-chip-top) + var(--agent-notes-chip-h) + var(--stack-gap-sm));
+}
+
+/* The Updates chip on every other screen (Q107 a): the header of Projects,
+ * the studios and the Commons keeps a slot for it (beside Settings on
+ * Projects; pinned in the header's right padding elsewhere, see
+ * workspace-header.css), so it never sits over that screen's own controls.
+ * The slot takes room only while the chip shows (no project open: none). The
+ * chip centres on it and its card and list drop below the header
+ * (components/agent-notes). */
+.agent-notes-slot {
+  display: none;
+}
+
+body.agent-notes-shown .agent-notes-slot {
+  display: block;
+  flex: 0 0 var(--agent-notes-chip-w);
+  width: var(--agent-notes-chip-w);
+  height: var(--agent-notes-slot-h);
+  pointer-events: none;
+}
+
+/* The full-screen studios and the Commons sit on the workspace layer (50),
+ * above the canvas's 46: off the canvas the corner joins the workspace
+ * overlays (chat, Settings), still below modals. */
+body.agent-notes-shown:not(.agent-notes-reserved) .agent-notes-chip,
+body.agent-notes-shown:not(.agent-notes-reserved) .agent-note-card,
+body.agent-notes-shown:not(.agent-notes-reserved) .agent-notes-panel {
+  z-index: var(--sr-layer-workspace-overlay, 55);
+}
+
+/* A chat left open on the canvas stays up in the studios and the Commons
+ * (.workspace-overlays--studio). Docked, it starts below the line the corner
+ * drops its card and list from (the header's foot, written by the corner),
+ * so the chip in its header slot never sits over the chat's own controls.
+ * A chat dragged free keeps its own top; the card and the list move left of
+ * it (components/agent-notes). Until the corner has placed itself, the
+ * canvas's chip line stands in. */
+body.agent-notes-shown:not(.agent-notes-reserved) .workspace-overlays--studio .chat-panel {
+  --chat-dock-top: var(--agent-notes-drop-top, calc(var(--agent-notes-chip-top) + var(--agent-notes-chip-h) + var(--stack-gap-sm)));
+}
+
+body.agent-notes-shown .project-home__header .agent-notes-slot {
+  margin-left: auto;
+}
+
+body.agent-notes-shown .project-home__header .agent-notes-slot + .project-home__settings {
+  margin-left: 0;
 }
 
 /* While the agent log shows (or its "hidden" notice does), the docked chat

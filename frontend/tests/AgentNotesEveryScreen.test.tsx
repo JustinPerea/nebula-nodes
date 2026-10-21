@@ -1,0 +1,475 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import type { AgentNote } from '../src/lib/agentNotes';
+
+/**
+ * The Updates corner on every screen (Justin's Q107 a, 2026-10-21): "Show it
+ * on every screen, with the open project's Updates." The same list, count,
+ * Review and outcomes as on the canvas; socket updates land live wherever
+ * the person is. Review and Show work from any screen. Hidden with no
+ * project open. On a screen with a header it sits over the header's own
+ * slot (the layout's reserved room), not over that screen's controls, and
+ * it never takes a screen's keys (Cmd+Z in Moodboard Studio, the canvas's).
+ */
+
+const flow = vi.hoisted(() => ({
+  state: {
+    transform: [0, 0, 1] as [number, number, number],
+    width: 1440,
+    height: 900,
+    minZoom: 0.1,
+    nodes: [] as unknown[],
+    userSelectionActive: false,
+    nodeLookup: new Map<string, unknown>(),
+  },
+  setViewport: vi.fn(),
+}));
+const ws = vi.hoisted(() => ({ handlers: [] as Array<(event: unknown) => void> }));
+const api = vi.hoisted(() => ({
+  fetchAgentNotes: vi.fn(),
+  markAgentNotesRead: vi.fn(),
+  dismissAgentNote: vi.fn(),
+}));
+
+vi.mock('@xyflow/react', () => ({
+  useStore: (selector: (state: typeof flow.state) => unknown) => selector(flow.state),
+  useStoreApi: () => ({ getState: () => flow.state, subscribe: () => () => {} }),
+  useReactFlow: () => ({ setViewport: flow.setViewport }),
+  ViewportPortal: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+vi.mock('../src/lib/wsClient', () => ({
+  wsClient: {
+    subscribe: (handler: (event: unknown) => void) => { ws.handlers.push(handler); return () => {}; },
+    subscribeFirst: () => () => {},
+    connect: () => {},
+    send: () => {},
+  },
+}));
+vi.mock('../src/lib/agentNotes', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/lib/agentNotes')>()),
+  ...api,
+}));
+
+const { AppAgentNotes } = await import('../src/components/agent-notes/AgentNotesCorner');
+const { useAgentNotesStore } = await import('../src/store/agentNotesStore');
+const { useUIStore } = await import('../src/store/uiStore');
+const { useProjectStore } = await import('../src/store/projectStore');
+const { useAssetProposalsStore } = await import('../src/store/assetProposalsStore');
+const { isStudioShortcutTarget } = await import('../src/components/moodboard-studio/studioKeys');
+const { isCanvasShortcutTarget } = await import('../src/lib/canvasShortcutScope');
+
+const CLAUDE = { kind: 'agent', id: 'claude', name: 'Claude Code', color: '#E8825A' } as const;
+let clock = Date.parse('2026-10-21T12:14:00.000Z');
+
+function note(id: string, overrides: Partial<AgentNote> = {}): AgentNote {
+  clock += 1000;
+  return {
+    id, author: CLAUDE, source: 'agent', about: 'other', at: new Date(clock).toISOString(),
+    text: `update ${id}`, parts: [{ text: `update ${id}` }], refs: ['n4'], actions: [],
+    readAt: null, dismissedAt: null, actedAt: null, actedWith: null, ...overrides,
+  };
+}
+
+function ask(target: 'project' | 'moodboard' | 'commons', targetId: string, overrides: Partial<AgentNote> = {}) {
+  const text = `Claude Code asks about ${target}`;
+  return note(`an_${target}`, {
+    source: 'nebula', about: 'proposal', text, parts: [{ text }], refs: [],
+    actions: [{ label: 'Review', op: { kind: 'proposal.review', proposalId: 'pa_1', target, targetId } }],
+    ...overrides,
+  });
+}
+
+function emit(event: unknown) {
+  act(() => {
+    for (const handler of ws.handlers) handler(event);
+  });
+}
+
+function sync(notes: AgentNote[], projectId: string | null = 'p1') {
+  emit({ type: 'agentNotes', surface: 'canvas', op: 'sync', projectId, notes,
+    unread: notes.filter((n) => !n.readAt && !n.dismissedAt).length, at: 1 });
+}
+
+function chip() {
+  return screen.getByRole('button', { name: /^Updates/ });
+}
+
+function openEntry(): HTMLElement {
+  fireEvent.click(chip());
+  return within(screen.getByRole('dialog', { name: 'Updates' })).getAllByRole('listitem')[0];
+}
+
+const initialUI = useUIStore.getState();
+const initialProjects = useProjectStore.getState();
+const open = vi.fn(async (id: string) => {
+  void id;
+  useProjectStore.setState({ screen: 'workspace' });
+});
+const goHome = vi.fn(async () => {
+  useProjectStore.setState({ screen: 'home' });
+});
+
+/** Put the person on a screen. */
+function on(where: 'home' | 'canvas' | 'moodboard-editor' | 'commons' | 'create' | 'character-editor') {
+  if (where === 'home') {
+    useProjectStore.setState({ screen: 'home' });
+    useUIStore.setState({ viewMode: 'canvas' });
+  } else {
+    useProjectStore.setState({ screen: 'workspace' });
+    useUIStore.setState({ viewMode: where });
+  }
+}
+
+beforeEach(() => {
+  useAgentNotesStore.getState().reset();
+  useAssetProposalsStore.getState().clear();
+  useUIStore.setState({ ...initialUI, agentLogEnabled: true, commonsEnabled: true }, true);
+  useProjectStore.setState({
+    ...initialProjects, screen: 'workspace', initialized: true, loading: false,
+    activeProject: { id: 'p1', name: 'Harbor' } as never, open, goHome,
+  }, true);
+  open.mockClear();
+  goHome.mockClear();
+  api.fetchAgentNotes.mockReset().mockResolvedValue({ projectId: 'p1', notes: [], unread: 0, keptWith: 'project' });
+  api.markAgentNotesRead.mockReset().mockImplementation(async () => ({ ids: [], unread: 0, projectId: 'p1' }));
+  api.dismissAgentNote.mockReset().mockImplementation(async () => ({ unread: 0, projectId: 'p1' }));
+  flow.setViewport.mockReset();
+  flow.state.nodeLookup = new Map([
+    ['n4', { id: 'n4', measured: { width: 240, height: 160 }, internals: { positionAbsolute: { x: 2000, y: 1500 } } }],
+  ]);
+  Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+});
+
+afterEach(() => {
+  cleanup();
+  document.querySelectorAll('[data-test-fixture]').forEach((el) => el.remove());
+  vi.useRealTimers();
+  useUIStore.setState(initialUI, true);
+  useProjectStore.setState(initialProjects, true);
+});
+
+describe('the corner shows the open project\'s Updates on every screen', () => {
+  it.each(['home', 'canvas', 'moodboard-editor', 'commons', 'create', 'character-editor'] as const)(
+    'on %s: the same list and count, and an update from the socket lands live',
+    async (where) => {
+      on(where);
+      render(<AppAgentNotes />);
+      sync([note('an_1')]);
+      expect(chip().getAttribute('aria-label')).toBe('Updates, 1 unread');
+      emit({ type: 'agentNotes', surface: 'canvas', op: 'added', projectId: 'p1', note: note('an_2'), unread: 2, at: 2, removed: [] });
+      expect(chip().getAttribute('aria-label')).toBe('Updates, 2 unread');
+      // The card drops here too, not only on the canvas.
+      await vi.waitFor(() => expect(document.querySelector('.agent-note-card')).not.toBeNull());
+    },
+  );
+
+  it('loads the open project\'s list when it first mounts off the canvas', async () => {
+    on('home');
+    api.fetchAgentNotes.mockResolvedValue({ projectId: 'p1', notes: [note('an_9')], unread: 1, keptWith: 'project' });
+    render(<AppAgentNotes />);
+    await vi.waitFor(() => expect(chip().getAttribute('aria-label')).toBe('Updates, 1 unread'));
+    expect(api.fetchAgentNotes).toHaveBeenCalledWith({ kind: 'canvas' });
+  });
+
+  it('is hidden on Projects while no project is open, and shows once one is', () => {
+    on('home');
+    useProjectStore.setState({ activeProject: null });
+    api.fetchAgentNotes.mockResolvedValue({ projectId: null, notes: [], unread: 0, keptWith: 'project' });
+    render(<AppAgentNotes />);
+    sync([], null);
+    expect(screen.queryByRole('button', { name: /^Updates/ })).toBeNull();
+    expect(document.body.classList.contains('agent-notes-shown')).toBe(false);
+    sync([note('an_1')], 'p2');
+    expect(chip()).toBeTruthy();
+    expect(document.body.classList.contains('agent-notes-shown')).toBe(true);
+  });
+
+  it('reserves the canvas\'s corner for the docked chat only on the canvas', () => {
+    on('moodboard-editor');
+    render(<AppAgentNotes />);
+    sync([note('an_1')]);
+    expect(document.body.classList.contains('agent-notes-reserved')).toBe(false);
+    act(() => on('canvas'));
+    expect(document.body.classList.contains('agent-notes-reserved')).toBe(true);
+  });
+
+  it('names the open project off the canvas, where "this project" is unclear', () => {
+    on('home');
+    render(<AppAgentNotes />);
+    sync([note('an_1')]);
+    fireEvent.click(chip());
+    expect(within(screen.getByRole('dialog', { name: 'Updates' })).getByText('kept with Harbor')).toBeTruthy();
+  });
+
+  it('shows a restarted ask\'s outcome in place of Review (Q108 a)', () => {
+    on('home');
+    render(<AppAgentNotes />);
+    sync([ask('project', 'dusk', { readAt: '2026-10-21T12:30:00.000Z', resolvedAt: '2026-10-21T12:30:00.000Z',
+      outcome: 'Closed: Nebula restarted' })]);
+    const entry = openEntry();
+    expect(entry.textContent).toContain('Closed: Nebula restarted');
+    expect(within(entry).queryByRole('button', { name: 'Review' })).toBeNull();
+  });
+});
+
+describe('Review from any screen lands where the person decides', () => {
+  it('a cover ask from Moodboard Studio or the Commons opens Projects at that card', async () => {
+    for (const where of ['moodboard-editor', 'commons'] as const) {
+      on(where);
+      render(<AppAgentNotes />);
+      sync([ask('project', 'dusk')]);
+      fireEvent.click(within(openEntry()).getByRole('button', { name: 'Review' }));
+      await vi.waitFor(() => expect(goHome).toHaveBeenCalled());
+      expect(useAssetProposalsStore.getState().review).toMatchObject({ kind: 'project', targetId: 'dusk' });
+      cleanup();
+      goHome.mockClear();
+    }
+  });
+
+  it('a board\'s ask from Projects opens the workspace on Moodboard Studio at that board', async () => {
+    on('home');
+    render(<AppAgentNotes />);
+    sync([ask('moodboard', 'mb1')]);
+    fireEvent.click(within(openEntry()).getByRole('button', { name: 'Review' }));
+    await vi.waitFor(() => expect(open).toHaveBeenCalledWith('p1'));
+    expect(useProjectStore.getState().screen).toBe('workspace');
+    expect(useUIStore.getState().viewMode).toBe('moodboard-editor');
+    expect(useUIStore.getState().moodboardEditorId).toBe('mb1');
+    expect(useAssetProposalsStore.getState().review).toMatchObject({ kind: 'moodboard', targetId: 'mb1' });
+  });
+
+  it('a Commons ask from Projects opens the workspace on the Commons', async () => {
+    on('home');
+    render(<AppAgentNotes />);
+    sync([ask('commons', 'ast_1')]);
+    fireEvent.click(within(openEntry()).getByRole('button', { name: 'Review' }));
+    await vi.waitFor(() => expect(open).toHaveBeenCalledWith('p1'));
+    expect(useProjectStore.getState().screen).toBe('workspace');
+    expect(useUIStore.getState().viewMode).toBe('commons');
+    expect(useAssetProposalsStore.getState().review).toMatchObject({ kind: 'commons', targetId: 'ast_1' });
+  });
+
+  it('closes the list on Review, so the strip it leads to is not under it', async () => {
+    on('commons');
+    render(<AppAgentNotes />);
+    sync([ask('project', 'dusk')]);
+    fireEvent.click(within(openEntry()).getByRole('button', { name: 'Review' }));
+    await vi.waitFor(() => expect(goHome).toHaveBeenCalled());
+    await vi.waitFor(() => expect(screen.queryByRole('dialog', { name: 'Updates' })).toBeNull());
+  });
+
+  it('a board\'s ask from the Commons opens Moodboard Studio on that board', async () => {
+    on('commons');
+    render(<AppAgentNotes />);
+    sync([ask('moodboard', 'mb1')]);
+    fireEvent.click(within(openEntry()).getByRole('button', { name: 'Review' }));
+    await vi.waitFor(() => expect(useUIStore.getState().viewMode).toBe('moodboard-editor'));
+    expect(useUIStore.getState().moodboardEditorId).toBe('mb1');
+    expect(open).not.toHaveBeenCalled();
+  });
+});
+
+describe('Show on canvas from another screen', () => {
+  function canvasMounts() {
+    const renderer = document.createElement('div');
+    renderer.className = 'react-flow__renderer';
+    renderer.dataset.testFixture = 'true';
+    document.body.appendChild(renderer);
+  }
+
+  it('from a studio: goes to the canvas, then frames and outlines what it names', async () => {
+    on('moodboard-editor');
+    useUIStore.setState({ moodboardEditorId: 'mb1' });
+    render(<AppAgentNotes />);
+    sync([note('an_1')]);
+    fireEvent.click(within(openEntry()).getByRole('button', { name: 'Show on canvas' }));
+    // The list steps aside for the canvas it leads to.
+    expect(screen.queryByRole('dialog', { name: 'Updates' })).toBeNull();
+    await vi.waitFor(() => expect(useUIStore.getState().viewMode).toBe('canvas'));
+    expect(useUIStore.getState().moodboardEditorId).toBeNull();
+    expect(flow.setViewport).not.toHaveBeenCalled();
+    canvasMounts();
+    await vi.waitFor(() => expect(flow.setViewport).toHaveBeenCalled());
+    expect(useAgentNotesStore.getState().activeOutline()?.refs).toEqual(['n4']);
+  });
+
+  it('from Projects: opens the project\'s canvas first', async () => {
+    on('home');
+    render(<AppAgentNotes />);
+    sync([note('an_1')]);
+    fireEvent.click(within(openEntry()).getByRole('button', { name: 'Show on canvas' }));
+    await vi.waitFor(() => expect(open).toHaveBeenCalledWith('p1'));
+    canvasMounts();
+    await vi.waitFor(() => expect(flow.setViewport).toHaveBeenCalled());
+  });
+});
+
+describe('the corner keeps clear of each screen\'s controls', () => {
+  function slot(rect: { left: number; right: number; top: number; bottom: number }) {
+    const header = document.createElement('header');
+    header.dataset.testFixture = 'true';
+    header.getBoundingClientRect = () => ({ ...rect, top: 0, bottom: 48, left: 0, width: 1440, height: 48, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    const el = document.createElement('span');
+    el.className = 'agent-notes-slot';
+    el.getBoundingClientRect = () => ({ ...rect, width: rect.right - rect.left, height: rect.bottom - rect.top, x: rect.left, y: rect.top, toJSON: () => ({}) }) as DOMRect;
+    header.appendChild(el);
+    document.body.appendChild(header);
+  }
+
+  it('sits over the header\'s reserved slot, and drops its list below the header', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
+    on('moodboard-editor');
+    slot({ left: 1300, right: 1412, top: 8, bottom: 40 });
+    render(<AppAgentNotes />);
+    sync([note('an_1')]);
+    // Centred on the 32 px slot: 8 + 16 - 20.
+    expect(chip().style.getPropertyValue('--an-chip-top')).toBe('4px');
+    expect(chip().style.getPropertyValue('--an-right')).toBe('28px');
+    fireEvent.click(chip());
+    const list = screen.getByRole('dialog', { name: 'Updates' });
+    // Below the header (48) plus the gap, never over the screen's own bar.
+    expect(list.style.getPropertyValue('--an-drop-top')).toBe('56px');
+  });
+
+  it('stays on screen when the page scrolls the header away (Projects scrolls)', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
+    on('home');
+    slot({ left: 1163, right: 1308, top: -100, bottom: -68 });
+    render(<AppAgentNotes />);
+    sync([note('an_1')]);
+    // Never above the page gutter: it keeps the top right while the header is gone.
+    expect(chip().style.getPropertyValue('--an-chip-top')).toBe('16px');
+    expect(chip().style.getPropertyValue('--an-right')).toBe('132px');
+  });
+
+  it('moves onto a slot that mounts after it (a studio\'s chunk lands later)', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
+    const { UpdatesSlot } = await import('../src/components/agent-notes/UpdatesSlot');
+    const rect = (r: { left: number; right: number; top: number; bottom: number }) =>
+      ({ ...r, width: r.right - r.left, height: r.bottom - r.top, x: r.left, y: r.top, toJSON: () => ({}) }) as DOMRect;
+    const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains('agent-notes-slot')) return rect({ left: 1300, right: 1412, top: 8, bottom: 40 });
+      if (this.tagName === 'HEADER') return rect({ left: 0, right: 1440, top: 0, bottom: 48 });
+      return rect({ left: 0, right: 0, top: 0, bottom: 0 });
+    });
+    try {
+      on('moodboard-editor');
+      render(<AppAgentNotes />);
+      sync([note('an_1')]);
+      expect(chip().style.getPropertyValue('--an-chip-top')).toBe('');
+      render(<header><UpdatesSlot /></header>);
+      await vi.waitFor(() => expect(chip().style.getPropertyValue('--an-chip-top')).toBe('4px'));
+      expect(chip().style.getPropertyValue('--an-right')).toBe('28px');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  // Review of Q107 a: a chat left open on the canvas stays mounted in the
+  // studios (.workspace-overlays--studio), docked from the top gutter at
+  // 1280x800 (x 924-1264, y 16-726). The chip keeps its header slot; a card
+  // or the list that would meet the chat sits just left of it, and the
+  // docked chat starts below the header line the corner drops from.
+  function chatPanel(rect: { left: number; right: number; top: number; bottom: number }) {
+    const el = document.createElement('div');
+    el.dataset.testFixture = 'true';
+    el.className = 'chat-panel';
+    el.getBoundingClientRect = () => ({ ...rect, width: rect.right - rect.left, height: rect.bottom - rect.top, x: rect.left, y: rect.top, toJSON: () => ({}) }) as DOMRect;
+    document.body.appendChild(el);
+  }
+
+  function cardWidths() {
+    return vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('agent-note-card') || this.classList.contains('agent-notes-panel') ? 320 : 0;
+    });
+  }
+
+  it('drops a card and the list left of an open chat in a studio, the chip staying in its slot', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+    const widths = cardWidths();
+    try {
+      on('moodboard-editor');
+      slot({ left: 1154, right: 1266, top: 8, bottom: 40 });
+      chatPanel({ left: 924, right: 1264, top: 16, bottom: 726 });
+      render(<AppAgentNotes />);
+      sync([note('an_1')]);
+      expect(chip().style.getPropertyValue('--an-right')).toBe('14px');
+      emit({ type: 'agentNotes', surface: 'canvas', op: 'added', projectId: 'p1', note: note('an_2'), unread: 2, at: 2, removed: [] });
+      await vi.waitFor(() => expect(document.querySelector('.agent-note-card')).not.toBeNull());
+      const card = document.querySelector<HTMLElement>('.agent-note-card')!;
+      await vi.waitFor(() => expect(parseFloat(card.style.getPropertyValue('--an-right'))).toBeGreaterThanOrEqual(1280 - 924 + 8));
+      expect(chip().style.getPropertyValue('--an-right')).toBe('14px');
+      fireEvent.click(chip());
+      const list = screen.getByRole('dialog', { name: 'Updates' });
+      expect(parseFloat(list.style.getPropertyValue('--an-right'))).toBeGreaterThanOrEqual(1280 - 924 + 8);
+    } finally {
+      widths.mockRestore();
+    }
+  });
+
+  it('keeps a card at its slot when no chat meets it', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+    const widths = cardWidths();
+    try {
+      on('moodboard-editor');
+      slot({ left: 1154, right: 1266, top: 8, bottom: 40 });
+      render(<AppAgentNotes />);
+      sync([]);
+      emit({ type: 'agentNotes', surface: 'canvas', op: 'added', projectId: 'p1', note: note('an_2'), unread: 1, at: 2, removed: [] });
+      await vi.waitFor(() => expect(document.querySelector('.agent-note-card')).not.toBeNull());
+      expect(document.querySelector<HTMLElement>('.agent-note-card')!.style.getPropertyValue('--an-right')).toBe('14px');
+    } finally {
+      widths.mockRestore();
+    }
+  });
+
+  it('writes the header line it drops from, so the docked chat starts below it; clears it on the canvas', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
+    const root = document.documentElement;
+    on('moodboard-editor');
+    slot({ left: 1300, right: 1412, top: 8, bottom: 40 });
+    const { unmount } = render(<AppAgentNotes />);
+    sync([note('an_1')]);
+    expect(root.style.getPropertyValue('--agent-notes-drop-top')).toBe('56px');
+    document.querySelectorAll('[data-test-fixture]').forEach((el) => el.remove());
+    act(() => on('canvas'));
+    expect(root.style.getPropertyValue('--agent-notes-drop-top')).toBe('');
+    act(() => on('moodboard-editor'));
+    slot({ left: 1300, right: 1412, top: 8, bottom: 40 });
+    sync([note('an_1'), note('an_3')]);
+    expect(root.style.getPropertyValue('--agent-notes-drop-top')).toBe('56px');
+    unmount();
+    expect(root.style.getPropertyValue('--agent-notes-drop-top')).toBe('');
+  });
+
+  it('keeps its own corner on the canvas, where no header slot shows', () => {
+    on('canvas');
+    render(<AppAgentNotes />);
+    sync([note('an_1')]);
+    expect(chip().style.getPropertyValue('--an-chip-top')).toBe('');
+  });
+});
+
+describe('the corner never takes a screen\'s keys', () => {
+  it('Cmd+Z with focus on the chip or a card is still the Studio\'s and the canvas\'s', () => {
+    on('moodboard-editor');
+    render(<AppAgentNotes />);
+    sync([note('an_1')]);
+    expect(isStudioShortcutTarget(chip(), 'undo')).toBe(true);
+    expect(isCanvasShortcutTarget(chip())).toBe(true);
+    // The open list is a dialog: its keys are its own (Escape, Tab).
+    fireEvent.click(chip());
+    const list = screen.getByRole('dialog', { name: 'Updates' });
+    expect(isStudioShortcutTarget(list, 'undo')).toBe(false);
+    expect(isCanvasShortcutTarget(list)).toBe(false);
+  });
+
+  it('lets Cmd+Z through: no key but Escape is handled on the chip', () => {
+    on('moodboard-editor');
+    render(<AppAgentNotes />);
+    sync([note('an_1')]);
+    const event = new KeyboardEvent('keydown', { key: 'z', metaKey: true, bubbles: true, cancelable: true });
+    chip().dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+  });
+});

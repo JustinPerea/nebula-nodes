@@ -10,6 +10,10 @@ const CANVAS_OWNED = [
   '.workspace-rail',
   '.workspace-header--canvas',
   '.panel-launcher--chat',
+  // The Updates chip and its card (on every screen, Q107 a) keep no keys of
+  // their own but Escape; their open list is a dialog, which does.
+  '.agent-notes-chip',
+  '.agent-note-card',
 ].join(', ');
 
 export function isCanvasShortcutTarget(target: EventTarget | null): boolean {

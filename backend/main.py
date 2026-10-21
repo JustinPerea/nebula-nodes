@@ -185,7 +185,7 @@ from services.canvas_proposals import (
 # Proposals outside the graph: a project's cover, a board's Send notes (U16).
 from services.asset_proposals import AssetProposal, asset_proposals
 from services.asset_proposals import parse_change as parse_asset_change, summary as asset_proposal_summary
-from services.asset_proposals import outcome_line as asset_outcome_line, update_text as asset_update_text
+from services.asset_proposals import RESTART_OUTCOME, outcome_line as asset_outcome_line, update_text as asset_update_text
 from services.agent_presence import request_headers_scope
 from services.local_guard import host_allowed
 from services import run_approvals as approvals
@@ -5515,6 +5515,13 @@ async def list_canvas_proposals() -> dict[str, Any]:
     return {"proposals": [_proposal_view(p) for p in canvas_proposals.open_list()]}
 
 
+def _gone_proposal_detail(proposal_id: str) -> str:
+    """A proposal Nebula no longer has: decided ones go after 30 minutes, and
+    open ones live in memory, so a restart closes them (Q108 a)."""
+    return (f"No proposal {proposal_id[:20]} (decided proposals are kept for 30 minutes, and a restart of "
+            "Nebula closes open ones: propose again if you still want it)")
+
+
 @app.get("/api/canvas/proposals/{proposal_id}")
 async def get_canvas_proposal(proposal_id: str, request: Request) -> dict[str, Any]:
     """One proposal; with ?wait=<seconds> (≤25) wait for the person to decide."""
@@ -5525,7 +5532,7 @@ async def get_canvas_proposal(proposal_id: str, request: Request) -> dict[str, A
     if proposal is None and asset_proposals.get(proposal_id) is not None:
         return await _get_asset_proposal(proposal_id, wait)  # a project's or a board's (U16)
     if proposal is None:
-        raise HTTPException(status_code=404, detail=f"No proposal {proposal_id[:20]} (decided proposals are kept for 30 minutes)")
+        raise HTTPException(status_code=404, detail=_gone_proposal_detail(proposal_id))
     loop = asyncio.get_running_loop()
     deadline = loop.time() + wait
     cursor = canvas_events.latest
@@ -6033,7 +6040,8 @@ async def _settle_asset_updates() -> None:
         proposal = asset_proposals.get(str(ref.get("id") or ""))
         if isinstance(proposal, AssetProposal) and proposal.is_open:
             continue
-        outcome = asset_outcome_line(proposal) if isinstance(proposal, AssetProposal) else "Expired"
+        # Not in memory: Nebula restarted while it was open (Q108 a).
+        outcome = asset_outcome_line(proposal) if isinstance(proposal, AssetProposal) else RESTART_OUTCOME
         try:
             result = await asyncio.to_thread(agent_notes.resolve_proposal, project_id, note["id"],
                                              outcome=outcome, by={"kind": "system"})
@@ -6214,7 +6222,7 @@ async def _get_asset_proposal(proposal_id: str, wait: float) -> dict[str, Any]:
     await _sweep_asset_proposals()
     proposal = asset_proposals.get(proposal_id)
     if not isinstance(proposal, AssetProposal) or not await _commons_proposal_visible(proposal, current_request_headers()):
-        raise HTTPException(status_code=404, detail=f"No proposal {proposal_id[:20]} (decided proposals are kept for 30 minutes)")
+        raise HTTPException(status_code=404, detail=_gone_proposal_detail(proposal_id))
     loop = asyncio.get_running_loop()
     deadline = loop.time() + wait
     cursor = canvas_events.latest

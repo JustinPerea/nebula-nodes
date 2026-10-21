@@ -30,13 +30,14 @@ export const DeferredAgentLog = lazyWithPreload(
   (module) => module.AgentLog,
 );
 
-// The Updates corner (PR9a): the chip shows on the canvas at once but isn't
-// needed for the first paint. Its store (store/agentNotesStore.ts) is imported
-// eagerly by App.tsx, so no update is missed before the chip arrives. The
-// node outlines mount inside Canvas, beside the agent cursors.
+// The Updates corner (PR9a; on every screen since Q107 a): the chip shows at
+// once but isn't needed for the first paint. Its store
+// (store/agentNotesStore.ts) is imported eagerly by App.tsx, so no update is
+// missed before the chip arrives. The node outlines mount inside Canvas,
+// beside the agent cursors.
 export const DeferredAgentNotes = lazyWithPreload(
   () => import('../components/agent-notes/AgentNotesCorner'),
-  (module) => module.CanvasAgentNotes,
+  (module) => module.AppAgentNotes,
 );
 
 export const DeferredAgentNoteOutlineLayer = lazyWithPreload(
@@ -97,6 +98,7 @@ export const DEFERRED_MODULES: readonly string[] = [
   'components/agent-notes/AgentNoteOutlineLayer.tsx',
   'lib/agentNotesView.ts',
   'lib/assetProposalReview.ts',
+  'lib/goToCanvas.ts',
   'store/assetProposalReviewRequest.ts',
   'components/panels/RunHistoryPanel.tsx',
   'components/onboarding/OnboardingOverlay.tsx',
