@@ -322,6 +322,46 @@ def test_a_stale_studio_save_of_an_old_character_gets_the_version_conflict(clien
     assert response.json()["character"]["referenceViews"] == urls
 
 
+def test_a_model_change_checks_the_params_the_style_keeps_under_its_new_model(client, tmp_path):
+    """A held param is held for its model: under nano-banana `filePath` is no
+    image, under style-reference it is one, so moving the Style there checks
+    it (a change that sends no params included)."""
+    _saved_before_the_check(tmp_path, {
+        "id": "oldstyle0003", "name": "Swap", "category": "My Styles", "prompt": "p",
+        "params": {"filePath": OUTSIDE}, "modelId": "nano-banana", "refImages": [], "thumbnail": "",
+        "version": 1, "paramsVersion": 0, "scope": "global", "projectId": None,
+        "createdAt": "2026-10-01T00:00:00+00:00", "updatedAt": "2026-10-01T00:00:00+00:00",
+    }, "presets")
+
+    moved = client.put("/api/presets/oldstyle0003", json={"modelId": "style-reference"}, headers=AGENT)
+    assert moved.status_code == 422, moved.text
+    assert "params.filePath" in _detail(moved)
+    assert client.get("/api/presets/oldstyle0003").json()["modelId"] == "nano-banana"
+
+    # Renaming it under its own model still saves: the value stays held there.
+    assert client.put("/api/presets/oldstyle0003", json={"name": "Swap 2"}, headers=AGENT).status_code == 200
+
+
+def test_a_stale_save_of_an_old_style_gets_the_version_conflict(client, local_images, tmp_path):
+    """As for a Character: a write a version behind is the 409 the caller
+    re-reads from, not a 422 about a link the Style no longer holds."""
+    urls, _ = local_images
+    _saved_before_the_check(tmp_path, {
+        "id": "oldstyle0002", "name": "Old two", "category": "My Styles", "prompt": "p", "params": {},
+        "modelId": "nano-banana", "refImages": [urls[0], OUTSIDE], "thumbnail": "", "version": 1,
+        "paramsVersion": 0, "scope": "global", "projectId": None,
+        "createdAt": "2026-10-01T00:00:00+00:00", "updatedAt": "2026-10-01T00:00:00+00:00",
+    }, "presets")
+    assert client.put("/api/presets/oldstyle0002", json={"refImages": [urls[0]], "baseVersion": 1},
+                      headers=AGENT).status_code == 200
+
+    response = client.put("/api/presets/oldstyle0002",
+                          json={"refImages": [urls[0], OUTSIDE, urls[1]], "baseVersion": 1}, headers=AGENT)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["style"]["refImages"] == [urls[0]]
+
+
 @pytest.mark.parametrize("link", [
     "https:/images.example.com/a.png",
     "https:images.example.com/a.png",

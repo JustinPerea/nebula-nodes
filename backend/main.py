@@ -11905,10 +11905,19 @@ def _check_stored_images(kind: str, fields: Mapping[str, Any], before: Mapping[s
     from services.stored_image_refs import StoredImageError, check
 
     if kind == "style":
-        definition = node_registry.get(str(fields.get("modelId") or (before or {}).get("modelId") or "")) or {}
+        # The params the Style will have under the model it will have: a
+        # write that changes only the model can make a held value an image
+        # param, so a held param counts as held only under its own model.
+        stored = before or {}
+        model = fields["modelId"] if "modelId" in fields else stored.get("modelId")
+        definition = node_registry.get(str(model or "")) or {}
         param_keys = ["_previewUrl", *(str(p.get("key")) for p in definition.get("params") or []
                                        if isinstance(p, dict) and p.get("type") == "file")]
         image_fields: tuple[str, ...] = ("refImages", "thumbnail")
+        if "params" not in fields or fields["params"] is None:
+            fields = {**fields, "params": stored.get("params")}
+        if before is not None and (model or None) != (stored.get("modelId") or None):
+            before = {key: value for key, value in before.items() if key != "params"}
     else:
         param_keys, image_fields = [], ("referenceViews", "thumbnail")
     try:
