@@ -278,10 +278,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     undo_p = sub.add_parser(
         "undo",
-        help="Undo your own `nebula apply` by the token it printed (parts changed since stay as they are)",
+        help="Undo your own `nebula apply` by the token it printed (parts changed or run since stay as they are)",
         description=("Undo one of your applies with the token it printed. Each part (a node it added, a param, "
                      "name or position it changed, a node or wire it removed) goes back unless someone changed "
-                     "it since. Several tokens are undone in the order given (a steps plan prints them newest "
+                     "it since. A node someone else ran since (the person, another agent) stays whole, with "
+                     "its params, name and input wires; your own runs don't count. Several tokens are undone in the order given (a steps plan prints them newest "
                      "first), stopping at the first one refused. Only you can use your tokens, for 60 minutes, "
                      "while the project you edited is open."),
     )

@@ -141,7 +141,8 @@ The server exposes these tools for building and running (see
   outputs, names and wires.
 - `undo_canvas_edit`: takes one of your own edits back with its `undo.token`
   (or a steps plan's `undo.tokens`, newest first). A part someone changed
-  since stays as it is and is listed in `skipped`.
+  since stays as it is and is listed in `skipped`; so does a node someone
+  else ran since (reason `ran since`). Your own runs don't count.
 - `run_nodes`: runs a node and what feeds it (or the whole canvas) under the
   person's spending limits. Returns outputs with small inline previews, or
   `running` and a run id. A run in which any node failed comes back
@@ -1509,16 +1510,32 @@ TOKEN`, `POST /api/graph/apply/undo {token}`) takes the edit back:
   whose input has taken another wire since, stays out.
 - A wire it added is unwired; one it took away is wired back.
 
+A run counts as a change. A node the edit touched that someone ran after
+the edit (the person, another agent, or a client that didn't name itself)
+stays whole: it isn't removed, its params, name and position aren't put
+back, and no wire into it is taken away or put back, because those inputs
+made its result. It is one `skipped` item with reason `ran since`,
+`ranBy` (`[{kind, name}]`), `left` (the parts it kept: `node`, `params`,
+`name`, `position`, `wires in`) and a message such as "n3 ran since (run
+by the person), so it stays". Wires out of it follow the rules above. Only
+runs the undoing agent started itself don't count, so an agent can still
+undo its own experiments. A run counts if it was asked for after the edit
+landed, including one still going when the undo comes (all the nodes it
+set out to run count); a run asked for before the edit doesn't, even if it
+reached the node after. The person's own Cmd+Z is unchanged.
+
 Each part someone changed since is left as it is and listed in `skipped`
-(`{nodeId, part, keys?, wire?, reason, message}`), as a moodboard restore
-does. A param only the person may change back (opening a Moodboard node's
+(`{nodeId, part, keys?, wire?, reason, message}`, plus `ranBy` and `left`
+for `ran since`), as a moodboard restore does. A param only the person may change back (opening a Moodboard node's
 "send notes" again) is skipped too. The rest is one restore through the
 same staging as the canvas's Cmd+Z, so it lands whole or not at all, and
 the person can undo the undo. `status` is `undone`; `skipped` when nothing
-could go back (the token keeps working, for when the person puts a part
-back); or `already-undone`, with `undoneBy` (you, or the person with Cmd+Z,
-which the backend learns from the canvas's restore). Calling it twice
-changes nothing the second time.
+could go back (the token keeps working, for when the person puts a changed
+part back; a node someone ran since stays for good, since a run can't be
+taken back, and the message says so); or `already-undone`, with `undoneBy` (you, or the person with Cmd+Z,
+which the backend learns from the canvas's restore). `message` says what
+went back and each part left, and why. Calling it twice changes nothing
+the second time.
 
 The backend keeps each inverse in memory (`services/canvas_undo.py`): for
 60 minutes, the last 100 edits, at most 16 MB each and 64 MB in all. A
@@ -1771,7 +1788,7 @@ nebula apply --note "Two takes" \
 #   +p → n8  Text Input
 #   +wide → n9  Wide
 #   +tight → n10  Nano Banana
-#   Undo: nebula undo 3f9c…  (for 60 minutes; parts changed since stay)
+#   Undo: nebula undo 3f9c…  (for 60 minutes; parts changed or run since stay)
 nebula undo 3f9c…                   # take it back (see Undoing your own edit)
 nebula apply --file plan.json       # or --file - to read standard input
 nebula apply --file plan.json --arrange        # or --arrange down
