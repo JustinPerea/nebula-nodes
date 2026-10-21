@@ -496,7 +496,8 @@ def wait_for_canvas_change(
 
     Returns `events`, each with `kind` (node.added, node.params, node.moved,
     node.renamed, edge.added, selection.changed, run.finished,
-    run.skipped, canvas.replaced, edit.undone, ...), the `actor` who did it (`person`, an `agent`,
+    run.skipped, canvas.replaced, edit.undone, board.moved, board.fields,
+    ...), the `actor` who did it (`person`, an `agent`,
     or `anonymous`), `nodeId`, `data` and a one-line `summary`. An event
     from a canvas edit has `edit`: your edit_canvas events carry its `id`
     (your `undo.editId`); an undo's events carry `undoes` (the edit id it
@@ -508,7 +509,10 @@ def wait_for_canvas_change(
     result then carries a `note`).
     Pass the returned `cursor` back as `since` next time so
     nothing is missed; `look_at_canvas` also returns `events.cursor`.
-    `kinds` filters by group or exact kind, e.g. ["node", "run.failed"].
+    `kinds` filters by group or exact kind, e.g. ["node", "run.failed"];
+    ["board"] returns on any moodboard write. `board.fields` is a change to
+    a board's own fields (Direction, Avoid, notes, strength...): its
+    `data.fields` names them, never their values (moodboard_get has those).
     `timedOut` is true when nothing changed within `timeout_seconds` (max 300).
     If `gap` or `reset` is true, events were lost: call look_at_canvas.
     """
@@ -1457,7 +1461,8 @@ def moodboard_update(board: str, images: list[dict] | None = None, remove: list[
     what an older Nebula puts back instead (`remove`, a list change or a Keep
     beside it is refused). Changing images, notes, mode or strength
     clears the analysis (run moodboard_analyze again); a rename and the brief
-    fields keep it."""
+    fields keep it. A field change is journaled as one `board.fields` canvas
+    event naming the fields, never their values."""
     import moodboard_client as boards
 
     if undo is not None:

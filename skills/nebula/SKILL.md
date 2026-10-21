@@ -345,6 +345,12 @@ nebula moodboard delete <board>
 - Changing images, notes, mode or strength clears the analysis: run
   `analyze` again before you use the board. A rename and the brief fields
   keep it.
+- Every board write is journaled in its writer's name, so `nebula watch
+  --kinds board` sees the person's edits too: an image, card or frame
+  change is `board.added`, `board.moved`, ...; a change to the board's own
+  fields (Direction, Avoid, pinned colours, its notes, Send notes, strength,
+  a rename...) is `board.fields`, whose `fields` lists the names that
+  changed. It never carries their values: read the board (`show`) for them.
 - Without `--project` a board is Global: it belongs to no project, so every
   project can use it. `--project current` keeps it in the project open on the
   canvas (the `*` in `nebula projects`), which is the project the person's

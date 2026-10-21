@@ -12241,20 +12241,26 @@ def _moodboard_conflict(exc: Any) -> JSONResponse:
 
 
 def _journal_board_change(before: dict, after: dict, changes: dict, *, say: str = "") -> None:
-    """One ``board.*`` journal event for a board write (plan section 5.2):
-    an edit batch or a PUT. Tagged with the open canvas project; the board's
-    own scope is in ``data`` (a Global board is in every project). Never any
-    note text."""
-    from services.moodboard_edits import journal_entry
+    """The journal events for a board write (plan section 5.2): an edit
+    batch or a PUT. One ``board.*`` event for its images, cards and frames,
+    and one ``board.fields`` event naming the board fields it changed
+    (Justin's Q91). Every board write goes through here (the Studio, MCP,
+    the CLI, an undo's ``restore``, an accepted proposal's PUT), so none is
+    missed. Tagged with the open canvas project; the board's own scope is in
+    ``data`` (a Global board is in every project). Never any note text, and
+    never a field's value."""
+    from services.moodboard_edits import journal_entries
 
-    entry = journal_entry(changes, before, after)
-    if entry is None:
-        return
-    data = {"boardId": after.get("id"), "boardName": after.get("name"),
-            "scope": after.get("projectId") or "global", "refs": entry["refs"], "kinds": entry["kinds"]}
-    if say:
-        data["say"] = say
-    _journal(entry["kind"], data=data, summary=entry["summary"])
+    for entry in journal_entries(changes, before, after):
+        data: dict[str, Any] = {"boardId": after.get("id"), "boardName": after.get("name"),
+                                "scope": after.get("projectId") or "global"}
+        if entry["kind"] == "board.fields":
+            data["fields"] = entry["fields"]
+        else:
+            data.update({"refs": entry["refs"], "kinds": entry["kinds"]})
+        if say:
+            data["say"] = say
+        _journal(entry["kind"], data=data, summary=entry["summary"])
 
 
 async def _say_agent_board_change(before: dict, after: dict, changes: dict, *, say: str = "",

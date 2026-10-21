@@ -77,7 +77,9 @@ EVENT_KINDS = frozenset({
     "proposal.expired",
     "proposal.invalidated",
     # Moodboards (services/moodboard_edits.py): one event per board edit
-    # batch or PUT, with data {boardId, boardName, scope, refs, kinds}.
+    # batch or PUT that changed its images, cards or frames, with data
+    # {boardId, boardName, scope, refs, kinds}, and one board.fields event
+    # when it changed the board's own fields.
     "board.added",
     "board.removed",
     "board.moved",
@@ -88,6 +90,10 @@ EVENT_KINDS = frozenset({
     "board.frame",
     # The image the board opens on changed (a cover pick; nothing moves).
     "board.cover",
+    # The board's own fields changed (Direction, Avoid, pinned colours, its
+    # notes, Send notes, strength...): data {boardId, boardName, scope,
+    # fields}, the field names only, never a value (Justin's Q91).
+    "board.fields",
     "board.sorted",
     "board.arranged",
     "board.suggested",
