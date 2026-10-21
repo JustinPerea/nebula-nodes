@@ -10,6 +10,16 @@ from .client import NebulaClient
 from .parser import NebulaArgumentParser
 
 
+def _positive_int(text: str) -> int:
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"'{text}' isn't a whole number") from None
+    if value < 1:
+        raise argparse.ArgumentTypeError("must be 1 or more")
+    return value
+
+
 def build_parser() -> argparse.ArgumentParser:
     # NebulaArgumentParser (cli/parser.py): errors say "Did you mean ...?" and
     # print only that command's usage; `describe` and `find` are hidden
@@ -31,13 +41,24 @@ def build_parser() -> argparse.ArgumentParser:
                         "prices, and the spend limits, in one call")
     context_p.add_argument("--json", action="store_true", help="Print it as JSON, as the backend sends it")
 
-    nodes_p = sub.add_parser("nodes", help="List node definitions", start_hint=True)
+    nodes_p = sub.add_parser(
+        "nodes", help="Node types that run here, with how and their prices (--all: every one, and what it needs)",
+        description="Node types that run here, best matches first: how each runs (key, free, krea, nous) and its "
+                    "price per run at default settings, then how many more need a key. MCP's find_nodes gives the "
+                    "same answer.",
+        start_hint=True)
     nodes_p.add_argument("words", nargs="*", metavar="WORD",
-                         help="Search: every word must be in the id or name (e.g. nebula nodes image edit)")
-    nodes_p.add_argument("--filter", dest="query", help="Search by id or name (the same as words)")
+                         help="Search: every word must be in the id, name or description (e.g. nebula nodes image edit)")
+    nodes_p.add_argument("--filter", dest="query", help="Search by id, name or description (the same as words)")
     # MCP's word for it (find_nodes(query=...)); hidden so the help doesn't grow.
     nodes_p.add_argument("--query", dest="query", help=argparse.SUPPRESS)
     nodes_p.add_argument("--category", help="Only this category: an id (image-gen) or its short name (image)")
+    nodes_p.add_argument("--all", dest="show_all", action="store_true",
+                         help="Also list the node types that can't run here, each with what it needs (a key, a sign-in)")
+    nodes_p.add_argument("--limit", type=_positive_int, metavar="N",
+                         help="At most N rows, best matches first (default: every match)")
+    nodes_p.add_argument("--json", action="store_true",
+                         help="Print the answer as JSON, as MCP find_nodes returns it")
 
     info_p = sub.add_parser("info", help="Show full detail for a node", start_hint=True)
     info_p.add_argument("node_id",
@@ -546,7 +567,8 @@ def main() -> None:
         "style": lambda: style.run(client, args),
         "context": lambda: context.run(client, as_json=args.json),
         "nodes": lambda: nodes.run_list(client, query=" ".join([*args.words, *([args.query] if args.query else [])]),
-                                        category=args.category),
+                                        category=args.category, show_all=args.show_all, limit=args.limit,
+                                        as_json=args.json),
         "info": lambda: nodes.run_info(client, args.node_id),
         "keys": lambda: keys.run(client),
         "create": lambda: graph.run_create(client, args.node_id, parse_kv_list(args.param)),
