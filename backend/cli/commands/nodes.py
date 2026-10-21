@@ -3,7 +3,7 @@ from __future__ import annotations
 from services import node_categories
 
 from ..client import NebulaClient
-from ..formatter import format_node_detail, format_node_table
+from ..formatter import format_node_detail, format_node_table, format_price_line
 from ..parser import START_LINE
 
 
@@ -40,3 +40,9 @@ def run_info(client: NebulaClient, node_id: str) -> None:
     node = client.get_node(node_id)
     print(START_LINE)
     print(format_node_detail(node))
+    try:
+        price = format_price_line(client.get_agent_node(node_id))
+    except Exception:  # noqa: BLE001 - an older backend has no price to add; the rest stands
+        price = None
+    if price:
+        print(price)

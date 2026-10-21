@@ -97,6 +97,14 @@ A priced setting that arrives by wire (Krea Kling 3.0's ``multi_prompt``
 port) is only known at run time, so that node is unpriced too
 (``model_pricing.wired_ports``).
 
+A price measured from the run's input file (SeedVR2 per megapixel, FLUX
+Video Upscale and Edit by the clip: model_pricing ``sizing``) is checked at
+the size the caller measured (``sizes``, services/input_sizes.py), at the
+top of whatever range results. When the input doesn't exist yet (its
+upstream node runs in this same request), the node is unpriced, and the
+refusal says what makes it priced: an Image or Video Input holding the
+file, `nebula quick` on the file, or a proposal.
+
 Nodes that made no provider request get their share of the count back, since
 they can't have cost anything:
 
@@ -587,6 +595,55 @@ def _names(ids: list[str], labels: Mapping[str, str]) -> str:
     return ", ".join(shown) + (f" and {len(ids) - 4} more" if len(ids) > 4 else "")
 
 
+_NO_LIMIT_CHECK = "so it can't check this run against the spending limits set in Nebula Settings."
+
+
+def _awaiting_reasons(
+    awaiting: list[str], why: Mapping[str, str], labels: Mapping[str, str],
+    definition_of: Mapping[str, str], pricing: Mapping[str, Any],
+) -> list[str]:
+    """One sentence per reason the nodes priced from their input's size have
+    no size here (input_sizes.run_input_sizes ``reasons``): each says what to
+    do instead, and none suggests the step that just failed."""
+    from services import input_sizes
+
+    groups: dict[str, list[str]] = {}
+    for node_id in awaiting:
+        groups.setdefault(why.get(node_id) or input_sizes.PENDING, []).append(node_id)
+    sentences = []
+    for reason, ids in groups.items():
+        first = definition_of.get(ids[0], "")
+        port = next(iter(sorted(model_pricing.sizing_ports((pricing.get("nodes") or {}).get(first)))), "image")
+        names = f"Nebula prices {_names(ids, labels)} from the size of its input"
+        if reason == input_sizes.REMOTE:
+            sentences.append(
+                f"{names}, and that input is a file on another host: Nebula never downloads a file to price it, "
+                f"{_NO_LIMIT_CHECK} To run it within the limits, download the file and use the local copy: wire an "
+                "Image Input (or Video Input) holding it into the node, or run "
+                f"`nebula quick {first} --input {port}=<local file path>`; otherwise propose it.")
+        elif reason == input_sizes.UNREADABLE:
+            sentences.append(
+                f"{names}, and Nebula couldn't read that file's size (it is missing, isn't an image or video Nebula "
+                f"can open, or is outside the folders Nebula may read), {_NO_LIMIT_CHECK} Point the input at a "
+                "readable image or video file and run it again, or propose it.")
+        elif reason == input_sizes.WIRES:
+            sentences.append(
+                f"{names}, and more than one input is wired into its {port} port, so Nebula can't tell which "
+                f"file it sends; {_NO_LIMIT_CHECK} Wire one input into it, or propose it.")
+        elif reason == input_sizes.UNWIRED:
+            sentences.append(
+                f"{names}, and nothing wired into its {port} port gives it a file, {_NO_LIMIT_CHECK} Wire an "
+                "Image Input (or Video Input) holding the file into it, or propose it.")
+        else:
+            sentences.append(
+                f"{names}, and that image or video doesn't exist yet (the node that makes it runs in this same "
+                f"run, or hasn't run), {_NO_LIMIT_CHECK} To run it within the limits, wire an Image Input (or "
+                "Video Input) holding the file into it and run that, or run it on the file with "
+                f"`nebula quick {first} --input {port}=<file>`; otherwise propose it (once the node that makes "
+                "the input has run, a proposal is priced from that output).")
+    return sentences
+
+
 def decide(
     items: list[Mapping[str, Any]],
     edges: list[tuple[str, str, str | None]],
@@ -598,6 +655,8 @@ def decide(
     budgets: list[Budget] | None = None,
     how_to_ask: str,
     passes: int = 1,
+    sizes: Mapping[str, Mapping[str, Any]] | None = None,
+    size_reasons: Mapping[str, str] | None = None,
 ) -> Decision:
     """Whether an agent may start this run itself, and what it would cost.
 
@@ -610,7 +669,11 @@ def decide(
     is a chat session's total, held to the per-session limits. ``how_to_ask``
     is the sentence that tells the agent what to do instead. ``passes`` is how
     many times the request runs these nodes, uncached (a cinema shot's
-    variations)."""
+    variations). ``sizes`` are the measured inputs of nodes priced by their
+    input's size (input_sizes.run_input_sizes), and ``size_reasons`` why
+    each of the others wasn't measured (its ``reasons``), so the refusal says
+    what is true: still to be made, a file on another host, unreadable, or not
+    one wire."""
     if isinstance(passes, bool) or not isinstance(passes, int) or passes < 1:
         raise ValueError("passes must be a positive whole number")
     threshold = threshold_from_settings(settings)
@@ -621,7 +684,7 @@ def decide(
     api_keys = settings.get("apiKeys") or {}
     multipliers = model_pricing.run_multipliers(list(items), [(source, target) for source, target, _ in edges])
     estimate = model_pricing.estimate_run(list(items), pricing, definitions, api_keys, multipliers,
-                                          model_pricing.wired_counts(list(items), edges))
+                                          model_pricing.wired_counts(list(items), edges), sizes)
     definition_of = {str(item["id"]): str(item.get("definitionId") or "") for item in items}
     labels = {node_id: str((definitions.get(def_id) or {}).get("displayName") or "") for node_id, def_id in definition_of.items()}
 
@@ -657,8 +720,15 @@ def decide(
         return decision(None)
 
     if usd_limited and estimate["unpriced"]:
-        return refuse(f"Nebula has no list price for {_names(estimate['unpriced'], labels)}, "
-                      "so it can't check this run against the spending limits set in Nebula Settings.")
+        awaiting = [node_id for node_id in estimate["unpriced"] if node_id in (estimate.get("awaitingInput") or [])]
+        unlisted = [node_id for node_id in estimate["unpriced"] if node_id not in awaiting]
+        reasons = []
+        if unlisted:
+            reasons.append(f"Nebula has no list price for {_names(unlisted, labels)}, "
+                           "so it can't check this run against the spending limits set in Nebula Settings.")
+        if awaiting:
+            reasons.extend(_awaiting_reasons(awaiting, size_reasons or {}, labels, definition_of, pricing))
+        return refuse(" ".join(reasons))
 
     # Per run: each model with its own limit, then everything else against the general one.
     for def_id, amount in sorted(by_model.items(), key=lambda kv: -kv[1]):

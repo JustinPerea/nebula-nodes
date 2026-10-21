@@ -346,3 +346,114 @@ describe('run estimate for a shipped route-table node (cases shared with the bac
     });
   }
 });
+
+describe('a run priced from its input file (cases shared with the backend)', () => {
+  // pricing_cases.json sizedRunCases; test_price_from_input_size.py runs them too.
+  type SizedRunCase = {
+    name: string; nodeId: string; params: Record<string, unknown>; apiKeys: Record<string, string>; port: string;
+    size?: Record<string, number>;
+    expected: { low: number | null; high: number | null; awaitingInput: boolean };
+  };
+  const cases = (pricingCases as unknown as { sizedRunCases: SizedRunCase[] }).sizedRunCases;
+  for (const testCase of cases) {
+    it(testCase.name, () => {
+      const video = NODE_DEFINITIONS[testCase.nodeId].inputPorts.find((port) => port.id === testCase.port)?.dataType === 'Video';
+      const ref = video ? '/out/clip.mp4' : '/out/in.png';
+      const source: Node<NodeData> = {
+        id: 'in', position: { x: 0, y: 0 },
+        data: { definitionId: video ? 'video-input' : 'image-input', label: 'In', params: { filePath: ref } } as unknown as NodeData,
+      };
+      const target: Node<NodeData> = {
+        id: 'n1', position: { x: 0, y: 0 },
+        data: { definitionId: testCase.nodeId, label: 'Node', params: testCase.params } as unknown as NodeData,
+      };
+      const wires: Edge[] = [{ id: 'w', source: 'in', sourceHandle: video ? 'video' : 'image', target: 'n1', targetHandle: testCase.port }];
+      const { cost } = summarizeRunScope([source, target], wires, { kind: 'graph' }, {
+        pricing: shippedTable as unknown as PricingTable, apiKeys: testCase.apiKeys,
+        sizes: testCase.size ? { [ref]: testCase.size } : {},
+      });
+      const line = cost!.lines.find((candidate) => candidate.name === 'Node');
+      if (testCase.expected.low === null) expect(line).toBeUndefined();
+      else {
+        expect(line!.low).toBeCloseTo(testCase.expected.low, 9);
+        expect(line!.high).toBeCloseTo(testCase.expected.high!, 9);
+      }
+      expect(cost!.awaitingInput.includes('Node')).toBe(testCase.expected.awaitingInput);
+    });
+  }
+
+  const upload = (params: Record<string, unknown>): Node<NodeData> => ({
+    id: 'in', position: { x: 0, y: 0 }, data: { definitionId: 'image-input', label: 'Photo', params } as unknown as NodeData,
+  });
+  const seedvr: Node<NodeData> = {
+    id: 'up', position: { x: 0, y: 0 }, data: { definitionId: 'seedvr2-upscale', label: 'Upscale', params: {} } as unknown as NodeData,
+  };
+  const wire: Edge[] = [{ id: 'w', source: 'in', sourceHandle: 'image', target: 'up', targetHandle: 'image' }];
+  const context = { pricing: shippedTable as unknown as PricingTable, apiKeys: { FAL_KEY: 'set' } };
+
+  it('asks for the size of an upload it has not measured, and says it is priced when known', () => {
+    const summary = summarizeRunScope([upload({ filePath: '/out/a.png' }), seedvr], wire, { kind: 'node', nodeId: 'up' }, context);
+    expect(summary.cost!.sizeRefs).toEqual([{ ref: '/out/a.png', kind: 'Image' }]);
+    expect(summary.cost!.awaitingInput).toEqual(['Upscale']);
+    expect(runChipLabel(summary)).toBe('1 paid');
+    const text = describeRunScope(summary);
+    expect(text).toContain('Priced when its input is known: Upscale');
+    expect(text).not.toContain('No list price');
+    expect(runCostConfirmMessage(summary)).toContain('Priced when its input is known: Upscale');
+  });
+
+  it('prices it once the size is in', () => {
+    const summary = summarizeRunScope([upload({ filePath: '/out/a.png' }), seedvr], wire, { kind: 'node', nodeId: 'up' },
+      { ...context, sizes: { '/out/a.png': { width: 1000, height: 1000 } } });
+    expect(summary.cost!.sizeRefs).toEqual([]);
+    expect(summary.cost!.lines).toEqual([{ name: 'Upscale', low: 0.004, high: 0.004, runs: [1, 1] }]);
+    expect(runChipLabel(summary)).toBe('~$0.004');
+  });
+
+  it('never measures an input made in the same run', () => {
+    const generator: Node<NodeData> = {
+      id: 'gen', position: { x: 0, y: 0 },
+      data: { definitionId: 'gpt-image-2-generate', label: 'Gen', params: {}, outputs: { image: { type: 'Image', value: '/out/b.png' } } } as unknown as NodeData,
+    };
+    const edges: Edge[] = [{ id: 'w', source: 'gen', sourceHandle: 'image', target: 'up', targetHandle: 'image' }];
+    const summary = summarizeRunScope([generator, seedvr], edges, { kind: 'node', nodeId: 'up' },
+      { ...context, sizes: { '/out/b.png': { width: 1000, height: 1000 } } });
+    expect(summary.cost!.sizeRefs).toEqual([]);
+    expect(summary.cost!.awaitingInput).toEqual(['Upscale']);
+  });
+
+  it('says when the backend can\'t read the input file, rather than that it isn\'t known yet', () => {
+    // The measure route answers null for a file on another host (never
+    // downloaded to price it) or one it can't read.
+    const summary = summarizeRunScope([upload({ filePath: 'https://images.example.com/x.png' }), seedvr], wire,
+      { kind: 'node', nodeId: 'up' }, { ...context, sizes: { 'https://images.example.com/x.png': null } });
+    expect(summary.cost!.sizeRefs).toEqual([]);
+    expect(summary.cost!.awaitingInput).toEqual(['Upscale']);
+    expect(summary.cost!.sizeUnreadable).toEqual(['Upscale']);
+    const text = describeRunScope(summary);
+    expect(text).not.toContain('Priced when its input is known');
+    expect(text).toContain("Nebula can't read the size of its input");
+    expect(text).toContain('Upscale');
+    expect(runCostConfirmMessage(summary)).toContain("Nebula can't read the size of its input");
+    expect(runCostConfirmMessage(summary)).not.toContain('Priced when its input is known');
+  });
+
+  it('keeps both notes when an unreadable and a pending node share a name', () => {
+    const generator: Node<NodeData> = {
+      id: 'gen', position: { x: 0, y: 0 }, data: { definitionId: 'gpt-image-2-generate', label: 'Gen', params: {} } as unknown as NodeData,
+    };
+    const second: Node<NodeData> = { ...seedvr, id: 'up2' };
+    const edges: Edge[] = [...wire, { id: 'w2', source: 'gen', sourceHandle: 'image', target: 'up2', targetHandle: 'image' }];
+    const summary = summarizeRunScope([upload({ filePath: 'https://images.example.com/x.png' }), seedvr, generator, second], edges,
+      { kind: 'graph' }, { ...context, sizes: { 'https://images.example.com/x.png': null } });
+    const text = describeRunScope(summary);
+    expect(text).toContain('Priced when its input is known: Upscale');
+    expect(text).toContain("Nebula can't read the size of its input (a file on another host is never downloaded to price it): Upscale");
+  });
+
+  it('never measures an upload with no file yet', () => {
+    const summary = summarizeRunScope([upload({}), seedvr], wire, { kind: 'graph' }, context);
+    expect(summary.cost!.sizeRefs).toEqual([]);
+    expect(summary.cost!.awaitingInput).toEqual(['Upscale']);
+  });
+});

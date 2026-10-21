@@ -281,3 +281,17 @@ describe('snapHidden (a person editing a setting that controls a hidden one)', (
     expect(applyFix({ seed: 4, model: 'pro' }, { param: 'seed', value: null })).toEqual({ model: 'pro' });
   });
 });
+
+describe('a route priced from the input file', () => {
+  it('shows "by size" where the clip will set the price, and "-" where nothing can', async () => {
+    const shipped = (await import('../../../backend/data/model_pricing.json')).default as unknown as PricingTable;
+    const state = providerSwitchState(NODE_DEFINITIONS['flux-video-upscale'], {}, {
+      apiKeys: { BFL_API_KEY: KEY }, kreaSignedIn: false, pricing: shipped, wired: new Map([['video', 1]]),
+    });
+    const prices = Object.fromEntries(state.rows.map((row) => [row.id, [row.price, row.priceTitle]]));
+    expect(prices.bfl).toEqual(['by size', "Priced from the input's size when it runs"]);
+    expect(prices.replicate[0]).toBe('by size');
+    expect(prices.fal[0]).toBe('-');
+    expect(prices.auto[0]).toBe('by size');
+  });
+});

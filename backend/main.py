@@ -85,7 +85,7 @@ from services.settings import (
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
-from services import agent_start, node_categories
+from services import agent_start, input_sizes, node_categories
 from services import output_thumbnail
 from services.node_errors import NodeErrors
 from services import project_cover
@@ -2090,11 +2090,19 @@ def _require_spend_approval(
             status_code=503, detail=f"Can't check this run's cost (pricing table unavailable: {exc}). {ask}",
         ) from exc
     key, label = _spend_session(headers)
+    items = [{"id": n.id, "definitionId": n.definition_id, "params": n.params} for n in nodes]
+    definitions = node_registry.get_all()
+    # A price that depends on the input's size is checked at the size of the
+    # file this run will send (services/input_sizes.py).
+    size_reasons: dict[str, str] = {}
+    sizes = input_sizes.run_input_sizes(
+        items, [(e.source, e.source_handle, e.target, e.target_handle) for e in edges], pricing, definitions,
+        {n.id: n for n in nodes}, reasons=size_reasons)
     decision = agent_spend.decide(
-        [{"id": n.id, "definitionId": n.definition_id, "params": n.params} for n in nodes],
-        [(e.source, e.target, e.target_handle) for e in edges],
-        settings=settings, pricing=pricing, definitions=node_registry.get_all(),
-        budgets=_spend_budgets(key, settings), how_to_ask=ask, passes=passes,
+        items, [(e.source, e.target, e.target_handle) for e in edges],
+        settings=settings, pricing=pricing, definitions=definitions,
+        budgets=_spend_budgets(key, settings), how_to_ask=ask, passes=passes, sizes=sizes,
+        size_reasons=size_reasons,
     )
     if decision.refusal:
         raise HTTPException(status_code=403, detail=decision.refusal)
@@ -3718,6 +3726,10 @@ def _agent_node_context() -> dict[str, Any]:
             "pricing": pricing, "definitions": node_registry.get_all()}
 
 
+# find_nodes' and `nebula context`'s price for a node priced from its input's size.
+SIZED_PRICE = "by input size"
+
+
 def _agent_node_row(definition: Mapping[str, Any], context: Mapping[str, Any]) -> dict[str, Any]:
     """One node type as find_nodes lists it: whether it runs here (and if not,
     what's missing) and its list price at default settings."""
@@ -3746,14 +3758,19 @@ def _agent_node_row(definition: Mapping[str, Any], context: Mapping[str, Any]) -
     elif definition.get("apiProvider") == "utility":
         row["price"] = None
     else:
-        estimate = model_pricing.estimate_node(
-            context["pricing"].get(definition["id"]), definition, {},
-            model_pricing.route_price_key(
-                definition, node_route.select_route(definition, {}, settings.get("apiKeys") or {}))
-            if node_route.has_routes(definition)
-            else model_pricing.route_provider(definition, settings.get("apiKeys") or {}))
+        provider = (model_pricing.route_price_key(
+                        definition, node_route.select_route(definition, {}, settings.get("apiKeys") or {}))
+                    if node_route.has_routes(definition)
+                    else model_pricing.route_provider(definition, settings.get("apiKeys") or {}))
+        entry = context["pricing"].get(definition["id"])
+        estimate = model_pricing.estimate_node(entry, definition, {}, provider)
         row["price"] = ([round(estimate["low"], 4), round(estimate["high"], 4)]
                         if estimate and estimate.get("currency") == "usd" else None)
+        note = model_pricing.size_note(model_pricing.entry_for_route(entry, provider), definition)
+        if row["price"] is None and note:
+            # Priced at run time from the input file (model_pricing sizing).
+            row["price"] = SIZED_PRICE
+            row["priceNote"] = note
     return row
 
 
@@ -3850,6 +3867,11 @@ def _describe_routes(
             "price": ({"usd": [round(estimate["low"], 4), round(estimate["high"], 4)]}
                       if estimate and estimate.get("currency") == "usd" else None),
         }
+        sized = model_pricing.size_note(model_pricing.entry_for_route(
+            (pricing.get("nodes") or {}).get(str(definition.get("id") or "")), str(spec.get("pricing") or spec["id"])),
+            definition)
+        if row["price"] is None and sized:
+            row["priceBy"] = sized
         if row["price"] and model_pricing.route_price_unconfirmed(
                 (pricing.get("nodes") or {}).get(str(definition.get("id") or "")), definition, str(spec["id"])):
             row["priceUnconfirmed"] = True
@@ -4046,7 +4068,13 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
 
             def price_table(priced: Mapping[str, Any]) -> dict[str, Any]:
                 rows = [{**row.get("match", {}), "usd": row.get("price")} for row in priced.get("rows") or []]
-                return {"per": priced.get("per"), "dependsOn": priced.get("priceParams") or [], "rows": rows[:40]}
+                table = {"per": priced.get("per"), "dependsOn": priced.get("priceParams") or [], "rows": rows[:40]}
+                sized = model_pricing.size_note(priced, definition)
+                if sized:
+                    # The rows' multiplyBy quantities come from the input file at run time.
+                    table["byInputSize"] = sized
+                    table["multiplyBy"] = list(priced.get("multiplyBy") or [])
+                return table
 
             routed = model_pricing.entry_for_route(entry, provider)
             result["price"] = {
@@ -4054,6 +4082,9 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
                 "atDefaultsUsd": ([round(estimate["low"], 4), round(estimate["high"], 4)]
                                   if estimate and estimate.get("currency") == "usd" else None),
             }
+            if (routed or entry).get("unconfirmed") is True:
+                # The vendor's page doesn't state it exactly (the entry's notes say what's assumed).
+                result["price"]["unconfirmed"] = True
             if isinstance(entry.get("routes"), Mapping):
                 # Each route's own price; the run bills the route it takes.
                 result["price"]["billedBy"] = provider if routed else None
@@ -5136,7 +5167,7 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
             }
             for node_id in chosen
         ]
-        estimate = _estimate_proposal_run(items, graph_nodes, graph_edges, definitions)
+        estimate = _estimate_proposal_run(items, graph_nodes, graph_edges, definitions, candidate.nodes)
         for node_id in chosen:
             definition = definitions.get(str(candidate.nodes[node_id].get("definitionId") or ""), {})
             line = (estimate or {}).get("priced", {}).get(node_id)
@@ -5152,6 +5183,7 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
                 "unpriced": [ref_for.get(i, i) for i in estimate["unpriced"]],
                 "plan": [ref_for.get(i, i) for i in estimate["plan"]],
                 "unavailable": {ref_for.get(i, i): why for i, why in (estimate.get("unavailable") or {}).items()},
+                "awaitingInput": [ref_for.get(i, i) for i in estimate.get("awaitingInput") or []],
             }
         not_ready = _not_ready_nodes(candidate, graph_edges, scope, ref_for, definitions)
         needs = {row["ref"]: row["missing"] for row in not_ready}
@@ -5206,8 +5238,11 @@ def _estimate_proposal_run(
     graph_nodes: list[dict[str, Any]],
     graph_edges: list[dict[str, Any]],
     definitions: dict[str, Any],
+    known_nodes: Mapping[str, Any] | None = None,
 ) -> dict[str, Any] | None:
-    """List-price estimate for a proposal's run; None when the table can't load."""
+    """List-price estimate for a proposal's run; None when the table can't load.
+    ``known_nodes`` are the staged graph's nodes with their outputs, for a
+    price measured from an ancestor's existing output."""
     try:
         pricing = model_pricing.load_pricing()
     except (OSError, ValueError):
@@ -5220,7 +5255,13 @@ def _estimate_proposal_run(
     )
     wired = model_pricing.wired_counts(
         items, [(str(e.get("source")), str(e.get("target")), e.get("targetHandle")) for e in graph_edges])
-    return model_pricing.estimate_run(items, pricing, definitions, api_keys, multipliers, wired)
+    # Measured from the file the run would get: an upload, or an ancestor's
+    # output that already exists (it isn't in the run: see _proposal_cost).
+    sizes = input_sizes.run_input_sizes(
+        items, [(str(e.get("source")), e.get("sourceHandle"), str(e.get("target")), e.get("targetHandle"))
+                for e in graph_edges],
+        pricing, definitions, known_nodes if known_nodes is not None else {str(n.get("id")): n for n in graph_nodes})
+    return model_pricing.estimate_run(items, pricing, definitions, api_keys, multipliers, wired, sizes)
 
 
 def _node_order(node_id: str) -> tuple[int, str]:
@@ -7591,6 +7632,34 @@ async def get_pricing() -> dict:
     except (OSError, ValueError) as exc:
         raise HTTPException(status_code=500, detail=f"Pricing table unavailable: {exc}") from exc
     return {"currencies": data.get("currencies") or {}, "nodes": data.get("nodes") or {}}
+
+
+MAX_SIZE_REFS = 64
+
+
+@app.post("/api/pricing/input-sizes")
+async def get_input_sizes(body: dict[str, Any]) -> dict:
+    """The size of input files, for the canvas's estimate of a price that
+    depends on it (model_pricing ``sizing``: SeedVR2, FLUX Video Upscale and
+    Edit). ``refs`` is a list of {ref, kind: Image | Video}; each comes back
+    as {width, height[, seconds, frames]} or null. Only files in the output
+    store are read, and only their headers (services/input_sizes.py); an
+    outside URL or any other path is null, never fetched or opened."""
+    refs = body.get("refs") if isinstance(body, dict) else None
+    if not isinstance(refs, list) or len(refs) > MAX_SIZE_REFS:
+        raise HTTPException(status_code=400, detail=f"refs must be a list of at most {MAX_SIZE_REFS} {{ref, kind}}")
+    wanted: list[tuple[str, str]] = []
+    for item in refs:
+        ref = item.get("ref") if isinstance(item, dict) else None
+        kind = item.get("kind") if isinstance(item, dict) else None
+        if not isinstance(ref, str) or kind not in ("Image", "Video"):
+            raise HTTPException(status_code=400, detail="each ref must be {ref: text, kind: Image or Video}")
+        wanted.append((ref, kind))
+
+    def measure_all() -> dict[str, Any]:
+        return {ref: input_sizes.measure(ref, kind, store_only=True) for ref, kind in wanted}
+
+    return {"sizes": await asyncio.to_thread(measure_all)}
 
 
 @app.get("/api/moodboard/adapters")

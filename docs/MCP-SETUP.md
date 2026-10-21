@@ -76,12 +76,17 @@ The server exposes these tools for building and running (see
 
 - `start_here`: the first-turn answer above.
 - `find_nodes`: node types to build with, best matches first, each with
-  `runsWith` (key, free, krea, nous) and a list `price` at default settings.
-  `ready_only=false` also lists nodes that can't run here, with what's
+  `runsWith` (key, free, krea, nous) and a list `price` at default settings,
+  or `"by input size"` with a `priceNote` for a node priced from its input
+  file (SeedVR2 Upscale: "$0.001 per megapixel of the larger of input and
+  output, rounded up to a whole megapixel; priced from your image's size when
+  you run it"). `ready_only=false` also lists nodes that can't run here, with what's
   `missing`. "free" is at the node's defaults: a row with `needsKeyFor` (the
   Video QC nodes) calls a provider in another mode.
 - `describe_node`: one node type's ports, params (options, defaults, ranges)
-  and list prices by the params that set them. A local node that still calls
+  and list prices by the params that set them (`price.byInputSize` and
+  `multiplyBy` on a price read from the input file, `price.unconfirmed` when
+  the vendor's page doesn't state it exactly; a route has `priceBy`). A local node that still calls
   a provider also has `runsWithOptions`: readiness per value of the param that
   picks the provider (Cinema Scene's `scene.base.model`, a QC node's `mode`),
   and a note when another value would run with the keys set here. A QC
@@ -716,7 +721,10 @@ price (`unpriced`) or has a cost the vendor doesn't price up front (`plus`,
 e.g. input images), so the real total can be higher. Krea runs billed to a
 Krea account's plan are listed in `plan`. `estimate` is `null` when no node
 in the run has a list price. Each entry in `cost.nodes` carries its own
-`price` ({low, high} or null). These are list prices, not a quote.
+`price` ({low, high} or null). A node priced from its input file's size is
+priced from the file it would get (an upload, or an upstream output that
+already exists); while that file doesn't exist yet it is in `unpriced` and
+`awaitingInput`. These are list prices, not a quote.
 
 **Nodes that can't run here.** `cost.notReady` lists every node the run
 reads, upstream nodes with outputs included, that can't run here as set up,
@@ -949,6 +957,27 @@ which has no list price; Jev mode is priced per request) and a node whose priced
 `multi_prompt` port), or is set to something the price list doesn't cover
 (multi-shot Kling). Free nodes always pass. The person's own runs from the
 canvas are never limited.
+
+Some prices depend on the input file (SeedVR2 Upscale and Video Upscale,
+FLUX Video Upscale and Edit [fast]: `sizing` in
+[MODEL-PRICING](MODEL-PRICING.md#what-counts)). The check measures the file
+the run will send, reading only its header: an Image Input or Video Input's
+file, `nebula quick`'s file, or (in a proposal) an upstream output that
+already exists. The limit checks the top of the computed price. When the
+size can't be measured, the node is unpriced and the run is refused, and the
+refusal says which case it is and what to do:
+
+- The input is made by another node in the same run, or that node hasn't
+  run: wire an Image Input (or Video Input) holding the file into the node
+  and run that, run it on the file with
+  `nebula quick <node type> --input <port>=<file>`, or propose it (a
+  proposal made after the upstream node has run is priced from its output).
+- The input is a file on another host (an outside URL, including one passed
+  to `nebula quick`): it is never downloaded to price it. Download it and use
+  the local copy, or propose it.
+- The file can't be read (missing, not an image or clip Nebula opens, or
+  outside the folders Nebula may read), or the port has no wire or more than
+  one: fix the input, or propose it.
 
 How it works (`backend/services/agent_spend.py`):
 

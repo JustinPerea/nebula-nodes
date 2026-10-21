@@ -15,7 +15,7 @@ export interface PriceRow {
 
 export interface PriceEntry {
   currency: string;
-  per: 'image' | 'video' | 'second' | 'request' | 'megapixel-second';
+  per: 'image' | 'video' | 'second' | 'request' | 'megapixel-second' | 'megapixel' | 'megapixel-frame';
   rows: PriceRow[];
   /** A node that can run on more than one provider prices each route on its
    * own: provider -> a single-route entry (model_pricing.py). The run prices
@@ -36,7 +36,12 @@ export interface PriceEntry {
   notes?: string;
   sources?: Array<{ url: string; quote: string }>;
   checked?: string;
+  /** Quantities measured from the input on `port` (model_pricing.py sizing). */
+  sizing?: { port: string; output?: 'upscale'; megapixel?: number; roundUp?: string[]; say: string };
 }
+
+/** A run's measured input file (services/input_sizes.py). */
+export interface InputSize { width?: number; height?: number; seconds?: number; frames?: number }
 
 export interface PricingTable {
   currencies: Record<string, unknown>;
@@ -137,10 +142,71 @@ export function wireAwareKeys(entry: PriceEntry): Set<string> {
   }
   return result;
 }
-/** Price variables known only once the run's source clip is (its length,
- * its output frame size): an entry that reads one is unpriced before the run
- * (model_pricing.RUN_TIME_VARIABLES). */
-export const RUN_TIME_VARIABLES: readonly string[] = ['(source seconds)', '(output megapixels)', '(output tier)'];
+/** Quantities measured from a run's input file (model_pricing.SIZED_VARIABLES),
+ * and every run-time variable: `(output tier)` is never measured, so an entry
+ * reading it stays unpriced (model_pricing.RUN_TIME_VARIABLES). */
+export const SIZED_VARIABLES: readonly string[] = ['(input megapixels)', '(output megapixels)', '(larger megapixels)',
+  '(source seconds)', '(source frames)'];
+export const RUN_TIME_VARIABLES: readonly string[] = [...SIZED_VARIABLES, '(output tier)'];
+
+/** Whether this single-route entry is priced from its input's size
+ * (model_pricing.awaits_input). */
+export function awaitsInput(entry: PriceEntry | undefined): boolean {
+  if (!entry?.sizing) return false;
+  const keys = [...pricedKeys(entry)];
+  return keys.some((key) => SIZED_VARIABLES.includes(key)) && !keys.includes('(output tier)');
+}
+
+/** The input ports an entry (or any route of it) measures (model_pricing.sizing_ports). */
+export function sizingPorts(entry: PriceEntry | undefined): string[] {
+  return Object.values(entry?.routes ?? (entry ? { entry } : {})).flatMap((item) => (item.sizing ? [item.sizing.port] : []));
+}
+
+/** describe_node's line for an entry priced by its input (model_pricing.size_note). */
+export function sizeNote(entry: PriceEntry | undefined, definition: Partial<ModelNodeDefinition>): string | null {
+  if (!awaitsInput(entry)) return null;
+  const port = definition.inputPorts?.find((candidate) => candidate.id === entry!.sizing!.port);
+  return `${entry!.sizing!.say.trim()}; priced from your ${port?.dataType === 'Video' ? 'video' : 'image'}'s size when you run it`;
+}
+
+/** The SIZED_VARIABLES an entry reads, from its input's size, or null when
+ * one can't be measured (model_pricing.sized_quantities). */
+function sizedQuantities(entry: PriceEntry, values: Record<string, unknown>, size: InputSize | null | undefined): Record<string, number> | null {
+  const sizing = entry.sizing;
+  if (!sizing || !size) return null;
+  const megapixel = sizing.megapixel ?? 1_000_000;
+  const positive = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null);
+  const out: Record<string, number> = {};
+  const wanted = [...pricedKeys(entry)].filter((key) => SIZED_VARIABLES.includes(key));
+  if (wanted.some((key) => key.endsWith('megapixels)'))) {
+    const width = positive(size.width);
+    const height = positive(size.height);
+    if (width === null || height === null) return null;
+    let pixels: number | null = width * height;
+    if (sizing.output === 'upscale') {
+      const mode = asMatchValue(values.upscale_mode || 'factor');
+      const target = String(values.target_resolution ?? '').trim().toLowerCase();
+      const side = target.endsWith('p') ? multiplier(target.slice(0, -1)) : null;
+      const factor = multiplier(values.upscale_factor);
+      const ratio = Math.max(width, height) / Math.min(width, height);
+      // Which side a target sets isn't said: price both and take the larger.
+      pixels = mode === 'factor' ? (factor === null ? null : pixels * factor * factor)
+        : mode === 'target' && side !== null ? side * side * Math.max(ratio, 1 / ratio) : null;
+    }
+    if (pixels === null || !Number.isFinite(pixels) || pixels <= 0) return null;
+    out['(input megapixels)'] = (width * height) / megapixel;
+    out['(output megapixels)'] = pixels / megapixel;
+    out['(larger megapixels)'] = Math.max(out['(input megapixels)'], out['(output megapixels)']);
+  }
+  for (const [key, field] of [['(source seconds)', 'seconds'], ['(source frames)', 'frames']] as const) {
+    if (!wanted.includes(key)) continue;
+    const amount = positive(size[field]);
+    if (amount === null) return null;
+    out[key] = amount;
+  }
+  for (const key of sizing.roundUp ?? []) if (key in out) out[key] = Math.ceil(out[key] - 1e-9);
+  return Object.fromEntries(wanted.map((key) => [key, out[key]]));
+}
 
 /** A video run's mode from its wired ports (VIDEO_MODE); a source video wins. */
 export function videoMode(wired: Iterable<string>): 't2v' | 'i2v' | 'v2v' {
@@ -233,7 +299,8 @@ function priceValues(
 /** One run of this node, or null when it's unpriced (no entry, no matching
  * row, the run bills a different provider than the entry prices, a setting
  * the price reads arrives by wire, so it's only known at run time, or the
- * price reads a RUN_TIME_VARIABLES quantity). The wired ports also give the
+ * price reads a RUN_TIME_VARIABLES quantity and `size`, the measured input of
+ * its sizing port, doesn't give it). The wired ports also give the
  * VIDEO_MODE and REFERENCES a row may match. A `routes` entry prices the route
  * `routeProvider` names. */
 export function estimateNode(
@@ -242,6 +309,7 @@ export function estimateNode(
   params: Record<string, unknown> | undefined,
   routeProvider?: string | null,
   wired: Iterable<string> = [],
+  size?: InputSize | null,
 ): NodeEstimate | null {
   const entry = entryForRoute(priceEntry, routeProvider);
   if (!entry) return null;
@@ -251,8 +319,13 @@ export function estimateNode(
   const priced = pricedKeys(entry);
   const ports = [...wired];
   const aware = wireAwareKeys(entry);
-  if (ports.some((port) => priced.has(port) && !aware.has(port)) || RUN_TIME_VARIABLES.some((key) => priced.has(key))) return null;
+  if (ports.some((port) => priced.has(port) && !aware.has(port))) return null;
   const values = priceValues(entry, definition, params, ports);
+  if (RUN_TIME_VARIABLES.some((key) => priced.has(key))) {
+    const measured = awaitsInput(entry) ? sizedQuantities(entry, values, size) : null;
+    if (!measured) return null;
+    Object.assign(values, measured);
+  }
   const row = (entry.rows ?? []).find((candidate) => matches(values, candidate.match));
   if (!row) return null;
   const base = bounds(row.price);

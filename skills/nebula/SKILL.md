@@ -71,7 +71,7 @@ describe` is `nebula info`.
 | Command | What it does |
 |---|---|
 | `nebula nodes upscale` | Node types whose id or name has every word (`--category image` and so on) |
-| `nebula info <node-id>` | Ports, params, options, defaults and prices; on a node with a Moodboard port, what a wired board does there (`MOODBOARD:`) |
+| `nebula info <node-id>` | Ports, params, options, defaults and prices (`PRICE:`: at default settings, or the rate a node priced from its input file is checked at); on a node with a Moodboard port, what a wired board does there (`MOODBOARD:`) |
 | `nebula keys` | Which provider keys are set |
 | `nebula spend` | The spending limits you work under, and what you used |
 
@@ -149,6 +149,15 @@ nebula status
 
 Runs spend the person's own provider credits. A run over their limits, or
 with a node that has no list price, is refused: send it as a proposal.
+Some nodes are priced from their input file's size (SeedVR2 Upscale: $0.001
+per megapixel of the larger of input and output, rounded up; `nebula info`
+says so on its PRICE line). Nebula measures the file the run will send, so
+`nebula quick seedvr2-upscale --input image=photo.png` or an Image Input holding the file
+is checked against the limits; an input another node makes in the same run
+isn't known yet, so that run is refused: wire an Image Input with the file,
+or propose it. A file on another host (a URL) is never downloaded to price
+it either: download it and pass the local copy, or propose it. The refusal
+says which case it is.
 
 `nebula cancel` stops runs an agent or the CLI started. A run the person
 started from the canvas is theirs to stop: the CLI refuses it, so tell them
