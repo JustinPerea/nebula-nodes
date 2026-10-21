@@ -18,6 +18,8 @@ export interface ProjectSummary {
   cover?: ProjectCover | null;
   /** Who pinned the cover ({kind, name}); none on a pin from before it was recorded (the person's). */
   coverBy?: { kind: string; name: string };
+  /** A pin whose image left the project (Q90 a): it no longer counts, and the cover is automatic. */
+  coverLostPin?: { url: string; by: { kind: string; name: string } | null };
   /** Set when an agent made the project. */
   createdBy?: { kind: 'agent'; name: string };
 }
@@ -36,6 +38,8 @@ export interface CoverChoices {
   images: CoverChoice[]; pinned: string | null; cover: ProjectCover | null;
   /** Who pinned it: kind "person" is the person; missing from a backend before agents could set covers. */
   pinnedBy?: { kind: string; name: string } | null;
+  /** The stored pin while its image is gone ({url, by}); it counts again if the image comes back. */
+  lostPin?: { url: string; by: { kind: string; name: string } | null } | null;
 }
 export interface ProjectSnapshot {
   nodes: Node<NodeData>[]; edges: Edge[]; runHistory: RunRecord[];

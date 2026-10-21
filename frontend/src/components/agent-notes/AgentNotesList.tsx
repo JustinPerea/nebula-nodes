@@ -1,6 +1,6 @@
 import { type CSSProperties, type KeyboardEvent, type Ref } from 'react';
 import type { AgentNote, AgentNoteAction } from '../../lib/agentNotes';
-import { aboutLabel, clockTime, noteText, offersNotNow } from '../../lib/agentNotesView';
+import { clockTime, noteDone, noteLabel, noteText, offersNotNow } from '../../lib/agentNotesView';
 import { ScrollFade } from '../ScrollFade';
 import { AuthorDot, NoteButtons, type AgentNotesAdapter } from './AgentNoteParts';
 
@@ -80,9 +80,9 @@ export function AgentNotesList({
       ) : (
         <ScrollFade as="ul" className="agent-notes-panel__list">
           {notes.map((note) => {
-            const label = aboutLabel(note.about);
+            const label = noteLabel(note);
             const showable = note.refs.length > 0;
-            const done = Boolean(note.dismissedAt || note.actedAt);
+            const done = noteDone(note);
             return (
               <li
                 key={note.id}

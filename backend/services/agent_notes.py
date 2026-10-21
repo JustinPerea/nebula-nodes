@@ -77,6 +77,9 @@ ACTIONS: dict[str, dict[str, Any]] = {
     "history.restore": {"labels": ("Restore",), "keys": {"boardId": str, "historyIds": list}},
     "proposal.accept": {"labels": ("Accept",), "keys": {"proposalId": str}},
     "proposal.reject": {"labels": ("Reject",), "keys": {"proposalId": str}},
+    # An asset proposal's Update (Q92 a): takes the person to where they decide
+    # it (``target`` is the proposal's kind: project, moodboard or commons).
+    "proposal.review": {"labels": ("Review",), "keys": {"proposalId": str, "target": str, "targetId": str}},
 }
 
 # A board image ref inside saved text: private-use characters, which
@@ -473,13 +476,19 @@ class AgentNotes:
         notes = [note for note in (project or {}).get("agentNotes") or [] if isinstance(note, dict)]
         return (project_id if project else None), notes
 
-    def _write_project(self, mutate: Callable[[list[dict[str, Any]]], Any]) -> tuple[str, Any]:
+    def _write_project(self, mutate: Callable[[list[dict[str, Any]]], Any], *,
+                       project_id: str | None = None) -> tuple[str, Any]:
+        """Change the open project's updates (or ``project_id``'s, for an
+        update that follows something decided after the person switched)."""
         store = self.store
         with store.transaction() as catalog:
-            project_id = catalog.get("activeProjectId")
-            if not project_id or project_id not in catalog["projects"]:
-                raise NoteError(409, "Open or create a project first: updates are kept with a project",
-                                "no_project")
+            if project_id is None:
+                project_id = catalog.get("activeProjectId")
+                if not project_id or project_id not in catalog["projects"]:
+                    raise NoteError(409, "Open or create a project first: updates are kept with a project",
+                                    "no_project")
+            elif project_id not in catalog["projects"]:
+                raise NoteError(404, "That project is gone (or in Recently deleted)", "no_project")
             project = catalog["projects"][project_id]
             notes = project.get("agentNotes")
             if not isinstance(notes, list):
@@ -772,6 +781,86 @@ class AgentNotes:
 
         project_id, (unread, removed) = self._write_project(mutate)
         return {"note": note_view(note), "unread": unread, "projectId": project_id, "removed": removed}
+
+
+    # -- an asset proposal's Update (Justin's Q92 a) ------------------------------
+    def post_proposal(self, *, author: Mapping[str, Any], text: str,
+                      proposal: Mapping[str, Any]) -> dict[str, Any]:
+        """The Update an asset proposal posts on the open project's list:
+        written by Nebula from names only (``source: "nebula"``), attributed
+        to the proposing agent, ``about: "proposal"``, with one Review action.
+        One per agent and target: an earlier one from the same agent about the
+        same project, board or reference leaves the list (the socket's
+        ``removed``), so a re-proposal replaces it instead of stacking."""
+        clean_author = _clean_author(author)
+        ref = {"id": str(proposal["id"])[:64], "kind": str(proposal["kind"])[:16],
+               "targetId": str(proposal["targetId"])[:128]}
+        actions = _clean_actions([{"label": "Review", "op": {
+            "kind": "proposal.review", "proposalId": ref["id"], "target": ref["kind"], "targetId": ref["targetId"]}}])
+        note = self._new_note(author=clean_author, source="nebula", about="proposal", text=clean_note_text(text),
+                              refs=[], actions=actions)
+        note["proposal"] = ref
+
+        def mutate(notes: list[dict[str, Any]]) -> tuple[int, list[str]]:
+            removed = []
+            for old in [n for n in notes if _same_ask(n, note)]:
+                notes.remove(old)
+                removed.append(str(old.get("id")))
+            notes.append(note)
+            return unread_count(notes), removed + _prune(notes, MAX_PROJECT_NOTES)
+
+        project_id, (unread, removed) = self._write_project(mutate)
+        return {"note": note_view(note), "unread": unread, "projectId": project_id, "removed": removed}
+
+    def retarget_proposal(self, project_id: str, note_id: str, proposal_id: str) -> dict[str, Any] | None:
+        """The agent's other proposal on the same target is still open: the
+        Update now reviews that one. None when the update has left the list."""
+        def mutate(notes: list[dict[str, Any]]) -> dict[str, Any] | None:
+            note = next((n for n in notes if n.get("id") == note_id), None)
+            if note is None or note.get("resolvedAt"):
+                return None
+            note["proposal"] = {**(note.get("proposal") or {}), "id": proposal_id[:64]}
+            for action in note.get("actions") or []:
+                if (action.get("op") or {}).get("kind") == "proposal.review":
+                    action["op"]["proposalId"] = proposal_id[:64]
+            return copy.deepcopy(note)
+
+        _, note = self._write_project(mutate, project_id=project_id)
+        return None if note is None else {"projectId": project_id, "note": note_view(note)}
+
+    def resolve_proposal(self, project_id: str, note_id: str, *, outcome: str,
+                         by: Mapping[str, Any]) -> dict[str, Any] | None:
+        """The proposal closed (accepted, rejected, withdrawn, expired or no
+        longer fits): the Update says how in one short line (``outcome``) and
+        is read, so no stale Review stays. None when it has left the list."""
+        def mutate(notes: list[dict[str, Any]]) -> tuple[dict[str, Any], int] | None:
+            note = next((n for n in notes if n.get("id") == note_id), None)
+            if note is None or note.get("resolvedAt"):
+                return None
+            now = _iso(self._clock())
+            note["resolvedAt"] = now
+            note["resolvedBy"] = {"kind": str(by.get("kind") or "system")[:16],
+                                  **({"name": str(by["name"])[:40]} if by.get("name") else {})}
+            note["outcome"] = clean_note_text(outcome, limit=80)
+            if not note.get("readAt"):
+                note["readAt"] = now
+            return copy.deepcopy(note), unread_count(notes)
+
+        _, result = self._write_project(mutate, project_id=project_id)
+        if result is None:
+            return None
+        note, unread = result
+        return {"projectId": project_id, "note": note_view(note), "unread": unread}
+
+
+def _same_ask(note: Mapping[str, Any], new: Mapping[str, Any]) -> bool:
+    """Whether ``note`` is the same agent's Update about the same target as ``new``."""
+    if note.get("about") != "proposal" or not isinstance(note.get("proposal"), Mapping):
+        return False
+    old_author, author = note.get("author") or {}, new["author"]
+    return (old_author.get("kind") == author["kind"] and old_author.get("id") == author["id"]
+            and note["proposal"].get("kind") == new["proposal"]["kind"]
+            and note["proposal"].get("targetId") == new["proposal"]["targetId"])
 
 
 def note_summary(note: Mapping[str, Any]) -> str:

@@ -673,7 +673,10 @@ def list_project_covers(project_id: str, ctx: Context | None = None) -> dict[str
     input references. `cover` is what the card shows now, `pinned` the pinned
     image's url (null: the automatic cover, its newest image) and `pinnedBy`
     who pinned it ({kind, name}; kind "person" is the person, "agent" an
-    agent). Pass a url to set_project_cover.
+    agent). A pin whose image is gone (its node deleted) no longer counts:
+    `pinned` and `pinnedBy` are null and `lostPin` ({url, by}) names it; it
+    counts again if the image comes back (an undo). Pass a url to
+    set_project_cover.
     """
     from urllib.parse import quote
 
@@ -690,9 +693,11 @@ def set_project_cover(project_id: str, url: str, ctx: Context | None = None) -> 
     isn't "person"); Nebula records that you set it. A cover the person
     pinned is theirs: this is refused, and propose_asset_change(kind=
     "project", id=project_id, change={"cover": url}, note=...) asks them.
-    Returns the project's card (`cover`, `coverBy`) and `previous`
-    ({"cover": url or null}): set_project_cover(project_id, previous.cover or
-    "") puts it back.
+    A pin whose image is gone (its node deleted) no longer counts, so you may
+    set the cover then; the person's next pin counts again. Returns the
+    project's card (`cover`, `coverBy`) and `previous` ({"cover": url or
+    null}, what the card showed): set_project_cover(project_id,
+    previous.cover or "") puts it back.
     """
     from urllib.parse import quote
 
@@ -711,7 +716,10 @@ def propose_asset_change(kind: str, id: str, change: dict, note: str,  # noqa: A
       list_project_covers) or {"cover": ""} (back to automatic): change a
       cover the person pinned. Decided on the Projects screen. While they
       haven't pinned one (list_project_covers' `pinnedBy` isn't "person"),
-      set_project_cover sets it directly.
+      set_project_cover sets it directly; a pin whose image is gone no
+      longer counts (`lostPin`; the proposal's `change.cover.lostPin`).
+      The proposal's `change.cover.auto` is the image the automatic cover
+      shows now (null when the project has none).
     - kind "moodboard", `id` a board's id or name, change {"sendNotes": true}:
       send the board's notes to generators, which only the person may turn
       on. Decided in Moodboard Studio. Turning it off needs no proposal
@@ -733,9 +741,14 @@ def propose_asset_change(kind: str, id: str, change: dict, note: str,  # noqa: A
       inbox). Decided in the Commons, on the reference. Blind labeling and
       the agent review stay the person's alone.
 
-    `note` is one line (≤160 characters) saying why. Returns {"proposal"}
-    with `id`, `status`, `target` {kind, id, name}, `change` (each key's
-    `from` and `to`) and `decideIn`. Then get_proposal(id, wait_seconds=...)
+    `note` is one line (≤160 characters) saying why. Each proposal also
+    posts an Update in the person's Updates corner ("<you> asks to change
+    the cover of <project>", with Review), one per target: a new proposal on
+    the same target replaces it. When the proposal closes, the Update's
+    `outcome` says how (list_notes). Returns {"proposal"} with `id`,
+    `status`, `target` {kind, id, name}, `change` (each key's `from` and
+    `to`), `decideIn` and `update` ({id, projectId} of that Update, or null
+    with no project open). Then get_proposal(id, wait_seconds=...)
     waits for the decision: accepted (`applied` is what was set), rejected
     (with their `reason`), withdrawn, expired (15 minutes) or invalidated
     (the target changed first: another cover pinned, the board deleted).

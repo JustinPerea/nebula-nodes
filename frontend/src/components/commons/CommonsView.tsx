@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { targetsOf, useAssetProposalsStore } from '../../store/assetProposalsStore';
+import { openOnce } from '../../store/assetProposalReviewRequest';
 import { useUIStore } from '../../store/uiStore';
 import { commonsApi, filtersToRequest, type UrlAddResult } from '../../lib/commonsApi';
 import { EMPTY_FILTERS, type Collection, type CommonsStatus, type FilterState, type SearchRow } from '../../lib/commonsTypes';
@@ -240,6 +241,16 @@ export function CommonsView() {
     setSelectedId(id);
     if (tab !== 'all' && tab !== 'inbox') setTab('all');
   };
+
+  // Review on the proposal's Update (Q92 a): open that reference's detail;
+  // the strip there takes the request and comes into view. Each request opens
+  // it once: a later visit doesn't reopen it when no strip took the request.
+  const reviewAsked = useAssetProposalsStore((state) => (state.review?.kind === 'commons' ? state.review : null));
+  useEffect(() => {
+    if (reviewAsked && openOnce(reviewAsked)) reviewProposal(reviewAsked.targetId);
+    // Only a new request opens a detail; the tab and draft state are read as they are then.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewAsked]);
 
   const emptyHint = tab === 'inbox'
     ? 'Nothing waiting in the inbox. Items agents add land here for you to accept.'

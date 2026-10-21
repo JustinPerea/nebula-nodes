@@ -52,4 +52,16 @@ describe('asset proposals over the socket', () => {
     await vi.waitFor(() => expect(useAssetProposalsStore.getState().proposals.pa_00000001.closing).toBe('invalidated'));
     expect(useAssetProposalsStore.getState().proposals.pa_00000002.closing).toBeUndefined();
   });
+  it('takes the views the relist brings, so a pin whose image went shows as automatic (Q90 a)', async () => {
+    send({ type: 'assetProposalOpened', proposal: coverProposal(), acceptKey: 'k1' });
+    const lost = coverProposal({ change: { cover: { from: null, to: '/api/outputs/c.png', fromBy: null,
+      lostPin: { url: '/api/outputs/a.png', by: { kind: 'person', name: 'You' } } } } });
+    list.mockResolvedValue([lost]);
+    send({ type: 'projectsChanged', change: 'saved', projectId: 'dusk' });
+    await vi.waitFor(() => expect(useAssetProposalsStore.getState().proposals.pa_00000001.view.change.cover?.lostPin)
+      .toEqual({ url: '/api/outputs/a.png', by: { kind: 'person', name: 'You' } }));
+    const entry = useAssetProposalsStore.getState().proposals.pa_00000001;
+    expect(entry.acceptKey).toBe('k1');
+    expect(entry.closing).toBeUndefined();
+  });
 });
