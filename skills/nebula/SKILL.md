@@ -71,12 +71,18 @@ describe` is `nebula info`.
 | Command | What it does |
 |---|---|
 | `nebula nodes upscale` | Node types whose id or name has every word (`--category image` and so on) |
-| `nebula info <node-id>` | Ports, params, options, defaults and prices; on a node with a Moodboard port, what a wired board does there (`MOODBOARD:`) |
+| `nebula info <node-id>` | Ports, params, options, defaults and prices; on a node with a Moodboard port, what a wired board does there (`MOODBOARD:`). Takes a node's exact name too (`nebula info moodboard`), when one node has it, and says the id it used |
 | `nebula keys` | Which provider keys are set |
 | `nebula spend` | The spending limits you work under, and what you used |
 
 Node ids and params change as models are added. Check `nebula info` instead
-of guessing.
+of guessing. `nebula info` (and `describe`) also takes a node's exact name,
+any case: `nebula info moodboard` answers for `nebula-moodboard` and says so
+on its first line. An id always wins, and a name two nodes share is refused
+with both ids. `apply`, `propose`, `create`, `quick` and `style new/set
+--model` take ids only; given
+a name, they refuse and name the id ("did you mean nebula-moodboard
+(Moodboard)?").
 
 ## Build: `nebula apply`
 

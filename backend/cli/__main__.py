@@ -40,7 +40,9 @@ def build_parser() -> argparse.ArgumentParser:
     nodes_p.add_argument("--category", help="Only this category: an id (image-gen) or its short name (image)")
 
     info_p = sub.add_parser("info", help="Show full detail for a node", start_hint=True)
-    info_p.add_argument("node_id", help="Node definition ID")
+    info_p.add_argument("node_id",
+                        help="Node definition ID (nebula-moodboard), or a node's exact name (Moodboard, any case) "
+                             "when one node has it; it then says the id. apply, create and quick take ids only")
 
     sub.add_parser("keys", help="Show configured API keys")
 
