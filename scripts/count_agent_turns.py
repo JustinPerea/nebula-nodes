@@ -80,6 +80,10 @@ USAGE_PATTERNS = [
         r"\berror: argument [^:\n]+: expected\b",
         r"\berror: unknown [a-z ]+ (command|action)\b",
         r"\bNode '[^']+' not found\b",
+        # describe_node's and the write paths' words for a node type that isn't one
+        # (an unknown id, or a display name two nodes share).
+        r"\bNo node type '[^']+'",
+        r"\bunknown node definition '[^']+'",
         r"`nebula [a-z-]+` doesn't take --",
         r"\bRename existing nodes with edit_canvas\b",
         r"\bvalidation errors? for \w+Arguments\b",

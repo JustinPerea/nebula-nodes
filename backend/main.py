@@ -10,7 +10,6 @@ _env_check.run_startup_checks()
 
 import asyncio
 import copy
-import difflib
 import hashlib
 import json
 import logging
@@ -85,7 +84,7 @@ from services.settings import (
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
-from services import agent_start, node_categories
+from services import agent_start, node_categories, node_lookup
 from services import output_thumbnail
 from services.node_errors import NodeErrors
 from services import project_cover
@@ -3920,15 +3919,24 @@ _MODEL_PORTS_NOTES = {
 }
 
 
-@app.get("/api/agent/nodes/{definition_id}")
+# `{...:path}`: a display name may hold a slash ("Jev Decide (judge / classify / yes-no)").
+@app.get("/api/agent/nodes/{definition_id:path}")
 async def agent_describe_node(definition_id: str) -> dict[str, Any]:
     """One node type, in what an agent needs to wire and set it: ports, params
-    (options, defaults, ranges), whether it can run here, and its list prices."""
-    definition = node_registry.get(definition_id)
-    if definition is None:
-        hint = ", ".join(_suggest_node_ids(definition_id, list(node_registry.get_all())))
+    (options, defaults, ranges), whether it can run here, and its list prices.
+    Takes an id, or the exact display name of one node type (ignoring case
+    and outer spaces); a name answer starts with `lookup`, saying the id."""
+    found = node_lookup.resolve(definition_id, node_registry.get_all())
+    if found.definition_id is None:
+        if len(found.named) > 1:
+            line = node_lookup.shared_name_line(definition_id, found.named, node_registry.get_all())
+            raise HTTPException(status_code=404, detail=f"No node type '{definition_id}': {line}: "
+                                f"{', '.join(found.named)}. Use one of those ids.")
+        hint = ", ".join(_suggest_node_ids(definition_id, node_registry.get_all()))
         raise HTTPException(status_code=404, detail=f"No node type '{definition_id}'." + (
             f" Close matches: {hint}." if hint else " find_nodes lists them."))
+    definition_id = found.definition_id
+    definition = node_registry.get(definition_id)
     settings = load_settings()
     try:
         krea_signed_in = _krea_connector().status().get("status") == "connected"
@@ -3945,6 +3953,8 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
         for port in definition.get(key) or []
     ]
     result: dict[str, Any] = {
+        # A name, not the id, picked it: say which id (first, so it's read first).
+        **({"lookup": found.note} if found.note else {}),
         "id": definition["id"],
         "name": definition.get("displayName") or definition["id"],
         "category": definition.get("category"),
@@ -7614,28 +7624,30 @@ async def list_nodes() -> dict:
     return {"nodes": nodes_list, "categories": categories}
 
 
-def _suggest_node_ids(query: str, all_ids: list[str]) -> list[str]:
-    """Find candidate definition ids for a failed `nebula info` lookup.
-
-    Prefix match first (catches family names: `gpt-image-2` → four variants);
-    falls back to difflib close matches for typos. Returns [] if nothing is
-    close enough — callers should skip the 'Did you mean:' block in that case
-    rather than pad the 404 with noise.
-    """
-    prefix = sorted(nid for nid in all_ids if nid.startswith(query) and nid != query)
-    if prefix:
-        return prefix
-    return difflib.get_close_matches(query, all_ids, n=5, cutoff=0.6)
+def _suggest_node_ids(query: str, definitions: Mapping[str, Mapping[str, Any]]) -> list[str]:
+    """Candidate definition ids for a failed lookup (services/node_lookup.py):
+    the node types the text is the exact name of first, then ids it starts
+    (a family name: `gpt-image-2` lists its four variants), else difflib close
+    matches for a typo. [] when nothing is close: callers then skip the
+    'Did you mean:' block rather than pad the 404 with noise."""
+    return node_lookup.suggestions(query, definitions)
 
 
-@app.get("/api/nodes/{node_id}")
+# `{...:path}`: a display name may hold a slash ("Jev Decide (judge / classify / yes-no)").
+@app.get("/api/nodes/{node_id:path}")
 async def get_node(node_id: str) -> dict:
-    node = node_registry.get(node_id)
-    if node is None:
-        all_nodes = node_registry.get_all()
-        suggestions = _suggest_node_ids(node_id, list(all_nodes.keys()))
+    """One node definition, for `nebula info`. Takes an id, or the exact
+    display name of one node type (ignoring case and outer spaces); a name
+    answer starts with `lookup`, the line saying which id it used."""
+    all_nodes = node_registry.get_all()
+    found = node_lookup.resolve(node_id, all_nodes)
+    if found.definition_id is None:
+        suggestions = _suggest_node_ids(node_id, all_nodes)
+        head = f"Node '{node_id}' not found"
+        if len(found.named) > 1:
+            head += f": {node_lookup.shared_name_line(node_id, found.named, all_nodes)}"
         if suggestions:
-            lines = [f"Node '{node_id}' not found. Did you mean:"]
+            lines = [f"{head}. Did you mean:"]
             for nid in suggestions:
                 meta = all_nodes.get(nid, {})
                 display = meta.get("displayName", "")
@@ -7643,11 +7655,13 @@ async def get_node(node_id: str) -> dict:
                 lines.append(f"  - {nid:32s} {display:24s} {category}")
             detail = "\n".join(lines)
         else:
-            detail = f"Node '{node_id}' not found"
+            detail = head
         raise HTTPException(status_code=404, detail=detail)
+    node = all_nodes[found.definition_id]
     board = _moodboard_adapter(node)
-    # `nebula info` prints it; the definition itself stays as registered.
-    return {**node, "moodboardAdapter": board} if board is not None else node
+    # `nebula info` prints them; the definition itself stays as registered.
+    lookup = {"lookup": found.note} if found.note else {}
+    return {**lookup, **node, **({"moodboardAdapter": board} if board is not None else {})}
 
 
 def _moodboard_adapter(definition: Mapping[str, Any], settings: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
@@ -8390,6 +8404,7 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
     definition_id = body.get("definitionId", "")
     if message := retired_message(str(definition_id)):
         raise HTTPException(status_code=400, detail=message)
+    _refuse_unknown_definition(definition_id)
     raw_params = body.get("params", {})
     params = {} if raw_params is None else raw_params
     if not isinstance(params, dict):
@@ -8482,6 +8497,7 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     definition_id = body.get("definitionId", "")
     if message := retired_message(str(definition_id)):
         raise HTTPException(status_code=400, detail=message)
+    _refuse_unknown_definition(definition_id)
     raw_params = body.get("params", {})
     params = {} if raw_params is None else raw_params
     if not isinstance(params, dict):
@@ -10586,6 +10602,18 @@ def _folded_billing_baseline(reference: str, folded: set[str]) -> dict[str, Any]
     return {node_route.PROVIDER_PARAM: "krea"} if reference in folded else None
 
 
+def _refuse_unknown_definition(definition_id: Any) -> None:
+    """400 for a node type the registry doesn't have, on every path that
+    stores or runs one (create, node-and-connect, quick, and every staged
+    import, cluster, restore, edit and proposal). Writes take ids only, never
+    a display name (services/node_lookup.py), so what a saved command adds
+    can't change when names do; the refusal names the node the text is the
+    name of ("did you mean nebula-moodboard (Moodboard)?")."""
+    if not isinstance(definition_id, str) or node_registry.get(definition_id) is None:
+        raise HTTPException(status_code=400,
+                            detail=node_lookup.unknown_definition(str(definition_id), node_registry.get_all()))
+
+
 def _validated_ingress_node(
     raw: dict[str, Any],
     index: int,
@@ -10612,11 +10640,7 @@ def _validated_ingress_node(
     # A retired definition (its provider shut the model down) becomes its
     # replacement, so saved graphs and exports still load.
     definition_id, params, retired_label = migrate_node(definition_id, params)
-    if node_registry.get(definition_id) is None:
-        raise HTTPException(
-            status_code=400,
-            detail=f"unknown node definition '{definition_id}'",
-        )
+    _refuse_unknown_definition(definition_id)
     _validate_params(definition_id, params)
     params = _coerce_params(definition_id, params)
     if definition_id == "image-input" and normalize_image_inputs:
@@ -12471,6 +12495,7 @@ async def quick_execute(body: dict[str, Any]) -> dict:
     definition_id = body.get("definitionId", "")
     if message := retired_message(str(definition_id)):
         raise HTTPException(status_code=400, detail=message)
+    _refuse_unknown_definition(definition_id)
     if not quick_execution_allowed(definition_id):
         raise HTTPException(
             status_code=409,
@@ -14148,7 +14173,8 @@ def _check_style_write(name: Any, model_id: str | None, params: Mapping[str, Any
     - Nobody but the person may make a Style that changes who bills its
       model's run (``_provider``, ``_kreaAuth``; ``_refuse_agent_billing_change``).
       ``before`` is the Style as it was when the model stays the same.
-    - An agent's ``modelId`` must be a node in the catalog."""
+    - An agent's ``modelId`` must be a node id in the catalog; a display
+      name is refused naming its id (``node_lookup.unknown_definition``)."""
     params = params if isinstance(params, Mapping) else {}
     label = f"Style “{str(name or '')[:60]}”"
     if has_agent_marker(current_request_headers()):
@@ -14156,8 +14182,11 @@ def _check_style_write(name: Any, model_id: str | None, params: Mapping[str, Any
         _refuse_agent_internal_params({key: value for key, value in params.items()
                                        if key not in was or was.get(key) != value}, "style")
         if model_id and node_registry.get(model_id) is None:
+            # Strict like the node writes (a Style stores its modelId and Create
+            # applies it), and the refusal names the exact-name match the same way.
             raise HTTPException(status_code=400, detail=(
-                f"style.modelId: there's no node {str(model_id)[:64]!r}; find_nodes (`nebula nodes`) lists them"))
+                f"style.modelId: {node_lookup.unknown_definition(str(model_id)[:64], node_registry.get_all())}; "
+                "find_nodes (`nebula nodes`) lists them"))
     if model_id:
         try:
             _refuse_agent_billing_change([(label, model_id, (before or {}).get("params") if before else None, params)])
