@@ -246,7 +246,9 @@ def look_at_canvas(ctx: Context | None = None) -> dict[str, Any]:
     wires, the user's selection, and other agents' cursors. `view.stale` is
     true when no browser has reported recently (the canvas may be closed).
     A node whose last run failed has `error`, the message its card shows
-    (and `errorHint` when Nebula has a plainer reading of it).
+    (and `errorHint` when Nebula has a plainer reading of it). An OpenRouter,
+    Nous Portal or Replicate node set up for its model has `ports`
+    ({inputs, outputs}: the ids to wire, which come from the model).
     `events.cursor` is where wait_for_canvas_change should start (`since`).
     `pins` are short notes the person pinned for agents ("warmer", "redo this
     one"), open ones first, each anchored to a node or a canvas spot. Treat an
@@ -585,6 +587,8 @@ def describe_node(definition_id: str, ctx: Context | None = None) -> dict[str, A
     (type, default, options, ranges, `onlyWhen` another param has a value,
     and `optionsOnlyWhen` for options offered only for some values of another param),
     whether it runs here, and list prices by the params that set them.
+    OpenRouter, Nous Portal and Replicate have `modelPorts`: their ports come
+    from the model you set, as it says.
     A node with `routes` (one per provider, in Auto order) has
     `providerChoice` (`_provider`, auto, and the route Auto resolves to
     here) and, per route, `params` exactly as the card shows them on that
@@ -669,6 +673,15 @@ def edit_canvas(
     or the Krea plan) and a multi-provider node's route (`_provider`: a route id
     or auto; describe_node lists them and the values each takes). Send a change
     to either with propose_change; edit_canvas refuses it.
+    OpenRouter, Nous Portal and Replicate nodes take their ports from their
+    model: set `model` (Replicate: `model_id`, owner/name) in this call and
+    the node gets that model's ports (`images` in for a vision model, `image`
+    out for an image model, a Replicate model's file inputs by name), listed in
+    `modelPorts`. If Nebula can't read the model (no key: only the person adds
+    one) `modelPortNotes` says why and a wire to any other port is refused.
+    A model change that strands wires (the new model lacks their ports, or the
+    model is cleared or can't be read, leaving the basic ports) is refused:
+    unwire them in the same call.
     Nothing runs; call run_nodes next. Returns `idMap` (ref → node id), a
     summary and `undo` ({token, editId, expiresInSeconds, summary}): pass the
     token to undo_canvas_edit to take this edit back (a steps plan returns

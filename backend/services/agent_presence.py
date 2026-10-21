@@ -28,6 +28,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Callable, Iterator, Mapping
 
+from services import universal_ports
 from services.selection_context import _safe_value as safe_value
 
 PRESENCE_TTL_SECONDS = 120.0
@@ -422,6 +423,13 @@ class AgentPresence:
             }
             if node.get("label"):
                 entry["model"] = definition.get("displayName") or definition_id
+            # A universal node's ports come from its model: say which, once
+            # (its `_model_ports` record isn't repeated in params).
+            model_ports = universal_ports.stored_ports(definition_id, node.get("params"))
+            if model_ports is not None:
+                entry["params"].pop(universal_ports.PORTS_PARAM, None)
+                entry["ports"] = {"inputs": universal_ports.port_ids(model_ports[0]),
+                                  "outputs": universal_ports.port_ids(model_ports[1])}
             if reported is not None:
                 entry["position"] = {"x": round(reported["x"], 1), "y": round(reported["y"], 1)}
                 if "width" in reported:
