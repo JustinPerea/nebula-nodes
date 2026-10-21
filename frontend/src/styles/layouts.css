@@ -51,10 +51,12 @@
    * (Q107 a); the corner writes the chip's measured width here. Below about
    * 1360 px the chip drops the word "Updates" (agentNotes.css) and the slot
    * and the header padding reserve its compact width (GM review: a header
-   * must not wrap at 1280). Measured 2026-10-21: dots 38 + count 22, gaps 8,
-   * padding 15, border 2, and the word 52 + its gap. */
-  --agent-notes-chip-w-full: 145px;
-  --agent-notes-chip-w-compact: 85px;
+   * must not wrap at 1280). Measured 2026-10-21 (p157, the count as plain
+   * figures after a 4 px gap, GM review): dots 38 + gap 8 + count 4 + 7,
+   * padding 15, border 2 = 74; the word 52 + its gap 8 = 134. A two-digit
+   * count widens the chip, and the corner writes its measured width here. */
+  --agent-notes-chip-w-full: 134px;
+  --agent-notes-chip-w-compact: 74px;
   --agent-notes-chip-w: var(--agent-notes-chip-w-full);
   --agent-notes-slot-h: 32px;
   --chat-launcher-size: 42px;

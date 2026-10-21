@@ -18,6 +18,7 @@ import { CommonsProposalsLine } from './CommonsProposalsLine';
 import { WorkspaceHeader } from '../WorkspaceHeader';
 import { ToolbarMenuPopover } from '../asset-move/AssetMoveMenu';
 import { workspaceLabel } from '../../lib/workspaceLabel';
+import { setCommonsUnsaved } from '../../lib/commonsUnsaved';
 import '../../styles/commons.css';
 
 type Tab = 'all' | 'inbox' | 'settings' | 'labeling' | 'review';
@@ -205,6 +206,12 @@ export function CommonsView() {
   const folded = useToolbarFolds();
   const foldFocus = useFoldFocusHandoff(folded, tab);
   const [labelingDirty, setLabelingDirty] = useState(false);
+  // The Updates corner leaves the Commons too (Show, See all, Review): it
+  // reads this and refuses while a panel holds unsaved work (p157 review).
+  useEffect(() => {
+    setCommonsUnsaved(labelingDirty);
+    return () => setCommonsUnsaved(false);
+  }, [labelingDirty]);
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [rows, setRows] = useState<SearchRow[]>([]);
   const [loading, setLoading] = useState(true);

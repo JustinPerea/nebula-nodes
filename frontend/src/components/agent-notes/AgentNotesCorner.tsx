@@ -247,6 +247,43 @@ function placeCorner(chip: HTMLElement | null, card: HTMLElement | null, list: H
   }
 }
 
+function agentLogHeader(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('.agent-log__header');
+}
+
+/** The latest "See all actions →"; an older one that is still waiting gives way. */
+let seeAllRequest = 0;
+
+/**
+ * "See all actions →": the Agent log, expanded, with focus on its header.
+ * App mounts the log only on the canvas, so from any other screen this goes
+ * to the canvas first (the way Show does) and opens the log once it has
+ * mounted there. Until then agentLogOpen stays as it was: it is never left
+ * set with no log on screen (which would pop the log open on a later visit).
+ * If the person moves on before the log mounts, nothing opens. Resolves once
+ * the log is open (or the person moved on); rejects with the reason when it
+ * can't get there (the project didn't open, the Commons holds unsaved
+ * labels, the log never showed), for the list to show.
+ */
+function seeAllActions(): Promise<void> {
+  const request = ++seeAllRequest;
+  if (onCanvas()) {
+    useUIStore.getState().openAgentLog();
+    window.requestAnimationFrame(() => agentLogHeader()?.focus({ preventScroll: true }));
+    return Promise.resolve();
+  }
+  return goToCanvas()
+    .then(() => whenReady(() => onCanvas() && agentLogHeader() !== null))
+    .then((ready) => {
+      if (request !== seeAllRequest || !onCanvas()) return;
+      if (!ready) throw new Error("The Agent log didn't open. Try again.");
+      useUIStore.getState().openAgentLog();
+      window.requestAnimationFrame(() => {
+        if (onCanvas()) agentLogHeader()?.focus({ preventScroll: true });
+      });
+    });
+}
+
 /** The newest author of each kind, for the chip's two dots. */
 function chipAuthors(notes: AgentNote[]): { agent: AgentNoteAuthor; reader: AgentNoteAuthor } {
   const agent = notes.find((n) => n.author.kind === 'agent')?.author
@@ -303,6 +340,8 @@ export function AgentNotesCorner({
   useEffect(() => {
     openRef.current = open;
   }, [open]);
+  // For a step that fails after the render it started in (see `fail`).
+  const openListRef = useRef<() => void>(() => {});
 
   // New updates: into the open list (read as they arrive), or queued to drop.
   useEffect(() => {
@@ -431,6 +470,9 @@ export function AgentNotesCorner({
     const newest = list.notes[0];
     if (newest && list.unread > 0) void markRead(surface, newest.id);
   }
+  useEffect(() => {
+    openListRef.current = openList;
+  });
 
   // A click outside closes the list.
   useEffect(() => {
@@ -487,7 +529,18 @@ export function AgentNotesCorner({
     return () => window.clearInterval(timer);
   }, [open, card]);
 
+  /**
+   * A step that didn't go through: its reason in the list, where the person
+   * looks (p157 review). The list opens for it when the step came from a
+   * card, or when the list closed meanwhile.
+   */
+  function fail(failure: unknown) {
+    useAgentNotesStore.setState({ error: failure instanceof Error ? failure.message : String(failure) });
+    if (!openRef.current) openListRef.current();
+  }
+
   function runAction(note: AgentNote, action: AgentNoteAction) {
+    useAgentNotesStore.getState().clearError();
     void Promise.resolve()
       .then(() => adapter.runAction(note, action))
       .then(() => {
@@ -495,16 +548,25 @@ export function AgentNotesCorner({
         // Review that fails keeps the list open, with its reason.)
         if (action.op.kind === 'proposal.review' && openRef.current) closeList(false);
       })
-      .catch((failure: unknown) => {
-        useAgentNotesStore.setState({ error: failure instanceof Error ? failure.message : String(failure) });
-      });
+      .catch(fail);
   }
 
   function show(note: AgentNote) {
     if (note.refs.length === 0) return;
-    // From another screen Show opens the canvas: the list steps aside for it.
-    if (!onCanvas() && openRef.current) closeList(false);
-    adapter.show(note);
+    // From another screen Show opens the canvas: the list steps aside once
+    // it is there. One that can't go keeps the list open, with its reason.
+    if (!onCanvas()) useAgentNotesStore.getState().clearError();
+    const going = adapter.show(note);
+    if (going) void going.then(() => { if (openRef.current) closeList(false); }, fail);
+  }
+
+  function seeAll() {
+    useAgentNotesStore.getState().clearError();
+    // On the canvas the list steps aside for the log at once, as before.
+    if (onCanvas()) closeList(false);
+    // From another screen it steps aside once the log is open; a See all
+    // that can't get there keeps it open, with its reason.
+    void seeAllActions().then(() => { if (openRef.current) closeList(false); }, fail);
   }
 
   const hold = {
@@ -593,13 +655,7 @@ export function AgentNotesCorner({
           adapter={adapter}
           error={error}
           onClose={closeList}
-          onSeeAll={agentLogEnabled ? () => {
-            closeList(false);
-            useUIStore.getState().openAgentLog();
-            window.requestAnimationFrame(() => {
-              document.querySelector<HTMLElement>('.agent-log__header')?.focus({ preventScroll: true });
-            });
-          } : null}
+          onSeeAll={agentLogEnabled ? seeAll : null}
           onAction={runAction}
           onShow={show}
           onHover={(note) => setOutline('hover', note && note.refs.length > 0
@@ -687,16 +743,15 @@ function useAppAdapter(keptWith: string): AgentNotesAdapter {
           frame(note);
           return;
         }
-        void goToCanvas()
-          .then(() => whenReady(() => canvasReady(note)))
-          .then((ready) => {
+        // Resolves once on the canvas (the corner's list steps aside then);
+        // the framing follows when what the note names has measured.
+        return goToCanvas().then(() => {
+          void whenReady(() => canvasReady(note)).then((ready) => {
             if (request !== showRequest.current || !onCanvas()) return;
             outline(note);
             if (ready) frame(note);
-          })
-          .catch((failure: unknown) => {
-            useAgentNotesStore.setState({ error: failure instanceof Error ? failure.message : String(failure) });
           });
+        });
       },
       runAction: async (_note, action) => {
         // An asset proposal's Update (Q92 a): go where the person decides it.
