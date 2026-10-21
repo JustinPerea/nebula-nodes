@@ -149,28 +149,3 @@ def test_agents_are_told_updates_show_on_every_screen():
     assert "in the top\nright of the canvas" not in setup and "top right of the canvas" not in setup
     assert "every screen" in setup
     assert "every screen" in (REPO / "skills/nebula/SKILL.md").read_text(encoding="utf-8")
-
-
-def test_agents_are_told_a_boards_updates_are_not_on_screen_yet():
-    """Review of Q107 a: the corner shows only the open project's list.
-
-    An Update posted with `board` is kept with that board for list_notes, but
-    no screen shows it (not even Moodboard Studio on that board), so the
-    words that now say "every screen" must not steer an agent to post there
-    to reach the person.
-    """
-    import mcp_server
-
-    phrase = "not on screen yet"
-    post_doc = " ".join((mcp_server.post_note.__doc__ or "").split())
-    assert phrase in post_doc
-    assert "post without `board`" in post_doc
-    list_doc = " ".join((mcp_server.list_notes.__doc__ or "").split())
-    assert phrase in list_doc
-    setup = " ".join((REPO / "docs/MCP-SETUP.md").read_text(encoding="utf-8").split())
-    assert "(or with a board, with `board`)" not in setup
-    assert setup.count(phrase) >= 2, "the tool list and the Updates section"
-    skill = " ".join((REPO / "skills/nebula/SKILL.md").read_text(encoding="utf-8").split())
-    assert phrase in skill and "leave out `--board`" in skill
-    cli = " ".join((REPO / "backend/cli/__main__.py").read_text(encoding="utf-8").split())
-    assert phrase in cli

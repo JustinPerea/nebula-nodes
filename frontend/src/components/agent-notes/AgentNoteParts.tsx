@@ -21,6 +21,11 @@ export interface AgentNotesAdapter {
   runAction: (note: AgentNote, action: AgentNoteAction) => void | Promise<void>;
   /** Why an action can't run any more ("Expired"), or null while it can. */
   actionState?: (action: AgentNoteAction) => string | null;
+  /** A board image's number now (the Studio's board), to draw `#n` in the text. */
+  numberFor?: (ref: string) => number | null;
+  /** Whether hovering an entry or a card outlines its refs (the canvas's
+   *  outline layer draws nodes only; a board's refs are images). */
+  outlines?: boolean;
 }
 
 export function AuthorDot({

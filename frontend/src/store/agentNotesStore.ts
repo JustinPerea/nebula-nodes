@@ -19,6 +19,8 @@ import {
  * corner's chunk lands; the corner itself is deferred (lib/deferredChunks.ts).
  */
 
+export const EMPTY_LIST: SurfaceList = { notes: [], unread: 0, loaded: false };
+
 export interface SurfaceList {
   /** Newest first. */
   notes: AgentNote[];
@@ -53,6 +55,12 @@ interface AgentNotesState {
   error: string | null;
   /** Bumped by every canvas socket message, so a slower fetch never overwrites a newer push. */
   canvasSeq: number;
+  /** The board whose Updates show now (Moodboard Studio on it, Q113 c), or
+   *  null. Only its added updates drop a card; another board's just wait.
+   *  Set, and its list loaded, by the deferred corner (lib/agentNotesBoard.ts). */
+  boardInView: string | null;
+  /** Per board, bumped by each of its socket messages (as `canvasSeq`). */
+  boardSeq: Record<string, number>;
   apply: (event: AgentNotesEvent) => void;
   hydrateCanvas: () => Promise<void>;
   markRead: (surface: AgentNotesSurface, upTo?: string) => Promise<void>;
@@ -65,7 +73,7 @@ interface AgentNotesState {
   reset: () => void;
 }
 
-const EMPTY: SurfaceList = { notes: [], unread: 0, loaded: false };
+const EMPTY = EMPTY_LIST;
 
 function countUnread(notes: AgentNote[]): number {
   return notes.filter(isUnread).length;
@@ -97,6 +105,8 @@ function initialState() {
     outlines: {} as Partial<Record<OutlineSource, OutlineSpec>>,
     error: null as string | null,
     canvasSeq: 0,
+    boardInView: null as string | null,
+    boardSeq: {} as Record<string, number>,
   };
 }
 
@@ -113,6 +123,7 @@ async function sendRead(
     setState((state) => ({ lists: withList(state.lists, key, (list) => ({ ...list, unread: result.unread })) }));
   } catch (error) {
     setState({ error: error instanceof Error ? error.message : String(error) });
+    // (A board's list is read again by the corner when this error shows.)
     if (surface.kind === 'canvas') void getState().hydrateCanvas();
   }
 }
@@ -128,6 +139,7 @@ export const useAgentNotesStore = create<AgentNotesState>((set, get) => ({
     const serverUnread = typeof event.unread === 'number' && Number.isFinite(event.unread) ? event.unread : null;
 
     if (isCanvas) set((state) => ({ canvasSeq: state.canvasSeq + 1 }));
+    else set((state) => ({ boardSeq: { ...state.boardSeq, [key]: (state.boardSeq[key] ?? 0) + 1 } }));
     set((state) => {
       const switched = isCanvas && projectId !== state.canvasProjectId;
       const canvasProjectId = isCanvas ? projectId : state.canvasProjectId;
@@ -150,10 +162,13 @@ export const useAgentNotesStore = create<AgentNotesState>((set, get) => ({
         const current = state.lists[key] ?? EMPTY;
         const seen = current.notes.some((n) => n.id === note.id);
         const notes = [note, ...current.notes.filter((n) => n.id !== note.id && !removed.has(n.id))];
+        // A board's card drops only while that board is on screen; its
+        // update still waits in the list, unread, for when it is opened.
+        const shown = isCanvas || event.boardId === state.boardInView;
         return {
           canvasProjectId,
           lists: { ...state.lists, [key]: { notes, unread: serverUnread ?? countUnread(notes), loaded: current.loaded } },
-          arrivals: seen || !isUnread(note)
+          arrivals: seen || !isUnread(note) || !shown
             ? arrivals.filter((a) => !removed.has(a.id))
             : [...arrivals.filter((a) => !removed.has(a.id)), { key, id: note.id }],
         };
