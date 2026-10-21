@@ -26,7 +26,7 @@ vi.mock('../src/lib/backend', () => ({ apiFetch: net.apiFetch }));
 vi.mock('../src/store/graphStore', () => {
   const useGraphStore = (selector: (state: typeof graph.state) => unknown) => selector(graph.state);
   useGraphStore.getState = () => graph.state;
-  return { useGraphStore };
+  return { useGraphStore, watchGraphSyncs: () => ({ seen: new Set<string>(), stop: () => {} }) };
 });
 
 const { ProposalBar } = await import('../src/components/canvas/ProposalBar');
@@ -115,7 +115,7 @@ describe('ProposalBar', () => {
     expect((init.headers as Record<string, string>)['X-Nebula-Proposal-Key']).toBe('key-a');
     expect(JSON.parse(init.body as string)).toEqual({ positions: { '+up': { x: 900, y: -40 } } });
     expect(graph.state.adoptAcceptedProposal).toHaveBeenCalledWith(expect.objectContaining({ nodes: [{ id: 'n7' }] }),
-      { undoStep: expect.any(Object) });
+      { undoStep: expect.any(Object), synced: expect.any(Set) });
     expect(graph.state.executeNode).toHaveBeenCalledWith('n7', { approvalId: 'ra_a' });
     // Released after the run call (a no-op once the run used it up).
     expect(net.apiFetch.mock.calls[1][0]).toBe('/api/canvas/approvals/ra_a');

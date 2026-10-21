@@ -210,8 +210,9 @@ def test_aliases_stay_out_of_help():
 
 
 def test_cli_category_short_name_matches(cli):
+    # --all: with no key set here, no image node runs (tests/test_cli_nodes_ready.py has the default).
     for category in ("image", "Image", "image-gen"):
-        code, out, err = _run(["nodes", "--category", category])
+        code, out, err = _run(["nodes", "--category", category, "--all"])
         assert code == 0, err
         assert "IMAGE GENERATION" in out and "nano-banana" in out and "VIDEO" not in out
 
@@ -280,6 +281,9 @@ def test_skill_category_examples_list_nodes(cli):
         code, out, err = _run(["nodes", "--category", category])
         assert code == 0, err
         assert not re.search(r"no (matching )?nodes", out, flags=re.I), (category, out[:300])
+        # Nothing may run here with no key set; --all lists the category either way.
+        code, out, err = _run(["nodes", "--category", category, "--all"])
+        assert code == 0 and re.search(r"^  [a-z0-9]", out, flags=re.M), (category, out[:300])
 
 
 def test_skill_examples_parse():

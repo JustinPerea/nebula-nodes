@@ -2,6 +2,7 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import { gzipSync } from 'node:zlib';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { checkBuiltFonts } from './check-built-fonts.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.resolve(scriptDir, process.env.NEBULA_DESKTOP_BUILD === '1' ? '../dist-desktop' : '../dist');
@@ -40,7 +41,11 @@ for (const assetName of assetNames.filter((name) => name.endsWith('.js'))) {
   }
 }
 
+// The app ships its own fonts; nothing in the build may ask a font CDN.
+const fonts = await checkBuiltFonts(distDir, { desktop: process.env.NEBULA_DESKTOP_BUILD === '1' });
+
 console.log(
   `Build budget passed: ${entrySize} bytes raw / ${entryGzipSize} bytes gzip; ` +
-  `${assetNames.filter((name) => name.endsWith('.js')).length} JavaScript assets are eval-free.`,
+  `${assetNames.filter((name) => name.endsWith('.js')).length} JavaScript assets are eval-free; ` +
+  `${fonts.fontFiles} bundled woff2 files (${fonts.fontBytes} bytes) behind ${fonts.faces} @font-face rules, no font CDN.`,
 );
