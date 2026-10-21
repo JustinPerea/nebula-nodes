@@ -142,7 +142,11 @@ function headerSlot(): { slot: DOMRect; header: DOMRect | null } | null {
   return null;
 }
 
-/** The chip's width, as the slots reserve it (layouts.css `--agent-notes-chip-w`). */
+/**
+ * The chip's width, as the slots reserve it (layouts.css `--agent-notes-chip-w`,
+ * whose stylesheet values, full and compact, stand in until the chip is
+ * measured). A wider count ("12") widens the chip and the slot with it.
+ */
 function reserveChipWidth(width: number) {
   if (width <= 0) return;
   const root = document.documentElement;
@@ -453,22 +457,26 @@ export function AgentNotesCorner({
   useLayoutEffect(() => () => setDropLine(null), []);
 
   // Over a header slot the chip follows the header when the page scrolls
-  // (Projects), and moves onto a slot that mounts later (a studio's chunk):
-  // place it again then, once a frame.
+  // (Projects), and moves onto a slot that mounts later (a studio's chunk).
+  // A window resize can cross the compact chip's breakpoint (agentNotes.css)
+  // with no re-render: measure it again then, so the slot and the header
+  // padding reserve its new width. Place it again then, once a frame.
   useEffect(() => {
     let frame = 0;
-    const onScroll = () => {
+    const replace = () => {
       if (frame) return;
       frame = window.requestAnimationFrame(() => {
         frame = 0;
         placeCorner(chipRef.current, cardRef.current, listRef.current);
       });
     };
-    document.addEventListener('scroll', onScroll, { capture: true, passive: true });
-    window.addEventListener(UPDATES_SLOT_EVENT, onScroll);
+    document.addEventListener('scroll', replace, { capture: true, passive: true });
+    window.addEventListener(UPDATES_SLOT_EVENT, replace);
+    window.addEventListener('resize', replace);
     return () => {
-      document.removeEventListener('scroll', onScroll, { capture: true });
-      window.removeEventListener(UPDATES_SLOT_EVENT, onScroll);
+      document.removeEventListener('scroll', replace, { capture: true });
+      window.removeEventListener(UPDATES_SLOT_EVENT, replace);
+      window.removeEventListener('resize', replace);
       if (frame) window.cancelAnimationFrame(frame);
     };
   }, []);

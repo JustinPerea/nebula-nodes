@@ -85,3 +85,132 @@ describe('the workspace header keeps the Updates corner (Q107 a)', () => {
     expect(body).toMatch(/right:\s*var\(--workspace-header-pad-x\)/);
   });
 });
+
+// GM review of Q107 a (2026-10-21): at 1280 wide the Commons toolbar wrapped
+// to two rows (86 px instead of main's 49) once the chip took its room: "treat
+// the two-row wrap at 1280 as a defect". Below about 1360 px the chip shrinks
+// to its author dots and the count, and the header reserves that compact
+// width; above it, the full chip and its width. One token carries the width
+// the slot and the header padding reserve. jsdom has no layout or media
+// queries, so these pin the rules and resolve the token by hand; the live
+// check measures them.
+const notesCss = readFileSync(join(__dirname, '../src/components/agent-notes/agentNotes.css'), 'utf8');
+const COMPACT = '(max-width: 1359px)';
+
+/** The whole `@media <query> { ... }` block, braces balanced. */
+function mediaBlock(css: string, query: string): string {
+  const start = css.indexOf(`@media ${query} {`);
+  expect(start, `missing @media ${query}`).toBeGreaterThan(-1);
+  let depth = 0;
+  for (let i = css.indexOf('{', start); i < css.length; i += 1) {
+    if (css[i] === '{') depth += 1;
+    else if (css[i] === '}' && --depth === 0) return css.slice(start, i + 1);
+  }
+  throw new Error(`unbalanced @media ${query}`);
+}
+
+function ruleIn(css: string, selector: string): string {
+  const start = css.indexOf(`${selector} {`);
+  expect(start, `missing rule: ${selector}`).toBeGreaterThan(-1);
+  return css.slice(start, css.indexOf('}', start));
+}
+
+function declared(body: string, name: string): string | null {
+  const match = body.match(new RegExp(`${name}:\\s*([^;]+);`));
+  return match ? match[1].trim() : null;
+}
+
+/** The px width `--agent-notes-chip-w` resolves to at a window width. */
+function reservedAt(viewport: number): number {
+  const root = ruleIn(layouts, ':root');
+  const max = Number(COMPACT.match(/max-width:\s*(\d+)px/)![1]);
+  const value = viewport <= max
+    ? declared(ruleIn(mediaBlock(layouts, COMPACT), ':root'), '--agent-notes-chip-w')
+    : declared(root, '--agent-notes-chip-w');
+  const name = value?.match(/^var\((--[\w-]+)\)$/)?.[1];
+  const px = declared(root, name ?? '--none');
+  expect(px, `--agent-notes-chip-w at ${viewport}px`).toMatch(/^\d+px$/);
+  return parseFloat(px!);
+}
+
+describe('the compact Updates chip below about 1360 px (GM review of Q107 a)', () => {
+  it('names the chip\'s full and compact widths as tokens, the full one by default', () => {
+    const root = ruleIn(layouts, ':root');
+    // Measured live (2026-10-21): the dots 38 + gap 8 + "Updates" 52 + gap 8 + the count 22, plus padding and border.
+    expect(declared(root, '--agent-notes-chip-w-full')).toBe('145px');
+    // Without the word: dots 38 + gap 8 + count 22 + padding 15 + border 2.
+    expect(declared(root, '--agent-notes-chip-w-compact')).toBe('85px');
+    expect(declared(root, '--agent-notes-chip-w')).toBe('var(--agent-notes-chip-w-full)');
+  });
+
+  it('reserves the compact width below the breakpoint and the full width above it', () => {
+    expect(reservedAt(1280)).toBe(85);
+    expect(reservedAt(1359)).toBe(85);
+    expect(reservedAt(1366)).toBe(145);
+    expect(reservedAt(1440)).toBe(145);
+    expect(reservedAt(1920)).toBe(145);
+    // Both the slot and the header's right padding read that one token.
+    expect(rule('body.agent-notes-shown .agent-notes-slot')).toMatch(/width:\s*var\(--agent-notes-chip-w\)/);
+    expect(headerRule('body.app-slava-restraint.agent-notes-shown .workspace-header.workspace-header--updates-slot'))
+      .toMatch(/padding-right:\s*calc\(var\(--workspace-header-pad-x\) \+ var\(--agent-notes-chip-w\) \+ var\(--workspace-header-gap-x\)\)/);
+  });
+
+  it('drops the word "Updates" at the same breakpoint, keeping the dots, the count and the hit target', () => {
+    const compact = mediaBlock(notesCss, COMPACT);
+    expect(ruleIn(compact, '.agent-notes-chip__label')).toMatch(/display:\s*none/);
+    // Nothing else of the chip changes there: dots, count, height and padding stay.
+    expect(compact).not.toMatch(/agent-notes-chip__dots|agent-notes-chip__count|agent-notes-dot/);
+    expect(compact).not.toMatch(/\.agent-notes-chip\s*[,{][^}]*(height|padding)/);
+    expect(ruleIn(notesCss, '.agent-notes-chip')).toMatch(/height:\s*var\(--agent-notes-chip-h, 40px\)/);
+  });
+});
+
+// The Commons toolbar still wrapped at 1280 with the compact chip (it needs
+// 1346 px then, main's 1245): its two least-used sections fold into a More
+// menu while the chip shows, below the width where the full chip still fits
+// it (1406 px measured, so below 1440).
+const commonsCss = readFileSync(join(__dirname, '../src/styles/commons.css'), 'utf8');
+const COMMONS_FOLD = '(max-width: 1439px)';
+
+describe('the Commons toolbar keeps one row with the chip (GM review of Q107 a)', () => {
+  it('hides the More button unless the toolbar folds', () => {
+    expect(ruleIn(commonsCss, 'body.app-slava-restraint .commons-tabs__more')).toMatch(/display:\s*none/);
+  });
+
+  it('folds Blind labeling and Settings into More while the chip shows, below 1440', () => {
+    const fold = mediaBlock(commonsCss, COMMONS_FOLD);
+    expect(ruleIn(fold, 'body.app-slava-restraint.agent-notes-shown .commons-tab--overflow:not(.commons-tab--active)')).toMatch(/display:\s*none/);
+    expect(ruleIn(fold, 'body.app-slava-restraint.agent-notes-shown .commons-tabs__more')).toMatch(/display:\s*inline-flex/);
+  });
+
+  // Review of the fold: display:none on the open folded tab took it out of the
+  // accessibility tree, so the tablist had no selected tab. It stays in the
+  // tree, hidden on screen (and out of the Tab order, CommonsView).
+  it('keeps the open folded tab in the accessibility tree, hidden only on screen', () => {
+    const fold = mediaBlock(commonsCss, COMMONS_FOLD);
+    expect(fold).not.toContain('body.app-slava-restraint.agent-notes-shown .commons-tab--overflow {');
+    const open = ruleIn(fold, 'body.app-slava-restraint.agent-notes-shown .commons-tab--overflow.commons-tab--active');
+    expect(open).not.toMatch(/display:\s*none|visibility:\s*hidden/);
+    expect(open).toMatch(/position:\s*absolute/);
+    expect(open).toMatch(/width:\s*1px/);
+    expect(open).toMatch(/height:\s*1px/);
+    expect(open).toMatch(/overflow:\s*hidden/);
+    expect(open).toMatch(/clip-path:\s*inset\(50%\)/);
+  });
+});
+
+// Review of the fold: More's menu drew its two items the same, so a sighted
+// person could not see which folded section was open. A checked radio item
+// carries a visible mark; the Move menu (no `checked`) stays plain.
+const assetMoveCss = readFileSync(join(__dirname, '../src/styles/asset-move.css'), 'utf8');
+
+describe('the toolbar menu marks its checked item', () => {
+  it('draws a check before a checked radio item and leaves room for it', () => {
+    expect(ruleIn(assetMoveCss, '.asset-move__item[role="menuitemradio"]')).toMatch(/padding-left:\s*24px/);
+    expect(ruleIn(assetMoveCss, '.asset-move__item[role="menuitemradio"]')).toMatch(/position:\s*relative/);
+    const mark = ruleIn(assetMoveCss, '.asset-move__item[aria-checked="true"]::before');
+    expect(mark).toMatch(/content:\s*"\u2713"/);
+    expect(mark).toMatch(/position:\s*absolute/);
+    expect(ruleIn(assetMoveCss, '.asset-move__item[aria-checked="true"]')).toMatch(/font-weight:\s*600/);
+  });
+});
