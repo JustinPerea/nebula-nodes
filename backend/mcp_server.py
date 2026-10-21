@@ -393,18 +393,23 @@ def post_note(
     ctx: Context | None = None,
 ) -> dict[str, Any]:
     """Tell the person what you noticed, a report or a suggestion. It is saved,
-    and they read it under Updates in the top right of Nebula (a card drops
-    from the Updates chip, and the list keeps it). Your cursor's `say` is for
+    and they read it under Updates in the top right of Nebula, on every screen
+    (the canvas, Projects, Moodboard Studio, the Commons, the other studios),
+    with the open project's list: a card drops from the Updates chip, and the
+    list keeps it. Your cursor's `say` is for
     your own action only; an update is where a notice goes, so the person
     isn't shown text at your cursor every time you notice something.
 
     - `text`: one plain line, at most 240 characters. Never quote a private
       note (the person's own label on a board image): an update that does is
       refused.
-    - `board`: a moodboard id or exact name to post on that board instead of
-      the main canvas. There `#12` in the text names image 12: Nebula keeps it
-      as that image and always shows its current number; a number not on the
-      board refuses the update.
+    - `board`: a moodboard id or exact name to keep the update with that
+      board instead of the main canvas. A board's updates are not on screen
+      yet: the corner shows only the open project's list, even in Moodboard
+      Studio on that board, so you read them back with list_notes(board=...).
+      To reach the person, post without `board`. On a board `#12` in the text
+      names image 12: Nebula keeps it as that image and always shows its
+      current number; a number not on the board refuses the update.
     - `refs`: what it is about, outlined when the person looks: node ids
       ("n4") on the canvas, image ids or numbers on a board (at most 12).
       Unknown ones are dropped and listed in `dropped`.
@@ -437,9 +442,17 @@ def list_notes(board: str | None = None, unread: bool = False, ctx: Context | No
     newest first, with who wrote each (`author`), `about`, the clock time
     (`at`), `refs`, and `readAt` / `dismissedAt` once the person opened the
     list or dismissed one. `unread` is how many the person hasn't opened.
-    The main canvas's list is kept with the open project; pass `board` (an
-    id or exact name) for a moodboard's. `unread=True` lists only those.
-    Only the person marks them read or dismisses them.
+    The main canvas's list is kept with the open project (the person sees it
+    in the Updates corner on every screen); pass `board` (an id or exact
+    name) for a moodboard's, which are not on screen yet (only you read
+    them here). `unread=True` lists only those.
+    Only the person marks them read or dismisses them. Your
+    propose_asset_change asks post their own Update (`about: "proposal"`);
+    once the proposal closes it has `outcome`: "Accepted: ...", "You kept
+    ...", "Withdrawn by <you>", "Expired" (15 minutes without a decision),
+    "No longer fits", or "Closed: Nebula restarted" (Nebula restarted while
+    it was open; proposals don't survive a restart, so ask again if you still
+    want it).
     """
     params = {"unread": 1} if unread else None
     if board:
@@ -662,7 +675,8 @@ def get_proposal(proposal_id: str, wait_seconds: float = 0, ctx: Context | None 
     will run; don't start those runs yourself. `timedOut` is true when the
     person hasn't decided yet. It reads propose_asset_change's proposals
     (ids pa_...) too: those have `kind` and `target`, and when accepted
-    `applied` (what was set).
+    `applied` (what was set). Proposals are kept in memory: after Nebula
+    restarts, an open one is gone (404), so propose again if you still want it.
     """
     from urllib.parse import quote
 
@@ -778,7 +792,9 @@ def propose_asset_change(kind: str, id: str, change: dict, note: str,  # noqa: A
     posts an Update in the person's Updates corner ("<you> asks to change
     the cover of <project>", with Review), one per target: a new proposal on
     the same target replaces it. When the proposal closes, the Update's
-    `outcome` says how (list_notes). Returns {"proposal"} with `id`,
+    `outcome` says how (list_notes); "Closed: Nebula restarted" means Nebula
+    restarted while it was open (proposals are kept in memory only), so
+    propose again if you still want it. Returns {"proposal"} with `id`,
     `status`, `target` {kind, id, name}, `change` (each key's `from` and
     `to`), `decideIn` and `update` ({id, projectId} of that Update, or null
     with no project open). Then get_proposal(id, wait_seconds=...)

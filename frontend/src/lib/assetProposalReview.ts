@@ -2,6 +2,8 @@ import { useProjectStore } from '../store/projectStore';
 import { useUIStore } from '../store/uiStore';
 import type { AssetProposalKind } from './assetProposals';
 import { requestReview } from '../store/assetProposalReviewRequest';
+import { openWorkspace } from './goToCanvas';
+import { refuseWhileCommonsUnsaved } from './commonsUnsaved';
 
 /**
  * Review on an asset proposal's Update (Justin's Q92 a): take the person to
@@ -17,6 +19,9 @@ export async function reviewAssetProposal(op: Record<string, unknown>): Promise<
   if (!targetId || (kind !== 'project' && kind !== 'moodboard' && kind !== 'commons')) {
     throw new Error("This update's proposal can't be opened from here.");
   }
+  // Every Review leaves (or, for a Commons ask, moves within) the screen it
+  // starts on: not while the Commons holds unsaved labels (p157 review).
+  refuseWhileCommonsUnsaved();
   const ui = useUIStore.getState();
   if (kind === 'commons' && !ui.commonsEnabled) {
     throw new Error('Turn on the Commons in Settings to review this proposal.');
@@ -24,10 +29,15 @@ export async function reviewAssetProposal(op: Record<string, unknown>): Promise<
   requestReview({ kind, targetId });
   if (kind === 'project') {
     await useProjectStore.getState().goHome();
-  } else if (kind === 'moodboard') {
+    return;
+  }
+  // The corner shows on Projects too (Q107 a): the Studio and the Commons
+  // live in the open project's workspace, so open it first.
+  await openWorkspace();
+  if (kind === 'moodboard') {
     // The Studio reads the board's own project and fixes the scope itself.
-    ui.enterMoodboardEditor(targetId);
+    useUIStore.getState().enterMoodboardEditor(targetId);
   } else {
-    ui.enterCommons();
+    useUIStore.getState().enterCommons();
   }
 }

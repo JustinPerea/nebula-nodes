@@ -39,19 +39,35 @@ export function AssetMoveMenu({ choices, onChoose, busy = false, disabled = fals
         <span className="asset-move__caret" aria-hidden="true">▾</span>
       </button>
       {open && (
-        <MoveMenuPopover anchorRef={triggerRef} id={menuId} onClose={close} label={`Move this ${noun}`}
+        <ToolbarMenuPopover anchorRef={triggerRef} id={menuId} onClose={close} label={`Move this ${noun}`}
           choices={choices} onChoose={(choice) => { close(true); onChoose(choice); }} />
       )}
     </>
   );
 }
 
-function MoveMenuPopover({ anchorRef, id, label, choices, onChoose, onClose }: {
+const ITEM = '[role="menuitem"], [role="menuitemradio"]';
+
+/** One choice in a toolbar menu; with `checked` it is one of a radio group. */
+export interface ToolbarMenuChoice {
+  id: string;
+  label: string;
+  disabled?: boolean;
+  /** Why it's off, for its tooltip. */
+  reason?: string;
+  checked?: boolean;
+}
+
+/**
+ * The toolbar menu itself, also the Commons toolbar's More (CommonsView):
+ * fixed under its button in a portal, keyboard as described above.
+ */
+export function ToolbarMenuPopover<C extends ToolbarMenuChoice>({ anchorRef, id, label, choices, onChoose, onClose }: {
   anchorRef: RefObject<HTMLButtonElement | null>;
   id: string;
   label: string;
-  choices: MoveChoice[];
-  onChoose: (choice: MoveChoice) => void;
+  choices: C[];
+  onChoose: (choice: C) => void;
   onClose: (returnFocus: boolean) => void;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -71,8 +87,8 @@ function MoveMenuPopover({ anchorRef, id, label, choices, onChoose, onClose }: {
   useEffect(() => {
     if (!position) return;
     const menu = menuRef.current;
-    (menu?.querySelector<HTMLElement>('[role="menuitem"]:not([aria-disabled="true"])')
-      ?? menu?.querySelector<HTMLElement>('[role="menuitem"]'))?.focus();
+    (menu?.querySelector<HTMLElement>(`${ITEM}:not([aria-disabled="true"])`)
+      ?? menu?.querySelector<HTMLElement>(ITEM))?.focus();
   }, [position]);
 
   useEffect(() => {
@@ -91,7 +107,7 @@ function MoveMenuPopover({ anchorRef, id, label, choices, onChoose, onClose }: {
   }, [anchorRef, onClose]);
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    const items = [...(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
+    const items = [...(menuRef.current?.querySelectorAll<HTMLElement>(ITEM) ?? [])];
     const at = items.indexOf(document.activeElement as HTMLElement);
     const focus = (index: number) => { event.preventDefault(); items[(index + items.length) % items.length]?.focus(); };
     if (event.key === 'ArrowDown') focus(at + 1);
@@ -106,7 +122,8 @@ function MoveMenuPopover({ anchorRef, id, label, choices, onChoose, onClose }: {
       className={`asset-move__menu${position ? ' asset-move__menu--open' : ''}`}
       style={position ? { left: position.left, top: position.top } : undefined}>
       {choices.map((choice) => (
-        <button key={choice.id} type="button" role="menuitem" tabIndex={-1} className="asset-move__item"
+        <button key={choice.id} type="button" role={choice.checked === undefined ? 'menuitem' : 'menuitemradio'}
+          aria-checked={choice.checked} tabIndex={-1} className="asset-move__item"
           aria-disabled={choice.disabled || undefined} title={choice.reason}
           onClick={() => { if (!choice.disabled) onChoose(choice); }}>
           <span className="asset-move__label">{choice.label}</span>

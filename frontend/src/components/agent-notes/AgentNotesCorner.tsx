@@ -17,10 +17,13 @@ import { springViewport } from '../../lib/viewportSpring';
 import { selectCanvasList, useAgentNotesStore, type SurfaceList } from '../../store/agentNotesStore';
 import { useCanvasProposalsStore } from '../../store/canvasProposalsStore';
 import { reviewAssetProposal } from '../../lib/assetProposalReview';
+import { goToCanvas, onCanvas, whenReady } from '../../lib/goToCanvas';
 import { useUIStore } from '../../store/uiStore';
+import { useProjectStore } from '../../store/projectStore';
 import { AgentNoteCard, AgentNotesSummaryCard } from './AgentNoteCard';
 import { AgentNotesList } from './AgentNotesList';
 import { AuthorDot, type AgentNotesAdapter } from './AgentNoteParts';
+import { UPDATES_SLOT_EVENT } from './UpdatesSlot';
 import './agentNotes.css';
 
 /** A card stays about 4 s (GM's v5.2 holds 2.6 to 3.8 s), longer while hovered or focused. */
@@ -126,6 +129,44 @@ function useChatRect(): Box | null {
   return rect;
 }
 
+/** The header slot a screen keeps for the chip (WorkspaceHeader, ProjectHome), if one shows. */
+function headerSlot(): { slot: DOMRect; header: DOMRect | null } | null {
+  for (const el of document.querySelectorAll('.agent-notes-slot')) {
+    const slot = el.getBoundingClientRect();
+    if (slot.width > 0 && slot.height > 0) {
+      return { slot, header: el.closest('header')?.getBoundingClientRect() ?? null };
+    }
+  }
+  return null;
+}
+
+/**
+ * The chip's width, as the slots reserve it (layouts.css `--agent-notes-chip-w`,
+ * whose stylesheet values, full and compact, stand in until the chip is
+ * measured). A wider count ("12") widens the chip and the slot with it.
+ */
+function reserveChipWidth(width: number) {
+  if (width <= 0) return;
+  const root = document.documentElement;
+  const value = `${Math.ceil(width)}px`;
+  if (root.style.getPropertyValue('--agent-notes-chip-w') !== value) root.style.setProperty('--agent-notes-chip-w', value);
+}
+
+/**
+ * The line the corner drops its card and list from off the canvas
+ * (`--agent-notes-drop-top`, read by layouts.css to start a studio's docked
+ * chat below it), or null to clear it (the canvas keeps its own rule).
+ */
+function setDropLine(top: number | null) {
+  const root = document.documentElement;
+  if (top === null) {
+    if (root.style.getPropertyValue('--agent-notes-drop-top')) root.style.removeProperty('--agent-notes-drop-top');
+    return;
+  }
+  const value = `${top}px`;
+  if (root.style.getPropertyValue('--agent-notes-drop-top') !== value) root.style.setProperty('--agent-notes-drop-top', value);
+}
+
 /**
  * Keep the chip, the card and the list just left of the chat panel when its
  * rect would meet them (a chat dragged up to this corner; the docked chat
@@ -141,7 +182,42 @@ function placeCorner(chip: HTMLElement | null, card: HTMLElement | null, list: H
   const gutter = parseFloat(rootStyle.getPropertyValue('--page-gutter')) || 16;
   const gap = parseFloat(rootStyle.getPropertyValue('--stack-gap-sm')) || 8;
   const homeTop = parseFloat(rootStyle.getPropertyValue('--agent-notes-chip-top')) || 24;
-  const size = { height: chip.offsetHeight, width: chip.offsetWidth };
+  const tokenHeight = parseFloat(rootStyle.getPropertyValue('--agent-notes-chip-h')) || 40;
+  const size = { height: chip.offsetHeight || tokenHeight, width: chip.offsetWidth };
+  reserveChipWidth(size.width);
+  // Off the canvas (Q107 a) a screen's header keeps a slot for the chip, so it
+  // never sits over that screen's own controls: the chip centres on it, and
+  // the card and the list drop below the header.
+  const reserved = headerSlot();
+  if (reserved) {
+    const { slot, header } = reserved;
+    // Where the page scrolls its header away (Projects), the chip keeps the
+    // top right at the gutter instead of leaving with it.
+    const top = Math.round(slot.top >= 0 ? slot.top + (slot.height - size.height) / 2 : gutter);
+    const right = Math.round(viewport.width - slot.right);
+    chip.style.setProperty('--an-right', `${right}px`);
+    chip.style.setProperty('--an-chip-top', `${top}px`);
+    const dropTop = Math.round(Math.max(top + size.height, header?.bottom ?? 0) + gap);
+    // A chat left open on the canvas stays up in the studios: docked, it
+    // starts below this line (layouts.css), so it never sits under the chip.
+    setDropLine(dropTop);
+    const below = obstacles();
+    for (const el of [card, list]) {
+      if (!el) continue;
+      el.style.setProperty('--an-drop-top', `${dropTop}px`);
+      const box = { top: dropTop, height: el.offsetHeight, width: el.offsetWidth };
+      // A card or the list that would meet the chat (docked or dragged
+      // free) sits just left of it; the chip keeps its slot, since moving
+      // it would put it over the screen's own controls.
+      const elRight = Math.max(right, cornerRight(chat, viewport, box, right, gap));
+      el.style.setProperty('--an-right', `${elRight}px`);
+      const left = viewport.width - elRight - box.width;
+      const room = roomBelow({ left, right: left + box.width, top: dropTop }, below, viewport.height, gap);
+      el.style.setProperty('--an-max-h', `${Math.max(MIN_ROOM, room)}px`);
+    }
+    return;
+  }
+  setDropLine(null);
   let chipTop = homeTop;
   let chipRight = cornerRight(chat, viewport, { top: chipTop, ...size }, gutter);
   if (chipRight !== gutter) {
@@ -171,6 +247,43 @@ function placeCorner(chip: HTMLElement | null, card: HTMLElement | null, list: H
   }
 }
 
+function agentLogHeader(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('.agent-log__header');
+}
+
+/** The latest "See all actions →"; an older one that is still waiting gives way. */
+let seeAllRequest = 0;
+
+/**
+ * "See all actions →": the Agent log, expanded, with focus on its header.
+ * App mounts the log only on the canvas, so from any other screen this goes
+ * to the canvas first (the way Show does) and opens the log once it has
+ * mounted there. Until then agentLogOpen stays as it was: it is never left
+ * set with no log on screen (which would pop the log open on a later visit).
+ * If the person moves on before the log mounts, nothing opens. Resolves once
+ * the log is open (or the person moved on); rejects with the reason when it
+ * can't get there (the project didn't open, the Commons holds unsaved
+ * labels, the log never showed), for the list to show.
+ */
+function seeAllActions(): Promise<void> {
+  const request = ++seeAllRequest;
+  if (onCanvas()) {
+    useUIStore.getState().openAgentLog();
+    window.requestAnimationFrame(() => agentLogHeader()?.focus({ preventScroll: true }));
+    return Promise.resolve();
+  }
+  return goToCanvas()
+    .then(() => whenReady(() => onCanvas() && agentLogHeader() !== null))
+    .then((ready) => {
+      if (request !== seeAllRequest || !onCanvas()) return;
+      if (!ready) throw new Error("The Agent log didn't open. Try again.");
+      useUIStore.getState().openAgentLog();
+      window.requestAnimationFrame(() => {
+        if (onCanvas()) agentLogHeader()?.focus({ preventScroll: true });
+      });
+    });
+}
+
 /** The newest author of each kind, for the chip's two dots. */
 function chipAuthors(notes: AgentNote[]): { agent: AgentNoteAuthor; reader: AgentNoteAuthor } {
   const agent = notes.find((n) => n.author.kind === 'agent')?.author
@@ -184,7 +297,8 @@ function chipAuthors(notes: AgentNote[]): { agent: AgentNoteAuthor; reader: Agen
  * The Updates corner: the chip, the card that drops for each new update, and
  * the list it opens. One component for every surface; each passes an adapter
  * (`AgentNotesAdapter`). The main canvas mounts it in its own top-right spot
- * (`CanvasAgentNotes`); it keeps left of the chat panel when the chat's rect
+ * (`AppAgentNotes`, which also mounts it on every other screen, over
+ * that screen's header slot); it keeps left of the chat panel when the chat's rect
  * reaches it.
  */
 export function AgentNotesCorner({
@@ -226,6 +340,8 @@ export function AgentNotesCorner({
   useEffect(() => {
     openRef.current = open;
   }, [open]);
+  // For a step that fails after the render it started in (see `fail`).
+  const openListRef = useRef<() => void>(() => {});
 
   // New updates: into the open list (read as they arrive), or queued to drop.
   useEffect(() => {
@@ -333,10 +449,6 @@ export function AgentNotesCorner({
     return () => setOutline('card', null);
   }, [cardNote, leaving, open, setOutline]);
 
-  useEffect(() => {
-    if (!list.loaded && surface.kind === 'canvas') void useAgentNotesStore.getState().hydrateCanvas();
-  }, [list.loaded, surface.kind]);
-
   // The open list takes focus, so Escape and Tab start there.
   useEffect(() => {
     if (open) listRef.current?.focus({ preventScroll: true });
@@ -358,6 +470,9 @@ export function AgentNotesCorner({
     const newest = list.notes[0];
     if (newest && list.unread > 0) void markRead(surface, newest.id);
   }
+  useEffect(() => {
+    openListRef.current = openList;
+  });
 
   // A click outside closes the list.
   useEffect(() => {
@@ -376,6 +491,35 @@ export function AgentNotesCorner({
   useLayoutEffect(() => {
     placeCorner(chipRef.current, cardRef.current, listRef.current);
   });
+  // Gone (no project open): the chat docks as before. A layout cleanup, so on
+  // a project switch (which remounts the corner) it runs before the new
+  // corner places itself, never after.
+  useLayoutEffect(() => () => setDropLine(null), []);
+
+  // Over a header slot the chip follows the header when the page scrolls
+  // (Projects), and moves onto a slot that mounts later (a studio's chunk).
+  // A window resize can cross the compact chip's breakpoint (agentNotes.css)
+  // with no re-render: measure it again then, so the slot and the header
+  // padding reserve its new width. Place it again then, once a frame.
+  useEffect(() => {
+    let frame = 0;
+    const replace = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        placeCorner(chipRef.current, cardRef.current, listRef.current);
+      });
+    };
+    document.addEventListener('scroll', replace, { capture: true, passive: true });
+    window.addEventListener(UPDATES_SLOT_EVENT, replace);
+    window.addEventListener('resize', replace);
+    return () => {
+      document.removeEventListener('scroll', replace, { capture: true });
+      window.removeEventListener(UPDATES_SLOT_EVENT, replace);
+      window.removeEventListener('resize', replace);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, []);
 
   // What sits below can change while the list or a card is up (a proposal
   // arrives, the Agent log opens): place them again a few times a second.
@@ -385,16 +529,44 @@ export function AgentNotesCorner({
     return () => window.clearInterval(timer);
   }, [open, card]);
 
+  /**
+   * A step that didn't go through: its reason in the list, where the person
+   * looks (p157 review). The list opens for it when the step came from a
+   * card, or when the list closed meanwhile.
+   */
+  function fail(failure: unknown) {
+    useAgentNotesStore.setState({ error: failure instanceof Error ? failure.message : String(failure) });
+    if (!openRef.current) openListRef.current();
+  }
+
   function runAction(note: AgentNote, action: AgentNoteAction) {
+    useAgentNotesStore.getState().clearError();
     void Promise.resolve()
       .then(() => adapter.runAction(note, action))
-      .catch((failure: unknown) => {
-        useAgentNotesStore.setState({ error: failure instanceof Error ? failure.message : String(failure) });
-      });
+      .then(() => {
+        // Review took the person to the strip: the list steps aside. (A
+        // Review that fails keeps the list open, with its reason.)
+        if (action.op.kind === 'proposal.review' && openRef.current) closeList(false);
+      })
+      .catch(fail);
   }
 
   function show(note: AgentNote) {
-    if (note.refs.length > 0) adapter.show(note);
+    if (note.refs.length === 0) return;
+    // From another screen Show opens the canvas: the list steps aside once
+    // it is there. One that can't go keeps the list open, with its reason.
+    if (!onCanvas()) useAgentNotesStore.getState().clearError();
+    const going = adapter.show(note);
+    if (going) void going.then(() => { if (openRef.current) closeList(false); }, fail);
+  }
+
+  function seeAll() {
+    useAgentNotesStore.getState().clearError();
+    // On the canvas the list steps aside for the log at once, as before.
+    if (onCanvas()) closeList(false);
+    // From another screen it steps aside once the log is open; a See all
+    // that can't get there keeps it open, with its reason.
+    void seeAllActions().then(() => { if (openRef.current) closeList(false); }, fail);
   }
 
   const hold = {
@@ -409,7 +581,10 @@ export function AgentNotesCorner({
   const count = open ? 0 : list.unread;
   const authors = chipAuthors(notes);
   const unreadKinds = new Set(notes.filter(isUnread).map((n) => n.author.kind));
-  const ringed = Boolean(card) && !leaving && !open;
+  // The ring is the unread signal itself: on at any unread count, 1 included,
+  // while the list is closed (GM review of PR #157, round 2: it used to show
+  // only while a card was up, so a lone unread was left to a white figure).
+  const ringed = count > 0;
   const rootStyle = springCssVars() as CSSProperties;
 
   return (
@@ -483,13 +658,7 @@ export function AgentNotesCorner({
           adapter={adapter}
           error={error}
           onClose={closeList}
-          onSeeAll={agentLogEnabled ? () => {
-            closeList(false);
-            useUIStore.getState().openAgentLog();
-            window.requestAnimationFrame(() => {
-              document.querySelector<HTMLElement>('.agent-log__header')?.focus({ preventScroll: true });
-            });
-          } : null}
+          onSeeAll={agentLogEnabled ? seeAll : null}
           onAction={runAction}
           onShow={show}
           onHover={(note) => setOutline('hover', note && note.refs.length > 0
@@ -512,22 +681,25 @@ function nodeRect(lookup: ReactFlowState['nodeLookup'], id: string): FlowBoxRect
   return { left: position.x, top: position.y, right: position.x + width, bottom: position.y + height };
 }
 
-/** The main canvas's adapter: Show moves the view on a spring and outlines the nodes. */
-function useCanvasAdapter(): AgentNotesAdapter {
+/**
+ * The adapter for every screen (Q107 a): Show moves the canvas's view on a
+ * spring and outlines the nodes; from another screen it goes to the canvas
+ * first and shows once the canvas has mounted and placed its camera.
+ */
+function useAppAdapter(keptWith: string): AgentNotesAdapter {
   const store = useStoreApi<Node<NodeData>>();
   const { setViewport } = useReactFlow();
   const stopReveal = useRef<() => void>(() => {});
   const showTimer = useRef<number | null>(null);
+  const showRequest = useRef(0);
 
   useEffect(() => () => {
     stopReveal.current();
     if (showTimer.current !== null) window.clearTimeout(showTimer.current);
   }, []);
 
-  return useMemo<AgentNotesAdapter>(() => ({
-    keptWith: 'kept with this project',
-    showLabel: () => 'Show on canvas',
-    show: (note) => {
+  return useMemo<AgentNotesAdapter>(() => {
+    function outline(note: AgentNote) {
       const { setOutline } = useAgentNotesStore.getState();
       setOutline('show', { refs: note.refs, color: note.author.color, delayMs: 0, staggerMs: 0 });
       if (showTimer.current !== null) window.clearTimeout(showTimer.current);
@@ -535,7 +707,9 @@ function useCanvasAdapter(): AgentNotesAdapter {
         showTimer.current = null;
         useAgentNotesStore.getState().setOutline('show', null);
       }, SHOW_OUTLINE_MS);
+    }
 
+    function frame(note: AgentNote) {
       // Show writes nothing: it frames and outlines, and leaves the selection
       // (which agents read, and the journal records) as it is.
       const state = store.getState();
@@ -553,35 +727,95 @@ function useCanvasAdapter(): AgentNotesAdapter {
       if (!target) return;
       stopReveal.current();
       stopReveal.current = springViewport(viewport, target, (next) => { void setViewport(next); });
-    },
-    runAction: async (_note, action) => {
-      // An asset proposal's Update (Q92 a): go where the person decides it.
-      if (action.op.kind === 'proposal.review') return reviewAssetProposal(action.op);
-      const proposals = useCanvasProposalsStore.getState();
-      const id = typeof action.op.proposalId === 'string' ? action.op.proposalId : '';
-      if (action.op.kind === 'proposal.accept' && proposals.proposals[id]) return proposals.accept(id);
-      if (action.op.kind === 'proposal.reject' && proposals.proposals[id]) return proposals.reject(id);
-      throw new Error(`"${action.label}" can't run from the canvas.`);
-    },
-    actionState: (action) => {
-      // Review's proposal lives off the canvas; the backend resolves its Update when it closes.
-      if (action.op.kind !== 'proposal.accept' && action.op.kind !== 'proposal.reject') return null;
-      const id = typeof action.op.proposalId === 'string' ? action.op.proposalId : '';
-      return useCanvasProposalsStore.getState().proposals[id] ? null : 'Expired';
-    },
-  }), [store, setViewport]);
+    }
+
+    /** The canvas is on screen with what the note names measured. */
+    function canvasReady(note: AgentNote): boolean {
+      if (!onCanvas() || !document.querySelector('.react-flow__renderer')) return false;
+      const state = store.getState();
+      return note.refs.some((id) => nodeRect(state.nodeLookup, id) !== null);
+    }
+
+    return {
+      keptWith,
+      showLabel: () => 'Show on canvas',
+      show: (note) => {
+        const request = ++showRequest.current;
+        if (onCanvas()) {
+          outline(note);
+          frame(note);
+          return;
+        }
+        // Resolves once on the canvas (the corner's list steps aside then);
+        // the framing follows when what the note names has measured.
+        return goToCanvas().then(() => {
+          void whenReady(() => canvasReady(note)).then((ready) => {
+            if (request !== showRequest.current || !onCanvas()) return;
+            outline(note);
+            if (ready) frame(note);
+          });
+        });
+      },
+      runAction: async (_note, action) => {
+        // An asset proposal's Update (Q92 a): go where the person decides it.
+        if (action.op.kind === 'proposal.review') return reviewAssetProposal(action.op);
+        const proposals = useCanvasProposalsStore.getState();
+        const id = typeof action.op.proposalId === 'string' ? action.op.proposalId : '';
+        if (action.op.kind === 'proposal.accept' && proposals.proposals[id]) return proposals.accept(id);
+        if (action.op.kind === 'proposal.reject' && proposals.proposals[id]) return proposals.reject(id);
+        throw new Error(`"${action.label}" can't run from here.`);
+      },
+      actionState: (action) => {
+        // Review's proposal lives off the canvas; the backend resolves its Update when it closes.
+        if (action.op.kind !== 'proposal.accept' && action.op.kind !== 'proposal.reject') return null;
+        const id = typeof action.op.proposalId === 'string' ? action.op.proposalId : '';
+        return useCanvasProposalsStore.getState().proposals[id] ? null : 'Expired';
+      },
+    };
+  }, [store, setViewport, keptWith]);
 }
 
-/** The main canvas's Updates: its own fixed mount in the top right (PR9a). */
-export function CanvasAgentNotes() {
+/**
+ * The Updates corner on every screen (Justin's Q107 a, 2026-10-21: "Show it
+ * on every screen, with the open project's Updates"). App mounts one for
+ * all screens, so the open list, the card and the count carry across a
+ * screen switch. The list is always the open project's (the canvas surface,
+ * kept with the project). Hidden while no project is open: a first start on
+ * Projects with no project yet has no list to show. On the canvas it holds
+ * its own top-right corner (PR9a); elsewhere it sits over the slot that
+ * screen's header keeps for it.
+ */
+export function AppAgentNotes() {
   const list = useAgentNotesStore(selectCanvasList);
   const projectId = useAgentNotesStore((s) => s.canvasProjectId);
-  const adapter = useCanvasAdapter();
-  // The chip holds the top-right corner: the docked chat starts below it.
+  const inWorkspace = useProjectStore((s) => s.screen === 'workspace');
+  const canvas = useUIStore((s) => s.viewMode === 'canvas' || (s.viewMode === 'commons' && !s.commonsEnabled));
+  // Off the canvas "this project" is unclear (Projects lists them all): name it.
+  const projectName = useProjectStore((s) => (s.activeProject?.id === projectId ? s.activeProject?.name : null));
+  const adapter = useAppAdapter(inWorkspace && canvas || !projectName ? 'kept with this project' : `kept with ${projectName}`);
+  const shown = inWorkspace || projectId !== null;
+  const reserved = shown && inWorkspace && canvas;
+
+  // Off the canvas nothing else asks for the list: load it here.
   useEffect(() => {
+    if (!list.loaded) void useAgentNotesStore.getState().hydrateCanvas();
+  }, [list.loaded]);
+
+  // Screens keep a header slot for the chip while it shows (layouts.css).
+  useEffect(() => {
+    if (!shown) return;
+    document.body.classList.add('agent-notes-shown');
+    return () => document.body.classList.remove('agent-notes-shown');
+  }, [shown]);
+
+  // The chip holds the canvas's top-right corner: the docked chat starts below it.
+  useEffect(() => {
+    if (!reserved) return;
     document.body.classList.add('agent-notes-reserved');
     return () => document.body.classList.remove('agent-notes-reserved');
-  }, []);
+  }, [reserved]);
+
+  if (!shown) return null;
   return (
     <AgentNotesCorner
       key={projectId ?? ''}

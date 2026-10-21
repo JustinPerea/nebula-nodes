@@ -5,6 +5,7 @@ import { coverImages, type CoverChoices, type ProjectCover } from '../../lib/pro
 import { actorLabel } from '../../lib/trash';
 import { CrabMark } from '../brand/CrabMark';
 import { ProposalsFor } from '../proposals/ProposalsFor';
+import { UpdatesSlot } from '../agent-notes/UpdatesSlot';
 import '../../styles/project-home.css';
 
 export interface ProjectSummary {
@@ -343,6 +344,8 @@ export function ProjectHome({ projects, loading, busy, error, onCreate, onOpen, 
       <header className="project-home__header">
         <div className="project-home__brand"><CrabMark size={34} palette={monochromeMark} /><span>Nebula Nodes</span></div>
         <span className="project-home__location">Projects</span>
+        {/* Room for the Updates chip beside Settings (Q107 a; layouts.css). */}
+        <UpdatesSlot />
         {onToggleSettings && <button type="button" className="project-home__settings" aria-label="Settings"
           title="Settings and API keys" aria-haspopup="dialog" aria-expanded={settingsOpen} onClick={onToggleSettings}>
           <Settings aria-hidden="true" />

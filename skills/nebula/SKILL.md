@@ -413,7 +413,9 @@ nebula moodboard delete <board>
   proposal (a cover, Send notes, Commons curation) also posts an Update in
   the person's Updates corner ("<you> asks to ...", with Review); a new one
   on the same target replaces it, and `nebula notes` shows how it ended
-  (an expired one says "Expired" on time; ask again if you still want it). A Moodboard
+  (an expired one says "Expired" on time; one that was open when Nebula
+  restarted says "Closed: Nebula restarted", since proposals don't survive a
+  restart; either way, ask again if you still want it). A Moodboard
   node's `send_notes` param (`board`, `yes`, `no`) can
   override it per node; moving it toward sending is also the person's, so
   propose it. That includes pointing a node on `yes` at another board: set
@@ -536,8 +538,12 @@ nebula notes --unread          # your updates the person hasn't opened
 
 `--say` (on `point`, `pin resolve`) and `--note` (on `apply`, `propose`) are
 for your own action. What you noticed, a report or a suggestion goes in
-`nebula note`: the person reads it under Updates in the top right, saved with
-the project (`--board <name>` for a moodboard's, where `#12` names image 12).
+`nebula note`: the person reads it under Updates in the top right of
+every screen (the canvas, Projects, the studios, the Commons), saved with
+the project. `--board <name>` keeps it with a moodboard instead (there `#12`
+names image 12; read it back with `nebula notes --board <name>`), but a
+board's updates are not on screen yet, so leave out `--board` to reach the
+person.
 One plain line, 240 characters, at most 6 a minute; never quote a private
 note; `--since-last-turn` for what they changed since your last turn. Your
 proposals outside the canvas post their own Update (you don't post one):

@@ -235,6 +235,12 @@ def update_text(proposal: AssetProposal) -> str:
     return f"{agent} asks to change a reference in the Commons"
 
 
+# An Update whose proposal was open when Nebula restarted (Justin's Q108 a,
+# 2026-10-21): proposals live in memory, Updates with the project. The agent
+# can ask again; a proposal that timed out still says "Expired".
+RESTART_OUTCOME = "Closed: Nebula restarted"
+
+
 def outcome_line(proposal: AssetProposal) -> str:
     """How a closed proposal ended, for its Update (short; never the
     person's reason or the agent's note)."""
