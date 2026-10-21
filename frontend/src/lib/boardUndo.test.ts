@@ -106,3 +106,45 @@ describe('batches', () => {
     expect(batchesOf([late])).toEqual([{ stepId: sl, ops: [late] }]);
   });
 });
+
+describe('a step that ends as no step', () => {
+  it('a field step forgotten while newest gives back the redo stack its opening cleared', () => {
+    const id = undo().record(KEY, 1, 'Moved #1', [place('a', 5)]);
+    undo().landed(KEY, id, restore('a'));
+    undo().takeUndo(KEY, 1);
+    undo().redone(KEY, id, restore('r'));
+    const field = undo().recordFields(KEY, 1, 'Direction', ['direction']);
+    expect(undo().history(KEY, 1).undone).toEqual([]);
+    undo().forget(KEY, field);
+    expect(undo().takeRedo(KEY, 1)).toMatchObject({ id, redo: restore('r') });
+  });
+
+  it('a card step (a note typed and put back) forgotten while newest gives back the redo stack too', () => {
+    const id = undo().record(KEY, 1, 'Moved #1', [place('a', 5)]);
+    undo().landed(KEY, id, restore('a'));
+    undo().takeUndo(KEY, 1);
+    const note = undo().record(KEY, 1, 'Note on #1', [{ op: 'note', image: 'i1', notes: '' }], 'note:i1', true);
+    undo().forget(KEY, note);
+    expect(undo().takeRedo(KEY, 1)?.id).toBe(id);
+  });
+
+  it('a step that landed keeps no redo to give back: a later forget leaves the redo stack empty', () => {
+    const id = undo().record(KEY, 1, 'Moved #1', [place('a', 5)]);
+    undo().landed(KEY, id, restore('a'));
+    undo().takeUndo(KEY, 1);
+    const field = undo().recordFields(KEY, 1, 'Direction', ['direction']);
+    undo().landed(KEY, field, restore('d'));
+    undo().forget(KEY, field);
+    expect(undo().takeRedo(KEY, 1)).toBeNull();
+  });
+
+  it('a step that is not the newest gives nothing back when forgotten', () => {
+    const id = undo().record(KEY, 1, 'Moved #1', [place('a', 5)]);
+    undo().landed(KEY, id, restore('a'));
+    undo().takeUndo(KEY, 1);
+    const field = undo().recordFields(KEY, 1, 'Direction', ['direction']);
+    undo().recordFields(KEY, 1, 'Avoid', ['avoid']);
+    undo().forget(KEY, field);
+    expect(undo().history(KEY, 1).undone).toEqual([]);
+  });
+});

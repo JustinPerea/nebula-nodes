@@ -547,6 +547,7 @@ See §4.8 items 6 and 7. A board with frames whose node is on Whole board gives 
 - **The analysis.** Undo never brings an analysis back. With Q9, Measure reruns on its own.
 - **Keys.** Studio-scoped Cmd+Z, Shift+Cmd+Z and Cmd+S, all skipped inside text fields. Cmd+S calls `preventDefault`, so `GraphFileActions` (which yields on `defaultPrevented`, `GraphFileActions.tsx:129`) never opens the graph save.
 - **Delete.** React Flow's `deleteKeyCode` is `null`. Delete removes the selected references with an Undo toast (Q15).
+- **As built (Q83, moved up from PR7).** Board fields are steps in the same queue: one per field, closed when a text field loses focus or a control's change is done (a slider let go, a pick); a note on an image is one step until its box loses focus too. Each `PUT` carries one step's fields and answers with `undo`, the step's `restore`. Undo and redo of a field step go through `/edits` like any step, so a field changed since is left and named. Cmd+Z inside a text box is the browser's; on other controls it is the Studio's. Contract 07 section 1.7 is the as-built reference.
 
 ### 5.5 Agents on the board (C9)
 

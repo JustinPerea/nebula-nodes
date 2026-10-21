@@ -2182,7 +2182,11 @@ nebula moodboard delete <board>
   changed again since is left as they set it, and the result's `skipped`
   says so ("Direction changed since, left as is", "#2's weight changed
   since, left as is"; the CLI prints each line). Images the change took off
-  come back with it. The other keys are what an older Nebula puts back
+  come back with it. Its board-field part is the `undo` the server's `PUT`
+  answered with: a direct `PUT /api/moodboards/{id}` answers with the board
+  plus `undo`, and sending its `ops` to `POST /api/moodboards/{id}/edits`
+  is the same checked undo. The person's Cmd+Z in Moodboard Studio never
+  takes back your edit, so take back your own this way. The other keys are what an older Nebula puts back
   instead; a `previous` without `undo` is put back as arguments, and the
   images it took off come back from `removed` (`moodboard_add` / `nebula
   moodboard add`).

@@ -441,7 +441,10 @@ nebula moodboard delete <board>
   pass `previous` to the MCP tool `moodboard_update` as it is (`undo`
   included). Its `undo` is one checked write: anything someone changed
   again since is left as they set it, and the result says so in `skipped`
-  ("Direction changed since, left as is"). Images you took off with
+  ("Direction changed since, left as is"). The person's own Cmd+Z in
+  Moodboard Studio never undoes your edits, so this is how you take back
+  yours (over HTTP, a `PUT /api/moodboards/{id}` answers with the same
+  `undo`; send its `ops` to `/edits`). Images you took off with
   `--remove` come back with it (an older Nebula's `previous` has no `undo`:
   add them back from `removed` with `nebula moodboard add <board> <url>`). If a `--keep-brief` fails after
   the other changes were saved, the error prints the `previous` that puts

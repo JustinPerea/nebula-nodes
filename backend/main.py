@@ -13404,7 +13404,12 @@ async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
     _journal_board_change(before, moodboard, changes)
     await _broadcast_stored_asset("moodboard", moodboard, edit={"touched": changes["touched"], "undo": None})
     await _say_agent_board_change(before, moodboard, changes)
-    return _moodboard_out(moodboard)
+    # The answer is the board plus `undo`, the `restore` that takes this
+    # write back (the shape `/edits` answers with), made from the same diff:
+    # Moodboard Studio's field steps undo with it, and so can any caller.
+    # Only the caller gets it; the broadcast's stays null.
+    undo = {"ops": [{"op": "restore", "slices": changes["slices"]}]} if changes["slices"] else {"ops": []}
+    return {**_moodboard_out(moodboard), "undo": undo}
 
 
 @app.post("/api/moodboards/{moodboard_id}/edits")
