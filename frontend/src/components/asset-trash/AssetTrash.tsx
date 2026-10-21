@@ -13,7 +13,8 @@ import '../../styles/asset-trash.css';
 import { useCurrentProjectId } from '../../lib/currentProject';
 
 /**
- * Recently deleted, inside Moodboard Studio and Character Studio.
+ * Recently deleted, inside Moodboard Studio and Character Studio, and under
+ * the Assets panel's Styles.
  *
  * A deleted board or character waits here until the person deletes it for
  * good (no timer). Restore brings it back with the same id, so canvas nodes
@@ -21,11 +22,12 @@ import { useCurrentProjectId } from '../../lib/currentProject';
  * backend refuses agents.
  */
 
-type AssetKind = 'moodboard' | 'character';
+type AssetKind = 'moodboard' | 'character' | 'style';
 
 const NOUNS: Record<AssetKind, { one: string; many: string }> = {
   moodboard: { one: 'board', many: 'boards' },
   character: { one: 'character', many: 'characters' },
+  style: { one: 'style', many: 'styles' },
 };
 
 export const UNDO_VISIBLE_MS = 8000;

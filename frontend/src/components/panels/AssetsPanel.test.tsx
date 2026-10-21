@@ -5,8 +5,10 @@ import type { Character, Moodboard } from '../../types';
 
 const api = vi.hoisted(() => ({ fetchMoodboards: vi.fn(), fetchCharacters: vi.fn(), moveStoredAsset: vi.fn() }));
 vi.mock('../../lib/api', () => api);
-const presets = vi.hoisted(() => ({ fetchPresets: vi.fn() }));
+const presets = vi.hoisted(() => ({ fetchPresets: vi.fn(), deletePreset: vi.fn() }));
 vi.mock('../../lib/createPresets', () => presets);
+const trash = vi.hoisted(() => ({ fetchTrash: vi.fn(), restoreTrashed: vi.fn(), purgeTrashed: vi.fn(), emptyTrash: vi.fn() }));
+vi.mock('../../lib/trash', async (importOriginal) => ({ ...(await importOriginal<object>()), ...trash }));
 vi.mock('../../lib/backend', async (importOriginal) => ({ ...(await importOriginal<object>()), backendAssetUrlSync: (url: string) => url }));
 const socket = vi.hoisted(() => ({ handlers: new Set<(event: unknown) => void>() }));
 vi.mock('../../lib/wsClient', () => ({ wsClient: {
@@ -28,6 +30,11 @@ const enterMoodboardEditor = vi.fn();
 const enterCharacterEditor = vi.fn();
 
 beforeEach(() => {
+  presets.fetchPresets.mockReset().mockResolvedValue([]);
+  presets.deletePreset.mockReset().mockResolvedValue(undefined);
+  Object.values(trash).forEach((mock) => mock.mockReset());
+  trash.fetchTrash.mockResolvedValue([]);
+  trash.restoreTrashed.mockResolvedValue(undefined);
   api.fetchMoodboards.mockReset().mockResolvedValue([board]);
   presets.fetchPresets.mockReset().mockResolvedValue([]);
   api.fetchCharacters.mockReset().mockResolvedValue([character]);
@@ -224,5 +231,65 @@ describe('Assets panel images from outside Nebula', () => {
     expect(await screen.findByText('Old noir')).toBeTruthy();
     expect(screen.getByText('Image link from outside Nebula')).toBeTruthy();
     expect(view.container.querySelector('img[src^="https://"]')).toBeNull();
+  });
+});
+
+describe('Assets panel Styles', () => {
+  const style = { id: 's1', name: 'Neon noir', category: 'My Styles', prompt: 'neon', params: {}, modelId: null,
+    refImages: [], thumbnail: '', version: 1, scope: 'global', projectId: null, createdAt: '', updatedAt: '' };
+
+  it('deletes a Style to Recently deleted with Undo, and Undo restores it', async () => {
+    presets.fetchPresets.mockResolvedValue([style]);
+    renderPanel();
+    fireEvent.click(screen.getByRole('tab', { name: 'Styles' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Neon noir/ }));
+    const listed = presets.fetchPresets.mock.calls.length;
+    presets.fetchPresets.mockResolvedValue([]);
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Neon noir' }));
+
+    await waitFor(() => expect(presets.deletePreset).toHaveBeenCalledWith('s1'));
+    expect(await screen.findByText('Moved “Neon noir” to Recently deleted')).toBeTruthy();
+    await waitFor(() => expect(presets.fetchPresets.mock.calls.length).toBeGreaterThan(listed));
+    expect(await screen.findByText('No Styles yet.')).toBeTruthy();
+
+    presets.fetchPresets.mockResolvedValue([style]);
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(trash.restoreTrashed).toHaveBeenCalledWith('style', 's1'));
+    expect(await screen.findByRole('button', { name: /^Neon noir/ })).toBeTruthy();
+    expect(screen.queryByText('Moved “Neon noir” to Recently deleted')).toBeNull();
+  });
+
+  it('shows Recently deleted Styles for the scope it lists, and a refused delete says why', async () => {
+    presets.fetchPresets.mockResolvedValue([style]);
+    trash.fetchTrash.mockResolvedValue([{ kind: 'style', id: 's0', name: 'Old look', projectId: null,
+      deletedAt: '2026-10-20T12:00:00Z', deletedBy: { kind: 'agent', name: 'GM - Design' } }]);
+    presets.deletePreset.mockRejectedValueOnce(new Error("Style 's1' not found"));
+    renderPanel();
+    fireEvent.click(screen.getByRole('tab', { name: 'Styles' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
+    expect(trash.fetchTrash).toHaveBeenCalledWith({ kind: 'style', scope: 'global' });
+    expect(screen.getByText('Old look')).toBeTruthy();
+    expect(screen.getByText(/by GM - Design \(agent\)/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Neon noir/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Neon noir' }));
+    expect(await screen.findByText("Style 's1' not found")).toBeTruthy();
+    expect(screen.queryByText(/to Recently deleted/)).toBeNull();
+  });
+
+  it('lists again when an agent changes a Style', async () => {
+    presets.fetchPresets.mockResolvedValue([style]);
+    renderPanel();
+    fireEvent.click(screen.getByRole('tab', { name: 'Styles' }));
+    await screen.findByRole('button', { name: /^Neon noir/ });
+    presets.fetchPresets.mockResolvedValue([{ ...style, name: 'Neon rain' }]);
+    act(() => { for (const handler of socket.handlers) handler({ type: 'storedAssetChanged', kind: 'style', id: 's1', deleted: false }); });
+    expect(await screen.findByRole('button', { name: /^Neon rain/ })).toBeTruthy();
+  });
+
+  it('Characters and Moodboards keep no Delete in the panel (their Studios have it)', async () => {
+    await openTab('Moodboards');
+    fireEvent.click(await screen.findByRole('button', { name: /^Warm editorial/ }));
+    expect(screen.queryByRole('button', { name: 'Delete Warm editorial' })).toBeNull();
   });
 });

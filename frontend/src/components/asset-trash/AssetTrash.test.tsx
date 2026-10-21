@@ -116,6 +116,24 @@ describe('RecentlyDeletedAssets', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('Only the person');
   });
 
+  it('keeps Styles too, in their own words, and restores one as kind "style"', async () => {
+    trash.fetchTrash.mockResolvedValue([board({ kind: 'style', id: 's1', name: 'Neon noir' })]);
+    render(<RecentlyDeletedAssets kind="style" scope="global" />);
+    fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
+    expect(trash.fetchTrash).toHaveBeenCalledWith({ kind: 'style', scope: 'global' });
+    expect(screen.getByRole('region', { name: 'Recently deleted styles' })).toBeTruthy();
+    expect(screen.getByText('Deleted styles stay here until you delete them for good.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Restore Neon noir' }));
+    await waitFor(() => expect(trash.restoreTrashed).toHaveBeenCalledWith('style', 's1'));
+    await waitFor(() => expect(trash.fetchTrash).toHaveBeenCalledTimes(2)); // listed again after the restore
+    // A Style's change elsewhere lists it again; a board's doesn't.
+    const calls = trash.fetchTrash.mock.calls.length;
+    act(() => ws.handlers.forEach((handler) => handler({ type: 'storedAssetChanged', kind: 'moodboard', id: 'b1', deleted: true })));
+    expect(trash.fetchTrash.mock.calls.length).toBe(calls);
+    act(() => ws.handlers.forEach((handler) => handler({ type: 'storedAssetChanged', kind: 'style', id: 's2', deleted: true })));
+    await waitFor(() => expect(trash.fetchTrash.mock.calls.length).toBe(calls + 1));
+  });
+
   it('empties only the scope it shows', async () => {
     trash.fetchTrash.mockResolvedValue([board(), board({ id: 'b2', name: 'Cold' })]);
     render(<RecentlyDeletedAssets kind="character" scope="project" />);

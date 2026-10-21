@@ -93,16 +93,16 @@ def build_parser() -> argparse.ArgumentParser:
     project_open_p.add_argument("project_id", help="Project id (from `nebula projects`)")
 
     trash_p = sub.add_parser(
-        "trash", help="Recently deleted moodboards, characters and projects: list them or restore one")
+        "trash", help="Recently deleted moodboards, characters, Styles and projects: list them or restore one")
     trash_sub = trash_p.add_subparsers(dest="trash_cmd", required=True)
     trash_list_p = trash_sub.add_parser("list", help="What's in Recently deleted, newest first")
-    trash_list_p.add_argument("--kind", choices=["moodboard", "character", "project"], help="Only this kind")
+    trash_list_p.add_argument("--kind", choices=["moodboard", "character", "style", "project"], help="Only this kind")
     trash_list_p.add_argument("--json", action="store_true", help="Print the raw JSON")
     trash_restore_p = trash_sub.add_parser(
         "restore", help="Bring one back with the same id (nodes that point at it work again)")
     trash_restore_p.add_argument("target", nargs="+", metavar="[kind] id",
                                  help="The id from `nebula trash list`, optionally after its kind "
-                                      "(moodboard, character or project)")
+                                      "(moodboard, character, style or project)")
 
     sub.add_parser("graph", help="Show current graph state")
     sub.add_parser("selection", help="Show nodes currently selected on the canvas")
@@ -381,6 +381,8 @@ def build_parser() -> argparse.ArgumentParser:
     moodboard_cmd.add_parser(sub)
     from .commands import character as character_cmd
     character_cmd.add_parser(sub)
+    from .commands import style as style_cmd
+    style_cmd.add_parser(sub)
 
     # -- Outside apps --
     from .commands import skill as skill_cmd
@@ -493,11 +495,13 @@ def main() -> None:
         projects, proposals, selection, spend, trash,
     )
     from .commands import notes as notes_cmd
+    from .commands import style
 
     dispatch = {
         "commons": lambda: commons.run(client, args),
         "moodboard": lambda: moodboard.run(client, args),
         "character": lambda: character.run(client, args),
+        "style": lambda: style.run(client, args),
         "context": lambda: context.run(client, as_json=args.json),
         "nodes": lambda: nodes.run_list(client, query=" ".join([*args.words, *([args.query] if args.query else [])]),
                                         category=args.category),
