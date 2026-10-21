@@ -21,6 +21,7 @@ Implementation work to add missing nodes should run in a **dedicated Cursor chat
 
 ## Other conventions
 
+- Notes: each change writes its decisions, tradeoffs and surprises to its own file, `docs/notes/<YYYY-MM-DD>-<branch>.md`: the date the branch starts, and the branch name with `/` as `-`. Don't add to `implementation-notes.md` or to the older per-feature notes files (`docs/*-notes.md`, `implementation-notes-*.md`): they keep their entries up to 2026-10-21, when one shared file was making every open PR conflict whenever another merged. A branch that still has an entry at the top of `implementation-notes.md` moves it into its own `docs/notes/` file when it next takes main in, instead of resolving the conflict there.
 - Repo-backed agent skills live in `.agents/skills/` (indexed by the backend Codex runner). Keep them free of secrets and user outputs.
 - `skills/nebula/` is the `nebula` CLI skill for agents outside Nebula (Claude Code, Codex). `nebula skill install` links it into `~/.claude/skills` and `~/.agents/skills`. Keep it out of `.agents/skills/`, which Nebula's own chats read. Update it when a CLI command changes.
 - Dual-route nodes (a fal or Krea copy that also runs on the maker's API with the person's key) pick their route through `backend/services/node_route.py` (mirrored by `frontend/src/lib/directRoute.ts`): Krea plan, else maker key, else the fal/Krea key. Krea maker routes are declared in `scripts/sync-krea-catalog.py` `DIRECT_ROUTES`; never hand-edit generated Krea nodes.

@@ -90,7 +90,10 @@ same `TMP` in both.
    If the node closes a logged gap, update [the Flora audit](docs/flora-gap-audit.md).
 
 Keep credentials, local outputs, and user data out of commits. Record unexpected
-decisions and tradeoffs in `implementation-notes.md` during implementation.
+decisions and tradeoffs during implementation in your change's own notes file,
+`docs/notes/<YYYY-MM-DD>-<branch>.md` (the date the branch starts, and the
+branch name with `/` as `-`). `implementation-notes.md` and the older per-feature
+notes files keep the entries written before 2026-10-21.
 
 ## Agent integration
 
