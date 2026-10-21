@@ -51,7 +51,6 @@ from services.acp_client import (
 from services.acp_events import ToolCallState, TurnTextBudget, capped_json, make_redactor, map_session_update
 from services.agent_process import spawn_agent_process, terminate_agent_process_tree
 from services.child_env import scrubbed_env
-from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.krea_agent_mcp import NEBULA_SERVER_NAME, nebula_acp_mcp_server
 
 logger = logging.getLogger(__name__)
@@ -61,6 +60,14 @@ APP_VERSION = "0.1.0"
 CLIENT_INFO = {"name": "nebula-nodes", "title": "Nebula Nodes", "version": APP_VERSION}
 CLIENT_CAPABILITIES = {"fs": {"readTextFile": False, "writeTextFile": False}, "terminal": False}
 INIT_TIMEOUT_S = 30.0
+# An ``authenticate`` on start only refreshes a login the person made in
+# Settings; past this it is waiting for a browser sign-in nobody will see.
+AUTH_TIMEOUT_S = 45.0
+SET_OPTION_TIMEOUT_S = 20.0
+MAX_CONFIG_OPTIONS = 4
+MAX_OPTION_VALUES = 64
+# Config option categories the chat lets the person pick per session.
+PICKABLE_CATEGORIES = ("model", "thought_level")
 PERMISSION_TIMEOUT_S = 120.0
 CANCEL_GRACE_S = 10.0
 CLOSE_RPC_TIMEOUT_S = 2.0
@@ -71,13 +78,9 @@ ENDED_MEMORY = 64
 STDERR_TAIL_BYTES = 8192
 NEBULA_MCP_NAME = NEBULA_SERVER_NAME
 MAX_MESSAGE_CHARS = 100_000
-# Environment variables the agent must never inherit, beyond child_env's list:
-# Nebula's own spending tokens, and every provider key the backend may have
-# inherited from the shell that started it. Claude Code bills ANTHROPIC_API_KEY
-# ahead of the subscription login, and Codex OPENAI_API_KEY, so a terminal's
-# key would silently replace the plan the person set the agent up with.
-_AGENT_ENV_DROP = frozenset({"NEBULA_AGENT_TOKEN", "NEBULA_APP_TOKEN", "NEBULA_APP_TOKEN_FILE", agent_token_file.ENV_VAR}
-                            | CREDENTIAL_PROVIDERS)
+# Environment variables the agent must never inherit, beyond child_env's list
+# (Nebula's spending tokens and every provider key): personal_agents.AGENT_ENV_DROP.
+_AGENT_ENV_DROP = personal_agents.AGENT_ENV_DROP
 
 PERSONAL_AGENT_PRIMER_TAIL = (
     "YOUR SETUP. You are the person's own agent, with your own tools, memory and "
@@ -95,6 +98,66 @@ class PersonalSessionError(Exception):
         super().__init__(message)
         self.code = code
         self.message = message
+
+
+def agent_base_env(command: Path) -> dict[str, str]:
+    """The environment every personal agent process starts from: the backend's,
+    scrubbed of secrets and provider keys, with PATH built around its binary."""
+    env = scrubbed_env()
+    for key in _AGENT_ENV_DROP:
+        env.pop(key, None)
+    env["PATH"] = agent_binaries.child_path(Path(command))
+    return env
+
+
+def _short(value: Any, limit: int) -> str:
+    return str(value)[:limit] if isinstance(value, (str, int, float)) else ""
+
+
+def clean_config_options(raw: Any) -> list[dict[str, Any]]:
+    """The select options worth a picker (model, thinking level), flattened and capped."""
+    if not isinstance(raw, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict) or item.get("type") != "select" or item.get("category") not in PICKABLE_CATEGORIES:
+            continue
+        config_id = item.get("id")
+        if not isinstance(config_id, str) or not config_id or len(config_id) > 64:
+            continue
+        values: list[dict[str, str]] = []
+        for entry in item.get("options") or []:
+            group = entry.get("options") if isinstance(entry, dict) and isinstance(entry.get("options"), list) else [entry]
+            for option in group:
+                if isinstance(option, dict) and isinstance(option.get("value"), str) and option["value"] \
+                        and len(option["value"]) <= 200 and len(values) < MAX_OPTION_VALUES:
+                    values.append({"value": option["value"], "name": _short(option.get("name") or option["value"], 80)})
+        current = item.get("currentValue") if isinstance(item.get("currentValue"), str) else None
+        if not values:
+            continue
+        out.append({"id": config_id, "name": _short(item.get("name") or config_id, 40),
+                    "category": item["category"], "current": current, "options": values})
+        if len(out) >= MAX_CONFIG_OPTIONS:
+            break
+    return out
+
+
+LEGACY_MODEL_OPTION = "_session_model"
+
+
+def legacy_model_option(raw: Any) -> list[dict[str, Any]]:
+    """The older ``models`` field (session/set_model), as one picker."""
+    if not isinstance(raw, dict) or not isinstance(raw.get("availableModels"), list):
+        return []
+    values = []
+    for model in raw["availableModels"][:MAX_OPTION_VALUES]:
+        if isinstance(model, dict) and isinstance(model.get("modelId"), str) and model["modelId"] \
+                and len(model["modelId"]) <= 200:
+            values.append({"value": model["modelId"], "name": _short(model.get("name") or model["modelId"], 80)})
+    if not values:
+        return []
+    current = raw.get("currentModelId") if isinstance(raw.get("currentModelId"), str) else None
+    return [{"id": LEGACY_MODEL_OPTION, "name": "Model", "category": "model", "current": current, "options": values}]
 
 
 def _primer() -> str:
@@ -170,6 +233,8 @@ class AcpHostSession:
         self.acp_session_id: str | None = None
         self.agent_caps: dict[str, Any] = {}
         self.agent_info: dict[str, Any] = {}
+        # What the person may pick for this session (clean_config_options).
+        self.options: list[dict[str, Any]] = []
         self.token: str | None = None
         self.token_file: Path | None = None
         self.state = "starting"
@@ -187,16 +252,19 @@ class AcpHostSession:
         # AcpSessionManager.open sets it, close_stale compares it.
         self.launch_key: tuple | None = None
         self._tools = ToolCallState()
-        self._redact = make_redactor()
+        self._redact = make_redactor(*spec.secrets)
         self._background: set[asyncio.Task] = set()
 
     # -- lifecycle ---------------------------------------------------------------------
 
+    @property
+    def prompt_images(self) -> bool:
+        """Whether the agent says its prompts may carry images (ACP promptCapabilities.image)."""
+        caps = self.agent_caps.get("promptCapabilities")
+        return isinstance(caps, dict) and caps.get("image") is True
+
     def _agent_env(self) -> dict[str, str]:
-        env = scrubbed_env()
-        for key in _AGENT_ENV_DROP:
-            env.pop(key, None)
-        env["PATH"] = agent_binaries.child_path(Path(self.spec.argv[0]))
+        env = agent_base_env(Path(self.spec.argv[0]))
         env.update(self.spec.env)
         env["NEBULA_URL"] = self.backend_url
         return env
@@ -239,6 +307,9 @@ class AcpHostSession:
                     f"{self.display_name} speaks ACP version {init.get('protocolVersion')!r}; Nebula speaks 1.")
             self.agent_caps = init.get("agentCapabilities") if isinstance(init.get("agentCapabilities"), dict) else {}
             self.agent_info = init.get("agentInfo") if isinstance(init.get("agentInfo"), dict) else {}
+            # A sign-in the person made in Settings, before any token exists.
+            await self._authenticate(init)
+            self._give_up_if_closing()
             # From the check above to the file write nothing awaits, so a
             # teardown either starts after this (and revokes the token and
             # deletes the file) or already stopped start() above.
@@ -246,7 +317,7 @@ class AcpHostSession:
                 f"personal:{self.agent_id}", [self.output_root, self.workdir], workspace=self.workdir,
                 spend_key=agent_spend.personal_agent_spend_key(self.agent_id, self.id),
                 display_name=self.display_name, color=self.color)
-            self._redact = make_redactor(self.token)
+            self._redact = make_redactor(self.token, *self.spec.secrets)
             name = str(self.agent_info.get("name") or self.agent_id)[:64]
             version = str(self.agent_info.get("version") or "")[:32]
             actors.agent_registry.set_model(self.token, f"{name}@{version}" if version else name)
@@ -258,9 +329,10 @@ class AcpHostSession:
             except AcpError as exc:
                 self._give_up_if_closing()
                 if exc.code == AUTH_REQUIRED:
+                    where = (f"Sign in in Settings > Preferences > Personal agents > {self.display_name}"
+                             if self.spec.auth_method else "Open a terminal, sign in to it there")
                     raise PersonalSessionError(
-                        "auth_required",
-                        f"{self.display_name} needs you to sign in. Open a terminal, sign in to it there, then try again.",
+                        "auth_required", f"{self.display_name} needs you to sign in. {where}, then try again.",
                     ) from exc
                 raise PersonalSessionError("personal_agent_start_failed",
                                            f"{self.display_name} couldn't start a session: {self._redact(exc.message)}") from exc
@@ -272,6 +344,7 @@ class AcpHostSession:
             if not isinstance(session_id, str) or not session_id or len(session_id) > 256:
                 raise PersonalSessionError("personal_agent_start_failed", f"{self.display_name} returned no session id.")
             self.acp_session_id = session_id
+            self.options = clean_config_options(created.get("configOptions")) or legacy_model_option(created.get("models"))
             self.state = "ready"
             self.last_activity = time.monotonic()
             self._watch_task = asyncio.create_task(self._watch())
@@ -294,6 +367,63 @@ class AcpHostSession:
         except BaseException:
             await asyncio.shield(self.close("start_failed"))
             raise
+
+    async def _authenticate(self, init: dict[str, Any]) -> None:
+        """Re-use a sign-in the person made in Settings (services/antigravity_agent.py).
+
+        Only for agents whose spec names an auth method, and only one the agent
+        offers. The agent's own browser flow can't open here (the spec sets
+        BROWSER to a no-op), so a timeout means the stored login is gone."""
+        method = self.spec.auth_method
+        if method is None or self.conn is None:
+            return
+        offered = init.get("authMethods") if isinstance(init.get("authMethods"), list) else []
+        if not any(isinstance(m, dict) and m.get("id") == method for m in offered):
+            raise PersonalSessionError("personal_agent_start_failed",
+                                       f"{self.display_name} no longer offers the sign-in Nebula used.")
+        again = f"Sign in again in Settings > Preferences > Personal agents > {self.display_name}."
+        try:
+            await self.conn.request("authenticate", {"methodId": method}, timeout=AUTH_TIMEOUT_S)
+        except asyncio.TimeoutError as exc:
+            try:
+                personal_agents.set_signed_in(self.state_dir, self.agent_id, False)
+            except personal_agents.PersonalAgentError:
+                pass
+            raise PersonalSessionError("auth_required",
+                                       f"{self.display_name} needs you to sign in with Google again. {again}") from exc
+        except AcpError as exc:
+            raise PersonalSessionError("auth_required", f"{self.display_name} couldn't use your sign-in: "
+                                       f"{self._redact(exc.message)[:200]}. If this keeps happening, {again[0].lower()}{again[1:]}") from exc
+
+    def option_view(self) -> list[dict[str, Any]]:
+        return [dict(option, options=list(option["options"])) for option in self.options]
+
+    async def set_option(self, config_id: Any, value: Any) -> list[dict[str, Any]]:
+        """The person picked a model (or thinking level) for this session."""
+        option = next((o for o in self.options if o["id"] == config_id), None)
+        if option is None or not isinstance(value, str) or value not in {v["value"] for v in option["options"]}:
+            raise PersonalSessionError("personal_option_invalid", "That choice isn't one this agent offers.")
+        if self.state != "ready" or self.conn is None or not self.acp_session_id:
+            raise PersonalSessionError("personal_option_busy", "Wait for the agent to finish its turn, then pick again.")
+        try:
+            if config_id == LEGACY_MODEL_OPTION:
+                await self.conn.request("session/set_model", {"sessionId": self.acp_session_id, "modelId": value},
+                                        timeout=SET_OPTION_TIMEOUT_S)
+                option["current"] = value
+            else:
+                result = await self.conn.request("session/set_config_option", {
+                    "sessionId": self.acp_session_id, "configId": config_id, "value": value},
+                    timeout=SET_OPTION_TIMEOUT_S)
+                fresh = clean_config_options(result.get("configOptions")) if isinstance(result, dict) else []
+                if fresh:
+                    self.options = fresh
+                else:
+                    option["current"] = value
+        except (AcpError, asyncio.TimeoutError, AcpConnectionClosed) as exc:
+            detail = self._redact(exc.message)[:200] if isinstance(exc, AcpError) else "no answer"
+            raise PersonalSessionError("personal_option_failed", f"{self.display_name} didn't switch: {detail}.") from exc
+        self.last_activity = time.monotonic()
+        return self.option_view()
 
     async def _drain_stderr(self) -> None:
         stream = self.proc.stderr if self.proc else None
@@ -400,7 +530,16 @@ class AcpHostSession:
             turn.queue.put_nowait(event)
 
     def _on_notification(self, method: str, params: dict) -> None:
-        if method != "session/update" or params.get("sessionId") != self.acp_session_id or self._turn is None:
+        if method != "session/update" or params.get("sessionId") != self.acp_session_id:
+            return
+        update = params.get("update")
+        if isinstance(update, dict) and update.get("sessionUpdate") == "config_option_update":
+            fresh = clean_config_options(update.get("configOptions"))
+            if fresh:
+                self.options = fresh
+                self._emit({"type": "personal_options", "sessionId": self.id, "options": self.option_view()})
+            return
+        if self._turn is None:
             return
         self.last_activity = time.monotonic()
         for event in map_session_update(params.get("update"), self._tools, redact=self._redact,
@@ -627,14 +766,22 @@ class AcpSessionManager:
         self._prune()
         if self._shutting_down:
             raise PersonalSessionError("personal_agent_shutting_down", "Nebula is shutting down.")
-        # Read what Settings allow only now. From here to registering the
-        # session nothing awaits, so a Settings change can't fall between the
-        # read and the moment close_stale can see the session.
+        # The spec is read off the loop: for Gemini it runs `gemini --version`
+        # and `--help` (services/gemini_cli_setup.py), which take seconds on a
+        # cold start and would freeze every socket if run here.
         key = personal_agents.launch_key(state_dir, agent_id)
         try:
-            spec = personal_agents.launch_spec(state_dir, agent_id, home)
+            spec = await asyncio.to_thread(personal_agents.launch_spec, state_dir, agent_id, home)
         except personal_agents.PersonalAgentError as exc:
             raise PersonalSessionError(exc.code, exc.message) from exc
+        if self._shutting_down:
+            raise PersonalSessionError("personal_agent_shutting_down", "Nebula is shutting down.")
+        # Settings may have changed while the spec was read. From this check to
+        # registering the session nothing awaits, so a later Settings change
+        # can't fall between the check and the moment close_stale can see it.
+        if personal_agents.launch_key(state_dir, agent_id) != key:
+            raise PersonalSessionError("personal_agent_changed",
+                                       f"{spec.display_name}'s settings changed while it started. Send again.")
         if len(self.live()) >= MAX_LIVE_SESSIONS:
             raise PersonalSessionError("personal_agent_limit",
                                        f"At most {MAX_LIVE_SESSIONS} personal agents can run at once. Close one first.")

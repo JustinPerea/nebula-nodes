@@ -13,7 +13,7 @@ import sqlite3
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
@@ -423,6 +423,21 @@ async def rescan(link_id: str, actor=Depends(human_dep), store=Depends(store_dep
 
 # -- human edits -----------------------------------------------------------------
 
+# Who hears about curation writes (corrections, regions, memberships):
+# main journals each as a commons.* event for wait_for_canvas_change, with
+# its actor, and checks the agents' proposals on that reference. A listener
+# gets (kind, data, actor); data holds ids and field names, never Commons text.
+curation_listeners: list[Callable[[str, dict, actors_mod.Actor], None]] = []
+
+
+def _curated(kind: str, data: dict, actor: actors_mod.Actor) -> None:
+    for listener in list(curation_listeners):
+        try:
+            listener(kind, data, actor)
+        except Exception:  # noqa: BLE001 - the journal never fails the write that already happened
+            pass
+
+
 class MembershipPatch(BaseModel):
     role: str | None = None
     why: str | None = None
@@ -441,6 +456,8 @@ def patch_membership(membership_id: str, body: MembershipPatch, actor=Depends(hu
         changes["why"] = (changes["why"] or "").strip() or None
     updated = store.update_membership(membership_id, actor=actor.id, **changes)
     search.reindex_asset(store, m["asset"])  # role, why feed the index (Task 10 note)
+    _curated("membership", {"assetId": m["asset"], "membershipId": membership_id, "collectionId": m["collection"],
+                            "change": sorted(changes)}, actor)
     return updated
 
 
@@ -451,6 +468,8 @@ def accept_membership(membership_id: str, actor=Depends(human_dep), store=Depend
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="membership not found") from exc
     search.reindex_asset(store, m["asset"])
+    _curated("membership", {"assetId": m["asset"], "membershipId": membership_id, "collectionId": m["collection"],
+                            "change": ["accepted"]}, actor)
     return m
 
 
@@ -466,10 +485,12 @@ def add_correction(asset_id: str, body: CorrectionIn, actor=Depends(human_dep), 
     if store.get_asset(asset_id) is None:
         raise HTTPException(status_code=404, detail="asset not found")
     try:
-        return records.add_correction(store, asset_id, field_path=body.field_path, op=body.op, value=body.value,
-                                      actor=actor.id, reason=body.reason)
+        row = records.add_correction(store, asset_id, field_path=body.field_path, op=body.op, value=body.value,
+                                     actor=actor.id, reason=body.reason)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    _curated("corrected", {"assetId": asset_id, "fieldPath": body.field_path, "op": body.op}, actor)
+    return row
 
 
 class RegionIn(BaseModel):
@@ -489,19 +510,24 @@ def add_region(asset_id: str, body: RegionIn, actor=Depends(human_dep), store=De
     if store.get_asset(asset_id) is None:
         raise HTTPException(status_code=404, detail="asset not found")
     try:
-        return records.add_region(store, asset_id, box=body.box, label=body.label, actor=actor.id)
+        region = records.add_region(store, asset_id, box=body.box, label=body.label, actor=actor.id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    _curated("region", {"assetId": asset_id, "regionId": region["id"], "change": ["added"]}, actor)
+    return region
 
 
 @router.patch("/regions/{region_id}", dependencies=[Depends(json_body)])
 def patch_region(region_id: str, body: RegionPatch, actor=Depends(human_dep), store=Depends(store_dep)) -> dict:
+    fields = body.model_dump(exclude_unset=True)
     try:
-        return records.update_region(store, region_id, actor=actor.id, **body.model_dump(exclude_unset=True))
+        region = records.update_region(store, region_id, actor=actor.id, **fields)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="region not found") from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    _curated("region", {"assetId": region["asset"], "regionId": region_id, "change": sorted(fields)}, actor)
+    return region
 
 
 @router.post("/assets/{asset_id}/reanalyze")
@@ -618,10 +644,12 @@ def fidelity(borrowing_id: str, brand: str | None = None, actor=Depends(actor_de
 
 
 @router.get("/concentration")
-def concentration(actor=Depends(actor_dep), store=Depends(store_dep)) -> dict:
-    if actor.workspace is not None:
+def concentration(brand: str | None = None, actor=Depends(actor_dep), store=Depends(store_dep)) -> dict:
+    # Every agent sees the share of borrowings in its own brand scope, as
+    # GET /borrowings and the asset detail show them; only the person sees all.
+    if not actor.is_human:
         from collections import Counter
-        scope = _scope(store, actor, None)
+        scope = _scope(store, actor, brand)
         counts = Counter(row["asset"] for row in borrow.list_borrowings(store)
                          if (store.get_membership(row["membership"]) or {}).get("collection") in scope)
         total = sum(counts.values())

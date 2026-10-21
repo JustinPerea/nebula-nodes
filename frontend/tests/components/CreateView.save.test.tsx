@@ -105,6 +105,18 @@ describe('Create style saving', () => {
     expect(view.queryByRole('alert')).toBeNull();
   });
 
+  it('refuses to save a Style holding an image link from outside Nebula, and says so', async () => {
+    const view = render(<CreateView />);
+    act(() => useCreateDraftStore.getState().updateDraft('test-session', () => ({ refs: [
+      { filePath: '/api/outputs/chat-uploads/a.png', previewUrl: '/api/outputs/chat-uploads/a.png' },
+      { filePath: 'https://images.example.com/x.png', previewUrl: '' }] })));
+    fireEvent.click(view.getByRole('button', { name: 'Styles' }));
+    fireEvent.click(await view.findByRole('button', { name: 'Save current' }));
+    expect(await view.findByRole('alert')).toHaveTextContent('image link from outside Nebula');
+    expect(view.queryByRole('dialog', { name: 'Name this style:' })).toBeNull();
+    expect(mocks.createPreset).not.toHaveBeenCalled();
+  });
+
   it('refreshes the real preset library only after persistence resolves', async () => {
     let finish!: (preset: Preset) => void;
     let persisted: Preset | null = null;

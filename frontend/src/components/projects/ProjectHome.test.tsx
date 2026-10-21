@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { ProjectHome, type ProjectHomeProps, type ProjectSummary } from './ProjectHome';
+import { useAssetProposalsStore } from '../../store/assetProposalsStore';
+import { coverProposal } from '../../test/assetProposalFixtures';
 
 vi.mock('../../lib/backend', () => ({ backendAssetUrlSync: (url: string) => `http://127.0.0.1:8060${url}` }));
 
@@ -233,5 +235,28 @@ describe('ProjectHome', () => {
   it('hides the Settings button when nothing handles it', () => {
     render(<ProjectHome {...props()} />);
     expect(screen.queryByRole('button', { name: 'Settings' })).toBeNull();
+  });
+
+  it('shows an agent’s cover proposal on its project’s card only', async () => {
+    useAssetProposalsStore.getState().clear();
+    useAssetProposalsStore.getState().open(coverProposal({ target: { kind: 'project', id: 'glass', name: 'Glass campaign' } }), 'k1');
+    render(<ProjectHome {...props({ projects: [project(), project({ id: 'logo', name: 'Logo explorations' })] })} />);
+    const glass = screen.getByRole('article', { name: 'Glass campaign' });
+    expect(await within(glass).findByRole('group', { name: 'Claude Code proposes a new cover' })).toBeTruthy();
+    const logo = screen.getByRole('article', { name: 'Logo explorations' });
+    expect(within(logo).queryByRole('group')).toBeNull();
+    useAssetProposalsStore.getState().clear();
+  });
+
+  it('says when an agent set the cover', async () => {
+    const choices = { images: [{ url: '/api/outputs/a.png', kind: 'output' as const }], pinned: '/api/outputs/a.png',
+      cover: { source: 'pinned' as const, images: ['/api/outputs/a.png'] }, pinnedBy: { kind: 'agent', name: 'Codex' } };
+    render(<ProjectHome {...props({
+      projects: [project({ cover: choices.cover, coverBy: { kind: 'agent', name: 'Codex' } })],
+      loadCoverChoices: vi.fn().mockResolvedValue(choices), onPinCover: vi.fn() })} />);
+    const button = screen.getByRole('button', { name: 'Choose a cover for Glass campaign' });
+    expect(button.getAttribute('title')).toBe('Cover: set by Codex (agent)');
+    fireEvent.click(button);
+    expect(await screen.findByText('Cover · set by Codex (agent)')).toBeTruthy();
   });
 });

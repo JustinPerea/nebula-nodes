@@ -1,4 +1,4 @@
-"""The person's own agents (Claude, Codex, Gemini, Hermes, custom), run over ACP.
+"""The person's own agents (Claude, Codex, Gemini, Antigravity, Hermes, custom), run over ACP.
 
 A personal agent is the person's own CLI agent (their login, their settings,
 hooks, MCP servers and memory), started by Nebula as an ACP subprocess and
@@ -18,7 +18,10 @@ were checked on registry.npmjs.org on 2026-10-13 (cutoff 2026-09-29):
 
 ``NPX_ENV`` also sets ``npm_config_before`` to 14 days ago, which holds
 everything npx installs for them (``@openai/codex``, say) to the same rule.
-Gemini and Hermes are binaries the person installed themselves.
+Gemini and Hermes are binaries the person installed themselves; Nebula checks
+the Gemini CLI's ACP flag and login first (services/gemini_cli_setup.py).
+Antigravity is Google's ACP server, which Nebula downloads, pinned by version
+and SHA-256, into its own data dir (services/antigravity_agent.py).
 """
 from __future__ import annotations
 
@@ -32,8 +35,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from services import agent_binaries
+from services import agent_binaries, agent_token_file, antigravity_agent, gemini_cli_setup
 from services.agent_presence import clean_agent_name
+from services.credential_catalog import CREDENTIAL_PROVIDERS
 
 FILE_NAME = "personal-agents.json"
 MAX_AGENTS = 20
@@ -45,6 +49,17 @@ STARTUP_TIMEOUT_S = 60.0
 ID_RE = re.compile(r"^[a-z0-9-]{1,32}$")
 COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 STATUSES = ("ready", "not_installed", "needs_node", "needs_setup", "disabled")
+
+# Environment variables a personal agent never inherits from the backend:
+# Nebula's own spending tokens, and every provider key the backend may have
+# inherited from the shell that started it. Claude Code bills ANTHROPIC_API_KEY
+# ahead of the subscription login, and Codex OPENAI_API_KEY, so a terminal's
+# key would silently replace the plan the person set the agent up with.
+# GEMINI_API_KEY too: Gemini CLI and Google's Antigravity server would bill a
+# shell's key; a key reaches them only when the person turns it on here, or
+# from their own ~/.gemini/.env, which the CLI reads itself.
+AGENT_ENV_DROP = frozenset({"NEBULA_AGENT_TOKEN", "NEBULA_APP_TOKEN", "NEBULA_APP_TOKEN_FILE", agent_token_file.ENV_VAR,
+                            "GEMINI_API_KEY"} | CREDENTIAL_PROVIDERS)
 
 _lock = threading.Lock()
 
@@ -69,6 +84,14 @@ class Preset:
     startable: bool = True
     setup_note: str = ""
     npx: bool = False
+    # "command" (found on PATH), "gemini" (checked by gemini_cli_setup) or
+    # "download" (Nebula's pinned copy, antigravity_agent).
+    kind: str = "command"
+    # Settings key the person may choose to hand this agent (off by default).
+    key_option: str | None = None
+    # ACP auth method Nebula calls before session/new, after an explicit sign-in.
+    sign_in: str | None = None
+    terms_note: str = ""
 
 
 PRESETS: dict[str, Preset] = {
@@ -82,7 +105,12 @@ PRESETS: dict[str, Preset] = {
         note="Uses your Codex login and ~/.codex config.", npx=True),
     "gemini": Preset(
         "gemini", "Gemini (your setup)", "#4285F4", "gemini", ("--acp",),
-        note="Uses the gemini CLI you installed and its login."),
+        note="Uses the gemini CLI you installed and its login.", kind="gemini", key_option="GOOGLE_API_KEY"),
+    "antigravity": Preset(
+        "antigravity", "Antigravity (your setup)", "#34A853", antigravity_agent.COMMAND, (),
+        env=(("BROWSER", antigravity_agent.NO_BROWSER),),
+        note="Google's Antigravity ACP server, on your Google AI plan.", kind="download",
+        sign_in=antigravity_agent.AUTH_METHOD, terms_note=antigravity_agent.TERMS_NOTE),
     "hermes": Preset(
         "hermes", "Hermes", "#A78BFA", "hermes", ("acp",), env=(("HERMES_ACP_SKIP_CONFIGURED_MCP", "1"),),
         startable=False, setup_note="Hermes needs a Nebula profile before it can start here. Not set up yet."),
@@ -97,6 +125,13 @@ class LaunchSpec:
     color: str
     startup_timeout: float
     agent_id: str
+    # ACP auth method to call before session/new (a sign-in the person did here).
+    auth_method: str | None = None
+    # Values to mask in anything the agent prints (a key Nebula handed it).
+    secrets: tuple[str, ...] = ()
+
+    def __repr__(self) -> str:  # never print a handed-over key
+        return f"LaunchSpec(agent_id={self.agent_id!r}, argv={self.argv!r}, env_keys={sorted(self.env)!r})"
 
 
 @dataclass
@@ -112,6 +147,14 @@ class AgentView:
     resolvedPath: str | None = None
     note: str = ""
     startable: bool = True
+    version: str | None = None
+    # The "hand this agent my key" choice: {enabled, keySaved, billing, blocked}.
+    keyOption: dict[str, Any] | None = None
+    # A download Nebula manages: {state, version, sizeBytes, message, job?}.
+    install: dict[str, Any] | None = None
+    # A sign-in run through the agent: {state, message, job?}.
+    signIn: dict[str, Any] | None = None
+    termsNote: str = ""
     extra: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
@@ -219,6 +262,13 @@ def _validate_row(row: Any, *, existing_custom: bool = False) -> dict[str, Any]:
     if row.get("color") is not None:
         clean["color"] = _clean_color(row["color"])
     if agent_id in PRESETS:
+        preset = PRESETS[agent_id]
+        if preset.key_option is not None:
+            if "useNebulaKey" in row and not isinstance(row["useNebulaKey"], bool):
+                raise PersonalAgentError("invalid", "useNebulaKey must be true or false")
+            clean["useNebulaKey"] = bool(row.get("useNebulaKey", False))
+        if preset.sign_in is not None:
+            clean["signedIn"] = row.get("signedIn") is True
         return clean
     clean["displayName"] = clean.get("displayName") or _clean_name(agent_id)
     clean["color"] = clean.get("color") or "#7AD3FF"
@@ -244,13 +294,25 @@ def _row(data: dict[str, Any], agent_id: str) -> dict[str, Any] | None:
     return next((row for row in data["agents"] if row["id"] == agent_id), None)
 
 
-def _preset_status(preset: Preset, enabled: bool, home: Path | None) -> tuple[str, Path | None, str]:
+def _nebula_key(name: str) -> str | None:
+    from services import settings
+    try:
+        return settings.get_api_key(name)
+    except (OSError, ValueError):
+        return None
+
+
+def _not_installed(preset: Preset) -> str:
+    what = "npx (Node.js)" if preset.npx else f"`{preset.command}`"
+    return f"Install {what} first; Nebula doesn't install it."
+
+
+def _command_status(preset: Preset, enabled: bool, home: Path | None) -> tuple[str, Path | None, str]:
     resolved = agent_binaries.resolve(preset.command, home=home)
     if not preset.startable:
         return "needs_setup", resolved, preset.setup_note
     if resolved is None:
-        what = "npx (Node.js)" if preset.npx else f"`{preset.command}`"
-        return "not_installed", None, f"Install {what} first; Nebula doesn't install it."
+        return "not_installed", None, _not_installed(preset)
     if preset.min_node is not None:
         major = agent_binaries.node_major(str(resolved))
         if major is None or major < preset.min_node:
@@ -260,16 +322,79 @@ def _preset_status(preset: Preset, enabled: bool, home: Path | None) -> tuple[st
     return "ready", resolved, preset.note
 
 
-def _view(agent_id: str, row: dict[str, Any] | None, home: Path | None) -> AgentView:
+def _gemini_view(preset: Preset, row: dict[str, Any], enabled: bool, home: Path | None,
+                 state_dir: Path) -> dict[str, Any]:
+    resolved = agent_binaries.resolve(preset.command, home=home)
+    use_key = bool(row.get("useNebulaKey"))
+    key_saved = bool(_nebula_key(preset.key_option or ""))
+    key_option = {"enabled": use_key, "keySaved": key_saved, "billing": gemini_cli_setup.KEY_BILLING,
+                  "blocked": None}
+    if resolved is None:
+        return {"status": "not_installed", "resolved": None, "note": _not_installed(preset), "args": list(preset.args),
+                "version": None, "keyOption": key_option}
+    ready = gemini_cli_setup.readiness(resolved, Path(home) if home is not None else Path.home(),
+                                       use_nebula_key=use_key, nebula_key_saved=key_saved, start_dir=state_dir,
+                                       dropped_env=AGENT_ENV_DROP)
+    key_option["blocked"] = ready.key_blocked
+    status = "needs_setup" if not ready.ready else "ready" if enabled else "disabled"
+    return {"status": status, "resolved": resolved, "note": ready.note,
+            "args": [ready.acp_flag] if ready.acp_flag else list(preset.args), "version": ready.version,
+            "keyOption": key_option}
+
+
+def _download_view(preset: Preset, row: dict[str, Any], enabled: bool, state_dir: Path) -> dict[str, Any]:
+    state, message = antigravity_agent.install_state(state_dir)
+    rel = antigravity_agent.release()
+    install: dict[str, Any] = {"state": state, "version": antigravity_agent.VERSION,
+                               "sizeBytes": rel.size if rel else None, "message": message,
+                               "source": rel.url if rel else None}
+    job = antigravity_agent.job(state_dir, "install")
+    if job is not None and job.state != "done":
+        install["job"] = job.view()
+        if job.state == "running":
+            install["state"] = "downloading"
+    signed_in = bool(row.get("signedIn"))
+    sign_in: dict[str, Any] = {"state": "signed_in" if signed_in else "signed_out"}
+    sign_job = antigravity_agent.job(state_dir, "sign_in")
+    if sign_job is not None and sign_job.state != "done":
+        sign_in["job"] = sign_job.view()
+        if sign_job.state == "running":
+            sign_in["state"] = "waiting"
+    resolved = antigravity_agent.installed_command(state_dir)
+    if state in {"unsupported", "changed"} or install["state"] == "downloading":
+        status, note = ("not_installed" if install["state"] == "downloading" else "needs_setup"), message
+    elif state == "missing":
+        status, note = "not_installed", message
+    elif not signed_in:
+        status, note = "needs_setup", "Sign in with Google below. Google's server opens the sign-in page in your browser."
+    else:
+        status, note = ("ready" if enabled else "disabled"), preset.note
+    return {"status": status, "resolved": resolved, "note": note, "args": list(preset.args),
+            "version": antigravity_agent.VERSION if resolved else None, "install": install, "signIn": sign_in}
+
+
+def _view(agent_id: str, row: dict[str, Any] | None, home: Path | None, state_dir: Path | None = None) -> AgentView:
     preset = PRESETS.get(agent_id)
     if preset is not None:
-        enabled = bool(row and row.get("enabled"))
-        status, resolved, note = _preset_status(preset, enabled, home)
+        row = row or {}
+        enabled = bool(row.get("enabled"))
+        extras: dict[str, Any] = {}
+        if preset.kind == "gemini":
+            extras = _gemini_view(preset, row, enabled, home, Path(state_dir) if state_dir else Path("."))
+        elif preset.kind == "download":
+            extras = _download_view(preset, row, enabled, Path(state_dir) if state_dir else Path("."))
+        else:
+            status, resolved, note = _command_status(preset, enabled, home)
+            extras = {"status": status, "resolved": resolved, "note": note, "args": list(preset.args)}
+        resolved = extras["resolved"]
         return AgentView(
-            id=agent_id, kind="preset", displayName=(row or {}).get("displayName") or preset.display_name,
-            color=(row or {}).get("color") or preset.color, enabled=enabled, command=preset.command,
-            args=list(preset.args), status=status, resolvedPath=str(resolved) if resolved else None,
-            note=note, startable=preset.startable)
+            id=agent_id, kind="preset", displayName=row.get("displayName") or preset.display_name,
+            color=row.get("color") or preset.color, enabled=enabled,
+            command=str(resolved) if preset.kind == "download" and resolved else preset.command,
+            args=extras["args"], status=extras["status"], resolvedPath=str(resolved) if resolved else None,
+            note=extras["note"], startable=preset.startable, version=extras.get("version"),
+            keyOption=extras.get("keyOption"), install=extras.get("install"), signIn=extras.get("signIn"),
+            termsNote=preset.terms_note)
     assert row is not None
     resolved = agent_binaries.resolve(row["command"], home=home)
     status = "not_installed" if resolved is None else "ready" if row.get("enabled") else "disabled"
@@ -282,8 +407,8 @@ def _view(agent_id: str, row: dict[str, Any] | None, home: Path | None) -> Agent
 
 def list_agents(state_dir: Path, home: Path | None = None) -> list[AgentView]:
     data = _load(state_dir)
-    views = [_view(agent_id, _row(data, agent_id), home) for agent_id in PRESETS]
-    views += [_view(row["id"], row, home) for row in data["agents"] if row["id"] not in PRESETS]
+    views = [_view(agent_id, _row(data, agent_id), home, state_dir) for agent_id in PRESETS]
+    views += [_view(row["id"], row, home, state_dir) for row in data["agents"] if row["id"] not in PRESETS]
     return views
 
 
@@ -294,7 +419,7 @@ def get_agent(state_dir: Path, agent_id: str, home: Path | None = None) -> Agent
     row = _row(data, agent_id)
     if agent_id not in PRESETS and row is None:
         return None
-    return _view(agent_id, row, home)
+    return _view(agent_id, row, home, state_dir)
 
 
 def create_custom(state_dir: Path, body: Any, home: Path | None = None) -> AgentView:
@@ -314,20 +439,25 @@ def create_custom(state_dir: Path, body: Any, home: Path | None = None) -> Agent
             raise PersonalAgentError("invalid", f"At most {MAX_AGENTS} custom agents")
         data["agents"].append(row)
         _save(state_dir, data)
-    return _view(row["id"], row, home)
+    return _view(row["id"], row, home, state_dir)
 
 
 def update_agent(state_dir: Path, agent_id: str, body: Any, home: Path | None = None) -> AgentView:
     if not isinstance(body, dict) or not body:
         raise PersonalAgentError("invalid", "Send the fields to change")
     preset = agent_id in PRESETS
-    allowed = {"displayName", "color", "enabled"} | (set() if preset else {"command", "args"})
+    key_option = preset and PRESETS[agent_id].key_option is not None
+    allowed = {"displayName", "color", "enabled"} | (set() if preset else {"command", "args"}) \
+        | ({"useNebulaKey"} if key_option else set())
     if set(body) - allowed:
         raise PersonalAgentError(
-            "invalid", "Built-in agents only change enabled, displayName and color" if preset
+            "invalid", ("Built-in agents only change enabled, displayName and color"
+                        + (", and useNebulaKey" if key_option else "")) if preset
             else f"Unknown fields: {sorted(set(body) - allowed)}")
     if "enabled" in body and not isinstance(body["enabled"], bool):
         raise PersonalAgentError("invalid", "enabled must be true or false")
+    if "useNebulaKey" in body and not isinstance(body["useNebulaKey"], bool):
+        raise PersonalAgentError("invalid", "useNebulaKey must be true or false")
     with _lock:
         data = _load(state_dir)
         row = _row(data, agent_id)
@@ -340,7 +470,26 @@ def update_agent(state_dir: Path, agent_id: str, body: Any, home: Path | None = 
         row.clear()
         row.update(merged)
         _save(state_dir, data)
-    return _view(agent_id, row, home)
+    return _view(agent_id, row, home, state_dir)
+
+
+def set_signed_in(state_dir: Path, agent_id: str, signed_in: bool) -> None:
+    """Record that the person finished (or undid) a sign-in run through this
+    agent. Only Nebula's sign-in and sign-out flows call this; it holds no
+    credential, just whether to call the agent's auth method on start."""
+    preset = PRESETS.get(agent_id)
+    if preset is None or preset.sign_in is None:
+        raise PersonalAgentError("invalid", "That agent has no sign-in")
+    with _lock:
+        data = _load(state_dir)
+        row = _row(data, agent_id)
+        if row is None:
+            row = {"id": agent_id, "enabled": False}
+            data["agents"].append(row)
+        if bool(row.get("signedIn")) == signed_in:
+            return
+        row["signedIn"] = signed_in
+        _save(state_dir, data)
 
 
 def delete_custom(state_dir: Path, agent_id: str) -> bool:
@@ -373,6 +522,8 @@ def launch_spec(state_dir: Path, agent_id: str, home: Path | None = None) -> Lau
     env: dict[str, str] = {}
     preset = PRESETS.get(agent_id)
     timeout = STARTUP_TIMEOUT_S
+    secrets: tuple[str, ...] = ()
+    auth_method = None
     if preset is not None:
         env.update(dict(preset.env))
         if preset.npx:
@@ -382,8 +533,23 @@ def launch_spec(state_dir: Path, agent_id: str, home: Path | None = None) -> Lau
             codex = agent_binaries.resolve("codex", home=home)
             if codex is not None:
                 env["CODEX_PATH"] = str(codex)
+        if preset.key_option is not None and view.keyOption and view.keyOption.get("enabled"):
+            # The person turned this on for this agent; readiness checked the key exists.
+            key = _nebula_key(preset.key_option)
+            if not key:
+                raise PersonalAgentError("personal_agent_needs_setup",
+                                         f"{view.displayName}: save a Gemini API key in Settings > API keys first.")
+            env["GEMINI_API_KEY"] = key
+            # Read before the overlay replaces the system settings path: the
+            # CLI looks for system-defaults.json next to that file.
+            env["GEMINI_CLI_SYSTEM_DEFAULTS_PATH"] = str(gemini_cli_setup.system_defaults_path())
+            env["GEMINI_CLI_SYSTEM_SETTINGS_PATH"] = str(gemini_cli_setup.write_key_overlay(state_dir))
+            secrets = (key,)
+        if preset.sign_in is not None:
+            auth_method = preset.sign_in
     return LaunchSpec(argv=[view.resolvedPath, *view.args], env=env, display_name=view.displayName,
-                      color=view.color, startup_timeout=timeout, agent_id=agent_id)
+                      color=view.color, startup_timeout=timeout, agent_id=agent_id, auth_method=auth_method,
+                      secrets=secrets)
 
 
 def launch_key(state_dir: Path, agent_id: str) -> tuple | None:
@@ -401,7 +567,16 @@ def launch_key(state_dir: Path, agent_id: str) -> tuple | None:
         return None
     if agent_id in PRESETS:
         preset = PRESETS[agent_id]
-        return ("preset", agent_id, preset.command, tuple(preset.args))
+        key: tuple = ("preset", agent_id, preset.command, tuple(preset.args))
+        if preset.key_option is not None:
+            key += (("useNebulaKey", bool(row.get("useNebulaKey"))),)
+        if preset.sign_in is not None:
+            key += (("signedIn", bool(row.get("signedIn"))),)
+        if preset.kind == "download":
+            # Removing or replacing the download stops its sessions too.
+            marker = antigravity_agent.version_dir(state_dir) / antigravity_agent.MARKER
+            key += (("download", antigravity_agent.VERSION, marker.exists()),)
+        return key
     return ("custom", agent_id, row.get("command"), tuple(row.get("args") or ()))
 
 

@@ -1,0 +1,1093 @@
+{
+ "about": "The model pickers' ports, params and wire pruning on main 23f11b8e (frontend/tests/universalPorts.pickerParity.test.ts writes `expected` from a verbatim copy of graphStore's configureOpenRouterModel and fetchReplicateSchemaAndConfigure). backend/tests/test_universal_ports.py checks services/universal_ports.py against the same cases. `backendChanges` lists where the backend now differs on purpose.",
+ "backendChanges": {
+  "replicate list of plain strings": {
+   "dynamicOutputPorts": [
+    {
+     "id": "text",
+     "label": "Output",
+     "dataType": "Text",
+     "required": false
+    }
+   ],
+   "why": "A Replicate model that returns a list of plain strings (a streaming text model) gives a run a `text` output (handlers/replicate_universal.py), so the picker's Image `image` port never received anything; model_schema names `text` too."
+  }
+ },
+ "cases": [
+  {
+   "name": "openrouter text model",
+   "definitionId": "openrouter-universal",
+   "nodeId": "n3",
+   "params": {
+    "model": "",
+    "temperature": 1,
+    "max_tokens": 4096,
+    "response_format": "text",
+    "prompt_caching": false
+   },
+   "edges": [
+    {
+     "id": "e1",
+     "source": "n1",
+     "sourceHandle": "text",
+     "target": "n3",
+     "targetHandle": "messages"
+    }
+   ],
+   "model": "anthropic/claude-sonnet-4.5",
+   "row": {
+    "id": "anthropic/claude-sonnet-4.5",
+    "input_modalities": [
+     "text"
+    ],
+    "output_modalities": [
+     "text"
+    ]
+   },
+   "expected": {
+    "params": {
+     "model": "anthropic/claude-sonnet-4.5",
+     "temperature": 1,
+     "max_tokens": 4096,
+     "response_format": "text",
+     "prompt_caching": false,
+     "_output_image": false
+    },
+    "dynamicInputPorts": [
+     {
+      "id": "messages",
+      "label": "Messages",
+      "dataType": "Text",
+      "required": true
+     }
+    ],
+    "dynamicOutputPorts": [
+     {
+      "id": "text",
+      "label": "Text",
+      "dataType": "Text",
+      "required": false
+     }
+    ],
+    "keptEdgeIds": [
+     "e1"
+    ]
+   }
+  },
+  {
+   "name": "openrouter vision model",
+   "definitionId": "openrouter-universal",
+   "nodeId": "n3",
+   "params": {
+    "model": "anthropic/claude-sonnet-4.5",
+    "temperature": 0.4,
+    "_output_image": false
+   },
+   "edges": [
+    {
+     "id": "e1",
+     "source": "n1",
+     "sourceHandle": "text",
+     "target": "n3",
+     "targetHandle": "messages"
+    },
+    {
+     "id": "e2",
+     "source": "n3",
+     "sourceHandle": "text",
+     "target": "n4",
+     "targetHandle": "prompt"
+    }
+   ],
+   "model": "openai/gpt-4o",
+   "row": {
+    "id": "openai/gpt-4o",
+    "input_modalities": [
+     "text",
+     "image",
+     "file"
+    ],
+    "output_modalities": [
+     "text"
+    ]
+   },
+   "expected": {
+    "params": {
+     "model": "openai/gpt-4o",
+     "temperature": 0.4,
+     "_output_image": false
+    },
+    "dynamicInputPorts": [
+     {
+      "id": "messages",
+      "label": "Messages",
+      "dataType": "Text",
+      "required": true
+     },
+     {
+      "id": "images",
+      "label": "Images",
+      "dataType": "Image",
+      "required": false,
+      "multiple": true
+     }
+    ],
+    "dynamicOutputPorts": [
+     {
+      "id": "text",
+      "label": "Text",
+      "dataType": "Text",
+      "required": false
+     }
+    ],
+    "keptEdgeIds": [
+     "e1",
+     "e2"
+    ]
+   }
+  },
+  {
+   "name": "openrouter image output model",
+   "definitionId": "openrouter-universal",
+   "nodeId": "n3",
+   "params": {
+    "model": "openai/gpt-4o",
+    "_output_image": false
+   },
+   "edges": [
+    {
+     "id": "e1",
+     "source": "n2",
+     "sourceHandle": "image",
+     "target": "n3",
+     "targetHandle": "images"
+    },
+    {
+     "id": "e2",
+     "source": "n3",
+     "sourceHandle": "text",
+     "target": "n4",
+     "targetHandle": "prompt"
+    }
+   ],
+   "model": "google/gemini-2.5-flash-image",
+   "row": {
+    "id": "google/gemini-2.5-flash-image",
+    "input_modalities": [
+     "image",
+     "text"
+    ],
+    "output_modalities": [
+     "image",
+     "text"
+    ]
+   },
+   "expected": {
+    "params": {
+     "model": "google/gemini-2.5-flash-image",
+     "_output_image": true
+    },
+    "dynamicInputPorts": [
+     {
+      "id": "messages",
+      "label": "Messages",
+      "dataType": "Text",
+      "required": true
+     },
+     {
+      "id": "images",
+      "label": "Images",
+      "dataType": "Image",
+      "required": false,
+      "multiple": true
+     }
+    ],
+    "dynamicOutputPorts": [
+     {
+      "id": "text",
+      "label": "Text",
+      "dataType": "Text",
+      "required": false
+     },
+     {
+      "id": "image",
+      "label": "Image",
+      "dataType": "Image",
+      "required": false
+     }
+    ],
+    "keptEdgeIds": [
+     "e1",
+     "e2"
+    ]
+   }
+  },
+  {
+   "name": "openrouter image only output drops text wires",
+   "definitionId": "openrouter-universal",
+   "nodeId": "n3",
+   "params": {
+    "model": "google/gemini-2.5-flash-image",
+    "_output_image": true
+   },
+   "edges": [
+    {
+     "id": "e1",
+     "source": "n2",
+     "sourceHandle": "image",
+     "target": "n3",
+     "targetHandle": "images"
+    },
+    {
+     "id": "e2",
+     "source": "n3",
+     "sourceHandle": "text",
+     "target": "n4",
+     "targetHandle": "prompt"
+    },
+    {
+     "id": "e3",
+     "source": "n3",
+     "sourceHandle": "image",
+     "target": "n5",
+     "targetHandle": "image"
+    },
+    {
+     "id": "e4",
+     "source": "n1",
+     "sourceHandle": "text",
+     "target": "n4",
+     "targetHandle": "prompt"
+    }
+   ],
+   "model": "openai/gpt-5-image-only",
+   "row": {
+    "id": "openai/gpt-5-image-only",
+    "input_modalities": [
+     "text"
+    ],
+    "output_modalities": [
+     "image"
+    ]
+   },
+   "expected": {
+    "params": {
+     "model": "openai/gpt-5-image-only",
+     "_output_image": true
+    },
+    "dynamicInputPorts": [
+     {
+      "id": "messages",
+      "label": "Messages",
+      "dataType": "Text",
+      "required": true
+     }
+    ],
+    "dynamicOutputPorts": [
+     {
+      "id": "image",
+      "label": "Image",
+      "dataType": "Image",
+      "required": false
+     }
+    ],
+    "keptEdgeIds": [
+     "e3",
+     "e4"
+    ]
+   }
+  },
+  {
+   "name": "openrouter row without modalities",
+   "definitionId": "openrouter-universal",
+   "nodeId": "n3",
+   "params": {
+    "model": ""
+   },
+   "edges": [],
+   "model": "legacy/no-modalities",
+   "row": {
+    "id": "legacy/no-modalities"
+   },
+   "expected": {
+    "params": {
+     "model": "legacy/no-modalities",
+     "_output_image": false
+    },
+    "dynamicInputPorts": [
+     {
+      "id": "messages",
+      "label": "Messages",
+      "dataType": "Text",
+      "required": true
+     }
+    ],
+    "dynamicOutputPorts": [
+     {
+      "id": "text",
+      "label": "Text",
+      "dataType": "Text",
+      "required": false
+     }
+    ],
+    "keptEdgeIds": []
+   }
+  },
+  {
+   "name": "openrouter row with empty modalities",
+   "definitionId": "openrouter-universal",
+   "nodeId": "n3",
+   "params": {
+    "model": ""
+   },
+   "edges": [
+    {
+     "id": "e1",
+     "source": "n3",
+     "sourceHandle": "text",
+     "target": "n4",
+     "targetHandle": "prompt"
+    }
+   ],
+   "model": "odd/empty",
+   "row": {
+    "id": "odd/empty",
+    "input_modalities": [],
+    "output_modalities": []
+   },
+   "expected": {
+    "params": {
+     "model": "odd/empty",
+     "_output_image": false
+    },
+    "dynamicInputPorts": [
+     {
+      "id": "messages",
+      "label": "Messages",
+      "dataType": "Text",
+      "required": true
+     }
+    ],
+    "dynamicOutputPorts": [],
+    "keptEdgeIds": []
+   }
+  },
+  {
+   "name": "nous text model",
+   "definitionId": "nous-portal-universal",
+   "nodeId": "n6",
+   "params": {
+    "model": "",
+    "temperature": 1,
+    "max_tokens": 4096
+   },
+   "edges": [
+    {
+     "id": "e1",
+     "source": "n2",
+     "sourceHandle": "image",
+     "target": "n6",
+     "targetHandle": "images"
+    },
+    {
+     "id": "e2",
+     "source": "n1",
+     "sourceHandle": "text",
+     "target": "n6",
+     "targetHandle": "messages"
+    }
+   ],
+   "model": "moonshotai/kimi-k2.6",
+   "row": {
+    "id": "moonshotai/kimi-k2.6",
+    "input_modalities": [
+     "text"
+    ],
+    "output_modalities": [
+     "text"
+    ]
+   },
+   "expected": {
+    "params": {
+     "model": "moonshotai/kimi-k2.6",
+     "temperature": 1,
+     "max_tokens": 4096,
+     "_output_image": false
+    },
+    "dynamicInputPorts": [
+     {
+      "id": "messages",
+      "label": "Messages",
+      "dataType": "Text",
+      "required": true
+     }
+    ],
+    "dynamicOutputPorts": [
+     {
+      "id": "text",
+      "label": "Text",
+      "dataType": "Text",
+      "required": false
+     }
+    ],
+    "keptEdgeIds": [
+     "e2"
+    ]
+   }
+  },
+  {
+   "name": "nous vision model",
+   "definitionId": "nous-portal-universal",
+   "nodeId": "n6",
+   "params": {
+    "model": "moonshotai/kimi-k2.6",
+    "_output_image": false
+   },
+   "edges": [
+    {
+     "id": "e1",
+     "source": "n2",
+     "sourceHandle": "image",
+     "target": "n6",
+     "targetHandle": "images"
+    }
+   ],
+   "model": "nousresearch/hermes-4-vl",
+   "row": {
+    "id": "nousresearch/hermes-4-vl",
+    "input_modalities": [
+     "text",
+     "image"
+    ],
+    "output_modalities": [
+     "text"
+    ]
+   },
+   "expected": {
+    "params": {
+     "model": "nousresearch/hermes-4-vl",
+     "_output_image": false
+    },
+    "dynamicInputPorts": [
+     {
+      "id": "messages",
+      "label": "Messages",
+      "dataType": "Text",
+      "required": true
+     },
+     {
+      "id": "images",
+      "label": "Images",
+      "dataType": "Image",
+      "required": false,
+      "multiple": true
+     }
+    ],
+    "dynamicOutputPorts": [
+     {
+      "id": "text",
+      "label": "Text",
+      "dataType": "Text",
+      "required": false
+     }
+    ],
+    "keptEdgeIds": [
+     "e1"
+    ]
+   }
+  },
+  {
+   "name": "replicate image edit",
+   "definitionId": "replicate-universal",
+   "nodeId": "n7",
+   "params": {
+    "model_id": "black-forest-labs/flux-kontext-pro",
+    "prompt": "make it dusk",
+    "seed": 7
+   },
+   "providerMeta": {},
+   "schema": {
+    "version_id": "v-kontext",
+    "description": "Edit images with text",
+    "input_schema": {
+     "type": "object",
+     "required": [
+      "prompt"
+     ],
+     "properties": {
+      "prompt": {
+       "type": "string",
+       "title": "Prompt",
+       "description": "Text description of what you want to generate, or the instruction on how to edit the given image.",
+       "x-order": 0
+      },
+      "input_image": {
+       "type": "string",
+       "format": "uri",
+       "title": "Input Image",
+       "description": "Image to use as reference.",
+       "x-order": 1
+      },
+      "aspect_ratio": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/aspect_ratio"
+        }
+       ],
+       "default": "match_input_image",
+       "description": "Aspect ratio of the generated image.",
+       "x-order": 2
+      },
+      "output_format": {
+       "type": "string",
+       "enum": [
+        "jpg",
+        "png"
+       ],
+       "default": "png",
+       "description": "Output format",
+       "x-order": 3
+      },
+      "safety_tolerance": {
+       "type": "integer",
+       "default": 2,
+       "minimum": 0,
+       "maximum": 6,
+       "description": "Safety tolerance, 0 is most strict and 6 is most permissive.",
+       "x-order": 4
+      },
+      "seed": {
+       "type": "integer",
+       "description": "Random seed. Set for reproducible generation",
+       "x-order": 5
+      },
+      "prompt_upsampling": {
+       "type": "boolean",
+       "default": false,
+       "description": "Automatic prompt improvement",
+       "x-order": 6
+      }
+     }
+    },
+    "output_schema": {
+     "type": "string",
+     "format": "uri",
+     "title": "Output"
+    }
+   },
+   "expected": {
+    "params": {
+     "model_id": "black-forest-labs/flux-kontext-pro",
+     "prompt": "make it dusk",
+     "seed": 7,
+     "aspect_ratio": "match_input_image",
+     "output_format": "png",
+     "safety_tolerance": 2,
+     "prompt_upsampling": false,
+     "_version_id": "v-kontext",
+     "_schema_fetched": true
+    },
+    "dynamicInputPorts": [
+     {
+      "id": "input_image",
+      "label": "Input Image",
+      "dataType": "Image",
+      "required": false
+     }
+    ],
+    "dynamicOutputPorts": [
+     {
+      "id": "image",
+      "label": "Output",
+      "dataType": "Image",
+      "required": false
+     }
+    ],
+    "dynamicParams": [
+     {
+      "key": "prompt",
+      "label": "Prompt",
+      "type": "string",
+      "required": true,
+      "placeholder": "Text description of what you want to generate, or the instruction on how to edit"
+     },
+     {
+      "key": "aspect_ratio",
+      "label": "Aspect Ratio",
+      "type": "string",
+      "required": false,
+      "default": "match_input_image",
+      "placeholder": "Aspect ratio of the generated image."
+     },
+     {
+      "key": "output_format",
+      "label": "Output Format",
+      "type": "enum",
+      "required": false,
+      "default": "png",
+      "placeholder": "Output format",
+      "options": [
+       {
+        "label": "jpg",
+        "value": "jpg"
+       },
+       {
+        "label": "png",
+        "value": "png"
+       }
+      ]
+     },
+     {
+      "key": "safety_tolerance",
+      "label": "Safety Tolerance",
+      "type": "integer",
+      "required": false,
+      "default": 2,
+      "placeholder": "Safety tolerance, 0 is most strict and 6 is most permissive.",
+      "min": 0,
+      "max": 6
+     },
+     {
+      "key": "seed",
+      "label": "Seed",
+      "type": "integer",
+      "required": false,
+      "placeholder": "Random seed. Set for reproducible generation"
+     },
+     {
+      "key": "prompt_upsampling",
+      "label": "Prompt Upsampling",
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "placeholder": "Automatic prompt improvement"
+     }
+    ],
+    "providerMeta": {
+     "version_id": "v-kontext",
+     "description": "Edit images with text"
+    }
+   }
+  },
+  {
+   "name": "replicate list of file urls",
+   "definitionId": "replicate-universal",
+   "nodeId": "n7",
+   "params": {
+    "model_id": "stability-ai/sdxl",
+    "_version_id": "v-old",
+    "_schema_fetched": true,
+    "width": 512
+   },
+   "providerMeta": {
+    "version_id": "v-old",
+    "description": "old"
+   },
+   "schema": {
+    "version_id": "v-sdxl",
+    "description": "A text-to-image generative AI model",
+    "input_schema": {
+     "type": "object",
+     "properties": {
+      "mask": {
+       "type": "string",
+       "format": "uri",
+       "description": "Input mask for inpaint mode."
+      },
+      "image": {
+       "type": "string",
+       "format": "uri",
+       "description": "Input image for img2img or inpaint mode"
+      },
+      "width": {
+       "type": "integer",
+       "default": 1024,
+       "description": "Width of output image"
+      },
+      "prompt": {
+       "type": "string",
+       "default": "An astronaut riding a rainbow unicorn",
+       "description": "Input prompt"
+      },
+      "refine": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/refine"
+        }
+       ],
+       "default": "no_refiner"
+      },
+      "num_outputs": {
+       "type": "integer",
+       "default": 1,
+       "minimum": 1,
+       "maximum": 4
+      },
+      "guidance_scale": {
+       "type": "number",
+       "default": 7.5,
+       "minimum": 1,
+       "maximum": 50
+      },
+      "scheduler": {
+       "enum": [
+        "DDIM",
+        "K_EULER",
+        2
+       ],
+       "default": "K_EULER"
+      }
+     }
+    },
+    "output_schema": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "format": "uri"
+     },
+     "title": "Output"
+    }
+   },
+   "expected": {
+    "params": {
+     "model_id": "stability-ai/sdxl",
+     "_version_id": "v-sdxl",
+     "_schema_fetched": true,
+     "width": 1024,
+     "prompt": "An astronaut riding a rainbow unicorn",
+     "refine": "no_refiner",
+     "num_outputs": 1,
+     "guidance_scale": 7.5,
+     "scheduler": "K_EULER"
+    },
+    "dynamicInputPorts": [
+     {
+      "id": "mask",
+      "label": "Mask",
+      "dataType": "Image",
+      "required": false
+     },
+     {
+      "id": "image",
+      "label": "Image",
+      "dataType": "Image",
+      "required": false
+     }
+    ],
+    "dynamicOutputPorts": [
+     {
+      "id": "image",
+      "label": "Output",
+      "dataType": "Image",
+      "required": false
+     }
+    ],
+    "dynamicParams": [
+     {
+      "key": "width",
+      "label": "Width",
+      "type": "integer",
+      "required": false,
+      "default": 1024,
+      "placeholder": "Width of output image"
+     },
+     {
+      "key": "prompt",
+      "label": "Prompt",
+      "type": "string",
+      "required": false,
+      "default": "An astronaut riding a rainbow unicorn",
+      "placeholder": "Input prompt"
+     },
+     {
+      "key": "refine",
+      "label": "Refine",
+      "type": "string",
+      "required": false,
+      "default": "no_refiner",
+      "placeholder": ""
+     },
+     {
+      "key": "num_outputs",
+      "label": "Num Outputs",
+      "type": "integer",
+      "required": false,
+      "default": 1,
+      "placeholder": "",
+      "min": 1,
+      "max": 4
+     },
+     {
+      "key": "guidance_scale",
+      "label": "Guidance Scale",
+      "type": "float",
+      "required": false,
+      "default": 7.5,
+      "placeholder": "",
+      "min": 1,
+      "max": 50
+     },
+     {
+      "key": "scheduler",
+      "label": "Scheduler",
+      "type": "enum",
+      "required": false,
+      "default": "K_EULER",
+      "placeholder": "",
+      "options": [
+       {
+        "label": "DDIM",
+        "value": "DDIM"
+       },
+       {
+        "label": "K_EULER",
+        "value": "K_EULER"
+       },
+       {
+        "label": "2",
+        "value": 2
+       }
+      ]
+     }
+    ],
+    "providerMeta": {
+     "version_id": "v-sdxl",
+     "description": "A text-to-image generative AI model"
+    }
+   }
+  },
+  {
+   "name": "replicate list of plain strings",
+   "definitionId": "replicate-universal",
+   "nodeId": "n7",
+   "params": {
+    "model_id": "meta/meta-llama-3-8b-instruct"
+   },
+   "providerMeta": {},
+   "schema": {
+    "version_id": "v-llama",
+    "description": "Base version of Llama 3",
+    "input_schema": {
+     "type": "object",
+     "required": [
+      "prompt"
+     ],
+     "properties": {
+      "prompt": {
+       "type": "string",
+       "default": "",
+       "description": "Prompt"
+      },
+      "max_tokens": {
+       "type": "integer",
+       "default": 512,
+       "description": "The maximum number of tokens the model should generate as output."
+      },
+      "temperature": {
+       "type": "number",
+       "default": 0.6
+      }
+     }
+    },
+    "output_schema": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "x-cog-array-type": "iterator",
+     "x-cog-array-display": "concatenate",
+     "title": "Output"
+    }
+   },
+   "expected": {
+    "params": {
+     "model_id": "meta/meta-llama-3-8b-instruct",
+     "prompt": "",
+     "max_tokens": 512,
+     "temperature": 0.6,
+     "_version_id": "v-llama",
+     "_schema_fetched": true
+    },
+    "dynamicInputPorts": [],
+    "dynamicOutputPorts": [
+     {
+      "id": "image",
+      "label": "Output",
+      "dataType": "Image",
+      "required": false
+     }
+    ],
+    "dynamicParams": [
+     {
+      "key": "prompt",
+      "label": "Prompt",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "placeholder": "Prompt"
+     },
+     {
+      "key": "max_tokens",
+      "label": "Max Tokens",
+      "type": "integer",
+      "required": false,
+      "default": 512,
+      "placeholder": "The maximum number of tokens the model should generate as output."
+     },
+     {
+      "key": "temperature",
+      "label": "Temperature",
+      "type": "float",
+      "required": false,
+      "default": 0.6,
+      "placeholder": ""
+     }
+    ],
+    "providerMeta": {
+     "version_id": "v-llama",
+     "description": "Base version of Llama 3"
+    }
+   }
+  },
+  {
+   "name": "replicate uploadable audio, object output",
+   "definitionId": "replicate-universal",
+   "nodeId": "n7",
+   "params": {
+    "model_id": "openai/whisper"
+   },
+   "providerMeta": {
+    "version_id": "v-older"
+   },
+   "schema": {
+    "version_id": "v-whisper",
+    "description": "Convert speech in audio to text",
+    "input_schema": {
+     "type": "object",
+     "required": [
+      "audio"
+     ],
+     "properties": {
+      "audio": {
+       "type": "string",
+       "x-uploadable": true,
+       "description": "Audio file"
+      },
+      "language": {
+       "type": "string",
+       "default": null,
+       "description": "language spoken in the audio, specify None to perform language detection"
+      },
+      "translate": {
+       "type": "boolean",
+       "default": false
+      },
+      "1st_pass": {
+       "type": "number",
+       "minimum": 0.5
+      }
+     }
+    },
+    "output_schema": {
+     "type": "object",
+     "properties": {
+      "transcription": {
+       "type": "string"
+      }
+     }
+    }
+   },
+   "expected": {
+    "params": {
+     "model_id": "openai/whisper",
+     "language": null,
+     "translate": false,
+     "_version_id": "v-whisper",
+     "_schema_fetched": true
+    },
+    "dynamicInputPorts": [
+     {
+      "id": "audio",
+      "label": "Audio",
+      "dataType": "Image",
+      "required": true
+     }
+    ],
+    "dynamicOutputPorts": [
+     {
+      "id": "text",
+      "label": "Output",
+      "dataType": "Text",
+      "required": false
+     }
+    ],
+    "dynamicParams": [
+     {
+      "key": "language",
+      "label": "Language",
+      "type": "string",
+      "required": false,
+      "default": null,
+      "placeholder": "language spoken in the audio, specify None to perform language detection"
+     },
+     {
+      "key": "translate",
+      "label": "Translate",
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "placeholder": ""
+     },
+     {
+      "key": "1st_pass",
+      "label": "1st Pass",
+      "type": "float",
+      "required": false,
+      "placeholder": "",
+      "min": 0.5
+     }
+    ],
+    "providerMeta": {
+     "version_id": "v-whisper",
+     "description": "Convert speech in audio to text"
+    }
+   }
+  },
+  {
+   "name": "replicate empty schema",
+   "definitionId": "replicate-universal",
+   "nodeId": "n7",
+   "params": {
+    "model_id": "someone/bare"
+   },
+   "providerMeta": {},
+   "schema": {
+    "version_id": "v-bare",
+    "description": "",
+    "input_schema": {},
+    "output_schema": {}
+   },
+   "expected": {
+    "params": {
+     "model_id": "someone/bare",
+     "_version_id": "v-bare",
+     "_schema_fetched": true
+    },
+    "dynamicInputPorts": [],
+    "dynamicOutputPorts": [
+     {
+      "id": "text",
+      "label": "Output",
+      "dataType": "Text",
+      "required": false
+     }
+    ],
+    "dynamicParams": [],
+    "providerMeta": {
+     "version_id": "v-bare",
+     "description": ""
+    }
+   }
+  }
+ ]
+}

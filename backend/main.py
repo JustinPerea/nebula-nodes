@@ -10,7 +10,6 @@ _env_check.run_startup_checks()
 
 import asyncio
 import copy
-import difflib
 import hashlib
 import json
 import logging
@@ -85,7 +84,7 @@ from services.settings import (
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
-from services import agent_start, node_categories
+from services import agent_start, node_categories, node_lookup
 from services import output_thumbnail
 from services.node_errors import NodeErrors
 from services import project_cover
@@ -102,8 +101,10 @@ from services.port_contracts import (
     ContractEdge,
     ContractNode,
     cinema_output_ports,
+    node_ports,
     validate_edge_contracts,
 )
+from services import universal_ports
 from services.file_access import ProtectedPathError, require_allowed_path, validate_file_references
 from services.qc_common import extract_frames
 from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT, resolve_output_ref, portable_output_ref, ManifestError, find_output_record, read_manifest
@@ -115,7 +116,7 @@ from services.execution_runs import (
     ExecutionRunRegistry,
 )
 from services.chat_session import run_claude
-from services import personal_agents
+from services import antigravity_agent, personal_agents
 from services.acp_session import PersonalSessionError, acp_sessions
 from services.agent_profiles import (
     GrantOverlapsProtectedDir,
@@ -179,6 +180,10 @@ from services.canvas_proposals import (
     readiness_warning,
     summarize_cost,
 )
+# Proposals outside the graph: a project's cover, a board's Send notes (U16).
+from services.asset_proposals import AssetProposal, asset_proposals
+from services.asset_proposals import parse_change as parse_asset_change, summary as asset_proposal_summary
+from services.agent_presence import request_headers_scope
 from services.local_guard import host_allowed
 from services import run_approvals as approvals
 from services.run_approvals import RunApprovals
@@ -1592,8 +1597,7 @@ def _validate_imported_outputs(
     """Reject fabricated output handles/types before staging graph state."""
 
     definition = node_registry.get(definition_id) or {}
-    output_ports = (cinema_output_ports(params) if definition_id == "cinema-scene"
-                    else definition.get("outputPorts", []) or [])
+    output_ports = node_ports(definition_id, params, definition, "outputPorts")
     # displayOutputs are values a node keeps only to show on its card (Image
     # Compare's two inputs). They are saved with the node but never wired.
     declared_ports = {
@@ -1603,6 +1607,7 @@ def _validate_imported_outputs(
     }
     handles_are_dynamic = (
         definition_id in _DYNAMIC_OUTPUT_DEFINITION_IDS and not declared_ports
+        and universal_ports.stored_ports(definition_id, params) is None
     )
     for handle, port in outputs.items():
         if not isinstance(handle, str) or not handle:
@@ -2859,6 +2864,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             if manager.promote(websocket, frame.get("personToken")):
                 # Accept keys travel only to the person's canvas sockets.
                 await websocket.send_text(json.dumps(_proposal_sync_message()))
+                await websocket.send_text(json.dumps(await _asset_proposal_sync_message()))
             else:
                 await websocket.send_text(json.dumps({
                     "type": "personRequired",
@@ -2937,7 +2943,10 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 return {"type": "done"}
             enqueue({"type": "session", "sessionId": host.id, "agentName": host.display_name, "color": host.color,
                      "agentInfo": {"name": str(host.agent_info.get("name") or "")[:64],
-                                   "version": str(host.agent_info.get("version") or "")[:32]}})
+                                   "version": str(host.agent_info.get("version") or "")[:32]},
+                     # The models (and thinking levels) the person may pick
+                     # for this session, and whether its prompts take images.
+                     "options": host.option_view(), "promptImages": host.prompt_images})
         # Reused or just started, Settings must still allow it before it gets
         # a prompt: switched off, removed or changed since it started.
         if host.closed or not acp_sessions.still_allowed(host, _STATE_DIR):
@@ -3176,7 +3185,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
                         "source": source,
                     })
                 continue
-            if msg_type in {"permission", "close_session"}:
+            if msg_type in {"permission", "close_session", "personal_option"}:
                 # The person's answers to a personal agent: they carry the
                 # person token, and only this socket's own sessions count.
                 if chat_marked_as_agent or not person_session.verify(payload.get("personToken")):
@@ -3188,6 +3197,24 @@ async def chat_websocket(websocket: WebSocket) -> None:
                     for host in acp_sessions.live():
                         if host.owner == connection_id:
                             host.resolve_permission(payload.get("requestId"), payload.get("decision"), connection_id)
+                    continue
+                if msg_type == "personal_option":
+                    # The person picked a model (or thinking level) for this session.
+                    target = acp_sessions.get(payload.get("sessionId"), connection_id)
+                    if target is None:
+                        await send_event({"type": "error", "code": "personal_session_ended", "message": (
+                            "This chat's agent has stopped. Send again to start a new conversation."),
+                            "source": "personal"})
+                        continue
+                    try:
+                        options = await target.set_option(payload.get("configId"), payload.get("value"))
+                    except PersonalSessionError as exc:
+                        await send_event({"type": "personal_options", "sessionId": target.id,
+                                          "options": target.option_view(), "error": exc.message,
+                                          "source": "personal"})
+                        continue
+                    await send_event({"type": "personal_options", "sessionId": target.id, "options": options,
+                                      "source": "personal"})
                     continue
                 target = acp_sessions.get(payload.get("sessionId"), connection_id)
                 if target is not None and current_task is not None and not current_task.done() \
@@ -3375,6 +3402,76 @@ async def delete_personal_agent(agent_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="No custom agent with that id")
     await acp_sessions.close_stale(_STATE_DIR)
     return {"ok": True}
+
+
+def _antigravity_signed_in(value: bool) -> None:
+    personal_agents.set_signed_in(_STATE_DIR, antigravity_agent.AGENT_ID, value)
+
+
+def _antigravity_view() -> dict[str, Any]:
+    view = personal_agents.get_agent(_STATE_DIR, antigravity_agent.AGENT_ID)
+    assert view is not None
+    return {"agent": view.as_dict()}
+
+
+def _antigravity_http_error(exc: antigravity_agent.AntigravityError) -> HTTPException:
+    return HTTPException(status_code=409 if exc.code in {"not_installed", "unsupported"} else 400, detail=exc.message)
+
+
+@app.post("/api/personal-agents/antigravity/install")
+async def install_antigravity() -> dict[str, Any]:
+    """Download Google's Antigravity ACP server, pinned and SHA-256 checked
+    (services/antigravity_agent.py). Runs in the background; GET shows progress."""
+    require_person(current_request_headers())
+    try:
+        antigravity_agent.start_install(_STATE_DIR)
+    except antigravity_agent.AntigravityError as exc:
+        raise _antigravity_http_error(exc) from exc
+    return await asyncio.to_thread(_antigravity_view)
+
+
+@app.delete("/api/personal-agents/antigravity/install")
+async def remove_antigravity() -> dict[str, Any]:
+    """Stop a download in progress, or delete the downloaded server."""
+    require_person(current_request_headers())
+    if not await antigravity_agent.cancel(_STATE_DIR, "install"):
+        await antigravity_agent.cancel(_STATE_DIR, "sign_in")
+        await asyncio.to_thread(antigravity_agent.remove, _STATE_DIR)
+    await acp_sessions.close_stale(_STATE_DIR)
+    return await asyncio.to_thread(_antigravity_view)
+
+
+@app.post("/api/personal-agents/antigravity/sign-in")
+async def sign_in_antigravity() -> dict[str, Any]:
+    """The person asked to sign in with Google. Google's server opens the
+    browser and keeps the login in the Keychain; Nebula never sees it."""
+    require_person(current_request_headers())
+    try:
+        antigravity_agent.start_sign_in(_STATE_DIR, _antigravity_signed_in)
+    except antigravity_agent.AntigravityError as exc:
+        raise _antigravity_http_error(exc) from exc
+    return await asyncio.to_thread(_antigravity_view)
+
+
+@app.delete("/api/personal-agents/antigravity/sign-in")
+async def cancel_antigravity_sign_in() -> dict[str, Any]:
+    require_person(current_request_headers())
+    await antigravity_agent.cancel(_STATE_DIR, "sign_in")
+    return await asyncio.to_thread(_antigravity_view)
+
+
+@app.post("/api/personal-agents/antigravity/sign-out")
+async def sign_out_antigravity() -> dict[str, Any]:
+    """Stop using the Google login at once (running sessions stop), then ask
+    Google's server to delete it."""
+    require_person(current_request_headers())
+    try:
+        message = await antigravity_agent.sign_out(_STATE_DIR, _antigravity_signed_in)
+    except antigravity_agent.AntigravityError as exc:
+        message = exc.message
+    finally:
+        await acp_sessions.close_stale(_STATE_DIR)
+    return {**(await asyncio.to_thread(_antigravity_view)), "message": message}
 
 
 @app.post("/api/personal-agents/acknowledge-warning")
@@ -3804,15 +3901,42 @@ def _brief_param(param: dict[str, Any]) -> dict[str, Any]:
     return brief
 
 
-@app.get("/api/agent/nodes/{definition_id}")
+_CHAT_MODEL_PORTS = (
+    "These ports follow the node's `model`: `messages` always; `images` (Image, several wires) when the model "
+    "takes images; `text` when it writes text and `image` (Image) when it makes images. Set `model` with "
+    "edit_canvas and the node gets that model's ports (the edit's `modelPorts` lists them; look_at_canvas shows "
+    "a node's `ports`). Nebula reads the model list with the person's key, which costs nothing; without it the "
+    "edit says so and the node keeps the ports above.")
+_MODEL_PORTS_NOTES = {
+    "openrouter-universal": _CHAT_MODEL_PORTS,
+    "nous-portal-universal": _CHAT_MODEL_PORTS,
+    "replicate-universal": (
+        "No ports until `model_id` (owner/name) is set. Set it with edit_canvas and the node gets the model's "
+        "version and defaults, a port for each file input (named as the model names it) and one output: `image` "
+        "when the model returns a file or a list of them, else `text`. The model's other inputs are params of "
+        "the same name. The edit's `modelPorts` lists the ports; look_at_canvas shows a node's `ports`. Nebula "
+        "reads the schema with the person's Replicate token, which costs nothing; without it the edit says so."),
+}
+
+
+# `{...:path}`: a display name may hold a slash ("Jev Decide (judge / classify / yes-no)").
+@app.get("/api/agent/nodes/{definition_id:path}")
 async def agent_describe_node(definition_id: str) -> dict[str, Any]:
     """One node type, in what an agent needs to wire and set it: ports, params
-    (options, defaults, ranges), whether it can run here, and its list prices."""
-    definition = node_registry.get(definition_id)
-    if definition is None:
-        hint = ", ".join(_suggest_node_ids(definition_id, list(node_registry.get_all())))
+    (options, defaults, ranges), whether it can run here, and its list prices.
+    Takes an id, or the exact display name of one node type (ignoring case
+    and outer spaces); a name answer starts with `lookup`, saying the id."""
+    found = node_lookup.resolve(definition_id, node_registry.get_all())
+    if found.definition_id is None:
+        if len(found.named) > 1:
+            line = node_lookup.shared_name_line(definition_id, found.named, node_registry.get_all())
+            raise HTTPException(status_code=404, detail=f"No node type '{definition_id}': {line}: "
+                                f"{', '.join(found.named)}. Use one of those ids.")
+        hint = ", ".join(_suggest_node_ids(definition_id, node_registry.get_all()))
         raise HTTPException(status_code=404, detail=f"No node type '{definition_id}'." + (
             f" Close matches: {hint}." if hint else " find_nodes lists them."))
+    definition_id = found.definition_id
+    definition = node_registry.get(definition_id)
     settings = load_settings()
     try:
         krea_signed_in = _krea_connector().status().get("status") == "connected"
@@ -3829,6 +3953,8 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
         for port in definition.get(key) or []
     ]
     result: dict[str, Any] = {
+        # A name, not the id, picked it: say which id (first, so it's read first).
+        **({"lookup": found.note} if found.note else {}),
         "id": definition["id"],
         "name": definition.get("displayName") or definition["id"],
         "category": definition.get("category"),
@@ -3838,6 +3964,9 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
     }
     if definition.get("description"):
         result["description"] = definition["description"]
+    if definition_id in _MODEL_PORTS_NOTES:
+        # Its ports come from its model (services/universal_ports.py).
+        result["modelPorts"] = _MODEL_PORTS_NOTES[definition_id]
     shown = lambda key: [_brief_param(param) for param in definition.get(key) or []  # noqa: E731
                          if not str(param.get("key", "")).startswith("_") and not param.get("hidden")]
     # A dual-route node lists its shared params here and each route's own
@@ -4762,12 +4891,88 @@ def _proposal_view(proposal: Proposal) -> dict[str, Any]:
     return canvas_proposals.view(proposal, registry=node_registry)
 
 
+def _spec_models_wanted(spec: ProposalSpec) -> list[tuple[str, str]]:
+    """(definition id, model) for each universal node a proposal or edit
+    creates with a model or sets the model of: what _look_up_models reads."""
+    wanted: list[tuple[str, str]] = []
+    for node in spec.nodes:
+        if universal_ports.is_universal(node.definition_id):
+            wanted.append((node.definition_id, universal_ports.model_of(node.definition_id, node.params)))
+    for change in spec.params:
+        node = cli_graph.nodes.get(change.node_id) or {}
+        definition_id = str(node.get("definitionId") or "")
+        key = universal_ports.MODEL_PARAM.get(definition_id)
+        if key and key in change.params:
+            wanted.append((definition_id, universal_ports.model_of(
+                definition_id, {**(node.get("params") or {}), **change.params})))
+    return wanted
+
+
+async def _look_up_models(wanted: Iterable[tuple[str, str]]) -> dict[tuple[str, str], Any]:
+    """The provider's data (or why there is none) for each wanted model,
+    read before staging: staging can't wait on the network. Cached by the
+    model-list routes, so a second edit with the same model reads nothing."""
+    found: dict[tuple[str, str], Any] = {}
+    for definition_id, model in wanted:
+        if model and (definition_id, model) not in found:
+            found[(definition_id, model)] = await universal_ports.look_up(definition_id, model)
+    return found
+
+
+def _basic_ports_line(definition_id: str, params: Mapping[str, Any]) -> str:
+    definition = node_registry.get(definition_id) or {}
+    inputs = universal_ports.port_ids(node_ports(definition_id, params, definition, "inputPorts"))
+    outputs = universal_ports.port_ids(node_ports(definition_id, params, definition, "outputPorts"))
+    if not inputs and not outputs:
+        return "no ports"
+    return f"inputs {', '.join(inputs) or '(none)'}; outputs {', '.join(outputs) or '(none)'}"
+
+
+def _refuse_orphaned_wires(graph: CLIGraph, node_id: str, name: str | None = None, reason: str = "") -> None:
+    """400 when a node's model change leaves wires on ports it no longer has:
+    the new model's, or, when the model was cleared or can't be read
+    (``reason``), its definition's. An agent's edit is all or nothing, so the
+    wires aren't dropped for it: it unwires them in the same edit (the picker
+    drops them for the person). Left in place they would fail every save."""
+    node = graph.nodes.get(node_id) or {}
+    definition_id = str(node.get("definitionId") or "")
+    params = node.get("params") or {}
+    definition = node_registry.get(definition_id) or {}
+    inputs = node_ports(definition_id, params, definition, "inputPorts")
+    outputs = node_ports(definition_id, params, definition, "outputPorts")
+    configured = universal_ports.stored_ports(definition_id, params) is not None
+    # A node never configured with no declared ports in a direction takes any
+    # handle there (port_contracts.DYNAMIC_PORT_DEFINITION_IDS): Replicate.
+    def fits(edge: dict[str, Any]) -> bool:
+        if edge.get("source") == node_id and (outputs or configured):
+            return edge.get("sourceHandle") in universal_ports.port_ids(outputs)
+        if edge.get("target") == node_id and (inputs or configured):
+            return edge.get("targetHandle") in universal_ports.port_ids(inputs)
+        return True
+    orphans = [edge for edge in graph.edges if not fits(edge)]
+    if orphans:
+        wires = ", ".join(f"{e['source']}.{e['sourceHandle']} → {e['target']}.{e['targetHandle']}" for e in orphans[:6])
+        model = universal_ports.model_of(definition_id, params)
+        who = name or node_id
+        if configured:
+            why = f"{who}'s new model {model} doesn't have the ports these wires use"
+        elif model:
+            why = (f"{reason}, so Nebula can't tell which ports {model} has and {who} keeps only "
+                   f"{_basic_ports_line(definition_id, params)}; these wires use others")
+        else:
+            why = f"Without a model {who} has {_basic_ports_line(definition_id, params)}; these wires use others"
+        raise HTTPException(status_code=400, detail=(
+            f"{why}: {wires}. Unwire them in the same edit (`unwire`), or pick a model that takes them."))
+
+
 def _stage_proposal(
     spec: ProposalSpec,
     *,
     positions: dict[str, dict[str, float]] | None = None,
     base: CLIGraph | None = None,
     what: str = "a proposal",
+    models: Mapping[tuple[str, str], Any] | None = None,
+    report: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[CLIGraph, dict[str, str], list[str], list[str]]:
     """Stage a proposal on a clone of the live graph with the cluster validators.
 
@@ -4777,11 +4982,20 @@ def _stage_proposal(
     committed. Missing referenced nodes raise 409 (the canvas moved on).
     `base` stages onto an already-staged candidate instead (direct edits
     remove nodes first); `what` names the change in refusals.
+
+    `models` (from _look_up_models) configures each universal node whose
+    model the spec sets, as the canvas's picker does: its ports follow the
+    model (services/universal_ports.py). A wire to a port that can't be
+    known (no key, unknown model) is refused with the reason. `report`, when
+    given, gets `ports` {node id: {model, inputs, outputs}} and `notes`
+    {node id: reason} for those nodes.
     """
     candidate = base if base is not None else cli_graph.clone()
     for node_id in sorted(spec.references):
         if node_id not in candidate.nodes:
             raise HTTPException(status_code=409, detail=f"{node_id} is no longer on the canvas")
+    # node id -> why its model's ports are unknown ("" when they are known).
+    configured: dict[str, str] = {}
     # Existing nodes first: their ports can depend on their params.
     for change in spec.params:
         node = candidate.nodes[change.node_id]
@@ -4791,8 +5005,14 @@ def _stage_proposal(
         if uses_durable_recovery(definition_id, provider="worldlabs"):
             raise HTTPException(status_code=400, detail=f"World Labs nodes can't be changed by {what}; add a new node instead")
         _validate_params(definition_id, change.params)
-        candidate.update_params(change.node_id, migrate_param_update(
-            definition_id, node.get("params"), _coerce_params(definition_id, change.params)))
+        update = migrate_param_update(definition_id, node.get("params"), _coerce_params(definition_id, change.params))
+        model_key = universal_ports.MODEL_PARAM.get(definition_id)
+        if models is not None and model_key and model_key in change.params:
+            full, reason = universal_ports.agent_update(definition_id, node.get("params") or {}, update, models)
+            candidate.set_params(change.node_id, full)
+            configured[change.node_id] = reason or ""
+        else:
+            candidate.update_params(change.node_id, update)
     names = spec.names
     raw_nodes = [
         {
@@ -4807,20 +5027,64 @@ def _stage_proposal(
     ]
     raw_nodes, raw_edges, _warnings, _folded = _migrate_ingress(
         raw_nodes, [edge.as_dict() for edge in spec.edges], reference_key="tempId")
+    configured_refs: dict[str, str] = {}
+    for raw in raw_nodes:
+        definition_id = str(raw.get("definitionId") or "")
+        params = raw.get("params")
+        if (models is not None and universal_ports.is_universal(definition_id) and isinstance(params, dict)
+                and universal_ports.model_of(definition_id, params)):
+            raw["params"], reason = universal_ports.agent_update(definition_id, {}, params, models)
+            configured_refs[str(raw.get("tempId"))] = reason or ""
     id_map = _stage_graph_nodes(candidate, raw_nodes, reference_key="tempId", include_outputs=False)
+    configured.update({id_map[ref]: reason for ref, reason in configured_refs.items() if ref in id_map})
     new_ids = set(id_map.values())
     refs: dict[str, str] = {node_id: node_id for node_id in candidate.nodes if node_id not in new_ids}
     refs.update(id_map)
+    ref_for = {new_id: ref for ref, new_id in id_map.items()}
+    # A wire to a port the model's data would have to say exists: refused in
+    # plain words when that data can't be read (a missing key, say).
+    for raw in raw_edges:
+        for end, handle_key, port_key in (("source", "sourceHandle", "outputPorts"),
+                                          ("target", "targetHandle", "inputPorts")):
+            node_id = refs.get(raw.get(end)) if isinstance(raw.get(end), str) else None
+            reason = configured.get(node_id or "")
+            if not reason:
+                continue
+            node = candidate.nodes[node_id]
+            definition_id = str(node.get("definitionId") or "")
+            ports = node_ports(definition_id, node.get("params"), node_registry.get(definition_id) or {}, port_key)
+            handle = raw.get(handle_key)
+            if handle not in universal_ports.port_ids(ports):
+                name = ref_for.get(node_id, node_id)
+                model = universal_ports.model_of(definition_id, node.get("params"))
+                raise HTTPException(status_code=400, detail=(
+                    f"Can't wire {name}.{handle}: {reason}, so Nebula can't tell which ports {model} has. "
+                    f"Until it can, {name} has {_basic_ports_line(definition_id, node.get('params') or {})}."))
     try:
         edge_ids = _stage_graph_edges(candidate, raw_edges, refs)
+        for node_id, reason in configured.items():
+            _refuse_orphaned_wires(candidate, node_id, reason=reason)
     except HTTPException as exc:
         # The validators name nodes by id; a new node's staged id (n12) means
         # nothing to the agent, which wrote +img.
-        ref_for = {new_id: ref for ref, new_id in id_map.items()}
         detail = exc.detail
         if isinstance(detail, str) and ref_for:
             detail = re.sub(r"\bn\d+\b", lambda match: ref_for.get(match.group(0), match.group(0)), detail)
         raise HTTPException(status_code=exc.status_code, detail=detail) from exc
+    if report is not None:
+        for node_id, reason in configured.items():
+            node = candidate.nodes[node_id]
+            definition_id = str(node.get("definitionId") or "")
+            stored = universal_ports.stored_ports(definition_id, node.get("params"))
+            if stored is not None:
+                report.setdefault("ports", {})[node_id] = {
+                    "model": universal_ports.model_of(definition_id, node.get("params")),
+                    "inputs": universal_ports.port_ids(stored[0]), "outputs": universal_ports.port_ids(stored[1])}
+            elif reason:
+                report.setdefault("notes", {})[node_id] = (
+                    f"{reason}, so Nebula can't tell which ports "
+                    f"{universal_ports.model_of(definition_id, node.get('params'))} has; until it can, the node has "
+                    f"{_basic_ports_line(definition_id, node.get('params') or {})}")
     run_ids: list[str] = []
     for item in spec.run:
         if item not in refs:
@@ -5027,8 +5291,9 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         _check_provider(str(current.get("definitionId") or ""), change.params, change.node_id)
         _check_asset_refs(str(current.get("definitionId") or ""), change.params, change.node_id,
                           before=current.get("params") or {}, must_exist=True)
+    models = await _look_up_models(_spec_models_wanted(spec))
     try:
-        candidate, id_map, _edge_ids, run_ids = _stage_proposal(spec)
+        candidate, id_map, _edge_ids, run_ids = _stage_proposal(spec, models=models)
     except HTTPException as exc:
         # A missing node is a bad proposal here (the agent's view is stale), not a conflict.
         raise HTTPException(status_code=400 if exc.status_code == 409 else exc.status_code,
@@ -5112,6 +5377,8 @@ async def get_canvas_proposal(proposal_id: str, request: Request) -> dict[str, A
     wait = min(wait, 25.0)
     await _sweep_proposals()
     proposal = canvas_proposals.get(proposal_id)
+    if proposal is None and asset_proposals.get(proposal_id) is not None:
+        return await _get_asset_proposal(proposal_id, wait)  # a project's or a board's (U16)
     if proposal is None:
         raise HTTPException(status_code=404, detail=f"No proposal {proposal_id[:20]} (decided proposals are kept for 30 minutes)")
     loop = asyncio.get_running_loop()
@@ -5142,6 +5409,8 @@ async def withdraw_canvas_proposal(proposal_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
     await _sweep_proposals()
     proposal = canvas_proposals.get(proposal_id)
+    if proposal is None and asset_proposals.get(proposal_id) is not None:
+        return await _withdraw_asset_proposal(proposal_id, identity)  # a project's or a board's (U16)
     if proposal is None:
         raise HTTPException(status_code=404, detail=f"No proposal {proposal_id[:20]}")
     if proposal.agent.id != identity.id:
@@ -5242,6 +5511,8 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
     proposal = await _decidable_proposal(proposal_id)
     _check_workspace_revision()
     body = await _proposal_body(request)
+    # The models it sets, read now: nothing below may await.
+    models = await _look_up_models(_spec_models_wanted(proposal.spec))
     # Reading the body can yield to the event loop, and in that gap the agent
     # may withdraw, the sweep may expire it, or a second tab may accept it.
     # Check again here. From this line to close() below nothing awaits, so no
@@ -5256,7 +5527,7 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
     with _paid_graph_mutation("accept a proposal"):
         try:
             _refuse_overwriting_later_edits(proposal)
-            candidate, id_map, edge_ids, run_ids = _stage_proposal(proposal.spec, positions=positions)
+            candidate, id_map, edge_ids, run_ids = _stage_proposal(proposal.spec, positions=positions, models=models)
             _refuse_changed_runs(proposal, candidate, id_map, run_ids)
         except HTTPException as exc:
             # cli_graph is only replaced at commit, so nothing changed.
@@ -5369,6 +5640,501 @@ async def release_run_approval(approval_id: str) -> dict[str, Any]:
     run, or the canvas didn't start it). The nodes it locked are free again."""
     require_person(current_request_headers())
     return {"status": "released" if run_approvals.drop(approval_id) else "not_found"}
+
+
+# ---------- Asset proposals: changes outside the graph (U16) ----------
+#
+# The canvas proposals' life cycle and accept gate for a project's cover and
+# a board's Send notes (services/asset_proposals.py). Accept applies the
+# change through the route the person's own click uses (the cover route, the
+# board PUT), as the person.
+
+# Proposals being applied right now: an agent can't withdraw one and the
+# sweep leaves it alone until Accept has closed it.
+_asset_deciding: set[str] = set()
+_ASSET_WAIT_KINDS = {"proposal", "project", "board", "commons"}
+
+
+def _asset_proposal_view(proposal: AssetProposal) -> dict[str, Any]:
+    return asset_proposals.view(proposal)
+
+
+def _asset_proposal_closed_message(proposal: AssetProposal) -> dict[str, Any]:
+    # Every socket gets it, agents' too: a commons proposal's reason (the
+    # person's words) reaches only those who may read it (get_proposal).
+    return {"type": "assetProposalClosed", "proposalId": proposal.id, "status": proposal.status,
+            "reason": None if proposal.kind == "commons" else proposal.reason, "kind": proposal.kind,
+            "targetId": proposal.target_id}
+
+
+def _asset_journal_data(proposal: AssetProposal) -> dict[str, Any]:
+    data = {"proposalId": proposal.id, "agentId": proposal.agent.id, "kind": proposal.kind,
+            "targetId": proposal.target_id, "targetName": proposal.target_name, "note": proposal.note}
+    if proposal.kind == "commons":
+        # Every agent on the canvas reads the journal, whatever its brand; the
+        # note and the person's reason reach only those who see the reference.
+        data.pop("note")
+    return data
+
+
+async def _announce_closed_asset_proposals(proposals: list[AssetProposal], *,
+                                           actor: dict[str, Any] | None = None) -> None:
+    """Journal and broadcast asset proposals that just closed."""
+    for proposal in proposals:
+        reason = f": {proposal.reason}" if proposal.reason and proposal.kind != "commons" else ""
+        _journal(
+            f"proposal.{proposal.status}",
+            data={**_asset_journal_data(proposal), "reason": proposal.reason if proposal.kind != "commons" else None},
+            summary=f"{proposal.status} {proposal.agent.name}'s proposal {proposal.id}{reason}",
+            actor=actor,
+        )
+        try:
+            await manager.broadcast_raw(_asset_proposal_closed_message(proposal))
+        except Exception:  # noqa: BLE001 - the screens also hide expired proposals locally
+            pass
+
+
+async def _asset_proposal_misfit(proposal: AssetProposal, exported: dict[str, Any] | None = None) -> str | None:
+    """Why the proposal no longer fits its target, or None while it does."""
+    if proposal.kind == "commons":
+        return await _commons_proposal_misfit(proposal)
+    if proposal.kind == "project":
+        catalog = project_store.read()
+        project = catalog["projects"].get(proposal.target_id)
+        if project is None:
+            return "the project was deleted"
+        if _cover_state(project) != proposal.before:
+            return "the project's cover changed since it was proposed"
+        url = proposal.change.get("cover")
+        if url is not None and not project_cover.is_choice(_cover_images_now(project, catalog, exported), url):
+            return "that image is no longer one of the project's images"
+        return None
+    try:
+        board = await asyncio.to_thread(_moodboard_store().get, proposal.target_id)
+    except ValueError:
+        board = None
+    if board is None:
+        return "the board was deleted"
+    if board.get("sendNotes") is True:
+        return "Send notes to generators is already on"
+    return None
+
+
+async def _sweep_asset_proposals() -> None:
+    """Expire overdue asset proposals and invalidate those whose target moved
+    on (another cover pinned, the project or board deleted, notes already
+    sent). Called before every asset proposal read and decision, and after a
+    cover change."""
+    try:
+        expired = [p for p in asset_proposals.sweep() if isinstance(p, AssetProposal)]
+    except Exception:  # noqa: BLE001 - never fail a read over housekeeping
+        return
+    misfits: list[AssetProposal] = []
+    waiting = [p for p in asset_proposals.open_list() if p.id not in _asset_deciding]
+    exported = None
+    if any(p.kind == "project" for p in waiting):
+        try:
+            exported = await _projects_live_export()
+        except Exception:  # noqa: BLE001 - checked against the saved snapshot then
+            exported = None
+    for proposal in waiting:
+        try:
+            reason = await _asset_proposal_misfit(proposal, exported)
+            if reason and proposal.is_open and proposal.id not in _asset_deciding:
+                asset_proposals.close(proposal.id, "invalidated", reason=reason)
+                misfits.append(proposal)
+        except Exception:  # noqa: BLE001 - one odd target never blocks the rest
+            continue
+    await _announce_closed_asset_proposals(expired + misfits, actor=dict(_SYSTEM_ACTOR))
+
+
+async def _asset_proposal_sync_message() -> dict[str, Any]:
+    """Every open asset proposal with its accept key, for a socket that just
+    said hello as the person (the Projects screen and Moodboard Studio)."""
+    await _sweep_asset_proposals()
+    return {"type": "assetProposalSync",
+            "proposals": [{**_asset_proposal_person_view(p), "acceptKey": p.accept_key}
+                          for p in asset_proposals.open_list()]}
+
+
+async def _asset_proposal_target(kind: str, target_id: str, change: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """(the target's name, its state now) for a new proposal; 404 for a
+    missing target, 400 for an image not in the project, 409 for a change
+    that is already so."""
+    if kind == "project":
+        exported = await _projects_live_export()
+        catalog = project_store.read()
+        project = _project_id_or_404(target_id, catalog)
+        url = change.get("cover")
+        if url is not None and not project_cover.is_choice(_cover_images_now(project, catalog, exported), url):
+            raise HTTPException(status_code=400, detail=(
+                "Pick one of this project's own images for its cover (list_project_covers, "
+                f"GET /api/projects/{target_id}/covers, lists them)."))
+        state = _cover_state(project)
+        if state["cover"] == url:
+            raise HTTPException(status_code=409, detail=(
+                "That is already the project's cover; nothing to propose." if url is not None
+                else "The project's cover is already the automatic one; nothing to propose."))
+        return str(project.get("name") or ""), state
+    try:
+        board = await asyncio.to_thread(_moodboard_store().get, target_id)
+    except ValueError:
+        board = None
+    if board is None:
+        raise HTTPException(status_code=404, detail=f"No moodboard '{target_id[:40]}' (moodboard_list lists them)")
+    if board.get("sendNotes") is True:
+        raise HTTPException(status_code=409, detail=(
+            f'Send notes to generators is already on for board "{board.get("name")}"; nothing to propose.'))
+    return str(board.get("name") or ""), {"sendNotes": False}
+
+
+@app.post("/api/asset-proposals", status_code=201)
+async def create_asset_proposal(body: dict[str, Any]) -> dict[str, Any]:
+    """An agent proposes a change outside the graph; the person decides where
+    they work on that thing (a project's cover on the Projects screen, a
+    board's Send notes in Moodboard Studio). Nothing changes until they accept.
+
+    Body: {kind: "project" | "moodboard", id, change, note}. ``change`` is
+    {"cover": url | null} for a project, {"sendNotes": true} for a board."""
+    headers = current_request_headers()
+    identity = identify_agent(headers)
+    if identity is None:
+        if is_person(headers):
+            raise HTTPException(status_code=403, detail="The person doesn't need to propose; change it directly")
+        raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
+    await _sweep_asset_proposals()
+    try:
+        spec = parse_asset_change(body)
+    except ProposalError as exc:
+        raise _proposal_http_error(exc) from exc
+    if spec.kind == "commons":
+        spec, name, before = await _commons_proposal_target(spec, headers)
+    else:
+        name, before = await _asset_proposal_target(spec.kind, spec.target_id, spec.change)
+    try:
+        proposal = asset_proposals.create_asset(agent=identity, spec=spec, target_name=name, before=before)
+    except ProposalError as exc:
+        raise _proposal_http_error(exc) from exc
+    view = _asset_proposal_view(proposal)
+    said = asset_proposal_summary(proposal)
+    _journal("proposal.created", data={**_asset_journal_data(proposal), "change": sorted(spec.change)},
+             summary=(f"proposed {proposal.id} ({said})" if spec.kind == "commons"
+                      else f'proposed {proposal.id}: "{spec.note}" ({said})'))
+    try:
+        # The accept key goes only to the person's canvas sockets.
+        await manager.broadcast_browser({"type": "assetProposalOpened",
+                                         "proposal": _asset_proposal_person_view(proposal),
+                                         "acceptKey": proposal.accept_key})
+    except Exception:  # noqa: BLE001 - a screen that missed it gets assetProposalSync on reconnect
+        pass
+    where = {"project": "on the Projects screen", "commons": "in the Commons"}.get(spec.kind, "in Moodboard Studio")
+    # No cursor can go there, so the Agent log names it.
+    await _say_agent_action(f"Asks to {said} (decide {where})")
+    return {"proposal": view}
+
+
+@app.get("/api/asset-proposals")
+async def list_asset_proposals(kind: str | None = None, id: str | None = None) -> dict[str, Any]:  # noqa: A002
+    """Open asset proposals, optionally for one kind or one target (never their accept keys)."""
+    await _sweep_asset_proposals()
+    headers = current_request_headers()
+    return {"proposals": [_asset_proposal_view(p) for p in asset_proposals.for_target(kind, id)
+                          if await _commons_proposal_visible(p, headers)]}
+
+
+async def _get_asset_proposal(proposal_id: str, wait: float) -> dict[str, Any]:
+    """``GET /api/canvas/proposals/{id}`` for an asset proposal: with ``wait``
+    (≤25 s), wait for the decision, or for its target to move on."""
+    await _sweep_asset_proposals()
+    proposal = asset_proposals.get(proposal_id)
+    if not isinstance(proposal, AssetProposal) or not await _commons_proposal_visible(proposal, current_request_headers()):
+        raise HTTPException(status_code=404, detail=f"No proposal {proposal_id[:20]} (decided proposals are kept for 30 minutes)")
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + wait
+    cursor = canvas_events.latest
+    while proposal.is_open:
+        remaining = min(deadline - loop.time(), proposal.expires_at - asset_proposals.now() + 0.05)
+        if remaining <= 0:
+            break
+        try:
+            result = await canvas_events.wait(after=cursor, journal=canvas_events.journal_id,
+                                              wait=remaining, kinds=set(_ASSET_WAIT_KINDS))
+        except TooManyWaiters as exc:
+            raise HTTPException(status_code=429, detail=str(exc)) from exc
+        cursor = result.get("cursor", cursor)
+        await _sweep_asset_proposals()
+        if result.get("timedOut") and deadline - loop.time() <= 0:
+            break
+    return {"proposal": _asset_proposal_view(proposal)}
+
+
+async def _withdraw_asset_proposal(proposal_id: str, identity: Any) -> dict[str, Any]:
+    await _sweep_asset_proposals()
+    proposal = asset_proposals.get(proposal_id)
+    if not isinstance(proposal, AssetProposal) or not await _commons_proposal_visible(proposal, current_request_headers()):
+        raise HTTPException(status_code=404, detail=f"No proposal {proposal_id[:20]}")
+    if proposal.agent.id != identity.id:
+        raise HTTPException(status_code=403, detail="Only the agent that proposed this can withdraw it")
+    if proposal.id in _asset_deciding:
+        raise HTTPException(status_code=409, detail="The person is accepting this proposal right now")
+    try:
+        asset_proposals.close(proposal_id, "withdrawn", reason="withdrawn by the agent")
+    except ProposalError as exc:
+        raise _proposal_http_error(exc) from exc
+    await _announce_closed_asset_proposals([proposal])
+    return {"proposal": _asset_proposal_view(proposal)}
+
+
+async def _decidable_asset_proposal(proposal_id: str) -> AssetProposal:
+    """The person-only checks of accept and reject, as for canvas proposals:
+    no agent markers and the person token, then the proposal's accept key,
+    then still open."""
+    headers = current_request_headers()
+    require_person(headers)
+    lower = {k.lower(): v for k, v in (headers or {}).items()}
+    supplied = lower.get(_PROPOSAL_KEY_HEADER) or ""
+    proposal = asset_proposals.get(proposal_id)
+    if not isinstance(proposal, AssetProposal):
+        raise HTTPException(status_code=404, detail="This proposal is no longer available")
+    if not supplied or not secrets.compare_digest(supplied.encode(), proposal.accept_key.encode()):
+        raise HTTPException(status_code=403, detail="This proposal can only be decided from Nebula, where you saw it.")
+    await _sweep_asset_proposals()
+    if not proposal.is_open or proposal.id in _asset_deciding:
+        raise HTTPException(status_code=409, detail=f"This proposal is already {proposal.status}")
+    return proposal
+
+
+async def _apply_asset_proposal(proposal: AssetProposal) -> dict[str, Any]:
+    """Make the change as the person, through the route their own click uses."""
+    note = f" (accepted from {proposal.agent.name})"
+    if proposal.kind == "commons":
+        return await _apply_commons_proposal(proposal)
+    if proposal.kind == "project":
+        url = proposal.change.get("cover")
+        result = await _set_project_cover(proposal.target_id, url, expect=proposal.before, note=note)
+        return {"applied": {"cover": url}, "project": result["project"]}
+    # Without the tab id, the write isn't this tab's echo: the Studio that
+    # clicked Accept reads the board again like every other open one.
+    headers = {k: v for k, v in (current_request_headers() or {}).items() if k.lower() != "x-nebula-tab"}
+    with request_headers_scope(headers):
+        answer = await update_moodboard(proposal.target_id, MoodboardUpdate(sendNotes=True))
+    if isinstance(answer, Response):
+        detail = ""
+        try:
+            detail = str(json.loads(bytes(answer.body)).get("detail") or "")
+        except Exception:  # noqa: BLE001
+            pass
+        raise HTTPException(status_code=409, detail=detail or "the board can't take it now")
+    return {"applied": {"sendNotes": True}, "board": answer}
+
+
+@app.post("/api/asset-proposals/{proposal_id}/accept")
+async def accept_asset_proposal(proposal_id: str) -> dict[str, Any]:
+    """The person accepts: the change is made as theirs, or nothing is (409,
+    and the proposal closes as invalidated when it no longer fits)."""
+    proposal = await _decidable_asset_proposal(proposal_id)
+    _asset_deciding.add(proposal.id)
+    # Expiry must not land while the change is being made.
+    proposal.expires_at = max(proposal.expires_at, asset_proposals.now() + 120)
+    try:
+        exported = await _projects_live_export() if proposal.kind == "project" else None
+        misfit = await _asset_proposal_misfit(proposal, exported)
+        if misfit is not None:
+            raise HTTPException(status_code=409, detail=misfit)
+        outcome = await _apply_asset_proposal(proposal)
+    except (HTTPException, PersonGateError) as exc:
+        detail = str(getattr(exc, "detail", "") or exc)
+        _asset_deciding.discard(proposal.id)
+        if proposal.is_open:
+            asset_proposals.close(proposal.id, "invalidated", reason=detail[:200])
+            await _announce_closed_asset_proposals([proposal], actor=dict(_PERSON_ACTOR))
+        raise HTTPException(status_code=409, detail=f"This proposal no longer fits: {detail}") from exc
+    except BaseException:
+        _asset_deciding.discard(proposal.id)
+        raise
+    proposal.applied = dict(outcome["applied"])
+    try:
+        asset_proposals.close(proposal.id, "accepted")
+    except ProposalError:
+        pass  # unreachable while it is in _asset_deciding; the change is made either way
+    _asset_deciding.discard(proposal.id)
+    _journal("proposal.accepted", data={**_asset_journal_data(proposal), "applied": proposal.applied},
+             summary=f"accepted {proposal.agent.name}'s proposal {proposal.id} ({asset_proposal_summary(proposal)})",
+             actor=dict(_PERSON_ACTOR))
+    try:
+        await manager.broadcast_raw(_asset_proposal_closed_message(proposal))
+    except Exception:  # noqa: BLE001
+        pass
+    publish_action(f"Accepted {proposal.agent.name}'s proposal to {asset_proposal_summary(proposal)}")
+    return {"status": "accepted", "proposalId": proposal.id, "kind": proposal.kind,
+            "targetId": proposal.target_id, **outcome}
+
+
+@app.post("/api/asset-proposals/{proposal_id}/reject")
+async def reject_asset_proposal(proposal_id: str, request: Request) -> dict[str, Any]:
+    """The person says no. Body: {reason?} (one short line the agent will read)."""
+    proposal = await _decidable_asset_proposal(proposal_id)
+    body = await _proposal_body(request)
+    if not proposal.is_open or proposal.id in _asset_deciding:
+        raise HTTPException(status_code=409, detail=f"This proposal is already {proposal.status}")
+    reason: str | None = None
+    if body.get("reason") not in (None, ""):
+        try:
+            reason = clean_note(body.get("reason"), limit=MAX_REASON, label="reason")
+        except ProposalError as exc:
+            raise _proposal_http_error(exc) from exc
+    asset_proposals.close(proposal.id, "rejected", reason=reason)
+    await _announce_closed_asset_proposals([proposal], actor=dict(_PERSON_ACTOR))
+    return {"status": "rejected", "proposalId": proposal.id}
+
+
+# ---------- Commons curation as asset proposals (Justin's Q63 b, U13) ----------
+#
+# Curating the Commons (corrections, regions, a reference's role, why or
+# inbox place) stays the person's: agents propose it with kind "commons"
+# and the person decides on the reference's detail in the Commons. Accept
+# makes each edit through the Commons route the person's own click uses
+# (services/commons_proposals.py). Every curation write, the person's own
+# and an accepted proposal's, journals a commons.* event.
+
+def _asset_proposal_person_view(proposal: AssetProposal) -> dict[str, Any]:
+    """The view plus what only the person's screen may see (a commons
+    proposal's ``before``: Commons text), for the browser-only messages."""
+    return {**_asset_proposal_view(proposal), **asset_proposals.person_values(proposal)}
+
+
+def _commons_proposal_store() -> Any:
+    from commons import activation as commons_activation, runtime as commons_runtime
+
+    if not commons_activation.is_enabled():
+        raise HTTPException(status_code=404, detail="The Commons is off on this backend, so there is nothing to propose.")
+    return commons_runtime.get_store()
+
+
+async def _commons_proposal_target(spec: Any, headers: Mapping[str, str] | None) -> tuple[Any, str, dict[str, Any]]:
+    """(the spec with edits already so dropped, the target's name, ``before``).
+    The agent must see the reference in its own scope, as commons_get does."""
+    import dataclasses
+
+    from routes import commons as commons_routes
+    from services import commons_proposals
+
+    store = _commons_proposal_store()
+    try:
+        actor = commons_actors.resolve_actor(headers or {})
+    except commons_actors.AuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    change, before = await asyncio.to_thread(commons_proposals.target, store, actor, spec.target_id,
+                                             spec.change, spec.brand)
+    # The scope it was proposed in: who else may read it (_commons_proposal_visible).
+    scope = {"brand": commons_routes._effective_brand(actor, spec.brand),
+             "workspace": str(actor.workspace) if actor.workspace is not None else None}
+    return dataclasses.replace(spec, change=change), "", {"edits": before, "scope": scope}
+
+
+async def _commons_proposal_visible(proposal: AssetProposal, headers: Mapping[str, str] | None) -> bool:
+    """Whether this caller may read a proposal: any proposal but a commons
+    one; that one only for the person, the session that proposed it (which
+    reads the outcome even once the reference is gone), and callers who see
+    its reference in the brand it was proposed for, as commons_get does. A
+    brand-bound agent session never sees another brand's (the Commons fence)."""
+    if proposal.kind != "commons" or is_person(headers):
+        return True
+    from commons import activation as commons_activation, runtime as commons_runtime
+    from routes import commons as commons_routes
+
+    scope = proposal.before.get("scope") or {}
+    try:
+        actor = commons_actors.resolve_actor(headers or {})
+    except commons_actors.AuthError:
+        return False
+    identity = identify_agent(headers)
+    workspace = str(actor.workspace) if actor.workspace is not None else None
+    if identity is not None and identity.id == proposal.agent.id and workspace == scope.get("workspace"):
+        return True
+    if not commons_activation.is_enabled():
+        return False
+
+    def sees_reference() -> bool:
+        try:
+            commons_routes._asset_access(commons_runtime.get_store(), actor, proposal.target_id, scope.get("brand"))
+        except HTTPException:
+            return False
+        return True
+
+    return await asyncio.to_thread(sees_reference)
+
+
+async def _commons_proposal_misfit(proposal: AssetProposal) -> str | None:
+    from commons import activation as commons_activation, runtime as commons_runtime
+    from services import commons_proposals
+
+    if not commons_activation.is_enabled():
+        return "the Commons was turned off"
+    return await asyncio.to_thread(commons_proposals.misfit, commons_runtime.get_store(), proposal.target_id,
+                                   proposal.change, list(proposal.before.get("edits") or []))
+
+
+async def _apply_commons_proposal(proposal: AssetProposal) -> dict[str, Any]:
+    from services import commons_proposals
+
+    store = _commons_proposal_store()
+    said = commons_proposals.accepted_from.set(proposal.agent.name)
+    try:
+        made = await asyncio.to_thread(commons_proposals.apply, store, proposal.target_id, proposal.change)
+    finally:
+        commons_proposals.accepted_from.reset(said)
+    # Other proposals on this reference may no longer fit (this one is still deciding).
+    await _sweep_asset_proposals()
+    return {"applied": {"edits": made}}
+
+
+_COMMONS_EVENT_KINDS = {"corrected": "commons.corrected", "region": "commons.region",
+                        "membership": "commons.membership"}
+
+
+def _commons_curation_summary(kind: str, data: Mapping[str, Any]) -> str:
+    asset_id = data.get("assetId") or "?"
+    if kind == "corrected":
+        return f"corrected {data.get('fieldPath')} ({data.get('op')}) on Commons reference {asset_id}"
+    changed = ", ".join(data.get("change") or []) or "nothing"
+    if kind == "region":
+        return f"{'added a region' if changed == 'added' else f'changed a region ({changed})'} on Commons reference {asset_id}"
+    return f"changed {changed} of Commons reference {asset_id} in a collection"
+
+
+def _journal_commons_curation(kind: str, data: dict[str, Any], actor: Any) -> None:
+    """routes/commons.py's curation hook: one commons.* event per write, with
+    who made it, and never Commons text (no values, labels or whys). Then the
+    proposals waiting on that reference are checked, from the route's worker
+    thread (an accepted proposal sweeps for itself)."""
+    from services import commons_proposals
+
+    event = _COMMONS_EVENT_KINDS.get(kind)
+    if event is None:
+        return
+    who = dict(_PERSON_ACTOR) if getattr(actor, "is_human", False) else actor_for_headers(current_request_headers())
+    origin = commons_proposals.accepted_from.get()
+    note = f" (accepted from {origin})" if origin else ""
+    _journal(event, data=dict(data), summary=_commons_curation_summary(kind, data) + note, actor=who)
+    if origin or not asset_proposals.for_target("commons", str(data.get("assetId") or "")):
+        return
+    try:
+        import anyio.from_thread
+
+        anyio.from_thread.run(_sweep_asset_proposals)
+    except Exception:  # noqa: BLE001 - not on a route's worker thread; the next read sweeps
+        pass
+
+
+def _register_commons_curation_journal() -> None:
+    from routes import commons as commons_routes
+
+    if _journal_commons_curation not in commons_routes.curation_listeners:
+        commons_routes.curation_listeners.append(_journal_commons_curation)
+
+
+_register_commons_curation_journal()
 
 
 @app.get("/api/project")
@@ -5610,11 +6376,12 @@ async def _finalize_cancelled_execution(
     if not preserve_graph_params and _sync_params_to_cli_graph(nodes, submitted=submitted):
         await _broadcast_graph_sync()
     await manager.broadcast(GraphCancelledEvent(run_id=run_id))
+    stopped_by, started_by = _run_cancelled_actor(run_id)
     _journal(
         "run.cancelled",
-        data={"runId": run_id},
+        data={"runId": run_id, "startedBy": started_by},
         summary="run stopped",
-        actor=canvas_events.run_actor(run_id),
+        actor=stopped_by,
     )
 
 
@@ -6136,6 +6903,55 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     return {"status": "started", "nodeCount": len(sub_nodes), "runId": run_id}
 
 
+# -- who may stop a run (Justin, 2026-10-20, MCP parity Q61 a) --------------------
+# Agents stop only runs an agent started; the person stops anything. The rule
+# is services/execution_runs.py stop_refusal; here is who the caller is.
+
+def _run_party(headers: Mapping[str, str] | None = None) -> dict[str, Any]:
+    """The caller as a run's starter or stopper, as the journal names actors:
+    the person, a named agent, or anonymous (no marker, no person token: the
+    `nebula` CLI without NEBULA_AGENT_NAME, curl, a tab not connected as the
+    person). A request with an agent marker but no name is still an agent."""
+    headers = current_request_headers() if headers is None else headers
+    actor = actor_for_headers(headers)
+    if actor.get("kind") != "agent" and has_agent_marker(headers):
+        actor = {"kind": "agent", "name": "An agent"}
+    return actor
+
+
+execution_runs.set_starter_source(_run_party)
+
+
+def _refuse_stopping_the_persons_run(run_id: str, record: Any) -> None:
+    """Refuse a Stop the caller may not make, before anything is recorded.
+
+    A run still being admitted (its POST noted the starter in the journal but
+    hasn't registered it) is judged by the journal. A run ID nobody started
+    here keeps today's pre-admission tombstone for any caller, and a run that
+    already ended answers its status (there is nothing left to stop)."""
+    from services.execution_runs import stop_refusal
+    from services.person_gate import AGENT_REFUSED, PERSON_REQUIRED
+
+    if record is not None and record.status not in {"running", "cancelling"}:
+        return
+    headers = current_request_headers()
+    started_by = record.started_by if record is not None else canvas_events.run_actor(run_id)
+    refusal = stop_refusal(started_by, caller_is_person=is_person(headers))
+    if refusal is not None:
+        raise PersonGateError(403, refusal, AGENT_REFUSED if has_agent_marker(headers) else PERSON_REQUIRED)
+    if record is not None and record.stopped_by is None:
+        record.stopped_by = _run_party(headers)
+
+
+def _run_cancelled_actor(run_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """(who stopped it, who started it) for the run.cancelled journal event.
+    A Stop another backend recorded has no stopper here: the starter stands in."""
+    record = execution_runs.get(run_id)
+    started_by = record.started_by if record is not None else canvas_events.run_actor(run_id)
+    stopped_by = record.stopped_by if record is not None and record.stopped_by else started_by
+    return stopped_by, {key: started_by[key] for key in ("kind", "name") if started_by.get(key)}
+
+
 @app.get("/api/executions/{run_id}")
 async def get_execution_status(run_id: str) -> dict:
     record = execution_runs.get(run_id)
@@ -6146,8 +6962,11 @@ async def get_execution_status(run_id: str) -> dict:
 
 @app.delete("/api/executions/{run_id}")
 async def cancel_execution(run_id: str) -> dict:
-    """Idempotently request cancellation of a tracked graph execution."""
+    """Idempotently request cancellation of a tracked graph execution.
+
+    Only the person stops a run the person started (_refuse_stopping_the_persons_run)."""
     existing = execution_runs.get(run_id)
+    _refuse_stopping_the_persons_run(run_id, existing)
     try:
         # Persist every Stop, including one received by the task-owning worker.
         # Otherwise a different backend could reuse the same runId after the
@@ -6805,28 +7624,30 @@ async def list_nodes() -> dict:
     return {"nodes": nodes_list, "categories": categories}
 
 
-def _suggest_node_ids(query: str, all_ids: list[str]) -> list[str]:
-    """Find candidate definition ids for a failed `nebula info` lookup.
-
-    Prefix match first (catches family names: `gpt-image-2` → four variants);
-    falls back to difflib close matches for typos. Returns [] if nothing is
-    close enough — callers should skip the 'Did you mean:' block in that case
-    rather than pad the 404 with noise.
-    """
-    prefix = sorted(nid for nid in all_ids if nid.startswith(query) and nid != query)
-    if prefix:
-        return prefix
-    return difflib.get_close_matches(query, all_ids, n=5, cutoff=0.6)
+def _suggest_node_ids(query: str, definitions: Mapping[str, Mapping[str, Any]]) -> list[str]:
+    """Candidate definition ids for a failed lookup (services/node_lookup.py):
+    the node types the text is the exact name of first, then ids it starts
+    (a family name: `gpt-image-2` lists its four variants), else difflib close
+    matches for a typo. [] when nothing is close: callers then skip the
+    'Did you mean:' block rather than pad the 404 with noise."""
+    return node_lookup.suggestions(query, definitions)
 
 
-@app.get("/api/nodes/{node_id}")
+# `{...:path}`: a display name may hold a slash ("Jev Decide (judge / classify / yes-no)").
+@app.get("/api/nodes/{node_id:path}")
 async def get_node(node_id: str) -> dict:
-    node = node_registry.get(node_id)
-    if node is None:
-        all_nodes = node_registry.get_all()
-        suggestions = _suggest_node_ids(node_id, list(all_nodes.keys()))
+    """One node definition, for `nebula info`. Takes an id, or the exact
+    display name of one node type (ignoring case and outer spaces); a name
+    answer starts with `lookup`, the line saying which id it used."""
+    all_nodes = node_registry.get_all()
+    found = node_lookup.resolve(node_id, all_nodes)
+    if found.definition_id is None:
+        suggestions = _suggest_node_ids(node_id, all_nodes)
+        head = f"Node '{node_id}' not found"
+        if len(found.named) > 1:
+            head += f": {node_lookup.shared_name_line(node_id, found.named, all_nodes)}"
         if suggestions:
-            lines = [f"Node '{node_id}' not found. Did you mean:"]
+            lines = [f"{head}. Did you mean:"]
             for nid in suggestions:
                 meta = all_nodes.get(nid, {})
                 display = meta.get("displayName", "")
@@ -6834,11 +7655,13 @@ async def get_node(node_id: str) -> dict:
                 lines.append(f"  - {nid:32s} {display:24s} {category}")
             detail = "\n".join(lines)
         else:
-            detail = f"Node '{node_id}' not found"
+            detail = head
         raise HTTPException(status_code=404, detail=detail)
+    node = all_nodes[found.definition_id]
     board = _moodboard_adapter(node)
-    # `nebula info` prints it; the definition itself stays as registered.
-    return {**node, "moodboardAdapter": board} if board is not None else node
+    # `nebula info` prints them; the definition itself stays as registered.
+    lookup = {"lookup": found.note} if found.note else {}
+    return {**lookup, **node, **({"moodboardAdapter": board} if board is not None else {})}
 
 
 def _moodboard_adapter(definition: Mapping[str, Any], settings: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
@@ -7581,6 +8404,7 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
     definition_id = body.get("definitionId", "")
     if message := retired_message(str(definition_id)):
         raise HTTPException(status_code=400, detail=message)
+    _refuse_unknown_definition(definition_id)
     raw_params = body.get("params", {})
     params = {} if raw_params is None else raw_params
     if not isinstance(params, dict):
@@ -7590,6 +8414,12 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
     _refuse_agent_internal_params(params, str(definition_id))
     _check_provider(str(definition_id), params, str(definition_id))
     params = migrate_params(definition_id, _coerce_params(definition_id, params))
+    if (not _is_person_request() and universal_ports.is_universal(str(definition_id))
+            and universal_ports.model_of(str(definition_id), params)):
+        # Anyone but the person (an agent, the unnamed CLI) gets the node
+        # configured for its model, as the picker would.
+        models = await _look_up_models([(str(definition_id), universal_ports.model_of(str(definition_id), params))])
+        params, _reason = universal_ports.agent_update(str(definition_id), {}, params, models)
     _check_asset_refs(str(definition_id), params, str(definition_id))
     _refuse_agent_billing_change([(str(definition_id), str(definition_id), None, params)])
     carries_recovery = bool(
@@ -7667,6 +8497,7 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     definition_id = body.get("definitionId", "")
     if message := retired_message(str(definition_id)):
         raise HTTPException(status_code=400, detail=message)
+    _refuse_unknown_definition(definition_id)
     raw_params = body.get("params", {})
     params = {} if raw_params is None else raw_params
     if not isinstance(params, dict):
@@ -7746,9 +8577,7 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     if edge is not None:
         source_node = candidate.nodes[src]
         source_def = node_registry.get(source_node["definitionId"]) or {}
-        source_ports = (cinema_output_ports(source_node.get("params"))
-                        if source_node["definitionId"] == "cinema-scene"
-                        else source_def.get("outputPorts", []))
+        source_ports = node_ports(source_node["definitionId"], source_node.get("params"), source_def, "outputPorts")
         data_type = next((port["dataType"] for port in source_ports
                           if port["id"] == edge["sourceHandle"]), "Any")
         rf_edge = {**copy.deepcopy(edge), "type": "typed-edge", "data": {"dataType": data_type}}
@@ -7995,6 +8824,22 @@ def _keep_recovery_checkpoint(node: dict[str, Any], params: dict[str, Any]) -> b
 async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]) -> dict:
     _check_workspace_revision()
     _validate_graph_ingress_complexity(body)
+    # Anyone but the person (an agent, the unnamed CLI) who sets a universal
+    # node's model reconfigures it (its ports follow the model): when the model
+    # changes, or its ports are stale (a node saved before ports were kept).
+    # The same model again reads nothing. The canvas's own pushes are stored
+    # as sent; its picker uses /model.
+    models: dict[tuple[str, str], Any] | None = None
+    current = cli_graph.nodes.get(node_id) or {}
+    current_definition = str(current.get("definitionId") or "")
+    current_params = current.get("params") or {}
+    model_key = universal_ports.MODEL_PARAM.get(current_definition)
+    if (model_key and not _is_person_request() and isinstance(body.get("params"), dict)
+            and model_key in body["params"]):
+        model = universal_ports.model_of(current_definition, {**current_params, **body["params"]})
+        if (model != universal_ports.model_of(current_definition, current_params)
+                or universal_ports.stored_ports(current_definition, current_params) is None):
+            models = await _look_up_models([(current_definition, model)])
     with _paid_graph_mutation("update graph node parameters"):
         node = cli_graph.nodes.get(node_id)
         if not node:
@@ -8013,25 +8858,34 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
         _check_asset_refs(str(node.get("definitionId") or ""), params, node_id, before=params_before)
         _refuse_agent_billing_change([(node_id, str(node.get("definitionId") or ""), params_before,
                                             {**params_before, **params})])
-        _guard_approved_runs(lambda probe: probe.update_params(node_id, copy.deepcopy(params)))
-        _author_cinema_scene(cli_graph, node_id, node, params)
-        recovery_update = _keep_recovery_checkpoint(node, params)
-        if recovery_update:
-            candidate = cli_graph.clone()
-            try:
-                candidate.update_params(node_id, params)
-            except ValueError:
-                raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
-            _commit_graph_candidate_with_recoveries(
-                candidate,
-                [candidate.nodes[node_id]],
-                source="update",
-            )
+        if models is not None and node.get("definitionId") == current_definition:
+            # Universal nodes carry no recovery checkpoint or Cinema scene.
+            full, reason = universal_ports.agent_update(current_definition, params_before, params, models)
+            probe = cli_graph.clone()
+            probe.set_params(node_id, full)
+            _refuse_orphaned_wires(probe, node_id, reason=reason or "")
+            _guard_approved_runs(lambda probe: probe.set_params(node_id, copy.deepcopy(full)))
+            cli_graph.set_params(node_id, full)
         else:
-            try:
-                cli_graph.update_params(node_id, params)
-            except ValueError:
-                raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+            _guard_approved_runs(lambda probe: probe.update_params(node_id, copy.deepcopy(params)))
+            _author_cinema_scene(cli_graph, node_id, node, params)
+            recovery_update = _keep_recovery_checkpoint(node, params)
+            if recovery_update:
+                candidate = cli_graph.clone()
+                try:
+                    candidate.update_params(node_id, params)
+                except ValueError:
+                    raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+                _commit_graph_candidate_with_recoveries(
+                    candidate,
+                    [candidate.nodes[node_id]],
+                    source="update",
+                )
+            else:
+                try:
+                    cli_graph.update_params(node_id, params)
+                except ValueError:
+                    raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
     await _broadcast_graph_sync(edit=True)
     publish_action(f"Updated {node_id} params")
     changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
@@ -8045,6 +8899,104 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
     changed = ", ".join(sorted(str(key) for key in params)[:4])
     await _show_agent({"nodeId": node_id}, say=f"Set {changed}" if changed else f"Updated {node_id}")
     return cli_graph.nodes[node_id]
+
+
+def _universal_request(body: Any, definition_id: str | None = None) -> tuple[str, str]:
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="body must be an object")
+    definition_id = definition_id if definition_id is not None else str(body.get("definitionId") or "")
+    if not universal_ports.is_universal(definition_id):
+        raise HTTPException(status_code=400, detail=(
+            "Only the OpenRouter, Nous Portal and Replicate nodes take their ports from a model"))
+    model = body.get("model")
+    if not isinstance(model, str) or not model.strip() or len(model) > 300:
+        raise HTTPException(status_code=400, detail="model must be a model id")
+    return definition_id, model.strip()
+
+
+async def _universal_data(definition_id: str, model: str) -> dict[str, Any]:
+    found = await universal_ports.look_up(definition_id, model)
+    if isinstance(found, str):
+        raise HTTPException(status_code=400, detail=found[0].upper() + found[1:] + ".")
+    return found
+
+
+@app.post("/api/universal/ports")
+async def universal_model_ports(body: dict[str, Any]) -> dict[str, Any]:
+    """The ports and settings a universal node has for one model, without a node.
+
+    Body: {definitionId: "openrouter-universal" | "nous-portal-universal" |
+    "replicate-universal", model, params?}. Reads the provider's model list or
+    schema with the person's key (cached; nothing billed). Returns `inputs`,
+    `outputs` (the canvas's port shape), `nodeParams` (`params`, or {},
+    configured for the model as the picker sets them), `providerMeta` and,
+    for Replicate, `params` (the model's other inputs, set as params) and
+    `versionId`."""
+    _validate_graph_ingress_complexity(body)
+    definition_id, model = _universal_request(body)
+    base = body.get("params") if isinstance(body.get("params"), dict) else {}
+    configured = universal_ports.configure(definition_id, base, model, await _universal_data(definition_id, model))
+    result: dict[str, Any] = {"definitionId": definition_id, "model": model,
+                              "inputs": configured.inputs, "outputs": configured.outputs,
+                              "nodeParams": configured.params, "providerMeta": configured.provider_meta}
+    if definition_id == "replicate-universal":
+        result["params"] = configured.dynamic_params
+        result["versionId"] = configured.provider_meta.get("version_id")
+    return result
+
+
+@app.post("/api/graph/node/{node_id}/model")
+async def configure_universal_node(node_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    """The canvas's model picker: set a universal node's model and the ports,
+    params and Inspector controls that come with it (services/universal_ports.py).
+
+    Body: {model}. Writes the node's params as the picker always did, drops
+    wires on ports the new model doesn't have, and syncs the canvas. Returns
+    the node's `params`, `dynamicInputPorts`, `dynamicOutputPorts`,
+    `dynamicParams`, `providerMeta` (additions) and `removedEdges`. Only the
+    person: it drops wires, past the approved-run and billing checks an edit
+    gets. Anyone else (agents, the unnamed CLI, a tab without the person
+    link) sets the model with an edit (edit_canvas, `nebula apply`) or PUT
+    /api/graph/node/{id}, which configure the node the same way and refuse
+    rather than drop wires."""
+    require_person(current_request_headers(), hint=(
+        "Set a universal node's model with an edit (edit_canvas or `nebula apply`, params {model: ...}) "
+        "or PUT /api/graph/node/{id}: its ports follow the model."))
+    _check_workspace_revision()
+    node = cli_graph.nodes.get(node_id)
+    if node is None:
+        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+    definition_id, model = _universal_request(body, str(node.get("definitionId") or ""))
+    data = await _universal_data(definition_id, model)
+    with _paid_graph_mutation("set a node's model"):
+        node = cli_graph.nodes.get(node_id)
+        if node is None or node.get("definitionId") != definition_id:
+            raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+        params_before = copy.deepcopy(node.get("params") or {})
+        configured = universal_ports.configure(definition_id, params_before, model, data)
+        removed = [copy.deepcopy(edge) for edge in cli_graph.edges
+                   if not universal_ports.edge_fits(node_id, edge, configured.inputs, configured.outputs)]
+        candidate = cli_graph.clone()
+        for edge in removed:
+            candidate.remove_edge(edge["source"], edge["sourceHandle"], edge["target"], edge["targetHandle"])
+        candidate.set_params(node_id, configured.params)
+        _commit_graph_candidate_with_recoveries(candidate, [candidate.nodes[node_id]], source="update")
+    await _broadcast_graph_sync(edit=True)
+    publish_action(f"Set {node_id}'s model to {model}")
+    changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
+    if changes:
+        _journal("node.params", node_id=node_id, data=changes,
+                 summary=f"set {_listed(changes['keys'], 4)} on {_node_label(node_id)} ({node_id})")
+    for edge in removed:
+        _journal_edge("edge.removed", edge)
+    return {
+        "params": configured.params,
+        "dynamicInputPorts": configured.inputs,
+        "dynamicOutputPorts": configured.outputs,
+        "dynamicParams": configured.dynamic_params,
+        "providerMeta": configured.provider_meta,
+        "removedEdges": [{"id": edge.get("id"), **_edge_data(edge)} for edge in removed],
+    }
 
 
 @app.put("/api/graph/node/{node_id}/label")
@@ -8632,6 +9584,8 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             {**((cli_graph.nodes.get(change.node_id) or {}).get("params") or {}), **change.params})
            for change in additions.params])
 
+    models = await _look_up_models(_spec_models_wanted(additions))
+    model_report: dict[str, dict[str, Any]] = {}
     positions: dict[str, dict[str, float]] = {}
     if additions.nodes:
         known, visible_area = _proposal_layout_hints()
@@ -8670,7 +9624,8 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         if additions.nodes or additions.edges or additions.params:
             try:
                 candidate, id_map, edge_ids, _ = _stage_proposal(
-                    additions, positions=positions, base=candidate, what="an edit"
+                    additions, positions=positions, base=candidate, what="an edit",
+                    models=models, report=model_report,
                 )
             except HTTPException as exc:
                 # A missing node means the agent's view is stale.
@@ -8789,6 +9744,10 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         "removed": [gone["id"] for gone in removed],
         "unwired": [edge.as_dict() for edge in spec.unwire],
         **({"arrange": _arrange_reply(arrange)} if arrange is not None else {}),
+        # Universal nodes whose model this edit set: the ports they have now,
+        # or why they can't be known yet (services/universal_ports.py).
+        **({"modelPorts": model_report["ports"]} if model_report.get("ports") else {}),
+        **({"modelPortNotes": model_report["notes"]} if model_report.get("notes") else {}),
         "undo": undo,
     }
 
@@ -9643,6 +10602,18 @@ def _folded_billing_baseline(reference: str, folded: set[str]) -> dict[str, Any]
     return {node_route.PROVIDER_PARAM: "krea"} if reference in folded else None
 
 
+def _refuse_unknown_definition(definition_id: Any) -> None:
+    """400 for a node type the registry doesn't have, on every path that
+    stores or runs one (create, node-and-connect, quick, and every staged
+    import, cluster, restore, edit and proposal). Writes take ids only, never
+    a display name (services/node_lookup.py), so what a saved command adds
+    can't change when names do; the refusal names the node the text is the
+    name of ("did you mean nebula-moodboard (Moodboard)?")."""
+    if not isinstance(definition_id, str) or node_registry.get(definition_id) is None:
+        raise HTTPException(status_code=400,
+                            detail=node_lookup.unknown_definition(str(definition_id), node_registry.get_all()))
+
+
 def _validated_ingress_node(
     raw: dict[str, Any],
     index: int,
@@ -9669,11 +10640,7 @@ def _validated_ingress_node(
     # A retired definition (its provider shut the model down) becomes its
     # replacement, so saved graphs and exports still load.
     definition_id, params, retired_label = migrate_node(definition_id, params)
-    if node_registry.get(definition_id) is None:
-        raise HTTPException(
-            status_code=400,
-            detail=f"unknown node definition '{definition_id}'",
-        )
+    _refuse_unknown_definition(definition_id)
     _validate_params(definition_id, params)
     params = _coerce_params(definition_id, params)
     if definition_id == "image-input" and normalize_image_inputs:
@@ -9933,7 +10900,7 @@ def _rf_created(node_ids: list[str], edge_ids: list[str]) -> dict[str, list[dict
         src_node = cli_graph.nodes.get(e["source"], {})
         src_def = all_defs.get(src_node.get("definitionId", ""), {})
         data_type = "Any"
-        for port in src_def.get("outputPorts", []):
+        for port in node_ports(str(src_node.get("definitionId") or ""), src_node.get("params"), src_def, "outputPorts"):
             if port["id"] == e["sourceHandle"]:
                 data_type = port["dataType"]
                 break
@@ -10089,8 +11056,10 @@ def _cli_node_to_rf(n: dict[str, Any], position: dict[str, float], all_defs: dic
             "isDynamic": True,
             "providerType": DYNAMIC_NODE_PROVIDER_BY_DEFINITION[definition_id],
             "modelId": params.get("model") or params.get("model_id") or params.get("endpoint_id"),
-            "dynamicInputPorts": defn.get("inputPorts", []),
-            "dynamicOutputPorts": defn.get("outputPorts", []),
+            # A configured universal node's ports are its model's
+            # (services/universal_ports.py); otherwise the definition's.
+            "dynamicInputPorts": node_ports(definition_id, params, defn, "inputPorts"),
+            "dynamicOutputPorts": node_ports(definition_id, params, defn, "outputPorts"),
             "dynamicParams": [],
             "providerMeta": {},
         })
@@ -10822,27 +11791,91 @@ async def list_project_covers(project_id: str) -> dict[str, Any]:
         if catalog["activeProjectId"] == project_id and _overlay_live_project(project, exported):
             project_store.commit(catalog)
         return {"images": project_cover.choices(project["snapshot"]), "pinned": project.get("coverPin"),
-                "cover": project.get("cover")}
+                "cover": project.get("cover"), "pinnedBy": _cover_owner(project)}
 
 
 @app.put("/api/projects/{project_id}/cover")
 async def pin_project_cover(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
     """Pin one of the project's images as its card picture ({"url": ...}), or
-    go back to the automatic one ({"url": null}). The person's choice only."""
-    require_person(current_request_headers())
-    url = body.get("url")
+    go back to the automatic one ({"url": null}).
+
+    The person may always. Anyone else (an agent, a script) may while the
+    person hasn't pinned one; a cover the person pinned changes only through
+    a proposal they accept on the Projects screen (``POST
+    /api/asset-proposals``, Justin's Q60 a, 2026-10-20). Who set the pin is
+    saved as ``coverBy``. The answer's ``previous`` ({"cover": url or null})
+    put back through this route undoes the change."""
+    return await _set_project_cover(project_id, body.get("url"))
+
+
+def _cover_owner(project: Mapping[str, Any]) -> dict[str, str] | None:
+    """Who pinned the project's cover, or None for the automatic one. A pin
+    saved before ``coverBy`` existed is the person's: only they could pin."""
+    if not project.get("coverPin"):
+        return None
+    by = project.get("coverBy")
+    return dict(by) if isinstance(by, dict) and by.get("kind") else {"kind": "person", "name": "You"}
+
+
+def _cover_state(project: Mapping[str, Any]) -> dict[str, Any]:
+    return {"cover": project.get("coverPin") or None, "coverBy": _cover_owner(project)}
+
+
+def _cover_images_now(project: dict[str, Any], catalog: Mapping[str, Any], exported: dict[str, Any] | None) -> dict[str, Any]:
+    """The project's snapshot as its images are now: the open project's
+    saved snapshot lags the live canvas, so it is overlaid on a copy."""
+    if exported is None or catalog.get("activeProjectId") != project.get("id"):
+        return project["snapshot"]
+    copied = copy.deepcopy(project)
+    _overlay_live_project(copied, exported)
+    return copied["snapshot"]
+
+
+async def _set_project_cover(project_id: str, url: Any, *, expect: dict[str, Any] | None = None,
+                             note: str = "") -> dict[str, Any]:
+    """The cover change itself, for the route and for an accepted proposal
+    (``expect``: the cover as the proposal saw it, else 409)."""
+    headers = current_request_headers()
+    person = is_person(headers)
+    exported = await _projects_live_export()
     with project_store.transaction() as catalog:
         project = _project_id_or_404(project_id, catalog)
-        if url is None:
+        if catalog["activeProjectId"] == project_id:
+            _overlay_live_project(project, exported)
+        if expect is not None and _cover_state(project) != expect:
+            raise HTTPException(status_code=409, detail="The project's cover changed since it was proposed.")
+        owner = _cover_owner(project)
+        if not person and owner is not None and owner.get("kind") == "person":
+            require_person(headers, hint=(
+                f'The person pinned the cover of project "{project["name"]}", so only they can change it. '
+                f'To ask them, propose it: propose_asset_change(kind="project", id="{project_id}", '
+                'change={"cover": <url or null>}, note=...) (POST /api/asset-proposals); they decide on the '
+                "Projects screen."))
+        previous = project.get("coverPin") or None
+        if url is None or url == "":
+            url = None
             project.pop("coverPin", None)
+            project.pop("coverBy", None)
         else:
             if not isinstance(url, str) or not project_cover.is_choice(project["snapshot"], url):
                 raise HTTPException(status_code=400, detail="Pick one of this project's own images for its cover.")
             project["coverPin"] = url
+            project["coverBy"] = actor_record(actor_for_headers(headers))
+        changed = previous != url or owner != _cover_owner(project)
         refresh_metadata(project, touch=False)
         project_store.commit(catalog)
-        result = {"project": project_metadata(project)}
+        name = str(project.get("name") or "")
+        result = {"project": project_metadata(project), "previous": {"cover": previous}}
+    if changed:
+        _journal(
+            "project.cover",
+            data={"projectId": project_id, "projectName": name, "cover": url},
+            summary=(f'pinned a cover on project "{name}"' if url is not None
+                     else f'set the cover of project "{name}" back to automatic') + note,
+        )
     await _broadcast_projects_changed("cover", project_id)
+    # A cover proposal for this project may no longer fit (the person picked another).
+    await _sweep_asset_proposals()
     return result
 
 
@@ -11041,9 +12074,7 @@ async def export_graph_for_frontend() -> dict:
         src_node = cli_graph.nodes.get(e["source"], {})
         src_def = all_defs.get(src_node.get("definitionId", ""), {})
         data_type = "Any"
-        src_ports = (cinema_output_ports(src_node.get("params"))
-                     if src_node.get("definitionId") == "cinema-scene"
-                     else src_def.get("outputPorts", []))
+        src_ports = node_ports(str(src_node.get("definitionId") or ""), src_node.get("params"), src_def, "outputPorts")
         for port in src_ports:
             if port["id"] == e["sourceHandle"]:
                 data_type = port["dataType"]
@@ -11464,6 +12495,7 @@ async def quick_execute(body: dict[str, Any]) -> dict:
     definition_id = body.get("definitionId", "")
     if message := retired_message(str(definition_id)):
         raise HTTPException(status_code=400, detail=message)
+    _refuse_unknown_definition(definition_id)
     if not quick_execution_allowed(definition_id):
         raise HTTPException(
             status_code=409,
@@ -11940,6 +12972,37 @@ def _preset_params_version(body: BaseModel, missing: int) -> int:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+def _check_stored_images(kind: str, fields: Mapping[str, Any], before: Mapping[str, Any] | None = None) -> None:
+    """422 unless every image a Style (``kind="style"``: refImages, thumbnail
+    and its image params) or a Character (``"character"``: referenceViews)
+    write names is one of Nebula's own files (services/stored_image_refs.py).
+    Every caller is checked, the person too; a value ``before`` (the asset as
+    stored) already holds isn't checked again."""
+    from services.stored_image_refs import StoredImageError, check
+
+    if kind == "style":
+        # The params the Style will have under the model it will have: a
+        # write that changes only the model can make a held value an image
+        # param, so a held param counts as held only under its own model.
+        stored = before or {}
+        model = fields["modelId"] if "modelId" in fields else stored.get("modelId")
+        definition = node_registry.get(str(model or "")) or {}
+        param_keys = ["_previewUrl", *(str(p.get("key")) for p in definition.get("params") or []
+                                       if isinstance(p, dict) and p.get("type") == "file")]
+        image_fields: tuple[str, ...] = ("refImages", "thumbnail")
+        if "params" not in fields or fields["params"] is None:
+            fields = {**fields, "params": stored.get("params")}
+        if before is not None and (model or None) != (stored.get("modelId") or None):
+            before = {key: value for key, value in before.items() if key != "params"}
+    else:
+        param_keys, image_fields = [], ("referenceViews", "thumbnail")
+    try:
+        check(fields, image_fields=image_fields, before=before, param_keys=param_keys,
+              shipped_thumbnail=lambda value: _preset_thumbnail_path_from_ref(value) is not None)
+    except StoredImageError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 def _char_store():
     from services.character_store import CharacterStore
     return CharacterStore()
@@ -12084,6 +13147,7 @@ async def list_characters(scope: str = "global", projectId: str | None = None) -
 async def create_character(body: CharacterCreate) -> dict:
     """Create a new Character."""
     _require_canvas_project(body.projectId)
+    _check_stored_images("character", body.model_dump())
     store = _char_store()
     try:
         character = store.create(
@@ -12127,6 +13191,22 @@ async def update_character(char_id: str, body: CharacterUpdate) -> dict:
         raise HTTPException(status_code=422, detail="baseVersion must be a whole number: the Character's version you read")
     store = _char_store()
     updates = {k: v for k, v in body.model_dump().items() if v is not None and k != "baseVersion"}
+    if "referenceViews" in updates:
+        try:
+            stored = store.get(char_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
+        # Not live: the in_trash 404 the Studio offers Restore from, before
+        # any check (a Studio sends the views it read, held links too).
+        if stored is None:
+            return _asset_not_found("character", char_id)
+        # A version behind (versions only grow): the update below is the 409
+        # the Studio merges from and writes nothing, so the views aren't
+        # checked against a Character they can't land on.
+        version = stored.get("version")
+        behind = (body.baseVersion is not None and isinstance(version, int) and version > body.baseVersion)
+        if not behind:
+            _check_stored_images("character", updates, before=stored)
     try:
         character = store.update(char_id, base_version=body.baseVersion, **updates)
     except KeyError:
@@ -12241,20 +13321,26 @@ def _moodboard_conflict(exc: Any) -> JSONResponse:
 
 
 def _journal_board_change(before: dict, after: dict, changes: dict, *, say: str = "") -> None:
-    """One ``board.*`` journal event for a board write (plan section 5.2):
-    an edit batch or a PUT. Tagged with the open canvas project; the board's
-    own scope is in ``data`` (a Global board is in every project). Never any
-    note text."""
-    from services.moodboard_edits import journal_entry
+    """The journal events for a board write (plan section 5.2): an edit
+    batch or a PUT. One ``board.*`` event for its images, cards and frames,
+    and one ``board.fields`` event naming the board fields it changed
+    (Justin's Q91). Every board write goes through here (the Studio, MCP,
+    the CLI, an undo's ``restore``, an accepted proposal's PUT), so none is
+    missed. Tagged with the open canvas project; the board's own scope is in
+    ``data`` (a Global board is in every project). Never any note text, and
+    never a field's value."""
+    from services.moodboard_edits import journal_entries
 
-    entry = journal_entry(changes, before, after)
-    if entry is None:
-        return
-    data = {"boardId": after.get("id"), "boardName": after.get("name"),
-            "scope": after.get("projectId") or "global", "refs": entry["refs"], "kinds": entry["kinds"]}
-    if say:
-        data["say"] = say
-    _journal(entry["kind"], data=data, summary=entry["summary"])
+    for entry in journal_entries(changes, before, after):
+        data: dict[str, Any] = {"boardId": after.get("id"), "boardName": after.get("name"),
+                                "scope": after.get("projectId") or "global"}
+        if entry["kind"] == "board.fields":
+            data["fields"] = entry["fields"]
+        else:
+            data.update({"refs": entry["refs"], "kinds": entry["kinds"]})
+        if say:
+            data["say"] = say
+        _journal(entry["kind"], data=data, summary=entry["summary"])
 
 
 async def _say_agent_board_change(before: dict, after: dict, changes: dict, *, say: str = "",
@@ -12972,6 +14058,7 @@ async def create_preset(body: PresetCreate) -> dict:
     # params from before every upgrade: version 0 (services/saved_graph_upgrades.py).
     params_version = _preset_params_version(body, 0)
     _check_style_write(body.name, body.modelId, body.params, None)
+    _check_stored_images("style", body.model_dump())
     try:
         preset = preset_store.create(
             name=body.name, category=body.category, prompt=body.prompt, params=body.params,
@@ -13030,6 +14117,11 @@ async def update_preset(preset_id: str, body: PresetUpdate) -> dict:
                        fields.get("params", before.get("params") or {}),
                        before if after_model == (before.get("modelId") or None) else None,
                        before_params=before.get("params") or {})
+    # A version behind (versions only grow): the update below is the 409 the
+    # caller re-reads from, so an outside link it still holds isn't the answer.
+    version = before.get("version")
+    if not (base_version is not None and isinstance(version, int) and version > base_version):
+        _check_stored_images("style", fields, before=before)
     try:
         preset = preset_store.update(preset_id, params_version=params_version, base_version=base_version, **fields)
     except KeyError:
@@ -13086,7 +14178,8 @@ def _check_style_write(name: Any, model_id: str | None, params: Mapping[str, Any
     - Nobody but the person may make a Style that changes who bills its
       model's run (``_provider``, ``_kreaAuth``; ``_refuse_agent_billing_change``).
       ``before`` is the Style as it was when the model stays the same.
-    - An agent's ``modelId`` must be a node in the catalog."""
+    - An agent's ``modelId`` must be a node id in the catalog; a display
+      name is refused naming its id (``node_lookup.unknown_definition``)."""
     params = params if isinstance(params, Mapping) else {}
     label = f"Style “{str(name or '')[:60]}”"
     if has_agent_marker(current_request_headers()):
@@ -13094,8 +14187,11 @@ def _check_style_write(name: Any, model_id: str | None, params: Mapping[str, Any
         _refuse_agent_internal_params({key: value for key, value in params.items()
                                        if key not in was or was.get(key) != value}, "style")
         if model_id and node_registry.get(model_id) is None:
+            # Strict like the node writes (a Style stores its modelId and Create
+            # applies it), and the refusal names the exact-name match the same way.
             raise HTTPException(status_code=400, detail=(
-                f"style.modelId: there's no node {str(model_id)[:64]!r}; find_nodes (`nebula nodes`) lists them"))
+                f"style.modelId: {node_lookup.unknown_definition(str(model_id)[:64], node_registry.get_all())}; "
+                "find_nodes (`nebula nodes`) lists them"))
     if model_id:
         try:
             _refuse_agent_billing_change([(label, model_id, (before or {}).get("params") if before else None, params)])

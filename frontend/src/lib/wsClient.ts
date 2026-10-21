@@ -8,6 +8,7 @@ import type {
   ProviderStartAmbiguity,
   ProviderStartKind,
 } from './runHistory';
+import type { AssetProposalClosedEvent, AssetProposalOpenedEvent, AssetProposalSyncEvent } from './assetProposals';
 
 export type ErrorCategory =
   | 'blocked'
@@ -295,6 +296,9 @@ export type ExecutionEvent = (
   | ProposalOpenedEvent
   | ProposalSyncEvent
   | ProposalClosedEvent
+  | AssetProposalOpenedEvent
+  | AssetProposalSyncEvent
+  | AssetProposalClosedEvent
   | SocketReconnectedEvent
 ) & { runId?: string };
 
