@@ -8,9 +8,11 @@ what the person wrote: a private note is "private note changed", not its text.
 
 One set of words, the journal's (``services/moodboard_edits``). A change to a
 board (an edit batch or a ``PUT``) is said in ``journal_entry``'s summary, so
-the Agent log and the journal never describe one change two ways. The journal
-leaves the board's fields out (a Direction change, a rename); those are named
-by the labels ``moodboard_edits.FIELD_LABELS`` already gives them. Every line
+the Agent log and the journal never describe one change two ways. The board's
+own fields (a Direction change, a rename) are named as the ``board.fields``
+event names them (``moodboard_edits.field_label``): "Changed Direction and
+the Avoid list on board Dusk"; only Send notes says which way it went here
+("turned ... off"), since the journal names fields, never values. Every line
 names the board as the journal does (``moodboard_edits.board_where``: "board
 Dusk"), the lines for writes the journal has no event for (make, Analyze,
 Keep, move, delete, restore) too.
@@ -19,35 +21,23 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from services.moodboard_edits import FIELD_LABELS, board_where, cover_words, journal_entry
+from services.moodboard_edits import FIELD_LABELS, board_where, cover_words, field_label, journal_entry, listed_words
 
 
 def _images(n: int) -> str:
     return f"{n} image{'' if n == 1 else 's'}"
 
 
-def _label(key: str) -> str:
-    label = FIELD_LABELS.get(key, key)
-    return "the " + label[4:] if label.startswith("The ") else label
-
-
-def _listed(words: list[str]) -> str:
-    return words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]
-
-
 def _field_words(changes: Mapping[str, Any], entry: Mapping[str, Any] | None,
                  after: Mapping[str, Any]) -> list[str]:
-    """The board fields the change set, from its ``fields`` slice. The board's
-    notes are left out only when the journal's summary is the one about them
-    ("changed the notes of board Dusk")."""
+    """The board fields the change set, from its ``fields`` slice, in the
+    words of the ``board.fields`` journal event (moodboard_edits.fields_entry),
+    except that the Agent log line also says which way Send notes went (an
+    agent can only turn it off)."""
     fields = next((item for item in changes.get("slices") or [] if item.get("part") == "fields"), None)
     if not fields:
         return []
     keys = list((fields.get("expect") or {}).keys())
-    board_notes_said = (entry is not None and entry.get("kind") == "board.noted"
-                        and not (changes.get("kinds") or {}).get("noted"))
-    if board_notes_said:
-        keys = [key for key in keys if key != "notes"]
     words: list[str] = []
     if "coverImageId" in keys:
         # Said with the image's number, not as a field: "made #3 the cover",
@@ -58,7 +48,7 @@ def _field_words(changes: Mapping[str, Any], entry: Mapping[str, Any] | None,
             words.append(cover_words(after))
     changed = [key for key in keys if key != "sendNotes"]
     if changed:
-        words.append("changed " + _listed([_label(key) for key in changed]))
+        words.append("changed " + listed_words([field_label(key) for key in changed]))
     if "sendNotes" in keys:
         words.append(f"turned {FIELD_LABELS['sendNotes']} " + ("on" if fields["expect"]["sendNotes"] else "off"))
     return words
