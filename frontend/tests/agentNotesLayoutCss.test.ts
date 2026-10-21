@@ -233,6 +233,43 @@ describe('the Commons toolbar keeps one row with the chip (GM review of Q107 a)'
   });
 });
 
+// p157c: with the long worker status ("Library analysis paused until
+// reference labels are sealed") the Commons header still wrapped to 86 px at
+// 1280, 1366 and 1440. The status gives way first: its text truncates on one
+// line down to a minimum that keeps its first words, and only that minimum
+// counts toward the row (inline-size containment), so no status length can
+// push the controls or the header onto a second row. Start/Stop never shrinks.
+describe('the Commons worker status gives way before the toolbar wraps (p157c)', () => {
+  it('grows into the toolbar\'s free room and keeps its text at the control\'s side', () => {
+    const line = ruleIn(commonsCss, 'body.app-slava-restraint .commons-status');
+    expect(declared(line, 'flex')).toBe('1 1 auto');
+    expect(declared(line, 'justify-content')).toBe('flex-end');
+    expect(declared(line, 'white-space')).toBe('nowrap');
+  });
+
+  it('truncates its text on one line with an ellipsis, shrinking to a named minimum', () => {
+    const text = ruleIn(commonsCss, 'body.app-slava-restraint .commons-status__text');
+    expect(declared(text, 'white-space')).toBe('nowrap');
+    expect(declared(text, 'overflow')).toBe('hidden');
+    expect(declared(text, 'text-overflow')).toBe('ellipsis');
+    // Only the minimum counts toward the row: the text's own length never does.
+    expect(declared(text, 'contain')).toBe('inline-size');
+    expect(declared(text, 'flex')).toBe('1 1 auto');
+    // A short status ("Worker stopped") reserves no more than its own length
+    // (1ch per character is wider than this face's average glyph, measured),
+    // so it never truncates and the row keeps the room it had before.
+    expect(declared(text, 'min-width')).toBe('min(var(--commons-status-min), calc(var(--commons-status-chars, 99) * 1ch))');
+    expect(declared(text, 'text-align')).toBe('right');
+    const token = declared(ruleIn(commonsCss, 'body.app-slava-restraint .commons-toolbar'), '--commons-status-min');
+    expect(token, 'the minimum is a token on the toolbar').toMatch(/^\d+(\.\d+)?em$/);
+  });
+
+  it('never shrinks or wraps its Start / Stop control', () => {
+    const control = ruleIn(commonsCss, 'body.app-slava-restraint .commons-status > .commons-button');
+    expect(declared(control, 'flex')).toBe('none');
+  });
+});
+
 // Review of the fold: More's menu drew its two items the same, so a sighted
 // person could not see which folded section was open. A checked radio item
 // carries a visible mark; the Move menu (no `checked`) stays plain.

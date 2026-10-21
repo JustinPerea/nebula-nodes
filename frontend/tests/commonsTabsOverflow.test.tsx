@@ -180,3 +180,17 @@ it('leaves focus alone when it is somewhere else as the window crosses the fold'
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   expect(document.activeElement).toBe(add);
 });
+
+// p157c: the worker status takes the toolbar's free room itself (it grows and
+// truncates, commons.css). A spacer beside it would split that room in two
+// and cut the status short while there was space for all of it.
+it('lets the worker status, not a spacer, take the toolbar\'s free room, with Start whole at the end', async () => {
+  render(<CommonsView />);
+  const start = await screen.findByRole('button', { name: 'Start' });
+  const actions = start.closest('.workspace-header__actions')!;
+  expect(actions.querySelector('.commons-spacer')).toBeNull();
+  const line = start.closest('.commons-status')!;
+  expect(actions.lastElementChild).toBe(line);
+  expect(line.querySelector('.commons-status__text')?.getAttribute('title')).toBe('Worker stopped');
+  expect(line.lastElementChild).toBe(start);
+});

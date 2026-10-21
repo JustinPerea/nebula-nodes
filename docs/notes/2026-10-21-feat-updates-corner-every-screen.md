@@ -158,7 +158,7 @@ Branch `feat/updates-corner-every-screen`, from main `296e9199` (after #148). Un
   - **Whole `vitest run`:** 28 failed, 3970 passed (10 of 337 files failed; 18 of the failures were "Test timed out"). The 10 files rerun together all passed (168): CommonsDetail, ChatPanel.personal, CommandPalette, ModelDiscovery.integration, ModelPicker, ResultsGallery, ConnectionPopup, GraphFileActions, NodeLibrary, Settings. These are the same load-sensitive files as in the earlier runs.
   - **Backend whole suite** (iso.sh; no backend file changed): 1 failed, 9450 passed, 61 skipped in 22:45. The failure was `test_krea_mcp_server.py::test_stdio_bridge_process_connects_to_only_local_discovery_routes`, an anyio deadline on a subprocess under load. Alone, its file passes 5/5.
 - **Open items.**
-  - At 1440 and up, a long Commons worker status can still wrap the toolbar when main's wouldn't (above).
+  - At 1440 and up, a long Commons worker status can still wrap the toolbar when main's wouldn't (above). Fixed in p157c (below).
 - **Review (three confirmed findings on the More fold, all fixed).**
   - *Sighted people couldn't see which folded section was open.* More's menu now draws a check and bold text on the checked item (`asset-move.css`, `[role="menuitemradio"]` / `[aria-checked="true"]`). The Move menu never passes `checked`, so it looks the same as before. The reviewer also suggested putting the section's name on the button. I measured that live first: at 1280 there are 33 px to spare, "Settings ▾" needs 17 more and fits, but "Blind labeling ▾" needs 46 more and wraps the header to 86 px. So the button keeps "More", as the reviewer's fallback said. When More's menu is closed, the toolbar shows only that More is active. The menu and the panel show which section is open.
   - *The tablist had no selected tab.* The open folded tab used to get `display: none`, which removed it from the accessibility tree. Now only the closed folded tabs are `display: none`. The open one is hidden on screen only (the clip pattern, `position: absolute`, 1 px), so the tablist still has one selected tab. While the toolbar folds, that tab gets `tabIndex=-1`, so Tab never lands on something invisible. CommonsView works out "folds" the same way the stylesheet does: `(max-width: 1439px)` plus `body.agent-notes-shown`, through `useSyncExternalStore`, a matchMedia listener and a body-class observer. With the chip hidden, no tab ever leaves the Tab order.
@@ -354,4 +354,78 @@ Same branch, on top of `adcde818` (PR #157). Uncommitted. Files touched: `fronte
 - **Open items.**
   - GM: is Blind labeling and Agent review's green-black palette a deliberate evaluation mode? It is consistent across both, but no doc records it (above).
   - GM: JetBrains Mono's marked zero stays on the muted 0. Inter's tabular figures would give a plain zero if GM prefers.
-  - The long worker status ("Library analysis paused until reference labels are sealed") still wraps the Commons toolbar at 1280-1440 (already listed).
+  - The long worker status ("Library analysis paused until reference labels are sealed") still wraps the Commons toolbar at 1280-1440 (already listed). Fixed in p157c (below).
+
+## p157c: the long worker status no longer wraps the Commons header
+
+Same branch, on top of `bdcdde87` (PR #157). Uncommitted. Files touched: `frontend/src/components/commons/CommonsView.tsx` (`StatusLine` and the toolbar's spacer), `frontend/src/styles/commons.css` (the toolbar's token and the status rules), `frontend/tests/commonsStatusLine.test.tsx`, `frontend/tests/agentNotesLayoutCss.test.ts`, `frontend/tests/commonsTabsOverflow.test.tsx`, and this file. No layout token in `layouts.css` or `workspace-header.css` changed, no backend file, no package. Motion: none.
+
+- **What changed and why.** Still Justin's Q107 a ("Show it on every screen, with the open project's Updates"), with GM - Design's ruling that a header wrapping to two rows is a defect. The seeded status fit, but a real one didn't. After preparing a Blind labeling reference set, the status reads "Library analysis paused until reference labels are sealed". The Commons header then wrapped to 86 px. Before this fix I reproduced it live at 1280 and 1440 (p157b also saw it at 1366).
+  - **The status gives way first.** Its text now sits in its own element (`.commons-status__text`). That element truncates on one line with an ellipsis. The whole status line grows into the row's free room and keeps its text right-aligned against its control, so it looks the same as before whenever the text fits.
+  - **Only a minimum counts toward the row.** The text element has `contain: inline-size`, so the browser sizes the row as if the text were only its minimum, never its full length. So no status length can push the controls, or the header, onto a second row.
+  - **The minimum** is `min(--commons-status-min, the status's own length)`.
+    - `--commons-status-min` is 12.5em (137.5 px at the status's 11 px). That shows "Library analysis paused…", "Paused: machine busy (l…" and "Worker stopped · 2 queu…".
+    - The status's own length is its character count × 1ch, passed in as `--commons-status-chars`. 1ch is 6.9 px in this face, and every status's average glyph measured 5.2-5.9 px. So a short status like "Worker stopped" reserves a little more than its own width (97 px for 83), never truncates, and never takes more room than it needs.
+  - **Start and Stop never shrink** (`flex: none`). They stay outside the part that truncates.
+  - **The full text stays available.**
+    - The element's `title` gives the tooltip.
+    - Its own text is the whole status. Chromium's accessibility tree has a StaticText node with the full string, so a screen reader reads all of it.
+    - The status was never a live region, and it still isn't.
+  - **The toolbar's spacer is gone.** It was an empty `commons-spacer` that grew to fill the row. The status now does that itself. Left in, the spacer would split the free room in half and cut the status short even when there was room for all of it.
+- **Every worker status the Commons can show.** They are all built in `StatusLine`, from `/api/commons/status`. The backend sends states, not text: `commons/worker.py` uses stopped, running, idle, analyzing, paused_load, cap_reached and budget_exhausted, and `routes/commons.py` sends `evaluation_waiting` and `evaluation_assisted`. Natural widths at the status's font (Inter 400 11px), measured live:
+  - Connecting… 69.3 px. Worker idle 59.1 px. Worker stopped 83.1 px.
+  - Worker stopped · 1 queued 139.4 px. Worker stopped · 999 queued · 999 held 210.6 px. Analyzing (0 queued) 111.6 px. Analyzing (999 queued) · 999 held 180.4 px.
+  - Call budget used (0/∞) 118.1 px. Call budget used (9999/9999) · 999 held 212.8 px.
+  - Daily cap reached, resets 09:00 AM 186.4 px. Daily cap reached, resets 11:59 PM · 999 held 235.8 px.
+  - Paused: machine busy (load 0.5 / 8) 187.1 px. Paused: machine busy (load 128.0 / 128) · 999 held 264.9 px.
+  - Library analysis paused until reference labels are sealed 292.0 px.
+  - **Library analysis paused · close the agent review to resume 304.7 px (the longest).**
+  - Any state with " · N held" appended grows by about 40 px. Start or Stop takes another 48-49 px plus an 8 px gap.
+- **Room for the text, live.** At 1280 and 1440 (with More folded at 1280, all five tabs at 1440) the text gets 290 px with no control and 233-234 px beside Start or Stop. At 1366 it gets 316 / 259-260 px.
+  - So the longest status loses about 15 px at 1280 and 1440: "Library analysis paused · close the agent revi…". The sealed one loses 2 px: "… reference labels …".
+  - The longest status with a control, "Paused: machine busy (load 128 / 128) · 999 held", shows 234 of its 255 px.
+  - Everything shows in full at 1920.
+- **What gives next.** At 1280 the minimum fits with about 95-150 px to spare, so nothing else had to fold. The header now stays one row down to these widths, whatever the status says:
+  - 1184 px for a status with Stop or Start;
+  - 1128 px for the paused statuses (no control);
+  - 1145 px for the short "Worker stopped".
+  - Below those widths the existing wrap takes over unchanged: the actions drop to a second row, as on main. That is outside the four desktop sizes. I didn't fold more sections.
+- **Decisions not in the spec.**
+  - The minimum is the status's first words, not a fixed word count. 12.5em keeps the state ("Library analysis paused", "Paused: machine busy", "Daily cap reached", "Call budget used", "Worker stopped · N…") and drops the detail.
+  - For short statuses the reservation is capped by character count, not a constant. A constant 12.5em would have made "Worker stopped" reserve 138 px instead of 83. The header would then wrap about 50 px sooner at narrow window widths than before this change. With the cap it wraps about 7 px sooner (1145 vs about 1138).
+  - I didn't add `role="status"` or an `aria-label`. The status wasn't announced before, and a label on a plain span isn't reliably read. The full text is the element's content.
+- **Tradeoffs.**
+  - The 1ch cap is an estimate. A status made mostly of glyphs wider than "0" could reserve a little less than its width and truncate a few pixels, but only when the row is already tight. None of today's strings comes close (the closest is at 85 % of its cap).
+  - The text element spans the free room, so the tooltip also shows when hovering the blank space just left of the text.
+- **Surprises.**
+  - Chrome's ellipsis on the sealed status drops the whole last word ("labels …"), not a few letters, even though only 2 px overflow.
+  - Before this fix, at 1366 in this run, the long sealed status didn't wrap (49). p157b measured 86 there, with a different chip width.
+- **Tests (written first, run on the old code and seen failing).**
+  - First version: 11 failed.
+    - `agentNotesLayoutCss.test.ts`, the new "Commons worker status gives way" block: 3 failed. `.commons-status` had no `flex`, and the rules `.commons-status__text` and `.commons-status > .commons-button` were missing.
+    - `commonsStatusLine.test.tsx`: 7 failed. Six statuses, from the two long pauses to "Worker idle" with Stop, had no `.commons-status__text` element. "Connecting…" had none either.
+    - `commonsTabsOverflow.test.tsx`: 1 failed, because the toolbar still had its `.commons-spacer`.
+  - The character-count cap was added test-first too. Its CSS expectation and the `--commons-status-chars` checks failed 7 times before the change.
+  - After the change, the three files pass: 45 tests. No earlier test pinned the old layout; the three existing StatusLine tests pass unchanged.
+- **Live check.** Isolated backend on 8857 and Vite on 5857 (`VITE_NEBULA_BACKEND_PORT=8857`; `/api/health` through Vite reached the isolated backend). Temp HOME and every NEBULA_* root under `scratchpad/p157c/state`, no keys, one real MCP agent posting one note ("Updates, 1 unread"). Chromium had 8000-8010 and 5173 blocked by CDP plus the dead proxy.
+  - Before the fix, with the sealed status reached through the UI: Commons header 86 at 1280 and 1440, 49 at 1366 and 1920.
+  - After, on a fresh state. Every row was 49 px, with 0 overlaps (chip against every header text and control, and every pair of controls), the chip on top at its centre, and Start/Stop whole, unclipped and left of the chip:
+    - the seeded "Worker stopped" + Start, not truncated;
+    - "Library analysis paused until reference labels are sealed", reached by preparing the held-out set through Blind labeling;
+    - "Library analysis paused · close the agent review to resume", the longest. To reach it I added one `failed` row to `assisted_reviews` in the isolated database. No grading ran and no model was called.
+    - "Worker stopped · 2 queued · 1 held" + Start, as real state: I closed the batch through the page's session, imported the seeded board and held one asset in the isolated database. It is not truncated at any size.
+    - "Paused: machine busy (load 128 / 128) · 999 held" + Stop. This one came from a page-level stand-in for the status poll only (a `window.fetch` wrapper, not CDP interception). It is truncated at 1280 and 1440, with Stop at 1128-1176 and 1228-1276.
+  - Each was measured at 1280x800, 1366x768, 1440x900 and 1920x1080.
+  - Other screens at 1280, once: Projects 72, Create, Moodboard Studio, Character, Cinema and Remotion 49, the Video editor 51. 0 overlaps, chip on top.
+  - Hovering the truncated longest status at 1280: `:hover` true, and `title` is the whole status.
+  - Blocked requests: 0 during the run, and 2 in the deliberate canary probe. Canary hits 0, no proxy failures during the run. Sockets went only to 5857 and 8857.
+  - Shots: `scratchpad/p157c/shots/commons-header-long-1280.png`, `commons-header-long-1440.png` and `commons-status-hover-1280@2x.png`.
+  - The native title tooltip isn't in the shots. Headless Chromium doesn't paint OS tooltips. A headful window plus a screen capture would have put a window on, and captured, Justin's shared screen, so I checked the title instead.
+- **Gates.**
+  - Backend whole suite (iso.sh): 9466 passed, 61 skipped, 0 failed (9:02).
+  - `npx vitest run`: 9 failed, 4053 passed (6 of 339 files; 6 of the 9 failures were "Test timed out"). All six files pass alone, 135 tests: CommandPalette, ModelPicker, ResultsGallery, GraphFileActions, NodeLibrary, Settings. None is touched here.
+  - `npx tsc -b`: clean. `npm run -s lint`: clean, including the inline-style and Slava CSS scope guards.
+  - `vite build` plus the budget passed: **511,428 bytes raw** / 149,598 gzip (572 under 512,000).
+- **Open items.**
+  - At 1280 and 1440 the two longest statuses still truncate (by 2-15 px). The tooltip and the accessible text carry the rest. If GM wants them whole there, shorter wording would fix it, such as "Analysis paused until labels are sealed". That is a copy call, so I left it.
+  - Below about 1184 px wide (1128 for the paused statuses) the Commons header still wraps through its existing rule, the same as main.
