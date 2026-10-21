@@ -215,7 +215,14 @@ If a node the run needs can't run here, `nebula propose` prints a
 `warning:` line naming it and why (`--json` gives it as `warning`, with
 `--wait` too); Accept would fail at that node. Say so to
 the person, or propose a node that runs here instead (`nebula nodes` lists
-them).
+them). The proposal is kept, with the warning: if you then propose
+something else instead, withdraw the first with the call the warning ends
+with (`nebula proposal withdraw <id>`; `--json` gives it as `withdrawWith`,
+which `--wait` drops once the person has decided), so the person has one
+proposal to answer. While one of yours that can't run
+is still open, your next `nebula propose` prints a `reminder:` line naming
+it (`stillOpen` in `--json`); nothing is withdrawn for you. `nebula context`
+marks such a proposal "N node(s) can't run here".
 
 `nebula proposals` lists open ones; `nebula proposal withdraw <id>` takes one
 back.
