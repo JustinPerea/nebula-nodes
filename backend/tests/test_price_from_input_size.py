@@ -86,8 +86,8 @@ def test_an_entry_reading_a_measured_quantity_needs_sizing():
 
 # -- measuring the input ---------------------------------------------------------
 
-def test_an_image_is_measured_from_its_header(tmp_path):
-    path = _png(tmp_path / "in.png", 1000, 1000)
+def test_an_image_is_measured_from_its_header():
+    path = _stored_png("in.png", 1000, 1000)
     assert input_sizes.measure(str(path), "Image") == {"width": 1000, "height": 1000}
 
 
@@ -127,8 +127,11 @@ def test_missing_or_unreadable_files_measure_as_unknown(tmp_path):
     assert input_sizes.measure("", "Image") is None
 
 
-def test_a_video_is_measured_by_the_probe(monkeypatch, tmp_path):
-    clip = tmp_path / "clip.mp4"
+def test_a_video_is_measured_by_the_probe(monkeypatch):
+    from services.output import OUTPUT_ROOT
+
+    clip = OUTPUT_ROOT / "price-from-input" / "clip.mp4"
+    clip.parent.mkdir(parents=True, exist_ok=True)
     clip.write_bytes(b"\x00")
     seen = []
 
@@ -141,8 +144,8 @@ def test_a_video_is_measured_by_the_probe(monkeypatch, tmp_path):
     assert seen == [clip.resolve()]
 
 
-def test_run_input_sizes_reads_an_upload_in_the_run(tmp_path):
-    path = _png(tmp_path / "up.png", 1000, 1000)
+def test_run_input_sizes_reads_an_upload_in_the_run():
+    path = _stored_png("up.png", 1000, 1000)
     items = [{"id": "in", "definitionId": "image-input", "params": {"filePath": str(path)}},
              {"id": "up", "definitionId": "seedvr2-upscale", "params": {}}]
     edges = [("in", "image", "up", "image")]
@@ -347,11 +350,14 @@ def test_nebula_info_and_context_show_the_size_price(client, capsys):
 
 @pytest.mark.skipif(not (__import__("shutil").which("ffmpeg") and __import__("shutil").which("ffprobe")),
                     reason="needs ffmpeg and ffprobe")
-def test_the_real_probe_reads_a_clip_header(tmp_path):
+def test_the_real_probe_reads_a_clip_header():
     import subprocess
 
-    clip = tmp_path / "tiny.mp4"
-    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=size=64x48:rate=10:duration=2",
+    from services.output import OUTPUT_ROOT
+
+    clip = OUTPUT_ROOT / "price-from-input" / "tiny.mp4"
+    clip.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=64x48:rate=10:duration=2",
                     "-pix_fmt", "yuv420p", str(clip)], check=True, timeout=60)
     size = input_sizes.measure(str(clip), "Video")
     assert size is not None and (size["width"], size["height"]) == (64, 48)
@@ -388,8 +394,8 @@ def test_run_input_sizes_says_when_the_port_has_no_single_wire(tmp_path):
     assert reasons == {"up": "wires", "lone": "unwired"}
 
 
-def test_a_measured_node_has_no_reason(tmp_path):
-    path = _png(tmp_path / "ok.png", 10, 10)
+def test_a_measured_node_has_no_reason():
+    path = _stored_png("ok.png", 10, 10)
     items = [{"id": "in", "definitionId": "image-input", "params": {"filePath": str(path)}},
              {"id": "up", "definitionId": SEEDVR, "params": {}}]
     reasons: dict[str, str] = {}

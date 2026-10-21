@@ -108,7 +108,7 @@ from services import universal_ports
 from services.media_types import MEDIA_PORT_IDS
 from services.file_access import ProtectedPathError, require_allowed_path, validate_file_references
 from services.qc_common import extract_frames
-from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT, resolve_output_ref, portable_output_ref, ManifestError, find_output_record, read_manifest
+from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT, resolve_output_ref, portable_output_ref, ManifestError, find_output_record, read_manifest, write_new_file, link_new, is_being_written
 from services.image_input import is_remote_or_data_uri
 from services.cache import ExecutionCache
 from services.execution_runs import (
@@ -1708,7 +1708,8 @@ def _import_external_image_to_output_root(file_path_value: str) -> tuple[Path, s
     digest = hashlib.sha256(data).hexdigest()
     saved_path = require_allowed_path(CHAT_UPLOADS_DIR / f"{digest}{ext}")
     if not saved_path.exists():
-        saved_path.write_bytes(data)
+        # Whole or not at all: a price may be measured from it (write_new_file).
+        write_new_file(saved_path, data)
     return saved_path.resolve(), f"/api/outputs/chat-uploads/{saved_path.name}"
 
 
@@ -2008,14 +2009,17 @@ def _settle_hold(run_id: str) -> None:
         pass
 
 
-def _require_run_spend_approval(
+async def _require_run_spend_approval(
     run_id: str, nodes: list[GraphNode], edges: list[GraphEdge], *, approval_id: str | None = None, **kwargs: Any,
 ) -> None:
     """The approval and spend checks for a run already noted for its actor: a
-    refusal forgets the note."""
+    refusal forgets the note. The inputs a price reads are measured first,
+    off the event loop (_measure_run_inputs); the approval is taken and the
+    limits checked after that, with no await between them."""
     try:
+        measured = await _measure_run_inputs(nodes, edges)
         _check_run_approval(approval_id, nodes, edges)
-        _require_spend_approval(nodes, edges, run_id=run_id, **kwargs)
+        _require_spend_approval(nodes, edges, run_id=run_id, measured=measured, **kwargs)
     except HTTPException:
         canvas_events.forget_run(run_id)
         raise
@@ -2095,12 +2099,43 @@ def _guard_approved_runs(change: Callable[[CLIGraph], Any]) -> None:
     _refuse_agent_change_to_approved_runs(probe)
 
 
+async def _measure_run_inputs(nodes: list[GraphNode], edges: list[GraphEdge]) -> input_sizes.Measured | None:
+    """The input sizes the spending check prices size-priced nodes at
+    (services/input_sizes.py), measured in a worker thread: reading every
+    packet of a clip takes seconds, and on the event loop it would hold up
+    every other request. Each run route awaits this just before its
+    synchronous check and passes the result to _require_spend_approval.
+
+    None for the person's own runs, which the limits don't bind. A project
+    switch while it measured makes the run refuse (409) rather than start
+    against a different project than the one it was checked in."""
+    if _is_person_request():
+        return None
+    try:
+        pricing = model_pricing.load_pricing()
+    except (OSError, ValueError):
+        return input_sizes.Measured()  # the check itself refuses: the table is unavailable
+    items = [{"id": n.id, "definitionId": n.definition_id, "params": n.params} for n in nodes]
+    if not input_sizes.needs_measuring(items, pricing):
+        return input_sizes.Measured()
+    before = _workspace_context()["workspaceRevision"]
+    measured = await input_sizes.measure_run(
+        items, [(e.source, e.source_handle, e.target, e.target_handle) for e in edges], pricing,
+        node_registry.get_all(), {n.id: n for n in nodes})
+    _check_workspace_revision(before)
+    return measured
+
+
 def _require_spend_approval(
-    nodes: list[GraphNode], edges: list[GraphEdge], *, settings: Mapping[str, Any], how_to_ask: str | None = None,
+    nodes: list[GraphNode], edges: list[GraphEdge], *, settings: Mapping[str, Any],
+    measured: input_sizes.Measured | None, how_to_ask: str | None = None,
     run_ids: list[str] | None = None, run_id: str | None = None, passes: int = 1, on_canvas: bool = True,
 ) -> None:
     """Refuse a run that isn't the person's when it breaks a spending limit, and
     count it against the caller's session when it doesn't.
+
+    ``measured`` is what _measure_run_inputs found for these nodes, awaited
+    by the caller (off the event loop), for prices read from an input's size.
 
     ``settings`` is the snapshot the caller read for this run: its ``apiKeys``
     are the ones the run receives, so the provider route priced here (a
@@ -2128,16 +2163,15 @@ def _require_spend_approval(
     items = [{"id": n.id, "definitionId": n.definition_id, "params": n.params} for n in nodes]
     definitions = node_registry.get_all()
     # A price that depends on the input's size is checked at the size of the
-    # file this run will send (services/input_sizes.py).
-    size_reasons: dict[str, str] = {}
-    sizes = input_sizes.run_input_sizes(
-        items, [(e.source, e.source_handle, e.target, e.target_handle) for e in edges], pricing, definitions,
-        {n.id: n for n in nodes}, reasons=size_reasons)
+    # file this run will send (services/input_sizes.py), measured before this
+    # synchronous check by the caller (_measure_run_inputs).
+    if measured is None:
+        raise RuntimeError("_require_spend_approval needs the run's measured inputs (_measure_run_inputs)")
     decision = agent_spend.decide(
         items, [(e.source, e.target, e.target_handle) for e in edges],
         settings=settings, pricing=pricing, definitions=definitions,
-        budgets=_spend_budgets(key, settings), how_to_ask=ask, passes=passes, sizes=sizes,
-        size_reasons=size_reasons,
+        budgets=_spend_budgets(key, settings), how_to_ask=ask, passes=passes, sizes=measured.sizes,
+        size_reasons=measured.reasons,
     )
     if decision.refusal:
         raise HTTPException(status_code=403, detail=decision.refusal)
@@ -2212,6 +2246,11 @@ async def archive_outputs(older_than_days: int = 30) -> dict:
             if entry.stat().st_mtime > cutoff:
                 continue
         except OSError:
+            continue
+        if is_being_written(entry):
+            # A run still writing here would go on writing into the moved
+            # folder, where the spending check could measure a half-written
+            # file (services/input_sizes.py); it is archived another time.
             continue
         dest = archive_root / entry.name
         if dest.exists():
@@ -2519,11 +2558,13 @@ async def upload_file_consolidated(
     # Track whether THIS request created the file: content-hash dedup means the
     # file may already exist from an earlier upload, in which case a later
     # failure must NOT delete it (other nodes/requests may reference it).
-    file_created = not saved_path.exists()
-    if file_created:
+    file_created = False
+    if not saved_path.exists():
         # Dedup by content hash: identical bytes collapse to one file on disk.
-        # Concurrent write-after-write writes the same bytes and is benign.
-        saved_path.write_bytes(content)
+        # It appears whole under its served name, never half-written, so a
+        # price measured from it (services/input_sizes.py) is of the whole
+        # file; a concurrent upload of the same bytes finds it there.
+        file_created = write_new_file(saved_path, content)
 
     url = f"/api/outputs/chat-uploads/{saved_path.name}"
     filename = file.filename or f"{digest}{ext}"
@@ -2533,6 +2574,8 @@ async def upload_file_consolidated(
         "url": url,
         "filePath": str(saved_path.resolve()),
         "filename": filename,
+        # The input node it routes to (upload_client: `nebula upload`, MCP upload_file).
+        "nodeType": node_type,
     }
 
     # Opt-in node creation: parse create_node laxly so any reasonable truthy
@@ -2598,6 +2641,12 @@ async def upload_file_consolidated(
                 status_code=500,
                 detail=f"Upload succeeded but graph sync failed: {exc}",
             ) from exc
+        # The same record /api/graph/node keeps: the history, `nebula watch`
+        # and the chat's action line credit the node to whoever uploaded it
+        # (an agent's `nebula upload` / upload_file, or the person's drop).
+        publish_action(f"Added {node_type} ({node_id})")
+        _journal_node_added(node_id)
+        await _show_agent({"nodeId": node_id}, say=f"Added {_node_label(node_id)}")
         response["nodeId"] = node_id
         if node_type == "image-input":
             response["thumbUrl"] = url
@@ -5282,12 +5331,72 @@ def _outputs_available(outputs: Any) -> bool:
     return any(bool(value.get("value") if isinstance(value, dict) else value) for value in outputs.values())
 
 
-def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[str]) -> dict[str, Any]:
+def _proposal_run_scope(
+    candidate: CLIGraph, run_ids: list[str],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str], list[str], bool, list[dict[str, Any]]]:
+    """A proposal's run as the cost sees it: the staged graph (nodes, edges),
+    the nodes it may start (``chosen``: the targets plus ancestors without
+    outputs), every node its pre-call check reads (``scope``), whether
+    ancestors are counted (``up_to``), and the chosen nodes as price items."""
+    graph_nodes, graph_edges = candidate.to_execute_format()
+    nodes = [GraphNode.model_validate(node) for node in graph_nodes]
+    edges = [GraphEdge.model_validate(edge) for edge in graph_edges]
+    chosen: list[str] = []
+    # Every node the run's pre-call check reads, cached ancestors too.
+    scope: list[str] = []
+    up_to = False
+    for target in run_ids:
+        sub_nodes, _ = get_subgraph(nodes, edges, target)
+        for node in sorted(sub_nodes, key=lambda n: _node_order(n.id)):
+            if node.id not in scope:
+                scope.append(node.id)
+            if node.id in chosen:
+                continue
+            if node.id not in run_ids:
+                if _outputs_available((candidate.nodes.get(node.id) or {}).get("outputs")):
+                    continue
+                up_to = True
+            chosen.append(node.id)
+    items = [
+        {
+            "id": node_id,
+            "definitionId": str(candidate.nodes[node_id].get("definitionId") or ""),
+            "params": candidate.nodes[node_id].get("params") or {},
+        }
+        for node_id in chosen
+    ]
+    return graph_nodes, graph_edges, chosen, scope, up_to, items
+
+
+async def _measure_proposal_inputs(candidate: CLIGraph, run_ids: list[str]) -> input_sizes.Measured:
+    """The proposal estimate's input sizes (_estimate_proposal_run),
+    measured in a worker thread from copies of the staged nodes, so the
+    event loop serves other requests meanwhile (_measure_run_inputs)."""
+    if not run_ids:
+        return input_sizes.Measured()
+    try:
+        pricing = model_pricing.load_pricing()
+    except (OSError, ValueError):
+        return input_sizes.Measured()
+    _graph_nodes, graph_edges, chosen, _scope, _up_to, items = _proposal_run_scope(candidate, run_ids)
+    if not input_sizes.needs_measuring(items, pricing):
+        return input_sizes.Measured()
+    wired = [(str(e.get("source")), e.get("sourceHandle"), str(e.get("target")), e.get("targetHandle"))
+             for e in graph_edges if str(e.get("target")) in chosen]
+    # The thread reads copies: the staged graph stays this request's own.
+    sources = {source for source, _handle, _target, _port in wired}
+    known = {node_id: copy.deepcopy(candidate.nodes[node_id]) for node_id in sources if node_id in candidate.nodes}
+    return await input_sizes.measure_run(copy.deepcopy(items), wired, pricing, node_registry.get_all(), known)
+
+
+def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[str], *,
+                   measured: input_sizes.Measured) -> dict[str, Any]:
     """Which nodes a run after acceptance may start: the targets plus ancestors without outputs.
 
     Each node is free (utility) or paid (a provider call), with its list
     price when model_pricing.json has one. "Up to" when ancestors are counted,
-    because the execution cache may skip them.
+    because the execution cache may skip them. ``measured`` holds the input
+    sizes for prices read from them (_measure_proposal_inputs, awaited first).
     """
     ref_for = {new_id: ref for ref, new_id in id_map.items()}
     definitions = node_registry.get_all()
@@ -5296,33 +5405,8 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
     entries: list[dict[str, Any]] = []
     up_to = False
     if run_ids:
-        graph_nodes, graph_edges = candidate.to_execute_format()
-        nodes = [GraphNode.model_validate(node) for node in graph_nodes]
-        edges = [GraphEdge.model_validate(edge) for edge in graph_edges]
-        chosen: list[str] = []
-        # Every node the run's pre-call check reads, cached ancestors too.
-        scope: list[str] = []
-        for target in run_ids:
-            sub_nodes, _ = get_subgraph(nodes, edges, target)
-            for node in sorted(sub_nodes, key=lambda n: _node_order(n.id)):
-                if node.id not in scope:
-                    scope.append(node.id)
-                if node.id in chosen:
-                    continue
-                if node.id not in run_ids:
-                    if _outputs_available((candidate.nodes.get(node.id) or {}).get("outputs")):
-                        continue
-                    up_to = True
-                chosen.append(node.id)
-        items = [
-            {
-                "id": node_id,
-                "definitionId": str(candidate.nodes[node_id].get("definitionId") or ""),
-                "params": candidate.nodes[node_id].get("params") or {},
-            }
-            for node_id in chosen
-        ]
-        estimate = _estimate_proposal_run(items, graph_nodes, graph_edges, definitions, candidate.nodes)
+        graph_nodes, graph_edges, chosen, scope, up_to, items = _proposal_run_scope(candidate, run_ids)
+        estimate = _estimate_proposal_run(items, graph_nodes, graph_edges, definitions, measured)
         for node_id in chosen:
             definition = definitions.get(str(candidate.nodes[node_id].get("definitionId") or ""), {})
             line = (estimate or {}).get("priced", {}).get(node_id)
@@ -5393,11 +5477,11 @@ def _estimate_proposal_run(
     graph_nodes: list[dict[str, Any]],
     graph_edges: list[dict[str, Any]],
     definitions: dict[str, Any],
-    known_nodes: Mapping[str, Any] | None = None,
+    measured: input_sizes.Measured,
 ) -> dict[str, Any] | None:
     """List-price estimate for a proposal's run; None when the table can't load.
-    ``known_nodes`` are the staged graph's nodes with their outputs, for a
-    price measured from an ancestor's existing output."""
+    ``measured`` are the input sizes for a price read from an upload or an
+    ancestor's existing output (_measure_proposal_inputs)."""
     try:
         pricing = model_pricing.load_pricing()
     except (OSError, ValueError):
@@ -5412,11 +5496,7 @@ def _estimate_proposal_run(
         items, [(str(e.get("source")), str(e.get("target")), e.get("targetHandle")) for e in graph_edges])
     # Measured from the file the run would get: an upload, or an ancestor's
     # output that already exists (it isn't in the run: see _proposal_cost).
-    sizes = input_sizes.run_input_sizes(
-        items, [(str(e.get("source")), e.get("sourceHandle"), str(e.get("target")), e.get("targetHandle"))
-                for e in graph_edges],
-        pricing, definitions, known_nodes if known_nodes is not None else {str(n.get("id")): n for n in graph_nodes})
-    return model_pricing.estimate_run(items, pricing, definitions, api_keys, multipliers, wired, sizes)
+    return model_pricing.estimate_run(items, pricing, definitions, api_keys, multipliers, wired, measured.sizes)
 
 
 def _node_order(node_id: str) -> tuple[int, str]:
@@ -5486,7 +5566,8 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
                             detail=exc.detail) from exc
     known, visible_area = _proposal_layout_hints()
     positions = place_new_nodes(spec, known, visible_area)
-    cost = _proposal_cost(candidate, id_map, run_ids)
+    measured = await _measure_proposal_inputs(candidate, run_ids)
+    cost = _proposal_cost(candidate, id_map, run_ids, measured=measured)
     run_fingerprint = _proposal_run_fingerprint(candidate, id_map, run_ids)
     existing = {
         node_id: {
@@ -7098,7 +7179,7 @@ async def execute(request: ExecuteRequest) -> dict:
         raise HTTPException(status_code=400, detail=f"Graph contains a cycle: {exc}")
 
     # After validation, so a graph that can't run reports why, not its cost.
-    _require_run_spend_approval(run_id, nodes, request.edges, approval_id=request.approval_id,
+    await _require_run_spend_approval(run_id, nodes, request.edges, approval_id=request.approval_id,
                                 run_ids=_end_node_ids(nodes, request.edges), settings=settings)
 
     handler_registry = get_handler_registry(emit=_emit_and_sync)
@@ -7249,7 +7330,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
         raise HTTPException(status_code=400, detail=f"Subgraph contains a cycle: {exc}")
 
     # After validation, so a graph that can't run reports why, not its cost.
-    _require_run_spend_approval(run_id, sub_nodes, sub_edges, approval_id=request.approval_id,
+    await _require_run_spend_approval(run_id, sub_nodes, sub_edges, approval_id=request.approval_id,
                                 run_ids=[request.target_node_id], settings=settings)
 
     handler_registry = get_handler_registry(emit=_emit_and_sync)
@@ -7864,7 +7945,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     # each one counts in full. Checked after validation, so a request that
     # can't run doesn't count.
     spend_nodes, spend_edges = get_subgraph(request.nodes, request.edges, request.node_id)
-    _require_run_spend_approval(run_id, spend_nodes, spend_edges, run_ids=[request.node_id], passes=count,
+    await _require_run_spend_approval(run_id, spend_nodes, spend_edges, run_ids=[request.node_id], passes=count,
                                 settings=settings)
 
     # A per-shot run does not acquire the frontend's Canvas-wide ``isExecuting``
@@ -8027,8 +8108,11 @@ async def get_input_sizes(body: dict[str, Any]) -> dict:
     depends on it (model_pricing ``sizing``: SeedVR2, FLUX Video Upscale and
     Edit). ``refs`` is a list of {ref, kind: Image | Video}; each comes back
     as {width, height[, seconds, frames]} or null. Only files in the output
-    store are read, and only their headers (services/input_sizes.py); an
-    outside URL or any other path is null, never fetched or opened."""
+    store are read, by the same rule the spending check uses (the path as
+    given and its resolved path both inside the store, no ``..``, nothing
+    Nebula is still writing: services/input_sizes.py), so the canvas and the
+    check agree; an outside URL or any other path is null, never fetched or
+    opened. An inline data: image is null here (the canvas sends files)."""
     refs = body.get("refs") if isinstance(body, dict) else None
     if not isinstance(refs, list) or len(refs) > MAX_SIZE_REFS:
         raise HTTPException(status_code=400, detail=f"refs must be a list of at most {MAX_SIZE_REFS} {{ref, kind}}")
@@ -8041,7 +8125,7 @@ async def get_input_sizes(body: dict[str, Any]) -> dict:
         wanted.append((ref, kind))
 
     def measure_all() -> dict[str, Any]:
-        return {ref: input_sizes.measure(ref, kind, store_only=True) for ref, kind in wanted}
+        return {ref: input_sizes.measure(ref, kind, inline=False) for ref, kind in wanted}
 
     return {"sizes": await asyncio.to_thread(measure_all)}
 
@@ -12747,7 +12831,8 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         return await _refused_cli_run(run_id, target, errors)
 
     # Checked last: a request refused for anything else must not count.
-    _require_spend_approval(sub_nodes, sub_edges, run_id=run_id, settings=settings,
+    measured = await _measure_run_inputs(sub_nodes, sub_edges)
+    _require_spend_approval(sub_nodes, sub_edges, run_id=run_id, settings=settings, measured=measured,
                             run_ids=[target] if target else _end_node_ids(sub_nodes, sub_edges))
     _note_run(run_id)
     _note_run_nodes(run_id, sub_nodes)
@@ -13269,7 +13354,9 @@ async def quick_execute(body: dict[str, Any]) -> dict:
     ))
     # A quick run has no canvas node to propose, so point at one.
     quick_run = f"quick-{uuid4().hex}"
-    _require_spend_approval(temp_nodes, temp_edges, run_id=quick_run, on_canvas=False, settings=settings, how_to_ask=(
+    measured = await _measure_run_inputs(temp_nodes, temp_edges)
+    _require_spend_approval(temp_nodes, temp_edges, run_id=quick_run, on_canvas=False, settings=settings,
+                            measured=measured, how_to_ask=(
         f"Add it to the canvas instead (`nebula create {definition_id}`), then propose the run: "
         "`nebula propose --note \"<why>\" --run <node id>` (MCP: propose_change). "
         "The person accepts on the canvas, and the canvas runs it."
@@ -15050,17 +15137,29 @@ async def export_file(body: dict[str, Any]) -> dict:
     except OSError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
-    # Determine filename with collision avoidance
+    # Determine filename with collision avoidance. The copy goes to a
+    # dot-named temporary file and is linked into place under a name nothing
+    # holds yet, so an export never replaces a file and never shows half
+    # written (the export folder may be inside the output store, whose files
+    # the spending check measures: services/input_sizes.py). On a drive with
+    # no hard links (exFAT, FAT) link_new copies it in exclusively instead.
     stem = Path(filename).stem
     suffix = Path(filename).suffix
     dest = dest_dir / filename
     counter = 1
-    while dest.exists():
-        dest = dest_dir / f"{stem} -{counter}{suffix}"
-        counter += 1
-
     try:
-        _shutil.copy2(require_allowed_path(src), require_allowed_path(dest))
+        partial = require_allowed_path(dest_dir / f".{filename}.{uuid4().hex}.part")
+        _shutil.copy2(require_allowed_path(src), partial)
+        try:
+            while True:
+                try:
+                    link_new(partial, require_allowed_path(dest))
+                    break
+                except FileExistsError:
+                    dest = dest_dir / f"{stem} -{counter}{suffix}"
+                    counter += 1
+        finally:
+            partial.unlink(missing_ok=True)
     except OSError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 

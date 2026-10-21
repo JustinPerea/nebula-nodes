@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from handlers.video_edit import _build_filter_complex, _resolve_local_path
 from services.file_access import ProtectedPathError
 from services.ffmpeg import ffprobe_video, run_ffmpeg
-from services.output import OUTPUT_ROOT, get_run_dir
+from services.output import OUTPUT_ROOT, get_run_dir, seal_run_dir
 
 router = APIRouter(prefix="/api/video-edit", tags=["video-edit"])
 
@@ -74,6 +74,8 @@ async def preview_render(req: PreviewRenderRequest) -> PreviewRenderResponse:
         args += ["-c:a", "aac", "-b:a", "96k"]
     args += [str(output_path)]
     await run_ffmpeg(args)
+    # Whole now: a price may be measured from it (services/output.py _LIVE_RUN_DIRS).
+    seal_run_dir(preview_dir.parent)
 
     rel = output_path.relative_to(OUTPUT_ROOT)
     return PreviewRenderResponse(previewUrl=f"/api/outputs/{rel}")

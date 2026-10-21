@@ -175,13 +175,27 @@ Runs spend the person's own provider credits. A run over their limits, or
 with a node that has no list price, is refused: send it as a proposal.
 Some nodes are priced from their input file's size (SeedVR2 Upscale: $0.001
 per megapixel of the larger of input and output, rounded up; `nebula info`
-says so on its PRICE line). Nebula measures the file the run will send, so
-`nebula quick seedvr2-upscale --input image=photo.png` or an Image Input holding the file
-is checked against the limits; an input another node makes in the same run
-isn't known yet, so that run is refused: wire an Image Input with the file,
-or propose it. A file on another host (a URL) is never downloaded to price
-it either: download it and pass the local copy, or propose it. The refusal
-says which case it is.
+says so on its PRICE line). Nebula measures the file the run will send, but
+only a file in Nebula's own output folder (or an inline image): a file
+anywhere else could change between the check and the run, so a run from it
+is refused. Add your file first:
+
+```bash
+nebula upload clip.mp4     # copies it into Nebula; prints the Video Input it made (MCP: upload_file)
+nebula connect n7:video n8:video
+nebula run n8              # checked against the limits at the clip's real size
+```
+
+`nebula quick seedvr2-upscale --input image=photo.png` works too for an
+image (quick copies a local image into Nebula first, not a clip). An image
+over 20 MB, one Nebula can't recognise, or a clip over 500 MB can't be
+added at all: propose that run. An input
+another node makes in the same run isn't known yet, so that run is refused:
+wire an Image Input or Video Input holding the file, or propose it. A file
+on another host (a URL) is never downloaded to price it either: download it,
+`nebula upload` the local copy, or propose it. A clip with more than one
+video stream, or an image with more than one frame or size, isn't measured
+(propose it). The refusal says which case it is.
 
 `nebula cancel` stops runs an agent or the CLI started. A run the person
 started from the canvas is theirs to stop: the CLI refuses it, so tell them
@@ -548,6 +562,9 @@ shows now (null when the project has none).
 nebula save graph.json
 nebula load graph.json         # replaces the canvas: open a new project first
 ```
+
+`nebula save` replaces only an earlier saved graph; it won't write over any
+other file (an image or clip, say).
 
 ## Port types
 

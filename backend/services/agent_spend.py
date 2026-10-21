@@ -103,7 +103,10 @@ the size the caller measured (``sizes``, services/input_sizes.py), at the
 top of whatever range results. When the input doesn't exist yet (its
 upstream node runs in this same request), the node is unpriced, and the
 refusal says what makes it priced: an Image or Video Input holding the
-file, `nebula quick` on the file, or a proposal.
+file, `nebula quick` on the file, or a proposal. Only a file in Nebula's
+output folder (or an inline image) is measured, since one anywhere else
+could change between the check and the run (input_sizes OUTSIDE): the
+refusal says to add it first (`nebula upload`, MCP upload_file).
 
 Nodes that made no provider request get their share of the count back, since
 they can't have cost anything:
@@ -601,31 +604,60 @@ _NO_LIMIT_CHECK = "so it can't check this run against the spending limits set in
 def _awaiting_reasons(
     awaiting: list[str], why: Mapping[str, str], labels: Mapping[str, str],
     definition_of: Mapping[str, str], pricing: Mapping[str, Any],
+    definitions: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> list[str]:
     """One sentence per reason the nodes priced from their input's size have
     no size here (input_sizes.run_input_sizes ``reasons``): each says what to
-    do instead, and none suggests the step that just failed."""
+    do instead, and none suggests the step that just failed.
+
+    Adding a local file to Nebula first is `nebula upload <file>` (MCP:
+    upload_file): Nebula's own copy is in its output folder, the only place
+    a price is measured from (services/input_sizes.py). `nebula quick` is
+    offered on a local file only for an image port and only for PENDING and
+    REMOTE: /api/quick copies a local image into Nebula before the check
+    (never a clip), and an image that is OUTSIDE is one that copy (the same
+    one every run route makes) already refused, so OUTSIDE names the
+    upload's limits instead."""
     from services import input_sizes
 
     groups: dict[str, list[str]] = {}
     for node_id in awaiting:
         groups.setdefault(why.get(node_id) or input_sizes.PENDING, []).append(node_id)
+    upload = ("`nebula upload <file>` (MCP: upload_file) copies it into Nebula's output folder and puts an "
+              "Image Input or Video Input holding the copy on the canvas; wire that into the node and run it")
     sentences = []
     for reason, ids in groups.items():
         first = definition_of.get(ids[0], "")
         port = next(iter(sorted(model_pricing.sizing_ports((pricing.get("nodes") or {}).get(first)))), "image")
+        port_type = next((str(spec.get("dataType") or "") for spec in ((definitions or {}).get(first) or {})
+                          .get("inputPorts") or [] if isinstance(spec, Mapping) and spec.get("id") == port), "")
+        image_port = port_type != "Video"
         names = f"Nebula prices {_names(ids, labels)} from the size of its input"
         if reason == input_sizes.REMOTE:
+            quick = (f", or run `nebula quick {first} --input {port}=<local file path>`" if image_port else "")
             sentences.append(
                 f"{names}, and that input is a file on another host: Nebula never downloads a file to price it, "
-                f"{_NO_LIMIT_CHECK} To run it within the limits, download the file and use the local copy: wire an "
-                "Image Input (or Video Input) holding it into the node, or run "
-                f"`nebula quick {first} --input {port}=<local file path>`; otherwise propose it.")
+                f"{_NO_LIMIT_CHECK} To run it within the limits, download the file and add the local copy to "
+                f"Nebula: {upload}{quick}; otherwise propose it.")
+        elif reason == input_sizes.OUTSIDE:
+            # Every run route has already tried to copy an outside image in
+            # (main._import_external_image_to_output_root), so an image is
+            # still outside only when that refused it; the upload refuses the
+            # same files. No `nebula quick` here: it is that same import.
+            limit = (" An image over 20 MB, or one Nebula can't recognise as an image, can't be added this way: "
+                     "the upload refuses it, and the run already tried to copy it in."
+                     if image_port else
+                     " A clip over 500 MB can't be added this way: the upload refuses it.")
+            sentences.append(
+                f"{names}, and that input is a local file outside Nebula's output folder, which could change "
+                f"after the check: Nebula doesn't price a run from such a file, {_NO_LIMIT_CHECK} To run it within "
+                f"the limits, add it to Nebula first: {upload}.{limit} Otherwise propose it.")
         elif reason == input_sizes.UNREADABLE:
             sentences.append(
                 f"{names}, and Nebula couldn't read that file's size (it is missing, isn't an image or video Nebula "
-                f"can open, or is outside the folders Nebula may read), {_NO_LIMIT_CHECK} Point the input at a "
-                "readable image or video file and run it again, or propose it.")
+                "can measure, such as one with more than one frame, size or video stream, or is outside the "
+                f"folders Nebula may read), {_NO_LIMIT_CHECK} Point the input at a readable image or video file "
+                "and run it again, or propose it.")
         elif reason == input_sizes.WIRES:
             sentences.append(
                 f"{names}, and more than one input is wired into its {port} port, so Nebula can't tell which "
@@ -635,12 +667,14 @@ def _awaiting_reasons(
                 f"{names}, and nothing wired into its {port} port gives it a file, {_NO_LIMIT_CHECK} Wire an "
                 "Image Input (or Video Input) holding the file into it, or propose it.")
         else:
+            quick = (f", or run it on the file with `nebula quick {first} --input {port}=<file>`"
+                     if image_port else "")
             sentences.append(
                 f"{names}, and that image or video doesn't exist yet (the node that makes it runs in this same "
-                f"run, or hasn't run), {_NO_LIMIT_CHECK} To run it within the limits, wire an Image Input (or "
-                "Video Input) holding the file into it and run that, or run it on the file with "
-                f"`nebula quick {first} --input {port}=<file>`; otherwise propose it (once the node that makes "
-                "the input has run, a proposal is priced from that output).")
+                f"run or hasn't run, or Nebula is still writing it), {_NO_LIMIT_CHECK} To run it within the "
+                f"limits, wire an Image Input (or Video Input) holding the file into it: {upload}{quick}; "
+                "otherwise propose it (once the node that makes the input has run, a proposal is priced from "
+                "that output).")
     return sentences
 
 
@@ -672,8 +706,8 @@ def decide(
     variations). ``sizes`` are the measured inputs of nodes priced by their
     input's size (input_sizes.run_input_sizes), and ``size_reasons`` why
     each of the others wasn't measured (its ``reasons``), so the refusal says
-    what is true: still to be made, a file on another host, unreadable, or not
-    one wire."""
+    what is true: still to be made, a file on another host, a local file
+    outside Nebula's output folder, unreadable, or not one wire."""
     if isinstance(passes, bool) or not isinstance(passes, int) or passes < 1:
         raise ValueError("passes must be a positive whole number")
     threshold = threshold_from_settings(settings)
@@ -727,7 +761,8 @@ def decide(
             reasons.append(f"Nebula has no list price for {_names(unlisted, labels)}, "
                            "so it can't check this run against the spending limits set in Nebula Settings.")
         if awaiting:
-            reasons.extend(_awaiting_reasons(awaiting, size_reasons or {}, labels, definition_of, pricing))
+            reasons.extend(_awaiting_reasons(awaiting, size_reasons or {}, labels, definition_of, pricing,
+                                              definitions))
         return refuse(" ".join(reasons))
 
     # Per run: each model with its own limit, then everything else against the general one.

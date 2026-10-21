@@ -42,7 +42,7 @@ NEBULA_MCP_TOOLS = (
     "start_here", "get_selected_nodes", "look_at_canvas", "resolve_pin", "post_note", "list_notes", "point_at",
     "wait_for_canvas_change",
     "propose_change", "get_proposal", "withdraw_proposal",
-    "find_nodes", "describe_node", "edit_canvas", "remove_from_canvas", "undo_canvas_edit",
+    "find_nodes", "describe_node", "edit_canvas", "remove_from_canvas", "undo_canvas_edit", "upload_file",
     "run_nodes", "get_run", "cancel_run", "view_output", "get_spend_limits",
     "list_projects", "open_project", "new_project",
     "list_trash", "restore_from_trash",

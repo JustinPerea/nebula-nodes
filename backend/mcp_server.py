@@ -871,6 +871,28 @@ def describe_node(definition_id: str, ctx: Context | None = None) -> dict[str, A
     return _canvas_call("GET", f"/api/agent/nodes/{quote(definition_id, safe='')}", ctx)
 
 
+@_tool(annotations=_EDIT, waits=True)
+def upload_file(path: str, ctx: Context | None = None) -> dict[str, Any]:
+    """Add a local image or video to Nebula (`nebula upload <file>`): Nebula
+    copies it into its output folder and puts an Image Input or Video Input
+    holding the copy on the canvas. Returns `nodeId` (wire it into a node with
+    edit_canvas), `kind`, `url` ("/api/outputs/...") and `filePath`.
+
+    Do this before running a node priced from its input's size (SeedVR2,
+    FLUX Video Upscale) on a file of yours: the spending check measures only
+    files in Nebula's output folder, since one anywhere else could change
+    after the check, so a run from it is refused. PNG, JPEG, GIF, WebP, MP4,
+    MOV, WebM, PDF or text; 20 MB for an image, 500 MB for a clip. An in-app
+    chat's turn reads only its own workspace; a relative path means that
+    workspace. Download a web file first; this takes local files only."""
+    import upload_client
+
+    try:
+        return upload_client.upload(_api(), path, headers=_board_headers(ctx))
+    except upload_client.UploadError as exc:
+        raise RuntimeError(str(exc)) from exc
+
+
 @_tool(annotations=_EDIT)
 def edit_canvas(
     note: str = "",
@@ -1162,9 +1184,10 @@ async def run_nodes(node_id: str | None = None, wait_seconds: float = DEFAULT_RU
     over one, or a node has no list price, it is refused with what to do:
     usually send the same nodes as propose_change with `run`. A node priced
     from its input file's size (SeedVR2 Upscale) is checked at the size of
-    the file it gets; an input another node makes in this same run isn't
-    known yet, so wire an Image Input holding the file into it, or propose
-    it. Waits up to
+    the file it gets, measured only in Nebula's output folder (add a file
+    of yours with upload_file first); an input another node makes in this
+    same run isn't known yet, so wire an Image Input holding the file into
+    it, or propose it. Waits up to
     `wait_seconds` (max 300). Finished: outputs per node, errors, `skipped`
     (nodes a gate such as Jev Decide's On Pass / On Fail withheld, with
     the reason; they never ran and cost nothing), and small previews of
