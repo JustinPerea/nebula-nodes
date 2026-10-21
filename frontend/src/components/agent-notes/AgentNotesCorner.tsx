@@ -5,23 +5,27 @@ import {
   DEFAULT_AGENT_COLOR,
   isUnread,
   READER_COLOR,
+  surfaceKey,
   type AgentNote,
   type AgentNoteAction,
   type AgentNoteAuthor,
   type AgentNotesSurface,
 } from '../../lib/agentNotes';
-import { cornerRight, roomBelow, type Box } from '../../lib/agentNotesView';
+import { cornerRight, roomBelow, showLabel, type Box } from '../../lib/agentNotesView';
 import { springCssVars, springLinear, SPRING_SOFT } from '../../lib/springs';
 import { viewportRevealing } from '../../lib/canvasFit';
 import { springViewport } from '../../lib/viewportSpring';
 import { selectCanvasList, useAgentNotesStore, type SurfaceList } from '../../store/agentNotesStore';
+import { hydrateBoard, selectBoardList, setBoardInView } from '../../lib/agentNotesBoard';
+import { wsClient } from '../../lib/wsClient';
+import { useBoardCanvasStore } from '../../store/boardCanvasStore';
 import { useCanvasProposalsStore } from '../../store/canvasProposalsStore';
 import { reviewAssetProposal } from '../../lib/assetProposalReview';
 import { goToCanvas, onCanvas, whenReady } from '../../lib/goToCanvas';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { AgentNoteCard, AgentNotesSummaryCard } from './AgentNoteCard';
-import { AgentNotesList } from './AgentNotesList';
+import { AgentNotesList, type AgentNotesListSection } from './AgentNotesList';
 import { AuthorDot, type AgentNotesAdapter } from './AgentNoteParts';
 import { UPDATES_SLOT_EVENT } from './UpdatesSlot';
 import './agentNotes.css';
@@ -252,25 +256,58 @@ function chipAuthors(notes: AgentNote[]): { agent: AgentNoteAuthor; reader: Agen
   return { agent, reader };
 }
 
-/**
- * The Updates corner: the chip, the card that drops for each new update, and
- * the list it opens. One component for every surface; each passes an adapter
- * (`AgentNotesAdapter`). The main canvas mounts it in its own top-right spot
- * (`AppAgentNotes`, which also mounts it on every other screen, over
- * that screen's header slot); it keeps left of the chat panel when the chat's rect
- * reaches it.
- */
-export function AgentNotesCorner({
-  surface,
-  listKey,
-  list,
-  adapter,
-}: {
+/** One list the corner shows: the open project's, and in Moodboard Studio the open board's (Q113 c). */
+export interface AgentNotesCornerSection extends AgentNotesListSection {
   surface: AgentNotesSurface;
+  /** The store key (`canvas:<projectId>`, `board:<boardId>`). */
   listKey: string;
   list: SurfaceList;
-  adapter: AgentNotesAdapter;
-}) {
+}
+
+/** The section holding update `id`, read from the store now (a socket message may be newer than props). */
+function sectionHolding(sections: AgentNotesCornerSection[], id: string): AgentNotesCornerSection | null {
+  const { lists } = useAgentNotesStore.getState();
+  return sections.find((section) => (lists[section.listKey] ?? section.list).notes.some((n) => n.id === id)) ?? null;
+}
+
+function liveNote(sections: AgentNotesCornerSection[], id: string): AgentNote | null {
+  const { lists } = useAgentNotesStore.getState();
+  for (const section of sections) {
+    const found = (lists[section.listKey] ?? section.list).notes.find((n) => n.id === id);
+    if (found) return found;
+  }
+  return null;
+}
+
+/** Lists that are each newest first, merged newest first by time; each list keeps its own order. */
+function mergeNewestFirst(lists: AgentNote[][]): AgentNote[] {
+  const filled = lists.filter((notes) => notes.length > 0);
+  if (filled.length <= 1) return filled[0] ?? [];
+  const at = filled.map(() => 0);
+  const merged: AgentNote[] = [];
+  for (;;) {
+    let pick = -1;
+    filled.forEach((notes, index) => {
+      const next = notes[at[index]];
+      if (next && (pick < 0 || next.at > filled[pick][at[pick]].at)) pick = index;
+    });
+    if (pick < 0) return merged;
+    merged.push(filled[pick][at[pick]]);
+    at[pick] += 1;
+  }
+}
+
+/**
+ * The Updates corner: the chip, the card that drops for each new update, and
+ * the list it opens. One component for every surface; each list it shows is
+ * a section with its own adapter (`AgentNotesAdapter`). The main canvas
+ * mounts it in its own top-right spot (`AppAgentNotes`, which also mounts it
+ * on every other screen, over that screen's header slot); it keeps left of
+ * the chat panel when the chat's rect reaches it. In Moodboard Studio it
+ * shows the open board's Updates above the project's (Q113 c): one chip,
+ * one count, and opening the list reads both.
+ */
+export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSection[] }) {
   const markRead = useAgentNotesStore((s) => s.markRead);
   const markReadIds = useAgentNotesStore((s) => s.markReadIds);
   const dismiss = useAgentNotesStore((s) => s.dismiss);
@@ -295,6 +332,12 @@ export function AgentNotesCorner({
   const chipRef = useRef<HTMLButtonElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
+  // The lists as last rendered, for the socket's and the timers' callbacks.
+  const sectionsRef = useRef(sections);
+  useLayoutEffect(() => {
+    sectionsRef.current = sections;
+  }, [sections]);
+  const listKeys = sections.map((section) => section.listKey).join('|');
 
   useEffect(() => {
     openRef.current = open;
@@ -303,17 +346,23 @@ export function AgentNotesCorner({
   // New updates: into the open list (read as they arrive), or queued to drop.
   useEffect(() => {
     const handle = () => {
-      const ids = useAgentNotesStore.getState().takeArrivals(listKey);
-      if (ids.length === 0) return;
+      const store = useAgentNotesStore.getState();
+      const arrived: string[] = [];
+      for (const section of sectionsRef.current) {
+        const ids = store.takeArrivals(section.listKey);
+        if (ids.length === 0) continue;
+        arrived.push(...ids);
+        if (openRef.current) void store.markRead(section.surface, ids[ids.length - 1]);
+      }
+      if (arrived.length === 0) return;
       setPop((value) => value + 1);
       if (openRef.current) {
-        setNewCount((value) => value + ids.length);
-        void useAgentNotesStore.getState().markRead(surface, ids[ids.length - 1]);
+        setNewCount((value) => value + arrived.length);
         return;
       }
       // Nobody is looking: no drop. The count still rises.
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      setQueue((current) => [...current, ...ids]);
+      setQueue((current) => [...current, ...arrived]);
     };
     const unsubscribe = useAgentNotesStore.subscribe(handle);
     const first = window.setTimeout(handle, 0);
@@ -321,18 +370,20 @@ export function AgentNotesCorner({
       unsubscribe();
       window.clearTimeout(first);
     };
-  }, [listKey, surface]);
+  }, [listKeys]);
 
   // One card at a time; four or more waiting become one summary card.
   const gatherFrom = useRef<number | null>(null);
   useEffect(() => {
     if (queue.length === 0) gatherFrom.current = null;
+    const unread = (id: string) => {
+      const found = liveNote(sectionsRef.current, id);
+      return Boolean(found && isUnread(found));
+    };
     // A slower burst (an MCP agent's posts land 1 to 3 s apart): the card up
     // and those waiting behind it fold into one summary card once they reach
     // four, unless the pointer or focus is on the card.
     if (card?.kind === 'note' && !leaving && !holdRef.current && queue.length > 0) {
-      const notes = (useAgentNotesStore.getState().lists[listKey] ?? list).notes;
-      const unread = (id: string) => notes.some((n) => n.id === id && isUnread(n));
       const live = queue.filter(unread);
       if (!unread(card.id) || live.length + 1 < SUMMARY_AT) return;
       const fold = window.setTimeout(() => {
@@ -347,8 +398,7 @@ export function AgentNotesCorner({
     const wait = Math.min(GATHER_MS, Math.max(0, gatherFrom.current + MAX_GATHER_MS - now));
     const timer = window.setTimeout(() => {
       gatherFrom.current = null;
-      const notes = (useAgentNotesStore.getState().lists[listKey] ?? list).notes;
-      const live = queue.filter((id) => notes.some((n) => n.id === id && isUnread(n)));
+      const live = queue.filter(unread);
       holdRef.current = false;
       setLeaving(false);
       if (live.length >= SUMMARY_AT) {
@@ -362,26 +412,24 @@ export function AgentNotesCorner({
       }
     }, wait);
     return () => window.clearTimeout(timer);
-  }, [card, leaving, queue, list, listKey]);
+  }, [card, leaving, queue]);
 
   // The card leaves by itself after its hold, unless hovered or focused.
   useEffect(() => {
     if (!card || leaving) return;
     let remaining = CARD_HOLD_MS;
     const timer = window.setInterval(() => {
-      if (card.kind === 'note') {
-        const notes = (useAgentNotesStore.getState().lists[listKey] ?? { notes: [] }).notes;
-        if (!notes.some((n) => n.id === card.id)) {
-          setCard(null);
-          return;
-        }
+      // Its list left the corner (the Studio closed), or the update left its list.
+      if (card.kind === 'note' && !liveNote(sectionsRef.current, card.id)) {
+        setCard(null);
+        return;
       }
       if (holdRef.current) return;
       remaining -= HOLD_TICK_MS;
       if (remaining <= 0) setLeaving(true);
     }, HOLD_TICK_MS);
     return () => window.clearInterval(timer);
-  }, [card, leaving, listKey]);
+  }, [card, leaving]);
 
   useEffect(() => {
     if (!card || !leaving) return;
@@ -392,11 +440,17 @@ export function AgentNotesCorner({
     return () => window.clearTimeout(timer);
   }, [card, leaving]);
 
-  const cardNote = card?.kind === 'note' ? list.notes.find((n) => n.id === card.id) ?? null : null;
+  const cardSection = card?.kind === 'note'
+    ? sections.find((section) => section.list.notes.some((n) => n.id === card.id)) ?? null
+    : null;
+  const cardNote = card?.kind === 'note' && cardSection
+    ? cardSection.list.notes.find((n) => n.id === card.id) ?? null
+    : null;
+  const cardOutlines = cardSection?.adapter.outlines !== false;
 
   // Outline what the card names while it is up; they fade out with it.
   useEffect(() => {
-    if (!cardNote || leaving || open) return;
+    if (!cardNote || !cardOutlines || leaving || open) return;
     setOutline('card', {
       refs: cardNote.refs,
       color: cardNote.author.color,
@@ -404,7 +458,7 @@ export function AgentNotesCorner({
       staggerMs: CARD_OUTLINE_STAGGER_MS,
     });
     return () => setOutline('card', null);
-  }, [cardNote, leaving, open, setOutline]);
+  }, [cardNote, cardOutlines, leaving, open, setOutline]);
 
   // The open list takes focus, so Escape and Tab start there.
   useEffect(() => {
@@ -424,8 +478,11 @@ export function AgentNotesCorner({
     setNewCount(0);
     setQueue([]);
     if (card) setLeaving(true);
-    const newest = list.notes[0];
-    if (newest && list.unread > 0) void markRead(surface, newest.id);
+    // Opening reads every list it shows (the board's and the project's).
+    for (const section of sections) {
+      const newest = section.list.notes[0];
+      if (newest && section.list.unread > 0) void markRead(section.surface, newest.id);
+    }
   }
 
   // A click outside closes the list.
@@ -480,8 +537,10 @@ export function AgentNotesCorner({
   }, [open, card]);
 
   function runAction(note: AgentNote, action: AgentNoteAction) {
+    const section = sectionHolding(sectionsRef.current, note.id);
+    if (!section) return;
     void Promise.resolve()
-      .then(() => adapter.runAction(note, action))
+      .then(() => section.adapter.runAction(note, action))
       .then(() => {
         // Review took the person to the strip: the list steps aside. (A
         // Review that fails keeps the list open, with its reason.)
@@ -494,9 +553,19 @@ export function AgentNotesCorner({
 
   function show(note: AgentNote) {
     if (note.refs.length === 0) return;
-    // From another screen Show opens the canvas: the list steps aside for it.
-    if (!onCanvas() && openRef.current) closeList(false);
-    adapter.show(note);
+    const section = sectionHolding(sectionsRef.current, note.id);
+    if (!section) return;
+    // Show that opens another screen (the canvas from elsewhere): the list
+    // steps aside for it. On the same screen it stays open.
+    if (section.adapter.showLeaves?.() && openRef.current) closeList(false);
+    section.adapter.show(note);
+  }
+
+  function hover(note: AgentNote | null) {
+    const outlines = note ? sectionHolding(sectionsRef.current, note.id)?.adapter.outlines !== false : false;
+    setOutline('hover', note && outlines && note.refs.length > 0
+      ? { refs: note.refs, color: note.author.color, delayMs: 0, staggerMs: 0 }
+      : null);
   }
 
   const hold = {
@@ -506,9 +575,11 @@ export function AgentNotesCorner({
     onBlur: () => { holdRef.current = false; },
   };
 
-  const notes = list.notes;
+  // Every list's updates, newest first, for the chip's colour and dots.
+  const notes = useMemo(() => mergeNewestFirst(sections.map((section) => section.list.notes)), [sections]);
+  const unread = sections.reduce((sum, section) => sum + section.list.unread, 0);
   const newest = notes[0]?.author.color ?? DEFAULT_AGENT_COLOR;
-  const count = open ? 0 : list.unread;
+  const count = open ? 0 : unread;
   const authors = chipAuthors(notes);
   const unreadKinds = new Set(notes.filter(isUnread).map((n) => n.author.kind));
   const ringed = Boolean(card) && !leaving && !open;
@@ -547,17 +618,17 @@ export function AgentNotesCorner({
         </span>
       </button>
 
-      {card && !open && cardNote && (
+      {card && !open && cardNote && cardSection && (
         <AgentNoteCard
           key={cardNote.id}
           note={cardNote}
-          adapter={adapter}
+          adapter={cardSection.adapter}
           leaving={leaving}
           cardRef={cardRef}
           hold={hold}
-          onRead={() => { if (isUnread(cardNote)) void markReadIds(surface, [cardNote.id]); }}
+          onRead={() => { if (isUnread(cardNote)) void markReadIds(cardSection.surface, [cardNote.id]); }}
           onDismiss={() => {
-            void dismiss(surface, cardNote.id);
+            void dismiss(cardSection.surface, cardNote.id);
             setLeaving(true);
           }}
           onAction={(action) => runAction(cardNote, action)}
@@ -579,10 +650,9 @@ export function AgentNotesCorner({
       {open && (
         <AgentNotesList
           listRef={listRef}
-          notes={notes}
+          sections={sections}
           newCount={newCount}
           now={now}
-          adapter={adapter}
           error={error}
           onClose={closeList}
           onSeeAll={agentLogEnabled ? () => {
@@ -594,9 +664,7 @@ export function AgentNotesCorner({
           } : null}
           onAction={runAction}
           onShow={show}
-          onHover={(note) => setOutline('hover', note && note.refs.length > 0
-            ? { refs: note.refs, color: note.author.color, delayMs: 0, staggerMs: 0 }
-            : null)}
+          onHover={hover}
         />
       )}
     </div>
@@ -672,6 +740,8 @@ function useAppAdapter(keptWith: string): AgentNotesAdapter {
     return {
       keptWith,
       showLabel: () => 'Show on canvas',
+      // From another screen Show opens the canvas: the list steps aside for it.
+      showLeaves: () => !onCanvas(),
       show: (note) => {
         const request = ++showRequest.current;
         if (onCanvas()) {
@@ -710,30 +780,99 @@ function useAppAdapter(keptWith: string): AgentNotesAdapter {
 }
 
 /**
+ * The board open in Moodboard Studio (Q113 c): its updates name images, drawn
+ * with their numbers now; Show selects and frames their cards in the Board
+ * view (the Studio answers `requestShow`). The board's edit actions (a run's
+ * undo, Restore, a suggestion's Make frame / Not now, a board proposal's
+ * Accept / Reject) have no route on main yet, so they say so and run nothing.
+ */
+function useBoardAdapter(boardId: string | null, imageIds: readonly string[]): AgentNotesAdapter {
+  const order = imageIds.join('\n');
+  return useMemo<AgentNotesAdapter>(() => {
+    const numbers = new Map((order ? order.split('\n') : []).map((id, index) => [id, index + 1] as const));
+    const numberFor = (ref: string) => numbers.get(ref) ?? null;
+    return {
+      keptWith: 'kept with this board',
+      numberFor,
+      // The canvas's outline layer draws nodes; a board's refs are images.
+      outlines: false,
+      showLeaves: () => false,
+      showLabel: (note) => showLabel(note, { surface: 'board', numberFor }),
+      show: (note) => {
+        const onBoard = note.refs.filter((ref) => numbers.has(ref));
+        if (!boardId) return;
+        if (onBoard.length === 0) {
+          useAgentNotesStore.setState({ error: 'What this update names is no longer on the board.' });
+          return;
+        }
+        useBoardCanvasStore.getState().requestShow(boardId, onBoard);
+      },
+      runAction: async (_note, action) => {
+        throw new Error(`"${action.label}" can't run here yet.`);
+      },
+    };
+  }, [boardId, order]);
+}
+
+const NO_IMAGES: string[] = [];
+
+/**
  * The Updates corner on every screen (Justin's Q107 a, 2026-10-21: "Show it
  * on every screen, with the open project's Updates"). App mounts one for
  * all screens, so the open list, the card and the count carry across a
- * screen switch. The list is always the open project's (the canvas surface,
- * kept with the project). Hidden while no project is open: a first start on
+ * screen switch. The list is the open project's (the canvas surface, kept
+ * with the project). Hidden while no project is open: a first start on
  * Projects with no project yet has no list to show. On the canvas it holds
  * its own top-right corner (PR9a); elsewhere it sits over the slot that
  * screen's header keeps for it.
+ *
+ * In Moodboard Studio on a saved board (Justin's Q113 c, 2026-10-21: "Two
+ * sections in one list: "This board" first, then the project. One chip with
+ * one count (both added), opening it reads both, and an empty board section
+ * is hidden.") the board's own Updates come first. Only there: every other
+ * screen keeps the project's list alone. A board with Updates shows its list
+ * even with no project open; with neither, there is no corner.
  */
 export function AppAgentNotes() {
   const list = useAgentNotesStore(selectCanvasList);
   const projectId = useAgentNotesStore((s) => s.canvasProjectId);
   const inWorkspace = useProjectStore((s) => s.screen === 'workspace');
   const canvas = useUIStore((s) => s.viewMode === 'canvas' || (s.viewMode === 'commons' && !s.commonsEnabled));
+  const inStudio = useUIStore((s) => s.viewMode === 'moodboard-editor');
   // Off the canvas "this project" is unclear (Projects lists them all): name it.
   const projectName = useProjectStore((s) => (s.activeProject?.id === projectId ? s.activeProject?.name : null));
   const adapter = useAppAdapter(inWorkspace && canvas || !projectName ? 'kept with this project' : `kept with ${projectName}`);
-  const shown = inWorkspace || projectId !== null;
+  const studioBoard = useBoardCanvasStore((s) => s.studioBoard);
+  const boardId = inStudio && studioBoard ? studioBoard.boardId : null;
+  const boardList = useAgentNotesStore((s) => selectBoardList(s, boardId));
+  const boardAdapter = useBoardAdapter(boardId, boardId ? studioBoard!.imageIds : NO_IMAGES);
+  const projectShown = inWorkspace || projectId !== null;
+  const boardShown = boardId !== null && boardList.notes.length > 0;
+  const shown = projectShown || boardShown;
   const reserved = shown && inWorkspace && canvas;
 
   // Off the canvas nothing else asks for the list: load it here.
   useEffect(() => {
     if (!list.loaded) void useAgentNotesStore.getState().hydrateCanvas();
   }, [list.loaded]);
+
+  // The board the Studio has open: its list, and its cards from now on.
+  useEffect(() => {
+    setBoardInView(boardId);
+    if (boardId) void hydrateBoard(boardId);
+  }, [boardId]);
+  useEffect(() => () => setBoardInView(null), []);
+  // The backend replays no board Updates on (re)connect, only the canvas's
+  // sync; and a read or dismiss the server refused leaves the list unsure.
+  // Either way, read the open board's list again.
+  const error = useAgentNotesStore((s) => s.error);
+  useEffect(() => {
+    if (!boardId) return;
+    if (error) void hydrateBoard(boardId);
+    return wsClient.subscribe((event) => {
+      if (event.type === 'socketReconnected') void hydrateBoard(boardId);
+    });
+  }, [boardId, error]);
 
   // Screens keep a header slot for the chip while it shows (layouts.css).
   useEffect(() => {
@@ -749,14 +888,19 @@ export function AppAgentNotes() {
     return () => document.body.classList.remove('agent-notes-reserved');
   }, [reserved]);
 
+  const sections = useMemo(() => {
+    const result: AgentNotesCornerSection[] = [];
+    if (boardShown && boardId) {
+      result.push({ id: 'board', title: 'This board', surface: { kind: 'board', boardId },
+        listKey: surfaceKey({ kind: 'board', boardId }), list: boardList, notes: boardList.notes, adapter: boardAdapter });
+    }
+    if (projectShown) {
+      result.push({ id: 'project', title: 'This project', surface: CANVAS_SURFACE,
+        listKey: `canvas:${projectId ?? ''}`, list, notes: list.notes, adapter });
+    }
+    return result;
+  }, [boardShown, boardId, boardList, boardAdapter, projectShown, projectId, list, adapter]);
+
   if (!shown) return null;
-  return (
-    <AgentNotesCorner
-      key={projectId ?? ''}
-      surface={CANVAS_SURFACE}
-      listKey={`canvas:${projectId ?? ''}`}
-      list={list}
-      adapter={adapter}
-    />
-  );
+  return <AgentNotesCorner key={projectId ?? ''} sections={sections} />;
 }

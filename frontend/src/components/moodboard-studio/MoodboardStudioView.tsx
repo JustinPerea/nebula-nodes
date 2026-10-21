@@ -353,6 +353,32 @@ export function MoodboardStudioView() {
   const announced = useRef(0);
   const draftNow = useCallback(() => useAssetStudioDraftStore.getState().entries[resolveAssetStudioDraftKey(
     useAssetStudioDraftStore.getState(), key)]?.draft as MoodboardDraft | undefined, [key]);
+
+  // The board's own Updates (Justin's Q113 c): the corner shows them under
+  // "This board" while this saved board is open. Say which board that is,
+  // with its images in board order (their numbers), and forget it on leaving.
+  const imageOrder = draft.images.map((image) => image.id).join('\n');
+  useEffect(() => {
+    useBoardCanvasStore.getState().setStudioBoard(loaded && savedId
+      ? { boardId: savedId, boardKey: key, imageIds: imageOrder ? imageOrder.split('\n') : [] }
+      : null);
+  }, [loaded, savedId, key, imageOrder]);
+  useEffect(() => () => useBoardCanvasStore.getState().setStudioBoard(null), []);
+  // An Update's Show ("Show #37", "Show on board"): the Board view, with the
+  // cards of the images it names selected and framed. It writes nothing.
+  const showRequest = useBoardCanvasStore((state) => state.showRequest);
+  useEffect(() => {
+    if (!showRequest || !loaded || !savedId || showRequest.boardId !== savedId) return;
+    const boards = useBoardCanvasStore.getState();
+    useBoardCanvasStore.setState({ showRequest: null });
+    const wanted = new Set(showRequest.imageIds);
+    const cards = (draftNow()?.images ?? []).filter((image) => wanted.has(image.id))
+      .flatMap((image) => (image.placements ?? []).map((card) => card.id));
+    if (cards.length === 0) return;
+    boards.setView('board');
+    boards.setSelection(key, cards);
+    boards.requestFrame(key, cards);
+  }, [showRequest, loaded, savedId, key, draftNow]);
   const moveDraft = useCallback((board: Moodboard, sent?: ReadonlySet<MoodboardOp>,
     asSent?: Partial<Record<BoardFieldKey, unknown>>) => {
     const store = useAssetStudioDraftStore.getState();

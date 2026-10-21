@@ -329,9 +329,10 @@ And these canvas tools:
   suggestion, and read the list back. The person reads them under
   **Updates** in the top right of every screen (the canvas, Projects, the
   studios, the Commons), saved with the project. Updates posted with
-  `board` are kept with that board for `list_notes`, but they are not on
-  screen yet, so post without `board` to reach the person. See
-  [Updates](#updates).
+  `board` are kept with that board: the person sees them in Moodboard
+  Studio's corner under "This board" (above the project's) while that board
+  is open, and on no other screen, so post without `board` to reach the
+  person anywhere. See [Updates](#updates).
 - `wait_for_canvas_change`: blocks until the person (or another agent)
   changes the canvas, then returns what changed and who did it. It skips
   your own edits. When the person undoes your edit with Cmd+Z, the events
@@ -697,14 +698,18 @@ time and a "Show on canvas" button that frames what it names (from another
 screen it opens the canvas first). Updates are saved with the project (beside the
 canvas snapshot, like pins, so autosave never touches them) and switch with
 it. A moodboard's (posted with `board` / `--board`) are saved beside the board
-(`<moodboards>/.notes/<id>.json`, never in the board file), but they are not on
-screen yet: the corner shows only the open project's list, even in Moodboard
-Studio on that board. You read them back with `list_notes(board=...)` or
-`nebula notes --board <name>`; leave out `board` to reach the person.
+(`<moodboards>/.notes/<id>.json`, never in the board file). While the person
+has that board open in Moodboard Studio, the corner's list shows them first,
+under "This board" ("kept with this board"), then the project's, with one
+count for both; opening the list reads both, and with no board updates the
+list is just the project's. "Show #12" / "Show on board" selects and frames
+the images on the board. Every other screen shows only the project's list,
+so leave out `board` to reach the person anywhere. You read them back with
+`list_notes(board=...)` or `nebula notes --board <name>`.
 
 ```bash
 nebula note "The two portrait branches use different seeds; I'll match them" --node n4 --node n7
-nebula note "#12 reads painterly and dither" --board Dusk --ref 12   # kept with the board, not on screen yet
+nebula note "#12 reads painterly and dither" --board Dusk --ref 12   # shown in Moodboard Studio on Dusk, under This board
 nebula note "You moved the lake into Painterly" --board Dusk --since-last-turn
 nebula notes --unread                                   # the list, newest first
 ```

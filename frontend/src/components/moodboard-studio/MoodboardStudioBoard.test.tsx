@@ -162,7 +162,7 @@ beforeEach(() => {
   });
   useAssetStudioDraftStore.setState({ entries: {}, aliases: {} });
   useBoardUndoStore.setState({ histories: {} });
-  useBoardCanvasStore.setState({ view: 'list', selection: {}, viewports: {} });
+  useBoardCanvasStore.setState({ view: 'list', selection: {}, viewports: {}, studioBoard: null, showRequest: null, frameRequest: null });
   try { window.localStorage.removeItem(MOODBOARD_VIEW_KEY); } catch { /* jsdom */ }
   setOpenProject(['p1', 'Project']);
 });
@@ -487,5 +487,33 @@ describe("the Studio's keys", () => {
     press('Delete');
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(server.edits).toEqual([]);
+  });
+});
+
+describe('the board\'s Updates in the corner (Q113 c)', () => {
+  it('the Studio says which saved board is open, with its images in board order, and forgets it on leaving', async () => {
+    await openStudio();
+    await waitFor(() => expect(useBoardCanvasStore.getState().studioBoard).toMatchObject({ boardId: 'g1', imageIds: ['i1', 'i2'] }));
+    expect(useBoardCanvasStore.getState().studioBoard!.boardKey).toBe(JSON.stringify(['moodboard', 'global', 'g1']));
+    cleanup();
+    expect(useBoardCanvasStore.getState().studioBoard).toBeNull();
+  });
+
+  it('Show from an update opens the Board view, selects the cards it names and frames them', async () => {
+    await openStudio();
+    act(() => useBoardCanvasStore.getState().requestShow('g1', ['i2']));
+    expect(await screen.findByTestId('board-canvas')).toBeTruthy();
+    const key = board.props!.boardKey;
+    expect(useBoardCanvasStore.getState().selection[key]).toEqual(['c-i2']);
+    expect(useBoardCanvasStore.getState().frameRequest).toMatchObject({ boardKey: key, placementIds: ['c-i2'] });
+    expect(useBoardCanvasStore.getState().showRequest).toBeNull();
+  });
+
+  it('a Show meant for another board is left alone', async () => {
+    await openStudio();
+    act(() => useBoardCanvasStore.getState().requestShow('other', ['i2']));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByTestId('board-canvas')).toBeNull();
+    expect(useBoardCanvasStore.getState().frameRequest).toBeNull();
   });
 });

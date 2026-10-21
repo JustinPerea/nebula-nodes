@@ -54,10 +54,18 @@ export function authorInitials(author: Pick<AgentNoteAuthor, 'kind' | 'name'>): 
   return words[0].slice(0, 1).toUpperCase();
 }
 
-/** The text as the person reads it: board numbers drawn from refs. */
-export function noteText(note: Pick<AgentNote, 'parts' | 'text'>): string {
+/**
+ * The text as the person reads it: board numbers drawn from refs. With
+ * `numberFor` (the board open in Moodboard Studio) each number is the
+ * image's place now, so a removal since the server drew it can't mislabel it.
+ */
+export function noteText(note: Pick<AgentNote, 'parts' | 'text'>, numberFor?: (ref: string) => number | null): string {
   return note.parts
-    .map((part) => ('text' in part ? part.text : part.number ? `#${part.number}` : '(removed)'))
+    .map((part) => {
+      if ('text' in part) return part.text;
+      const number = numberFor ? numberFor(part.ref) : part.number;
+      return number ? `#${number}` : '(removed)';
+    })
     .join('');
 }
 
