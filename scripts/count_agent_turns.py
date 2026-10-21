@@ -18,9 +18,16 @@ call in it is one of:
   ``describe``; MCP ``start_here``, ``find_nodes``, ``describe_node``);
 - ``limits``: reading the spend limits or the keys (``nebula spend``,
   ``nebula keys``, MCP ``get_spend_limits``);
+- ``schema``: loading tool schemas (Claude Code's ``ToolSearch``, which
+  loads the deferred MCP tools' argument docs before they can be called);
 - ``usage-error``: a call that failed on usage, whatever it meant to do
   (argparse's exit 2, an unknown command, option or node id, a named
-  "doesn't take" error, an MCP argument error).
+  "doesn't take" error, an MCP argument error: a missing, unknown or
+  mistyped argument, a target point_at needs, a node or wire in the wrong
+  shape, a param the node doesn't take).
+
+``schema`` is its own kind, not ``lookup``, so a report shows how many calls
+went to loading schemas apart from looking up node types (PR26b).
 
 Everything else is **needed**: reading the person's own work (``projects``,
 ``look``, ``selection``, ``pins``, ``moodboard list``/``show`` and their MCP
@@ -49,7 +56,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
-ORIENTATION = ("help", "lookup", "limits", "usage-error")
+ORIENTATION = ("help", "lookup", "limits", "schema", "usage-error")
 
 # `nebula` commands by class. `find` and `describe` are the CLI's aliases for
 # `nodes` and `info` (MCP's names for them).
@@ -61,6 +68,8 @@ GLOBAL_VALUE_OPTIONS = {"--url"}
 # MCP tool names (after `mcp__<server>__`).
 LOOKUP_TOOLS = {"start_here", "find_nodes", "describe_node"}
 LIMIT_TOOLS = {"get_spend_limits"}
+# Claude Code's tools that load deferred tool schemas.
+SCHEMA_TOOLS = {"ToolSearch"}
 
 # Text that marks a failed call as a usage failure.
 USAGE_PATTERNS = [
@@ -78,6 +87,21 @@ USAGE_PATTERNS = [
         r"\bInput validation error\b",
         r"\bunexpected keyword argument\b",
         r"\b(No such|Unknown) tool\b",
+        # Argument errors in Nebula's words (PR26b; before it, then its one-line form).
+        r"\bvalidation errors? for\b",
+        r"\bField required\b",
+        r"\bneeds node_id, or x and y\b",
+        r"\bmust be a node definition id\b",
+        r"\.ref must look like \+up\b",
+        r"\bmust be a node id \(n4\) or a ref \(\+up\)",
+        r"\bmust be a port id\b",
+        r"\bUnknown param\(s\)",
+        r"\bis a wire \{source, sourceHandle, target, targetHandle\}",
+        r"\b[a-z]+_[a-z_]+ takes .+, not \w+",
+        r"\b[a-z]+_[a-z_]+ needs [\w ]+: it takes ",
+        r"\b[a-z]+_[a-z_]+: \w+ must be .+\. It takes ",
+        r"\bnodes\[\d+\] (puts its place in position|is named with rename|has unknown field)\b",
+        r"\bunknown (proposal|edit) field '",
     )
 ]
 GUARD_REFUSAL = re.compile(r"Not allowed in this demo", re.I)
@@ -223,6 +247,8 @@ def _mcp_name(tool: str) -> str | None:
 
 
 def _kind_of(tool: str, tool_input: dict[str, Any]) -> str:
+    if tool in SCHEMA_TOOLS:
+        return "schema"
     mcp = _mcp_name(tool)
     if mcp is not None:
         if mcp in LOOKUP_TOOLS:

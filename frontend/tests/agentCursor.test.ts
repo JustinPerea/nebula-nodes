@@ -124,6 +124,18 @@ describe('agent presence store', () => {
     prune(1_000 + AGENT_CURSOR_EXPIRE_MS);
     expect(useAgentPresenceStore.getState().agents).toEqual({});
   });
+
+  it('shows a line said at the cursor without moving it (point_at with only say)', () => {
+    // The backend sends the cursor's own target back with the new line.
+    const { apply } = useAgentPresenceStore.getState();
+    apply(presenceEvent({ target: { nodeId: 'n1', handle: 'text' }, action: 'move', say: '' }), 1_000);
+    apply(presenceEvent({ target: { nodeId: 'n1', handle: 'text' }, action: 'move', say: 'Wiring it next' }), 2_000);
+    const cursor = useAgentPresenceStore.getState().agents['ext:claude-code'];
+    expect(cursor.target).toEqual({ nodeId: 'n1', handle: 'text' });
+    expect(cursor.say).toBe('Wiring it next');
+    expect(cursor.seq).toBe(2); // a new seq restarts the line's timer (AgentCursorLayer)
+    expect(cursor.receivedAt).toBe(2_000);
+  });
 });
 
 describe('canvas view report', () => {
