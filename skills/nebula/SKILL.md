@@ -136,6 +136,13 @@ out ...`.
   list of them, else `text`. The model's other inputs are params of the same
   name: set them with `--param`, don't wire them.
 
+To see a model's ports before the apply, an agent on Nebula's MCP server
+calls `model_schema(provider, model_id)` (its `ports`, with types) or
+`model_catalog(provider, query)` (each row's `ports`, as ids). They come from
+the same function the apply configures the node with, so wiring exactly those
+ports in the apply that sets the model is accepted. There is no `nebula`
+command for the catalogs yet.
+
 Changing the model of a node with wires on ports the new model lacks (or
 clearing it, or naming one Nebula can't read, which leaves the basic ports)
 is refused: `--unwire` them in the same apply. Without the provider's key the
@@ -391,6 +398,12 @@ nebula moodboard delete <board>
 - Changing images, notes, mode or strength clears the analysis: run
   `analyze` again before you use the board. A rename and the brief fields
   keep it.
+- Every board write is journaled in its writer's name, so `nebula watch
+  --kinds board` sees the person's edits too: an image, card or frame
+  change is `board.added`, `board.moved`, ...; a change to the board's own
+  fields (Direction, Avoid, pinned colours, its notes, Send notes, strength,
+  a rename...) is `board.fields`, whose `fields` lists the names that
+  changed. It never carries their values: read the board (`show`) for them.
 - Without `--project` a board is Global: it belongs to no project, so every
   project can use it. `--project current` keeps it in the project open on the
   canvas (the `*` in `nebula projects`), which is the project the person's

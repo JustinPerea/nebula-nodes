@@ -20,12 +20,12 @@ Since 2026-10-15 Replicate is also a provider you can pick on three FLUX 3 nodes
 
 | Node (as shown in app) | Node ID | Type | Key inputs | Notable params | Use it for |
 |---|---|---|---|---|---|
-| Replicate | `replicate-universal` | universal (async-poll) | None pre-defined — connected input ports are passed straight through to the model's `input` (port name = model input field) | `model_id` (required, format `owner/name`, e.g. `stability-ai/sdxl`) | Running any Replicate-hosted model — image, video, audio, 3D, or text — by typing its `owner/name` slug |
+| Replicate | `replicate-universal` | universal (async-poll) | Set from the model once `model_id` is set: one Image port per file input, named after the input field (`model_schema` `ports.inputs`) | `model_id` (required, format `owner/name`, e.g. `stability-ai/sdxl`) | Running any Replicate-hosted model — image, video, audio, 3D, or text — by typing its `owner/name` slug |
 
 Notes grounded in `backend/data/node_definitions.json` and `backend/handlers/replicate_universal.py`:
 
-- The node ships with **no fixed input or output ports** (`inputPorts: []`, `outputPorts: []`). The handler infers the output type at runtime from the model's result — a URL ending in `.png/.jpg/.webp/.gif` becomes an **Image** port, `.mp4/.mov/.webm` a **Video** port, `.mp3/.wav/.flac` an **Audio** port, a plain string becomes a **Text** port, and a list of URLs returns its first item as an Image.
-- The only declared param is **`model_id`**. Any other parameters the model needs (prompt, seed, width, etc.) are passed through generically: the handler forwards every connected input port and every extra param into the prediction's `input` object verbatim. There is no per-model schema baked into the node.
+- The definition declares `inputPorts: []` and `outputPorts: []`, but once `model_id` is set the node's ports come from the model's schema (`backend/services/universal_ports.py`, the same ports the canvas draws and `edit_canvas` checks; agents read them with `model_schema("replicate", "<owner/name>")`). Inputs: one Image port per file input (`x-uploadable` or a `uri` string), named after the field (`replicate_inputs`). Output: exactly one, `image` when the output schema is a file URL or a list of them, otherwise `text` (`replicate_output`). At run time the handler names the output from the result (`_infer_output_type`): a URL ending in `.png/.jpg/.webp/.gif` is `image`, `.mp4/.mov/.webm` is `video`, `.mp3/.wav/.flac` is `audio`, a plain string is `text`, and a list of URLs returns its first item as an image. Open issue: a video or audio model's schema is also a `uri` string, so its node shows `image` while the run fills `video`/`audio`, and a wire from `image` gets nothing on those runs.
+- The only declared param is **`model_id`**. The model's other inputs (prompt, seed, width, etc.) become params of the same name (`model_schema` `params`); set them in `params`, don't wire them. The handler forwards every connected input port and every extra param into the prediction's `input` object verbatim. There is no per-model schema baked into the node definition.
 - Internally the handler also reads two private params if present (`_version_id`, `_schema_fetched`); these are implementation details, not user-facing controls.
 
 ## How to use it in Nebula
@@ -84,8 +84,8 @@ Replicate's HTTP API surface is large; the Nebula node deliberately uses only th
 What it covers:
 
 - **Auth & setup** — that `REPLICATE_API_TOKEN` must be set in the backend env, how to obtain it, and the missing-key failure mode.
-- **The single node contract** — `replicate-universal` has exactly one required param (`model_id`, `owner/name` format) and **no fixed ports**; every other model input is passed through by name. (The non-obvious bit an agent must understand to build a working graph.)
-- **Per-model input discovery** — how to look up a model's input field names (model page / API) and map graph ports to those exact names, plus a recommended default-slug cheat-sheet per media type (image / video / audio / 3D / text).
+- **The single node contract** — `replicate-universal` has exactly one required param (`model_id`, `owner/name` format); its ports come from the model's schema once that is set (file inputs as ports, everything else as params of the same name; read them with `model_schema`). (The non-obvious bit an agent must understand to build a working graph.)
+- **Per-model input discovery** — how to look up a model's input field names (`model_schema`, model page or API), wire its file inputs by those exact names and set the rest as params, plus a recommended default-slug cheat-sheet per media type (image / video / audio / 3D / text).
 - **Output-type inference rules** — how the handler decides Image vs. Video vs. Audio vs. Text from the result (URL extension or string/list shape).
 - **Execution expectations** — predictions without `urls.stream` async-poll to the ~10-minute 300 × 2s ceiling; advertised streams are consumed for every output family. Text renders live `streamingText`; media data URIs are buffered privately and materialized only at completion. **Cancellation propagates upstream**; polled media progress is status-only.
 - **Known gaps to route around** — no Files API upload (supply file inputs as URLs/data URLs), no fine-tuning, no deployments, no in-app model search.
