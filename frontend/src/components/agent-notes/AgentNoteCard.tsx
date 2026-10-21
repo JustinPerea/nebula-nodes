@@ -1,7 +1,7 @@
 import { type CSSProperties, type Ref } from 'react';
 import { X } from 'lucide-react';
 import type { AgentNote, AgentNoteAction } from '../../lib/agentNotes';
-import { aboutLabel, noteText } from '../../lib/agentNotesView';
+import { noteLabel, noteText } from '../../lib/agentNotesView';
 import { AuthorDot, NoteButtons, type AgentNotesAdapter } from './AgentNoteParts';
 
 interface HoldHandlers {
@@ -37,7 +37,7 @@ export function AgentNoteCard({
   onAction: (action: AgentNoteAction) => void;
   onShow: () => void;
 }) {
-  const label = aboutLabel(note.about);
+  const label = noteLabel(note);
   return (
     <div
       ref={cardRef}

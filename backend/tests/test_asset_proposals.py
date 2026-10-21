@@ -218,7 +218,8 @@ def test_an_agent_proposes_a_new_cover_for_a_pinned_project(api):
     assert view["status"] == "open"
     assert view["kind"] == "project"
     assert view["target"] == {"kind": "project", "id": api.dusk, "name": "Dusk"}
-    assert view["change"] == {"cover": {"from": A, "to": C, "fromBy": {"kind": "person", "name": "You"}}}
+    # auto: the image the automatic cover would show (the newest, C).
+    assert view["change"] == {"cover": {"from": A, "to": C, "fromBy": {"kind": "person", "name": "You"}, "auto": C}}
     assert view["agent"]["name"] == "Claude Code"
     assert view["decideIn"] == "projects"
     assert "acceptKey" not in json.dumps(made.json())
@@ -274,7 +275,7 @@ def test_who_may_propose(api):
 def test_an_agent_may_ask_before_setting_an_unpinned_cover(api):
     made = _propose(api, {"cover": B})
     assert made.status_code == 201, made.text
-    assert made.json()["proposal"]["change"]["cover"] == {"from": None, "to": B, "fromBy": None}
+    assert made.json()["proposal"]["change"]["cover"] == {"from": None, "to": B, "fromBy": None, "auto": C}
 
 
 def test_open_proposals_are_capped_per_agent(api):

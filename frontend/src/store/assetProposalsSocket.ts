@@ -20,6 +20,8 @@ function relist(): void {
   relisting = listAssetProposals()
     .then((open) => {
       const store = useAssetProposalsStore.getState();
+      // The views may have moved too (a pin whose image went, Q90 a).
+      store.refresh(open);
       const listed = new Set(open.map((view) => view.id));
       store.retain(Object.keys(store.proposals).filter((id) => listed.has(id) || !asked.has(id)));
     })

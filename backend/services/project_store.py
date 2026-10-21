@@ -67,10 +67,25 @@ def metadata(project: dict[str, Any]) -> dict[str, Any]:
     if project.get("createdBy"):
         found["createdBy"] = copy.deepcopy(project["createdBy"])
     # Who pinned the cover ({kind, name}); a pin from before it was recorded
-    # has none and is the person's (main._cover_owner).
-    if project.get("coverPin") and isinstance(project.get("coverBy"), dict):
-        found["coverBy"] = copy.deepcopy(project["coverBy"])
+    # has none and is the person's (main._cover_owner). A pin whose image left
+    # the project no longer counts (Q90 a): the card is automatic, and
+    # `coverLostPin` names the old pin so a screen can say why.
+    pin = project.get("coverPin")
+    if pin and (project.get("cover") or {}).get("source") == "pinned":
+        if isinstance(project.get("coverBy"), dict):
+            found["coverBy"] = copy.deepcopy(project["coverBy"])
+    elif pin and "cover" in project:
+        found["coverLostPin"] = {"url": pin, "by": recorded_cover_owner(project)}
     return found
+
+
+def recorded_cover_owner(project: dict[str, Any]) -> dict[str, str] | None:
+    """Who the stored pin says pinned the cover, whether or not it counts now.
+    A pin saved before ``coverBy`` existed is the person's: only they could pin."""
+    if not project.get("coverPin"):
+        return None
+    by = project.get("coverBy")
+    return copy.deepcopy(dict(by)) if isinstance(by, dict) and by.get("kind") else {"kind": "person", "name": "You"}
 
 
 def needs_cover(project: dict[str, Any]) -> bool:
@@ -257,6 +272,11 @@ class ProjectStore:
         if signature is not None:
             self._workspace_cache = (signature, dict(answer))
         return answer
+
+    def signature(self) -> tuple[int, int, int] | None:
+        """catalog.json's (inode, mtime, size): it changes on every commit, so a
+        caller can keep something it read until then (main._open_project_record)."""
+        return self._signature()
 
     def _signature(self) -> tuple[int, int, int] | None:
         try:

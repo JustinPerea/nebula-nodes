@@ -200,7 +200,8 @@ The server exposes these tools for building and running (see
   can show (`images`, `pinned`, `pinnedBy`, `cover`) and setting its cover to
   one of them (or `""` for the automatic one). An agent sets it while the
   person hasn't pinned one; a cover the person pinned changes only through
-  `propose_asset_change`. See
+  `propose_asset_change`. A pin whose image is gone (its node deleted) no
+  longer counts (`pinned` and `pinnedBy` null, `lostPin` names it). See
   [Proposals outside the canvas](#proposals-outside-the-canvas).
 - `rename_project`: renames a saved project (`project_id` or `"current"`,
   `name`) through `PUT /api/projects/{id}` `{name}`, the canvas header's own
@@ -681,7 +682,9 @@ nebula notes --unread                                   # the list, newest first
 
 Over MCP: `post_note(text, board?, refs?, about?)` and
 `list_notes(board?, unread?)`. The words "note" stay in the tool names; on
-screen they are Updates.
+screen they are Updates. A proposal outside the canvas (`propose_asset_change`)
+posts its own Update with **Review**, and marks it with how it ended; see
+[Proposals outside the canvas](#proposals-outside-the-canvas).
 
 Rules:
 
@@ -894,9 +897,33 @@ A cover the person pinned is refused for anyone else (403, `agent_refused`
 or `person_required`) with a sentence naming `propose_asset_change`. An
 accepted proposal pins the cover as the person's, so the next agent change
 asks again. The Projects screen shows "Cover: set by <agent> (agent)" on a
-cover an agent set. A board's own cover, the image a board opens on, is
-the board's setting rather than a pin of the person's, so it has no
-proposal: agents set it with the board's other fields.
+cover an agent set.
+
+A pin whose image is no longer in the project (its node deleted, or its
+output gone from the project's snapshot; the same test as the cover
+picker's list) no longer counts (Justin's Q90 a, 2026-10-21): the card shows
+the automatic cover, the covers listing has `pinned: null`, `pinnedBy: null`
+and `lostPin: {url, by}`, the card has `coverLostPin` and no `coverBy`, and
+anyone may set the cover (`previous` is then `{"cover": null}`, what the card
+showed). The stored pin isn't deleted: if the image comes back (Cmd+Z on the
+canvas, saved by autosave) the pin counts again. An agent's reset to
+automatic leaves a lost pin as it is (the cover is automatic already); the
+person's reset drops it. The person's next pin counts as before. A proposal
+made against a pin that has since lost its image stays open: its
+`change.cover` reads `from: null`, `fromBy: null` and `lostPin`, so the strip
+shows it against the automatic cover (never "You pinned" over a missing
+image), and Accept applies it as before. The exception is a proposal back to
+automatic (`{"cover": ""}`): once the pin's image is gone it would change
+nothing, so it closes as `invalidated` ("No longer fits"), the same way a new
+one is refused with 409, and the stored pin stays for an undo. The open
+project's cover proposals follow its live canvas: a node deleted, undone or
+removed by an agent re-checks them at once, so the person's screen updates
+(or the proposal closes) without waiting for the autosave.
+
+A board's own cover, the image a board opens on, is the board's setting
+rather than a pin of the person's, so it has no proposal: agents set it with
+the board's other fields. Taking that image off the board clears the cover
+(the board opens on #1), so a board cover never outlives its image.
 
 **Life cycle.** The same as canvas proposals: `open`, then `accepted`,
 `rejected` (with the person's reason), `withdrawn`, `expired` (15 minutes)
@@ -907,8 +934,14 @@ the journal uses the same `proposal.*` kinds with `kind` and `targetId` in
 `data`. `GET /api/asset-proposals?kind=&id=` lists the open ones. The view
 is `{id, status, agent, note, kind, target: {kind, id, name}, change:
 {<key>: {from, to}}, summary, decideIn, createdAt, expiresAt, reason,
-applied}` (`change.cover` also has `fromBy`; `applied` is what Accept set;
-a commons proposal's `change` is `{"edits": [...]}`, the agent's own edits).
+applied, update}` (`change.cover` also has `fromBy`, `auto` (the image the
+automatic cover shows now, the newest one, or null when the project has no
+image; the strip shows it on the automatic side), and `lostPin` while the
+pin it was proposed against has lost its image; `applied` is what Accept set;
+a commons proposal's `change` is `{"edits": [...]}`, the agent's own edits;
+`update` is `{id, projectId}` of its Update, below, or null). `start_here`'s
+`proposals` part lists open asset proposals too, with `kind`, `targetId` and
+`update` (the Update's id).
 Caps: 3 open per agent and 12 in all (429 beyond), counted apart from canvas
 proposals; a 160-character note.
 
@@ -934,6 +967,34 @@ screen), never to REST, the journal or MCP results. `assetProposalClosed`
 Agent log names the proposal ("Asks to make another image the cover of
 project "Dusk" (decide on the Projects screen)"), since no cursor can go
 there. Memory only: lost on restart.
+
+**The Update.** Each asset proposal also posts an Update in the Updates
+corner (Justin's Q92 a, 2026-10-21), on the open project's list, written by
+Nebula in the strip's words and attributed to the agent (`author` is the
+agent, `source: "nebula"`, `about: "proposal"`): "Claude Code asks to change
+the cover of Dusk", "Claude Code asks to send Dusk board's notes to
+generators", "Claude Code asks to change a reference in the Commons" (or
+"asks to make 3 changes to a reference in the Commons", "asks to take a
+reference out of the inbox"). Names only: never the agent's note, a board's
+notes, a private note or Commons text. It carries `proposal: {id, kind,
+targetId}` and one **Review** action (`proposal.review`), which takes the
+person to the Projects screen with that card's strip in view, to Moodboard
+Studio on that board, or to the Commons on that reference. One per agent and
+target: a new proposal on the same target replaces the agent's earlier
+Update (the socket's `removed`), and while the agent still has another
+proposal open there, closing one leaves the Update asking about the other.
+When the last one closes the Update gets `resolvedAt`, `resolvedBy` (`person`,
+the agent, or `system`), `readAt` and a short `outcome` ("Accepted: the cover
+changed", "You kept your cover", "You kept the notes here", "Applied",
+"Withdrawn by Claude Code", "Expired", "No longer fits"), and shows that in
+place of Review. Expiry lands on time, even when nobody reads proposals:
+Nebula checks each proposal when it is due, and `list_notes` never lists an
+expired one as waiting. After a restart (proposals are memory only) an
+Update whose proposal is gone resolves as "Expired". The socket sends `agentNotes` op `resolved` (op `changed`
+when it moved to the other proposal) for the open project. With no project
+open there is no Update (`update: null`); the Agent log line still is.
+Agents read it with `list_notes` / `nebula notes` and through the view's
+`update`.
 
 ### Commons curation
 

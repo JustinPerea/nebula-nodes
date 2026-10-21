@@ -180,6 +180,17 @@ class AssetProposal:
     run_node_ids: list[str] | None = None
     # The canvas book invalidates by node id; an asset proposal refers to none.
     references: frozenset[str] = frozenset()
+    # kind project: the pin it was proposed against while that pin's image is
+    # gone ({url, by}; Q90 a), so the strip shows the automatic cover, never
+    # "You pinned" over a missing image. main refreshes it on every sweep.
+    lost_pin: dict[str, Any] | None = None
+    # kind project: the image the automatic cover would show now (the newest
+    # one, or the first reference), or None; main refreshes it with lost_pin.
+    # The same kind of URL list_project_covers lists (a /api/outputs path or
+    # the image's own URL), so agents see it too.
+    auto_cover: str | None = None
+    # The Update it posted (Q92 a): {"id": note id, "projectId": ...}, or None.
+    update: dict[str, Any] | None = None
 
     @property
     def is_open(self) -> bool:
@@ -202,6 +213,46 @@ def summary(proposal: AssetProposal) -> str:
         return (f'set the cover of project "{name}" back to automatic' if to is None
                 else f'make another image the cover of project "{name}"')
     return f'send the notes of board "{name}" to generators'
+
+
+def update_text(proposal: AssetProposal) -> str:
+    """The Update an asset proposal posts (Justin's Q92 a), in the words of
+    where the person decides it: the strip's and the Commons line's. Names
+    only: never the agent's note, a board's notes or Commons text."""
+    agent = proposal.agent.name
+    name = " ".join((proposal.target_name or "").split())[:120]
+    if proposal.kind == "project":
+        return f"{agent} asks to change the cover of {name or 'a project'}"
+    if proposal.kind == "moodboard":
+        whose = name + "'s" if name else "a board's"
+        return f"{agent} asks to send {whose} notes to generators"
+    edits = proposal.change.get("edits") or []
+    if len(edits) > 1:
+        return f"{agent} asks to make {len(edits)} changes to a reference in the Commons"
+    membership = edits[0].get("membership") if edits and isinstance(edits[0], dict) else None
+    if isinstance(membership, dict) and membership.get("accept") and set(membership) == {"id", "accept"}:
+        return f"{agent} asks to take a reference out of the inbox"
+    return f"{agent} asks to change a reference in the Commons"
+
+
+def outcome_line(proposal: AssetProposal) -> str:
+    """How a closed proposal ended, for its Update (short; never the
+    person's reason or the agent's note)."""
+    status = proposal.status
+    if status == "accepted":
+        return {"project": "Accepted: the cover changed", "moodboard": "Accepted: the notes go to generators",
+                "commons": "Applied"}[proposal.kind]
+    if status == "rejected":
+        if proposal.kind == "project":
+            by = proposal.before.get("coverBy") or {}
+            return ("You kept your cover" if by.get("kind") == "person" and not proposal.lost_pin
+                    else "You kept this cover")
+        return "You kept the notes here" if proposal.kind == "moodboard" else "You said no"
+    if status == "withdrawn":
+        return f"Withdrawn by {proposal.agent.name}"
+    if status == "expired":
+        return "Expired"
+    return "No longer fits"
 
 
 class AssetProposalBook(ProposalBook):
@@ -248,8 +299,14 @@ class AssetProposalBook(ProposalBook):
             # text, which reaches the person's screen alone (person_values).
             change = copy.deepcopy(proposal.change)
         elif proposal.kind == "project":
-            change = {"cover": {"from": proposal.before.get("cover"), "to": proposal.change.get("cover"),
-                                "fromBy": copy.deepcopy(proposal.before.get("coverBy"))}}
+            if proposal.lost_pin:
+                # The pin it was proposed against no longer counts: the card is automatic.
+                change = {"cover": {"from": None, "to": proposal.change.get("cover"), "fromBy": None,
+                                    "lostPin": copy.deepcopy(proposal.lost_pin)}}
+            else:
+                change = {"cover": {"from": proposal.before.get("cover"), "to": proposal.change.get("cover"),
+                                    "fromBy": copy.deepcopy(proposal.before.get("coverBy"))}}
+            change["cover"]["auto"] = proposal.auto_cover
         else:
             change = {"sendNotes": {"from": bool(proposal.before.get("sendNotes")), "to": True}}
         return {
@@ -266,6 +323,8 @@ class AssetProposalBook(ProposalBook):
             "expiresAt": int(proposal.expires_at * 1000),
             "reason": proposal.reason,
             "applied": copy.deepcopy(proposal.applied),
+            # The Update it posted in the corner (list_notes has it), or None.
+            "update": copy.deepcopy(proposal.update),
         }
 
     def brief(self, proposal: Any) -> dict[str, Any]:
@@ -277,6 +336,7 @@ class AssetProposalBook(ProposalBook):
             "kind": proposal.kind,
             "targetId": proposal.target_id,
             "expiresInSeconds": max(0, int(proposal.expires_at - self.now())),
+            "update": (proposal.update or {}).get("id"),
         }
 
     def person_values(self, proposal: Any) -> dict[str, Any]:

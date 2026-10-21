@@ -154,6 +154,15 @@ def is_choice(snapshot: dict[str, Any], url: str) -> bool:
     return url in made or url in references
 
 
+def pin_counts(snapshot: dict[str, Any], pinned: Any) -> bool:
+    """Whether a pinned cover still counts: its image is still one of the
+    project's choices (Justin's Q90 a). A pin whose node was deleted, or whose
+    output left the snapshot, stops counting: the card is automatic and
+    agents may set the cover. The stored pin isn't touched, so an undo that
+    brings the image back makes it count again."""
+    return isinstance(pinned, str) and bool(pinned) and is_choice(snapshot, pinned)
+
+
 def first_image(found: dict[str, Any] | None) -> str | None:
     images: Iterable[str] = (found or {}).get("images") or []
     return next(iter(images), None)

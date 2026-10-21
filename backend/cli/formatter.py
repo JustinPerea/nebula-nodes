@@ -903,6 +903,9 @@ def _asset_change_lines(view: dict[str, Any], where: str | None) -> list[str]:
         if isinstance(values, dict):
             label = {"cover": "cover", "sendNotes": "send notes"}.get(key, key)
             lines.append(f"  sets   {label}: {_asset_value(values.get('from'))} → {_asset_value(values.get('to'))}")
+            lost = values.get("lostPin") if key == "cover" else None
+            if isinstance(lost, dict):
+                lines.append(f"  was    pinned {lost.get('url')}, whose image is gone: that pin no longer counts")
     if where and view.get("status", "open") == "open":
         lines.append(f"  decide {where}")
     return lines
