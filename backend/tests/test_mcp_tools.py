@@ -355,9 +355,44 @@ def test_propose_change_warns_about_run_nodes_that_cannot_run(nebula, monkeypatc
     assert response["proposal"]["cost"]["notReady"][0]["missing"] == "needs OPENAI_API_KEY in Settings > Providers"
     assert "+img (GPT Image 2) needs OPENAI_API_KEY" in response["warning"]
     # Named the MCP way, not the CLI's or the HTTP route's.
-    assert response["warning"].endswith("(find_nodes lists them).")
+    proposal_id = response["proposal"]["id"]
+    assert response["warning"].endswith(
+        "(find_nodes lists them). If you propose something else instead, withdraw this one first: "
+        f'`withdraw_proposal(proposal_id="{proposal_id}")`.')
+    assert response["withdrawWith"] == f'withdraw_proposal(proposal_id="{proposal_id}")'
     assert "nebula context" not in response["warning"] and "/api/agent/nodes" not in response["warning"]
-    mcp_server.withdraw_proposal(response["proposal"]["id"])
+    assert "DELETE" not in json.dumps(response)
+    mcp_server.withdraw_proposal(proposal_id)
+
+
+def test_propose_change_reminds_the_agent_its_unrunnable_proposal_is_still_open(nebula, monkeypatch):
+    """Q109: FLUX.2 with only an OpenAI key is kept with its warning; the next
+    proposal (GPT Image 2) says the first is still open and names withdraw_proposal."""
+    import main
+
+    monkeypatch.setattr(main, "load_settings", lambda: {"apiKeys": {"OPENAI_API_KEY": "sk-test"}})
+    prompt = mcp_server.edit_canvas(nodes=[{"ref": "+p", "definitionId": "text-input", "params": {"value": "a"}}])
+    wire = [{"source": prompt["idMap"]["+p"], "sourceHandle": "text", "target": "+img", "targetHandle": "prompt"}]
+
+    def propose(definition_id: str) -> dict:
+        return mcp_server.propose_change(note=f"Hero with {definition_id}",
+                                         nodes=[{"ref": "+img", "definitionId": definition_id}],
+                                         edges=wire, run=["+img"])
+
+    first = propose("flux-2-pro")
+    first_id = first["proposal"]["id"]
+    assert first["proposal"]["status"] == "open" and first["warning"]
+    second = propose("gpt-image-2-generate")
+    call = f'withdraw_proposal(proposal_id="{first_id}")'
+    assert "warning" not in second
+    assert second["stillOpen"] == [{"id": first_id, "note": "Hero with flux-2-pro", "withdrawWith": call}]
+    assert second["reminder"] == (f"Your proposal {first_id} is still open and can't run here; "
+                                  f"withdraw it if this one replaces it: `{call}`.")
+    assert mcp_server.withdraw_proposal(first_id)["proposal"]["status"] == "withdrawn"
+    third = propose("gpt-image-2-generate")
+    assert "stillOpen" not in third and "reminder" not in third
+    for answer in (second, third):
+        mcp_server.withdraw_proposal(answer["proposal"]["id"])
 
 
 # -- the moodboard adapter table, as agents read it (contract 07 section 1.16) --------------------------
