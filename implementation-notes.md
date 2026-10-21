@@ -1,6 +1,6 @@
 # Implementation Notes
 
-New entries don't go here any more. Since 2026-10-21 each change writes its notes to its own file in [`docs/notes/`](docs/notes/), named `<YYYY-MM-DD>-<branch>.md` (the branch name with `/` as `-`), so the folder lists in order and two PRs never edit the same file. This file keeps every entry up to then.
+New entries don't go here any more. Since 2026-10-21 each change writes its notes to its own file in [`docs/notes/`](docs/notes/), named `<YYYY-MM-DD>-<branch>.md` (the date the branch starts, and the branch name with `/` as `-`), so the folder lists in order and two PRs never edit the same file. This file keeps every entry up to then.
 
 ## 2026-10-20 — The Krea consent-expiry test waits for the expiry, not 50 ms
 

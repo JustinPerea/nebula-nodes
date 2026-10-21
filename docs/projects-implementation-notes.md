@@ -1,5 +1,7 @@
 # Project home implementation notes
 
+New entries go in [`docs/notes/`](notes/), one file per change, since 2026-10-21 (see `AGENTS.md`). This file keeps the entries up to then.
+
 ## 2026-10-09
 
 - Startup will show a project home instead of immediately entering the last canvas. Preserve the existing canvas as a migrated saved project; opening home must not clear it or submit generation.
