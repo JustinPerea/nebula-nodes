@@ -11,12 +11,12 @@
     />
     <meta name="theme-color" content="#060607" />
 
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap"
-    />
+    <!-- Inter and JetBrains Mono ship with the app (src/assets/fonts/README.md).
+         Every start uses both latin files; preloading them removed the one
+         fallback-font frame the first paint otherwise showed. -->
+    <link rel="stylesheet" href="/src/assets/fonts/fonts.css" />
+    <link rel="preload" href="/src/assets/fonts/inter/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/src/assets/fonts/jetbrains-mono/jetbrains-mono-latin.woff2" as="font" type="font/woff2" crossorigin />
 
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Nebula Nodes" />
