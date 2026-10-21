@@ -356,12 +356,15 @@ And these canvas tools:
   it before paid runs or reworking their graph. When a node the run needs
   can't run here (no key, no Krea sign-in, a route that can't take it), the
   reply has a `warning` naming each one, so the agent can say so or propose
-  another model. See [Proposals](#proposals).
+  another model. Such a proposal is kept, with the warning; if the agent
+  then proposes something else instead, it withdraws the first
+  (`withdrawWith` is the exact call). See [Proposals](#proposals).
 - `get_proposal`: reads one of your proposals; `wait_seconds` (up to 300)
   waits for the person's decision. On accept it returns `idMap` (your refs to
   real node ids) and `runNodeIds` (what the canvas will run; don't run them
   yourself).
-- `withdraw_proposal`: takes back one of your open proposals.
+- `withdraw_proposal`: takes back one of your open proposals. Withdraw one
+  that can't run here before proposing something else instead.
 - `propose_asset_change`: proposes a change outside the canvas that is the
   person's call: a project cover they pinned, a board's Send notes to
   generators, or curating a Commons reference. They decide on the Projects
@@ -839,6 +842,28 @@ details). Both re-check keys as the person adds them, so a line goes away
 once its key is set. Accept stays enabled, as the canvas's Run button does
 for a node without its key: the run is refused at that node before any
 provider is called, and the node shows why.
+
+**Withdraw it before proposing something else.** A proposal that can't run
+here is kept, with the warning (Justin's call, Q109: not refused, and
+nothing is withdrawn for the agent). The warning ends with the call that
+takes it back, and the reply's `withdrawWith` is that call on its own:
+`withdraw_proposal(proposal_id="p_…")` for MCP, `nebula proposal withdraw
+p_…` for the CLI (with `--as <name>` when the agent named itself with
+`--as`), `DELETE /api/canvas/proposals/p_…` over HTTP. If the agent then
+proposes something else instead, it withdraws the first, so the person has
+one proposal to answer, not two. As a reminder, while the same agent still
+has an open proposal on this canvas that can't run, its next proposal's
+reply lists it in `stillOpen` (`[{id, note, withdrawWith}]`) and says so in
+`reminder` ("Your proposal p_… is still open and can't run here; withdraw
+it if this one replaces it: …"); `nebula propose` prints it as a
+`reminder:` line. `nebula propose --json --wait` prints these as they
+stand after the wait: once the person has decided, `withdrawWith` and the
+warning's withdraw step are gone, and `stillOpen` keeps only proposals still
+open. Other agents' proposals, and the agent's proposals that
+can run, don't count. Open proposals in `start_here`, `nebula context` and
+`nebula look` carry `cantRun` (how many of the run's nodes can't run here,
+when any can't), so an agent that comes back later sees it too. The state
+is the one read when each proposal was made.
 
 Rules:
 
