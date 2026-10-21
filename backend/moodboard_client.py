@@ -40,6 +40,7 @@ import asyncio
 import contextvars
 import errno
 import json
+import math
 import os
 import re
 import stat
@@ -579,6 +580,135 @@ def edit_board(api: NebulaAPI, ref: str, ops: list[dict[str, Any]], *, base_vers
         raise
 
 
+CARD_HELP = "CARD is an image's number or id (when it has one card), a card id, or 12@<look>"
+
+
+def _coordinate(text: str) -> int | float:
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError(text)
+    return int(value) if value.is_integer() else value
+
+
+def _place_op(item: str) -> dict[str, Any]:
+    card, sep, at = item.partition("=")
+    x, comma, y = at.partition(",")
+    try:
+        if not sep or not comma or not card.strip():
+            raise ValueError(item)
+        return {"op": "place", "placement": card.strip(), "x": _coordinate(x), "y": _coordinate(y)}
+    except ValueError:
+        raise MoodboardError(f"--place takes CARD=X,Y in board pixels, e.g. --place 12=200,40 ({CARD_HELP})") from None
+
+
+def _resize_op(item: str) -> dict[str, Any]:
+    card, sep, size = item.partition("=")
+    width, by, height = size.strip().lower().partition("x")
+    try:
+        if not sep or not card.strip():
+            raise ValueError(item)
+        if by:
+            w, h = _coordinate(width), _coordinate(height)
+            return {"op": "resize", "placement": card.strip(), "w": w, "h": h}
+        return {"op": "resize", "placement": card.strip(), "weight": float(size)}
+    except ValueError:
+        raise MoodboardError("--resize takes CARD=WEIGHT or CARD=WxH, e.g. --resize 12=0.6 or --resize 12=480x270 "
+                             f"(the card keeps its aspect; {CARD_HELP})") from None
+
+
+def _named_pair(item: str, flag: str, example: str) -> tuple[str, str]:
+    left, sep, right = item.partition("=")
+    if not sep or not left.strip() or not right.strip():
+        raise MoodboardError(f"{flag} takes {example}")
+    return left.strip(), right.strip()
+
+
+def _card_of(board: dict[str, Any], ref: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The (image, card) `ref` names, as the edits route names a card: a card
+    id, image@look, or an image (number or id) that has one card."""
+    images = [image for image in board.get("images") or [] if isinstance(image, dict)]
+    for image in images:
+        for card in image.get("placements") or []:
+            if isinstance(card, dict) and card.get("id") == ref:
+                return image, card
+    image_ref, at, frame_ref = ref.rpartition("@")
+    image = images[find_image(images, image_ref if at else ref)]
+    cards = [card for card in image.get("placements") or [] if isinstance(card, dict)]
+    number = images.index(image) + 1
+    if at:
+        frames = [frame for frame in board.get("frames") or [] if isinstance(frame, dict)]
+        frame = next((f for f in frames if f.get("id") == frame_ref), None) or next(
+            (f for f in frames if str(f.get("name", "")).casefold() == frame_ref.casefold()), None)
+        if frame is None:
+            raise MoodboardError(f"no look '{frame_ref}' on this board")
+        card = next((c for c in cards if c.get("frameId") == frame.get("id")), None)
+        if card is None:
+            raise MoodboardError(f"#{number} has no card in {frame.get('name')}")
+        return image, card
+    if len(cards) != 1:
+        raise MoodboardError(f"#{number} has {len(cards)} cards: name one as {number}@<look>")
+    return image, cards[0]
+
+
+def edit_ops(board: dict[str, Any], *, place: Iterable[str] = (), resize: Iterable[str] = (),
+             into: Iterable[str] = (), link: Iterable[str] = (), set_aside: Iterable[str] = (),
+             use: Iterable[str] = (), note: Iterable[str] = (), private_note: Iterable[str] = ()
+             ) -> list[dict[str, Any]]:
+    """`nebula moodboard edit`'s flags as board-edit ops (contract 07, 1.12),
+    the same ops moodboard_edit takes. `board` is the board as read: only
+    `into` needs it, to know whether the card is loose (it joins the look)
+    or in another look (a copy goes into the new one with the card's weight,
+    and the old card goes, in the same batch)."""
+    ops: list[dict[str, Any]] = [_place_op(item) for item in place]
+    ops += [_resize_op(item) for item in resize]
+    for item in into:
+        card_ref, frame = _named_pair(item, "--in", f"CARD=LOOK, e.g. --in 12=Dither ({CARD_HELP})")
+        image, card = _card_of(board, card_ref)
+        if card.get("frameId") is None:
+            ops.append({"op": "link", "image": str(image.get("id")), "frameId": frame})
+        else:
+            ops += [{"op": "link", "image": str(image.get("id")), "frameId": frame,
+                     "weight": card.get("weight") or 1.0},
+                    {"op": "unlink", "placement": str(card.get("id"))}]
+    for item in link:
+        image_ref, frame = _named_pair(item, "--link", "IMAGE=LOOK, e.g. --link 12=Glass (a copy in that look)")
+        ops.append({"op": "link", "image": image_ref, "frameId": frame})
+    both = sorted(set(set_aside) & set(use))
+    if both:
+        raise MoodboardError(f"--set-aside and --use both name image {', '.join(both)}: pick one")
+    ops += [{"op": "setAside", "image": str(ref).strip(), "value": True} for ref in set_aside]
+    ops += [{"op": "setAside", "image": str(ref).strip(), "value": False} for ref in use]
+    for flag, key, items in (("--note", "notes", note), ("--private-note", "privateNote", private_note)):
+        for item in items:
+            image_ref, sep, text = item.partition("=")
+            if not sep or not image_ref.strip():
+                raise MoodboardError(f"{flag} takes IMAGE=TEXT, e.g. {flag} 3=\"the orange accent\"")
+            ops.append({"op": "note", "image": image_ref.strip(), key: text})
+    return ops
+
+
+def undo_ops(data: Any) -> list[dict[str, Any]]:
+    """The ops of an undo, from what an edit printed or returned: its whole
+    answer (`edit --json`, `add --json`, moodboard_edit), its `undo`, or the
+    ops themselves."""
+    if isinstance(data, dict) and isinstance(data.get("undo"), dict):
+        data = data["undo"]
+    if isinstance(data, dict) and "ops" in data:
+        data = data["ops"]
+    if isinstance(data, list) and not data:
+        raise MoodboardError("that edit changed nothing, so there is nothing to undo")
+    if not isinstance(data, list) or not all(isinstance(op, dict) for op in data):
+        raise MoodboardError("--undo takes what `nebula moodboard edit --json` (or `add --json`) printed, "
+                             "or its `undo`")
+    return data
+
+
+def skipped_messages(result: dict[str, Any]) -> list[str]:
+    """What a restore left as it was, in the route's words ("#2 changed since, left as is")."""
+    return [str(item.get("message")) for entry in result.get("applied") or [] if isinstance(entry, dict)
+            for item in entry.get("skipped") or [] if isinstance(item, dict) and item.get("message")]
+
+
 def add_to_board(api: NebulaAPI, ref: str, sources: Iterable[str], *, headers: dict[str, str] | None = None,
                  transport: httpx.AsyncBaseTransport | None = None
                  ) -> tuple[dict[str, Any], int, int, dict[str, Any] | None]:
@@ -988,7 +1118,7 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
                  keep_anyway: list[str] | None = None, leave_out: list[str] | None = None,
                  leave_out_flagged: bool = False, reset_colors: list[str] | None = None,
                  color_choices: dict[str, Any] | None = None, clash_mode: str | None = None,
-                 send_notes: bool | None = None, undo: dict[str, Any] | None = None,
+                 send_notes: bool | None = None, cover: Any = None, undo: dict[str, Any] | None = None,
                  headers: dict[str, str] | None = None) -> tuple[dict[str, Any], list[str], dict[str, Any]]:
     """Change a board. `images` is a list of {"image": number or id, "weight",
     "notes", "privateNote", "excluded"}; `remove` takes images off the board (their files
@@ -1037,6 +1167,13 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
     flag, no-measured or keep-all. `send_notes` False stops the board's
     notes reaching generators; True is the person's call (refused for an
     agent, before anything is saved).
+
+    `cover` picks the image the board opens on (its thumbnail on the canvas
+    card and in lists), by number ("#3" or 3) or id; "" opens it on #1
+    again. A pick, not a reorder: no image changes number, and no notes,
+    weights or analysis change. It goes in the same checked batch as the
+    image changes; an image can't be the cover and come off the board in
+    one call.
 
     `undo` (from a `previous`) makes the call an undo: see undo_board,
     which also says what it left as is. The other arguments are then what
@@ -1105,9 +1242,23 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
             target["notes"] = note_op["notes"] = str(edit["notes"])
         if note_op:
             ops.append({"op": "note", "image": image_id, **note_op})
+    # The cover, by its id (numbers as read), in the same batch as the image changes.
+    cover_id: str | None = None
+    if cover is not None:
+        if "coverImageId" not in board:
+            raise MoodboardError("this version of Nebula has no board cover: a board always opens on image #1. "
+                                 "Nothing was changed.")
+        text = str(cover).strip()
+        if text:
+            cover_id = str(current[find_image(current, text[1:] if text.startswith("#") else text)]["id"])
+        ops.append({"op": "cover", "image": cover_id})
     removed: list[str] = []
     if remove:
         drop = {find_image(current, item) for item in remove}
+        if cover_id is not None and cover_id in {str(current[index]["id"]) for index in drop}:
+            number = next(i for i, image in enumerate(current) if str(image["id"]) == cover_id) + 1
+            raise MoodboardError(f"image {number} can't be the cover and come off the board in one change: pick "
+                                 "one. Nothing was changed.")
         removed = [str(current[index]["url"]) for index in sorted(drop)]
         ops.append({"op": "remove", "images": [str(current[index]["id"]) for index in sorted(drop)]})
         current = [image for index, image in enumerate(current) if index not in drop]
@@ -1212,6 +1363,8 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
                            headers=headers)
             updated = answer["board"]
             edited = True
+            if (updated.get("coverImageId") or None) != (board.get("coverImageId") or None):
+                previous["cover"] = board.get("coverImageId") or ""
             for op in (answer.get("undo") or {}).get("ops") or []:
                 undo_slices.extend(op.get("slices") or [])
             if undo_slices:
@@ -1318,7 +1471,9 @@ _OTHERS_SAVED = "The other changes were saved; `previous` puts them back."
 _PERSON_NOTES = ("Only the person can send this board's notes to generators: the notes are their words about "
                  "the board, for them, their team and agents. Nothing was changed: leave send_notes "
                  "(--send-notes) out to make the other changes, or ask the person to turn on \"Send these notes "
-                 "to generators\" in Moodboard Studio.")
+                 "to generators\" in Moodboard Studio: propose it with propose_asset_change(kind=\"moodboard\", "
+                 "id=<board id>, change={\"sendNotes\": true}, note=...) over MCP, or POST /api/asset-proposals, "
+                 "and they accept it there.")
 
 
 # The backend's cap on an image's private note (services/moodboard_store.py).
@@ -1380,7 +1535,7 @@ def _steering(images: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # image in `images` carries its weight, notes, private note and excluded.
 # `undo` is the checked way back a change hands over too (undo_board).
 RESTORE_KEYS = ("name", "notes", "mode", "strength", "images", "direction", "avoid", "pinned_colors",
-                "brief_override", "clash_mode", "color_choices", "send_notes", "undo")
+                "brief_override", "clash_mode", "color_choices", "send_notes", "cover", "undo")
 
 
 def previous_settings(board: dict[str, Any], *, brief: bool = False, notes: bool = False,
@@ -1603,14 +1758,27 @@ def _override(board: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def cover_of(board: dict[str, Any]) -> dict[str, Any] | None:
+    """The image the board opens on: `{number, id, chosen}`. `chosen` is
+    False when nobody picked one and it opens on #1; None for a board with
+    no images."""
+    images = [image for image in board.get("images") or [] if isinstance(image, dict)]
+    chosen = board.get("coverImageId")
+    for index, image in enumerate(images):
+        if chosen and str(image.get("id")) == str(chosen):
+            return {"number": index + 1, "id": image.get("id"), "chosen": True}
+    return {"number": 1, "id": images[0].get("id"), "chosen": False} if images else None
+
+
 def brief(board: dict[str, Any], *, layout: bool = False) -> dict[str, Any]:
     """A board as an agent needs it: settings, the brief fields, the brief
     generators get, numbered images, and the analysis.
 
     `layout` adds where the cards sit: each image's `placements` (one card
     each: x, y, w, h in board pixels, its weight, and `frameId`, the frame it
-    is in, null for none) and the board's `frames`. `nebula moodboard show
-    --json` and moodboard_get ask for it; lists and edits leave it out.
+    is in, null for none), the board's `frames` and its `version`. `nebula moodboard show
+    --json`, `nebula moodboard edit --json`, moodboard_get and moodboard_edit
+    ask for it; lists and the other edits leave it out.
 
     An image's `privateNote` is the person's own label for it, shown to
     whoever inspects the board; nothing that generates gets it, so don't put
@@ -1623,7 +1791,12 @@ def brief(board: dict[str, Any], *, layout: bool = False) -> dict[str, Any]:
     `brief` is the backend's composed brief as it sent it (`styleBrief` is
     the text generators get, `negativePrompt` their negatives); None when
     this Nebula doesn't send one. The analysis's own `styleBrief` leaves out
-    Direction, pinned colours and any hand-written brief, so it is not it."""
+    Direction, pinned colours and any hand-written brief, so it is not it.
+
+    `cover` ({number, id}) is the image chosen to open the board on, its
+    picture on the canvas card and in lists; with none chosen (or on a
+    Nebula without covers) there is no `cover` and the board opens on #1.
+    It is only what the board shows: no generator gets it."""
     analysis = board.get("analysis") or None
     composed = board.get("brief")
     view = {
@@ -1648,10 +1821,17 @@ def brief(board: dict[str, Any], *, layout: bool = False) -> dict[str, Any]:
              **({"privateNote": image.get("privateNote") or ""} if "privateNote" in image else {})}
             for index, image in enumerate(board.get("images") or [])
         ],
+        # Only when one is chosen, so an old board's view is as it was (the
+        # golden file pins it): no `cover` means it opens on #1.
+        **({"cover": {key: chosen[key] for key in ("number", "id")}}
+           if (chosen := cover_of(board)) and chosen["chosen"] else {}),
         "analysis": analysis,
         "updatedAt": board.get("updatedAt"),
     }
     if layout:
+        # The write counter: moodboard_edit's base_version (`--base-version`)
+        # refuses an edit when the board was saved since this version.
+        view["version"] = board.get("version")
         for image, shown in zip(board.get("images") or [], view["images"]):
             if isinstance(image, dict) and isinstance(image.get("placements"), list):
                 shown["placements"] = image["placements"]

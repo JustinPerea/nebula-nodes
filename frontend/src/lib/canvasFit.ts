@@ -41,6 +41,10 @@ export function computeCanvasFitPadding(): PixelPadding {
     // An agent's proposal bar (and its undo notice) floats above the
     // toolbar; Fit view with a proposal open must not tuck nodes under it.
     { selector: '.proposal-bar-panel', side: 'bottom' as const },
+    // The open Updates list and a dropped update card (top right): Show and
+    // Fit view keep the nodes they frame out from under them.
+    { selector: '.agent-notes-panel', side: 'right' as const },
+    { selector: '.agent-note-card', side: 'right' as const },
     { selector: '.node-inspector-popover', side: null },
     { selector: '.panel--inspector', side: null },
   ];

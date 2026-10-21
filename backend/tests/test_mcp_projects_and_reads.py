@@ -90,6 +90,12 @@ def nebula(tmp_path, monkeypatch):
     krea = _Krea()
     monkeypatch.delenv("NEBULA_AGENT_TOKEN", raising=False)
     monkeypatch.delenv("NEBULA_AGENT_NAME", raising=False)
+    # Styles, boards and characters this file makes and deletes stay in this
+    # test's own roots, not the session-wide ones (conftest) that other files'
+    # exact Recently deleted listings read.
+    monkeypatch.setenv("NEBULA_PRESET_ROOT", str(tmp_path / "presets"))
+    monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path / "moodboards"))
+    monkeypatch.setenv("NEBULA_CHARACTER_ROOT", str(tmp_path / "characters"))
     monkeypatch.setattr(main, "cli_graph", CLIGraph(persist_path=tmp_path / "state.json"))
     monkeypatch.setattr(main, "project_store", ProjectStore(tmp_path / "projects"))
     monkeypatch.setattr(main, "provider_recovery_store", ProviderRecoveryStore(tmp_path / "recoveries.json"))
@@ -309,6 +315,65 @@ def test_get_project_hides_a_key_a_provider_quoted_in_a_saved_error(nebula, pers
     assert "You can find your API key" in node["error"]
 
 
+def test_get_project_shows_a_universal_nodes_ports_as_look_at_canvas_does(nebula, person):
+    """Merge with main (#132): look_at_canvas gives a universal node configured
+    for a model its `ports` and leaves `_model_ports` out of params. A saved
+    project's nodes go through the same redacted_node, so get_project shows
+    the same ports, and still hides a key a provider quoted in its error."""
+    from services import universal_ports
+    from services.model_cache import model_cache
+
+    http = nebula["http"]
+    model_cache.set("openrouter:models", {"models": [
+        {"id": "openai/gpt-4o", "name": "GPT-4o", "input_modalities": ["text", "image"],
+         "output_modalities": ["text"]}], "count": 1}, ttl=300)
+    try:
+        project = mcp_server.new_project("Universal")["project"]
+        built = mcp_server.edit_canvas(nodes=[{"ref": "+eye", "definitionId": "openrouter-universal",
+                                               "params": {"model": "openai/gpt-4o"}}])
+        eye = built["idMap"]["+eye"]
+        looked = next(node for node in mcp_server.look_at_canvas()["nodes"] if node["id"] == eye)
+        assert looked["ports"] == {"inputs": ["messages", "images"], "outputs": ["text"]}
+        assert universal_ports.PORTS_PARAM not in looked["params"]
+
+        # The person's tab autosaves the card with the error a failed run left on it.
+        saved = http.get(f"/api/projects/{project['id']}").json()["snapshot"]
+        [rf] = [node for node in saved["nodes"] if node["id"] == eye]
+        assert universal_ports.PORTS_PARAM in rf["data"]["params"]  # the saved card keeps its record
+        rf["data"]["error"] = f"Error code: 401 - Incorrect API key provided: {OPENAI_KEY[:7]}****{OPENAI_KEY[-4:]}"
+        _save(http, project["id"], saved, person)
+
+        read = mcp_server.get_project("current")
+        _no_key(read)
+        [node] = [node for node in read["nodes"] if node["id"] == eye]
+        fields = ("id", "definitionId", "name", "params", "outputs", "inputsFrom", "ports")
+        assert {key: node.get(key) for key in fields} == {key: looked.get(key) for key in fields}
+        assert node["error"].startswith("Error code: 401 - Incorrect API key provided: ")
+    finally:
+        model_cache.clear()
+
+
+def test_list_trash_narrows_styles_by_scope_too(nebula, person):
+    """Merge with main (#130): Styles are in Recently deleted, and list_trash's
+    scope (#121) narrows them as it narrows boards and characters."""
+    project = mcp_server.new_project("Looks")["project"]
+    mine = mcp_server.style_create("Project look", prompt="warm", project_id="current")
+    everyone = mcp_server.style_create("Global look", prompt="cool")
+    for style in (mine, everyone):
+        mcp_server.style_delete(style["id"])
+
+    def listed(**kwargs) -> set[str]:
+        result = mcp_server.list_trash(kind="style", **kwargs)
+        _no_key(result)
+        assert all(item["kind"] == "style" for item in result["items"])
+        return {item["id"] for item in result["items"]}
+
+    assert listed() >= {mine["id"], everyone["id"]}
+    assert listed(project_id="current") == {mine["id"]}
+    assert listed(scope="project", project_id=project["id"]) == {mine["id"]}
+    assert mine["id"] not in listed(scope="global") and everyone["id"] in listed(scope="global")
+
+
 def test_get_run_hides_a_key_a_provider_quoted_in_a_node_error(nebula, person):
     http, script = nebula["http"], nebula["script"]
     mcp_server.new_project("Quoted")
@@ -329,6 +394,69 @@ def test_get_run_hides_a_key_a_provider_quoted_in_a_node_error(nebula, person):
     [node] = [node for node in mcp_server.look_at_canvas()["nodes"] if node["id"] == a]
     _no_key(node)
     assert node["error"].startswith("401: Incorrect API key provided: ")
+
+
+def test_the_journal_and_view_output_hide_a_key_a_provider_quoted(nebula, person):
+    """Review of #121: a failed run's journal event (wait_for_canvas_change,
+    `nebula watch`) and view_output's failure answers (its 409 and the
+    X-Nebula-Last-Run-Error header beside an older output; `nebula path`)
+    are agent reads of the same raw error, so they hide keys too."""
+    from models.events import SkippedEvent
+
+    http, script = nebula["http"], nebula["script"]
+    mcp_server.new_project("Quoted elsewhere")
+    built = mcp_server.edit_canvas(nodes=[{"ref": "+a", "definitionId": "text-input", "params": {"value": "x"}},
+                                          {"ref": "+b", "definitionId": "text-input", "params": {"value": "y"}},
+                                          {"ref": "+c", "definitionId": "text-input", "params": {"value": "z"}}])
+    a, b, c = (built["idMap"][ref] for ref in ("+a", "+b", "+c"))
+    nodes = [{"id": node, "definitionId": "text-input", "params": {"value": "x"}} for node in (a, b, c)]
+    quoted = f"401: Incorrect API key provided: {OPENAI_KEY[:7]}****{OPENAI_KEY[-4:]}; header Key {FAL_KEY}"
+
+    # a has an output from an earlier run that worked.
+    def worked(graph_nodes, run_id):
+        yield ExecutedEvent(node_id=a, run_id=run_id, outputs={"text": {"type": "Text", "value": "earlier"}})
+
+    script["events"] = worked
+    first = _canvas_run(http, person, nodes[:1])
+    assert json.loads(asyncio.run(mcp_server.get_run(first, wait_seconds=5))[0])["status"] == "finished"
+
+    journal, cursor = _cursor()
+
+    def failing(graph_nodes, run_id):
+        yield ErrorEvent(node_id=a, run_id=run_id, error=quoted)
+        yield ErrorEvent(node_id=b, run_id=run_id, error=quoted)
+        yield SkippedEvent(node_id=c, run_id=run_id, reason=f"upstream said {quoted}")
+
+    script["events"] = failing
+    failed = _canvas_run(http, person, nodes)
+    assert json.loads(asyncio.run(mcp_server.get_run(failed, wait_seconds=5))[0])["status"] == "failed"
+
+    changed = mcp_server.wait_for_canvas_change(since=cursor, journal=journal, timeout_seconds=2,
+                                                kinds=["run"], include_self=True)
+    raw = http.get("/api/canvas/events", params={"after": cursor, "journal": journal, "wait": 0,
+                                                 "self": 1}).json()  # `nebula watch`
+    for result in (changed, raw):
+        _no_key(result)
+        failures = [event for event in result["events"] if event["kind"] == "run.failed"]
+        assert {event["nodeId"] for event in failures} >= {a, b}
+        for event in failures:
+            assert "<key hidden>" in event["data"]["error"] and "****" not in event["data"]["error"]
+    skipped = [event for event in changed["events"] if event["nodeId"] == c and event["kind"] == "run.skipped"]
+    assert skipped and "<key hidden>" in skipped[0]["data"]["reason"]
+
+    # b made nothing: view_output (and `nebula path`, the same 409) gives the error.
+    no_output = json.loads(mcp_server.view_output(b)[0])
+    _no_key(no_output)
+    assert no_output["state"] == "error" and "<key hidden>" in no_output["error"]
+    path = http.get(f"/api/graph/node/{b}/path")
+    _no_key(path.text)
+    # a still has its earlier value: view_output notes the failure beside it.
+    older = json.loads(mcp_server.view_output(a)[0])
+    _no_key(older)
+    assert older["outputs"]["text"]["value"] == "earlier" and "<key hidden>" in older["note"]
+    preview = http.get(f"/api/graph/node/{a}/preview")
+    assert preview.status_code == 415
+    _no_key(preview.headers.get("x-nebula-last-run-error") or "")
 
 
 def test_list_projects_and_get_project_carry_the_cover(nebula, person, monkeypatch):
@@ -366,7 +494,7 @@ def test_list_projects_and_get_project_carry_the_cover(nebula, person, monkeypat
 
 # -- settings and providers ----------------------------------------------------------
 
-def test_get_settings_says_which_keys_are_set_and_never_any_part_of_one(nebula):
+def test_get_settings_says_which_keys_are_set_and_never_any_part_of_one(nebula, person):
     result = mcp_server.get_settings()
     _no_key(result)
     assert result == {
@@ -377,8 +505,15 @@ def test_get_settings_says_which_keys_are_set_and_never_any_part_of_one(nebula):
         "exportFolder": "/tmp/nebula-exports",
         "kreaConnectionMode": "mcp",
     }
-    # GET /api/settings itself is unchanged (audit question 3): it still masks to the last 4.
-    assert nebula["http"].get("/api/settings").json()["apiKeys"]["OPENAI_API_KEY"] == "***" + OPENAI_KEY[-4:]
+    # GET /api/settings (Justin, Q55 a): "Only the app (your person token)
+    # gets the endings. Everything else learns which providers are set, and
+    # nothing more." An agent's curl or `nebula keys` gets a bare "***".
+    http = nebula["http"]
+    anyone = http.get("/api/settings").json()["apiKeys"]
+    _no_key(anyone)
+    assert anyone == {"OPENAI_API_KEY": "***", "FAL_KEY": "***", "GOOGLE_API_KEY": ""}
+    app = http.get("/api/settings", headers=person.headers).json()["apiKeys"]
+    assert app == {"OPENAI_API_KEY": "***" + OPENAI_KEY[-4:], "FAL_KEY": "***" + FAL_KEY[-4:], "GOOGLE_API_KEY": ""}
 
 
 def test_provider_status_reads_the_health_probes_and_the_krea_connection(nebula, monkeypatch):

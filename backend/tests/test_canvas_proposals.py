@@ -411,12 +411,13 @@ def test_websocket_sync_sends_keys_only_after_a_person_hello(api):
     proposal_id = _propose(api, _upscale_body(n1)).json()["proposal"]["id"]
     key = _key(api, proposal_id)
     with api.client.websocket_connect("/ws", headers=FORGED_ORIGIN) as ws:
-        messages = [ws.receive_json() for _ in range(2)]
+        messages = [ws.receive_json() for _ in range(3)]
         ws.send_json(PERSON_HELLO)
         messages.append(ws.receive_json())
-    assert [m["type"] for m in messages] == ["graphSync", "canvasPins", "proposalSync"]
-    assert messages[2]["proposals"][0]["id"] == proposal_id
-    assert messages[2]["proposals"][0]["acceptKey"] == key
+    # The open project's pins and Updates follow graphSync.
+    assert [m["type"] for m in messages] == ["graphSync", "canvasPins", "agentNotes", "proposalSync"]
+    assert messages[3]["proposals"][0]["id"] == proposal_id
+    assert messages[3]["proposals"][0]["acceptKey"] == key
 
     # A forged Origin, no hello, or a wrong token never get the key.
     for headers, hello in ((FORGED_ORIGIN, None), ({}, None), (FORGED_ORIGIN, {"type": "hello", "personToken": "x" * 43})):
@@ -424,10 +425,11 @@ def test_websocket_sync_sends_keys_only_after_a_person_hello(api):
         with api.client.websocket_connect("/ws", headers=headers) as ws:
             seen.append(ws.receive_json())
             seen.append(ws.receive_json())
+            seen.append(ws.receive_json())
             if hello is not None:
                 ws.send_json(hello)
                 seen.append(ws.receive_json())
-        assert [m["type"] for m in seen][:2] == ["graphSync", "canvasPins"]
+        assert [m["type"] for m in seen][:3] == ["graphSync", "canvasPins", "agentNotes"]
         assert "proposalSync" not in [m["type"] for m in seen]
         assert key not in json.dumps(seen)
 
@@ -866,6 +868,24 @@ def test_accept_rejects_bad_positions(api):
     assert api.book.get(proposal_id).status == "open" and len(api.graph.nodes) == 1
 
 
+def test_accept_refuses_a_huge_int_position_in_any_content_type(api):
+    """_proposal_body parses the raw body itself, whatever its content type, so
+    a text/plain body skips the JSON number guard; it uses the guard's checked
+    parse. float(10**400) in clean_positions was a 500 (2026-10-20)."""
+    n1 = api.graph.add_node("text-input", {"value": "a cat"})
+    proposal_id = _propose(api, _upscale_body(n1)).json()["proposal"]["id"]
+    key = _key(api, proposal_id)
+    huge = "1" + "0" * 400
+    client = TestClient(api.main.app, raise_server_exceptions=False)
+    for content_type in ("text/plain", "application/json"):
+        response = client.post(f"/api/canvas/proposals/{proposal_id}/accept",
+                               headers={**PERSON, KEY: key, "content-type": content_type},
+                               content=('{"positions": {"+img": {"x": %s, "y": 0}}}' % huge).encode())
+        assert response.status_code == 422, (content_type, response.text)
+        assert huge[:40] in response.json()["detail"] and "1.8e308" in response.json()["detail"]
+    assert api.book.get(proposal_id).status == "open" and len(api.graph.nodes) == 1
+
+
 def test_withdraw_is_for_the_proposing_agent_only(api):
     n1 = api.graph.add_node("text-input", {"value": "a cat"})
     proposal_id = _propose(api, _upscale_body(n1)).json()["proposal"]["id"]
@@ -933,7 +953,7 @@ def test_cli_builder_turns_flags_into_a_body():
         "run": ["+up"],
     }
     for kwargs in ({"add": ["up=x"]}, {"param": [["+ghost.k=v"]]}, {"set_params": ["+up.k=v"]},
-                   {"wire": [["n4", "+up:image"]]}, {"at": ["+up=1,2"]}):
+                   {"wire": [["n4:", "+up:image"]]}, {"at": ["+up=1,2"]}):
         with pytest.raises(proposals_cmd.BuildError):
             proposals_cmd.build_body(note="x", **kwargs)
 

@@ -5,6 +5,9 @@ Two servers, both started per turn by the agent's own CLI:
     tools. It is how in-app agents reach Nebula; Codex's shell has no network,
     so for it this is the only way.
   - `nebula_krea` (backend/krea_mcp_server.py): read-only Krea discovery.
+    The `nebula` server has the same calls too (krea_discovery_tools,
+    krea_discover, over the same routes and allow-list), so outside agents,
+    which get only the `nebula` server, have them.
 
 Each child only knows the local backend address. For the in-app chats the
 turn's agent token reaches the Nebula server by environment variable *name*
@@ -36,15 +39,24 @@ NEBULA_MCP_ENV_VARS = ("NEBULA_AGENT_TOKEN", "NEBULA_URL")
 # doesn't import the MCP package; test_agent_mcp_registration checks it
 # against the server's own tool manager, so a new tool can't go unlisted.
 NEBULA_MCP_TOOLS = (
-    "get_selected_nodes", "look_at_canvas", "resolve_pin", "point_at", "wait_for_canvas_change",
+    "start_here", "get_selected_nodes", "look_at_canvas", "resolve_pin", "post_note", "list_notes", "point_at",
+    "wait_for_canvas_change",
     "propose_change", "get_proposal", "withdraw_proposal",
-    "find_nodes", "describe_node", "edit_canvas", "remove_from_canvas",
+    "find_nodes", "describe_node", "edit_canvas", "remove_from_canvas", "undo_canvas_edit",
     "run_nodes", "get_run", "cancel_run", "view_output", "get_spend_limits",
     "list_projects", "open_project", "new_project",
     "list_trash", "restore_from_trash",
     "commons_search", "commons_get", "commons_add", "commons_comment", "commons_borrow",
     "moodboard_list", "moodboard_get", "moodboard_create", "moodboard_add", "moodboard_update",
-    "moodboard_analyze", "moodboard_delete", "moodboard_move", "character_move",
+    "moodboard_edit", "moodboard_analyze", "moodboard_delete", "moodboard_move", "character_move",
+    "style_list", "style_get", "style_create", "style_update", "style_delete",
+    # Outside the graph (U16): project covers and asset proposals.
+    "list_project_covers", "set_project_cover", "propose_asset_change",
+    # Commons reads that needed raw HTTP (Q63 b, U13); curation goes through propose_asset_change.
+    "commons_collections", "commons_status", "commons_borrowings", "commons_fidelity", "commons_concentration",
+    # MCP parity U10 and U14 (2026-10-20): universal-node catalogs, Krea discovery.
+    "model_catalog", "model_schema", "krea_discovery_tools", "krea_discover",
+    # Projects without opening them, settings and providers (U3, U6).
     "rename_project", "get_project", "get_settings", "provider_status",
 )
 # In-app Codex may wait this long for one tool call (run_nodes/get_run wait up

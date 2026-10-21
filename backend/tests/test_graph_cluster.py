@@ -377,8 +377,10 @@ def test_import_nonfinite_position_preserves_existing_graph():
         headers={"content-type": "application/json"},
     )
 
-    assert response.status_code == 400
-    assert "non-finite" in response.json()["detail"]
+    # JsonNumberGuard refuses 1e400 before the route (2026-10-20); the
+    # route's own non-finite check was a 400.
+    assert response.status_code == 422
+    assert "JSON number out of range: 1e400" in response.json()["detail"]
     assert main_module.cli_graph.get_state() == before
 
 
@@ -404,8 +406,10 @@ def test_import_nonfinite_params_preserve_existing_graph_and_disk(
         headers={"content-type": "application/json"},
     )
 
-    assert response.status_code == 400
-    assert "non-finite" in response.json()["detail"]
+    # JsonNumberGuard refuses 1e400 before the route (2026-10-20); the
+    # route's own non-finite check was a 400.
+    assert response.status_code == 422
+    assert "JSON number out of range: 1e400" in response.json()["detail"]
     assert live.get_state() == before
     restored = CLIGraph()
     restored.load(path)

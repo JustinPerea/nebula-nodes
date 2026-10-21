@@ -76,9 +76,12 @@ def test_remove_provider_persists_and_reopening_returns_only_masked_other_keys(s
     assert json.loads(path.read_text()) == expected
     assert settings.get_api_key("OPENAI_API_KEY") is None
     assert settings.get_api_key("FAL_KEY") == initial["apiKeys"]["FAL_KEY"]
-    reopened = TestClient(main.app).get("/api/settings")
+    # The app reopening (its person token) sees the endings; anyone else only
+    # which keys are set (Justin, Q55 a).
+    reopened = TestClient(main.app).get("/api/settings", headers=PERSON)
     assert reopened.status_code == 200
     assert reopened.json()["apiKeys"] == {"FAL_KEY": "***5678", "KREA_API_TOKEN": "***9012"}
+    assert TestClient(main.app).get("/api/settings").json()["apiKeys"] == {"FAL_KEY": "***", "KREA_API_TOKEN": "***"}
     assert all(value not in reopened.text for value in initial["apiKeys"].values())
     assert all(value not in response.text for value in initial["apiKeys"].values())
     clear.assert_called_once_with()

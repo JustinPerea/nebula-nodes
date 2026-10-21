@@ -13,6 +13,8 @@ Commons is selectively composed with main `6f7e7155` (Paper, Krea MCP, Cinema ar
 
 **Real library activation is a separate operational step:** preserve a backup, choose a safe restart, use a fresh browser chat, and verify the intended brand scope before reader/evaluation work. No real activation or store migration was performed for this integration.
 
+- **2026-10-20 (Justin's Q63 b, audit U13):** agents also read collections, status, borrowings, fidelity and concentration (`commons_collections`, `commons_status`, `commons_borrowings`, `commons_fidelity`, `commons_concentration`, with `nebula commons` twins), comment into a chosen membership's thread, and ask for curation (corrections, regions, memberships) as asset proposals (`propose_asset_change(kind="commons")`) the person accepts in the Commons. The curation routes, blind labeling and the agent review stay human-only, unchanged; concentration is now brand-scoped for every agent, not only bound ones. See `docs/MCP-SETUP.md`, Commons curation.
+
 ## Behavior and preservation
 
 Commons adds browser reference intake, search/filtering, local measurements, comments, collections, linked-folder controls, labeling and assisted review. Analysis is explicit and metered. Human corrections remain authoritative; assisted review is not blind ground truth.

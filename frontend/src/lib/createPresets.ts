@@ -55,11 +55,24 @@ export async function createPreset(body: PresetCreateInput): Promise<Preset> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(resolvedBody),
   });
-  if (!res.ok) throw new Error(`Create preset failed: ${res.status}`);
+  if (!res.ok) {
+    // A refusal says why (an image that isn't one of Nebula's files, a
+    // project in Recently deleted), so Create can show it as it is.
+    const body = await res.json().catch(() => null) as { detail?: unknown } | null;
+    throw new Error(typeof body?.detail === 'string' ? body.detail : `Create preset failed: ${res.status}`);
+  }
   return res.json();
 }
 
+/** Move a Style to Recently deleted (backend services/preset_store.py);
+ * `restoreTrashed('style', id)` brings it back with the same id. */
 export async function deletePreset(id: string): Promise<void> {
-  const res = await apiFetch(`/api/presets/${id}`, { method: 'DELETE' });
-  if (!res.ok) throw new Error(`Delete preset failed: ${res.status}`);
+  const res = await apiFetch(`/api/presets/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (res.ok) return;
+  let detail = '';
+  try {
+    const body = await res.json() as { detail?: unknown };
+    if (typeof body?.detail === 'string') detail = body.detail;
+  } catch { /* not JSON */ }
+  throw new Error(detail || `Delete failed: ${res.status}`);
 }

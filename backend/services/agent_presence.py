@@ -28,6 +28,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Callable, Iterator, Mapping
 
+from services import universal_ports
 from services.selection_context import _safe_value as safe_value
 
 PRESENCE_TTL_SECONDS = 120.0
@@ -176,7 +177,10 @@ def identify(
 def _finite(value: Any, label: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise PresenceError(f"{label} must be a number")
-    number = float(value)
+    try:
+        number = float(value)
+    except OverflowError:  # an int past float's range
+        number = math.inf
     if not math.isfinite(number) or abs(number) > 1e7:
         raise PresenceError(f"{label} must be a finite number")
     return number
@@ -256,6 +260,23 @@ class AgentPresence:
             event["from"] = origin
         self._agents[identity.id] = {**event, "_t": now}
         return event
+
+    def here(self, identity: AgentIdentity) -> tuple[dict[str, Any], str]:
+        """Where a line said with no target goes, and which place that is:
+        the agent's own cursor (`cursor`, so it doesn't move), else the
+        middle of the person's view when the browser reported one (`view`),
+        else (0, 0) (`origin`)."""
+        self.active()  # drops expired cursors first
+        current = self._agents.get(identity.id)
+        if current is not None:
+            return dict(current["target"]), "cursor"
+        view = self._view or {}
+        viewport, screen = view.get("viewport"), view.get("screen")
+        if viewport and screen:
+            zoom = viewport["zoom"]
+            return {"x": round((screen["width"] / 2 - viewport["x"]) / zoom, 1),
+                    "y": round((screen["height"] / 2 - viewport["y"]) / zoom, 1)}, "view"
+        return {"x": 0.0, "y": 0.0}, "origin"
 
     def active(self) -> list[dict[str, Any]]:
         now = self._clock()
@@ -455,7 +476,8 @@ def output_availability(outputs: Any) -> dict[str, Any]:
 def redacted_node(node_id: str, node: Mapping[str, Any], definition: Mapping[str, Any],
                   inputs_from: list[str]) -> dict[str, Any]:
     """One node as agents read it (look_at_canvas, and get_project for a saved
-    project): its name, redacted params, which outputs exist, and its wires in.
+    project): its name, redacted params, which outputs exist, its wires in, and
+    a universal node's `ports` (from its model).
     `node` is a canvas node: definitionId, params, outputs and the label the
     person or an agent gave it (none when it goes by the model's name)."""
     definition_id = str(node.get("definitionId", ""))
@@ -470,6 +492,14 @@ def redacted_node(node_id: str, node: Mapping[str, Any], definition: Mapping[str
     }
     if node.get("label"):
         entry["model"] = definition.get("displayName") or definition_id
+    # A universal node's ports come from its model: say which, once
+    # (its `_model_ports` record isn't repeated in params).
+    model_ports = universal_ports.stored_ports(definition_id, node.get("params"))
+    if model_ports is not None:
+        if isinstance(entry["params"], dict):
+            entry["params"].pop(universal_ports.PORTS_PARAM, None)
+        entry["ports"] = {"inputs": universal_ports.port_ids(model_ports[0]),
+                          "outputs": universal_ports.port_ids(model_ports[1])}
     return entry
 
 

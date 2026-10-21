@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronRight, RotateCcw, X } from 'lucide-react';
 import { backendAssetUrlSync } from '../../lib/backend';
+import { storedImageView } from '../../lib/storedImage';
+import { OutsideImageNote } from '../OutsideImageNote';
 import {
   deletedByLabel, emptyTrash, fetchTrash, purgeTrashed, restoreTrashed,
   type TrashedItem,
@@ -11,7 +13,8 @@ import '../../styles/asset-trash.css';
 import { useCurrentProjectId } from '../../lib/currentProject';
 
 /**
- * Recently deleted, inside Moodboard Studio and Character Studio.
+ * Recently deleted, inside Moodboard Studio and Character Studio, and under
+ * the Assets panel's Styles.
  *
  * A deleted board or character waits here until the person deletes it for
  * good (no timer). Restore brings it back with the same id, so canvas nodes
@@ -19,14 +22,22 @@ import { useCurrentProjectId } from '../../lib/currentProject';
  * backend refuses agents.
  */
 
-type AssetKind = 'moodboard' | 'character';
+type AssetKind = 'moodboard' | 'character' | 'style';
 
 const NOUNS: Record<AssetKind, { one: string; many: string }> = {
   moodboard: { one: 'board', many: 'boards' },
   character: { one: 'character', many: 'characters' },
+  style: { one: 'style', many: 'styles' },
 };
 
 export const UNDO_VISIBLE_MS = 8000;
+
+/** A deleted item's picture: a Character's only when it is one of Nebula's
+ *  own files (lib/storedImage.ts); a board's as before. */
+function thumbnailOf(item: TrashedItem): string | null {
+  if (item.kind === 'character') return storedImageView(item.thumbnail).src;
+  return item.thumbnail ? backendAssetUrlSync(item.thumbnail) : null;
+}
 
 function deletedLine(item: TrashedItem): string {
   const date = new Date(item.deletedAt);
@@ -158,11 +169,12 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
             {items.map((item) => (
               <li key={item.id} className="asset-trash__row" aria-label={item.name || 'Untitled'}>
                 <span className="asset-trash__thumb">
-                  {item.thumbnail ? <img src={backendAssetUrlSync(item.thumbnail)} alt="" draggable={false} /> : null}
+                  {thumbnailOf(item) && <img src={thumbnailOf(item) ?? undefined} alt="" draggable={false} />}
                 </span>
                 <span className="asset-trash__meta">
                   <span className="asset-trash__name">{item.name || 'Untitled'}</span>
                   <span className="asset-trash__sub">{deletedLine(item)}</span>
+                  {item.kind === 'character' && storedImageView(item.thumbnail).outside && <OutsideImageNote />}
                 </span>
                 <span className="asset-trash__actions">
                   <button type="button" className="asset-trash__button" disabled={busy}

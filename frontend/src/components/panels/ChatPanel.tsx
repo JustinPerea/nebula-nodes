@@ -15,8 +15,10 @@ import {
   fetchPersonalAgents,
   acknowledgePersonalAgentWarning,
   isPersonalAgent,
+  parsePersonalSessionOptions,
   type ChatAgentId,
   type PersonalAgentList,
+  type PersonalSessionOption,
   type ClaudeStatus,
   type CodexChatGPTLoginState,
   type CodexStatus,
@@ -485,6 +487,9 @@ export function ChatPanel() {
   const [codexLoginError, setCodexLoginError] = useState<string | null>(null);
   const [codexLoginBusy, setCodexLoginBusy] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  // The models (or thinking levels) a personal agent offers for its session.
+  const [personalOptions, setPersonalOptions] = useState<PersonalSessionOption[]>([]);
+  useEffect(() => { if (!sessionId) setPersonalOptions([]); }, [sessionId]);
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
   const [cancelState, setCancelState] = useState<ChatCancellationState>('idle');
@@ -1004,6 +1009,12 @@ export function ChatPanel() {
           const type = event.type;
           if (type === 'session') {
             setSessionId(String(event.sessionId));
+            setPersonalOptions(parsePersonalSessionOptions(event.options));
+            return;
+          }
+          if (type === 'personal_options') {
+            setPersonalOptions(parsePersonalSessionOptions(event.options));
+            if (event.error) setNotice(String(event.error));
             return;
           }
           if (type === 'thinking') {
@@ -1512,6 +1523,17 @@ export function ChatPanel() {
     sendRef.current = send;
   }, [send]);
 
+  const choosePersonalOption = useCallback((configId: string, value: string) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN || !sessionId) return;
+    setPersonalOptions((current) => current.map((option) => option.id === configId ? { ...option, current: value } : option));
+    void personTokenForSocket(ws.url).then((personToken) => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      ws.send(JSON.stringify({ type: 'personal_option', sessionId, configId, value,
+        ...(personToken ? { personToken } : {}) }));
+    });
+  }, [sessionId]);
+
   const answerPermission = useCallback((requestId: string, decision: 'allow' | 'deny') => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -1824,6 +1846,21 @@ export function ChatPanel() {
               </span>
             )}
           </div>
+          {personal && personalOptions.length > 0 && (
+            // The models (or thinking levels) the agent offers, on their own row
+            // so they never split the status line above.
+            <div className="chat-panel__personal-options" onMouseDown={(e) => e.stopPropagation()}>
+              {personalOptions.map((option) => (
+                <select key={option.id} className="chat-panel__personal-option" value={option.current ?? ''}
+                  aria-label={`${option.name} for this conversation`} disabled={busy}
+                  title={`${option.name}: ${agentDisplayName} offers these for this conversation`}
+                  onChange={(event) => choosePersonalOption(option.id, event.target.value)}>
+                  {option.current === null && <option value="" disabled>{option.name}</option>}
+                  {option.options.map((item) => <option key={item.value} value={item.value}>{item.name}</option>)}
+                </select>
+              ))}
+            </div>
+          )}
         </div>
         <button
           type="button"

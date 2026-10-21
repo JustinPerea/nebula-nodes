@@ -10,8 +10,8 @@ import '../../styles/batch-node.css';
 function BatchNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as NodeData;
   const selectNode = useUIStore((state) => state.selectNode);
-  const selectedNodeId = useUIStore((state) => state.selectedNodeId);
-  const inspectorVisible = useUIStore((state) => state.panels.inspector.visible);
+  // Booleans, so another node's selection doesn't re-render this card.
+  const selectedInUi = useUIStore((state) => state.selectedNodeId === id);
   const setInspectorVisible = useUIStore((state) => state.setInspectorVisible);
   const entranceClass = useSlavaNodeEntranceClass();
   const items = parseBatchItems(nodeData.params);
@@ -19,7 +19,8 @@ function BatchNodeComponent({ id, data, selected }: NodeProps) {
   const authoringError = batchAuthoringError(nodeData.params);
   const name = typeof nodeData.params.display_name === 'string' && nodeData.params.display_name.trim()
     ? nodeData.params.display_name : 'Batch';
-  const isSelected = selected || selectedNodeId === id;
+  const isSelected = selected || selectedInUi;
+  const inspectorExpanded = useUIStore((state) => isSelected && state.panels.inspector.visible);
 
   return (
     <div className={`batch-node${isSelected ? ' batch-node--selected' : ''}${entranceClass}`}
@@ -29,7 +30,7 @@ function BatchNodeComponent({ id, data, selected }: NodeProps) {
         <span className="batch-node__count">{items.length} item{items.length === 1 ? '' : 's'}</span>
         <button type="button" className="batch-node__edit nodrag" aria-label="Edit Batch items"
           data-node-inspector-anchor={id} aria-haspopup="dialog"
-          aria-expanded={isSelected && inspectorVisible}
+          aria-expanded={inspectorExpanded}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation(); selectNode(id); setInspectorVisible(true);

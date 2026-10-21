@@ -1,0 +1,543 @@
+"""Undo for an agent's own canvas edits: the inverse the server keeps.
+
+Every edit through ``POST /api/graph/apply`` (the MCP tools edit_canvas and
+remove_from_canvas, ``nebula apply``) that changes something gets an edit id
+and an undo token:
+
+- The edit id (``ed_...``) is public. It rides on the edit's graphSync
+  (``edit.id``), so a canvas's undo step knows which edit it holds, and on
+  each of the edit's journal events (``edit: {id}``).
+- The token is the agent's alone. Only the reply to its own request carries
+  it, and ``POST /api/graph/apply/undo`` takes it back only from the same
+  agent, while the canvas shows the project the edit was made in.
+
+Per edit the book keeps what the edit changed (``inverse``): the nodes it
+added, the params, names and positions it changed (before and after), the
+nodes it removed (whole: params with the canvas's own ``_`` keys, outputs,
+name, position) and the wires it added or took away. ``plan_undo`` checks
+each part against how the edit left it (the "expect" side) and leaves a part
+someone changed since as it is, reporting it, as a moodboard restore does
+(services/moodboard_edits.py). main turns the plan into one restore (the
+staging ``POST /api/graph/restore`` uses), trusted for ``_`` keys because the
+server wrote them; an agent still can't send them.
+
+Memory-only and bounded: ``UNDO_TTL_SECONDS``, ``MAX_EDITS``,
+``MAX_EDIT_BYTES`` and ``MAX_TOTAL_BYTES``. A backend restart forgets every
+inverse (a token then gets 404). Clearing the canvas or loading a graph into
+the open project ends that project's tokens, because its node ids start
+again.
+
+Links: every edit id handed out (an agent's edit, an agent's undo, the
+person's Cmd+Z of a step the canvas knew the edit of) keeps a small brief
+(``EditLink``: whose, what kind, which journal events) for ``MAX_LINKS``
+ids, after its inverse is gone, so the journal can still say whose edit an
+undo reverted.
+"""
+from __future__ import annotations
+
+import copy
+import json
+import re
+import secrets
+import time
+from collections import OrderedDict
+from dataclasses import dataclass, field
+from typing import Any, Callable, Mapping
+
+UNDO_TTL_SECONDS = 3600
+MAX_EDITS = 100
+MAX_EDIT_BYTES = 16 * 1024 * 1024
+MAX_TOTAL_BYTES = 64 * 1024 * 1024
+MAX_LINKS = 500
+MAX_GONE = 500
+MAX_LINK_EVENTS = 50
+
+EDIT_ID_RE = re.compile(r"^ed_[0-9a-f]{16}$")
+_TOKEN_RE = re.compile(r"^[0-9a-f]{40}$")
+
+APPLIED = "applied"
+UNDONE = "undone"
+
+Wire = tuple[str, str, str, str]
+_MISSING = object()
+
+
+class UndoError(Exception):
+    def __init__(self, status: int, detail: str, code: str) -> None:
+        super().__init__(detail)
+        self.status = status
+        self.detail = detail
+        self.code = code
+
+
+def actor_brief(actor: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Whose edit, as a link names it: kind, and id and name for an agent."""
+    actor = actor or {}
+    kind = str(actor.get("kind") or "anonymous")
+    brief: dict[str, Any] = {"kind": kind}
+    for key in ("id", "name"):
+        if isinstance(actor.get(key), str) and actor[key]:
+            brief[key] = actor[key]
+    return brief
+
+
+def wire_key(edge: Mapping[str, Any]) -> Wire:
+    return (str(edge.get("source") or ""), str(edge.get("sourceHandle") or ""),
+            str(edge.get("target") or ""), str(edge.get("targetHandle") or ""))
+
+
+def wire_body(wire: Wire) -> dict[str, str]:
+    return {"source": wire[0], "sourceHandle": wire[1], "target": wire[2], "targetHandle": wire[3]}
+
+
+def _wire_text(wire: Wire) -> str:
+    return f"{wire[0]}.{wire[1]} → {wire[2]}.{wire[3]}"
+
+
+# -- what an edit changed ------------------------------------------------------
+
+def capture_before(nodes: Mapping[str, dict[str, Any]], edges: list[dict[str, Any]], *,
+                   removed: list[str], changed: list[str], renamed: list[str], moved: list[str],
+                   shown: Mapping[str, Any]) -> dict[str, Any]:
+    """The canvas as an edit is about to change it: only what the edit names.
+
+    ``shown`` are the positions the canvas shows (a node without a stored one
+    is laid out on export), so undoing a move puts a node back where the
+    person saw it."""
+    def node_copy(node_id: str) -> dict[str, Any]:
+        node = nodes[node_id]
+        position = node.get("position") or shown.get(node_id)
+        return {
+            "id": node_id,
+            "definitionId": str(node.get("definitionId") or ""),
+            "params": copy.deepcopy(node.get("params") or {}),
+            "label": node.get("label") or None,
+            **({"position": {"x": float(position["x"]), "y": float(position["y"])}}
+               if isinstance(position, Mapping) else {}),
+            "outputs": copy.deepcopy(node.get("outputs") or {}),
+        }
+
+    return {
+        "removed": [node_copy(node_id) for node_id in dict.fromkeys(removed) if node_id in nodes],
+        "params": {node_id: copy.deepcopy(nodes[node_id].get("params") or {})
+                   for node_id in changed if node_id in nodes},
+        "labels": {node_id: nodes[node_id].get("label") or None for node_id in renamed if node_id in nodes},
+        "positions": {node_id: _point(nodes[node_id].get("position") or shown.get(node_id))
+                      for node_id in moved if node_id in nodes},
+        "wires": sorted({wire_key(edge) for edge in edges}),
+    }
+
+
+def _point(value: Any) -> dict[str, float] | None:
+    if not isinstance(value, Mapping):
+        return None
+    try:
+        return {"x": float(value["x"]), "y": float(value["y"])}
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def build_inverse(before: Mapping[str, Any], nodes: Mapping[str, dict[str, Any]], edges: list[dict[str, Any]],
+                  *, added: list[str]) -> dict[str, Any] | None:
+    """What undoing the edit means, from the canvas before it and now; None
+    when the edit changed nothing that undo would put back."""
+    wires_before = {tuple(wire) for wire in before["wires"]}
+    wires_after = {wire_key(edge) for edge in edges}
+    inverse: dict[str, Any] = {
+        "added": [{"id": node_id, "definitionId": str(nodes[node_id].get("definitionId") or ""),
+                   "params": copy.deepcopy(nodes[node_id].get("params") or {}),
+                   "label": nodes[node_id].get("label") or None}
+                  for node_id in added if node_id in nodes],
+        "addedWires": sorted(wires_after - wires_before),
+        "changed": [],
+        "renamed": [],
+        "moved": [],
+        "removed": [copy.deepcopy(node) for node in before["removed"] if node["id"] not in nodes],
+        "removedWires": sorted(wires_before - wires_after),
+    }
+    for node_id, params in before["params"].items():
+        now = nodes.get(node_id)
+        if now is not None and (now.get("params") or {}) != params:
+            inverse["changed"].append({"id": node_id, "definitionId": str(now.get("definitionId") or ""),
+                                       "before": copy.deepcopy(params),
+                                       "after": copy.deepcopy(now.get("params") or {})})
+    for node_id, label in before["labels"].items():
+        now = nodes.get(node_id)
+        if now is not None and (now.get("label") or None) != label:
+            inverse["renamed"].append({"id": node_id, "before": label, "after": now.get("label") or None})
+    for node_id, point in before["positions"].items():
+        now = nodes.get(node_id)
+        if now is not None and point is not None and _point(now.get("position")) != point:
+            inverse["moved"].append({"id": node_id, "before": point, "after": _point(now.get("position"))})
+    if not any(inverse.values()):
+        return None
+    return inverse
+
+
+def describe(inverse: Mapping[str, Any]) -> str:
+    """One line on what undoing this edit does."""
+    parts: list[str] = []
+    if inverse["added"]:
+        parts.append("removes " + _ids([node["id"] for node in inverse["added"]]))
+    if inverse["removed"]:
+        parts.append("puts back " + _ids([node["id"] for node in inverse["removed"]]))
+    earlier = [item["id"] for key in ("changed", "renamed", "moved") for item in inverse[key]]
+    if earlier:
+        parts.append("returns " + _ids(list(dict.fromkeys(earlier))) + " to how they were")
+    wires = len(inverse["addedWires"]) + len(inverse["removedWires"])
+    if wires and not parts:
+        parts.append(f"puts {wires} wire{'s' if wires != 1 else ''} back")
+    return "Undo " + "; ".join(parts) + ". Anything changed since is left as it is."
+
+
+def _ids(ids: list[str], limit: int = 6) -> str:
+    shown = ", ".join(ids[:limit])
+    return shown + (f" and {len(ids) - limit} more" if len(ids) > limit else "")
+
+
+# -- the plan: what undo does to the canvas as it is now -----------------------------
+
+@dataclass
+class UndoPlan:
+    restore: dict[str, Any]
+    trusted: frozenset[str]
+    skipped: list[dict[str, Any]]
+
+    @property
+    def empty(self) -> bool:
+        body = self.restore
+        return not (body["nodes"] or body["remove"] or body["wire"] or body["unwire"])
+
+
+def authored(definition_id: str, params: Mapping[str, Any]) -> Any:
+    """Params as the person authored them, as the canvas's undo compares them
+    (frontend lib/canvasUndo.ts authoredParams): a Cinema scene without the
+    media a run put into its shots, a Paper source as which source it is."""
+    params = dict(params or {})
+    if definition_id == "cinema-scene" and isinstance(params.get("scene"), dict):
+        scene = dict(params["scene"])
+        if isinstance(scene.get("shots"), list):
+            scene["shots"] = [{key: value for key, value in shot.items()
+                               if key not in ("output", "variations", "selectedVariation")}
+                              if isinstance(shot, dict) else shot for shot in scene["shots"]]
+        params["scene"] = scene
+    if definition_id == "paper-source":
+        source = params.get("_paperSource")
+        params["_paperSource"] = source.get("id") if isinstance(source, dict) else None
+    return params
+
+
+def plan_undo(
+    inverse: Mapping[str, Any],
+    nodes: Mapping[str, dict[str, Any]],
+    edges: list[dict[str, Any]],
+    *,
+    cannot_remove: Callable[[str, dict[str, Any]], str | None],
+    refused_change: Callable[[str, str, dict[str, Any], dict[str, Any]], str | None],
+) -> UndoPlan:
+    """The restore that undoes ``inverse`` on the canvas as it is now.
+
+    A part goes back only if it is still as the edit left it; one that is
+    already back is left alone; one someone changed since is skipped and
+    reported. Parts are judged one by one: a node the person moved still
+    gets its params back, and a param the person changed stays while the
+    edit's other params go back.
+
+    ``cannot_remove`` says why a node can't be deleted now (paid state), and
+    ``refused_change`` why a param change isn't the agent's to make (who
+    bills a run, notes to generators); both None when it is fine."""
+    skipped: list[dict[str, Any]] = []
+    current_wires = {wire_key(edge) for edge in edges}
+    edit_wires = {tuple(wire) for wire in inverse["addedWires"]}
+
+    remove: list[str] = []
+    kept: set[str] = set()
+    for node in inverse["added"]:
+        node_id = node["id"]
+        now = nodes.get(node_id)
+        if now is None:
+            continue
+        reason: str | None = None
+        if (str(now.get("definitionId") or "") != node["definitionId"]
+                or authored(node["definitionId"], now.get("params") or {})
+                != authored(node["definitionId"], node["params"])
+                or (now.get("label") or None) != node["label"]):
+            reason, message = "changed since", f"{node_id} changed since, so it stays"
+        else:
+            foreign = sorted(wire for wire in current_wires if node_id in (wire[0], wire[2]) and wire not in edit_wires)
+            if foreign:
+                other = foreign[0][2] if foreign[0][0] == node_id else foreign[0][0]
+                reason, message = "wired since", f"{node_id} was wired to {other} since, so it stays"
+            else:
+                refusal = cannot_remove(node_id, now)
+                if refusal:
+                    reason, message = "can't be removed now", f"{node_id} stays: {refusal}"
+        if reason:
+            kept.add(node_id)
+            skipped.append({"nodeId": node_id, "part": "node", "reason": reason, "message": message})
+        else:
+            remove.append(node_id)
+
+    gone = set(remove)
+    unwire = [wire_body(wire) for wire in inverse["addedWires"]
+              if tuple(wire) in current_wires and not gone & {wire[0], wire[2]} and not kept & {wire[0], wire[2]}]
+
+    items: dict[str, dict[str, Any]] = {}
+
+    def item(node_id: str) -> dict[str, Any]:
+        return items.setdefault(node_id, {"id": node_id, "definitionId": str(nodes[node_id].get("definitionId") or "")})
+
+    for change in inverse["changed"]:
+        node_id = change["id"]
+        now = nodes.get(node_id)
+        if now is None:
+            skipped.append({"nodeId": node_id, "part": "params", "reason": "removed since",
+                            "message": f"{node_id} was removed since"})
+            continue
+        if str(now.get("definitionId") or "") != change["definitionId"]:
+            skipped.append({"nodeId": node_id, "part": "params", "reason": "a different node now",
+                            "message": f"{node_id} is a different node now"})
+            continue
+        current = dict(now.get("params") or {})
+        before, after = change["before"], change["after"]
+        keys = sorted(key for key in set(before) | set(after) if before.get(key, _MISSING) != after.get(key, _MISSING))
+        back: dict[str, Any] = {}
+        stale: list[str] = []
+        for key in keys:
+            was, left, value = before.get(key, _MISSING), after.get(key, _MISSING), current.get(key, _MISSING)
+            if value == was:
+                continue
+            if value != left:
+                stale.append(key)
+                continue
+            back[key] = was
+        held: list[tuple[str, str]] = []
+        for key in sorted(back):
+            refusal = refused_change(node_id, change["definitionId"], current, _with(current, {key: back[key]}))
+            if refusal:
+                held.append((key, refusal))
+        for key, _reason in held:
+            back.pop(key)
+        if back and refused_change(node_id, change["definitionId"], current, _with(current, back)):
+            held.extend((key, "together") for key in sorted(back))
+            back = {}
+        if stale:
+            skipped.append({"nodeId": node_id, "part": "params", "keys": stale, "reason": "changed since",
+                            "message": f"{node_id}'s {', '.join(stale)} changed since, left as is"})
+        if held:
+            names = [key for key, _reason in held]
+            skipped.append({"nodeId": node_id, "part": "params", "keys": names, "reason": "the person's to change",
+                            "message": f"{node_id}'s {', '.join(names)} is the person's to change back "
+                                       "(propose_change sends it to them)"})
+        if back:
+            item(node_id)["params"] = _with(current, back)
+
+    for rename in inverse["renamed"]:
+        node_id = rename["id"]
+        now = nodes.get(node_id)
+        if now is None:
+            continue
+        label = now.get("label") or None
+        if label == rename["before"]:
+            continue
+        if label != rename["after"]:
+            skipped.append({"nodeId": node_id, "part": "name", "reason": "changed since",
+                            "message": f"{node_id}'s name changed since, left as is"})
+            continue
+        item(node_id)["label"] = rename["before"] or ""
+
+    for move in inverse["moved"]:
+        node_id = move["id"]
+        now = nodes.get(node_id)
+        if now is None:
+            continue
+        point = _point(now.get("position"))
+        if point == move["before"]:
+            continue
+        if point != move["after"]:
+            skipped.append({"nodeId": node_id, "part": "position", "reason": "moved since",
+                            "message": f"{node_id} was moved since, left where it is"})
+            continue
+        item(node_id)["position"] = dict(move["before"])
+
+    back_again: list[str] = []
+    for node in inverse["removed"]:
+        if node["id"] in nodes:
+            continue  # already back: ids are never handed out twice
+        restored = {key: copy.deepcopy(node[key]) for key in ("id", "definitionId", "params", "outputs", "position")
+                    if key in node}
+        if node.get("label"):
+            restored["label"] = node["label"]
+        items[node["id"]] = restored
+        back_again.append(node["id"])
+
+    present = (set(nodes) - gone) | set(back_again)
+    wire: list[dict[str, str]] = []
+    for raw in inverse["removedWires"]:
+        edge = tuple(raw)
+        if edge in current_wires:
+            continue
+        missing = next((end for end in (edge[0], edge[2]) if end not in present), None)
+        if missing is not None:
+            skipped.append({"part": "wire", "wire": wire_body(edge), "reason": "gone since",
+                            "nodeId": missing,
+                            "message": f"the wire {_wire_text(edge)} can't come back: {missing} is gone"})
+            continue
+        wire.append(wire_body(edge))
+
+    return UndoPlan(
+        restore={"action": "undo", "nodes": list(items.values()), "remove": remove, "wire": wire, "unwire": unwire},
+        trusted=frozenset(items),
+        skipped=skipped,
+    )
+
+
+def _with(params: Mapping[str, Any], back: Mapping[str, Any]) -> dict[str, Any]:
+    out = dict(params)
+    for key, value in back.items():
+        if value is _MISSING:
+            out.pop(key, None)
+        else:
+            out[key] = copy.deepcopy(value)
+    return out
+
+
+# -- the book ----------------------------------------------------------------------
+
+@dataclass
+class EditLink:
+    """What an edit id names, kept after the edit's inverse is gone."""
+    id: str
+    kind: str  # "edit" (an agent's apply), "undo" or "redo"
+    actor: dict[str, Any]
+    target: str | None = None  # for an undo or redo: the edit id it acts on
+    events: list[int] = field(default_factory=list)
+
+
+@dataclass
+class EditRecord:
+    edit_id: str
+    token: str
+    agent_id: str
+    actor: dict[str, Any]
+    project_id: str | None
+    project_name: str
+    expires: float
+    inverse: dict[str, Any]
+    size: int
+    state: str = APPLIED
+    undone_by: dict[str, Any] | None = None
+    undo_id: str | None = None
+    last_skipped: list[dict[str, Any]] = field(default_factory=list)
+
+
+class CanvasUndoBook:
+    def __init__(self, clock: Callable[[], float] = time.time) -> None:
+        self._clock = clock
+        self._records: OrderedDict[str, EditRecord] = OrderedDict()  # by token, oldest first
+        self._by_edit: dict[str, str] = {}
+        self._links: OrderedDict[str, EditLink] = OrderedDict()
+        self._gone: OrderedDict[str, str] = OrderedDict()  # token -> why it no longer works
+        self._bytes = 0
+        # Per project: how many times its node ids started again (forget_project),
+        # so an edit that was still finishing then keeps no token.
+        self._epochs: dict[str | None, int] = {}
+
+    @staticmethod
+    def new_id() -> str:
+        return "ed_" + secrets.token_hex(8)
+
+    # -- links
+    def link(self, edit_id: str, *, kind: str, actor: Mapping[str, Any], target: str | None = None) -> EditLink:
+        entry = EditLink(id=edit_id, kind=kind, actor=actor_brief(actor), target=target)
+        self._links[edit_id] = entry
+        self._links.move_to_end(edit_id)
+        while len(self._links) > MAX_LINKS:
+            self._links.popitem(last=False)
+        return entry
+
+    def link_of(self, edit_id: str | None) -> EditLink | None:
+        return self._links.get(edit_id) if edit_id else None
+
+    def note_events(self, edit_id: str, seqs: list[int]) -> None:
+        entry = self._links.get(edit_id)
+        if entry is not None:
+            entry.events = list(seqs)[:MAX_LINK_EVENTS]
+
+    # -- records
+    def epoch(self, project_id: str | None) -> int:
+        """Pass it to ``keep`` from when the edit committed."""
+        return self._epochs.get(project_id, 0)
+
+    def keep(self, *, edit_id: str, actor: Mapping[str, Any], agent_id: str, project_id: str | None,
+             project_name: str, inverse: dict[str, Any], epoch: int | None = None) -> dict[str, Any]:
+        """Keep an edit's inverse; the reply's ``undo``."""
+        self._expire()
+        if epoch is not None and epoch != self.epoch(project_id):
+            return {"token": None, "editId": edit_id, "reason": (
+                "The canvas was cleared or a graph was loaded into it while this edit was finishing, so its "
+                "node ids started again and the edit can't be undone.")}
+        size = len(json.dumps(inverse, ensure_ascii=False, default=str).encode("utf-8"))
+        if size > MAX_EDIT_BYTES:
+            return {"token": None, "editId": edit_id, "reason": (
+                "This edit is too large for Nebula to keep its undo. The person can still undo it on the canvas.")}
+        token = secrets.token_hex(20)
+        record = EditRecord(edit_id=edit_id, token=token, agent_id=agent_id, actor=actor_brief(actor),
+                            project_id=project_id, project_name=project_name,
+                            expires=self._clock() + UNDO_TTL_SECONDS, inverse=inverse, size=size)
+        self._records[token] = record
+        self._by_edit[edit_id] = token
+        self._bytes += size
+        while self._records and (len(self._records) > MAX_EDITS or self._bytes > MAX_TOTAL_BYTES):
+            oldest = next(iter(self._records))
+            self._drop(oldest, f"Nebula keeps the undo of the last {MAX_EDITS} edits, and this is now older "
+                               "(the oldest is dropped first)")
+        return {"token": token, "editId": edit_id, "expiresInSeconds": UNDO_TTL_SECONDS,
+                "summary": describe(inverse)}
+
+    def take(self, token: str, *, agent_id: str, project_id: str | None) -> EditRecord:
+        """The record a token undoes, for this agent on this project."""
+        self._expire()
+        if not isinstance(token, str) or _TOKEN_RE.fullmatch(token) is None:
+            raise UndoError(404, "That isn't an undo token Nebula gave out (it is the `undo.token` of an "
+                                 "edit_canvas or remove_from_canvas result).", "unknown_token")
+        record = self._records.get(token)
+        if record is None:
+            why = self._gone.get(token)
+            if why is not None:
+                raise UndoError(410, f"This undo token no longer works: {why}. The person can still undo "
+                                     "the edit on the canvas (Cmd+Z).", "token_gone")
+            raise UndoError(404, "There's no edit for that undo token. Nebula forgets undo tokens when it "
+                                 "restarts.", "unknown_token")
+        if record.agent_id != agent_id:
+            name = record.actor.get("name") or "another agent"
+            raise UndoError(403, f"This undo token is for an edit {name} made; only {name} can undo it with "
+                                 "it. The person can undo it on the canvas.", "not_your_edit")
+        if record.project_id != project_id:
+            raise UndoError(409, f"This edit was made in the project “{record.project_name}”, which isn't open. "
+                                 "Open it again (open_project) to undo it.", "other_project")
+        return record
+
+    def by_edit(self, edit_id: str | None) -> EditRecord | None:
+        token = self._by_edit.get(edit_id or "")
+        return self._records.get(token) if token else None
+
+    def forget_project(self, project_id: str | None, why: str) -> None:
+        self._epochs[project_id] = self.epoch(project_id) + 1
+        for token in [token for token, record in self._records.items() if record.project_id == project_id]:
+            self._drop(token, why)
+
+    def _expire(self) -> None:
+        now = self._clock()
+        for token in [token for token, record in self._records.items() if record.expires <= now]:
+            self._drop(token, f"it expired ({UNDO_TTL_SECONDS // 60} minutes after the edit)")
+
+    def _drop(self, token: str, why: str) -> None:
+        record = self._records.pop(token, None)
+        if record is None:
+            return
+        self._bytes -= record.size
+        self._by_edit.pop(record.edit_id, None)
+        self._gone[token] = why
+        while len(self._gone) > MAX_GONE:
+            self._gone.popitem(last=False)

@@ -7,26 +7,39 @@ from contextlib import nullcontext
 from pathlib import Path
 
 from .client import NebulaClient
+from .parser import NebulaArgumentParser
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    # NebulaArgumentParser (cli/parser.py): errors say "Did you mean ...?" and
+    # print only that command's usage; `describe` and `find` are hidden
+    # aliases of `info` and `nodes`. Every subcommand parser is one too.
+    parser = NebulaArgumentParser(
         prog="nebula",
+        usage="nebula [--url URL] <command> [options]",
         description="Nebula Nodes CLI — build and run media generation pipelines",
+        start_hint=True,
     )
     parser.add_argument("--url", default=None,
                         help="Backend URL (default: $NEBULA_URL, else the address in $NEBULA_URL_FILE, "
                              "else http://localhost:8000)")
-    sub = parser.add_subparsers(dest="command")
+    sub = parser.add_subparsers(dest="command", metavar="<command>", prog="nebula")
 
     # -- Discovery --
-    sub.add_parser("context", help="Compact summary of available nodes and keys")
+    context_p = sub.add_parser(
+        "context", help="Start here: the canvas, pins, proposals, every board, the nodes that run here with "
+                        "prices, and the spend limits, in one call")
+    context_p.add_argument("--json", action="store_true", help="Print it as JSON, as the backend sends it")
 
-    nodes_p = sub.add_parser("nodes", help="List node definitions")
-    nodes_p.add_argument("--filter", dest="query", help="Filter nodes by name")
-    nodes_p.add_argument("--category", help="Filter by category")
+    nodes_p = sub.add_parser("nodes", help="List node definitions", start_hint=True)
+    nodes_p.add_argument("words", nargs="*", metavar="WORD",
+                         help="Search: every word must be in the id or name (e.g. nebula nodes image edit)")
+    nodes_p.add_argument("--filter", dest="query", help="Search by id or name (the same as words)")
+    # MCP's word for it (find_nodes(query=...)); hidden so the help doesn't grow.
+    nodes_p.add_argument("--query", dest="query", help=argparse.SUPPRESS)
+    nodes_p.add_argument("--category", help="Only this category: an id (image-gen) or its short name (image)")
 
-    info_p = sub.add_parser("info", help="Show full detail for a node")
+    info_p = sub.add_parser("info", help="Show full detail for a node", start_hint=True)
     info_p.add_argument("node_id", help="Node definition ID")
 
     sub.add_parser("keys", help="Show configured API keys")
@@ -80,16 +93,16 @@ def build_parser() -> argparse.ArgumentParser:
     project_open_p.add_argument("project_id", help="Project id (from `nebula projects`)")
 
     trash_p = sub.add_parser(
-        "trash", help="Recently deleted moodboards, characters and projects: list them or restore one")
+        "trash", help="Recently deleted moodboards, characters, Styles and projects: list them or restore one")
     trash_sub = trash_p.add_subparsers(dest="trash_cmd", required=True)
     trash_list_p = trash_sub.add_parser("list", help="What's in Recently deleted, newest first")
-    trash_list_p.add_argument("--kind", choices=["moodboard", "character", "project"], help="Only this kind")
+    trash_list_p.add_argument("--kind", choices=["moodboard", "character", "style", "project"], help="Only this kind")
     trash_list_p.add_argument("--json", action="store_true", help="Print the raw JSON")
     trash_restore_p = trash_sub.add_parser(
         "restore", help="Bring one back with the same id (nodes that point at it work again)")
     trash_restore_p.add_argument("target", nargs="+", metavar="[kind] id",
                                  help="The id from `nebula trash list`, optionally after its kind "
-                                      "(moodboard, character or project)")
+                                      "(moodboard, character, style or project)")
 
     sub.add_parser("graph", help="Show current graph state")
     sub.add_parser("selection", help="Show nodes currently selected on the canvas")
@@ -97,9 +110,17 @@ def build_parser() -> argparse.ArgumentParser:
     look_p = sub.add_parser("look", help="Read the canvas as data: what's on screen, states, wires, agent cursors")
     look_p.add_argument("--json", action="store_true", help="Print the raw snapshot JSON")
 
-    point_p = sub.add_parser("point", help="Move your cursor on the canvas so the user sees where you are working")
-    point_p.add_argument("target", help="Node (n2), port (n2.prompt) or flow coordinates (120,-40)")
-    point_p.add_argument("--say", default="", help="Short line shown next to your cursor")
+    point_p = sub.add_parser(
+        "point", help="Move your cursor on the canvas so the user sees where you are working",
+        description="Point at a node, a port or a spot. With only --say (no target) the line shows where your "
+                    "cursor already is, and it doesn't move; with no cursor yet it starts at the middle of the "
+                    "person's view, or at 0,0 when no canvas has reported its view.")
+    point_p.add_argument("target", nargs="?", default=None,
+                         help="Node (n2), port (n2.prompt) or flow coordinates (120,-40); leave it out to say "
+                              "something where your cursor is")
+    point_p.add_argument("--say", default="",
+                         help="Short line shown next to your cursor: your own action only "
+                              "(what you noticed goes in `nebula note`)")
     point_p.add_argument("--from", dest="origin", help="Start of a drag gesture (same forms as target)")
     point_p.add_argument("--action", choices=["move", "click", "drag", "look"], default=None,
                          help="Gesture to show (default: move, or drag with --from)")
@@ -129,23 +150,55 @@ def build_parser() -> argparse.ArgumentParser:
     pin_sub = pin_p.add_subparsers(dest="pin_cmd", required=True)
     resolve_p = pin_sub.add_parser("resolve", help="Reply in one line and mark the note done")
     resolve_p.add_argument("pin_id", help="Pin id from `nebula look` or `nebula pins` (e.g. pin_8c41d2aa)")
-    resolve_p.add_argument("--say", required=True, help="Your one-line reply (280 characters max)")
+    resolve_p.add_argument("--say", required=True,
+                           help="Your one-line reply (280 characters max): your own answer only; "
+                                "what you noticed goes in `nebula note`")
     resolve_p.add_argument("--as", dest="agent_name",
                            help="Your agent name (default: $NEBULA_AGENT_NAME; in-app agents are named automatically)")
+
+    note_p = sub.add_parser(
+        "note",
+        help="Tell the person what you noticed, a report or a suggestion: they read it under Updates "
+             "in the top right (your cursor's --say is for your own action)",
+        description=(
+            "Posts an update. The person reads it in the Updates list in the top right of Nebula, saved with "
+            "the project (or with the board, with --board). On a board, #12 in the text names image 12 and "
+            "always shows its current number; a number not on the board refuses the update. Never quote a "
+            "private note. At most 6 a minute. Updates carry no buttons: make the change, or propose it."
+        ),
+    )
+    note_p.add_argument("text", help="One plain line, 240 characters max")
+    note_p.add_argument("--board", help="A moodboard id or exact name: post on that board instead of the canvas")
+    note_p.add_argument("--ref", dest="refs", action="append", default=[], metavar="IMAGE",
+                        help="With --board: an image it is about, by number or id (repeatable, 12 max)")
+    note_p.add_argument("--node", dest="nodes", action="append", default=[], metavar="nX",
+                        help="A canvas node it is about, e.g. --node n7 (repeatable, 12 max)")
+    note_p.add_argument("--since-last-turn", dest="since_last_turn", action="store_true",
+                        help="About what the person changed since your last turn (replaces your unread one)")
+    note_p.add_argument("--json", action="store_true", help="Print the raw result JSON")
+    note_p.add_argument("--as", dest="agent_name",
+                        help="Your agent name (default: $NEBULA_AGENT_NAME; in-app agents are named automatically)")
+
+    notes_p = sub.add_parser("notes", help="List the Updates agents posted for the person (newest first)")
+    notes_p.add_argument("--board", help="A moodboard id or exact name: that board's Updates")
+    notes_p.add_argument("--unread", action="store_true", help="Only those the person hasn't opened")
+    notes_p.add_argument("--json", action="store_true", help="Print the raw listing JSON")
 
     propose_p = sub.add_parser(
         "propose",
         help="Propose a change for the person to accept or reject on the canvas (use before paid runs)",
         description=(
             "Builder: nebula propose --note \"Widen the take and upscale it\" --add +up=topaz-image-upscale "
-            "--param +up.upscale_factor=2 --wire n4:image +up:image --set n4.aspect_ratio=16:9 --run +up "
-            "--wait --timeout 100. "
+            "--param +up.upscale_factor=2 --wire n4:image +up:image --set n4.aspect_ratio=16:9 "
+            "--rename +up=\"Hero, upscaled\" --run +up --wait --timeout 100. "
             "New nodes use refs like +up; existing nodes use their ids (n4). Or pass --file plan.json "
-            "with {note, nodes, edges, params, run}."
+            "with {note, nodes, edges, params, run, rename}. A proposal can't move, remove, unwire or "
+            "arrange nodes, or rename existing ones: `nebula apply` does that directly."
         ),
     )
-    propose_p.add_argument("--file", help="JSON file with {note, nodes, edges, params, run}")
-    propose_p.add_argument("--note", help="One line the person reads (160 characters max)")
+    propose_p.add_argument("--file", help="JSON file with {note, nodes, edges, params, run, rename}")
+    propose_p.add_argument("--note", help="One line the person reads (160 characters max): your own proposal "
+                                          "only; what you noticed goes in `nebula note`")
     propose_p.add_argument("--add", action="append", default=[], metavar="+ref=definitionId",
                            help="A new node, e.g. --add +up=topaz-image-upscale (repeatable)")
     propose_p.add_argument("--param", action="append", nargs="*", default=[], metavar="+ref.key=value",
@@ -158,6 +211,14 @@ def build_parser() -> argparse.ArgumentParser:
                            help="Run this node after the person accepts (repeatable)")
     propose_p.add_argument("--at", action="append", default=[], metavar="+ref=x,y",
                            help="Where a new node goes, e.g. --at +up=820,140")
+    propose_p.add_argument("--rename", action="append", default=[], metavar="+ref=name",
+                           help="Name a new node, e.g. --rename +g=\"Lake hero\" (accepting applies it; "
+                                "rename existing nodes with `nebula rename`)")
+    # `nebula apply`'s other options: taken here only to say propose doesn't do them.
+    propose_p.add_argument("--move", action="append", default=[], help=argparse.SUPPRESS)
+    propose_p.add_argument("--remove", action="append", default=[], help=argparse.SUPPRESS)
+    propose_p.add_argument("--unwire", action="append", nargs=2, default=[], help=argparse.SUPPRESS)
+    propose_p.add_argument("--arrange", nargs="?", const="right", default=None, help=argparse.SUPPRESS)
     propose_p.add_argument("--wait", action="store_true", help="Wait for the person to accept or reject")
     propose_p.add_argument("--timeout", type=float, default=600.0, help="With --wait, give up after this many seconds")
     propose_p.add_argument("--json", action="store_true", help="Print the raw proposal JSON")
@@ -166,6 +227,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     apply_p = sub.add_parser(
         "apply",
+        start_hint=True,
         help="Edit the canvas directly in one step, all or nothing (never runs anything)",
         description=(
             "Builder: nebula apply --add +p=text-input --param +p.value=\"a lighthouse\" "
@@ -173,7 +235,8 @@ def build_parser() -> argparse.ArgumentParser:
             "--move n3=400,120 --remove n7 --unwire n1:text n2:prompt. "
             "New nodes use refs like +img; existing nodes use their ids (n4). Or pass --file plan.json "
             "(- reads standard input) with {note, nodes, edges, params, rename, move, remove, unwire, "
-            "arrange}: the plan `nebula propose` takes, without run. If any part is refused, nothing "
+            "arrange}: the plan `nebula propose` takes (without run), plus what only a direct edit does. "
+            "If any part is refused, nothing "
             "changes. There's no limit on how much one plan adds. "
             "A file can also hold {\"steps\": [plan, plan, ...]}: each step is applied in order as its "
             "own all-or-nothing edit, and a later step can use the +refs an earlier step created. If a "
@@ -184,7 +247,8 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     apply_p.add_argument("--file", help="JSON plan file, or - for standard input")
-    apply_p.add_argument("--note", help="One line saying what this does (shown with your cursor)")
+    apply_p.add_argument("--note", help="One line saying what this does (shown with your cursor): your own "
+                                        "edit only; what you noticed goes in `nebula note`")
     apply_p.add_argument("--add", action="append", default=[], metavar="+ref=definitionId",
                          help="A new node, e.g. --add +img=nano-banana (repeatable)")
     apply_p.add_argument("--param", action="append", nargs="*", default=[], metavar="+ref.key=value",
@@ -209,6 +273,20 @@ def build_parser() -> argparse.ArgumentParser:
     apply_p.add_argument("--json", action="store_true", help="Print the raw result JSON")
     apply_p.add_argument("--as", dest="agent_name",
                          help="Your agent name (default: $NEBULA_AGENT_NAME; in-app agents are named automatically)")
+
+    undo_p = sub.add_parser(
+        "undo",
+        help="Undo your own `nebula apply` by the token it printed (parts changed since stay as they are)",
+        description=("Undo one of your applies with the token it printed. Each part (a node it added, a param, "
+                     "name or position it changed, a node or wire it removed) goes back unless someone changed "
+                     "it since. Several tokens are undone in the order given (a steps plan prints them newest "
+                     "first), stopping at the first one refused. Only you can use your tokens, for 60 minutes, "
+                     "while the project you edited is open."),
+    )
+    undo_p.add_argument("tokens", nargs="+", metavar="TOKEN", help="The undo token(s) `nebula apply` printed")
+    undo_p.add_argument("--json", action="store_true", help="Print the raw result JSON")
+    undo_p.add_argument("--as", dest="agent_name",
+                        help="Your agent name (default: $NEBULA_AGENT_NAME; in-app agents are named automatically)")
 
     proposal_p = sub.add_parser("proposal", help="Check (or withdraw) one of your proposals")
     proposal_p.add_argument("id_or_action", help="A proposal id (p_9a1c3e02), or 'withdraw'")
@@ -294,6 +372,7 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("text")
     c.add_argument("--region")
     c.add_argument("--brand")
+    c.add_argument("--membership", help="The collection's thread (a membership id from `get`)")
     b = csub.add_parser("borrow", help="Record an attribute borrowed from a reference")
     b.add_argument("id")
     b.add_argument("--attribute", required=True)
@@ -303,12 +382,31 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--region")
     b.add_argument("--brand")
     csub.add_parser("status", help="Worker, meter and queue status")
+    # Twins of the commons_* reads and of curation proposals (Q63 b, U13).
+    cl = csub.add_parser("collections", help="The collections in your scope (add takes a collection id)")
+    cl.add_argument("--brand")
+    bw = csub.add_parser("borrowings", help="Recorded borrowings in your scope")
+    bw.add_argument("--asset", help="Only this reference's")
+    bw.add_argument("--brand")
+    fd = csub.add_parser("fidelity", help="Check a borrowing shows in its output, and save the result")
+    fd.add_argument("borrowing_id")
+    fd.add_argument("--brand")
+    cc = csub.add_parser("concentration", help="How borrowings spread over references")
+    cc.add_argument("--brand")
+    pr = csub.add_parser("propose", help="Propose curating a reference; the person decides in the Commons")
+    pr.add_argument("id", help="The reference's id")
+    pr.add_argument("--edit", action="append", required=True,
+                    help='JSON, repeatable: {"correction": {...}}, {"region": {...}} or {"membership": {...}}')
+    pr.add_argument("--note", required=True, help="One line saying why")
+    pr.add_argument("--brand")
 
     # -- Moodboards --
     from .commands import moodboard as moodboard_cmd
     moodboard_cmd.add_parser(sub)
     from .commands import character as character_cmd
     character_cmd.add_parser(sub)
+    from .commands import style as style_cmd
+    style_cmd.add_parser(sub)
 
     # -- Outside apps --
     from .commands import skill as skill_cmd
@@ -391,9 +489,24 @@ def default_url(environ: dict[str, str] | None = None, *, strict: bool = True) -
     return "http://localhost:8000"
 
 
+def _subparser(parser: argparse.ArgumentParser, name: str) -> argparse.ArgumentParser:
+    """A command's own parser, so its error prints its usage, not the top one."""
+    for action in parser._actions:  # noqa: SLF001 - argparse keeps subparsers only here
+        if isinstance(action, argparse._SubParsersAction) and name in action.choices:
+            return action.choices[name]
+    return parser
+
+
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
+    if args.command == "point" and args.target is None:
+        # One actionable line, with that command's usage (cli/parser.py).
+        if args.origin:
+            _subparser(parser, "point").error("--from needs a target to drag to (n2, n2.prompt or 120,-40)")
+        if not args.say.strip():
+            _subparser(parser, "point").error("give a target (n2, n2.prompt or 120,-40), or only --say \"...\" "
+                                              "to narrate where your cursor is")
     if args.command == "skill":
         # Installs files on this machine; needs no backend.
         from .commands import skill
@@ -404,7 +517,7 @@ def main() -> None:
         args.url = default_url(strict=args.command != "mcp")
 
     if not args.command:
-        parser.print_help()
+        parser.print_help()  # starts with START_LINE (cli/parser.py)
         sys.exit(0)
 
     if args.command == "mcp":
@@ -420,13 +533,17 @@ def main() -> None:
         apply, canvas, character, commons, context, nodes, keys, graph, execute, moodboard, quick, path, pins,
         projects, proposals, selection, spend, trash,
     )
+    from .commands import notes as notes_cmd
+    from .commands import style
 
     dispatch = {
         "commons": lambda: commons.run(client, args),
         "moodboard": lambda: moodboard.run(client, args),
         "character": lambda: character.run(client, args),
-        "context": lambda: context.run(client),
-        "nodes": lambda: nodes.run_list(client, query=args.query, category=args.category),
+        "style": lambda: style.run(client, args),
+        "context": lambda: context.run(client, as_json=args.json),
+        "nodes": lambda: nodes.run_list(client, query=" ".join([*args.words, *([args.query] if args.query else [])]),
+                                        category=args.category),
         "info": lambda: nodes.run_info(client, args.node_id),
         "keys": lambda: keys.run(client),
         "create": lambda: graph.run_create(client, args.node_id, parse_kv_list(args.param)),
@@ -452,8 +569,11 @@ def main() -> None:
         ),
         "pins": lambda: pins.run_list(client),
         "pin": lambda: pins.run_pin(client, args),
+        "note": lambda: notes_cmd.run_note(client, args),
+        "notes": lambda: notes_cmd.run_notes(client, args),
         "propose": lambda: proposals.run_propose(client, args),
         "apply": lambda: apply.run_apply(client, args),
+        "undo": lambda: apply.run_undo(client, args),
         "proposal": lambda: proposals.run_proposal(client, args),
         "proposals": lambda: proposals.run_list(client),
         "save": lambda: graph.run_save(client, args.file),

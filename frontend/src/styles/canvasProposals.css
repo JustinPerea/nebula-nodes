@@ -157,6 +157,11 @@
   font-size: 10px;
 }
 
+/* A named ghost's caption also names the model; if it wraps, it breaks before "proposed by". */
+.proposal-ghost__by {
+  white-space: nowrap;
+}
+
 .proposal-ghost__port {
   position: absolute;
   top: calc(56px + var(--port-row, 0) * 24px - 5px);

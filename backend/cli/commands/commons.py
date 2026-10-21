@@ -90,7 +90,8 @@ def run(client, args) -> None:
             _print(client.commons("POST", "/add/upload", data=body, files={"file": (path.name, path.read_bytes())}))
     elif verb == "comment":
         _print(client.commons("POST", "/comments", json={"asset_id": args.id, "text": args.text,
-                                                         "region_id": args.region, "brand": args.brand}))
+                                                         "region_id": args.region,
+                                                         "membership_id": args.membership, "brand": args.brand}))
     elif verb == "borrow":
         value = args.value
         try:
@@ -103,3 +104,20 @@ def run(client, args) -> None:
             "why": args.why, "region_id": args.region, "brand": args.brand}))
     elif verb == "status":
         _print(client.commons("GET", "/status"))
+    elif verb in ("collections", "borrowings", "fidelity", "concentration"):
+        # The commons_* reads (Q63 b): the same routes, in your brand scope.
+        params = {k: v for k, v in {"asset": getattr(args, "asset", None), "brand": args.brand}.items() if v}
+        if verb == "fidelity":
+            from urllib.parse import quote
+            _print(client.commons("POST", f"/borrowings/{quote(args.borrowing_id, safe='')}/fidelity", params=params))
+        else:
+            _print(client.commons("GET", f"/{verb}", params=params))
+    elif verb == "propose":
+        # Curation is the person's: this asks, through the asset proposals'
+        # route (propose_asset_change's); `nebula proposal <id> --wait` waits.
+        edits = [_json_arg(text, "edit") for text in args.edit]
+        body = {"kind": "commons", "id": args.id, "note": args.note,
+                "change": edits[0] if len(edits) == 1 else {"edits": edits}}
+        if args.brand:
+            body["brand"] = args.brand
+        _print(client._request("POST", "/api/asset-proposals", json=body))

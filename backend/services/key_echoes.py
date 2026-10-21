@@ -3,7 +3,9 @@
 Cards keep a provider's raw error, and providers quote keys: OpenAI's 401
 shows the key's first and last characters around asterisks
 ("sk-abc1****wxyz"), and an httpx header error shows the whole key. Agents
-read those errors through look_at_canvas, get_project and get_run, and no
+read those errors through look_at_canvas, get_project, get_run, view_output
+(its 409 and X-Nebula-Last-Run-Error; `nebula path`) and the journal's
+run.failed/run.skipped events (wait_for_canvas_change, `nebula watch`), and no
 agent-facing result may hold any part of a key (Justin, audit U6).
 
 Two passes over an error's text:

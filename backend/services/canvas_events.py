@@ -86,9 +86,39 @@ EVENT_KINDS = frozenset({
     "board.setAside",
     "board.noted",
     "board.frame",
+    # The image the board opens on changed (a cover pick; nothing moves).
+    "board.cover",
     "board.sorted",
     "board.arranged",
     "board.suggested",
+    # Styles (presets, main.py /api/presets and /api/trash): one event per
+    # write, with data {styleId, styleName, scope} (+ fields for an update).
+    "style.created",
+    "style.updated",
+    "style.deleted",
+    "style.restored",
+    "style.purged",
+    # Updates (services/agent_notes.py): one event per update an agent or
+    # Nebula posts, data {surface, boardId?, noteId, about, refs, text}.
+    # Marking read and dismissing aren't journaled.
+    "note.posted",
+    # An undo or redo of a whole edit (an agent's undo_canvas_edit, or the
+    # person's Cmd+Z of a step the canvas knew the edit of), after the node
+    # and wire events it made. data {editId, of?, events?, ...}; see
+    # services/canvas_undo.py.
+    "edit.undone",
+    "edit.redone",
+    # Projects outside the canvas graph: a cover pinned, changed or set back
+    # to automatic, with data {projectId, projectName, cover} (main
+    # _set_project_cover; U16).
+    "project.cover",
+    # Commons curation, by the person or an accepted proposal (routes/commons.py
+    # curation_listeners; Q63 b): data {assetId, fieldPath, op} for a
+    # correction, {assetId, regionId, change} for a region, {assetId,
+    # membershipId, collectionId, change} for a membership. Never Commons text.
+    "commons.corrected",
+    "commons.region",
+    "commons.membership",
     # Saved projects (main.py, next to _broadcast_projects_changed), whoever
     # changed them: data {projectId, name; from/to for a rename; wasOpen}.
     "project.created",
@@ -300,7 +330,11 @@ class CanvasEventJournal:
         node_id: str | None = None,
         data: Mapping[str, Any] | None = None,
         summary: str = "",
+        edit: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """``edit`` names the canvas edit behind the event (services/canvas_undo.py):
+        ``{id}`` for an agent's edit, plus ``undoes`` or ``redoes`` (the edit id it
+        reverts or applies again) and ``of`` (whose edit that was) for an undo."""
         if kind not in EVENT_KINDS:
             raise ValueError(f"unknown canvas event kind '{kind}'")
         self._seq += 1
@@ -315,6 +349,8 @@ class CanvasEventJournal:
         }
         if node_id is not None:
             event["nodeId"] = str(node_id)[:128]
+        if edit:
+            event["edit"] = _cap_strings(dict(edit))
         self._events.append(event)
         self._wake()
         return event
@@ -423,6 +459,10 @@ class CanvasEventJournal:
                                kinds=kinds, exclude_actor_id=exclude_actor_id)
             if result["events"] or result["gap"]:
                 return result
+
+    def seqs_of_edit(self, edit_id: str) -> list[int]:
+        """The buffered events of one canvas edit (``edit.id``), oldest first."""
+        return [event["seq"] for event in self._events if (event.get("edit") or {}).get("id") == edit_id]
 
     @property
     def waiting(self) -> int:

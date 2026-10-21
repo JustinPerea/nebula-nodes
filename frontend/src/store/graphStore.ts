@@ -61,7 +61,6 @@ import {
   deleteProviderRecovery as apiDeleteProviderRecovery,
   generateCinemaShot as apiGenerateShot,
   promoteCinemaShotVariation as apiPromoteShotVariation,
-  fetchReplicateSchema,
   getExecutionStatus as apiGetExecutionStatus,
   ExecutionStartRejectedError,
   type ExecutionValidationError,
@@ -99,6 +98,7 @@ import { isPortCompatible } from '../lib/portCompatibility';
 import { getProjectContext } from '../lib/projectContext';
 import { boundingRect, findOpenGroupOffset, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
 import { withParamDefaults } from '../lib/paramDefaults';
+import { replaceChanged, shareUnchanged } from '../lib/structuralShare';
 
 export type TrackItemOrderAction = 'send-to-back' | 'send-backward' | 'bring-forward' | 'bring-to-front';
 
@@ -847,7 +847,9 @@ interface GraphState {
   /** `undoStep`: the step beginUndoStep made before the backend clear, so the
    * clear stays one step even when the clear's graphSync landed first. */
   clearGraph: (options?: { undoStep?: object }) => void;
-  configureOpenRouterModel: (nodeId: string, modelId: string, model: OpenRouterModel) => void;
+  /** The OpenRouter / Nous Portal picker: the backend configures the node for
+   * the model (its ports, params) and drops wires the model has no port for. */
+  configureOpenRouterModel: (nodeId: string, modelId: string, model?: OpenRouterModel) => Promise<void>;
   fetchReplicateSchemaAndConfigure: (nodeId: string, owner: string, name: string) => Promise<void>;
 
   // Video-edit node helpers
@@ -904,6 +906,124 @@ const DYNAMIC_PROVIDER_BY_DEFINITION: Record<string, DynamicProviderType> = {
   'replicate-universal': 'replicate',
   'fal-universal': 'fal',
 };
+
+const UNIVERSAL_MODEL_PARAM: Record<string, string> = {
+  'openrouter-universal': 'model', 'nous-portal-universal': 'model', 'replicate-universal': 'model_id',
+};
+/** The canvas-owned params the backend sets with a model (universal_ports.DERIVED_PARAMS). */
+const UNIVERSAL_DERIVED_PARAMS = ['_model_ports', '_output_image', '_version_id', '_schema_fetched'];
+/** Nodes whose model request is in flight: their param pushes wait for it. */
+const universalModelRequests = new Set<string>();
+
+/** The backend keeps a universal node's ports (`_model_ports`) but not its
+ * Inspector controls (a Replicate schema's params) or provider notes: a sync
+ * keeps this canvas's while the node's model is the same. */
+function keptUniversalFields(existing: Node<NodeData>, incoming: Node<NodeData>): Partial<DynamicNodeData> {
+  const key = UNIVERSAL_MODEL_PARAM[existing.data.definitionId];
+  const before = existing.data as Partial<DynamicNodeData>;
+  if (!key || incoming.data.definitionId !== existing.data.definitionId
+    || existing.data.params[key] !== incoming.data.params[key]) return {};
+  return { dynamicParams: before.dynamicParams ?? [], providerMeta: before.providerMeta ?? {} };
+}
+
+/** Whether a wire's ends on universal nodes are ports those nodes have. */
+function universalPortsHold(edge: Edge, nodesById: Map<string, Node<NodeData>>): boolean {
+  const source = nodesById.get(edge.source)?.data as Partial<DynamicNodeData> | undefined;
+  const target = nodesById.get(edge.target)?.data as Partial<DynamicNodeData> | undefined;
+  if (source?.definitionId && UNIVERSAL_MODEL_PARAM[source.definitionId] && source.dynamicOutputPorts
+    && source.dynamicOutputPorts.length > 0 && !source.dynamicOutputPorts.some((p) => p.id === edge.sourceHandle)) return false;
+  if (target?.definitionId && UNIVERSAL_MODEL_PARAM[target.definitionId] && target.dynamicInputPorts
+    && target.dynamicInputPorts.length > 0 && !target.dynamicInputPorts.some((p) => p.id === edge.targetHandle)) return false;
+  return true;
+}
+
+/** What the backend answers for a universal node's model (POST
+ * /api/graph/node/{id}/model, or /api/universal/ports for a node the backend
+ * doesn't have yet). */
+interface UniversalModelResult {
+  params: Record<string, unknown>;
+  dynamicInputPorts: DynamicPortDefinition[];
+  dynamicOutputPorts: DynamicPortDefinition[];
+  dynamicParams: DynamicParamDefinition[];
+  providerMeta: Record<string, unknown>;
+}
+
+async function backendDetail(response: Response): Promise<string> {
+  try {
+    const body = await response.json() as { detail?: unknown };
+    if (typeof body.detail === 'string') return body.detail;
+  } catch { /* not JSON */ }
+  return `HTTP ${response.status}`;
+}
+
+/** The node's params and ports for `model`, from the backend; null when the
+ * node is gone. Throws with the backend's reason (a missing key, say). */
+async function requestUniversalModel(nodeId: string, model: string): Promise<UniversalModelResult | null> {
+  const node = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
+  if (!node) return null;
+  if (CLI_ID_RE.test(nodeId)) {
+    // The backend configures the params it holds: send an edit still waiting
+    // on the debounce first, and hold the node's param pushes until the answer
+    // (one sent meanwhile would carry the old model and its ports back).
+    await flushNodeParams(nodeId);
+    universalModelRequests.add(nodeId);
+    try {
+      const response = await graphMutationFetch(`/api/graph/node/${nodeId}/model`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model }),
+      });
+      if (!response.ok) throw new Error(await backendDetail(response));
+      return await response.json() as UniversalModelResult;
+    } finally {
+      universalModelRequests.delete(nodeId);
+    }
+  }
+  // A node only this tab has (its backend create failed): the same rules,
+  // applied to its params here.
+  const response = await apiFetch('/api/universal/ports', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ definitionId: node.data.definitionId, model, params: node.data.params }),
+  });
+  if (!response.ok) throw new Error(await backendDetail(response));
+  const body = await response.json() as {
+    nodeParams: Record<string, unknown>; inputs: DynamicPortDefinition[]; outputs: DynamicPortDefinition[];
+    params?: DynamicParamDefinition[]; providerMeta?: Record<string, unknown>;
+  };
+  return {
+    params: body.nodeParams,
+    dynamicInputPorts: body.inputs,
+    dynamicOutputPorts: body.outputs,
+    dynamicParams: body.params ?? [],
+    providerMeta: body.providerMeta ?? {},
+  };
+}
+
+/** The params the backend configured for the model, with the edits the
+ * person made while it was read kept as typed (the model and the params it
+ * sets are the answer's); the held push then sends them with the new model. */
+function withEditsSinceRequest(nodeId: string, definitionId: string, configured: Record<string, unknown>,
+  local: Record<string, unknown>): Record<string, unknown> {
+  const entry = unsavedParamEdits.get(nodeId);
+  if (!entry) return configured;
+  const owned = new Set([UNIVERSAL_MODEL_PARAM[definitionId], ...UNIVERSAL_DERIVED_PARAMS]);
+  const params = { ...configured };
+  for (const key of entry.keys) {
+    if (owned.has(key)) continue;
+    if (key in local) params[key] = local[key];
+    else delete params[key];
+  }
+  return params;
+}
+
+/** Whether a wire keeps its ends on the node's new ports (a wire leaving the
+ * node is checked at its source end), as universal_ports.edge_fits says. */
+function edgeFitsPorts(nodeId: string, edge: Edge, ports: Pick<UniversalModelResult, 'dynamicInputPorts' | 'dynamicOutputPorts'>): boolean {
+  if (edge.source === nodeId) return ports.dynamicOutputPorts.some((p) => p.id === edge.sourceHandle);
+  if (edge.target === nodeId) return ports.dynamicInputPorts.some((p) => p.id === edge.targetHandle);
+  return true;
+}
 
 function isDynamicDefinition(definitionId: string): boolean {
   return (DYNAMIC_NODE_IDS as readonly string[]).includes(definitionId);
@@ -1109,6 +1229,44 @@ function withGraphMutationLifetime<Args extends unknown[], Result>(operation: (.
  * their backend request settles. Admission happens before invoking fetch. */
 function graphMutationFetch(path: string, init?: RequestInit): Promise<Response> {
   return trackGraphMutation(() => apiFetch(path, init));
+}
+
+/** Send a node's params to the backend after the debounce; a node whose
+ * model request is in flight waits for its answer (requestUniversalModel). */
+function scheduleParamPush(nodeId: string): void {
+  paramPushTimers[nodeId] = window.setTimeout(() => {
+    delete paramPushTimers[nodeId];
+    if (universalModelRequests.has(nodeId)) {
+      scheduleParamPush(nodeId);
+      return;
+    }
+    void pushNodeParams(nodeId);
+  }, PARAM_PUSH_DEBOUNCE_MS);
+}
+
+function pushNodeParams(nodeId: string): Promise<void> {
+  const node = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
+  if (!node) {
+    unsavedParamEdits.delete(nodeId);
+    return Promise.resolve();
+  }
+  const edits = unsavedParamEdits.get(nodeId);
+  if (edits) edits.inFlight += 1;
+  return graphMutationFetch(`/api/graph/node/${nodeId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ params: node.data.params }),
+  }).then(() => undefined).catch((err) => {
+    console.warn(`[nebula] Param sync for ${nodeId} failed:`, err);
+  }).finally(() => { if (edits) settleParamEdit(nodeId, edits); });
+}
+
+/** Send a node's debounced params now, if any are waiting. */
+async function flushNodeParams(nodeId: string): Promise<void> {
+  if (paramPushTimers[nodeId] === undefined) return;
+  window.clearTimeout(paramPushTimers[nodeId]);
+  delete paramPushTimers[nodeId];
+  await pushNodeParams(nodeId);
 }
 
 function clearAllParamPushTimers(): void {
@@ -1897,6 +2055,25 @@ function sameProviderRecoveryIdentity(
     && left.existingWorldId === right.existingWorldId;
 }
 
+/** The fields React Flow and this canvas keep on a node, which a graphSync's
+ * copy of the node doesn't carry. */
+function canvasOwnFields(node: Node<NodeData>): Partial<Node<NodeData>> {
+  const own: Partial<Node<NodeData>> = {};
+  if (node.measured) own.measured = node.measured;
+  // `false` too: React Flow leaves `selected: false` / `dragging: false` on a
+  // node once a selection or drag ends, and dropping them made the node
+  // differ from the canvas's copy, so the next sync re-rendered its card.
+  if (typeof node.selected === 'boolean') own.selected = node.selected;
+  if (typeof node.dragging === 'boolean') own.dragging = node.dragging;
+  return own;
+}
+
+/** The nodes with none selected; a node that wasn't stays the same object,
+ * so only the cards losing the selection re-render. */
+function deselectedNodes(nodes: Node<NodeData>[]): Node<NodeData>[] {
+  return replaceChanged(nodes, (node) => (node.selected ? { ...node, selected: false } : node));
+}
+
 function nodesWithProviderRecoveries(
   nodes: Node<NodeData>[],
   checkpoints: readonly ProviderRecoveryCheckpoint[],
@@ -2298,6 +2475,8 @@ function foreignEditStep(
     agentName: source === 'agent' ? origin.actor?.name ?? 'An agent' : null,
     ...(origin.actor?.color ? { agentColor: origin.actor.color } : {}),
     source,
+    ...(origin.id ? { editId: origin.id } : {}),
+    ...(origin.undoes ? { undoes: origin.undoes } : {}),
     at: Date.now(),
     ...change,
   };
@@ -2409,6 +2588,7 @@ function sendRestore(
 ): Promise<void> {
   const body = restoreRequest(action, prevNodes, prevEdges, nextNodes, nextEdges);
   if (!body) return restoreQueue;
+  if (isForeignEdit(entry) && entry.editId) body.edit = entry.editId;
   const task = restoreQueue.then(async () => {
     let response: Response;
     try {
@@ -2606,12 +2786,20 @@ wsClient.subscribe((event) => {
         }
         return {
           ...cliNode,
+          // What React Flow keeps on the node (its measured size, whether it
+          // is selected or being dragged) isn't the backend's: keep this
+          // canvas's. Dropping `measured` had React Flow measure every node
+          // again after each sync (a second update of every card), and
+          // dropping `selected` cleared the person's selection whenever an
+          // agent or a run synced the graph.
+          ...canvasOwnFields(existing),
           type: isPaperSource ? 'paperSourceNode' : cliNode.data.definitionId === 'batch'
             ? 'batchNode' : existing.type ?? cliNode.type,
           position: takesBackendPosition(cliNode, existing) ? cliNode.position : existing.position,
           data: {
             ...existing.data,
             ...cliNode.data,
+            ...keptUniversalFields(existing, cliNode),
             outputs: hasCliOutputs ? cliOutputs : existing.data.outputs,
             // The sync says "complete" for any node with outputs. Over the
             // same outputs it must not hide what a run's events said since:
@@ -2665,10 +2853,13 @@ wsClient.subscribe((event) => {
       };
     });
 
-    const merged = nodesWithProviderRecoveries(
+    // A node the sync didn't change stays the same object (and the array
+    // the same array when nothing changed), so React Flow re-renders only
+    // the cards that changed (tests/canvasRenderScope.test.tsx).
+    const merged = shareUnchanged(graphReplaced ? [] : state.nodes, nodesWithProviderRecoveries(
       [...frontendOnlyNodes, ...cliMerged],
       useGraphStore.getState().providerRecoveries,
-    );
+    ));
     const mergedIds = new Set(merged.map((n) => n.id));
 
     // Preserve frontend-only edges whose endpoints are still present. We dedupe
@@ -2680,15 +2871,31 @@ wsClient.subscribe((event) => {
       `${e.source}:${e.sourceHandle ?? ''}->${e.target}:${e.targetHandle ?? ''}`;
     const cliEdgeKeys = new Set((cliEdges as Edge[]).map(edgeKey));
     const confirmedMotion = useCinemaMotionStore.getState().handoffs.filter((item) => item.status === 'ready' && item.targetId);
+    const mergedById = new Map(merged.map((n) => [n.id, n]));
     const frontendOnlyEdges = graphReplaced ? [] : state.edges.filter(
       (e) => !cliEdgeKeys.has(edgeKey(e)) && mergedIds.has(e.source) && mergedIds.has(e.target)
+        // A universal node whose model changed (the picker's route, which drops
+        // these wires itself) no longer has the port: the wire can't stay.
+        && universalPortsHold(e, mergedById)
         // A confirmed server-owned motion wire omitted by newer canonical
         // state was removed. Keep other optimistic frontend edges unchanged.
         && !confirmedMotion.some((item) => CLI_ID_RE.test(item.nodeId) && CLI_ID_RE.test(item.targetId!)
           && e.source === item.nodeId && e.sourceHandle === shotPortId(item.shotId)
           && e.target === item.targetId && e.targetHandle === 'image'),
     );
-    const mergedEdges = [...frontendOnlyEdges, ...cliEdges];
+    // Edges are matched by id and connection: the backend can hand two
+    // edges the same id (cli_graph.connect numbers by count after a removal).
+    const edgeIdentity = (edge: Edge) => `${edge.id}\u0000${edgeKey(edge)}`;
+    const existingEdges = new Map((graphReplaced ? [] : state.edges).map((edge) => [edgeIdentity(edge), edge]));
+    const mergedEdges = shareUnchanged(graphReplaced ? [] : state.edges, [
+      ...frontendOnlyEdges,
+      // A selected wire stays selected (React Flow keeps `selected` on the
+      // edge, `false` once deselected, which is kept too so the wire is unchanged).
+      ...(cliEdges as Edge[]).map((edge) => {
+        const selected = existingEdges.get(edgeIdentity(edge))?.selected;
+        return typeof selected === 'boolean' ? { ...edge, selected } : edge;
+      }),
+    ], edgeIdentity);
 
     if (!origin && !graphReplaced) foldFinishedArrange(state, arranged, cliNodes as Node<NodeData>[]);
     useGraphStore.setState({
@@ -2890,7 +3097,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
     set((state) => ({
       nodes: [
-        ...state.nodes.map((n) => ({ ...n, selected: false })),
+        ...deselectedNodes(state.nodes),
         ...newNodes,
       ],
       edges: [...state.edges, ...newEdges],
@@ -2904,7 +3111,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   selectAll: () => {
     set((state) => ({
-      nodes: state.nodes.map((n) => ({ ...n, selected: true })),
+      // Only the nodes not yet selected change (and their cards re-render).
+      nodes: replaceChanged(state.nodes, (n) => (n.selected ? n : { ...n, selected: true })),
     }));
   },
 
@@ -2966,7 +3174,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
     set((state) => ({
       nodes: [
-        ...state.nodes.map((n) => ({ ...n, selected: false })),
+        ...deselectedNodes(state.nodes),
         ...newNodes,
       ],
       edges: [...state.edges, ...newEdges],
@@ -3676,23 +3884,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       if (paramPushTimers[nodeId] !== undefined) {
         window.clearTimeout(paramPushTimers[nodeId]);
       }
-      paramPushTimers[nodeId] = window.setTimeout(() => {
-        delete paramPushTimers[nodeId];
-        const node = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
-        if (!node) {
-          unsavedParamEdits.delete(nodeId);
-          return;
-        }
-        const edits = unsavedParamEdits.get(nodeId);
-        if (edits) edits.inFlight += 1;
-        graphMutationFetch(`/api/graph/node/${nodeId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ params: node.data.params }),
-        }).catch((err) => {
-          console.warn(`[nebula] Param sync for ${nodeId} failed:`, err);
-        }).finally(() => { if (edits) settleParamEdit(nodeId, edits); });
-      }, PARAM_PUSH_DEBOUNCE_MS);
+      scheduleParamPush(nodeId);
     }
   },
 
@@ -4241,17 +4433,14 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       activeRuns: [],
       createLaunchingIds: [],
       createCancelledLaunchIds: [],
-      nodes: state.nodes.map((node) => ({
-        ...node,
-        data: {
-          ...node.data,
-          // Only reset nodes that are mid-execution — preserve completed/errored results
-          state: (node.data.state === 'queued' || node.data.state === 'executing')
-            ? 'idle' as const
-            : node.data.state,
-          progress: undefined,
-        },
-      })),
+      nodes: replaceChanged(state.nodes, (node) => {
+        // Only reset nodes that are mid-execution — preserve completed/errored results.
+        const running = node.data.state === 'queued' || node.data.state === 'executing';
+        // A node with nothing to reset stays the same object, so its card
+        // doesn't re-render (every run starts here).
+        if (!running && node.data.progress === undefined) return node;
+        return { ...node, data: { ...node.data, state: running ? 'idle' as const : node.data.state, progress: undefined } };
+      }),
     }));
   },
 
@@ -5446,127 +5635,55 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     set({ nodes: [], edges: [], undoStack: newStack, redoStack: [], backendFreshStartPending: false });
   },
 
-  configureOpenRouterModel: (nodeId, modelId, model) => {
-    pushUndo(set, get);
-
-    const inputModalities = model.input_modalities || ['text'];
-    const outputModalities = model.output_modalities || ['text'];
-
-    const inputPorts: DynamicPortDefinition[] = [
-      { id: 'messages', label: 'Messages', dataType: 'Text', required: true },
-    ];
-    if (inputModalities.includes('image')) {
-      inputPorts.push({ id: 'images', label: 'Images', dataType: 'Image', required: false, multiple: true });
+  // The model pickers ask the backend for a model's ports and params
+  // (services/universal_ports.py, POST /api/graph/node/{id}/model): one set of
+  // rules for the canvas, the wire checks and agents' edits. The backend also
+  // drops wires on ports the new model doesn't have and syncs the canvas.
+  configureOpenRouterModel: async (nodeId, modelId) => {
+    const step = get().beginUndoStep();
+    try {
+      const result = await requestUniversalModel(nodeId, modelId);
+      if (!result) {
+        get().cancelUndoStep(step);
+        return;
+      }
+      set((state) => ({
+        nodes: state.nodes.map((n) => {
+          if (n.id !== nodeId) return n;
+          const data = n.data as unknown as DynamicNodeData;
+          return {
+            ...n,
+            type: isDynamicDefinition(data.definitionId) ? 'dynamic-node' : n.type,
+            data: {
+              ...data,
+              isDynamic: true,
+              providerType: dynamicProviderFor(data.definitionId),
+              modelId,
+              params: withEditsSinceRequest(nodeId, data.definitionId, result.params, data.params),
+              dynamicInputPorts: result.dynamicInputPorts,
+              dynamicOutputPorts: result.dynamicOutputPorts,
+              dynamicParams: data.dynamicParams ?? [],
+              providerMeta: data.providerMeta ?? {},
+            } as unknown as NodeData,
+          };
+        }),
+        // Remove edges connected to ports that no longer exist
+        edges: state.edges.filter((e) => edgeFitsPorts(nodeId, e, result)),
+      }));
+    } catch (err) {
+      get().cancelUndoStep(step);
+      console.error('Failed to set the model:', err);
     }
-
-    const outputPorts: DynamicPortDefinition[] = [];
-    if (outputModalities.includes('text')) {
-      outputPorts.push({ id: 'text', label: 'Text', dataType: 'Text', required: false });
-    }
-    if (outputModalities.includes('image')) {
-      outputPorts.push({ id: 'image', label: 'Image', dataType: 'Image', required: false });
-    }
-
-    const wantsImage = outputModalities.includes('image');
-
-    set((state) => ({
-      nodes: state.nodes.map((n) => {
-        if (n.id !== nodeId) return n;
-        const data = n.data as unknown as DynamicNodeData;
-        return {
-          ...n,
-          type: isDynamicDefinition(data.definitionId) ? 'dynamic-node' : n.type,
-          data: {
-            ...data,
-            isDynamic: true,
-            providerType: dynamicProviderFor(data.definitionId),
-            modelId,
-            params: { ...data.params, model: modelId, _output_image: wantsImage },
-            dynamicInputPorts: inputPorts,
-            dynamicOutputPorts: outputPorts,
-            dynamicParams: data.dynamicParams ?? [],
-            providerMeta: data.providerMeta ?? {},
-          } as unknown as NodeData,
-        };
-      }),
-      // Remove edges connected to ports that no longer exist
-      edges: state.edges.filter((e) => {
-        if (e.source === nodeId) {
-          return outputPorts.some((p) => p.id === e.sourceHandle);
-        }
-        if (e.target === nodeId) {
-          return inputPorts.some((p) => p.id === e.targetHandle);
-        }
-        return true;
-      }),
-    }));
   },
 
   fetchReplicateSchemaAndConfigure: async (nodeId, owner, name) => {
+    const step = get().beginUndoStep();
     try {
-      const schema = await fetchReplicateSchema(owner, name);
-
-      const inputProps = ((schema.input_schema as Record<string, unknown>)?.properties as Record<string, Record<string, unknown>>) ?? {};
-      const requiredInputs: string[] = ((schema.input_schema as Record<string, unknown>)?.required as string[]) ?? [];
-      const dynamicParams: DynamicParamDefinition[] = [];
-      const inputPorts: DynamicPortDefinition[] = [];
-
-      for (const [key, prop] of Object.entries(inputProps)) {
-        const p = prop as Record<string, unknown>;
-        const description = (p.description as string) ?? '';
-        const isUploadable = p['x-uploadable'] === true;
-        const format = (p.format as string) ?? '';
-
-        if (isUploadable || format === 'uri') {
-          inputPorts.push({
-            id: key,
-            label: key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
-            dataType: 'Image',
-            required: requiredInputs.includes(key),
-          });
-          continue;
-        }
-
-        let paramType: DynamicParamDefinition['type'] = 'string';
-        if (p.type === 'integer') paramType = 'integer';
-        else if (p.type === 'number') paramType = 'float';
-        else if (p.type === 'boolean') paramType = 'boolean';
-        else if (p.enum) paramType = 'enum';
-
-        const param: DynamicParamDefinition = {
-          key,
-          label: key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
-          type: paramType,
-          required: requiredInputs.includes(key),
-          default: p.default,
-          placeholder: description.slice(0, 80),
-        };
-
-        if (p.enum) {
-          param.options = (p.enum as Array<string | number>).map((v) => ({ label: String(v), value: v }));
-        }
-        if (p.minimum !== undefined) param.min = p.minimum as number;
-        if (p.maximum !== undefined) param.max = p.maximum as number;
-
-        dynamicParams.push(param);
+      const result = await requestUniversalModel(nodeId, `${owner}/${name}`);
+      if (!result) {
+        get().cancelUndoStep(step);
+        return;
       }
-
-      const outputPorts: DynamicPortDefinition[] = [];
-      const outputSchema = schema.output_schema as Record<string, unknown>;
-
-      if (outputSchema?.type === 'string' && outputSchema?.format === 'uri') {
-        outputPorts.push({ id: 'image', label: 'Output', dataType: 'Image', required: false });
-      } else if (outputSchema?.type === 'array') {
-        outputPorts.push({ id: 'image', label: 'Output', dataType: 'Image', required: false });
-      } else {
-        outputPorts.push({ id: 'text', label: 'Output', dataType: 'Text', required: false });
-      }
-
-      const paramDefaults: Record<string, unknown> = {};
-      for (const dp of dynamicParams) {
-        if (dp.default !== undefined) paramDefaults[dp.key] = dp.default;
-      }
-
       set((state) => ({
         nodes: state.nodes.map((n) => {
           if (n.id !== nodeId) return n;
@@ -5575,16 +5692,18 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             ...n,
             data: {
               ...data,
-              params: { ...data.params, ...paramDefaults, _version_id: schema.version_id, _schema_fetched: true },
-              dynamicInputPorts: inputPorts,
-              dynamicOutputPorts: outputPorts,
-              dynamicParams,
-              providerMeta: { ...data.providerMeta, version_id: schema.version_id, description: schema.description },
+              params: withEditsSinceRequest(nodeId, data.definitionId, result.params, data.params),
+              dynamicInputPorts: result.dynamicInputPorts,
+              dynamicOutputPorts: result.dynamicOutputPorts,
+              dynamicParams: result.dynamicParams,
+              providerMeta: { ...data.providerMeta, ...result.providerMeta },
             } as unknown as NodeData,
           };
         }),
+        edges: state.edges.filter((e) => edgeFitsPorts(nodeId, e, result)),
       }));
     } catch (err) {
+      get().cancelUndoStep(step);
       console.error('Failed to fetch Replicate schema:', err);
     }
   },
@@ -6020,6 +6139,7 @@ useGraphStore.setState({
   addMoodboardNode: withGraphMutationLifetime(projectMutationMethods.addMoodboardNode),
   authorGenerationCluster: withGraphMutationLifetime(projectMutationMethods.authorGenerationCluster),
   fetchReplicateSchemaAndConfigure: withGraphMutationLifetime(projectMutationMethods.fetchReplicateSchemaAndConfigure),
+  configureOpenRouterModel: withGraphMutationLifetime(projectMutationMethods.configureOpenRouterModel),
   promoteShotVariation: withGraphMutationLifetime(projectMutationMethods.promoteShotVariation),
 });
 

@@ -8,8 +8,6 @@ import {
   useInternalNode,
   useStore,
   type Connection,
-  type NodeTypes,
-  type EdgeTypes,
   type OnConnectEnd,
   type OnConnectStart,
   type Viewport,
@@ -19,22 +17,9 @@ import '@xyflow/react/dist/style.css';
 import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { useIsValidConnection } from '../hooks/useIsValidConnection';
-import { ModelNode } from './nodes/ModelNode';
-import { DynamicNode } from './nodes/DynamicNode';
-import { RerouteNode } from './nodes/RerouteNode';
-import { EditNode } from './nodes/EditNode';
-import { RemotionNode } from './nodes/RemotionNode';
-import { CinemaSceneNode } from './nodes/CinemaSceneNode';
-import { CharacterNode } from './nodes/CharacterNode';
-import { CameraRigNode } from './nodes/CameraRigNode';
-import { ReferenceSetNode } from './nodes/ReferenceSetNode';
-import { MoodboardNode } from './nodes/MoodboardNode';
-import { VideoQcNode } from './nodes/VideoQcNode';
-import { PaperSourceNode } from './nodes/PaperSourceNode';
-import { BatchNode } from './nodes/BatchNode';
-import { TypedEdge } from './edges/TypedEdge';
+import { CANVAS_EDGE_TYPES, CANVAS_NODE_TYPES } from './canvasTypes';
 import { ContextMenu } from './ContextMenu';
-import { ConnectionPopup } from './DeferredPanels';
+import { AgentNoteOutlines, ConnectionPopup } from './DeferredPanels';
 import { SelectionToolbar } from './SelectionToolbar';
 import { CanvasNavigation } from './CanvasNavigation';
 import { AgentCursorLayer } from './canvas/AgentCursorLayer';
@@ -55,30 +40,14 @@ import { cameraMoveIsCanvasOwn, cameraMoveStarted, claimCameraMove } from '../li
 import { CANVAS_LOD_ZOOM } from '../lib/canvasOverview';
 import { isCanvasShortcutTarget } from '../lib/canvasShortcutScope';
 import { boundingRect, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
+import { visibleFlowRect } from '../lib/visibleFlowRect';
 import type { NodeData } from '../types';
 import { NODE_RENAME_EVENT } from '../lib/keyboardShortcuts';
 import { publishCanvasSelection, selectedNodeIds } from '../lib/canvasSelection';
 import '../styles/canvas.css';
 
-const nodeTypes: NodeTypes = {
-  'model-node': ModelNode,
-  'dynamic-node': DynamicNode,
-  'reroute-node': RerouteNode,
-  editNode: EditNode,
-  remotionNode: RemotionNode,
-  cinemaSceneNode: CinemaSceneNode,
-  characterNode: CharacterNode,
-  cameraRigNode: CameraRigNode,
-  referenceSetNode: ReferenceSetNode,
-  moodboardNode: MoodboardNode,
-  videoQcNode: VideoQcNode,
-  paperSourceNode: PaperSourceNode,
-  batchNode: BatchNode,
-};
-
-const edgeTypes: EdgeTypes = {
-  'typed-edge': TypedEdge,
-};
+const nodeTypes = CANVAS_NODE_TYPES;
+const edgeTypes = CANVAS_EDGE_TYPES;
 
 const DEFAULT_FIT_MAX_ZOOM = 0.85;
 const FIRST_NODE_FIT_MAX_ZOOM = 0.62;
@@ -808,6 +777,7 @@ export function Canvas() {
         <CanvasViewReporter />
         <ArrangeController />
         <AgentCursorLayer />
+        <AgentNoteOutlines />
         <PinLayer />
         <ProposalLayer />
         <ProposalBar />
@@ -836,18 +806,6 @@ export function Canvas() {
       <PinComposer />
     </div>
   );
-}
-
-/** The canvas the person can see, in flow coordinates, or undefined before it has a size. */
-function visibleFlowRect(
-  wrapper: HTMLDivElement | null,
-  screenToFlowPosition: (point: { x: number; y: number }) => { x: number; y: number },
-): NodeRect | undefined {
-  const box = wrapper?.getBoundingClientRect();
-  if (!box || box.width <= 0 || box.height <= 0) return undefined;
-  const topLeft = screenToFlowPosition({ x: box.left, y: box.top });
-  const bottomRight = screenToFlowPosition({ x: box.right, y: box.bottom });
-  return { x: topLeft.x, y: topLeft.y, width: bottomRight.x - topLeft.x, height: bottomRight.y - topLeft.y };
 }
 
 /** The pasted nodes' bounding box, with measured sizes when known. */

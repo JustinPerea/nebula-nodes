@@ -4,7 +4,7 @@ import { Canvas } from './components/Canvas';
 import { CanvasTabs } from './components/CanvasTabs';
 import { NodeLibrary } from './components/panels/NodeLibrary';
 import { AssetsPanel } from './components/panels/AssetsPanel';
-import { AgentLog, OnboardingOverlay, RunHistoryPanel } from './components/DeferredPanels';
+import { AgentLog, AgentNotes, OnboardingOverlay, RunHistoryPanel } from './components/DeferredPanels';
 import { Settings } from './components/panels/Settings';
 import { Toolbar } from './components/panels/Toolbar';
 import { GraphFileActions } from './components/GraphFileActions';
@@ -15,6 +15,9 @@ import { ChatPanel } from './components/panels/ChatPanel';
 // The Agent log's store collects every agent's actions from page load, even
 // before the panel mounts (store/agentLogStore.ts subscribes at import).
 import './store/agentLogStore';
+// The same for Updates (store/agentNotesStore.ts): the corner is deferred,
+// its store counts from the first socket message.
+import './store/agentNotesStore';
 import { CommandPalette } from './components/CommandPalette';
 import { KeyboardShortcuts } from './components/KeyboardShortcuts';
 import { BackendConnectionStatus } from './components/BackendConnectionStatus';
@@ -36,6 +39,8 @@ import { NODE_DEFINITIONS } from './constants/nodeDefinitions';
 import { ProjectCoordinator } from './components/projects/ProjectCoordinator';
 import { ProjectSwitchToast } from './components/projects/ProjectSwitchToast';
 import { ProjectHome } from './components/projects/ProjectHome';
+// Asset proposals (a pinned cover, a board's Send notes) reach this tab on any screen.
+import './store/assetProposalsSocket';
 import { useHomeSettingsDock } from './components/projects/useHomeSettingsDock';
 import { useProjectStore } from './store/projectStore';
 import { listCoverChoices } from './lib/projects';
@@ -311,6 +316,7 @@ export default function App() {
       {isCanvas && <ChatLauncher />}
       {isCanvas && <Toolbar />}
       {isCanvas && <AgentLog />}
+      {isCanvas && <AgentNotes />}
       {!isHome && !isBrandShowcase && !isCommons && <CommandPalette />}
       {isCanvas && <OnboardingOverlay />}
       {isCanvas && <KeyboardShortcuts />}

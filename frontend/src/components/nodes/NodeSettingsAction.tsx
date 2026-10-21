@@ -2,6 +2,7 @@ import { createPortal } from 'react-dom';
 import { SlidersHorizontal } from 'lucide-react';
 import { useSelectionActionSlot } from '../../lib/selectionActionSlot';
 import { useUIStore } from '../../store/uiStore';
+import { useCardSelection } from '../../hooks/useCardSelection';
 
 /**
  * "Settings" in the selection toolbar for a card node that has no pill of its
@@ -10,12 +11,10 @@ import { useUIStore } from '../../store/uiStore';
  */
 export function NodeSettingsAction({ id }: { id: string }) {
   const slot = useSelectionActionSlot(id);
-  const selectedNodeId = useUIStore((s) => s.selectedNodeId);
-  const inspectorVisible = useUIStore((s) => s.panels.inspector.visible);
+  const { inspectorOpen: open } = useCardSelection(id);
   const selectNode = useUIStore((s) => s.selectNode);
   const setInspectorVisible = useUIStore((s) => s.setInspectorVisible);
   if (!slot) return null;
-  const open = inspectorVisible && selectedNodeId === id;
   return createPortal(
     <button
       type="button"

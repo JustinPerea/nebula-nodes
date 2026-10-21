@@ -66,6 +66,10 @@ def metadata(project: dict[str, Any]) -> dict[str, Any]:
     found["cover"] = copy.deepcopy(project.get("cover"))
     if project.get("createdBy"):
         found["createdBy"] = copy.deepcopy(project["createdBy"])
+    # Who pinned the cover ({kind, name}); a pin from before it was recorded
+    # has none and is the person's (main._cover_owner).
+    if project.get("coverPin") and isinstance(project.get("coverBy"), dict):
+        found["coverBy"] = copy.deepcopy(project["coverBy"])
     return found
 
 
@@ -214,6 +218,17 @@ class ProjectStore:
     def read(self) -> dict[str, Any]:
         with self.transaction() as catalog:
             return catalog
+
+    def read_unlocked(self) -> dict[str, Any]:
+        """The catalog as last committed, without taking the lock.
+
+        For work done ahead of a transaction in a worker thread
+        (main._open_ingress_verdict): the event loop takes the lock, so a
+        thread holding it would stall the loop. Commits replace catalog.json
+        whole (os.replace), so this reads one complete version, possibly one
+        a transaction is about to replace: a caller compares what it read
+        with what its transaction then holds, and never commits from it."""
+        return self._read()
 
     def workspace(self) -> dict[str, Any]:
         """{activeProjectId, workspaceRevision} without copying the catalog.

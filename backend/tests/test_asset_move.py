@@ -18,10 +18,17 @@ from cli.commands import character as character_cmd
 from cli.commands import moodboard as moodboard_cmd
 from nebula_api import NebulaAPI
 from services.project_store import ProjectStore, make_project, move_to_trash
+from tests.conftest import stored_image_urls
 
-CHARACTER = {"name": "Rina", "subjectType": "human", "referenceViews": ["a", "b", "c"],
+CHARACTER = {"name": "Rina", "subjectType": "human", "referenceViews": stored_image_urls(),
              "frozenTraitString": "warm", "seed": 7, "consistencyStrength": 0.9}
 KINDS = {"moodboard": ("/api/moodboards", "moodboards"), "character": ("/api/characters", "characters")}
+
+@pytest.fixture(autouse=True)
+def _stored_views():
+    """The Character's views must be files Nebula serves (services/stored_image_refs.py)."""
+    stored_image_urls()
+
 
 
 @pytest.fixture
@@ -398,7 +405,9 @@ def test_mcp_moodboard_move_and_character_move(env):
         annotations = tools[name].annotations
         assert annotations.readOnlyHint is False and annotations.destructiveHint is False
         assert annotations.idempotentHint is True and annotations.openWorldHint is False
-    assert "moodboard_move" in mcp_server.INSTRUCTIONS and "character_move" in mcp_server.INSTRUCTIONS
+    # The instructions send agents to moodboard_get, whose description names them (plan v2.7, PR26).
+    assert "moodboard_get" in mcp_server.INSTRUCTIONS
+    assert "moodboard_move" in tools["moodboard_get"].description and "character_move" in tools["moodboard_get"].description
 
 
 def test_in_app_claude_may_call_the_move_tools():

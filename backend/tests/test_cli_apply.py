@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import re
 
 import pytest
 from fastapi.testclient import TestClient
@@ -68,6 +69,9 @@ def api(tmp_path, monkeypatch, person):
     monkeypatch.setattr(main_module, "canvas_proposals", book)
     monkeypatch.setattr(main_module, "agent_presence", AgentPresence())
     monkeypatch.setattr(main_module, "canvas_events", CanvasEventJournal())
+    from services.canvas_undo import CanvasUndoBook
+
+    monkeypatch.setattr(main_module, "canvas_undo_book", CanvasUndoBook())
     monkeypatch.setattr(main_module, "provider_recovery_store", ProviderRecoveryStore(None))
     monkeypatch.setattr(main_module, "provider_start_guard", ProviderStartGuard(tmp_path / "paid-starts.json"))
     monkeypatch.setattr(main_module, "_graph_recovery_bootstrap_error", None)
@@ -109,7 +113,10 @@ def test_a_plan_file_lands_in_one_step_and_prints_the_new_ids(api):
 
     lines = out.getvalue().splitlines()
     assert lines[0] == "Applied: added 3, wired 2, renamed 2."
-    assert lines[1:] == ["  +p → n2  Text Input", "  +wide → n3  Wide", "  +tight → n4  Tight"]
+    assert lines[1:4] == ["  +p → n2  Text Input", "  +wide → n3  Wide", "  +tight → n4  Tight"]
+    # The last line says how to take it back.
+    assert re.fullmatch(r"  Undo: nebula undo [0-9a-f]{40}  \(for 60 minutes; parts changed since stay\)", lines[4])
+    assert len(lines) == 5
     assert sorted(api.graph.nodes) == ["n1", "n2", "n3", "n4"]
     assert {(e["source"], e["target"]) for e in api.graph.edges} == {("n2", "n3"), ("n2", "n4")}
     assert api.graph.nodes["n2"]["params"]["value"] == "a lighthouse at dusk"
@@ -170,9 +177,12 @@ def test_builder_edits_existing_nodes():
         "unwire": [{"source": "n1", "sourceHandle": "text", "target": "n2", "targetHandle": "prompt"}],
     }
     for kwargs in ({"rename": ["n4"]}, {"rename": ["+ghost=x"]}, {"move": ["n4=1"]}, {"move": ["n4=a,b"]},
-                   {"remove": ["+up"]}, {"unwire": [["n1", "n2:prompt"]]}):
+                   {"remove": ["+up"]}, {"unwire": [["n1:", "n2:prompt"]]}):
         with pytest.raises(BuildError):
             build_body(**kwargs)
+    # A bare end has no port: it goes without one, and the backend names the ports n1 has (PR26b review).
+    assert build_body(unwire=[["n1", "n2:prompt"]])["unwire"] == [
+        {"source": "n1", "target": "n2", "targetHandle": "prompt"}]
 
 
 def test_flags_or_a_file_not_both():
@@ -330,9 +340,11 @@ def test_arrange_from_the_builder_and_in_the_reply(api):
     out = io.StringIO()
     assert apply_cmd.run_apply(api.client, _args(add=["+a=text-input", "+b=text-input"], arrange="right"),
                                out=out) == 0
-    assert out.getvalue().splitlines()[-1] == (
+    # The arrange line, then the undo line.
+    assert out.getvalue().splitlines()[-2] == (
         "  Arrange: No canvas is open, so the 2 new nodes stay where they were placed. "
         "The first canvas that opens lays them out.")
+    assert out.getvalue().splitlines()[-1].startswith("  Undo: nebula undo ")
 
 
 def test_arrange_works_with_a_plan_file(api):
@@ -343,3 +355,68 @@ def test_arrange_works_with_a_plan_file(api):
     # With steps, arrange belongs to the step whose nodes it lays out.
     with pytest.raises(BuildError, match="in each step"):
         body_from_args(_args(file=_plan_file(api, STEPS), arrange="right"), command="apply")
+
+
+# -- undo (U1): `nebula undo` takes an apply's token -------------------------------
+
+def _undo_args(*tokens: str, json_out: bool = False) -> argparse.Namespace:
+    return argparse.Namespace(tokens=list(tokens), json=json_out, agent_name="Codex")
+
+
+def _applied_json(api, body: dict) -> dict:
+    out = io.StringIO()
+    assert apply_cmd.run_apply(api.client, _args(file=_plan_file(api, body), json=True), out=out) == 0
+    return json.loads(out.getvalue())
+
+
+def test_nebula_undo_puts_an_apply_back(api):
+    keep = api.graph.add_node("text-input", {"value": "keep"})
+    applied = _applied_json(api, {**PLAN, "params": [{"nodeId": keep, "params": {"value": "changed"}}]})
+    out = io.StringIO()
+    assert apply_cmd.run_undo(api.client, _undo_args(applied["undo"]["token"]), out=out) == 0
+    assert out.getvalue().splitlines()[0] == "Undone: removed 3, reset 1."
+    assert list(api.graph.nodes) == [keep] and api.graph.nodes[keep]["params"]["value"] == "keep"
+
+
+def test_nebula_undo_lists_what_it_left_as_is(api):
+    keep = api.graph.add_node("text-input", {"value": "keep"})
+    applied = _applied_json(api, {"params": [{"nodeId": keep, "params": {"value": "changed"}}],
+                                  "nodes": [{"ref": "+n", "definitionId": "text-input"}]})
+    api.graph.update_params(keep, {"value": "the person's"})
+    out = io.StringIO()
+    assert apply_cmd.run_undo(api.client, _undo_args(applied["undo"]["token"]), out=out) == 0
+    lines = out.getvalue().splitlines()
+    assert lines[0] == "Undone: removed 1."
+    assert lines[1] == "  Left as is: n1's value changed since, left as is"
+    assert api.graph.nodes[keep]["params"]["value"] == "the person's"
+
+
+def test_nebula_undo_of_a_steps_plan_goes_newest_first_and_stops_at_a_refusal(api, capsys):
+    out = io.StringIO()
+    assert apply_cmd.run_apply(api.client, _args(file=_plan_file(api, STEPS)), out=out) == 0
+    last = out.getvalue().splitlines()[-1]
+    match = re.fullmatch(r"Undo these 2 steps: nebula undo ([0-9a-f]{40}) ([0-9a-f]{40})", last)
+    assert match
+    newest, oldest = match.groups()
+    assert apply_cmd.run_undo(api.client, _undo_args(newest, "f" * 40, oldest), out=io.StringIO()) == 1
+    err = capsys.readouterr().err
+    assert "token 2 of 3 was refused" in err and "Token 1 was undone" in err
+    # Step 2 is undone; step 1's node stays, since the run stopped before its token.
+    assert list(api.graph.nodes) == ["n1"]
+    assert apply_cmd.run_undo(api.client, _undo_args(oldest), out=io.StringIO()) == 0
+    assert api.graph.nodes == {}
+
+
+def test_steps_json_lists_undo_tokens_newest_first(api):
+    out = io.StringIO()
+    assert apply_cmd.run_apply(api.client, _args(file=_plan_file(api, STEPS), json=True), out=out) == 0
+    result = json.loads(out.getvalue())
+    assert result["undo"]["tokens"] == [step["undo"]["token"] for step in reversed(result["steps"])]
+
+
+def test_nebula_undo_json(api):
+    applied = _applied_json(api, PLAN)
+    out = io.StringIO()
+    assert apply_cmd.run_undo(api.client, _undo_args(applied["undo"]["token"], json_out=True), out=out) == 0
+    result = json.loads(out.getvalue())
+    assert result["status"] == "undone" and len(result["removed"]) == 3
