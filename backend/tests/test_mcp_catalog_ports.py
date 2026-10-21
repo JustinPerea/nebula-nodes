@@ -55,6 +55,8 @@ KONTEXT = {
         "seed": {"type": "integer", "minimum": 0, "maximum": 2147483647},
     }},
     "output_schema": {"type": "string", "format": "uri"},
+    # The route keeps the model's example run's output (2026-10-21): it types the file.
+    "default_example_output": "https://replicate.delivery/xezq/kontext/output.jpg",
 }
 CAPTIONER = {
     "version_id": "v9", "model_id": "acme/captioner", "description": "Captions an image",

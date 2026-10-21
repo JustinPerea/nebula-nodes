@@ -105,6 +105,7 @@ from services.port_contracts import (
     validate_edge_contracts,
 )
 from services import universal_ports
+from services.media_types import MEDIA_PORT_IDS
 from services.file_access import ProtectedPathError, require_allowed_path, validate_file_references
 from services.qc_common import extract_frames
 from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT, resolve_output_ref, portable_output_ref, ManifestError, find_output_record, read_manifest
@@ -1608,7 +1609,21 @@ def _validate_imported_outputs(
     handles_are_dynamic = (
         definition_id in _DYNAMIC_OUTPUT_DEFINITION_IDS and not declared_ports
         and universal_ports.stored_ports(definition_id, params) is None
+    ) or (
+        # A Replicate node configured before its file output was typed (every
+        # file `image`): its run named the output by the returned file, as it
+        # still does, so a saved `video`/`audio` output is its own.
+        definition_id in _DYNAMIC_OUTPUT_DEFINITION_IDS
+        and universal_ports.untyped_output_stamp(definition_id, params)
     )
+    guessed = (universal_ports.declared_output(definition_id, params)
+               if definition_id in _DYNAMIC_OUTPUT_DEFINITION_IDS else None)
+    if guessed and guessed.get("typeUnconfirmed"):
+        # The port was a guess (the model's data said nothing): its run keeps
+        # a file of another type under that type's own port
+        # (handlers/replicate_universal._fill_declared_port).
+        for media, port_id in MEDIA_PORT_IDS.items():
+            declared_ports.setdefault(port_id, media)
     for handle, port in outputs.items():
         if not isinstance(handle, str) or not handle:
             raise ValueError(f"nodes[{node_index}] has an invalid output handle")
@@ -1630,6 +1645,25 @@ def _validate_imported_outputs(
                 f"nodes[{node_index}] output '{handle}' declares type {actual_type}, "
                 f"but definition '{definition_id}' outputs {declared_type or 'a known dynamic type'}"
             )
+
+
+def _drop_outputs_off_ports(graph: CLIGraph, node_id: str, params: dict[str, Any]) -> None:
+    """Before a universal node takes ``params`` (another model, or its model
+    read again), drop each saved output its new ports don't take: one left on
+    a port the node no longer declares fails every save of the project
+    (_validate_imported_outputs). The run history keeps the old result."""
+    node = graph.nodes.get(node_id)
+    if not node or not isinstance(node.get("outputs"), dict) or not node["outputs"]:
+        return
+    definition_id = str(node.get("definitionId") or "")
+    kept: dict[str, Any] = {}
+    for handle, value in node["outputs"].items():
+        try:
+            _validate_imported_outputs(definition_id, {handle: value}, node_index=0, params=params)
+        except ValueError:
+            continue
+        kept[handle] = value
+    node["outputs"] = kept
 
 
 def _import_external_image_to_output_root(file_path_value: str) -> tuple[Path, str] | None:
@@ -3912,8 +3946,12 @@ _MODEL_PORTS_NOTES = {
     "nous-portal-universal": _CHAT_MODEL_PORTS,
     "replicate-universal": (
         "No ports until `model_id` (owner/name) is set. Set it with edit_canvas and the node gets the model's "
-        "version and defaults, a port for each file input (named as the model names it) and one output: `image` "
-        "when the model returns a file or a list of them, else `text`. The model's other inputs are params of "
+        "version and defaults, a port for each file input (named as the model names it) and one output: for a "
+        "file or a list of them, typed from the model's data (its schema's content hints, else its "
+        "`default_example` run's file) as `video`, `audio`, `image`, `svg` or `mesh` (`image` with "
+        "`typeUnconfirmed` when nothing says; a run then keeps a file of another type under that type's own port), "
+        "else `text`; a run fills that port. A node whose ports were saved before outputs were typed shows its file "
+        "output as `typeUnconfirmed` with a note: set its model_id again. The model's other inputs are params of "
         "the same name. The edit's `modelPorts` lists the ports; look_at_canvas shows a node's `ports`. Nebula "
         "reads the schema with the person's Replicate token, which costs nothing; without it the edit says so."),
 }
@@ -5009,6 +5047,7 @@ def _stage_proposal(
         model_key = universal_ports.MODEL_PARAM.get(definition_id)
         if models is not None and model_key and model_key in change.params:
             full, reason = universal_ports.agent_update(definition_id, node.get("params") or {}, update, models)
+            _drop_outputs_off_ports(candidate, change.node_id, full)
             candidate.set_params(change.node_id, full)
             configured[change.node_id] = reason or ""
         else:
@@ -5077,14 +5116,32 @@ def _stage_proposal(
             definition_id = str(node.get("definitionId") or "")
             stored = universal_ports.stored_ports(definition_id, node.get("params"))
             if stored is not None:
+                model = universal_ports.model_of(definition_id, node.get("params"))
                 report.setdefault("ports", {})[node_id] = {
-                    "model": universal_ports.model_of(definition_id, node.get("params")),
+                    "model": model,
                     "inputs": universal_ports.port_ids(stored[0]), "outputs": universal_ports.port_ids(stored[1])}
+                # A port typed without the model's data saying so (Replicate),
+                # or kept before file outputs were typed.
+                guessed = universal_ports.stored_port_note(definition_id, node.get("params"))
+                if guessed:
+                    report.setdefault("notes", {})[node_id] = guessed
             elif reason:
                 report.setdefault("notes", {})[node_id] = (
                     f"{reason}, so Nebula can't tell which ports "
                     f"{universal_ports.model_of(definition_id, node.get('params'))} has; until it can, the node has "
                     f"{_basic_ports_line(definition_id, node.get('params') or {})}")
+        # A wire this edit makes on a node already there whose port is a guess
+        # (a Replicate stamp kept before file outputs were typed, say): the
+        # agent learns it now, not from a run that fills another port.
+        for raw in raw_edges:
+            for end in ("source", "target"):
+                node_id = refs.get(raw.get(end)) if isinstance(raw.get(end), str) else None
+                node = candidate.nodes.get(node_id or "")
+                if node is None or node_id in new_ids or node_id in report.get("notes", {}):
+                    continue
+                guessed = universal_ports.stored_port_note(str(node.get("definitionId") or ""), node.get("params"))
+                if guessed:
+                    report.setdefault("notes", {})[node_id] = guessed
     run_ids: list[str] = []
     for item in spec.run:
         if item not in refs:
@@ -8826,7 +8883,8 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
     _validate_graph_ingress_complexity(body)
     # Anyone but the person (an agent, the unnamed CLI) who sets a universal
     # node's model reconfigures it (its ports follow the model): when the model
-    # changes, or its ports are stale (a node saved before ports were kept).
+    # changes, or its ports are stale (a node saved before ports were kept, or
+    # a Replicate node whose file output was kept untyped: universal_ports.needs_configuring).
     # The same model again reads nothing. The canvas's own pushes are stored
     # as sent; its picker uses /model.
     models: dict[tuple[str, str], Any] | None = None
@@ -8838,7 +8896,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
             and model_key in body["params"]):
         model = universal_ports.model_of(current_definition, {**current_params, **body["params"]})
         if (model != universal_ports.model_of(current_definition, current_params)
-                or universal_ports.stored_ports(current_definition, current_params) is None):
+                or universal_ports.needs_configuring(current_definition, current_params)):
             models = await _look_up_models([(current_definition, model)])
     with _paid_graph_mutation("update graph node parameters"):
         node = cli_graph.nodes.get(node_id)
@@ -8865,6 +8923,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
             probe.set_params(node_id, full)
             _refuse_orphaned_wires(probe, node_id, reason=reason or "")
             _guard_approved_runs(lambda probe: probe.set_params(node_id, copy.deepcopy(full)))
+            _drop_outputs_off_ports(cli_graph, node_id, full)
             cli_graph.set_params(node_id, full)
         else:
             _guard_approved_runs(lambda probe: probe.update_params(node_id, copy.deepcopy(params)))
@@ -8979,6 +9038,7 @@ async def configure_universal_node(node_id: str, body: dict[str, Any]) -> dict[s
         candidate = cli_graph.clone()
         for edge in removed:
             candidate.remove_edge(edge["source"], edge["sourceHandle"], edge["target"], edge["targetHandle"])
+        _drop_outputs_off_ports(candidate, node_id, configured.params)
         candidate.set_params(node_id, configured.params)
         _commit_graph_candidate_with_recoveries(candidate, [candidate.nodes[node_id]], source="update")
     await _broadcast_graph_sync(edit=True)
