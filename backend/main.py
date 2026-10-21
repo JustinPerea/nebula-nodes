@@ -5499,9 +5499,9 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         # It closed while its Update was being written (see
         # _post_canvas_update): the canvas already heard proposalClosed, so
         # it never gets it as open (Accept would only fail). The agent reads
-        # the real status, and its reason, in the view (no readiness
-        # warning: there is nothing left to run).
-        return {"proposal": view}
+        # the real status, and its reason, in the view; agent_wording gives a
+        # closed one no readiness warning, but still names the agent's others.
+        return agent_wording({"proposal": view, **({"stillOpen": still_open} if still_open else {})})
     # The accept key goes only to the person's canvas sockets.
     try:
         await manager.broadcast_browser({

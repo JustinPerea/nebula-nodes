@@ -118,3 +118,7 @@ Branch `feat/canvas-proposal-updates`, stacked on `feat/updates-corner-every-scr
   - `start_here` / `nebula context` list open canvas proposals without their Update id (`brief()`; see above). Agents read it from the view or `list_notes`.
   - Review from the card leaves the card up for the rest of its 4 s hold, next to the bar (the accepted cost).
   - An expiry wasn't watched live (15 minutes). The timer and the read path are covered by tests.
+- **After merging main (#155) and the parent branch (coordinator).**
+  - Both merges were clean. The create route's early return, for a proposal that closed while its Update was being written, now goes through `agent_wording` too, so the agent's other open proposals that can't run still come back in `stillOpen` with the reminder.
+  - `agent_wording` gives a proposal that is no longer open no `warning` or `withdrawWith` (there is nothing to withdraw). MCP and the CLI word the HTTP answer again through it, so this holds on every surface. Test first: `test_each_surface_names_its_own_withdraw_call` failed on the old wording.
+  - The flood fix (a new proposal folds away the same agent's withdrawn Update) narrows "every one" for withdrawn proposals only. It went to Justin as Q115 before merge.

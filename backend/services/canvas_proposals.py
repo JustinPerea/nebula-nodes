@@ -645,6 +645,10 @@ def agent_wording(response: Mapping[str, Any], *, lister: str = READY_NODES_HTTP
     view = out.get("proposal") if isinstance(out.get("proposal"), Mapping) else {}
     proposal_id = str(view.get("id") or "") or None
     warning = readiness_warning(view.get("cost") or {}, lister=lister, proposal_id=proposal_id, withdraw=withdraw)
+    if view.get("status", OPEN) != OPEN:
+        # It closed already (it can while its Update is written), so there is nothing to withdraw.
+        out.pop("warning", None)
+        warning = None
     out.pop("withdrawWith", None)
     if warning:
         out["warning"] = warning

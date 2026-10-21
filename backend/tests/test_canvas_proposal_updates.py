@@ -436,6 +436,7 @@ def test_a_proposal_that_closes_while_its_update_is_written_settles_at_once(canv
     assert [m["note"]["id"] for m in _note_messages(canvas, "resolved")] == [note["id"]]
     assert not [m for m in canvas.sent if m.get("type") == "proposalOpened"]
     assert canvas.timers == []
+    assert "warning" not in made.json() and "withdrawWith" not in made.json()
 
 
 def test_a_new_proposal_folds_away_the_same_agents_withdrawn_update(canvas):
