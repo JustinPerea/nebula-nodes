@@ -28,6 +28,26 @@ Branch `feat/first-turn-fixes` from origin/main f94ce4f2. The fixes the PR26 mea
   - *Shape hints echoed the whole node.* `_definition_hint` copied `raw[alias]` and all of `params`, so a data URL came back as a 200,000-character error. Now the type is cut to 128 characters, the ref to 30, and params show at most 8 keys, each value only when its JSON is 40 characters or less ("..." otherwise), with "(and N more params)". `wire_shape_error` rewrites the wire only when every end is at most 64 characters. Every message in the test stays under 400 characters.
   - *Recount after the counter change:* identical to the earlier one (no transcript has either new message).
   - *Gates after the fixes:* backend suite isolated through `iso.sh` under `lg --gate`: 8774 passed, 61 skipped, 0 failed in 165 s. No frontend file changed in the review round, so vitest, `tsc -b` and lint weren't rerun (they were clean before it).
+  - *Final gates, after the node-field refusal and the merge with main 3a21ea40:* backend 8785 passed, 61 skipped, 0 failed (isolated, 394 s). `tsc -b`, lint, `vite build` and the first-load budget pass (498,521 bytes raw). Full vitest: 3741 passed and 19 failed under load 15 (13 of them timeouts) in 9 files this PR doesn't touch; those 9 files rerun alone passed 173 of 173.
+
+## 2026-10-20 — PR26 measured: it missed its target on B, C and E
+
+Branch `docs/pr26-measurement-results` from origin/main f94ce4f2. Justin OK'd the spend ("You have my okay on the spend"); a $5 stop cap was set, and the runs came to $4.18. The full tables and the method are in `docs/agent-runs/2026-10-20-pr26-first-turn-measurement.md`.
+
+- **Results.** Target for B, C and E: at most 3 orientation turns, no usage error, and no help read on C and E.
+  - A, baseline CLI: orientation median 2 (range 1 to 5). It doesn't reproduce GM's 8 of 16.
+  - B, branch CLI: median 5 (2 to 5). Missed.
+  - C, branch CLI with the swapped prompt: median 3 (1 to 3), no usage errors. Missed, because every run read `nebula apply --help`.
+  - D, baseline MCP: median 5 (3 to 6).
+  - E, branch MCP: median 2 (1 to 3). Missed, because E1 and E2 made 3 usage errors each.
+- **Why.**
+  - *B and C:* GM's prompt asks for `apply --help`, and `nebula context` doesn't give `apply`'s flags.
+  - *E:* `start_here` takes no arguments, so agents call it before loading any schema (Claude Code defers MCP schemas behind ToolSearch). They then guess the next tools' argument names: `id` for `board` and `definition_id`, `point_at` with only `say`, and `edit_canvas` with `type` and `from`/`to`. E3 and every D run loaded schemas first and made none of these errors.
+- **Surprise: two runs bypassed the guard.** Claude Code's Bash tool loads the login profile. On this Mac that put a `nebula` wrapper for the main checkout ahead of the guard on PATH, so the first C1 and C2 ran old code without the guard. They still reached only the isolated backend.
+  - *Fix:* the kit now sets `CLAUDE_ENV_FILE`, which runs before every Bash command, after the profile. The guard also logs each call, and the run checks the transcript against that log.
+  - *Reruns:* C1 and C2 ran again: 7 of 7 and 11 of 11 calls went through the guard. The doc's commands carry the fix.
+- **The counter undercounts.** ToolSearch counts as a needed call. A failed call counts as a usage error only when its text matches a pattern, so `point_at` without a target and `edit_canvas` shape errors land in "needed".
+- **Next: PR26b, then a rerun of B, C and E.** PR26b fixes what the transcripts show and the counter. The rerun is nine runs, about $2.20, and needs Justin's OK first.
 
 ## 2026-10-20 — Styles join Recently deleted, with MCP and CLI parity (Q53 a, audit U5)
 
