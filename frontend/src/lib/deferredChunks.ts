@@ -98,6 +98,7 @@ export const DEFERRED_MODULES: readonly string[] = [
   'components/agent-notes/AgentNoteOutlineLayer.tsx',
   'lib/agentNotesView.ts',
   'lib/assetProposalReview.ts',
+  'lib/canvasProposalReview.ts',
   'lib/goToCanvas.ts',
   'store/assetProposalReviewRequest.ts',
   'components/panels/RunHistoryPanel.tsx',

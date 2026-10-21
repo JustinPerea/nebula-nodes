@@ -204,7 +204,13 @@ the ghost shows the name and accepting applies it), `--run`, `--file`,
 `--wait` and `--json`. It doesn't take `apply`'s `--move`, `--remove`,
 `--unwire` or `--arrange`, or a rename of a node already on the canvas
 (use `nebula rename`). The person accepts or rejects it on the canvas; you
-can't accept it.
+can't accept it. Each proposal also posts an Update the person sees on
+every screen ("Codex proposes 3 changes on the canvas", with Review, which
+takes them to the canvas and its bar), so don't also post a `nebula note`
+about it. `nebula notes` shows how it ended: `[Accepted]`, `[Rejected]`,
+`[Withdrawn by <you>]`, `[Expired]`, `[No longer fits]` or
+`[Closed: Nebula restarted]` (ask again then). Proposing again after you
+withdraw one replaces the withdrawn one's Update.
 
 ```bash
 nebula propose --note "Upscale the wide take" \
@@ -539,8 +545,9 @@ board's updates are not on screen yet, so leave out `--board` to reach the
 person.
 One plain line, 240 characters, at most 6 a minute; never quote a private
 note; `--since-last-turn` for what they changed since your last turn. Your
-proposals outside the canvas post their own Update (you don't post one):
-`nebula notes` lists it with `[outcome]` once it closed.
+proposals, on the canvas and outside it, post their own Update (you don't
+post one, and it doesn't count toward the 6): `nebula notes` lists it with
+`[outcome]` once it closed.
 
 A project's cover: agents set it (MCP `set_project_cover`) while the person
 hasn't pinned one, and propose a change to the person's pin

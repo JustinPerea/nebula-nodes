@@ -55,6 +55,7 @@ const { useAgentNotesStore } = await import('../src/store/agentNotesStore');
 const { useUIStore } = await import('../src/store/uiStore');
 const { useProjectStore } = await import('../src/store/projectStore');
 const { useAssetProposalsStore } = await import('../src/store/assetProposalsStore');
+const { useCanvasProposalsStore } = await import('../src/store/canvasProposalsStore');
 const { isStudioShortcutTarget } = await import('../src/components/moodboard-studio/studioKeys');
 const { isCanvasShortcutTarget } = await import('../src/lib/canvasShortcutScope');
 
@@ -266,6 +267,110 @@ describe('Review from any screen lands where the person decides', () => {
     await vi.waitFor(() => expect(useUIStore.getState().viewMode).toBe('moodboard-editor'));
     expect(useUIStore.getState().moodboardEditorId).toBe('mb1');
     expect(open).not.toHaveBeenCalled();
+  });
+});
+
+describe("a canvas proposal's Update (Justin's Q112 a)", () => {
+  function canvasAsk(overrides: Partial<AgentNote> = {}) {
+    const text = 'Claude Code proposes 3 changes on the canvas';
+    return note('an_canvas', {
+      source: 'nebula', about: 'proposal', text, parts: [{ text }], refs: [],
+      actions: [{ label: 'Review', op: { kind: 'proposal.review', proposalId: 'p_1', target: 'canvas', targetId: 'p1' } }],
+      ...overrides,
+    });
+  }
+
+  function proposalView(id: string) {
+    return {
+      id, status: 'open', agent: { id: 'claude', name: 'Claude Code', color: '#E8825A', verified: false },
+      note: 'Hero from the cat line', projectId: 'p1', createdAt: Date.now(), expiresAt: Date.now() + 600_000,
+      nodes: [{ ref: '+img', definitionId: 'nano-banana', name: 'Nano Banana', category: 'image', params: {},
+        position: { x: 2400, y: 1500 }, cost: { kind: 'paid', provider: 'google', label: 'paid · google' },
+        runs: true, willRun: true, ports: { inputs: [], outputs: [] } }],
+      edges: [], params: [], run: ['+img'],
+      cost: { paidRuns: 1, freeRuns: 0, estimate: null, upTo: false, providers: ['google'], nodes: [], note: '' },
+      references: ['n4'], reason: null, idMap: null, runNodeIds: null,
+    } as never;
+  }
+
+  /** The canvas mounted, its bar showing the person's proposals. */
+  function canvasWithBar(id: string | null) {
+    if (id) useCanvasProposalsStore.getState().open(proposalView(id), 'key');
+    for (const name of ['react-flow__renderer', 'proposal-bar']) {
+      const el = document.createElement('div');
+      el.className = name;
+      el.tabIndex = -1;
+      el.dataset.testFixture = 'true';
+      document.body.appendChild(el);
+    }
+  }
+
+  beforeEach(() => {
+    useCanvasProposalsStore.setState({ proposals: {}, drag: {}, pending: {}, errors: {}, focusedId: null, deferredRun: null });
+  });
+
+  it('Review from Projects opens the project on its canvas with that proposal in the bar', async () => {
+    on('home');
+    render(<AppAgentNotes />);
+    sync([canvasAsk()]);
+    fireEvent.click(within(openEntry()).getByRole('button', { name: 'Review' }));
+    await vi.waitFor(() => expect(open).toHaveBeenCalledWith('p1'));
+    expect(useProjectStore.getState().screen).toBe('workspace');
+    expect(useUIStore.getState().viewMode).toBe('canvas');
+    canvasWithBar('p_1');
+    await vi.waitFor(() => expect(useCanvasProposalsStore.getState().focusedId).toBe('p_1'));
+    // Its ghosts come into view on the corner's spring, and the bar takes the keyboard.
+    await vi.waitFor(() => expect(flow.setViewport).toHaveBeenCalled());
+    expect(document.activeElement?.classList.contains('proposal-bar')).toBe(true);
+    await vi.waitFor(() => expect(screen.queryByRole('dialog', { name: 'Updates' })).toBeNull());
+  });
+
+  it('Review from a studio goes back to the canvas the way its Back does', async () => {
+    on('moodboard-editor');
+    useUIStore.setState({ moodboardEditorId: 'mb1' });
+    render(<AppAgentNotes />);
+    sync([canvasAsk()]);
+    fireEvent.click(within(openEntry()).getByRole('button', { name: 'Review' }));
+    await vi.waitFor(() => expect(useUIStore.getState().viewMode).toBe('canvas'));
+    expect(useUIStore.getState().moodboardEditorId).toBeNull();
+    expect(open).not.toHaveBeenCalled();
+    canvasWithBar('p_1');
+    await vi.waitFor(() => expect(useCanvasProposalsStore.getState().focusedId).toBe('p_1'));
+  });
+
+  it('Review on the canvas shows it in the bar without leaving', async () => {
+    on('canvas');
+    canvasWithBar('p_1');
+    render(<AppAgentNotes />);
+    sync([canvasAsk()]);
+    fireEvent.click(within(openEntry()).getByRole('button', { name: 'Review' }));
+    await vi.waitFor(() => expect(useCanvasProposalsStore.getState().focusedId).toBe('p_1'));
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it('a proposal no longer waiting says so, and the list stays open with it', async () => {
+    on('canvas');
+    canvasWithBar(null);
+    render(<AppAgentNotes />);
+    sync([canvasAsk()]);
+    fireEvent.click(within(openEntry()).getByRole('button', { name: 'Review' }));
+    await vi.waitFor(() => expect(useAgentNotesStore.getState().error).toMatch(/no longer waiting/), { timeout: 6000 });
+    expect(useCanvasProposalsStore.getState().focusedId).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Updates' })).toBeTruthy();
+  }, 15_000);
+
+  it('a settled one shows how it ended in place of Review, and is never "Expired" by the canvas', () => {
+    on('home');
+    render(<AppAgentNotes />);
+    sync([canvasAsk({ readAt: '2026-10-21T12:30:00.000Z', resolvedAt: '2026-10-21T12:30:00.000Z', outcome: 'Accepted' })]);
+    const entry = openEntry();
+    expect(entry.textContent).toContain('Accepted');
+    expect(within(entry).queryByRole('button', { name: 'Review' })).toBeNull();
+    cleanup();
+    // Still open, while the bar hasn't heard of it yet (Projects): Review stands.
+    render(<AppAgentNotes />);
+    sync([canvasAsk()]);
+    expect(within(openEntry()).getByRole('button', { name: 'Review' })).toBeTruthy();
   });
 });
 

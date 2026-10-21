@@ -1458,6 +1458,8 @@ Justin (relayed by GM - Design, 2026-10-20): "it should have a dedicated area on
 
 **Every screen (Justin's Q107 a, 2026-10-21):** "Show it on every screen, with the open project's Updates." The corner now shows on Projects, the studios and the Commons too, always with the open project's list (no corner while no project is open). Off the canvas each screen's header keeps the chip's room at its top right, and Review and "Show on canvas" go to their screen from wherever the person is. Notes: `docs/notes/2026-10-21-feat-updates-corner-every-screen.md`.
 
+**Canvas proposals too (Justin's Q112 a, 2026-10-21):** "Yes, every one: "Claude Code proposes 3 changes on the canvas", with Review taking you to the canvas and its bar. It settles like the others (Accepted, Rejected, Expired, Closed: Nebula restarted)." Every `propose_change` / `nebula propose` now posts its own Update (none replaces another); Review opens the canvas with that proposal in the bar; it settles as Accepted, Rejected, Withdrawn by <agent>, Expired, No longer fits or Closed: Nebula restarted. Notes: `docs/notes/2026-10-21-feat-canvas-proposal-updates.md`.
+
 Version 2.5 (Justin, relayed by GM - Design, 2026-10-20):
 
 - The chip and the list are called **"Updates"**. "Notes" clashed with image notes, the brief's NOTES row and pins (§3.5). Image notes, private notes, board notes and the NOTES row keep their names. One item in the list is "an update".

@@ -68,6 +68,8 @@ export function ProposalBar() {
   const pending = useCanvasProposalsStore((s) => s.pending);
   const errors = useCanvasProposalsStore((s) => s.errors);
   const deferredRun = useCanvasProposalsStore((s) => s.deferredRun);
+  // Review on its Update (Q112 a) asks for this one; paging moves on from it.
+  const focusedId = useCanvasProposalsStore((s) => s.focusedId);
   const accept = useCanvasProposalsStore((s) => s.accept);
   const reject = useCanvasProposalsStore((s) => s.reject);
   const pruneExpired = useCanvasProposalsStore((s) => s.pruneExpired);
@@ -91,7 +93,7 @@ export function ProposalBar() {
     .filter((entry) => !entry.closing)
     .sort((a, b) => a.view.createdAt - b.view.createdAt || a.view.id.localeCompare(b.view.id));
   const now = useNow(open.length > 0);
-  const current = open.find((entry) => entry.view.id === selectedId) ?? open[0];
+  const current = open.find((entry) => entry.view.id === (focusedId ?? selectedId)) ?? open[0];
   const currentId = current?.view.id ?? null;
   const position = current ? open.indexOf(current) : 0;
   const notReady = useProposalNotReady(current);
@@ -126,6 +128,7 @@ export function ProposalBar() {
     const next = open[(position + step + open.length) % open.length];
     pagedTo.current = next.view.id;
     setSelectedId(next.view.id);
+    useCanvasProposalsStore.getState().focus(null);
   };
   const settled = () => !guarding.current;
   const changes = current ? proposalChanges(current.view, current.values) : [];
@@ -164,6 +167,7 @@ export function ProposalBar() {
       {current && (
         <div
           className="proposal-bar"
+          tabIndex={-1}
           role="region"
           aria-label={`Proposal from ${current.view.agent.name}`}
           style={{ ['--agent-color' as string]: current.view.agent.color }}

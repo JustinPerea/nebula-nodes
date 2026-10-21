@@ -446,13 +446,13 @@ def list_notes(board: str | None = None, unread: bool = False, ctx: Context | No
     in the Updates corner on every screen); pass `board` (an id or exact
     name) for a moodboard's, which are not on screen yet (only you read
     them here). `unread=True` lists only those.
-    Only the person marks them read or dismisses them. Your
-    propose_asset_change asks post their own Update (`about: "proposal"`);
-    once the proposal closes it has `outcome`: "Accepted: ...", "You kept
-    ...", "Withdrawn by <you>", "Expired" (15 minutes without a decision),
-    "No longer fits", or "Closed: Nebula restarted" (Nebula restarted while
-    it was open; proposals don't survive a restart, so ask again if you still
-    want it).
+    Only the person marks them read or dismisses them. Your proposals
+    (propose_change and propose_asset_change) post their own Update (`about:
+    "proposal"`); once the proposal closes it has `outcome`: "Accepted" (or
+    "Accepted: ..."), "Rejected" or "You kept ...", "Withdrawn by <you>",
+    "Expired" (15 minutes without a decision), "No longer fits", or
+    "Closed: Nebula restarted" (Nebula restarted while it was open;
+    proposals don't survive a restart, so ask again if you still want it).
     """
     params = {"unread": 1} if unread else None
     if board:
@@ -610,6 +610,15 @@ def propose_change(
     their graph. The person sees your proposal as ghost nodes and dashed
     wires; nothing changes until they click Accept, and that click is their
     approval for the runs listed. You cannot accept your own proposal.
+
+    Each proposal also posts an Update for you ("Claude Code proposes 3
+    changes on the canvas", with Review), which the person sees in the
+    Updates corner on every screen, so don't also post_note to announce it.
+    Review takes them to the canvas with your proposal in the bar. Once it
+    closes the Update says how (list_notes `outcome`): Accepted, Rejected,
+    Withdrawn by <you> (withdraw_proposal), Expired, No longer fits, or
+    Closed: Nebula restarted. Proposing again after a withdraw replaces the
+    withdrawn one's Update.
 
     - `note`: one line (≤160 chars) saying what this does and why: your own
       proposal only; what you noticed goes in post_note.
