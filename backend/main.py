@@ -173,13 +173,13 @@ from services.canvas_proposals import (
     Proposal,
     ProposalError,
     ProposalSpec,
+    agent_wording,
     canvas_proposals,
     clean_note,
     clean_positions,
     cost_for,
     parse_spec,
     place_new_nodes,
-    readiness_warning,
     summarize_cost,
 )
 # Proposals outside the graph: a project's cover, a board's Send notes (U16).
@@ -5467,7 +5467,9 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
     except ProposalError as exc:
         raise _proposal_http_error(exc) from exc
     view = _proposal_view(proposal)
-    warning = readiness_warning(cost)
+    # The agent's other open proposals here that can't run: Justin (Q109)
+    # keeps them, and the agent is told to withdraw one this replaces.
+    still_open = [{"id": p.id, "note": p.spec.note} for p in canvas_proposals.open_unrunnable(proposal)]
     first_reference = next(iter(sorted(proposal.references, key=_node_order)), None)
     _journal(
         "proposal.created",
@@ -5504,8 +5506,9 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
     if target is not None:
         await _show_agent(target, action="click", say=spec.note)
     # Nodes of the run that can't run here, so the agent can say so or pick
-    # another model before the person accepts (the canvas shows it too).
-    return {"proposal": view, **({"warning": warning} if warning else {})}
+    # another model before the person accepts (the canvas shows it too), and
+    # the call that withdraws this one or an earlier one this replaces.
+    return agent_wording({"proposal": view, **({"stillOpen": still_open} if still_open else {})})
 
 
 @app.get("/api/canvas/proposals")

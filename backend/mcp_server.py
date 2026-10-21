@@ -19,7 +19,7 @@ import httpx  # noqa: F401 - tests patch httpx.request through this module
 from commons.client_paths import asset_path
 from nebula_api import NebulaAPI, NebulaAPIError
 from services.file_access import require_allowed_path
-from services.canvas_proposals import READY_NODES_MCP, readiness_warning
+from services.canvas_proposals import READY_NODES_MCP, WITHDRAW_MCP, agent_wording
 from services import universal_ports as _universal_ports
 from mcp.server.fastmcp import Context, FastMCP, Image
 from mcp.types import ToolAnnotations
@@ -616,7 +616,12 @@ def propose_change(
     can't run here as set up (no key, no Krea sign-in), each with `missing`
     in find_nodes' words, and `warning` says so in a sentence: if the person
     accepts, that run fails. Tell them what to set up, or propose a node that
-    runs here. Then call get_proposal(id, wait_seconds=...).
+    runs here. Such a proposal is kept, with the warning; if you then propose
+    something else instead, withdraw the first (`withdrawWith` is the exact
+    withdraw_proposal call). While one of yours that can't run is still open,
+    the next proposal's answer lists it in `stillOpen` ({id, note,
+    withdrawWith}) and says so in `reminder`; nothing is withdrawn for you.
+    Then call get_proposal(id, wait_seconds=...).
     """
     body: dict[str, Any] = {"note": note}
     if nodes:
@@ -634,11 +639,10 @@ def propose_change(
 
 
 def _worded_for_mcp(response: Any) -> Any:
-    """The readiness warning in this surface's words (find_nodes, not the HTTP route)."""
-    if isinstance(response, dict) and response.get("warning"):
-        warning = readiness_warning(((response.get("proposal") or {}).get("cost")) or {}, lister=READY_NODES_MCP)
-        if warning:
-            response = {**response, "warning": warning}
+    """The readiness warning, withdraw calls and reminder in this surface's
+    words (find_nodes and withdraw_proposal, not the HTTP routes)."""
+    if isinstance(response, dict) and isinstance(response.get("proposal"), dict):
+        return agent_wording(response, lister=READY_NODES_MCP, withdraw=WITHDRAW_MCP)
     return response
 
 
@@ -675,7 +679,11 @@ def get_proposal(proposal_id: str, wait_seconds: float = 0, ctx: Context | None 
 
 @_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False))
 def withdraw_proposal(proposal_id: str, ctx: Context | None = None) -> dict[str, Any]:
-    """Take back one of your open proposals (only the agent that proposed it can)."""
+    """Take back one of your open proposals (only the agent that proposed it can).
+
+    Withdraw one that can't run here (propose_change's `warning`) before you
+    propose something else instead, so the person has one proposal to answer.
+    """
     from urllib.parse import quote
 
     return _canvas_call("DELETE", f"/api/canvas/proposals/{quote(proposal_id, safe='')}", ctx)

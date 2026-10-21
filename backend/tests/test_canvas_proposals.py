@@ -303,7 +303,8 @@ def test_a_proposal_names_the_run_nodes_that_cannot_run_here(api, monkeypatch):
     assert response["warning"] == (
         "If the person accepts, the run fails: 1 node can't run here as set up. "
         f"+img (GPT Image 2) {need}. Tell the person what to set up, or propose a node that runs here "
-        "(GET /api/agent/nodes lists them).")
+        "(GET /api/agent/nodes lists them). If you propose something else instead, withdraw this one first: "
+        f"`DELETE /api/canvas/proposals/{response['proposal']['id']}`.")
     # The person's canvas gets the same cost, so the bar can say it too.
     opened = [m for m in api.browser if m["type"] == "proposalOpened"][-1]
     assert opened["proposal"]["cost"]["notReady"] == cost["notReady"]
@@ -1095,8 +1096,81 @@ def test_cli_propose_json_wait_keeps_the_readiness_warning():
     assert proposals_cmd.run_propose(client, _propose_args(wait=True, json=True), out=out) == 0
     answer = json.loads(out.getvalue())
     assert answer["proposal"]["status"] == "accepted"
+    # Accepted: the warning still says why the run fails, but there is nothing left to withdraw.
     assert answer["warning"].endswith("(`nebula context` lists them).")
+    assert "withdraw" not in answer["warning"] and "withdrawWith" not in answer
     assert f"+img (GPT Image 2) {need}" in answer["warning"]
+
+
+class _UnrunnableWaitClient(FakeClient):
+    """`propose` answers an unrunnable p_1 that reminds about the same agent's
+    p_0; `get_proposal` answers each id from `states` (p_1 last of all)."""
+
+    def __init__(self, states: dict[str, list[dict]]) -> None:
+        super().__init__([])
+        self.states = states
+
+    def propose(self, body, agent_name=None):
+        response = super().propose(body, agent_name)
+        response["proposal"]["cost"] = {"notReady": [{"ref": "+img", "nodeId": None, "name": "FLUX.2 [pro]",
+                                                      "missing": "needs BFL_API_KEY in Settings > Providers"}]}
+        return {**response, "warning": "(HTTP words)",
+                "stillOpen": [{"id": "p_0", "note": "Old", "withdrawWith": "DELETE /api/canvas/proposals/p_0"}],
+                "reminder": "(HTTP words)"}
+
+    def get_proposal(self, proposal_id, wait=0.0, agent_name=None):
+        self.waits.append(wait)
+        queue = self.states.get(proposal_id) or []
+        view = queue.pop(0) if len(queue) > 1 else (queue[0] if queue else {"id": proposal_id, "status": "open"})
+        return {"proposal": view}
+
+    def list_proposals(self):
+        views = [(self.states.get(pid) or [{}])[0] for pid in self.states]
+        return {"proposals": [view for view in views if view.get("status") == "open"]}
+
+
+@pytest.mark.parametrize("status", ["rejected", "expired", "withdrawn", "invalidated", "accepted"])
+def test_cli_propose_json_wait_drops_the_withdraw_call_once_the_proposal_closed(status):
+    """Review Q109: `propose --json --wait` printed withdrawWith (and the
+    warning's "withdraw this one first") for a proposal the person had already
+    closed, so following it failed with 409."""
+    client = _UnrunnableWaitClient({"p_1": [{"id": "p_1", "status": status}],
+                                    "p_0": [{"id": "p_0", "status": "open"}]})
+    out = io.StringIO()
+    proposals_cmd.run_propose(client, _propose_args(wait=True, json=True), out=out)
+    answer = json.loads(out.getvalue())
+    assert answer["proposal"]["status"] == status
+    assert "withdrawWith" not in answer
+    assert "withdraw this one first" not in answer["warning"] and "p_1" not in answer["warning"]
+    assert answer["warning"].startswith("If the person accepts, the run fails: 1 node can't run here")
+    # p_0 is still open and still can't run: the reminder about it stays.
+    assert [row["id"] for row in answer["stillOpen"]] == ["p_0"]
+    assert "Your proposal p_0 is still open" in answer["reminder"]
+
+
+def test_cli_propose_json_wait_drops_a_reminder_whose_proposal_closed_meanwhile():
+    """stillOpen was read before a wait that can last minutes: an earlier
+    proposal closed meanwhile is no longer named."""
+    client = _UnrunnableWaitClient({"p_1": [{"id": "p_1", "status": "rejected"}],
+                                    "p_0": [{"id": "p_0", "status": "expired"}]})
+    out = io.StringIO()
+    proposals_cmd.run_propose(client, _propose_args(wait=True, json=True), out=out)
+    answer = json.loads(out.getvalue())
+    assert "stillOpen" not in answer and "reminder" not in answer
+
+
+def test_cli_propose_json_wait_timeout_keeps_the_withdraw_call():
+    """On a timeout the proposal is still open, so its withdraw call is still right."""
+    times = iter([0.0, 0.0, 100.0, 100.0])
+    client = _UnrunnableWaitClient({"p_0": [{"id": "p_0", "status": "open"}]})
+    out = io.StringIO()
+    code = proposals_cmd.run_propose(client, _propose_args(wait=True, json=True, timeout=50.0), out=out,
+                                     clock=lambda: next(times))
+    answer = json.loads(out.getvalue())
+    assert code == 2 and answer["timedOut"] is True
+    assert answer["withdrawWith"] == "nebula proposal withdraw p_1"
+    assert answer["warning"].endswith("withdraw this one first: `nebula proposal withdraw p_1`.")
+    assert [row["id"] for row in answer["stillOpen"]] == ["p_0"]
 
 
 def test_cli_proposal_json_and_formatting():
@@ -1187,3 +1261,191 @@ def test_a_cinema_scene_is_paid_by_its_base_model():
     assert cost_for(scene, params, definitions) == {
         "kind": "paid", "provider": "google", "label": "paid · google, per shot"}
     assert cost_for(scene, {"scene": "unreadable"}, definitions)["kind"] == "paid"
+
+
+# -- a proposal that can't run here: kept, and the agent withdraws it before proposing something else (Q109) --
+
+OPENAI_ONLY = {"apiKeys": {"OPENAI_API_KEY": "sk-test"}}
+
+
+def _image_body(prompt_node: str, definition_id: str, note: str = "Hero shot") -> dict:
+    return {"note": note, "nodes": [{"ref": "+img", "definitionId": definition_id}],
+            "edges": [{"source": prompt_node, "sourceHandle": "text", "target": "+img", "targetHandle": "prompt"}],
+            "run": ["+img"]}
+
+
+def test_an_unrunnable_proposal_is_kept_and_its_warning_names_the_withdraw_call(api, monkeypatch):
+    """Justin, Q109: "Keep it with the warning, and tell the agent to withdraw
+    it before proposing something else." FLUX.2 with only an OpenAI key."""
+    monkeypatch.setattr(api.main, "load_settings", lambda: OPENAI_ONLY)
+    n1 = api.graph.add_node("text-input", {"value": "a dune"})
+    response = _propose(api, _image_body(n1, "flux-2-pro"))
+    assert response.status_code == 201, response.text
+    answer = response.json()
+    proposal_id = answer["proposal"]["id"]
+    assert answer["proposal"]["status"] == "open" and api.book.get(proposal_id).is_open
+    assert answer["proposal"]["cost"]["notReady"][0]["ref"] == "+img"
+    call = f"DELETE /api/canvas/proposals/{proposal_id}"
+    assert answer["warning"].startswith("If the person accepts, the run fails: 1 node can't run here as set up. ")
+    assert answer["warning"].endswith(
+        f"(GET /api/agent/nodes lists them). If you propose something else instead, withdraw this one first: `{call}`.")
+    assert answer["withdrawWith"] == call
+    # The route's message ends with a full stop; the warning doesn't double it ("Providers..").
+    assert ".." not in answer["warning"]
+    # Nothing to remind about yet: it is this agent's first proposal.
+    assert "stillOpen" not in answer and "reminder" not in answer
+
+
+def test_each_surface_names_its_own_withdraw_call():
+    """The warning is built once (canvas_proposals); MCP and the CLI each name their own call."""
+    from services.canvas_proposals import (
+        READY_NODES_CLI,
+        READY_NODES_MCP,
+        WITHDRAW_CLI,
+        WITHDRAW_MCP,
+        agent_wording,
+        cli_withdraw_form,
+    )
+
+    answer = {"proposal": {"id": "p_1a2b3c4d", "cost": {"notReady": [
+        {"ref": "+img", "nodeId": None, "name": "FLUX.2", "missing": "needs BFL_API_KEY or FAL_KEY"}]}},
+        "warning": "(HTTP words)", "withdrawWith": "DELETE /api/canvas/proposals/p_1a2b3c4d",
+        "stillOpen": [{"id": "p_00000001", "note": "Old", "withdrawWith": "DELETE /api/canvas/proposals/p_00000001"}],
+        "reminder": "(HTTP words)"}
+    mcp = agent_wording(answer, lister=READY_NODES_MCP, withdraw=WITHDRAW_MCP)
+    assert mcp["withdrawWith"] == 'withdraw_proposal(proposal_id="p_1a2b3c4d")'
+    assert mcp["warning"].endswith('withdraw this one first: `withdraw_proposal(proposal_id="p_1a2b3c4d")`.')
+    assert "(find_nodes lists them)" in mcp["warning"]
+    assert mcp["stillOpen"] == [{"id": "p_00000001", "note": "Old",
+                                 "withdrawWith": 'withdraw_proposal(proposal_id="p_00000001")'}]
+    assert mcp["reminder"] == ("Your proposal p_00000001 is still open and can't run here; withdraw it if this one "
+                               'replaces it: `withdraw_proposal(proposal_id="p_00000001")`.')
+    cli = agent_wording(answer, lister=READY_NODES_CLI, withdraw=WITHDRAW_CLI)
+    assert cli["withdrawWith"] == "nebula proposal withdraw p_1a2b3c4d"
+    assert cli["warning"].endswith("withdraw this one first: `nebula proposal withdraw p_1a2b3c4d`.")
+    assert cli["stillOpen"][0]["withdrawWith"] == "nebula proposal withdraw p_00000001"
+    assert "DELETE" not in json.dumps(cli) and "withdraw_proposal" not in json.dumps(cli)
+    # Named with --as, the agent withdraws with --as too (it needs its name to).
+    named = agent_wording(answer, lister=READY_NODES_CLI, withdraw=cli_withdraw_form("Claude Code"))
+    assert named["withdrawWith"] == "nebula proposal withdraw p_1a2b3c4d --as 'Claude Code'"
+    # A proposal that runs gets neither line.
+    ready = agent_wording({"proposal": {"id": "p_1", "cost": {"notReady": []}}}, lister=READY_NODES_MCP,
+                          withdraw=WITHDRAW_MCP)
+    assert ready == {"proposal": {"id": "p_1", "cost": {"notReady": []}}}
+
+
+def test_the_same_agents_next_proposal_says_its_unrunnable_one_is_still_open(api, monkeypatch):
+    monkeypatch.setattr(api.main, "load_settings", lambda: OPENAI_ONLY)
+    n1 = api.graph.add_node("text-input", {"value": "a dune"})
+    first = _propose(api, _image_body(n1, "flux-2-pro", "FLUX hero")).json()["proposal"]["id"]
+
+    # Another agent's next proposal doesn't hear about Claude's.
+    other = _propose(api, _image_body(n1, "gpt-image-2-generate"), headers=CODEX).json()
+    assert "stillOpen" not in other and "reminder" not in other and "warning" not in other
+
+    second = _propose(api, _image_body(n1, "gpt-image-2-generate", "GPT hero")).json()
+    assert "warning" not in second  # this one runs
+    call = f"DELETE /api/canvas/proposals/{first}"
+    assert second["stillOpen"] == [{"id": first, "note": "FLUX hero", "withdrawWith": call}]
+    assert second["reminder"] == (f"Your proposal {first} is still open and can't run here; "
+                                  f"withdraw it if this one replaces it: `{call}`.")
+    # Nothing is withdrawn for the agent: Justin chose to tell it, not decide for it.
+    assert api.book.get(first).is_open
+
+    # Withdrawn, it is no longer mentioned; the agent's open proposal that runs never is.
+    assert api.client.delete(f"/api/canvas/proposals/{first}", headers=CLAUDE).status_code == 200
+    third = _propose(api, _image_body(n1, "gpt-image-2-generate", "GPT again")).json()
+    assert "stillOpen" not in third and "reminder" not in third
+    # Codex's runnable proposal doesn't trigger it for Codex either.
+    again = _propose(api, _image_body(n1, "gpt-image-2-generate"), headers=CODEX).json()
+    assert "stillOpen" not in again and "reminder" not in again
+
+
+def test_an_unrunnable_proposal_after_another_names_both(api, monkeypatch):
+    """Two FLUX proposals in a row: the second has its own warning and the reminder."""
+    monkeypatch.setattr(api.main, "load_settings", lambda: OPENAI_ONLY)
+    n1 = api.graph.add_node("text-input", {"value": "a dune"})
+    first = _propose(api, _image_body(n1, "flux-2-pro")).json()["proposal"]["id"]
+    second = _propose(api, _image_body(n1, "flux-2-pro")).json()
+    assert second["withdrawWith"] == f"DELETE /api/canvas/proposals/{second['proposal']['id']}"
+    assert [row["id"] for row in second["stillOpen"]] == [first]
+
+
+def test_open_proposals_in_context_and_look_say_which_cannot_run(api, monkeypatch):
+    """An agent that comes back later sees its open proposal can't run (start_here, `nebula context`, look)."""
+    from cli.formatter import format_start
+
+    monkeypatch.setattr(api.main, "load_settings", lambda: OPENAI_ONLY)
+    n1 = api.graph.add_node("text-input", {"value": "a dune"})
+    flux = _propose(api, _image_body(n1, "flux-2-pro")).json()["proposal"]["id"]
+    gpt = _propose(api, _image_body(n1, "gpt-image-2-generate")).json()["proposal"]["id"]
+    briefs = {brief["id"]: brief for brief in (api.book.brief(p) for p in api.book.open_list())}
+    assert briefs[flux]["cantRun"] == 1 and "cantRun" not in briefs[gpt]
+
+    start = {"proposals": {"count": 2, "open": list(briefs.values())}}
+    text = format_start(start)
+    flux_line = next(line for line in text.splitlines() if flux in line)
+    gpt_line = next(line for line in text.splitlines() if gpt in line)
+    assert "1 node can't run here" in flux_line and "can't run" not in gpt_line
+    look = format_snapshot({"proposals": list(briefs.values()), "nodes": []})
+    assert "1 node can't run here" in next(line for line in look.splitlines() if flux in line)
+
+
+def _cli_client(api):
+    """The real CLI client, over the test app."""
+    from cli.client import NebulaClient
+
+    client = NebulaClient("http://testserver")
+    client._client = api.client
+    return client
+
+
+def _cli_propose_args(prompt_node: str, definition_id: str, **overrides) -> argparse.Namespace:
+    return _propose_args(add=[f"+img={definition_id}"], wire=[[f"{prompt_node}:text", "+img:prompt"]],
+                         run=["+img"], wait=False, **overrides)
+
+
+def test_cli_propose_warns_reminds_and_names_its_own_withdraw(api, monkeypatch):
+    """`nebula propose` with NEBULA_AGENT_NAME: FLUX.2 (no key), then GPT Image 2."""
+    monkeypatch.setattr(api.main, "load_settings", lambda: OPENAI_ONLY)
+    monkeypatch.setenv("NEBULA_AGENT_NAME", "Claude Code")
+    n1 = api.graph.add_node("text-input", {"value": "a dune"})
+    client = _cli_client(api)
+
+    out = io.StringIO()
+    assert proposals_cmd.run_propose(client, _cli_propose_args(n1, "flux-2-pro"), out=out) == 0
+    first = api.book.open_list()[-1].id
+    assert f"withdraw this one first: `nebula proposal withdraw {first}`." in out.getvalue()
+
+    out = io.StringIO()
+    assert proposals_cmd.run_propose(client, _cli_propose_args(n1, "gpt-image-2-generate"), out=out) == 0
+    assert (f"reminder: Your proposal {first} is still open and can't run here; withdraw it if this one "
+            f"replaces it: `nebula proposal withdraw {first}`.") in out.getvalue()
+
+    out = io.StringIO()
+    assert proposals_cmd.run_propose(client, _cli_propose_args(n1, "gpt-image-2-generate", json=True), out=out) == 0
+    answer = json.loads(out.getvalue())
+    assert answer["stillOpen"][0]["withdrawWith"] == f"nebula proposal withdraw {first}"
+    assert "DELETE" not in out.getvalue()
+
+    # The named call works as printed.
+    withdraw = argparse.Namespace(id_or_action="withdraw", proposal_id=first, wait=False, timeout=60.0, json=False,
+                                  agent_name=None)
+    assert proposals_cmd.run_proposal(client, withdraw, out=io.StringIO()) == 0
+    assert api.book.get(first).status == "withdrawn"
+    api.book.close(answer["proposal"]["id"], "withdrawn")  # under the open cap again
+    out = io.StringIO()
+    assert proposals_cmd.run_propose(client, _cli_propose_args(n1, "gpt-image-2-generate"), out=out) == 0
+    assert "reminder:" not in out.getvalue() and "still open" not in out.getvalue()
+
+
+def test_cli_propose_as_a_named_agent_names_withdraw_with_as(api, monkeypatch):
+    monkeypatch.setattr(api.main, "load_settings", lambda: OPENAI_ONLY)
+    monkeypatch.delenv("NEBULA_AGENT_NAME", raising=False)
+    n1 = api.graph.add_node("text-input", {"value": "a dune"})
+    client = _cli_client(api)
+    out = io.StringIO()
+    assert proposals_cmd.run_propose(client, _cli_propose_args(n1, "flux-2-pro", agent_name="Codex", json=True),
+                                     out=out) == 0
+    answer = json.loads(out.getvalue())
+    assert answer["withdrawWith"] == f"nebula proposal withdraw {answer['proposal']['id']} --as Codex"
