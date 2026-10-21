@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useEffect } from 'react';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { AgentNote } from '../src/lib/agentNotes';
 
@@ -388,9 +389,10 @@ describe('Show on canvas from another screen', () => {
     render(<AppAgentNotes />);
     sync([note('an_1')]);
     fireEvent.click(within(openEntry()).getByRole('button', { name: 'Show on canvas' }));
-    // The list steps aside for the canvas it leads to.
-    expect(screen.queryByRole('dialog', { name: 'Updates' })).toBeNull();
     await vi.waitFor(() => expect(useUIStore.getState().viewMode).toBe('canvas'));
+    // The list steps aside once on the canvas it leads to (not before: a
+    // Show that can't go keeps it open, with its reason).
+    await vi.waitFor(() => expect(screen.queryByRole('dialog', { name: 'Updates' })).toBeNull());
     expect(useUIStore.getState().moodboardEditorId).toBeNull();
     expect(flow.setViewport).not.toHaveBeenCalled();
     canvasMounts();
@@ -406,6 +408,223 @@ describe('Show on canvas from another screen', () => {
     await vi.waitFor(() => expect(open).toHaveBeenCalledWith('p1'));
     canvasMounts();
     await vi.waitFor(() => expect(flow.setViewport).toHaveBeenCalled());
+  });
+});
+
+// p157 bug: App mounts the Agent log only on the canvas (App.tsx), but the
+// corner is on every screen. Off the canvas "See all actions →" set
+// agentLogOpen and focused a header that wasn't there: nothing showed, and
+// the log popped open later on the canvas. It now goes to the canvas first
+// (the way Show does) and opens the log there, focused, once it has mounted.
+describe('"See all actions →" from any screen', () => {
+  /** App's Agent log: mounted only on the canvas, collapsed again on unmount (AgentLog.tsx). */
+  function MountedLog() {
+    const open = useUIStore((s) => s.agentLogOpen);
+    useEffect(() => () => useUIStore.getState().setAgentLogOpen(false), []);
+    return <div className="agent-log"><button type="button" className="agent-log__header" aria-expanded={open}>Agent log</button></div>;
+  }
+  function CanvasLog() {
+    const workspace = useProjectStore((s) => s.screen === 'workspace');
+    const canvas = useUIStore((s) => s.viewMode === 'canvas');
+    return workspace && canvas ? <MountedLog /> : null;
+  }
+  /** Every moment agentLogOpen is true, whether the canvas (and so the log) was on screen. */
+  function watchOpenOffCanvas() {
+    const offCanvas: string[] = [];
+    const check = () => {
+      if (!useUIStore.getState().agentLogOpen) return;
+      const where = useProjectStore.getState().screen === 'workspace' ? useUIStore.getState().viewMode : 'home';
+      if (where !== 'canvas') offCanvas.push(where);
+    };
+    const stopUI = useUIStore.subscribe(check);
+    const stopProjects = useProjectStore.subscribe(check);
+    return { offCanvas, stop: () => { stopUI(); stopProjects(); } };
+  }
+
+  it.each(['home', 'create', 'commons'] as const)(
+    'from %s: goes to the canvas, then opens the Agent log with focus on its header',
+    async (where) => {
+      on(where);
+      const watch = watchOpenOffCanvas();
+      try {
+        render(<><AppAgentNotes /><CanvasLog /></>);
+        sync([note('an_1')]);
+        fireEvent.click(chip());
+        fireEvent.click(screen.getByRole('button', { name: 'See all actions →' }));
+        await vi.waitFor(() => expect(useUIStore.getState().viewMode).toBe('canvas'));
+        expect(useProjectStore.getState().screen).toBe('workspace');
+        if (where === 'home') expect(open).toHaveBeenCalledWith('p1');
+        const header = await screen.findByRole('button', { name: 'Agent log' });
+        await vi.waitFor(() => expect(useUIStore.getState().agentLogOpen).toBe(true));
+        await vi.waitFor(() => expect(document.activeElement).toBe(header));
+        expect(header.getAttribute('aria-expanded')).toBe('true');
+        // The list steps aside once the log is open (not before: a See all
+        // that can't get there keeps it open, with its reason).
+        await vi.waitFor(() => expect(screen.queryByRole('dialog', { name: 'Updates' })).toBeNull());
+        expect(watch.offCanvas).toEqual([]);
+      } finally {
+        watch.stop();
+      }
+    },
+  );
+
+  it('never leaves the log set to open off the canvas when the person leaves before it mounts', async () => {
+    on('create');
+    const watch = watchOpenOffCanvas();
+    try {
+      // No Agent log mounts (its chunk is slow, or the person moved on first).
+      render(<AppAgentNotes />);
+      sync([note('an_1')]);
+      fireEvent.click(chip());
+      fireEvent.click(screen.getByRole('button', { name: 'See all actions →' }));
+      await vi.waitFor(() => expect(useUIStore.getState().viewMode).toBe('canvas'));
+      act(() => on('moodboard-editor'));
+      // Past the wait for the log's header (goToCanvas.whenReady, 3 s).
+      await new Promise((resolve) => setTimeout(resolve, 3300));
+      expect(useUIStore.getState().agentLogOpen).toBe(false);
+      expect(watch.offCanvas).toEqual([]);
+    } finally {
+      watch.stop();
+    }
+  }, 10000);
+
+  it('on the canvas opens the log in place, as before', () => {
+    on('canvas');
+    render(<><AppAgentNotes /><CanvasLog /></>);
+    sync([note('an_1')]);
+    fireEvent.click(chip());
+    fireEvent.click(screen.getByRole('button', { name: 'See all actions →' }));
+    expect(useUIStore.getState().agentLogOpen).toBe(true);
+    expect(useUIStore.getState().viewMode).toBe('canvas');
+  });
+
+  it.each(['home', 'create', 'commons'] as const)('on %s: no link while the Agent log is switched off (Q38)', (where) => {
+    on(where);
+    useUIStore.setState({ agentLogEnabled: false });
+    render(<AppAgentNotes />);
+    sync([note('an_1')]);
+    fireEvent.click(chip());
+    expect(screen.getByRole('dialog', { name: 'Updates' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'See all actions →' })).toBeNull();
+  });
+});
+
+// p157 review: a step to another screen that can't go through must say why,
+// where the person is looking. "See all actions →" and an off-canvas Show
+// used to close the list first, so the reason went to a list that was gone
+// (and showed up, unexplained, the next time it opened).
+describe('a step away that can\'t go through says why', () => {
+  const NOT_OPENED = "The project didn't open. Try again.";
+  function alertText() {
+    return within(screen.getByRole('dialog', { name: 'Updates' })).getByRole('alert').textContent;
+  }
+
+  it('See all from Projects that can\'t open the project: the list stays open with the reason, not an old one', async () => {
+    on('home');
+    open.mockImplementationOnce(async () => {});
+    render(<AppAgentNotes />);
+    sync([note('an_1')]);
+    act(() => useAgentNotesStore.setState({ error: 'an older reason' }));
+    fireEvent.click(chip());
+    fireEvent.click(screen.getByRole('button', { name: 'See all actions →' }));
+    await vi.waitFor(() => expect(alertText()).toBe(NOT_OPENED));
+    expect(useProjectStore.getState().screen).toBe('home');
+    expect(useUIStore.getState().agentLogOpen).toBe(false);
+  });
+
+  it('See all whose Agent log never shows on the canvas says so in the open list', async () => {
+    on('create');
+    render(<AppAgentNotes />);
+    sync([note('an_1')]);
+    fireEvent.click(chip());
+    fireEvent.click(screen.getByRole('button', { name: 'See all actions →' }));
+    await vi.waitFor(() => expect(useUIStore.getState().viewMode).toBe('canvas'));
+    // Past the wait for the log's header (goToCanvas.whenReady, 3 s).
+    await new Promise((resolve) => setTimeout(resolve, 3300));
+    expect(alertText()).toBe("The Agent log didn't open. Try again.");
+    expect(useUIStore.getState().agentLogOpen).toBe(false);
+  }, 10000);
+
+  it('Show from Projects that can\'t open the project keeps the list open with the reason', async () => {
+    on('home');
+    open.mockImplementationOnce(async () => {});
+    render(<AppAgentNotes />);
+    sync([note('an_1')]);
+    fireEvent.click(within(openEntry()).getByRole('button', { name: 'Show on canvas' }));
+    await vi.waitFor(() => expect(alertText()).toBe(NOT_OPENED));
+    expect(useProjectStore.getState().screen).toBe('home');
+  });
+
+  it('Show from a card that can\'t go opens the list, where the reason shows', async () => {
+    on('home');
+    open.mockImplementationOnce(async () => {});
+    render(<AppAgentNotes />);
+    sync([note('an_1')]);
+    emit({ type: 'agentNotes', surface: 'canvas', op: 'added', projectId: 'p1', note: note('an_2'), unread: 2, at: 2, removed: [] });
+    await vi.waitFor(() => expect(document.querySelector('.agent-note-card')).not.toBeNull());
+    const card = document.querySelector<HTMLElement>('.agent-note-card')!;
+    fireEvent.click(within(card).getByRole('button', { name: 'Show on canvas' }));
+    await vi.waitFor(() => expect(alertText()).toBe(NOT_OPENED));
+  });
+
+  // The Commons disables its own Back, tabs and More while Blind labeling or
+  // Agent review holds unsaved work. The corner leaves the Commons too (See
+  // all, Show, Review): it refuses the same way, and says why.
+  describe('from the Commons with unsaved labels', () => {
+    const UNSAVED = 'The Commons has unsaved changes: save or discard them first.';
+    async function unsaved(value: boolean) {
+      const { setCommonsUnsaved } = await import('../src/lib/commonsUnsaved');
+      setCommonsUnsaved(value);
+    }
+    afterEach(async () => { await unsaved(false); });
+
+    it('See all stays in the Commons and says why', async () => {
+      on('commons');
+      await unsaved(true);
+      render(<AppAgentNotes />);
+      sync([note('an_1')]);
+      fireEvent.click(chip());
+      fireEvent.click(screen.getByRole('button', { name: 'See all actions →' }));
+      await vi.waitFor(() => expect(alertText()).toBe(UNSAVED));
+      expect(useUIStore.getState().viewMode).toBe('commons');
+      expect(useUIStore.getState().agentLogOpen).toBe(false);
+    });
+
+    it('Show stays in the Commons and says why', async () => {
+      on('commons');
+      await unsaved(true);
+      render(<AppAgentNotes />);
+      sync([note('an_1')]);
+      fireEvent.click(within(openEntry()).getByRole('button', { name: 'Show on canvas' }));
+      await vi.waitFor(() => expect(alertText()).toBe(UNSAVED));
+      expect(useUIStore.getState().viewMode).toBe('commons');
+    });
+
+    it.each([['moodboard', 'mb1'], ['project', 'dusk'], ['commons', 'ast_1']] as const)(
+      'Review on a %s ask stays in the Commons and says why',
+      async (target, targetId) => {
+        on('commons');
+        await unsaved(true);
+        render(<AppAgentNotes />);
+        sync([ask(target, targetId)]);
+        fireEvent.click(within(openEntry()).getByRole('button', { name: 'Review' }));
+        await vi.waitFor(() => expect(alertText()).toBe(UNSAVED));
+        expect(useUIStore.getState().viewMode).toBe('commons');
+        expect(goHome).not.toHaveBeenCalled();
+        expect(useAssetProposalsStore.getState().review).toBeNull();
+      },
+    );
+
+    it('once saved, See all goes to the canvas', async () => {
+      on('commons');
+      await unsaved(true);
+      await unsaved(false);
+      render(<AppAgentNotes />);
+      sync([note('an_1')]);
+      fireEvent.click(chip());
+      fireEvent.click(screen.getByRole('button', { name: 'See all actions →' }));
+      await vi.waitFor(() => expect(useUIStore.getState().viewMode).toBe('canvas'));
+    });
   });
 });
 
@@ -555,7 +774,7 @@ describe('the corner keeps clear of each screen\'s controls', () => {
   it('measures the chip again on a window resize, so the slot follows its compact width', async () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
     const root = document.documentElement;
-    let width = 145;
+    let width = 134;
     const widths = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) {
       return this.classList.contains('agent-notes-chip') ? width : 0;
     });
@@ -564,11 +783,11 @@ describe('the corner keeps clear of each screen\'s controls', () => {
       slot({ left: 1281, right: 1426, top: 8, bottom: 40 });
       render(<AppAgentNotes />);
       sync([note('an_1')]);
-      expect(root.style.getPropertyValue('--agent-notes-chip-w')).toBe('145px');
+      expect(root.style.getPropertyValue('--agent-notes-chip-w')).toBe('134px');
       Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
-      width = 85;
+      width = 74;
       act(() => { window.dispatchEvent(new Event('resize')); });
-      await vi.waitFor(() => expect(root.style.getPropertyValue('--agent-notes-chip-w')).toBe('85px'));
+      await vi.waitFor(() => expect(root.style.getPropertyValue('--agent-notes-chip-w')).toBe('74px'));
     } finally {
       widths.mockRestore();
       root.style.removeProperty('--agent-notes-chip-w');
@@ -587,6 +806,27 @@ describe('the corner keeps clear of each screen\'s controls', () => {
     const label = button.querySelector('.agent-notes-chip__label');
     expect(label?.textContent).toBe('Updates');
     expect(label?.children).toHaveLength(0);
+  });
+
+  // GM review of p157: the count was a circle in the newest author's colour,
+  // the size of a dot, so "C Ar 1" read as three people. It is its own
+  // element after the dots (styled apart in agentNotes.css, pinned in
+  // agentNotesLayoutCss.test.ts) at every count.
+  it.each([0, 1, 9, 12])('renders a count of %i in its own element after the dots, never as an author dot', (unread) => {
+    on('create');
+    render(<AppAgentNotes />);
+    sync(Array.from({ length: Math.max(unread, 1) }, (_, i) => note(`an_${i}`, i < unread ? {} : { readAt: '2026-10-21T12:30:00.000Z' })));
+    const button = chip();
+    expect(button.getAttribute('aria-label')).toBe(unread ? `Updates, ${unread} unread` : 'Updates');
+    const count = button.querySelector('.agent-notes-chip__count')!;
+    expect(count.textContent).toBe(String(unread));
+    expect(count.classList.contains('agent-notes-dot')).toBe(false);
+    expect(count.closest('.agent-notes-chip__dots')).toBeNull();
+    expect(count.hasAttribute('style')).toBe(false);
+    // After the dots (and the word), never between them.
+    const dots = button.querySelector('.agent-notes-chip__dots')!;
+    expect(dots.compareDocumentPosition(count) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(count.getAttribute('data-muted')).toBe(unread === 0 ? 'true' : 'false');
   });
 
   it('keeps its own corner on the canvas, where no header slot shows', () => {
