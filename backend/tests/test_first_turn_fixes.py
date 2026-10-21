@@ -260,6 +260,30 @@ def test_a_node_placed_with_x_and_y_is_told_to_use_position(proposal):
     assert message.startswith("nodes[0] ") and 'position {"x": 0, "y": 40}' in message, message
 
 
+@pytest.mark.parametrize("x", [float("nan"), float("inf"), 2e7, 10 ** 4000],
+                         ids=["nan", "inf", "past-the-limit", "4000-digits"])
+def test_a_place_position_would_refuse_is_not_copied_into_the_hint(x):
+    # The hint must be one a retry can follow: NaN isn't JSON, and 2e7 is past COORD_LIMIT.
+    message = _shape_error({"nodes": [{"ref": "+pv", "definitionId": "preview", "x": x, "y": 1}]},
+                           proposal=False)
+    assert 'position {"x": ..., "y": ...}' in message and len(message) < 200, message[:300]
+
+
+@pytest.mark.parametrize("proposal", [False, True])
+def test_a_position_too_big_for_a_float_is_refused_not_a_crash(proposal):
+    # float(10 ** 400) raises OverflowError, which was a 500.
+    message = _shape_error({"nodes": [{"ref": "+pv", "definitionId": "preview",
+                                       "position": {"x": 10 ** 400, "y": 1}}]}, proposal=proposal)
+    assert message == "nodes[0].position.x must be a finite canvas coordinate", message
+
+
+def test_a_cursor_coordinate_too_big_for_a_float_is_refused_not_a_crash():
+    from services.agent_presence import PresenceError, parse_target
+
+    with pytest.raises(PresenceError, match="target.x must be a finite number"):
+        parse_target({"x": 10 ** 400, "y": 0}, {})
+
+
 @pytest.mark.parametrize("key", ["name", "label", "title"])
 @pytest.mark.parametrize("proposal", [False, True])
 def test_a_node_named_inline_is_told_to_use_rename(key, proposal):

@@ -148,6 +148,17 @@ def clean_note(raw: Any, *, limit: int = MAX_NOTE, label: str = "note") -> str:
         raise ProposalError(422, exc.detail) from exc
 
 
+def _placeable(value: Any) -> bool:
+    """A number position takes: finite and under COORD_LIMIT (an int past float's range isn't)."""
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        number = float(value)
+    except OverflowError:
+        return False
+    return number == number and abs(number) < COORD_LIMIT
+
+
 def _point(raw: Any, label: str) -> dict[str, float]:
     if not isinstance(raw, Mapping):
         raise ProposalError(422, f"{label} must be an object with x and y")
@@ -156,10 +167,9 @@ def _point(raw: Any, label: str) -> dict[str, float]:
         value = raw.get(axis)
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ProposalError(422, f"{label}.{axis} must be a number")
-        number = float(value)
-        if number != number or abs(number) >= COORD_LIMIT:
+        if not _placeable(value):
             raise ProposalError(422, f"{label}.{axis} must be a finite canvas coordinate")
-        result[axis] = round(number, 2)
+        result[axis] = round(float(value), 2)
     return result
 
 
@@ -246,8 +256,8 @@ def _node_field_error(index: int, raw: Mapping[str, Any]) -> str | None:
     if not unknown:
         return None
     if "x" in raw or "y" in raw:
-        point = {axis: raw[axis] for axis in ("x", "y")
-                 if isinstance(raw.get(axis), (int, float)) and not isinstance(raw.get(axis), bool)}
+        # The agent's numbers only when position would take them (finite, under COORD_LIMIT).
+        point = {axis: raw[axis] for axis in ("x", "y") if _placeable(raw.get(axis))}
         shown = json.dumps(point) if len(point) == 2 else '{"x": ..., "y": ...}'
         return (f"nodes[{index}] puts its place in position {shown}, not x and y "
                 "(or leave it out: new nodes are placed for you)")

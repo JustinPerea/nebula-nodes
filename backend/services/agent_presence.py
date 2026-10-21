@@ -176,7 +176,10 @@ def identify(
 def _finite(value: Any, label: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise PresenceError(f"{label} must be a number")
-    number = float(value)
+    try:
+        number = float(value)
+    except OverflowError:  # an int past float's range
+        number = math.inf
     if not math.isfinite(number) or abs(number) > 1e7:
         raise PresenceError(f"{label} must be a finite number")
     return number
