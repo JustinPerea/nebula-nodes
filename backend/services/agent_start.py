@@ -18,12 +18,19 @@ crowds out the rest:
 | `boards`    | 800             |
 | `nodes`     | 2,500           |
 | `spend`     | 150             |
-| `next`      | 200             |
+| `next`      | 300             |
 
 Tokens are counted as characters / 4, of the JSON as `start_here` sends it
 (`json.dumps`, no indent). The whole answer stays under 7,000 tokens (about
 28,000 characters), below Claude Code's 10,000-token warning for a tool
-result and its 50,000-character cut to a file.
+result and its 50,000-character cut to a file. The budgets add up to 6,950,
+so even every part at its budget leaves room for the answer's own keys.
+
+`next` (and `boards.read` and `boards.use`) give the exact calls for a first build, with the
+argument names each tool takes and the CLI's real flags (PR26b): the PR26
+measurement's agents read `nebula apply --help` and `nebula info
+nebula-moodboard`, or guessed `describe_node(id)`, because the hints named
+the tools but not how to call them.
 
 A part that doesn't fit is cut in a fixed way and says so (`truncated`,
 counts) and where the rest is (`more`, in the words of the caller's way in:
@@ -42,7 +49,7 @@ from services import node_categories
 
 CHARS_PER_TOKEN = 4
 BUDGETS: dict[str, int] = {
-    "canvas": 2500, "pins": 400, "proposals": 300, "boards": 800, "nodes": 2500, "spend": 150, "next": 200,
+    "canvas": 2500, "pins": 400, "proposals": 300, "boards": 800, "nodes": 2500, "spend": 150, "next": 300,
 }
 TOTAL_TOKENS = 7000
 
@@ -60,30 +67,58 @@ VIAS = ("mcp", "cli")
 # Underscore params are the editor's bookkeeping, except who bills a run.
 _SHOWN_INTERNAL = frozenset({"_provider", "_kreaAuth"})
 
+# Every call names its arguments as the tool takes them, and every command
+# its real flags (tests/test_first_turn_fixes.py checks both against the
+# tools and the parser). `build` and `use` are plans the backend's own shape
+# check accepts: text-input's param is `value` and its port `text`; the
+# Moodboard node (nebula-moodboard) takes the board in its `moodboard` param
+# and sends it from its `moodboard` port; Preview's input is `input`.
 HINTS: dict[str, dict[str, str]] = {
     "mcp": {
         "canvas": "look_at_canvas gives every node",
         "pins": "look_at_canvas lists every open pin in full",
         "proposals": "look_at_canvas lists every open proposal",
-        "boards": "moodboard_get gives one in full",
+        "boards": 'moodboard_list(project_id="<project-id>") lists a project\'s boards and Global\'s',
+        "read": 'moodboard_get(board="<id or exact name>") gives one in full',
         "nodes": "find_nodes(category=…) gives the rest",
-        "describe": "describe_node(id): a node type's ports, params and prices, before you wire or set it.",
-        "propose": ("propose_change(note, nodes, edges, params, run, rename) for a paid run over a limit or "
-                    "reworking their graph; the person accepts in Nebula, get_proposal waits."),
-        "pin": ("Answer a pin with resolve_pin(pin_id, reply) once you've acted on it; "
-                "wait_for_canvas_change(since=cursor) waits for the next one."),
+        "describe": 'describe_node(definition_id="<id>"): a node type\'s ports, params and prices, before you wire it.',
+        "build": ('edit_canvas(note="...", nodes=[{"ref": "+p", "definitionId": "text-input", "params": '
+                  '{"value": "a lake at dawn"}}, {"ref": "+g", "definitionId": "<id>"}], edges=[{"source": "+p", '
+                  '"sourceHandle": "text", "target": "+g", "targetHandle": "prompt"}], arrange=true) adds and '
+                  'wires in one call (idMap: the ids its +refs became); then run_nodes(node_id="n2").'),
+        "propose": ('propose_change(note="...", nodes=..., edges=..., params=[{"nodeId": "n4", "params": {...}}], '
+                    'run=["+g"]) takes the same nodes and edges, for a paid run over a limit or reworking their '
+                    'graph: the person accepts in Nebula; get_proposal(proposal_id="...", wait_seconds=60) waits.'),
+        "point": ('point_at(node_id="n2", say="...") points at what you work on; point_at(say="...") alone '
+                  "shows the line where your cursor is."),
+        "pin": ('resolve_pin(pin_id="...", reply="...") answers a pin once you\'ve acted on it; '
+                "wait_for_canvas_change(since=<cursor>) waits for the next one."),
+        "use": ('To show one: edit_canvas(nodes=[{"ref": "+mb", "definitionId": "nebula-moodboard", "params": '
+                '{"moodboard": "<board id>"}}, {"ref": "+pv", "definitionId": "preview"}], edges=[{"source": "+mb", '
+                '"sourceHandle": "moodboard", "target": "+pv", "targetHandle": "input"}]); to style a '
+                'generator, wire "moodboard" to its "moodboard" input instead.'),
     },
     "cli": {
         "canvas": "`nebula look` gives every node",
         "pins": "`nebula pins` lists every pin in full",
         "proposals": "`nebula proposals` lists every open proposal",
-        "boards": "`nebula moodboard show <id>` gives one in full",
+        "boards": "`nebula moodboard list --project <project-id>` lists a project's boards and Global's",
+        "read": "`nebula moodboard show <id>` gives one in full",
         "nodes": "`nebula nodes --category <category>` gives the rest",
         "describe": "`nebula info <id>`: a node type's ports, params and prices, before you wire or set it.",
-        "propose": ("`nebula propose --note \"...\" --add +ref=<id> ... --run +ref` for a paid run over a "
-                    "limit or reworking their graph; the person accepts in Nebula."),
+        "build": ("`nebula apply --note \"...\" --add +p=text-input --param +p.value=\"a lake at dawn\" "
+                  "--add +g=<id> --wire +p:text +g:prompt --arrange` adds and wires in one step and prints "
+                  "the new ids; then `nebula run <node-id>`."),
+        "propose": ("`nebula propose --note \"...\" --add +g=<id> --set nX.key=value --run +g` takes apply's "
+                    "--add, --param and --wire too, for a paid run over a limit or reworking their graph; the "
+                    "person accepts in Nebula."),
+        "point": ("`nebula point n2 --say \"...\"` points at what you work on; `nebula point --say \"...\"` "
+                  "alone shows the line where your cursor is."),
         "pin": ("Answer a pin with `nebula pin resolve <pin-id> --say \"...\"` once you've acted on it; "
                 "`nebula watch --once --since <cursor> --journal <journal>` waits for the next one."),
+        "use": ("To show one: `nebula apply --add +mb=nebula-moodboard --param +mb.moodboard=<board> "
+                "--add +pv=preview --wire +mb:moodboard +pv:input`; to style a generator, wire +mb:moodboard "
+                "to its moodboard input instead."),
     },
 }
 PRICES = "USD per run at default settings: [low, high], \"free\", or null (no list price)"
@@ -242,7 +277,6 @@ def boards_part(summaries: Iterable[Mapping[str, Any]], *, active_project_id: st
     is left out, as the app lists it nowhere."""
     budget = BUDGETS["boards"] * CHARS_PER_TOKEN
     rows: list[tuple[int, str, dict[str, Any]]] = []
-    cut_direction = False
     for board in summaries:
         project_id = board.get("projectId")
         if project_id is None:
@@ -257,12 +291,16 @@ def boards_part(summaries: Iterable[Mapping[str, Any]], *, active_project_id: st
                                "images": int(board.get("images") or 0), "analyzed": bool(board.get("analyzed"))}
         if board.get("direction"):
             row["direction"] = _cut(board["direction"], DIRECTION_CHARS)
-            cut_direction = cut_direction or len(str(board["direction"])) > DIRECTION_CHARS
         rows.append((rank, str(board.get("updatedAt") or ""), row))
     # Newest first inside each group; Python's sort is stable, so sort twice.
     rows.sort(key=lambda item: item[1], reverse=True)
     rows.sort(key=lambda item: item[0])
     part: dict[str, Any] = {"count": len(rows), "rows": []}
+    if rows:
+        # How to read one, and how to put one on the canvas, so a first build
+        # needn't guess moodboard_get's argument or describe the Moodboard node.
+        part["read"] = HINTS[via]["read"]
+        part["use"] = HINTS[via]["use"]
     used = size(part) + size({"truncated": True, "more": HINTS[via]["boards"]})
     for _rank, _updated, row in rows[:MAX_BOARDS]:
         cost = size(row) + 2
@@ -273,9 +311,7 @@ def boards_part(summaries: Iterable[Mapping[str, Any]], *, active_project_id: st
     if len(part["rows"]) < len(rows):
         part["truncated"] = True
         part["more"] = HINTS[via]["boards"]
-    elif cut_direction:
-        # Nothing was left out, but a Direction was cut short.
-        part["more"] = HINTS[via]["boards"]
+    # A Direction cut short is in full in `read`'s answer.
     return part
 
 
@@ -371,9 +407,12 @@ def spend_part(spend: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def next_part(events: Mapping[str, Any], *, via: str) -> dict[str, Any]:
+    """The events cursor, then one line per first-turn call: describe a node,
+    build, propose, point (with or without a target) and answer a pin."""
     hints = HINTS[via]
     return {"events": {"cursor": events.get("cursor"), "journal": events.get("journal")},
-            "describe": hints["describe"], "propose": hints["propose"], "pins": hints["pin"]}
+            "describe": hints["describe"], "build": hints["build"], "propose": hints["propose"],
+            "point": hints["point"], "pins": hints["pin"]}
 
 
 def build(**parts: dict[str, Any]) -> dict[str, Any]:
