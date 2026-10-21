@@ -296,6 +296,13 @@ body.app-slava-restraint .commons-heading {
   font-weight: 700;
 }
 
+/* A folded section's panel opens with its name (Settings, Blind labeling;
+ * GM review of p157), set like the section titles above. Settings spaces it
+ * with its column gap; Blind labeling's panel needs the same gap. */
+body.app-slava-restraint .commons-evaluation > .commons-panel-title {
+  margin: 0 0 16px;
+}
+
 /* -- messages + page candidates ---------------------------------------------- */
 
 body.app-slava-restraint .commons-messages {

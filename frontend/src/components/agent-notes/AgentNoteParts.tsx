@@ -11,17 +11,18 @@ export interface AgentNotesAdapter {
   /** "kept with this project" / "kept with this board". */
   keptWith: string;
   showLabel: (note: AgentNote) => string;
-  /** Show and a row click: bring the refs into view and outline them. Writes nothing. */
-  show: (note: AgentNote) => void;
+  /**
+   * Show and a row click: bring the refs into view and outline them. Writes
+   * nothing. From another screen it returns the way there: it resolves once
+   * there, or rejects with the reason it can't go (the corner shows it).
+   */
+  show: (note: AgentNote) => void | Promise<void>;
   /** Run an edit action as the person, through the route its button uses elsewhere. */
   runAction: (note: AgentNote, action: AgentNoteAction) => void | Promise<void>;
   /** Why an action can't run any more ("Expired"), or null while it can. */
   actionState?: (action: AgentNoteAction) => string | null;
   /** A board image's number now (the Studio's board), to draw `#n` in the text. */
   numberFor?: (ref: string) => number | null;
-  /** Whether Show leaves this screen (the canvas from elsewhere): the list
-   *  steps aside for it. Show on the same screen keeps the list open. */
-  showLeaves?: () => boolean;
   /** Whether hovering an entry or a card outlines its refs (the canvas's
    *  outline layer draws nodes only; a board's refs are images). */
   outlines?: boolean;

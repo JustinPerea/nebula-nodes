@@ -21,15 +21,26 @@
   color:#a0b28f;
   font-size:10px;
 }
-.commons-evaluation h1 {
+/* Blind labeling's own title and steps sit under the panel's "Blind labeling"
+ * heading (an h2, GM review of p157), so they are h3/h4 there; Agent review
+ * keeps its h1/h2. Same sizes either way. */
+.commons-evaluation h1,
+.commons-evaluation .evaluation-title {
   font-size:30px;
   letter-spacing:-.8px;
   font-weight:450;
   margin:10px 0;
 }
-.commons-evaluation h2 {
+.commons-evaluation h2:not(.commons-panel-title),
+.commons-evaluation .evaluation-step {
   font-size:22px;
   font-weight:450;
+  margin-block:.83em;
+}
+/* Was an h3: keep its size and spacing as an h4. */
+.commons-evaluation .evaluation-subhead {
+  font-size:1.17em;
+  margin-block:1em;
 }
 .commons-evaluation p {
   line-height:1.7;

@@ -107,9 +107,14 @@ body.app-slava-restraint .agent-notes-root {
   align-items: center;
 }
 
+/* 1 px of the chip's own background around each dot, so overlapping dots
+ * read as two (GM review of p157: "Ar" was grey on grey, half under "C"). */
+.agent-notes-chip__dots .agent-notes-dot {
+  box-shadow: 0 0 0 1px var(--an-raised);
+}
+
 .agent-notes-chip__dots .agent-notes-dot + .agent-notes-dot {
   margin-left: -6px;
-  box-shadow: 0 0 0 2px var(--an-raised);
 }
 
 .agent-notes-chip__label {
@@ -129,22 +134,21 @@ body.app-slava-restraint .agent-notes-root {
   }
 }
 
+/* The unread count: plain figures in the chip's own ink, after a clear gap.
+ * It was a circle in the newest author's colour, the size of a dot, so the
+ * chip read as three people (GM review of p157). Neutral, not the orange
+ * accent: the default agent colour is orange too (#E8825A). The chip's name
+ * says the count ("Updates, 3 unread"). */
 .agent-notes-chip__count {
-  min-width: 22px;
-  box-sizing: border-box;
-  padding: 4px 7px;
-  border-radius: 999px;
-  background: var(--an-newest);
-  color: var(--an-on-dot);
-  font: 700 11px/1 var(--an-mono);
-  text-align: center;
+  margin-left: 4px;
+  color: var(--an-ink-bold);
+  font: 700 12px/1 var(--an-mono);
   font-variant-numeric: tabular-nums;
 }
 
 .agent-notes-chip__count[data-muted='true'] {
-  background: transparent;
   color: var(--an-faint);
-  box-shadow: inset 0 0 0 1px var(--an-edge-strong);
+  font-weight: 500;
 }
 
 .agent-notes-chip__count[data-pop='true'] {
@@ -172,15 +176,14 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 /* In the chip a dot brightens while its author has unread updates. */
+/* Dimmed, it stays opaque: a see-through dot showed the dot under it through
+ * itself and its ring (GM review of p157). */
 .agent-notes-dot[data-lit='false'] {
-  opacity: 0.42;
-  filter: saturate(0.5);
+  filter: saturate(0.5) brightness(0.45);
 }
 
 .agent-notes-dot[data-lit] {
-  transition:
-    opacity var(--spring-soft-ms) var(--spring-soft),
-    filter var(--spring-soft-ms) var(--spring-soft);
+  transition: filter var(--spring-soft-ms) var(--spring-soft);
 }
 
 /* =============== The card =============== */

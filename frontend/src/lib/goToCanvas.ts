@@ -1,13 +1,17 @@
 import { useProjectStore } from '../store/projectStore';
 import { useUIStore } from '../store/uiStore';
+import { refuseWhileCommonsUnsaved } from './commonsUnsaved';
 
 /**
  * Back to the open project's canvas from any screen, the way each screen's
  * own Back goes (Q107 a: the Updates corner is on every screen, and its
  * "Show on canvas" works from there). Projects opens the open project's
  * workspace first. Only the Updates corner, a deferred chunk, imports this.
+ * Refuses while the Commons holds unsaved labels, as the Commons' own Back
+ * does (p157 review): leaving would unmount them.
  */
 export async function goToCanvas(): Promise<void> {
+  refuseWhileCommonsUnsaved();
   await openWorkspace();
   const ui = useUIStore.getState();
   switch (ui.viewMode) {
