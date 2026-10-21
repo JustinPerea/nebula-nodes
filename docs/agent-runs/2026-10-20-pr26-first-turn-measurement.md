@@ -305,3 +305,52 @@ The target for B, C and E: at most 3 orientation turns and no usage error; no he
 - **A node's exact name as its id.** `nebula info moodboard` and `describe_node("Moodboard")` could take a node type's exact display name when only one node has it, and say which id they used. That alone would have removed three of the four usage errors.
 - **E3's bare names** come from the client, so no Nebula change fixes them directly.
 - Any further rerun is new spend and needs Justin's OK.
+
+## Rerun after #144 (2026-10-21)
+
+Justin's Q104 a: "Yes: B and C three times each, stopping at $2." #144 lets `nebula info`, `nebula describe` and `describe_node` take a node type's exact display name when only one node has it, and say which id they used. That was aimed at the three `nebula info moodboard` usage errors above. Arms B and C ran three times each, with the "after" checkout pinned at `296e9199` (main after #144, #145-#149) and everything else as above: the same prompts, model, seed, guard wrapper, dead proxy and spend lock. The driver stopped before any run that could take the total past $2. The six runs cost $1.39. Every connection sample was 0 (100 samples), no backend log had a provider attempt, and each `nebula` call in every transcript went through the guard (6 of 6 runs).
+
+### Same counter, before and after
+
+Both columns are counted with `count_agent_turns.py` as merged with #144. The Q94 rerun's numbers come out the same as in the table above.
+
+| Arm | After PR26b (Q94 rerun): orientation, median (range) | After #144 | Usage errors, before → after (per run) | Help reads, before → after (per run) |
+|---|---|---|---|---|
+| B. Branch CLI | 3 (2 to 3) | **2 (1 to 7)** | 0, 1, 0 → 0, 0, 0 | 1, 2, 1 → 1, 1, 3 |
+| C. Branch CLI, swapped prompt | 1 (0 to 3) | **1 (0 to 2)** | 1, 1, 0 → 0, 0, 0 | 1, 0, 0 → 1, 0, 0 |
+
+### Against the target
+
+The target for B and C: at most 3 orientation turns and no usage error; no help read on C.
+
+- **Usage errors: met in all six runs.** No run guessed a wrong node id. B3 called `nebula info moodboard`, which now answers with the Moodboard node.
+- **Orientation: met in five of six.** B3 took 7, all after the board was already showing (below).
+- **Help reads: C1 read help** (`nebula apply --help`); C2 and C3 read none. Arm B's prompt names `nebula apply --help`, so B's help reads are prompted; C's prompt doesn't.
+
+### What the transcripts show
+
+- **B3 proposed a model that can't run here, then proposed again.**
+  1. After showing the board, it picked a paid model by browsing: `nebula nodes --help`, then `nebula nodes --category image-gen`. That lists all 78 image models with no mark of which can run in this Nebula.
+  2. It read `nebula info flux-2-pro` and `nebula propose --help`, and proposed FLUX.2 [pro].
+  3. The proposal was created anyway. Its reply said "can't +g Lake hero: FLUX.2 needs BFL_API_KEY or FAL_KEY" and "If the person accepts, the run fails". The measurement's settings hold only placeholder OpenAI and Google keys.
+  4. It then read `nebula context`, which lists only the node types that run here, read `nebula info nano-banana`, and proposed again.
+  5. The first proposal stayed open, so the person would have had two to answer.
+- **The other five runs** took a paid node they knew (`gpt-image-2-generate` in C1 and C2), or stopped after showing the board and asked first (B1, B2, C3), as the prompt says.
+- **Durations** were 34 to 126 s. As before, they aren't comparable across days.
+
+### Per run (2026-10-21, after #144)
+
+| Run | Orientation / turns | Usage errors | Help reads | `num_turns` | Duration | Cost |
+|---|---|---|---|---|---|---|
+| B1 | 2 / 8 | 0 | 1 | 9 | 125.6 s | $0.227 |
+| B2 | 1 / 7 | 0 | 1 | 10 | 55.5 s | $0.223 |
+| B3 | 7 / 17 | 0 | 3 | 18 | 48.6 s | $0.282 |
+| C1 | 2 / 9 | 0 | 1 | 12 | 45.5 s | $0.243 |
+| C2 | 1 / 8 | 0 | 0 | 10 | 69.1 s | $0.198 |
+| C3 | 0 / 6 | 0 | 0 | 9 | 34.5 s | $0.222 |
+
+### Next
+
+- **`nebula nodes` should list what runs here, like its MCP twin.** MCP `find_nodes` lists only node types that can run in this Nebula unless asked (`ready_only`), with `missing` saying what to set up for the rest. `nebula nodes` reads every node definition and marks none. The CLI twin should match (being built).
+- **A proposal that can't run.** Whether `nebula propose` / `propose_change` should refuse one is Justin's call (merge-oks page, Q109). Today it's kept with a warning, and an agent that then proposes something else leaves both open.
+- Any further rerun is new spend and needs Justin's OK.
