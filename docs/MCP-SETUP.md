@@ -1735,14 +1735,21 @@ drops open requests; the nodes keep the positions they were placed at.
 #### The person can undo any agent edit
 
 Every graph edit an agent makes (`edit_canvas`, `remove_from_canvas`,
-`nebula apply`, `set`, `create`, `delete`, `wire`, `move`, `nebula graph
-load`, the layout route) is one undo step on each open canvas (a canvas
+`nebula apply`, `set`, `create`, `delete`, `wire`, `disconnect`, `move`,
+`nebula graph load`, the layout route) is one undo step on each open canvas (a canvas
 finishing an agent's `arrange` joins that agent's step instead; see above). The canvas shows "Claude changed the
 canvas" with an Undo button, and Cmd-Z works too. Undo puts back exactly
 what that edit changed: deleted nodes come back with their params, outputs,
 name and wires, and new nodes go away with their wires. Redo (Cmd-Shift-Z)
 applies the edit again. A run's results are never undo steps, so undoing a
 param change keeps the outputs a run made since.
+
+An open canvas draws exactly the backend's wires between backend nodes: a
+wire an agent took away (an unwire, `disconnect`, an undo, a node re-typed
+to other ports) leaves it at once, with no reload, and its next save doesn't
+put it back. Only the person's own wire still on its way (drawn, not yet
+answered) or one they just deleted stays as they have it until the backend
+answers.
 
 How it works: a graphSync caused by an edit request carries `edit` =
 `{actor, tab?, id?, undoes?}`. `id` names an agent's apply or undo (its
