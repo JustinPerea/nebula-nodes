@@ -41,7 +41,8 @@ export function chatCancellationDisconnectNotice(
   return state === 'requested'
     ? chatCancellationNotice(
         'failed',
-        'The connection closed before Nebula confirmed it stopped.',
+        // GM, round 3: "People need to know it might still be spending."
+        'The connection dropped before Nebula confirmed the stop. The reply may still be running.',
       )
     : null;
 }

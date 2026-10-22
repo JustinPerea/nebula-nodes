@@ -49,7 +49,8 @@ describe('chat cancellation truth state', () => {
     // error-copy round 2 (GM): "Couldn't {verb} {object}." then the reason,
     // never "failed:".
     expect(chatCancellationDisconnectNotice('requested')).toEqual({
-      text: "Couldn't stop the reply. The connection closed before Nebula confirmed it stopped.",
+      // GM, round 3, verbatim: "People need to know it might still be spending."
+      text: "Couldn't stop the reply. The connection dropped before Nebula confirmed the stop. The reply may still be running.",
       tone: 'error',
     });
     expect(chatCancellationDisconnectNotice('idle')).toBeNull();

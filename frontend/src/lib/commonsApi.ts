@@ -194,7 +194,7 @@ export const commonsApi = {
     "Couldn't load the vocabulary candidates.", '/vocabulary/candidates'),
   workerStart: () => post("Couldn't start the worker.", '/worker/start'),
   workerStop: () => post("Couldn't stop the worker.", '/worker/stop'),
-  exportZip: () => call<Blob>("Couldn't export the zip.", '/export'),
+  exportZip: () => call<Blob>("Couldn't export the ZIP.", '/export'),
 };
 
 export function filtersToRequest(f: FilterState): { query: string; filters: Record<string, unknown> } {

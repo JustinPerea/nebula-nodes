@@ -54,17 +54,30 @@ def _reserve(store, position):
     with store.db.tx() as conn:
         batch = ev._batch(conn)
         if batch['closed']:
-            raise ev.EvaluationError('This batch is closed; no new grading attempts.')
+            raise ev.EvaluationError("This held-out set is closed, so the agent can't grade it again.")
         row = ev._item(conn, position)
         if conn.execute('SELECT 1 FROM assisted_reviews WHERE position=?', (position,)).fetchone():
-            raise ev.EvaluationError('This reference already has a grading attempt. No automatic retries.')
-        if conn.execute('SELECT count(*) FROM assisted_reviews').fetchone()[0] >= _budget():
-            raise ev.EvaluationError('Assisted review call budget reached or disabled.')
+            raise ev.EvaluationError('This reference already has a grading attempt. No automatic retries.',
+                                     'The agent has graded this reference once already. Nebula grades each reference only once.')
+        used, budget = conn.execute('SELECT count(*) FROM assisted_reviews').fetchone()[0], _budget()
+        if used >= budget:
+            raise ev.EvaluationError('Assisted review call budget reached or disabled.', (
+                'Agent review is off on this Nebula. Start it with a call budget '
+                '(NEBULA_COMMONS_REVIEW_CALL_BUDGET), then try again.' if budget == 0 else
+                f'Agent review can grade {budget} references, and it has graded {used}. '
+                'Restart Nebula with a larger call budget to grade more.'))
         if conn.execute("SELECT 1 FROM assisted_reviews WHERE status='running'").fetchone():
             raise ev.EvaluationError('Another reference is being graded. Wait for it to finish.')
         meter = records.meter_today(store)
         if meter['remaining'] <= 0:
-            raise ev.EvaluationError('Daily model call cap reached.')
+            # The real count, and a step that works: with the cap at 0 no call
+            # was made and tomorrow won't help; a cap lowered below today's
+            # calls names the calls made (round 3 review).
+            raise ev.EvaluationError('Daily model call cap reached.', (
+                'Agent review needs at least 1 analysis call a day. Analysis calls per day is set to 0 in Settings. '
+                'Raise it, then try again.' if meter['cap'] == 0 else
+                f"Commons has made {meter['calls']} analysis calls today, and the daily cap is {meter['cap']}. "
+                'Try again tomorrow, or raise Analysis calls per day in Settings.'))
         # Meter and reservation commit together, before the external call.
         # A crash leaves a visible attempt, never an automatic second charge.
         conn.execute("INSERT INTO meter(day,kind,calls) VALUES (?,'analysis',1) "
@@ -125,7 +138,7 @@ def accept(store, position, revision, labels):
         item = ev._item(conn, position)
         row = conn.execute('SELECT * FROM assisted_reviews WHERE position=?', (position,)).fetchone()
         if row is None or row['status'] != 'ready':
-            raise ev.EvaluationError('Wait for a valid agent grade before reviewing.')
+            raise ev.EvaluationError('Wait for the agent to grade this reference before you review it.')
         if type(revision) is not int or revision != row['revision']:
             raise ev.EvaluationError('This review changed in another window. Reload before saving.')
         ev.validate_labels(labels, json.loads(item['palette']), vocabulary=json.loads(batch['manifest'])['vocabulary_terms'], complete=True)

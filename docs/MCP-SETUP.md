@@ -284,7 +284,11 @@ The server exposes these tools for building and running (see
   recorded borrowings (`{"borrowings": [...]}`; `asset` narrows it),
   `commons_concentration` each reference's share of them, and
   `commons_fidelity` checks a borrowing against the output it was used in
-  and saves the result. Curating (corrections, regions, a reference's role,
+  and saves the result. A reference whose analysis failed has
+  `asset.analysis_state` `analysis_failed`, `asset.last_error` (the reader's
+  own text, unchanged) and, since error-copy round 3, `asset.last_error_kind`:
+  `unavailable` (network, a timeout or the provider down), `unreadable` (the
+  model declined or couldn't read the image) or `other`. Curating (corrections, regions, a reference's role,
   why or inbox place) is the person's: agents propose it, see
   [Commons curation](#commons-curation). Each has a `nebula commons` twin.
 - `style_list`, `style_get`, `style_create`, `style_update`, `style_delete`:
@@ -640,6 +644,19 @@ Storage and History). The token binds the in-app agents (Claude; Codex, whose
 shell has no network; see "In-app agents use this server") and any client that reaches Nebula only through its MCP server,
 CLI or API. It does not bind an outside agent with its own shell and network.
 It is not a sandbox against hostile local code.
+
+### Refusal text: the person's line, your detail
+
+A refusal says one of two texts in `detail` (error-copy rounds 2 and 3,
+`backend/services/refusal_copy.py`): the person's canvas and the Commons UI
+get a line written for people ("That board isn't there anymore. Reload to
+get the latest boards."), and everyone else (MCP, the CLI, a script, any
+request with an agent marker) gets the specific text, unchanged: "Moodboard
+'mb_1' not found", "Cannot delete n3: it has unresolved World Labs paid
+state...". The choice is by who asks, never by what they may do: a request
+with `X-Nebula-Agent`, `X-Nebula-Client` or an `Agent` token always gets the
+specific text, and the Commons decides by its actor (its UI session is the
+person). Parse status codes and your detail; don't match the person's lines.
 
 ### Numbers in request bodies
 

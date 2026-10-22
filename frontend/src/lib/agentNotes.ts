@@ -188,7 +188,7 @@ export async function markAgentNotesRead(
   upTo?: string,
   ids?: string[],
 ): Promise<{ ids: string[]; unread: number; projectId?: string | null }> {
-  const response = await apiRequest("Couldn't mark the updates read.", `${base(surface)}/read`, {
+  const response = await apiRequest("Couldn't mark the updates as read.", `${base(surface)}/read`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(ids ? { ids } : upTo ? { upTo } : {}),

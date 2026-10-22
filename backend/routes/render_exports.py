@@ -18,6 +18,10 @@ from handlers.video_edit import (
 from services.remotion_render import render_remotion_manifest
 from services.file_access import ProtectedPathError, validate_file_references
 from services.render_jobs import render_job_manager
+from services import refusal_copy
+
+# GM's 404 pattern (error-copy round 3): the video the edit cuts from is gone.
+SOURCE_GONE = "That video isn't there anymore. Reload to get the latest outputs."
 
 
 router = APIRouter(tags=["render-exports"])
@@ -42,7 +46,7 @@ async def start_video_export(req: VideoExportRequest) -> dict[str, object | None
     except ProtectedPathError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if source_path is None:
-        raise HTTPException(status_code=404, detail=f"Source not found: {req.sourceUrl}")
+        raise refusal_copy.refusal(404, f"Source not found: {req.sourceUrl}", SOURCE_GONE)
     if not req.clips:
         raise HTTPException(status_code=400, detail="clips required")
     if req.format not in VIDEO_EXPORT_FORMATS:
@@ -83,7 +87,7 @@ async def start_remotion_render(req: RemotionRenderRequest) -> dict[str, object 
 async def get_render_job(job_id: str) -> dict[str, object | None]:
     job = render_job_manager.get(job_id)
     if job is None:
-        raise HTTPException(status_code=404, detail="render job not found")
+        raise refusal_copy.not_found("render job not found", "render", "renders")
     return job.payload()
 
 
@@ -91,5 +95,5 @@ async def get_render_job(job_id: str) -> dict[str, object | None]:
 async def cancel_render_job(job_id: str) -> dict[str, object | None]:
     job = render_job_manager.cancel(job_id)
     if job is None:
-        raise HTTPException(status_code=404, detail="render job not found")
+        raise refusal_copy.not_found("render job not found", "render", "renders")
     return job.payload()

@@ -127,8 +127,8 @@ def add_bytes(store: CommonsStore, data: bytes, *, filename: str, collection_id:
                               info["duration"], CODE_VERSION, asset["id"]))
         except media.MediaError as exc:
             with store.db.tx() as conn:
-                conn.execute("UPDATE assets SET analysis_state = 'analysis_failed', last_error = ? "
-                             "WHERE id = ?", (f"video probe failed: {exc}", asset["id"]))
+                conn.execute("UPDATE assets SET analysis_state = 'analysis_failed', last_error = ?, "
+                             "last_error_kind = 'unreadable' WHERE id = ?", (f"video probe failed: {exc}", asset["id"]))
 
     from commons import search  # local import: search -> records -> measure; keeps intake import-light
 

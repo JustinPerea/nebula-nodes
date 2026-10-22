@@ -93,7 +93,7 @@ def walk(root: Path, ignores: list[str], *, stat_fn: Callable | None = None) -> 
 def link_folder(store, path: str, *, actor: str, ignores: list[str] | None = None) -> dict:
     raw = Path(path).expanduser()
     if raw.is_symlink():
-        raise Refused("linked folder may not be a symlink", "Choose a real folder, not a symlink.")
+        raise Refused("linked folder may not be a symlink", "Choose the folder itself, not a shortcut to it.")
     real = raw.resolve()
     if not real.is_dir():
         raise Refused(f"not a folder: {path}", "That isn't a folder. Check the path and try again.")

@@ -39,8 +39,14 @@ const png = () => new File([new Uint8Array([137, 80, 78, 71])], 'ref.png', { typ
 const calls: Array<[string, () => Promise<unknown>]> = [
   ["Couldn't check the run.", () => api.getExecutionStatus('r1')],
   ["Couldn't cancel the run.", () => api.cancelExecution('r1')],
-  ["Couldn't unlock the provider start.", () => api.acknowledgeProviderStartAmbiguity('video' as never, 'n1', 'r1')],
-  ["Couldn't clear the provider recovery.", () => api.deleteProviderRecovery('r1', 'n1', { resumeOperationId: 'op1' } as never)],
+  // Round 3 (GM): "Name the action with the label the person clicked." The
+  // status bar's "Checked Marble — unlock" unlocks a node (its label says
+  // "unlock node n1"); Run History's "Checked Marble — forget" forgets the
+  // node's "World Labs recovery safeguard".
+  ["Couldn't unlock the node.", () => api.acknowledgeProviderStartAmbiguity('video' as never, 'n1', 'r1')],
+  ["Couldn't forget the recovery safeguard.", () => api.deleteProviderRecovery('r1', 'n1', { resumeOperationId: 'op1' } as never)],
+  // GM, round 3, verbatim: "Couldn't keep your brief." -> "Couldn't save your brief."
+  ["Couldn't save your brief.", () => api.keepMoodboardBriefOverride('b1')],
   ["Couldn't start the run.", () => api.executeGraph([], [])],
   ["Couldn't run the node.", () => api.executeNode([], [], 'n1')],
   ["Couldn't start the shot.", () => api.generateCinemaShot([], [], 'n1', 's1')],
@@ -77,7 +83,8 @@ const calls: Array<[string, () => Promise<unknown>]> = [
   ["Couldn't save the note.", () => pins.createPin('x', { nodeId: 'n1' })],
   ["Couldn't delete the note.", () => pins.deletePin('p1')],
   ["Couldn't load the updates.", () => notes.fetchAgentNotes({ kind: 'canvas', projectId: null } as never)],
-  ["Couldn't mark the updates read.", () => notes.markAgentNotesRead({ kind: 'canvas', projectId: null } as never)],
+  // GM, round 3, verbatim.
+  ["Couldn't mark the updates as read.", () => notes.markAgentNotesRead({ kind: 'canvas', projectId: null } as never)],
   ["Couldn't dismiss the update.", () => notes.dismissAgentNote({ kind: 'canvas', projectId: null } as never, 'u1')],
   ["Couldn't accept the proposal.", () => assetProposals.acceptAssetProposal('a1', 'k')],
   ["Couldn't reject the proposal.", () => assetProposals.rejectAssetProposal('a1', 'k')],

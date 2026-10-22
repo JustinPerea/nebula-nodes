@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS assets (
   attempts INTEGER NOT NULL DEFAULT 0,
   next_attempt_at TEXT,
   last_error TEXT,
+  last_error_kind TEXT,
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS assets_queue ON assets(analysis_state, next_attempt_at);
@@ -251,6 +252,12 @@ CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(
 ADDED_COLUMNS = (
     ("evaluation_batch", "closed", "TEXT"),       # v4
     ("evaluation_batch", "close_hash", "TEXT"),   # v4
+    # Why an analysis failed (commons/analysis_errors.py; error-copy round 3).
+    # Nullable and additive, so the schema stays version 4: a build that
+    # predates it still opens the file and ignores the column, where a bump
+    # would lock that build out. Rows from before read their kind from
+    # last_error's text.
+    ("assets", "last_error_kind", "TEXT"),
 )
 
 

@@ -243,23 +243,68 @@ describe('a drag on the board', () => {
     expect(await screen.findByText('card #1 at 300,40')).toBeTruthy();
   });
 
-  // Review of error-copy round 2: the toolbar's Retry saves the board, it
-  // doesn't undo again, so a failed undo names its own action and keeps
-  // GM's full line ("Try again"): WRAP is only for a button that retries it.
-  it('a failed undo says "Couldn\'t undo the change." over GM\'s full line', async () => {
+  // Round 3 (GM): "Make Retry redo the failed action, never a different one."
+  // A failed undo names its own action, and the toolbar's Retry undoes the
+  // same step again (so the reason is GM's short line: the button is the
+  // retry). On 867f254e the Retry saved the board and never undid.
+  const undoNotice = async () => waitFor(() => {
+    const shown = document.querySelector('.moodboard-studio__notice--error');
+    expect(shown).not.toBeNull();
+    return shown!;
+  });
+  const parts = (shown: Element) => [shown.querySelector('.failure-lines__heading')?.textContent,
+    shown.querySelector('.failure-lines__reason')?.textContent];
+
+  it('a failed undo says "Couldn\'t undo the change." over GM\'s short line, and Retry undoes that step again', async () => {
     await openStudio({ view: 'board' });
     act(() => board.props!.onMove([{ placement: 'c-i1', x: 300, y: 40 }]));
     await waitFor(() => expect(server.edits).toHaveLength(1), { timeout: 400 });
     api.editMoodboard.mockRejectedValueOnce(new RequestFailedError("Couldn't save the board.", 503));
     press('z', { metaKey: true });
-    const notice = await waitFor(() => {
-      const shown = document.querySelector('.moodboard-studio__notice--error');
-      expect(shown).not.toBeNull();
-      return shown!;
+    expect(parts(await undoNotice())).toEqual(["Couldn't undo the change.", "Nebula didn't respond."]);
+    const restores = () => api.editMoodboard.mock.calls.filter(([, ops]) => (ops as MoodboardOp[])[0]?.op === 'restore');
+    expect(restores()).toHaveLength(1);
+    const puts = api.updateMoodboard.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(restores()).toHaveLength(2));
+    // The same step's restore, sent again; never a save of the board.
+    expect(restores()[1][1]).toEqual(restores()[0][1]);
+    expect(api.updateMoodboard.mock.calls.length).toBe(puts);
+    expect(await screen.findByText('card #1 at 0,0')).toBeTruthy();
+    await waitFor(() => expect(document.querySelector('.moodboard-studio__notice--error')).toBeNull());
+  });
+
+  it('a failed redo: Retry redoes that step again', async () => {
+    await openStudio({ view: 'board' });
+    act(() => board.props!.onMove([{ placement: 'c-i1', x: 300, y: 40 }]));
+    await waitFor(() => expect(server.edits).toHaveLength(1), { timeout: 400 });
+    press('z', { metaKey: true });
+    await waitFor(() => expect(server.edits).toHaveLength(2));
+    api.editMoodboard.mockRejectedValueOnce(new RequestFailedError("Couldn't save the board.", 503));
+    press('z', { metaKey: true, shiftKey: true });
+    expect(parts(await undoNotice())).toEqual(["Couldn't redo the change.", "Nebula didn't respond."]);
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(server.edits).toHaveLength(3));
+    expect(await screen.findByText('card #1 at 300,40')).toBeTruthy();
+  });
+
+  it('once the failed step is no longer the next one, Retry is hidden and the line keeps "Try again"', async () => {
+    await openStudio({ view: 'board' });
+    act(() => board.props!.onMove([{ placement: 'c-i1', x: 300, y: 40 }]));
+    await waitFor(() => expect(server.edits).toHaveLength(1), { timeout: 400 });
+    api.editMoodboard.mockRejectedValueOnce(new RequestFailedError("Couldn't save the board.", 503));
+    press('z', { metaKey: true });
+    await undoNotice();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+    // The step goes (another window's edit forgot it, say): there is nothing the same to undo.
+    act(() => {
+      const undo = useBoardUndoStore.getState();
+      for (const [key, history] of Object.entries(undo.histories)) {
+        for (const step of history.done) undo.forget(key, step.id);
+      }
     });
-    expect([notice.querySelector('.failure-lines__heading')?.textContent,
-      notice.querySelector('.failure-lines__reason')?.textContent])
-      .toEqual(["Couldn't undo the change.", "Nebula didn't respond. Try again."]);
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull());
+    expect(parts(await undoNotice())).toEqual(["Couldn't undo the change.", "Nebula didn't respond. Try again."]);
   });
 
   it('a step whose cards changed since says so instead of moving them', async () => {

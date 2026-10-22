@@ -10,6 +10,8 @@ import {
 import { showConfirm } from '../../lib/commonsFiles';
 import { actorLabel, STATE_LABELS } from '../../lib/commonsFormat';
 import { useCommonsPrompt } from '../../hooks/useCommonsPrompt';
+import { FailureLines } from '../failure/FailureLines';
+import { ANALYSIS_FAILED, analysisFailureReason } from '../../lib/commonsAnalysisCopy';
 
 interface Props {
   assetId: string;
@@ -304,8 +306,16 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
       <ProposalsFor kind="commons" targetId={assetId} names={proposalNames} />
 
       {asset.analysis_state === 'analysis_failed' && (
-        <div className="commons-notice commons-notice--error">
-          <span>Analysis failed{asset.last_error ? `: ${asset.last_error}` : ''}</span>
+        <div className="commons-notice commons-notice--error commons-analysis-failure">
+          <div className="commons-analysis-failure__text">
+            <FailureLines failure={{ heading: ANALYSIS_FAILED, reason: analysisFailureReason(asset.last_error_kind) }} />
+            {asset.last_error && (
+              <details className="commons-analysis-failure__details">
+                <summary>Details</summary>
+                <span className="commons-analysis-failure__raw">{asset.last_error}</span>
+              </details>
+            )}
+          </div>
           <button type="button" className="commons-button" onClick={() => run(() => commonsApi.reanalyze(assetId))}>Retry</button>
         </div>
       )}
