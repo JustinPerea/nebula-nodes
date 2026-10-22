@@ -173,18 +173,26 @@ export function StatusLine({ status, onStart, onStop }: { status: CommonsStatus 
     return <span className="commons-status"><StatusText text="Connecting…" title="Connecting to library analysis…" /></span>;
   }
   if (status.evaluation_waiting) {
-    // Sealing or closing only lifts the hold: a stopped worker (the default at
-    // launch) stays stopped, so the tooltip promises a resume only when it
-    // runs, and Start is here when it doesn't (review of sf).
-    // Stopped, the label leads with that, in the stopped colour: GM, "\"Paused\"
-    // next to \"Start\" reads as a contradiction, and it hides the state the
-    // person has to act on first." The tooltip names both steps.
+    // GM: "the label names whatever has to be fixed first, and the tooltip
+    // lists anything still blocking after that." Sealing or closing only
+    // lifts the hold: a stopped worker (the default at launch) stays stopped,
+    // so the label leads with "Stopped", in the stopped colour, and Start is
+    // here ("\"Paused\" next to \"Start\" reads as a contradiction"). A used
+    // call budget comes first of all: only a restart resets it.
     const { running, state } = status.worker;
+    const then = status.evaluation_assisted ? 'the agent review is closed' : 'the reference labels are sealed';
+    if (state === 'budget_exhausted') {
+      const budget = status.worker.budget ?? '∞';
+      return (
+        <span className="commons-status commons-status--stopped">
+          <StatusText text={`Stopped · call budget used (${status.worker.budget_used}/${budget})`}
+            title={`Library analysis is stopped: it used this run's call budget (${status.worker.budget_used} of ${budget} calls). Restart Nebula to reset it. Analysis then stays paused until ${then}.`} />
+        </span>
+      );
+    }
     const after = running
       ? ' to resume.'
-      : state === 'budget_exhausted'
-        ? ", then restart Nebula: this run's call budget is used, so it won't resume on its own."
-        : ", then press Start: library analysis is stopped, so it won't resume on its own.";
+      : ", then press Start: library analysis is stopped, so it won't resume on its own.";
     const text = status.evaluation_assisted
       ? (running ? 'Paused · close agent review to resume' : 'Stopped · agent review open')
       : (running ? 'Paused until labels are sealed' : 'Stopped · labels not sealed');
@@ -193,8 +201,7 @@ export function StatusLine({ status, onStart, onStop }: { status: CommonsStatus 
           title={`Library analysis is paused: the agent graded these references before the blind labels were sealed, so they can no longer be sealed as blind labels. Close them as an assisted review (in Agent review or Blind labeling)${after}`} />
       : <StatusText text={text}
           title={`Library analysis is paused while blind labeling is open, so it can't sway your reference labels. Seal the labels, or close the batch without sealing, in Blind labeling${after}`} />}
-      {!running && state !== 'budget_exhausted'
-        && <button type="button" className="commons-button commons-button--primary" onClick={onStart}>Start</button>}
+      {!running && <button type="button" className="commons-button commons-button--primary" onClick={onStart}>Start</button>}
     </span>;
   }
   const waiting = status.queue.queued ?? 0;
