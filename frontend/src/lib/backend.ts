@@ -1,4 +1,5 @@
 import { getProjectContext } from './projectContext';
+import { ConnectionLostError, isConnectionFailure } from './errorCopy';
 import { TAB_HEADER, TAB_ID } from './tabId';
 import { noteParamsOutdated, PARAMS_VERSION_HEADER } from './paramsOutdated';
 import { GRAPH_PARAMS_VERSION } from './savedParamsUpgrades';
@@ -334,7 +335,13 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
       requestInit = { ...requestInit, headers };
     }
   }
-  const send = (url: string) => fetch(url, requestInit);
+  // No answer at all is said in words here, where every request is made, so
+  // no screen shows the browser's "Failed to fetch" (error-copy, GM): a
+  // ConnectionLostError, still a TypeError, with fetch's own as its cause.
+  // The caller's own abort comes back as fetch threw it.
+  const send = (url: string) => fetch(url, requestInit).catch((error: unknown) => {
+    throw isConnectionFailure(error, init?.signal) ? new ConnectionLostError(error) : error;
+  });
   // Replaying a mutation against another discovered backend is not a retry: it
   // is a second side effect in a different process. This is especially
   // dangerous for paid provider starts, whose public APIs have no idempotency

@@ -1,6 +1,9 @@
 import { apiFetch } from './backend';
 import { CommonsRequestError } from './commonsRequestError';
 import {
+  CONNECTION_LOST_COPY, ConnectionLostError, NO_ANSWER_STATUS, copyForStatus, isConnectionFailure, readDetail,
+} from './errorCopy';
+import {
   forgetPersonCredential, personToken, refreshPersonCredential, resetPersonSessionForTests,
 } from './personSession';
 import type {
@@ -34,10 +37,18 @@ export async function resolveCommonsToken(): Promise<string> {
   return session;
 }
 
+/** No answer at all, as a Commons failure: status 0, the connection line. */
+const lostConnection = (cause: unknown) => new CommonsRequestError(CONNECTION_LOST_COPY, NO_ANSWER_STATUS, { cause });
+
 async function send(path: string, init: RequestInit): Promise<Response> {
   const headers: Record<string, string> = { Authorization: `Bearer ${await resolveCommonsToken()}` };
   if (init.body && !(init.body instanceof FormData)) headers['Content-Type'] = 'application/json';
-  return apiFetch(`/api/commons${path}`, { ...init, headers: { ...headers, ...(init.headers as object) } });
+  try {
+    return await apiFetch(`/api/commons${path}`, { ...init, headers: { ...headers, ...(init.headers as object) } });
+  } catch (error) {
+    // apiFetch says a lost connection in words; the caller's own abort passes.
+    throw error instanceof ConnectionLostError ? lostConnection(error) : error;
+  }
 }
 
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -57,12 +68,20 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new CommonsRequestError(SESSION_MESSAGE, 401);
   }
   if (!response.ok) {
-    let detail = `Commons request failed (${response.status})`;
-    try { detail = (await response.json()).detail ?? detail; } catch { /* keep default */ }
-    throw new CommonsRequestError(typeof detail === 'string' ? detail : JSON.stringify(detail), response.status);
+    // Copy, never the status or a raw body (lib/errorCopy.ts): GM's line for
+    // 408, 429 and 5xx, else the backend's written reason, else GM's line
+    // for the status. `detail` keeps what it sent, for debugging.
+    const detail = await readDetail(response);
+    throw new CommonsRequestError(copyForStatus(response.status, detail), response.status, { detail });
   }
   const type = response.headers.get('content-type') ?? '';
-  return (type.includes('application/json') ? response.json() : response.blob()) as Promise<T>;
+  try {
+    return await (type.includes('application/json') ? response.json() : response.blob()) as T;
+  } catch (error) {
+    // The connection dropped while the body was arriving.
+    if (isConnectionFailure(error, init.signal)) throw lostConnection(error);
+    throw error;
+  }
 }
 
 const post = <T>(path: string, body?: unknown) =>

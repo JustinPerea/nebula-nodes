@@ -1,6 +1,7 @@
 import { useEffect, useState, type RefObject } from 'react';
 import { setCommonsLeaveAsk, whenCommonsClean } from '../../lib/commonsUnsaved';
 import { CommonsRequestError } from '../../lib/commonsRequestError';
+import { canTryAgain, copyForError } from '../../lib/errorCopy';
 
 /**
  * Leaving the Commons with unsaved labels (commons-leave, GM - Design,
@@ -17,19 +18,18 @@ import { CommonsRequestError } from '../../lib/commonsRequestError';
 export type SaveResult = { ok: true } | { ok: false; reason: string; retry: boolean };
 type SaveFailure = Extract<SaveResult, { ok: false }>;
 
-/** 4xx answers that a second try can get past: a timeout, a rate limit (GM). */
-const TRY_AGAIN = new Set([408, 429]);
-
 /**
  * A failed save as a leave sees it. Saving again can work after a lost
- * connection (no answer), a server error (5xx), a timeout or a rate limit;
- * not after a refusal the same request would get again: a conflict ("changed
- * in another window"), a closed batch, no session (any other 4xx).
+ * connection (no answer, status 0), a server error (5xx), a timeout or a
+ * rate limit (408, 429; lib/errorCopy canTryAgain); not after a refusal the
+ * same request would get again: a conflict ("changed in another window"), a
+ * closed batch, no session (any other 4xx). The reason is copy: a Commons
+ * request's message already is (lib/commonsApi); any other error says the
+ * connection line or GM's general line, never its own message.
  */
 export function saveFailure(error: unknown): SaveFailure {
-  const reason = error instanceof Error ? error.message : '';
-  const retry = !(error instanceof CommonsRequestError) || error.status >= 500 || TRY_AGAIN.has(error.status);
-  return { ok: false, reason, retry };
+  if (error instanceof CommonsRequestError) return { ok: false, reason: error.message, retry: canTryAgain(error.status) };
+  return { ok: false, reason: copyForError(error), retry: true };
 }
 
 /**

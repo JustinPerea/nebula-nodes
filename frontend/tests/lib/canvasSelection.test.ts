@@ -7,6 +7,7 @@ import {
   selectedNodeIds,
 } from '../../src/lib/canvasSelection';
 import { GRAPH_BUNDLE_MAX_ASSET_BYTES } from '../../src/lib/graphFile';
+import { CONNECTION_LOST_COPY, ConnectionLostError, NO_RESPONSE_COPY } from '../../src/lib/errorCopy';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -126,5 +127,41 @@ describe('canvas selection context', () => {
       '/api/outputs/world-full.spz',
       { cache: 'no-store' },
     );
+  });
+
+  // error-copy review: the selection toolbar shows this error as the Download
+  // button's title, so it has to be copy, never the browser's "Failed to
+  // fetch" or a node/port id.
+  describe('download failure copy', () => {
+    const selection = () => [node('n1', true, { image: { type: 'Image', value: '/api/outputs/example.png' } })];
+    const failure = async () => {
+      try {
+        await downloadSelectedOutputs(selection());
+      } catch (error) {
+        return error as Error;
+      }
+      throw new Error('expected the download to fail');
+    };
+
+    it.each([
+      ['no answer (fetch TypeError)', () => Promise.reject(new TypeError('Failed to fetch')), CONNECTION_LOST_COPY],
+      ['503', () => Promise.resolve(new Response('upstream down', { status: 503 })), NO_RESPONSE_COPY],
+      ['429', () => Promise.resolve(new Response('', { status: 429 })), NO_RESPONSE_COPY],
+      ['404', () => Promise.resolve(new Response('', { status: 404 })), "That didn't work. Try again, or reload if it keeps happening."],
+      ['403', () => Promise.resolve(new Response('', { status: 403 })), "You don't have access to this anymore. Reload to sign in again."],
+    ])('%s reads as copy', async (_kind, answer, line) => {
+      vi.stubGlobal('fetch', vi.fn(answer));
+      const error = await failure();
+      expect(error.message).toBe(line);
+      expect(error.message).not.toMatch(/Failed to fetch|n1|image|\d{3}/);
+    });
+
+    it('keeps the browser error as the cause of a lost connection', async () => {
+      const raw = new TypeError('Failed to fetch');
+      vi.stubGlobal('fetch', vi.fn(() => Promise.reject(raw)));
+      const error = await failure();
+      expect(error).toBeInstanceOf(ConnectionLostError);
+      expect(error.cause).toBe(raw);
+    });
   });
 });

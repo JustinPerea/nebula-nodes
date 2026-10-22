@@ -7,6 +7,12 @@ import {
   GRAPH_BUNDLE_MAX_TOTAL_BYTES,
 } from './graphFileShared';
 import { readBoundedAssetResponse } from './boundedAsset';
+import {
+  ConnectionLostError,
+  RequestFailedError,
+  copyForStatus,
+  isConnectionFailure,
+} from './errorCopy';
 import { isSafeWorldUrl, parseWorldValue } from './worldValue';
 
 
@@ -110,8 +116,20 @@ export async function downloadSelectedOutputs(nodes: Node<NodeData>[]): Promise<
     if (remainingBytes <= 0) {
       throw new Error('Selected outputs exceed the safe ZIP size limit. Download fewer outputs at once.');
     }
-    const response = await fetch(backendAssetUrlSync(output.url), { cache: 'no-store' });
-    if (!response.ok) throw new Error(`Could not download ${output.nodeId}:${output.portId}`);
+    // An asset URL, not an API path, so apiFetch can't make this request;
+    // turn its failures into copy the same way (error-copy review): the
+    // selection toolbar shows this error as the Download button's title.
+    const response = await fetch(backendAssetUrlSync(output.url), { cache: 'no-store' })
+      .catch((error: unknown) => {
+        throw isConnectionFailure(error) ? new ConnectionLostError(error) : error;
+      });
+    if (!response.ok) {
+      throw new RequestFailedError(
+        copyForStatus(response.status, undefined),
+        response.status,
+        `${output.nodeId}:${output.portId}`,
+      );
+    }
     let bytes: Uint8Array;
     try {
       bytes = await readBoundedAssetResponse(
