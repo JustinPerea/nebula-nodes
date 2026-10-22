@@ -288,11 +288,21 @@ describe('Canvas toolbar hierarchy', () => {
     render(<Toolbar />);
     const { panel } = openActions();
     fireEvent.click(within(panel).getByRole('button', { name: 'Clear canvas…' }));
-    await waitFor(() => expect(window.alert).toHaveBeenCalledWith('Provider is still settling.'));
+    // error-copy round 2 (GM): the heading names the action, then the reason.
+    await waitFor(() => expect(window.alert).toHaveBeenCalledWith("Couldn't clear the canvas. Provider is still settling."));
     expect(mocks.clear).not.toHaveBeenCalled();
     expect(mocks.cancelStep).toHaveBeenCalledWith(mocks.undoStep);
     expect(mocks.graph!.getState().providerRecoveries).toHaveLength(1);
     expect(mocks.graph!.getState().nodes).toHaveLength(1);
+  });
+
+  it('error-copy round 2: a refused clear with no reason says GM\'s line, never the status', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mocks.fetch.mockResolvedValue({ ok: false, status: 409, json: async () => ({}) });
+    render(<Toolbar />);
+    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Clear canvas…' }));
+    await waitFor(() => expect(window.alert).toHaveBeenCalledWith(
+      "Couldn't clear the canvas. That didn't work. Try again, or reload if it keeps happening."));
   });
 
   it('does not request clear after a declined confirmation or a run starting during confirmation', () => {

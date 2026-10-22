@@ -199,7 +199,7 @@ function WorldPreviewComponent({ value, compact = false }: WorldPreviewProps) {
       if (downloadControllerRef.current === controller) setDownloadState(null);
     } catch (error) {
       if (controller.signal.aborted) return;
-      const message = error instanceof Error ? error.message : 'The asset could not be downloaded.';
+      const message = error instanceof Error ? error.message : "Couldn't download the world.";
       if (downloadControllerRef.current === controller) {
         setDownloadState({ key, status: 'error', message });
       }
@@ -427,7 +427,7 @@ function WorldPreviewComponent({ value, compact = false }: WorldPreviewProps) {
                 )}
                 {downloadState?.status === 'error' && (
                   <span className="world-modal__download-error" role="alert">
-                    Download failed. {downloadState.message}
+                    {downloadState.message}
                   </span>
                 )}
               </div>

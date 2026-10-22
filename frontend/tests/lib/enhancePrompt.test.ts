@@ -15,9 +15,10 @@ describe('enhancePrompt errors', () => {
     await expect(enhancePrompt('x')).rejects.toThrow('Prompt is too long for Enhance (5000 characters; the limit is 4000).');
   });
 
-  it('turns a validation list into readable text, not [object Object]', async () => {
+  it('a validation list says GM\'s fallback line, not [object Object] (error-copy round 2)', async () => {
     apiFetch.mockResolvedValue(json({ detail: [{ loc: ['body', 'prompt'], msg: 'Field required', type: 'missing' }] }, 422));
-    await expect(enhancePrompt('x')).rejects.toThrow('Field required');
+    await expect(enhancePrompt('x')).rejects.toThrow(
+      "Couldn't enhance the prompt. That didn't work. Try again, or reload if it keeps happening.");
   });
 
   it('shows the person gate refusal', async () => {

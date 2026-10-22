@@ -69,6 +69,7 @@ import { useProviderReadinessStore } from '../src/store/providerReadinessStore';
 import { resetSettingsWrites } from '../src/lib/settingsWrites';
 import { resetRunCostConfirmMigration } from '../src/lib/runCostConfirm';
 import { readServiceAccount } from '../src/components/panels/settings/rowHelpers';
+import { ConnectionLostError, RequestFailedError } from '../src/lib/errorCopy';
 
 // ---------------------------------------------------------------------------
 // Setup and helpers
@@ -221,10 +222,27 @@ describe('Settings shell', () => {
     await waitFor(() => expect(screen.getByRole('tab', { name: /Providers/ })).toHaveTextContent('Providers3'));
   });
 
+  // error-copy round 2 (GM): a retry surface shows the heading and the short
+  // reason ("the button is the retry"); on 1fc3d846 this always said
+  // "Settings couldn't load. Check that the Nebula backend is running."
+  it.each([
+    [new ConnectionLostError(new TypeError('Failed to fetch'), { heading: "Couldn't load your API keys." }),
+      "Couldn't reach Nebula. Check your connection."],
+    [new RequestFailedError("Couldn't load your API keys.", 503), "Nebula didn't respond."],
+    [new RequestFailedError("Couldn't load your API keys.", 400), "That didn't work. Try again, or reload if it keeps happening."],
+  ])('a failed first load says the heading and the short reason (%#)', async (error, reason) => {
+    getSettingsMock.mockRejectedValueOnce(error);
+    render(<Settings />);
+    const alert = await screen.findByRole('alert');
+    expect(alert.querySelector('.failure-lines__heading')?.textContent).toBe("Couldn't load your API keys.");
+    expect(alert.querySelector('.failure-lines__reason')?.textContent).toBe(reason);
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+  });
+
   it('keeps a failed first load actionable, and Try again loads the panel', async () => {
     getSettingsMock.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: {} });
     render(<Settings />);
-    expect(await screen.findByRole('alert')).toHaveTextContent("Settings couldn't load");
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load your API keys.");
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await screen.findByRole('searchbox', { name: 'Search providers and models' });

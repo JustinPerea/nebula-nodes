@@ -20,6 +20,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { setOpenProject } from '../../test/projectState';
 import { assetStudioDraftKey, emptyAssetStudioEntry, useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
+import { RequestFailedError } from '../../lib/errorCopy';
 
 const board = { id: 'b1', name: 'Warm editorial', thumbnail: '/api/outputs/a.png', images: [{}], mode: 'look' } as unknown as Moodboard;
 const character = { id: 'c1', name: 'Nari', thumbnail: '/api/outputs/n.png', referenceViews: ['a', 'b', 'c'] } as unknown as Character;
@@ -271,7 +272,9 @@ describe('Assets panel Styles', () => {
     presets.fetchPresets.mockResolvedValue([style]);
     trash.fetchTrash.mockResolvedValue([{ kind: 'style', id: 's0', name: 'Old look', projectId: null,
       deletedAt: '2026-10-20T12:00:00Z', deletedBy: { kind: 'agent', name: 'GM - Design' } }]);
-    presets.deletePreset.mockRejectedValueOnce(new Error("Style 's1' not found"));
+    // What deletePreset throws (error-copy round 2): its heading and the backend's reason.
+    presets.deletePreset.mockRejectedValueOnce(
+      new RequestFailedError("Couldn't delete the style.", 404, { detail: "Style 's1' not found" }));
     renderPanel();
     fireEvent.click(screen.getByRole('tab', { name: 'Styles' }));
     fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
@@ -281,7 +284,7 @@ describe('Assets panel Styles', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /^Neon noir/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Delete Neon noir' }));
-    expect(await screen.findByText("Style 's1' not found")).toBeTruthy();
+    expect((await screen.findByRole('alert')).textContent).toBe("Couldn't delete the style. Style 's1' not found");
     expect(screen.queryByText(/to Recently deleted/)).toBeNull();
   });
 

@@ -482,6 +482,7 @@ body.app-slava-restraint .character-def__ref-add:disabled {
 
 /* ── Inline notices (load / guard / save errors) ─────────────────────────── */
 body.app-slava-restraint .character-studio-view__notice {
+  text-wrap: pretty;
   font-size: 12px;
   line-height: 1.45;
   padding: 8px 12px;

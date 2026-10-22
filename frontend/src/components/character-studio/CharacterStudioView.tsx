@@ -27,6 +27,8 @@ import { CharacterStudioToolbar } from './CharacterStudioToolbar';
 import { CharacterLibraryRail } from './CharacterLibraryRail';
 import { CharacterDefinitionPanel } from './CharacterDefinitionPanel';
 import { CharacterTestPanel } from './CharacterTestPanel';
+import { failureCopy, oneLine } from '../../lib/errorCopy';
+import { FailureLines } from '../failure/FailureLines';
 import '../../styles/character-studio.css';
 
 /** Local editable shape — a Character minus the server-owned fields. The draft
@@ -231,7 +233,7 @@ export function CharacterStudioView() {
         readOnOpen.current = `${key}:${epoch}:${found.id}`;
         initialize(characterToDraft(found), found.id, found.thumbnail);
       }).catch((err) => {
-        if (current()) patch({ loadError: err instanceof Error ? err.message : 'Failed to load Character.' });
+        if (current()) patch({ loadError: failureCopy(err, { heading: "Couldn't load the character." }) });
       });
     }
     return () => { cancelled = true; };
@@ -292,7 +294,7 @@ export function CharacterStudioView() {
         }
       }
     } catch (err) {
-      store.failSave(key, attempt.id, err instanceof Error ? err.message : 'Save failed. Retry?');
+      store.failSave(key, attempt.id, failureCopy(err, { heading: "Couldn't save the character." }));
     }
   }, [key, isCurrent, verifyProject, enterCharacterEditor, moveDraft, draftNow, follow]);
 
@@ -389,7 +391,7 @@ export function CharacterStudioView() {
     <div className="character-studio-view">
       <CharacterStudioToolbar
           saveState={saveState}
-          saveError={saveError}
+          saveError={saveError === null ? null : typeof saveError === 'string' ? saveError : oneLine(saveError)}
           onRetry={() => void persist()}
           onDelete={savedId && !isDraftId ? () => { void deleteCharacterNow(); } : undefined}
           deleteDisabled={deleting.busy || Boolean(pendingSaveId)}
@@ -416,7 +418,7 @@ export function CharacterStudioView() {
       <main className="character-studio-view__main">
         {loading ? (
           <div className="character-studio-view__loading">
-            {loadError ? <div role="alert">{loadError}</div> : 'Loading Character…'}
+            {loadError ? <div role="alert"><FailureLines failure={loadError} retry /></div> : 'Loading Character…'}
             {loadError && <button type="button" className="character-studio-view__retry"
               onClick={() => { if (!projectReady) void verifyProject(); else patch({ loadError: null, revision: revision + 1 }); }}>Retry loading</button>}
           </div>
@@ -424,17 +426,17 @@ export function CharacterStudioView() {
           <>
             {loadError && (
               <div className="character-studio-view__notice character-studio-view__notice--warn">
-                {loadError}
+                <FailureLines failure={loadError} />
               </div>
             )}
             {deleting.error && !deleting.lastDeleted && (
               <div className="character-studio-view__notice character-studio-view__notice--error" role="alert">
-                {deleting.error}
+                <FailureLines failure={deleting.error} />
               </div>
             )}
             {moving.error && (
               <div className="character-studio-view__notice character-studio-view__notice--error" role="alert">
-                {moving.error}
+                <FailureLines failure={moving.error} />
               </div>
             )}
 
@@ -468,7 +470,8 @@ export function CharacterStudioView() {
 
             {saveError && (
               <div className="character-studio-view__notice character-studio-view__notice--error">
-                {saveError}{' '}
+                {/* Its own Retry is the retry: GM's short line (WRAP rule). */}
+                <FailureLines failure={saveError} retry />{' '}
                 <button
                   type="button"
                   className="character-studio-view__retry"

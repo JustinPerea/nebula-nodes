@@ -164,7 +164,7 @@ describe('Commons chat integration', () => {
     expect(screen.queryByRole('button', { name: 'Daedalus' })).not.toBeInTheDocument();
     expect(screen.getByText(/Private reference chats: Claude/)).toBeTruthy();
     const input = await sendText('Keep this unsent message');
-    expect(await screen.findByText(/no UI session/)).toBeTruthy();
+    expect(await screen.findByText(/Your session expired. Open a fresh Commons link from the backend terminal./)).toBeTruthy();
     expect(input).toHaveValue('Keep this unsent message');
     expect(socket.sent).toHaveLength(0);
     expect(apiMocks.apiFetch).not.toHaveBeenCalled();

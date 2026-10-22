@@ -659,3 +659,25 @@ body:not(.app-slava-restraint) .agent-log__msg {
 
 /* Preserve shared Settings/Chat state while Commons temporarily owns the screen. */
 .workspace-overlays--hidden { display: none; }
+
+/* A failure on a two-line surface (components/failure/FailureLines.tsx, GM
+ * error-copy round 2): the heading on line 1, the reason on line 2, and no
+ * short last word left alone on a line. Colour comes from the notice. */
+.failure-lines {
+  display: block;
+  min-width: 0;
+  text-wrap: pretty;
+}
+
+.failure-lines__heading,
+.failure-lines__reason {
+  display: block;
+}
+
+.failure-lines__heading {
+  font-weight: 600;
+}
+
+.failure-lines + .failure-lines {
+  margin-top: 6px;
+}

@@ -18,7 +18,15 @@ from commons.store import CommonsStore
 
 
 class IntakeError(Exception):
-    pass
+    """A refused add. The message is the specific text (agents read it to fix
+    their call; it is logged); `code` is a machine reason the person's UI
+    maps to written copy (commons/person_copy.INTAKE, the frontend's
+    UPLOAD_REASONS). Never show the message to the person (GM, error-copy
+    round 2)."""
+
+    def __init__(self, message: str, code: str = "refused"):
+        super().__init__(message)
+        self.code = code
 
 
 @dataclass
@@ -67,9 +75,9 @@ def add_bytes(store: CommonsStore, data: bytes, *, filename: str, collection_id:
         sniffed = media.sniff(data)
         media.check_size(sniffed.media, len(data))
     except media.MediaError as exc:
-        raise IntakeError(str(exc)) from exc
+        raise IntakeError(str(exc), exc.code) from exc
     if store.get_collection(collection_id) is None:
-        raise IntakeError(f"unknown collection {collection_id}")
+        raise IntakeError(f"unknown collection {collection_id}", "unknown_collection")
 
     existing = store.asset_by_sha(hashlib.sha256(data).hexdigest())
     columns: dict[str, Any] | None = None
@@ -81,7 +89,7 @@ def add_bytes(store: CommonsStore, data: bytes, *, filename: str, collection_id:
             else:
                 columns = {"media": "video", "mime": sniffed.mime}
         except media.MediaError as exc:
-            raise IntakeError(str(exc)) from exc
+            raise IntakeError(str(exc), exc.code) from exc
 
     # A blob write failure raises here, before any row exists (§10).
     sha, key = store.put_blob(data, sniffed.ext)
@@ -144,7 +152,9 @@ async def add_url(store, url: str, *, collection_id: str, actor: str, role: str 
     try:
         fetched = await fetch(url, max_bytes=media.VIDEO_CAP, accept="image/*,video/*,text/html;q=0.8")
     except (net.FetchBlocked, net.FetchError) as exc:
-        raise IntakeError(f"cannot fetch {url}: {exc}") from exc
+        code = ("blocked" if isinstance(exc, net.FetchBlocked)
+                else "too_large" if isinstance(exc, net.FetchTooLarge) else "fetch_failed")
+        raise IntakeError(f"cannot fetch {url}: {exc}", code) from exc
     ctype = fetched.content_type.split(";")[0].strip().lower()
     if ctype in ("text/html", "application/xhtml+xml"):
         info = page_mod.parse_page(fetched.data[:2_000_000].decode("utf-8", errors="replace"), fetched.final_url)
@@ -298,7 +308,7 @@ def _check_agent_target(store, actor, collection_id: str, why: str) -> None:
         raise IntakeError("why is required for agent adds")
     collection = store.get_collection(collection_id)
     if collection is None or collection["kind"] == "system":
-        raise IntakeError("unknown collection")
+        raise IntakeError("unknown collection", "unknown_collection")
     if actor.workspace is not None:
         from commons.search import scope_collection_ids
         if collection_id not in scope_collection_ids(store, actor.brand):
@@ -340,7 +350,7 @@ async def agent_add(store, *, actor, source: str, collection_id: str, why: str, 
     if not real.is_file():
         raise IntakeError("no such file")
     if real.stat().st_size > media.VIDEO_CAP:
-        raise IntakeError("file exceeds the size cap")
+        raise IntakeError("file exceeds the size cap", "too_large")
     data = await asyncio.to_thread(real.read_bytes)
     return await asyncio.to_thread(agent_add_bytes, store, actor=actor, data=data,
                                    filename=real.name, collection_id=collection_id, why=why, made_by=made_by)

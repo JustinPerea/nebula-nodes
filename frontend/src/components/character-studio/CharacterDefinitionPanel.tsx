@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { apiFetch } from '../../lib/backend';
+import { apiRequest } from '../../lib/apiRequest';
+import { failureMessage } from '../../lib/errorCopy';
 import { storedImageView } from '../../lib/storedImage';
 import { OutsideImageNote } from '../OutsideImageNote';
 import type { CharacterDraft } from './CharacterStudioView';
@@ -61,18 +62,16 @@ export function CharacterDefinitionPanel({
     const uploads = Array.from(files).map((file) => {
       const fd = new FormData();
       fd.append('file', file);
-      return apiFetch('/api/uploads', { method: 'POST', body: fd })
-        .then((r) => {
-          if (!r.ok) throw new Error(`Upload failed: ${r.status}`);
-          return r.json();
-        })
+      // GM, error-copy round 2: "Couldn't upload {filename}." then the reason.
+      return apiRequest(`Couldn't upload ${file.name}.`, '/api/uploads', { method: 'POST', body: fd })
+        .then((r) => r.json())
         .then((data: { filePath: string; url: string }) => data.url);
     });
     Promise.all(uploads)
       .then((urls) => addReferenceViews(urls.filter(Boolean)))
       .catch((err) => {
         console.error('[character] reference view upload failed:', err);
-        setUploadError('Upload failed — retry.');
+        setUploadError(failureMessage(err, "Couldn't upload the image."));
       })
       .finally(() => setUploading(false));
   };

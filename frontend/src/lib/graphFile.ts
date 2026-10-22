@@ -3,8 +3,10 @@ import type { Node, Edge, Viewport } from '@xyflow/react';
 import type { DynamicNodeData, NodeData, NodeState } from '../types';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { shotPortId } from '../constants/ports';
-import { apiFetch, backendAssetUrlSync, getCachedBackendBaseUrl } from './backend';
+import { backendAssetUrlSync, getCachedBackendBaseUrl } from './backend';
 import { AssetByteLimitError, readBoundedAssetResponse } from './boundedAsset';
+import { apiRequest } from './apiRequest';
+import { ConnectionLostError, RequestFailedError } from './errorCopy';
 import {
   hasRepresentationViewer,
   parseRepresentation,
@@ -17,6 +19,10 @@ import {
   GRAPH_BUNDLE_MAX_TOTAL_BYTES,
   normalizeRuntimeMediaParams,
 } from './graphFileShared';
+
+/** The Toolbar's "Save graph" / "Load graph", as GM's headings (round 2). */
+const SAVE_GRAPH = "Couldn't save the graph.";
+const LOAD_GRAPH = "Couldn't load the graph.";
 
 /**
  * .nebula.zip / .nebula file format — graph persistence.
@@ -646,7 +652,7 @@ export async function saveToFile(
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'The graph could not be serialized safely.';
-    alert(`Failed to save graph: ${message}`);
+    alert(`${SAVE_GRAPH} ${message}`);
     return null;
   }
 
@@ -664,12 +670,12 @@ export async function saveToFile(
     blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'The portable bundle could not be created.';
-    alert(`Failed to save graph: ${message}`);
+    alert(`${SAVE_GRAPH} ${message}`);
     return null;
   }
   if (blob.size > GRAPH_BUNDLE_MAX_IMPORT_BYTES) {
     alert(
-      `Failed to save graph: the finished bundle is ${(blob.size / (1024 * 1024)).toFixed(1)} MB, `
+      `${SAVE_GRAPH} The finished bundle is ${(blob.size / (1024 * 1024)).toFixed(1)} MB, `
       + `above Nebula's ${Math.floor(GRAPH_BUNDLE_MAX_IMPORT_BYTES / (1024 * 1024))} MB portable limit.`,
     );
     return null;
@@ -1076,12 +1082,8 @@ function validatedRestoreMapping(value: unknown): Map<string, string> {
   return mapping;
 }
 
-async function restoreFailureMessage(response: Response): Promise<string> {
-  const payload = await response.json().catch(() => null) as { detail?: unknown } | null;
-  return typeof payload?.detail === 'string' && payload.detail.trim()
-    ? payload.detail
-    : `Asset restore failed (HTTP ${response.status})`;
-}
+/** GM's heading for the bundle restore (error-copy round 2). */
+const RESTORE_ASSETS = "Couldn't restore the asset.";
 
 /**
  * Load graph from a file using the File System Access API.
@@ -1132,7 +1134,7 @@ export async function loadFromFile(): Promise<{
     } catch (err) {
       if ((err as DOMException).name === 'AbortError') return null;
       if (err instanceof GraphBundleImportTooLargeError) {
-        alert(`Failed to load graph: ${err.message}`);
+        alert(`${LOAD_GRAPH} ${err.message}`);
         return null;
       }
       console.warn('File System Access API failed, falling back to input:', err);
@@ -1152,12 +1154,11 @@ export async function loadFromFile(): Promise<{
       // The backend owns bounded ZIP preflight, graph.json inflation, graph
       // validation, and atomic extraction. Do not pass this buffer to JSZip:
       // compressed member sizes are not a trustworthy browser-memory bound.
-      const resp = await apiFetch('/api/outputs/restore', {
+      const resp = await apiRequest(RESTORE_ASSETS, '/api/outputs/restore', {
         method: 'POST',
         headers: { 'Content-Type': 'application/zip' },
         body: selection.file,
       });
-      if (!resp.ok) throw new Error(await restoreFailureMessage(resp));
 
       const restored = await resp.json() as unknown;
       if (!isRecord(restored)) throw new Error('Asset restore returned an invalid response');
@@ -1182,8 +1183,12 @@ export async function loadFromFile(): Promise<{
       warnings: [...restoreWarnings, ...worldWarnings, ...result.warnings],
     };
   } catch (err) {
-    console.error('Failed to load graph file:', err);
-    alert(`Failed to load graph: ${(err as Error).message}`);
+    console.error('[nebula] graph load', err);
+    // A request's error already names its action ("Couldn't restore the
+    // asset. <reason>"); anything else is the load's own written reason.
+    alert(err instanceof RequestFailedError || err instanceof ConnectionLostError
+      ? err.message
+      : `${LOAD_GRAPH} ${(err as Error).message}`);
     return null;
   }
 }
@@ -1205,7 +1210,7 @@ export function loadViaInput(): Promise<GraphFileSelection | null> {
         resolve(await inspectGraphFileWithinLimit(file));
       } catch (error) {
         const message = error instanceof Error ? error.message : 'The selected file could not be read.';
-        alert(`Failed to load graph: ${message}`);
+        alert(`${LOAD_GRAPH} ${message}`);
         resolve(null);
       }
     };

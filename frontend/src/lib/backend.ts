@@ -1,5 +1,5 @@
 import { getProjectContext } from './projectContext';
-import { ConnectionLostError, isConnectionFailure } from './errorCopy';
+import { BACKEND_NOT_RUNNING_COPY, ConnectionLostError, isConnectionFailure } from './errorCopy';
 import { TAB_HEADER, TAB_ID } from './tabId';
 import { noteParamsOutdated, PARAMS_VERSION_HEADER } from './paramsOutdated';
 import { GRAPH_PARAMS_VERSION } from './savedParamsUpgrades';
@@ -175,6 +175,9 @@ async function probeBackendBaseUrl(baseUrl: string): Promise<string | null> {
   }
 }
 
+/** The last "not found" logged, so a reconnect loop warns once (GM: keep it in the console). */
+let lastNotFound: string | null = null;
+
 async function discoverBackendBaseUrl(): Promise<string> {
   // Injected sidecar endpoint is authoritative — no discovery probes or
   // localStorage writes when the Electron bridge is present.
@@ -204,11 +207,18 @@ async function discoverBackendBaseUrl(): Promise<string> {
   const found = results.find((candidate): candidate is string => candidate != null);
   if (found == null) {
     const pinned = pinnedBackendPort(backendPortEnv().port);
-    throw new Error(pinned === null
+    const ports = pinned === null
       ? `Nebula backend not found on localhost ports ${configuredBackendPorts().join(', ')}`
-      : `Nebula backend not found on port ${pinned} (VITE_NEBULA_BACKEND_PORT); not scanning other ports`);
+      : `Nebula backend not found on port ${pinned} (VITE_NEBULA_BACKEND_PORT); not scanning other ports`;
+    // A plain browser tab with no backend (GM, error-copy round 2): GM's line
+    // for the person, the ports it tried for the console. No answer at all,
+    // so it is a ConnectionLostError (status 0) like a dropped request.
+    if (lastNotFound !== ports) console.warn(`[nebula] ${ports}`);
+    lastNotFound = ports;
+    throw new ConnectionLostError(new Error(ports), { reason: BACKEND_NOT_RUNNING_COPY, detail: ports });
   }
 
+  lastNotFound = null;
   cachedSource = 'discovered';
   writeStoredBaseUrl(found);
   return found;

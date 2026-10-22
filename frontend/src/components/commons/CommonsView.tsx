@@ -4,7 +4,9 @@ import { useShallow } from 'zustand/react/shallow';
 import { targetsOf, useAssetProposalsStore } from '../../store/assetProposalsStore';
 import { openOnce } from '../../store/assetProposalReviewRequest';
 import { useUIStore } from '../../store/uiStore';
-import { commonsApi, filtersToRequest, type UrlAddResult } from '../../lib/commonsApi';
+import { commonsApi, filtersToRequest, uploadFailureCopy, type UrlAddResult } from '../../lib/commonsApi';
+import type { FailureCopy } from '../../lib/errorCopy';
+import { FailureLines } from '../failure/FailureLines';
 import { EMPTY_FILTERS, type Collection, type CommonsStatus, type FilterState, type SearchRow } from '../../lib/commonsTypes';
 import { pickFiles } from '../../lib/commonsFiles';
 import { useCommonsPrompt } from '../../hooks/useCommonsPrompt';
@@ -318,6 +320,10 @@ export function CommonsView() {
   const [status, setStatus] = useState<CommonsStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /** The files the last upload couldn't add, each "Couldn't upload {filename}."
+   * over its reason (GM, error-copy round 2). Their own list: the refresh
+   * after an upload must not clear them, as it clears a search's error. */
+  const [uploadFailures, setUploadFailures] = useState<FailureCopy[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [urlDraft, setUrlDraft] = useState('');
   const [page, setPage] = useState<PageResult | null>(null);
@@ -412,11 +418,14 @@ export function CommonsView() {
   const upload = async (files: File[]) => {
     const collectionId = requireTarget();
     if (!collectionId || files.length === 0) return;
+    setUploadFailures([]);
     try {
       const { results } = await commonsApi.uploadFiles(collectionId, files);
       const failed = results.filter((r) => !r.ok);
       setNotice(`Added ${results.length - failed.length} of ${results.length}.`);
-      setError(failed.length ? failed.map((r) => `${r.filename}: ${r.error}`).join('; ') : null);
+      // Never the backend's raw `error` (GM): its reason code, mapped.
+      setUploadFailures(failed.map(uploadFailureCopy));
+      setError(null);
       refresh();
     } catch (e) {
       fail(e);
@@ -573,9 +582,16 @@ export function CommonsView() {
         />
       </WorkspaceHeader>
 
-      {(error || notice || proposed.size > 0) && (
+      {(error || notice || uploadFailures.length > 0 || proposed.size > 0) && (
         <div className="commons-messages">
           {error && <p className="commons-notice commons-notice--error" role="alert">{error}</p>}
+          {uploadFailures.length > 0 && (
+            <p className="commons-notice commons-notice--error" role="alert">
+              <span className="commons-notice__list">
+                {uploadFailures.map((failure, index) => <FailureLines key={index} failure={failure} />)}
+              </span>
+            </p>
+          )}
           {!error && notice && <p className="commons-notice" role="status">{notice}</p>}
           <CommonsProposalsLine onOpen={reviewProposal} />
         </div>

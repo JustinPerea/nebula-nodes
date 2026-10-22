@@ -8,6 +8,7 @@ import { RecentlyDeletedAssets } from '../asset-trash/AssetTrash';
 import { emptyRailMessage, railNotice, type AssetHome } from '../../lib/assetHome';
 import { NO_PROJECT_OPEN } from '../../lib/currentProject';
 import { wsClient } from '../../lib/wsClient';
+import { failureMessage } from '../../lib/errorCopy';
 
 interface CharacterLibraryRailProps {
   /** Currently-open Character id (or the 'new' sentinel for a fresh draft). */
@@ -71,7 +72,8 @@ export function CharacterLibraryRail({
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load.');
+          // The request's error is already "Couldn't load the characters. <reason>".
+          setError(failureMessage(err, "Couldn't load the characters."));
           setListing({ for: listKey, items: [] });
         }
       })

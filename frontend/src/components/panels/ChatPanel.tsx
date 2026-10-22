@@ -34,7 +34,8 @@ import { claimIntent } from '../../lib/heldIntents';
 import '../../styles/personal-agents.css';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl, personTokenForSocket } from '../../lib/backend';
 import { DEFAULT_BACKEND_PORT, devProxyPort } from '../../lib/devBackendPort';
-import { ConnectionLostError, NO_ANSWER_STATUS } from '../../lib/errorCopy';
+import { CONNECTION_LOST_COPY, ConnectionLostError, NO_ANSWER_STATUS, readDetail, warnFailure } from '../../lib/errorCopy';
+import { chatUploadChipError } from '../../lib/chatUploadCopy';
 import { chatAuthority } from '../../lib/commonsChatAuthority';
 import { onPersonConnected, reportPersonRequired } from '../../lib/personSession';
 import { normalizeAgentEventSource } from '../../lib/agentEvents';
@@ -850,13 +851,9 @@ export function ChatPanel() {
         const resp = await apiFetch('/api/uploads', { method: 'POST', body: form });
         if (!resp.ok) {
           useGraphStore.getState().cancelUndoStep(undoStep);
-          const detail = await resp.text().catch(() => '');
-          const errMsg =
-            resp.status === 413
-              ? 'Image > 20MB'
-              : resp.status === 415
-              ? 'Not an image'
-              : (detail || `Upload failed (${resp.status})`);
+          const detail = await readDetail(resp);
+          warnFailure("Couldn't upload the image.", resp.status, detail);
+          const errMsg = chatUploadChipError(resp.status, detail);
           setPendingImages((prev) => {
             const prior = prev.find((p) => p.id === chipId);
             // URL.revokeObjectURL is idempotent — safe inside a StrictMode-
@@ -1212,10 +1209,9 @@ export function ChatPanel() {
               return;
             }
             const active = Boolean(event.active);
-            const notice = chatCancellationNotice(
-              'failed',
-              String(event.message ?? 'unknown error'),
-            );
+            // The backend's text is for the console; the person reads GM's line.
+            console.warn('[nebula] chat stop failed:', event.message);
+            const notice = chatCancellationNotice('failed');
             applyCancellationEvent({ type: 'failed', active });
             upsertAssistant((msg) => ({
               ...msg,
@@ -1595,7 +1591,7 @@ export function ChatPanel() {
     const ws = wsRef.current;
     if (cancelStateRef.current === 'requested') return;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
-      const notice = chatCancellationNotice('failed', 'backend is disconnected.');
+      const notice = chatCancellationNotice('failed', CONNECTION_LOST_COPY);
       applyCancellationEvent({ type: 'failed', active: false });
       upsertAssistant((msg) => ({
         ...msg,
@@ -1611,10 +1607,8 @@ export function ChatPanel() {
       ws.send(JSON.stringify({ type: 'cancel' }));
       applyCancellationEvent({ type: 'request' });
     } catch (error) {
-      const notice = chatCancellationNotice(
-        'failed',
-        error instanceof Error ? error.message : String(error),
-      );
+      console.warn('[nebula] chat stop could not be sent:', error);
+      const notice = chatCancellationNotice('failed', CONNECTION_LOST_COPY);
       applyCancellationEvent({ type: 'failed', active: false });
       upsertAssistant((msg) => ({
         ...msg,

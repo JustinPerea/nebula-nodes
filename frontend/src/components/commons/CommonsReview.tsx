@@ -103,7 +103,8 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
     }
   }
   function accept(item: ReviewItem, labels: EvaluationLabels): Promise<SaveResult> {
-    if (pendingWrites.current) return Promise.resolve({ ok: false, reason: 'Wait for the grade in progress to finish.', retry: true });
+    if (pendingWrites.current) return Promise.resolve({ ok: false, reason: 'Wait for the grade in progress to finish.',
+      message: 'Wait for the grade in progress to finish.', retry: true });
     pendingWrites.current++;
     requestVersion.current++;
     setError('');
@@ -115,7 +116,7 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
         const first = value.items.findIndex((i) => !i.reviewed_at);
         if (next >= 0 || first >= 0) setIndex(next >= 0 ? next : first);
         return { ok: true };
-      } catch (e) { const failure = saveFailure(e); setError(failure.reason); return failure; }
+      } catch (e) { const failure = saveFailure(e); setError(failure.message); return failure; }
       finally { pendingWrites.current--; setSaving((current) => (current === attempt ? null : current)); }
     })();
     setSaving(attempt);

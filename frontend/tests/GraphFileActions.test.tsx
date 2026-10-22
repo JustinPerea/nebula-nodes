@@ -160,7 +160,12 @@ describe('workspace-independent graph file actions', () => {
     expect(mocks.apiFetch).not.toHaveBeenCalled();
     mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Fixture import rejected' }), { status: 400 }));
     await act(async () => { requestGraphLoad(); });
-    expect(alert).toHaveBeenCalledWith('Fixture import rejected');
+    // error-copy round 2 (GM): "Couldn't load the graph." then the reason.
+    expect(alert).toHaveBeenCalledWith("Couldn't load the graph. Fixture import rejected");
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mocks.apiFetch.mockResolvedValueOnce(new Response('', { status: 503 }));
+    await act(async () => { requestGraphLoad(); });
+    expect(alert).toHaveBeenLastCalledWith("Couldn't load the graph. Nebula didn't respond. Try again.");
     expect(useGraphStore.getState().nodes[0].id).toBe('existing');
     expect(useUIStore.getState().viewMode).toBe('create');
     expect(useGraphStore.getState().isImportingGraph).toBe(false);

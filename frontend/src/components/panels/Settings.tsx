@@ -2,6 +2,8 @@ import { Component, lazy, Suspense, useEffect, useRef, useState, type ReactNode 
 import { X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { getSettings } from '../../lib/api';
+import { failureCopy, type FailureCopy } from '../../lib/errorCopy';
+import { FailureLines } from '../failure/FailureLines';
 import { applySavedRunCostConfirm } from '../../lib/runCostConfirm';
 import { useSettingsDraftStore, readSettingsDraft, settingsWriteInFlight, type SettingsTab } from '../../store/settingsDraftStore';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
@@ -54,6 +56,9 @@ export function Settings() {
   const saved = useSettingsDraftStore((s) => s.saved);
   const tab = useSettingsDraftStore((s) => s.tab);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>(() => (saved ? 'ready' : 'loading'));
+  // What the first load's failure says (GM, error-copy round 2): the heading
+  // and the short reason, since "Try again" sits beside it.
+  const [loadFailure, setLoadFailure] = useState<FailureCopy | null>(null);
   const [retryLoad, setRetryLoad] = useState(0);
   const loadRequest = useRef(0);
 
@@ -88,9 +93,10 @@ export function Settings() {
         useUIStore.getState().setSettingsCache(loaded.apiKeys, loaded.kreaConnectionMode);
       }
       setLoadState('ready');
-    }).catch(() => {
+    }).catch((error: unknown) => {
       if (cancelled || request !== loadRequest.current) return;
       // Keep showing what we last confirmed; only a first load with nothing to show is an error.
+      setLoadFailure(failureCopy(error, { heading: "Couldn't load your API keys.", short: true }));
       setLoadState(useSettingsDraftStore.getState().saved ? 'ready' : 'error');
     });
     return () => { cancelled = true; };
@@ -137,7 +143,7 @@ export function Settings() {
       <ScrollFade className="panel__body settings__body">
         {loadState === 'error' && !saved ? (
           <div className="settings__load-error" role="alert">
-            <p>Settings couldn't load. Check that the Nebula backend is running.</p>
+            <p>{loadFailure && <FailureLines failure={loadFailure} />}</p>
             <button type="button" className="settings__button" onClick={() => setRetryLoad((value) => value + 1)}>Try again</button>
           </div>
         ) : !ready ? (

@@ -5,11 +5,15 @@ import { useUIStore } from '../store/uiStore';
 // Save and open load lib/graphFile.ts at the moment of use (preloaded on idle).
 import { graphFileModule } from '../lib/deferredChunks';
 import { canLoadGraph, canSaveGraph, GRAPH_LOAD_EVENT, GRAPH_SAVE_EVENT } from '../lib/graphFileActions';
-import { apiFetch } from '../lib/backend';
+import { apiRequest } from '../lib/apiRequest';
+import { failureMessage } from '../lib/errorCopy';
 import { computeCanvasFitPadding } from '../lib/canvasFit';
 import { providerKeyWarnings } from '../lib/providerSwitch';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { NodeData } from '../types';
+
+/** The Toolbar's "Load graph" (GM's heading pattern, error-copy round 2). */
+const LOAD_GRAPH = "Couldn't load the graph.";
 
 /** Mount once inside the app's ReactFlowProvider, independently of Canvas. */
 export function GraphFileActions() {
@@ -30,7 +34,7 @@ export function GraphFileActions() {
       await saveToFile(state.nodes, state.edges, viewport);
     } catch (error) {
       console.error('Graph save failed:', error);
-      alert(error instanceof Error ? error.message : 'Graph save failed.');
+      alert(failureMessage(error, "Couldn't save the graph."));
     } finally {
       actionInFlight.current = false;
     }
@@ -51,7 +55,7 @@ export function GraphFileActions() {
       importReserved = useGraphStore.getState().reserveGraphImport();
       if (!importReserved) return;
       // Preserve the current graph until the entire backend import succeeds.
-      const response = await apiFetch('/api/graph/import', {
+      const response = await apiRequest(LOAD_GRAPH, '/api/graph/import', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           nodes: result.nodes.map((node) => ({
@@ -67,11 +71,6 @@ export function GraphFileActions() {
           paramsVersion: result.paramsVersion,
         }),
       });
-      if (!response.ok) {
-        let detail = '';
-        try { detail = (await response.json()).detail ?? ''; } catch { /* status fallback */ }
-        throw new Error(detail || `Import failed: ${response.status}`);
-      }
       const imported = await response.json() as { nodes: Node<NodeData>[]; edges: Edge[]; warnings?: string[] };
       // Read from what the backend loaded: a node folded into another
       // (services/retired_nodes.py MERGED) arrives as its new node.
@@ -116,7 +115,7 @@ export function GraphFileActions() {
       if (notes.length > 0) alert(`Imported.\n${notes.join('\n')}`);
     } catch (error) {
       console.error('Graph import failed; existing graph preserved:', error);
-      alert(error instanceof Error ? error.message : 'Graph import failed. Existing graph was preserved.');
+      alert(failureMessage(error, LOAD_GRAPH));
     } finally {
       if (importReserved) useGraphStore.getState().releaseGraphImport();
       actionInFlight.current = false;

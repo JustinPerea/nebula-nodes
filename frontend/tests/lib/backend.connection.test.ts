@@ -44,3 +44,24 @@ describe('apiFetch with no answer', () => {
     expect((await apiFetch('/api/commons/status')).status).toBe(503);
   });
 });
+
+describe('round 2: apiRequest names its action', () => {
+  it('no answer: a ConnectionLostError under the heading, still a TypeError', async () => {
+    const backend = await import('../../src/lib/apiRequest');
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+    const error = await backend.apiRequest("Couldn't load your API keys.", '/api/settings').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ConnectionLostError);
+    expect((error as Error).message).toBe(`Couldn't load your API keys. ${LOST}`);
+  });
+
+  it('a 503: heading + GM\'s line, the status kept; an allowed status comes back as it is', async () => {
+    const backend = await import('../../src/lib/apiRequest');
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 503 })));
+    const error = await backend.apiRequest("Couldn't load your API keys.", '/api/settings').catch((e: unknown) => e);
+    expect((error as Error).message).toBe("Couldn't load your API keys. Nebula didn't respond. Try again.");
+    expect((error as { status: number }).status).toBe(503);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 404 })));
+    expect((await backend.apiRequest("Couldn't load the board.", '/api/moodboards/x', undefined, { allow: [404] })).status).toBe(404);
+  });
+});

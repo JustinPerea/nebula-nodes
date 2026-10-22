@@ -11,6 +11,7 @@ import { Download, X } from 'lucide-react';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { AssetByteLimitError, readBoundedAssetResponse } from '../../lib/boundedAsset';
 import { downloadWorldAsset, worldAssetFilename } from '../../lib/worldDownload';
+import { ConnectionLostError, oneLine, requestError, requestSucceeded } from '../../lib/errorCopy';
 import { isSafeWorldUrl } from '../../lib/worldValue';
 import { isSplatExport, meshFormatLabel } from '../../lib/meshFormat';
 
@@ -164,15 +165,26 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
         return;
       }
 
+      // GM, error-copy round 2: "Couldn't load the 3D preview." then the
+      // reason; the status stays in the console.
+      const heading = "Couldn't load the 3D preview.";
+      const failed = (reason: string) => new Error(oneLine({ heading, reason }));
       try {
-        if (!isSafeWorldUrl(src)) throw new Error('The mesh URL is not safe to preview.');
-        const response = await fetch(backendAssetUrlSync(src), {
-          cache: 'no-store',
-          signal: controller.signal,
-        });
-        if (!response.ok) throw new Error(`The mesh server returned HTTP ${response.status}.`);
+        if (!isSafeWorldUrl(src)) throw failed('The mesh URL is not safe to preview.');
+        let response: Response;
+        try {
+          response = await fetch(backendAssetUrlSync(src), {
+            cache: 'no-store',
+            signal: controller.signal,
+          });
+        } catch (error) {
+          if (error instanceof DOMException && error.name === 'AbortError') throw error;
+          throw new ConnectionLostError(error, { heading });
+        }
+        if (!response.ok) throw await requestError(heading, response);
+        requestSucceeded(heading);
         if (!isLikelyMeshResponse(src, response.headers.get('content-type'))) {
-          throw new Error('The mesh URL returned an unsupported file type.');
+          throw failed('The mesh URL returned an unsupported file type.');
         }
         const bytes = await readBoundedAssetResponse(response, MESH_PREVIEW_MAX_BYTES);
         const contentType = response.headers.get('content-type') || 'model/gltf-binary';
@@ -186,7 +198,7 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
             src,
             status: 'error',
             errorMessage: error instanceof AssetByteLimitError
-              ? 'This model is too large for a safe interactive preview. Download it instead.'
+              ? oneLine({ heading, reason: 'This model is too large for a safe interactive preview. Download it instead.' })
               : error instanceof Error ? error.message : 'Interactive preview unavailable.',
           });
         }
@@ -246,11 +258,12 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
     setDownloadError(null);
     try {
       await downloadWorldAsset(src, meshDownloadFilename(src), {
+        heading: "Couldn't download the 3D model.",
         tooLargeMessage:
           'This mesh is too large for a safe in-browser download. Use the local Nebula output folder instead.',
       });
     } catch (error) {
-      setDownloadError(error instanceof Error ? error.message : 'The mesh could not be downloaded.');
+      setDownloadError(error instanceof Error ? error.message : "Couldn't download the 3D model.");
     }
   }, [src]);
 

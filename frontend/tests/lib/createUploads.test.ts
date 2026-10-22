@@ -82,7 +82,8 @@ describe('Create reference ownership', () => {
     attachCreateReferences(session, [image()]);
     await waitFor(() => expect(draft().uploads[0].status).toBe('error'));
     const failed = draft().uploads[0];
-    expect(failed.error).toBe('Upload unavailable');
+    // error-copy round 2 (GM): the file and GM's line for a 503, whatever its body said.
+    expect(failed.error).toBe("Couldn't upload x.png. Nebula didn't respond. Try again.");
     expect(canRetryCreateReference(session, failed.id)).toBe(true);
     fetchMock.mockResolvedValueOnce(response());
     retryCreateReference(session, failed.id);

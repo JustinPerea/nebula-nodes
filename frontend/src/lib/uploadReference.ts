@@ -1,4 +1,5 @@
-import { apiFetch, backendAssetUrlSync } from './backend';
+import { backendAssetUrlSync } from './backend';
+import { apiRequest } from './apiRequest';
 
 export interface UploadedReference {
   filePath: string;   // absolute on-disk path — safe to feed image-input
@@ -16,11 +17,7 @@ export async function uploadReference(file: File, signal?: AbortSignal): Promise
   }
   const form = new FormData();
   form.append('file', file);
-  const res = await apiFetch('/api/uploads', { method: 'POST', body: form, signal });
-  if (!res.ok) {
-    const body = await res.json().catch(() => null) as { detail?: unknown } | null;
-    throw new Error(typeof body?.detail === 'string' ? body.detail : `Upload failed (${res.status}). Please try again.`);
-  }
+  const res = await apiRequest(`Couldn't upload ${file.name || 'the image'}.`, '/api/uploads', { method: 'POST', body: form, signal });
   const data = (await res.json()) as { filePath?: unknown; url?: unknown };
   if (typeof data.filePath !== 'string' || !data.filePath || typeof data.url !== 'string' || !data.url) {
     throw new Error('The upload returned no image reference. Please try again.');

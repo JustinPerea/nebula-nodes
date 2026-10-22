@@ -592,8 +592,10 @@ describe('graphStore', () => {
 
     expect(nodeId).toBeNull();
     expect(useGraphStore.getState().nodes).toHaveLength(0);
+    // error-copy round 2 (GM): a 5xx says Nebula didn't respond, whatever its
+    // body said; the backend's text stays in the console.
     expect(alertMock).toHaveBeenCalledWith(
-      expect.stringContaining('Paid-start safety journal unavailable'),
+      "Couldn't add World Labs Environment. Nebula didn't respond. Try again.",
     );
   });
 
@@ -607,8 +609,9 @@ describe('graphStore', () => {
     expect(nodeId).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(useGraphStore.getState().nodes).toHaveLength(0);
+    // error-copy round 2 (GM): the backend's reason, never the status.
     expect(alertMock).toHaveBeenCalledWith(
-      expect.stringContaining('Backend rejected graph clear (HTTP 409)'),
+      "Couldn't add Text Input. Graph has protected provider state",
     );
   });
 

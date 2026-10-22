@@ -9,11 +9,14 @@ import {
   fetchMoodboards,
   keepMoodboardBriefOverride,
   lookupStoredAsset,
+  SAVE_BOARD,
   updateMoodboard,
 } from '../../lib/api';
 import { RecentlyDeletedAssets, UndoDeleteToast } from '../asset-trash/AssetTrash';
 import { useAssetDelete } from '../../hooks/useAssetDelete';
-import { apiFetch } from '../../lib/backend';
+import { apiRequest } from '../../lib/apiRequest';
+import { failureCopy, failureMessage } from '../../lib/errorCopy';
+import { FailureLines } from '../failure/FailureLines';
 import { storedImageView } from '../../lib/storedImage';
 import { OutsideImageNote } from '../OutsideImageNote';
 import { WorkspaceHeader } from '../WorkspaceHeader';
@@ -244,7 +247,7 @@ export function MoodboardStudioView() {
   const exitMoodboardEditor = useUIStore((s) => s.exitMoodboardEditor);
 
   const studio = useAssetStudioDraft('moodboard', moodboardEditorScope, moodboardEditorId, emptyDraft);
-  const { draft: storedDraft, savedId, saveState, saveError, loadError, loaded,
+  const { draft: storedDraft, savedId, saveState, saveError, saveErrorRetry, loadError, loaded,
     dirty, pendingSaveId, pendingAnalysisId, key, revision, epoch, projectId, projectReady, verifyProject, setDraft, initialize, patch } = studio;
   const draft = withBriefFields(storedDraft);
   const loading = !loaded;
@@ -337,7 +340,7 @@ export function MoodboardStudioView() {
         rememberBrief(found);
         initialize(moodboardToDraft(found), found.id, found.thumbnail);
       }).catch((err) => {
-        if (current()) patch({ loadError: err instanceof Error ? err.message : 'Failed to load Moodboard.' });
+        if (current()) patch({ loadError: failureCopy(err, { heading: "Couldn't load the board." }) });
       });
     }
     return () => { cancelled = true; };
@@ -537,7 +540,7 @@ export function MoodboardStudioView() {
       if (announced.current > (draftNow()?.version ?? 0)) void follow();
       return id;
     } catch (err) {
-      store.failSave(key, attempt.id, err instanceof Error ? err.message : 'Save failed. Retry?');
+      store.failSave(key, attempt.id, failureCopy(err, { heading: SAVE_BOARD }));
       return null;
     }
   }, [key, epoch, isCurrent, verifyProject, enterMoodboardEditor, moveDraft, draftNow, follow, forgetUnsentSteps, fieldSteps]);
@@ -621,11 +624,8 @@ export function MoodboardStudioView() {
   const uploadFiles = (files: File[]) => Promise.all(files.map((file) => {
     const fd = new FormData();
     fd.append('file', file);
-    return apiFetch('/api/uploads', { method: 'POST', body: fd })
-      .then((r) => {
-        if (!r.ok) throw new Error(`Upload failed: ${r.status}`);
-        return r.json();
-      })
+    return apiRequest(`Couldn't upload ${file.name || 'the image'}.`, '/api/uploads', { method: 'POST', body: fd })
+      .then((r) => r.json())
       .then((data: { url: string }) => data.url);
   }));
 
@@ -634,7 +634,7 @@ export function MoodboardStudioView() {
     setUploading(true);
     uploadFiles(Array.from(files))
       .then((urls) => addImageUrls(urls.filter(Boolean)))
-      .catch(() => { if (isCurrent()) patch({ saveError: 'Upload failed. Retry.' }); })
+      .catch((err: unknown) => { if (isCurrent()) patch({ saveError: failureCopy(err, { heading: "Couldn't upload the image." }) }); })
       .finally(() => { if (isCurrent()) setUploading(false); });
   };
 
@@ -662,7 +662,7 @@ export function MoodboardStudioView() {
         commitOps(ops, placed.length === 1 ? `Added #${count + 1}` : `Added ${placed.length} references`, {
           now: true, aspects: Object.fromEntries(placed.map((item) => [item.url, item.aspect])) });
       })
-      .catch(() => { if (isCurrent()) patch({ saveError: 'Upload failed. Retry.' }); })
+      .catch((err: unknown) => { if (isCurrent()) patch({ saveError: failureCopy(err, { heading: "Couldn't upload the image." }) }); })
       .finally(() => { if (isCurrent()) setUploading(false); });
   };
 
@@ -805,7 +805,13 @@ export function MoodboardStudioView() {
         action: direction === 'undo' && next.length ? { label: 'Redo', run: () => { void runUndo('redo'); } } : undefined });
     } catch (err) {
       undoStore.restoreTaken(key, step, from);
-      store.failSave(key, attempt.id, err instanceof Error ? err.message : `${direction === 'undo' ? 'Undo' : 'Redo'} failed.`);
+      // The step names its own action (the edit request's heading is the
+      // board save's), and the toolbar's Retry saves, it doesn't undo again:
+      // GM's full line, not the short one (WRAP applies to a real retry).
+      store.failSave(key, attempt.id, {
+        ...failureCopy(err),
+        heading: direction === 'undo' ? "Couldn't undo the change." : "Couldn't redo the change.",
+      }, { retry: false });
     }
   };
 
@@ -885,7 +891,7 @@ export function MoodboardStudioView() {
       if (ownsAnalysis()) store.patch(targetKey, { draft: moodboardToDraft(updated), savedId: updated.id,
         thumbnail: updated.thumbnail, dirty: false, loaded: true, saveState: 'saved' });
     } catch (err) {
-      if (ownsAnalysis()) store.patch(targetKey, { saveError: err instanceof Error ? err.message : 'Analyze failed.', saveState: 'error' });
+      if (ownsAnalysis()) store.patch(targetKey, { saveError: failureCopy(err, { heading: "Couldn't analyze the board." }), saveState: 'error' });
     } finally {
       store.clearAnalysis(targetKey, attempt.id);
     }
@@ -921,7 +927,7 @@ export function MoodboardStudioView() {
       if (isCurrent() && !useAssetStudioDraftStore.getState().entries[key]?.pendingSaveId) moveDraft(kept);
       else rememberBrief(kept);
     } catch (err) {
-      if (isCurrent()) patch({ saveError: err instanceof Error ? err.message : 'Keep failed.' });
+      if (isCurrent()) patch({ saveError: failureCopy(err, { heading: "Couldn't keep your brief." }) });
     }
   };
 
@@ -1046,7 +1052,7 @@ export function MoodboardStudioView() {
 
   const loadingBlock = (
     <div className="moodboard-studio-view__loading">
-      {loadError ? <div role="alert">{loadError}</div> : 'Loading Moodboard...'}
+      {loadError ? <div role="alert"><FailureLines failure={loadError} retry /></div> : 'Loading Moodboard...'}
       {loadError && <button type="button" className="moodboard-studio-toolbar__button"
         onClick={() => { if (!projectReady) void verifyProject(); else patch({ loadError: null, revision: revision + 1 }); }}>Retry loading</button>}
     </div>
@@ -1054,13 +1060,16 @@ export function MoodboardStudioView() {
 
   const notices = (
     <>
-      {loadError && <div className="moodboard-studio__notice moodboard-studio__notice--warn">{loadError}</div>}
+      {loadError && <div className="moodboard-studio__notice moodboard-studio__notice--warn"><FailureLines failure={loadError} /></div>}
       {deleting.error && !deleting.lastDeleted && (
-        <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert">{deleting.error}</div>
+        <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert"><FailureLines failure={deleting.error} /></div>
       )}
-      {saveError && <div className="moodboard-studio__notice moodboard-studio__notice--error">{saveError}</div>}
+      {/* The toolbar's Retry shows with a failed save: the reason is GM's short line (WRAP rule). */}
+      {saveError && <div className="moodboard-studio__notice moodboard-studio__notice--error">
+        {/* Short line only beside a Retry that redoes it: a save's own failure. */}
+        <FailureLines failure={saveError} retry={saveState === 'error' && saveErrorRetry === true} /></div>}
       {moving.error && (
-        <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert">{moving.error}</div>
+        <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert"><FailureLines failure={moving.error} /></div>
       )}
     </>
   );
@@ -1356,7 +1365,7 @@ function MoodboardRail({
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load.');
+          setError(failureMessage(err, "Couldn't load the boards."));
           setListing({ for: listKey, items: [] });
         }
       })

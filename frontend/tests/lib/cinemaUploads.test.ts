@@ -104,7 +104,7 @@ describe('Cinema reference ownership', () => {
   it('keeps per-file HTTP errors actionable, retains successful references and retries explicitly', async () => {
     fetchMock.mockResolvedValueOnce({ ok: false, status: 415, json: async () => ({ detail: 'Invalid image bytes' }) }).mockResolvedValueOnce(response());
     attachCinemaReferences(nodeId, 'a', [image('bad.png'), image('good.png')]); await waitFor(() => expect(uploads()).toHaveLength(1));
-    expect(uploads()[0]).toMatchObject({ name: 'bad.png', status: 'error', error: 'Invalid image bytes', canRetry: true });
+    expect(uploads()[0]).toMatchObject({ name: 'bad.png', status: 'error', error: "Couldn't upload bad.png. Invalid image bytes", canRetry: true }); // error-copy round 2 (GM)
     expect(current().shots[0].refImageUrls).toEqual(['/api/outputs/uploaded.png']); expect(getCinemaUploadIssue(nodeId, 'a')).toContain('Retry or remove');
     fetchMock.mockResolvedValueOnce(response()); retryCinemaReferenceUpload(uploads()[0].id); expect(uploads()[0].status).toBe('uploading');
     await waitFor(() => expect(uploads()).toEqual([])); expect(current().shots[0].refImageUrls).toEqual(['/api/outputs/uploaded.png']);

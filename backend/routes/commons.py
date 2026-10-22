@@ -7,8 +7,10 @@ from `resolve_actor` (§4); response text for agents is wrapped as untrusted.
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
 import os
+import re
 import sqlite3
 import tempfile
 import zipfile
@@ -22,7 +24,7 @@ from starlette.background import BackgroundTask
 
 from commons import activation
 from commons import actors as actors_mod
-from commons import evaluation, review, borrow, folders, intake, media, records, runtime, search, untrusted
+from commons import evaluation, review, borrow, folders, intake, media, person_copy, records, runtime, search, untrusted
 from commons.effective import effective
 from commons.reader import MODEL_ID, PROMPT_VERSION
 from commons.store import _BLOB_KEY, CommonsStore
@@ -35,6 +37,7 @@ def activation_dep() -> None:
 
 router = APIRouter(prefix="/api/commons", tags=["commons"],
                    dependencies=[Depends(activation_dep)])
+logger = logging.getLogger(__name__)
 
 TEXT_KEYS = {"summary", "why", "text", "page_title", "subject", "composition_notes", "note", "label",
              "collection", "name", "reason", "also_in", "collection_name", "original_name"}
@@ -74,6 +77,34 @@ def out(actor: actors_mod.Actor, payload: Any) -> Any:
     return payload if actor.is_human else untrusted.wrap_fields(payload, TEXT_KEYS)
 
 
+_URL = re.compile(r"\b([a-zA-Z][a-zA-Z0-9+.-]*://)(?:[^\s/?#@]*@)?([^\s?#]*)(?:\?[^\s#]*)?(?:#\S*)?")
+
+
+def log_safe(text: str) -> str:
+    """`text` for the terminal: every URL without its sign-in part, query or
+    fragment (a signed link the person pasted carries its key there)."""
+    return _URL.sub(lambda m: m.group(1) + m.group(2), text)
+
+
+def log_refusal(message: str, *args: Any) -> None:
+    """Where the specific text the person didn't read goes (GM: "Log
+    str(exc)"). At WARNING: the backend configures no logging, so this
+    logger inherits the root's WARNING and an INFO line would be dropped."""
+    logger.warning(message, *(log_safe(str(arg)) for arg in args))
+
+
+def refuse(actor: actors_mod.Actor | None, status: int, specific: str, person: str, route: str) -> HTTPException:
+    """A refusal said twice (GM - Design, error-copy round 2: "People get the
+    written line and agents keep the specific detail"). An agent gets the
+    specific text it gets today, to fix its call; the person gets `person`,
+    written copy, and the specific text goes to the log (log_refusal). `actor`
+    None is a human-only route (Depends(human_dep))."""
+    if actor is not None and not actor.is_human:
+        return HTTPException(status_code=status, detail=specific)
+    log_refusal("commons %s refused (the person was told written copy): %s", route, specific)
+    return HTTPException(status_code=status, detail=person)
+
+
 def _effective_brand(actor, brand: str | None) -> str | None:
     # Only Nebula-issued workspace bindings carry authority. External clients
     # retain their existing explicit-brand behavior.
@@ -95,7 +126,7 @@ async def _read_capped(upload: UploadFile) -> bytes:
     """Read an upload without holding more than the largest accepted size (+1 byte) in memory."""
     data = await upload.read(media.VIDEO_CAP + 1)
     if len(data) > media.VIDEO_CAP:
-        raise intake.IntakeError("file exceeds the size cap")
+        raise intake.IntakeError("file exceeds the size cap", "too_large")
     return data
 
 
@@ -184,7 +215,7 @@ def do_search(body: SearchIn, actor=Depends(actor_dep), store=Depends(store_dep)
     try:
         filters = search.Filters.from_dict(body.filters)
     except (ValueError, KeyError, TypeError) as exc:
-        raise HTTPException(status_code=422, detail=f"bad filters: {exc}") from exc
+        raise refuse(actor, 422, f"bad filters: {exc}", person_copy.BAD_FILTERS, "search") from exc
     rows = search.search(store, query=body.query, filters=filters, brand=_effective_brand(actor, body.brand), limit=body.limit,
                          all_scopes=body.all_scopes)
     return out(actor, {"results": rows})
@@ -298,7 +329,13 @@ async def intake_files(collection_id: str = Form(...), role: str = Form("neutral
             results.append({"filename": upload.filename, "ok": True, "asset_id": res.asset["id"],
                             "membership_id": res.membership["id"]})
         except intake.IntakeError as exc:
-            results.append({"filename": upload.filename, "ok": False, "error": str(exc)})
+            # `person` is the line the person's UI shows under "Couldn't
+            # upload {filename}." (person_copy.INTAKE, the one table of these
+            # words); `reason` is its machine code; `error` stays the
+            # specific text, never shown to the person.
+            log_refusal("commons upload of one file refused (%s): %s", exc.code, exc)
+            results.append({"filename": upload.filename, "ok": False, "error": str(exc), "reason": exc.code,
+                            "person": person_copy.INTAKE.get(exc.code, person_copy.FALLBACK)})
     return {"results": results}
 
 
@@ -318,7 +355,7 @@ async def intake_url(body: UrlIn, actor=Depends(human_dep), store=Depends(store_
         res = await intake.add_url(store, body.url, collection_id=body.collection_id, actor=actor.id,
                                    role=body.role, why=body.why, page_url=body.page_url, page_title=body.page_title)
     except intake.IntakeError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise refuse(None, 422, str(exc), person_copy.INTAKE.get(exc.code, person_copy.FALLBACK), "intake/url") from exc
     if isinstance(res, dict):
         return res
     return {"kind": "asset", "asset_id": res.asset["id"], "membership_id": res.membership["id"]}
@@ -401,7 +438,7 @@ async def link_folder(body: FolderIn, actor=Depends(human_dep), store=Depends(st
     try:
         link = await asyncio.to_thread(folders.link_folder, store, body.path, actor=actor.id, ignores=body.ignores)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise refuse(None, 422, str(exc), person_copy.person_line(exc), "folders") from exc
     runtime.spawn(folders.scan_and_fetch(store, link["id"], downloader=runtime.get_downloader()))
     return link
 
@@ -488,7 +525,7 @@ def add_correction(asset_id: str, body: CorrectionIn, actor=Depends(human_dep), 
         row = records.add_correction(store, asset_id, field_path=body.field_path, op=body.op, value=body.value,
                                      actor=actor.id, reason=body.reason)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise refuse(None, 422, str(exc), person_copy.person_line(exc), "corrections") from exc
     _curated("corrected", {"assetId": asset_id, "fieldPath": body.field_path, "op": body.op}, actor)
     return row
 
@@ -512,7 +549,7 @@ def add_region(asset_id: str, body: RegionIn, actor=Depends(human_dep), store=De
     try:
         region = records.add_region(store, asset_id, box=body.box, label=body.label, actor=actor.id)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise refuse(None, 422, str(exc), person_copy.person_line(exc), "regions") from exc
     _curated("region", {"assetId": asset_id, "regionId": region["id"], "change": ["added"]}, actor)
     return region
 
@@ -525,7 +562,7 @@ def patch_region(region_id: str, body: RegionPatch, actor=Depends(human_dep), st
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="region not found") from exc
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise refuse(None, 422, str(exc), person_copy.person_line(exc), "regions") from exc
     _curated("region", {"assetId": region["asset"], "regionId": region_id, "change": sorted(fields)}, actor)
     return region
 
@@ -581,7 +618,7 @@ def comment(body: CommentIn, actor=Depends(actor_dep), store=Depends(store_dep))
         return out(actor, records.add_comment(store, candidates[0]["id"], text=body.text, actor=actor.id,
                                               region_id=body.region_id))
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise refuse(actor, 422, str(exc), person_copy.person_line(exc), "comments") from exc
 
 
 class BorrowIn(BaseModel):
@@ -695,9 +732,9 @@ async def patch_settings(request: Request, actor=Depends(human_dep), store=Depen
         raise HTTPException(status_code=422, detail="expected an object of settings")
     for key, value in body.items():
         if key not in SETTING_DEFAULTS:
-            raise HTTPException(status_code=422, detail=f"unknown setting {key}")
+            raise refuse(None, 422, f"unknown setting {key}", person_copy.UNKNOWN_SETTING, "settings")
         if not _valid_setting(key, value):
-            raise HTTPException(status_code=422, detail=f"bad value for {key}")
+            raise refuse(None, 422, f"bad value for {key}", person_copy.BAD_SETTING_VALUE, "settings")
     for key, value in body.items():
         await asyncio.to_thread(store.set_setting, key, value)
     return await asyncio.to_thread(_settings, store)
@@ -781,11 +818,21 @@ class EvaluationLabelsIn(EvaluationRevisionIn):
     labels: dict
 
 
+def _evaluation_refused(exc: Exception, route: str) -> HTTPException:
+    """Labeling is the person's only (human_dep). A written EvaluationError is
+    the line; a technical one says its `person` line; an OSError says GM's
+    pattern line for an unreadable folder. Raw text goes to the log."""
+    if isinstance(exc, evaluation.EvaluationError) and not exc.person:
+        return HTTPException(status_code=409, detail=str(exc))
+    fallback = person_copy.FOLDER_UNREADABLE if isinstance(exc, OSError) else person_copy.FALLBACK
+    return refuse(None, 409, str(exc), person_copy.person_line(exc, fallback), route)
+
+
 def _eval_call(fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs)
     except evaluation.EvaluationError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise _evaluation_refused(exc, "evaluation") from exc
 
 
 @router.get('/evaluation')
@@ -801,7 +848,7 @@ async def evaluation_prepare(body: EvaluationPrepareIn, response: Response,
     try:
         return await evaluation.prepare(store, body.path, downloader=runtime.get_downloader())
     except (evaluation.EvaluationError, OSError) as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise _evaluation_refused(exc, "evaluation/prepare") from exc
 
 
 @router.get('/evaluation/items/{position}/image')
@@ -853,7 +900,7 @@ async def review_propose(position: int, response: Response, actor=Depends(human_
     try:
         return await review.propose(store, position)
     except evaluation.EvaluationError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise _evaluation_refused(exc, "review/propose") from exc
 
 
 @router.put('/review/items/{position}', dependencies=[Depends(json_body)])

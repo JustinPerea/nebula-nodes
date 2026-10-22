@@ -2,7 +2,8 @@ import type { Edge, Node, Viewport } from '@xyflow/react';
 import type { NodeData } from '../types';
 import type { RunRecord } from './runHistory';
 import type { CreateDraft } from '../store/createDraftStore';
-import { apiFetch } from './backend';
+import { apiRequest } from './apiRequest';
+import { RequestFailedError } from './errorCopy';
 
 /** The card's picture (backend services/project_cover.py): a pinned image,
  * the newest made image, or up to four input references for a mosaic. */
@@ -67,51 +68,50 @@ export interface ProjectDeletion {
   activeProjectId: string | null; workspaceRevision: string;
 }
 
-export class ProjectRequestError extends Error {
-  readonly status: number;
-  constructor(message: string, status: number) { super(message); this.status = status; }
-}
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await apiFetch(path, init);
-  if (!response.ok) {
-    let detail = '';
-    try {
-      const body = await response.json() as { detail?: unknown };
-      if (typeof body.detail === 'string') detail = body.detail;
-    } catch { /* Use the readable fallback. */ }
-    throw new ProjectRequestError(detail || `Project request failed (${response.status}).`, response.status);
+/** A refused project call: its heading names the call (GM, error-copy round
+ * 2), its reason is the backend's or GM's line for the status, and `status`
+ * stays for the store's retry and conflict rules. */
+export class ProjectRequestError extends RequestFailedError {
+  constructor(reason: string, status: number, options: { heading?: string; detail?: unknown } = {}) {
+    super(options.heading ?? '', status, { reason, detail: options.detail });
+    this.name = 'ProjectRequestError';
   }
+}
+const asProjectError = (error: RequestFailedError) =>
+  new ProjectRequestError(error.reason, error.status, { heading: error.heading, detail: error.detail });
+async function request<T>(heading: string, path: string, init?: RequestInit): Promise<T> {
+  const response = await apiRequest(heading, path, init, { as: asProjectError });
   return response.json() as Promise<T>;
 }
 const json = (method: string, body: unknown): RequestInit => ({
   method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
 });
-export const listProjects = () => request<ProjectList>('/api/projects');
-export const getProject = (id: string) => request<SavedProject>(`/api/projects/${encodeURIComponent(id)}`);
+export const listProjects = () => request<ProjectList>("Couldn't load your projects.", '/api/projects');
+export const getProject = (id: string) => request<SavedProject>("Couldn't load the project.", `/api/projects/${encodeURIComponent(id)}`);
 export const createProject = (name: string | undefined, workspaceRevision: string) =>
-  request<ProjectActivation>('/api/projects', json('POST', { name, workspaceRevision }));
+  request<ProjectActivation>("Couldn't create the project.", '/api/projects', json('POST', { name, workspaceRevision }));
 export const openProject = (id: string, workspaceRevision: string) =>
-  request<ProjectActivation>(`/api/projects/${encodeURIComponent(id)}/open`, json('POST', { workspaceRevision }));
+  request<ProjectActivation>("Couldn't open the project.", `/api/projects/${encodeURIComponent(id)}/open`, json('POST', { workspaceRevision }));
 export const saveProject = (id: string, snapshot: ProjectSnapshot, workspaceRevision: string) =>
-  request<ProjectActivation>(`/api/projects/${encodeURIComponent(id)}`, json('PUT', { snapshot, workspaceRevision })).then((result) => result.project);
+  request<ProjectActivation>("Couldn't save the project.", `/api/projects/${encodeURIComponent(id)}`, json('PUT', { snapshot, workspaceRevision })).then((result) => result.project);
 export const renameProject = (id: string, name: string) =>
-  request<ProjectActivation>(`/api/projects/${encodeURIComponent(id)}`, json('PUT', { name })).then((result) => result.project);
+  request<ProjectActivation>("Couldn't rename the project.", `/api/projects/${encodeURIComponent(id)}`, json('PUT', { name })).then((result) => result.project);
 export const deleteProject = (id: string, workspaceRevision: string) =>
-  request<ProjectDeletion>(`/api/projects/${encodeURIComponent(id)}`, json('DELETE', { workspaceRevision }));
+  request<ProjectDeletion>("Couldn't delete the project.", `/api/projects/${encodeURIComponent(id)}`, json('DELETE', { workspaceRevision }));
 export const restoreProject = (id: string) =>
-  request<{ project: ProjectSummary; workspaceRevision: string }>(`/api/projects/${encodeURIComponent(id)}/restore`, { method: 'POST' }).then((result) => result.project);
+  request<{ project: ProjectSummary; workspaceRevision: string }>("Couldn't restore the project.", `/api/projects/${encodeURIComponent(id)}/restore`, { method: 'POST' }).then((result) => result.project);
 export const purgeTrashedProject = (id: string) =>
-  request<{ trash: TrashedProject[] }>(`/api/projects/trash/${encodeURIComponent(id)}`, { method: 'DELETE' }).then((result) => result.trash);
+  request<{ trash: TrashedProject[] }>("Couldn't delete the project for good.", `/api/projects/trash/${encodeURIComponent(id)}`, { method: 'DELETE' }).then((result) => result.trash);
 /** Deletes for good only `ids` (what the list showed), so a project an agent
  * deleted after it loaded stays restorable. */
 export const emptyProjectTrash = (ids: string[]) =>
-  request<{ trash: TrashedProject[] }>('/api/projects/trash/empty', json('POST', { ids })).then((result) => result.trash);
+  request<{ trash: TrashedProject[] }>("Couldn't empty Recently deleted.", '/api/projects/trash/empty', json('POST', { ids })).then((result) => result.trash);
 export const listCoverChoices = (id: string) =>
-  request<CoverChoices>(`/api/projects/${encodeURIComponent(id)}/covers`);
+  request<CoverChoices>("Couldn't load the cover choices.", `/api/projects/${encodeURIComponent(id)}/covers`);
 /** Pin one of the project's images as its cover, or `null` for automatic. */
 export const pinProjectCover = (id: string, url: string | null) =>
-  request<{ project: ProjectSummary }>(`/api/projects/${encodeURIComponent(id)}/cover`, json('PUT', { url })).then((result) => result.project);
+  request<{ project: ProjectSummary }>("Couldn't set the cover.", `/api/projects/${encodeURIComponent(id)}/cover`, json('PUT', { url })).then((result) => result.project);
 /** `paramsVersion`: the one-time param upgrades the tab's canvas had when it
  * loaded (lib/savedParamsUpgrades.ts). The backend upgrades the copy from it. */
 export const recoverProject = (sourceProjectId: string, snapshot: ProjectSnapshot, recoveryId: string, paramsVersion: number) =>
-  request<ProjectActivation>('/api/projects/recover', json('POST', { sourceProjectId, snapshot, recoveryId, paramsVersion })).then((result) => result.project);
+  request<ProjectActivation>("Couldn't recover the project.", '/api/projects/recover', json('POST', { sourceProjectId, snapshot, recoveryId, paramsVersion })).then((result) => result.project);

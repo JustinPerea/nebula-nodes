@@ -13,6 +13,7 @@ from typing import Callable
 
 from commons import intake, media
 from commons.icloud import SF_DATALESS, DatalessDownloader, is_dataless
+from commons.person_copy import Refused
 
 MAX_FILES = 5000
 MAX_DEPTH = 6
@@ -92,10 +93,10 @@ def walk(root: Path, ignores: list[str], *, stat_fn: Callable | None = None) -> 
 def link_folder(store, path: str, *, actor: str, ignores: list[str] | None = None) -> dict:
     raw = Path(path).expanduser()
     if raw.is_symlink():
-        raise ValueError("linked folder may not be a symlink")
+        raise Refused("linked folder may not be a symlink", "Choose a real folder, not a symlink.")
     real = raw.resolve()
     if not real.is_dir():
-        raise ValueError(f"not a folder: {path}")
+        raise Refused(f"not a folder: {path}", "That isn't a folder. Check the path and try again.")
     for link in store.list_folder_links():
         if link["path"] == str(real):
             return link

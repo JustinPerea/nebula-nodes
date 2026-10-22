@@ -3,6 +3,9 @@ import { deleteCharacter, deleteMoodboard } from '../lib/api';
 import { deletePreset } from '../lib/createPresets';
 import { restoreTrashed } from '../lib/trash';
 import type { AssetScope } from '../store/uiStore';
+import { failureCopy, type FailureCopy } from '../lib/errorCopy';
+
+const NOUN = { moodboard: 'board', character: 'character', style: 'style' } as const;
 
 export interface DeletedAsset {
   id: string;
@@ -21,7 +24,8 @@ export interface DeletedAsset {
 export function useAssetDelete(kind: 'moodboard' | 'character' | 'style') {
   const [lastDeleted, setLastDeleted] = useState<DeletedAsset | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  /** A failure as heading + reason (a Studio's two-line notice; the toast shows it as one line). */
+  const [error, setError] = useState<FailureCopy | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const remove = useCallback(async (asset: DeletedAsset): Promise<boolean> => {
@@ -33,7 +37,7 @@ export function useAssetDelete(kind: 'moodboard' | 'character' | 'style') {
       setLastDeleted(asset);
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Delete failed.');
+      setError(failureCopy(err, { heading: `Couldn't delete the ${NOUN[kind]}.` }));
       return false;
     } finally {
       setBusy(false);
@@ -51,7 +55,7 @@ export function useAssetDelete(kind: 'moodboard' | 'character' | 'style') {
       setLastDeleted(null);
       return asset;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Undo failed.');
+      setError(failureCopy(err, { heading: `Couldn't restore the ${NOUN[kind]}.` }));
       return null;
     } finally {
       setBusy(false);

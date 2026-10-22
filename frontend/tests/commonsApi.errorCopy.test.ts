@@ -35,16 +35,19 @@ describe('Commons request failures carry copy and keep their status', () => {
     const original = new TypeError('Failed to fetch');
     answer = () => { throw original; };
     const error = await failure(() => commonsEvaluationApi.labels(0, 3, {} as never));
-    expect(error.message).toBe(LOST);
+    expect(error.reason).toBe(LOST);
     expect(error.status).toBe(0);
     expect((error.cause as Error).cause).toBe(original);
-    expect(saveFailure(error)).toEqual({ ok: false, reason: LOST, retry: true });
+    // Round 2: the popover's short line (Save and leave is the retry), the banner's one line.
+    expect(saveFailure(error)).toEqual({ ok: false, reason: "Couldn't reach Nebula. Check your connection.",
+      message: `Couldn't save your labels. ${LOST}`, retry: true });
+    expect(error.heading).toBe("Couldn't save your labels.");
   });
 
   it.each([408, 429, 500, 502, 503, 504])('HTTP %i: the no-response line, the status, retry', async (status) => {
     answer = () => json({ detail: 'upstream exploded' }, status);
     const error = await failure(() => commonsApi.status());
-    expect(error.message).toBe(NO_ANSWER);
+    expect(error.reason).toBe(NO_ANSWER);
     expect(error.status).toBe(status);
     expect(error.detail).toBe('upstream exploded');
     expect(saveFailure(error).retry).toBe(true);
@@ -52,14 +55,15 @@ describe('Commons request failures carry copy and keep their status', () => {
 
   it('a 503 with no JSON body no longer says "Commons request failed (503)"', async () => {
     answer = () => new Response('Service Unavailable', { status: 503 });
-    expect((await failure(() => commonsApi.status())).message).toBe(NO_ANSWER);
+    expect((await failure(() => commonsApi.status())).reason).toBe(NO_ANSWER);
   });
 
   it('a 409 keeps the backend\'s words and is not retried', async () => {
     answer = () => json({ detail: 'Labels changed in another window. Reload before saving.' }, 409);
     const error = await failure(() => commonsEvaluationApi.labels(0, 3, {} as never));
-    expect(error.message).toBe('Labels changed in another window. Reload before saving.');
-    expect(saveFailure(error)).toEqual({ ok: false, reason: 'Labels changed in another window. Reload before saving.', retry: false });
+    expect(error.reason).toBe('Labels changed in another window. Reload before saving.');
+    expect(saveFailure(error)).toEqual({ ok: false, reason: 'Labels changed in another window. Reload before saving.',
+      message: "Couldn't save your labels. Labels changed in another window. Reload before saving.", retry: false });
   });
 
   it.each([
@@ -68,7 +72,7 @@ describe('Commons request failures carry copy and keep their status', () => {
   ])('a 4xx with %s says a written line, never the status or the raw detail', async (_name, make) => {
     answer = make;
     const error = await failure(() => commonsApi.status());
-    expect(error.message).toBe("That didn't work. Try again, or reload if it keeps happening.");
+    expect(error.reason).toBe("That didn't work. Try again, or reload if it keeps happening.");
     expect(error.message).not.toMatch(/\d{3}|field required|loc/);
   });
 
@@ -78,21 +82,22 @@ describe('Commons request failures carry copy and keep their status', () => {
   ])('a bare %i says GM\'s line for it and is not retried', async (status, line) => {
     answer = () => new Response('', { status });
     const error = await failure(() => commonsEvaluationApi.labels(0, 3, {} as never));
-    expect(error.message).toBe(line);
-    expect(saveFailure(error)).toEqual({ ok: false, reason: line, retry: false });
+    expect(error.reason).toBe(line);
+    expect(saveFailure(error)).toEqual({ ok: false, reason: line, message: `${error.heading} ${line}`, retry: false });
   });
 
   it('a failure that isn\'t a request\'s says GM\'s general line, never its own message', () => {
     expect(saveFailure(new SyntaxError('Unexpected token < in JSON at position 0'))).toEqual({
-      ok: false, reason: "That didn't work. Try again, or reload if it keeps happening.", retry: true,
+      ok: false, reason: "That didn't work. Try again, or reload if it keeps happening.",
+      message: "Couldn't save your labels. That didn't work. Try again, or reload if it keeps happening.", retry: true,
     });
   });
 
   it('the image and blob fetches say the same lines', async () => {
     answer = () => { throw new TypeError('Failed to fetch'); };
-    expect((await failure(() => commonsEvaluationApi.image(0))).message).toBe(LOST);
+    expect((await failure(() => commonsEvaluationApi.image(0))).reason).toBe(LOST);
     answer = () => new Response('', { status: 502 });
-    expect((await failure(() => commonsApi.blob('/api/commons/blobs/abc'))).message).toBe(NO_ANSWER);
+    expect((await failure(() => commonsApi.blob('/api/commons/blobs/abc'))).reason).toBe(NO_ANSWER);
   });
 
   it('the caller\'s own abort of an image comes back as an abort, not as copy', async () => {

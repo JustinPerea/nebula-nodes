@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import type { Moodboard } from '../../types';
+import { RequestFailedError } from '../../lib/errorCopy';
 
 const api = vi.hoisted(() => ({
   analyzeMoodboard: vi.fn(),
@@ -14,7 +15,7 @@ const api = vi.hoisted(() => ({
   moveStoredAsset: vi.fn(),
   updateMoodboard: vi.fn(),
 }));
-vi.mock('../../lib/api', () => api);
+vi.mock('../../lib/api', () => ({ ...api, SAVE_BOARD: "Couldn't save the board." }));
 vi.mock('../../lib/backend', () => ({ apiFetch: vi.fn(), backendAssetUrlSync: (url: string) => url }));
 vi.mock('../../lib/wsClient', () => ({ wsClient: { subscribe: () => () => {}, connect: () => {}, send: () => {} } }));
 vi.mock('../WorkspaceHeader', () => ({
@@ -435,19 +436,20 @@ describe('Moodboard Studio Move', () => {
 
   it("doesn't move when saving the edits fails, and a refused move keeps the draft", async () => {
     await openStudio('g1', 'global', 'Global board');
-    api.updateMoodboard.mockRejectedValueOnce(new Error('Save failed: disk full'));
+    // What the API throws (error-copy round 2): its heading and the reason.
+    api.updateMoodboard.mockRejectedValueOnce(new RequestFailedError("Couldn't save the board.", 409, { detail: 'The disk is full.' }));
     fireEvent.change(screen.getByDisplayValue('Global board'), { target: { value: 'Unsaved' } });
     openMove();
     fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Project' }));
-    expect(await screen.findByText('Save failed: disk full')).toBeTruthy();
+    await waitFor(() => expect(document.body.textContent).toContain("Couldn't save the board. The disk is full."));
     expect(api.moveStoredAsset).not.toHaveBeenCalled();
 
-    api.moveStoredAsset.mockRejectedValueOnce(new Error('Move failed: No project has the id'));
+    api.moveStoredAsset.mockRejectedValueOnce(new RequestFailedError("Couldn't move the board.", 404, { detail: 'No project has the id' }));
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(api.updateMoodboard).toHaveBeenCalledTimes(2));
     openMove();
     fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Project' }));
-    expect(await screen.findByText('Move failed: No project has the id')).toBeTruthy();
+    await waitFor(() => expect(document.body.textContent).toContain("Couldn't move the board. No project has the id"));
     expect(screen.getByDisplayValue('Unsaved')).toBeTruthy();
     expect(useUIStore.getState().moodboardEditorScope).toBe('global');
     const entry = useAssetStudioDraftStore.getState().entries[assetStudioDraftKey('moodboard', 'global', 'g1')];

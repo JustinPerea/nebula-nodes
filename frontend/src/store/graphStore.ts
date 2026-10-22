@@ -74,6 +74,7 @@ import {
   rewriteExecutionAssetUrls,
 } from '../lib/backend';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
+import { REFUSED_FALLBACK_COPY, copyForStatus, failureCopy, readDetail, requestError, warnFailure } from '../lib/errorCopy';
 import {
   RUNTIME_FIELDS, applySlice, diffCanvas, edgeKey, editArrivedText, foldArrange, foreignSource, isForeignEdit, isOwnEcho,
   restoreRequest, undoNoticeText, type EditOrigin, type ForeignEdit,
@@ -1531,7 +1532,8 @@ function sendWire(edge: Edge, want: boolean, set: GraphSet, after?: Promise<unkn
   return (after ? after.then(send) : send()).then(async (response) => {
     done(response.ok);
     if (response.ok) return;
-    const text = `Couldn't ${want ? 'connect' : 'remove'} that wire. ${await backendRejectionReason(response, 'Refused')}`;
+    const heading = `Couldn't ${want ? 'connect' : 'remove'} that wire.`;
+    const text = `${heading} ${await backendRejectionReason(response, heading)}`;
     set((state) => ({
       edges: want ? state.edges.filter((e) => e.id !== edge.id)
         : state.edges.some((e) => edgeKey(e) === edgeKey(edge)) ? state.edges : [...state.edges, edge],
@@ -1695,20 +1697,22 @@ function applyCanvasNodeChanges(
   persistNodePositions(settledPositions);
 }
 
+/** Resolves when the backend confirmed the delete, or answered that the node
+ * is already gone (404: another window or an agent removed it; the person
+ * wanted it gone, as restore treats an already-gone node); else rejects
+ * with the reason the person reads (GM's line for the status, or the
+ * backend's written reason). */
 async function deleteCLIOriginNode(nodeId: string): Promise<void> {
   const response = await graphMutationFetch(`/api/graph/node/${nodeId}`, { method: 'DELETE' });
-  if (response.ok) return;
-  let detail = '';
-  try {
-    detail = String(((await response.json()) as { detail?: unknown }).detail ?? '');
-  } catch {
-    // Fall through to the status-based message.
-  }
-  throw new Error(detail || `Backend rejected deletion of ${nodeId} (HTTP ${response.status}).`);
+  if (response.ok || response.status === 404) return;
+  throw await requestError("Couldn't delete the node.", response);
 }
 
-function reportNodeDeletionFailure(messages: string[]): void {
-  const message = `Nebula kept the node because its backend deletion was not confirmed. ${messages.join(' ')}`;
+/** The nodes stay on the canvas (their delete wasn't confirmed). GM's
+ * pattern: "Couldn't delete the node." then the reason, each reason once. */
+function reportNodeDeletionFailure(reasons: string[], count: number): void {
+  const heading = count === 1 ? "Couldn't delete the node." : `Couldn't delete ${count} nodes.`;
+  const message = `${heading} ${[...new Set(reasons)].join(' ')}`;
   console.warn(`[nebula] ${message}`);
   if (typeof window !== 'undefined' && typeof window.alert === 'function') {
     window.alert(message);
@@ -2301,7 +2305,7 @@ async function executeHistoricalRun(
     }
     if (result.status !== 'started' && result.status !== 'validation_error') {
       throw new ExecutionStartRejectedError(
-        `Execution did not start (${result.status || 'unknown status'}).`,
+        notStartedMessage("Couldn't start the run.", result.status),
         400,
       );
     }
@@ -2330,7 +2334,7 @@ async function executeHistoricalRun(
       nodes: markNodesErrored(
         state.nodes,
         scopeIds,
-        err instanceof Error ? err.message : 'Failed to replay historical run.',
+        err instanceof Error ? err.message : "Couldn't start the run.",
       ),
       ...ownershipState(),
     }));
@@ -2357,7 +2361,7 @@ async function ensureBackendFreshForLocalCanvas(
   }
 
   if (!exportRes.ok) {
-    throw new Error(`Backend rejected graph export (HTTP ${exportRes.status}).`);
+    throw new Error(await backendRejectionReason(exportRes, "Couldn't check the canvas."));
   }
 
   let exported: { empty?: boolean };
@@ -2379,7 +2383,7 @@ async function ensureBackendFreshForLocalCanvas(
       );
     }
     if (!clearRes.ok) {
-      throw new Error(`Backend rejected graph clear (HTTP ${clearRes.status}).`);
+      throw new Error(await backendRejectionReason(clearRes, "Couldn't clear the canvas."));
     }
   }
 
@@ -2387,14 +2391,21 @@ async function ensureBackendFreshForLocalCanvas(
   return true;
 }
 
-async function backendRejectionReason(response: Response, fallback: string): Promise<string> {
-  try {
-    const detail = ((await response.json()) as { detail?: unknown }).detail;
-    if (typeof detail === 'string' && detail.trim()) return detail.trim();
-  } catch {
-    // Fall through to the status-based message.
-  }
-  return `${fallback} (HTTP ${response.status}).`;
+/** A start the backend answered with a status other than started (not an
+ * HTTP status: the run's own, e.g. "busy"). GM: the status stays in the
+ * console; the person reads the heading and GM's line. */
+function notStartedMessage(heading: string, status: string | undefined): string {
+  console.warn(`[nebula] ${heading} start status: ${status || 'unknown'}`);
+  return `${heading} ${REFUSED_FALLBACK_COPY}`;
+}
+
+/** The reason line for a refused canvas request (error-copy round 2, GM):
+ * the backend's written reason, or GM's line for the status; the status
+ * itself goes to the console under `heading`, once per call site. */
+async function backendRejectionReason(response: Response, heading: string): Promise<string> {
+  const detail = await readDetail(response);
+  warnFailure(heading, response.status, detail);
+  return copyForStatus(response.status, detail);
 }
 
 type NodeCreationAttempt = {
@@ -2457,7 +2468,7 @@ function observePendingConnectedNodeCreation(nodes: Node<NodeData>[], edges: Edg
 }
 
 function reportNodeCreationFailure(displayName: string, reason: string): null {
-  const message = `Nebula did not add ${displayName}. ${reason}`;
+  const message = `Couldn't add ${displayName}. ${reason}`;
   console.warn(`[nebula] ${message}`);
   if (typeof window !== 'undefined' && typeof window.alert === 'function') {
     window.alert(message);
@@ -2694,7 +2705,7 @@ function sendRestore(
     }
     for (const done of holds) done(Boolean(response?.ok));
     if (!response || response.ok) return;
-    const reason = await backendRejectionReason(response, `Couldn't ${action} that step`);
+    const reason = await backendRejectionReason(response, `Couldn't ${action} that.`);
     console.warn(`[nebula] ${action} refused: ${reason}`);
     set((state) => {
       const stack = action === 'undo' ? state.redoStack : state.undoStack;
@@ -3395,7 +3406,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     } catch (err) {
       return reportNodeCreationFailure(
         definition.displayName,
-        err instanceof Error ? err.message : 'Backend rejected the request.',
+        err instanceof Error ? err.message : REFUSED_FALLBACK_COPY,
       );
     }
     if (!backendFresh) return addLocally(new Error('Backend is unavailable.'));
@@ -3437,7 +3448,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       if (pendingNodeCreationAttempt === attempt) pendingNodeCreationAttempt = null;
       return reportNodeCreationFailure(
         definition.displayName,
-        await backendRejectionReason(res, 'Backend rejected node creation'),
+        await backendRejectionReason(res, `Couldn't add ${definition.displayName}.`),
       );
     }
 
@@ -3537,7 +3548,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       });
       if (!res.ok) {
         definiteOutcome = res.status >= 400 && res.status < 500;
-        return fail(await backendRejectionReason(res, 'Backend rejected the connection'));
+        return fail(await backendRejectionReason(res, `Couldn't add ${definition.displayName}.`));
       }
       const node = (await res.json()) as { id?: unknown; definitionId?: unknown; params?: Record<string, unknown>;
         connected?: boolean; edge?: Edge };
@@ -3703,9 +3714,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const failures: string[] = [];
       results.forEach((result, index) => {
         if (result.status === 'fulfilled') confirmed.add(cliRemovedIds[index]);
-        else failures.push(result.reason instanceof Error
-          ? result.reason.message
-          : `Deletion of ${cliRemovedIds[index]} failed.`);
+        else failures.push(failureCopy(result.reason).reason);
       });
       const safeChanges = changes.filter((change) => (
         change.type !== 'remove'
@@ -3715,7 +3724,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       // Nothing was deleted after all: the step taken above would undo nothing.
       if (!safeChanges.some((change) => change.type === 'remove')) get().cancelUndoStep(undoStep);
       if (safeChanges.length > 0) applyCanvasNodeChanges(safeChanges, set, get, undoStep);
-      if (failures.length > 0) reportNodeDeletionFailure(failures);
+      if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length);
     });
   },
 
@@ -4580,7 +4589,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
       if (result.status !== 'started' && result.status !== 'validation_error') {
         throw new ExecutionStartRejectedError(
-          `Execution did not start (${result.status || 'unknown status'}).`,
+          notStartedMessage("Couldn't start the run.", result.status),
           400,
         );
       }
@@ -4609,7 +4618,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         nodes: markNodesErrored(
           state.nodes,
           new Set(nodesInExecutionScope(state.nodes, state.edges).map((node) => node.id)),
-          err instanceof Error ? err.message : 'Failed to start execution.',
+          err instanceof Error ? err.message : "Couldn't start the run.",
         ),
         ...ownershipState(),
       }));
@@ -4657,7 +4666,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
       if (result.status !== 'started' && result.status !== 'validation_error') {
         throw new ExecutionStartRejectedError(
-          `Execution did not start (${result.status || 'unknown status'}).`,
+          notStartedMessage("Couldn't run the node.", result.status),
           400,
         );
       }
@@ -4686,7 +4695,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         nodes: markNodesErrored(
           state.nodes,
           new Set(nodesInExecutionScope(state.nodes, state.edges, nodeId).map((node) => node.id)),
-          err instanceof Error ? err.message : 'Failed to start node execution.',
+          err instanceof Error ? err.message : "Couldn't run the node.",
         ),
         ...ownershipState(),
       }));
@@ -4771,7 +4780,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       if (!ownsRun(runId)) return;
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
       if (result.status !== 'started') {
-        failShot(result.status === 'validation_error' ? 'Validation failed. Check inputs and API keys.' : `Shot did not start (${result.status}).`);
+        failShot(result.status === 'validation_error' ? 'Validation failed. Check inputs and API keys.' : notStartedMessage("Couldn't start the shot.", result.status));
         settleTrackedExecutionStatus('failed', runId, set, get);
         return;
       }
@@ -4883,7 +4892,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
       if (result.status !== 'started' && result.status !== 'validation_error') {
         throw new ExecutionStartRejectedError(
-          `Execution did not start (${result.status || 'unknown status'}).`,
+          notStartedMessage("Couldn't start the run.", result.status),
           400,
         );
       }
@@ -4909,7 +4918,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
       closeCurrentRun(set, { status: 'failed' });
       set((state) => ({
-        nodes: markNodesErrored(state.nodes, idSet, err instanceof Error ? err.message : 'Failed to start generation.'),
+        nodes: markNodesErrored(state.nodes, idSet, err instanceof Error ? err.message : "Couldn't start the run."),
         ...ownershipState(),
       }));
     }
@@ -4962,7 +4971,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       set((state) => ({ nodes: result.status === 'validation_error'
         ? markNodesWithValidationErrors(state.nodes, idSet, result.errors,
           'Validation failed before generation. Check required inputs and API keys.')
-        : markNodesErrored(state.nodes, idSet, `Execution did not start (${result.status || 'unknown status'}).`) }));
+        : markNodesErrored(state.nodes, idSet, notStartedMessage("Couldn't start the run.", result.status)) }));
     } catch (error) {
       settleFailedStart(runId, error);
       if (!ownsRun(runId)) return;
@@ -4975,7 +4984,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
       closeTrackedRun(set, runId, { status: cancellationRequestedRunIds.has(runId) ? 'cancelled' : 'failed' });
       set((state) => ({ nodes: markNodesErrored(state.nodes, idSet,
-        error instanceof Error ? error.message : 'Failed to start generation.') }));
+        error instanceof Error ? error.message : "Couldn't start the run.") }));
     }
   },
 

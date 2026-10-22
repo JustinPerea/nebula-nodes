@@ -18,13 +18,26 @@ from commons.measure import CODE_VERSION, measure_image, phash, phash_distance
 from commons.reader import TYPE_STYLES, SPACING, LAYOUTS, MEDIA, ROLES
 from commons.search import AXES
 from commons.vocab import load_vocabulary
+from commons.person_copy import FOLDER_UNREADABLE
 
 VERSION = 'heldout-1'
 FIELDS = dict(type_style=TYPE_STYLES, spacing_density=SPACING, layout=LAYOUTS, medium=MEDIA)
 
 
 class EvaluationError(ValueError):
-    pass
+    """A refused labeling step. Most messages are written for the person
+    (GM approved "Labels changed in another window. Reload before saving.")
+    and are what the UI shows. A technical one (an OSError's text, a path)
+    also carries `person`, the line the UI shows instead; the message is
+    logged (GM - Design, error-copy round 2)."""
+
+    def __init__(self, message: str, person: str | None = None):
+        super().__init__(message)
+        self.person = person
+
+
+# Written to GM's patterns for the scan's technical failures (listed for GM).
+SCAN_FILE_UNREADABLE = "A file in that folder couldn't be read. Check that it opens, then scan again."
 
 
 def canonical(value):
@@ -76,12 +89,13 @@ def _inventory(root):
         raise EvaluationError('Choose a real folder, not a symlink.')
     paths, excluded = [], []
     def fail(error):
-        raise EvaluationError(f'Cannot enumerate source folder: {error}')
+        raise EvaluationError(f'Cannot enumerate source folder: {error}', FOLDER_UNREADABLE)
     for directory, dirs, files in os.walk(root, followlinks=False, onerror=fail):
         for name in sorted(dirs + files):
             path = Path(directory) / name
             if path.is_symlink():
-                raise EvaluationError(f'Resolve symlink before selection: {path.relative_to(root)}')
+                raise EvaluationError(f'Resolve symlink before selection: {path.relative_to(root)}',
+                                      'A file in that folder is a symlink. Replace it with the real file, then scan again.')
         for name in sorted(files):
             path = Path(directory) / name
             if path.suffix.lower().lstrip('.') in media.ACCEPTED_EXT:
@@ -163,10 +177,11 @@ async def prepare(store, path, *, downloader=None):
     for path in paths:
         try:
             if is_dataless(path.stat()) and not await downloader.download(path):
-                raise EvaluationError(f'iCloud download failed: {path.relative_to(root)}')
+                raise EvaluationError(f'iCloud download failed: {path.relative_to(root)}',
+                                      "A file in that folder didn't download from iCloud. Check your connection, then scan again.")
             row = await asyncio.to_thread(_snapshot, path, root)
         except (OSError, media.MediaError) as exc:
-            raise EvaluationError(f'Cannot read {path.relative_to(root)}: {exc}') from exc
+            raise EvaluationError(f'Cannot read {path.relative_to(root)}: {exc}', SCAN_FILE_UNREADABLE) from exc
         total += len(row['_png'])
         if total > 256 * 1024 * 1024:
             raise EvaluationError('Decoded snapshot set exceeds 256 MB; no batch created.')

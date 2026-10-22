@@ -244,7 +244,7 @@ function applyProject(project: SavedProject, revision: string, bootstrap = false
 }
 
 function showError(error: unknown): void {
-  useProjectStore.setState({ error: error instanceof Error ? error.message : 'Could not save the project.' });
+  useProjectStore.setState({ error: error instanceof Error ? error.message : "Couldn't save the project." });
 }
 /** What counts as unsaved work when the tab stops for a params version: run
  * records that never ran are left out, and so is node run state (queued,

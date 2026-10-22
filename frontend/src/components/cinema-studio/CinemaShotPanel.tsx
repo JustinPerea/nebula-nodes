@@ -9,6 +9,7 @@ import { CinemaLookControls, CinemaPaletteControls } from './CinemaArtDirectionC
 import { cinemaLookLabel, effectiveCinemaLook, effectiveCinemaPalette, patchCinemaLookOverride, patchCinemaPaletteOverride } from '../../lib/cinemaArtDirection';
 import type { CinemaLook, CinemaPalette } from '../../lib/cinemaArtDirection';
 import type { CinemaSceneSpec, CinemaShot } from '../../types';
+import { shortLine } from '../../lib/errorCopy';
 
 interface CinemaShotPanelProps {
   cinemaNodeId: string;
@@ -293,7 +294,10 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
                 <div key={upload.id} className="cinema-reference-upload" aria-busy={upload.status === 'uploading'}>
                   <span className="cinema-reference-upload__name">{upload.name}</span>
                   <span className="cinema-reference-upload__status" role={upload.status === 'error' ? 'alert' : 'status'}>
-                    {upload.status === 'uploading' ? 'Uploading…' : upload.error ?? 'Could not upload this image.'}
+                    {/* GM's WRAP rule: with Retry shown, the reason drops its own "try again". */}
+                    {upload.status === 'uploading' ? 'Uploading…'
+                      : upload.canRetry ? shortLine(upload.error ?? "Couldn't upload this image.")
+                        : upload.error ?? "Couldn't upload this image."}
                   </span>
                   <div className="cinema-reference-upload__actions">
                     {upload.status === 'error' && upload.canRetry && (

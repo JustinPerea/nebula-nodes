@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ACCESS_LOST_COPY, CONNECTION_LOST_COPY, ConnectionLostError, NO_RESPONSE_COPY, REFUSED_FALLBACK_COPY, TOO_LARGE_COPY,
   canTryAgain, copyForError, copyForStatus, failureKind, isConnectionFailure,
@@ -97,5 +97,126 @@ describe('ConnectionLostError keeps the original for debugging', () => {
     expect(error.message).toBe(LOST);
     expect(error.status).toBe(0);
     expect(error.cause).toBe(original);
+  });
+});
+
+/**
+ * Round 2 (GM - Design, error-copy round 2): an error from a request carries
+ * its parts. The heading names what failed ("Couldn't save the board."), the
+ * reason line says why (GM's lines, the backend's written reason, or GM's
+ * fallback for the status), and its kind. `message` is the one-line form
+ * "<heading> <reason>" for alerts, toasts and status text. GM's WRAP rule:
+ * "when the surface already has a retry button, the reason line drops its
+ * 'try again'. The button is the retry."
+ */
+describe('round 2: heading + reason + kind', async () => {
+  const copy = await import('../../src/lib/errorCopy');
+  const LOST_SHORT = "Couldn't reach Nebula. Check your connection.";
+  const NO_ANSWER_SHORT = "Nebula didn't respond.";
+  const HEADING = "Couldn't save the board.";
+
+  it('GM\'s short lines and the other round 2 lines, verbatim', () => {
+    expect(copy.CONNECTION_LOST_SHORT_COPY).toBe(LOST_SHORT);
+    expect(copy.NO_RESPONSE_SHORT_COPY).toBe(NO_ANSWER_SHORT);
+    expect(copy.BACKEND_NOT_RUNNING_COPY).toBe("Nebula's backend isn't running. Start it, then reload.");
+  });
+
+  // [status, detail, reason, short reason, kind]
+  const table: Array<[number, unknown, string, string, string]> = [
+    [0, undefined, LOST, LOST_SHORT, 'connection'],
+    [408, 'Request timed out', NO_ANSWER, NO_ANSWER_SHORT, 'no-response'],
+    [429, undefined, NO_ANSWER, NO_ANSWER_SHORT, 'no-response'],
+    [500, 'Internal Server Error', NO_ANSWER, NO_ANSWER_SHORT, 'no-response'],
+    [503, undefined, NO_ANSWER, NO_ANSWER_SHORT, 'no-response'],
+    [409, 'This board changed in another window.', 'This board changed in another window.', 'This board changed in another window.', 'refused'],
+    // GM's 4xx fallback keeps its "Try again" on a retry surface too (listed for GM).
+    [400, undefined, REFUSED, REFUSED, 'refused'],
+    [422, [{ loc: ['body', 'images', 0, 'url'], msg: 'field required' }], REFUSED, REFUSED, 'refused'],
+    [403, undefined, ACCESS, ACCESS, 'refused'],
+    [413, undefined, TOO_LARGE, TOO_LARGE, 'refused'],
+  ];
+  it.each(table)('HTTP %i (detail %j): heading, reason, short reason, kind', (status, detail, reason, short, kind) => {
+    const error = new copy.RequestFailedError(HEADING, status, { detail });
+    expect(error.heading).toBe(HEADING);
+    expect(error.reason).toBe(reason);
+    expect(error.kind).toBe(kind);
+    expect(error.status).toBe(status);
+    expect(error.detail).toEqual(detail);
+    expect(error.message).toBe(`${HEADING} ${reason}`);
+    expect(copy.failureCopy(error)).toEqual({ heading: HEADING, reason });
+    expect(copy.failureCopy(error, { short: true })).toEqual({ heading: HEADING, reason: short });
+  });
+
+  it('a lost connection named by its action keeps the browser\'s error and stays a TypeError', () => {
+    const original = new TypeError('Failed to fetch');
+    const error = new copy.ConnectionLostError(original).withHeading("Couldn't load your API keys.");
+    expect(error).toBeInstanceOf(TypeError);
+    expect(error).toBeInstanceOf(copy.ConnectionLostError);
+    expect(error.cause).toBe(original);
+    expect(error.status).toBe(0);
+    expect(error.message).toBe(`Couldn't load your API keys. ${LOST}`);
+    expect(copy.failureCopy(error, { short: true })).toEqual({ heading: "Couldn't load your API keys.", reason: LOST_SHORT });
+  });
+
+  it('withHeading names a lost connection, and leaves anything else (the caller\'s abort) as it was', () => {
+    const lost = copy.withHeading(new copy.ConnectionLostError(new TypeError('x')), "Couldn't cancel the run.");
+    expect((lost as Error).message).toBe(`Couldn't cancel the run. ${LOST}`);
+    const abort = new DOMException('aborted', 'AbortError');
+    expect(copy.withHeading(abort, "Couldn't cancel the run.")).toBe(abort);
+  });
+
+  it('a failure that isn\'t a request\'s says GM\'s general line under the heading the screen gives it', () => {
+    expect(copy.failureCopy(new Error('Unexpected token <'), { heading: HEADING })).toEqual({ heading: HEADING, reason: REFUSED });
+    expect(copy.failureCopy(new TypeError('Failed to fetch'), { heading: HEADING, short: true }))
+      .toEqual({ heading: HEADING, reason: LOST_SHORT });
+    expect(copy.failureMessage(new Error('boom'), HEADING)).toBe(`${HEADING} ${REFUSED}`);
+    expect(copy.failureMessage(new copy.RequestFailedError(HEADING, 503), "Couldn't do it.")).toBe(`${HEADING} ${NO_ANSWER}`);
+  });
+
+  it('a reason with no heading stands alone', () => {
+    expect(new copy.RequestFailedError('', 503).message).toBe(NO_ANSWER);
+  });
+});
+
+describe('round 2: requestError reads the answer and keeps the status in the console', async () => {
+  const copy = await import('../../src/lib/errorCopy');
+  afterEach(() => { vi.restoreAllMocks(); copy.resetFailureWarningsForTests(); });
+
+  it('reads the backend\'s detail; a FastAPI field list is no reason (GM\'s fallback), kept in detail', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const list = [{ loc: ['body', 'images', 0, 'url'], msg: 'field required' }];
+    const error = await copy.requestError("Couldn't save the board.",
+      new Response(JSON.stringify({ detail: list }), { status: 422, headers: { 'Content-Type': 'application/json' } }));
+    expect(error.message).toBe(`Couldn't save the board. ${REFUSED}`);
+    expect(error.detail).toEqual(list);
+    const reasoned = await copy.requestError("Couldn't move the board.",
+      new Response(JSON.stringify({ detail: 'That project is gone.' }), { status: 404 }));
+    expect(reasoned.message).toBe("Couldn't move the board. That project is gone.");
+  });
+
+  it('warns once with the status and raw detail, not on every identical failure, and again after a success', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const fail = () => copy.requestError("Couldn't check Codex status.", new Response(JSON.stringify({ detail: 'boom' }), { status: 503 }));
+    await fail(); await fail(); await fail();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0].join(' '))).toMatch(/503/);
+    expect(String(warn.mock.calls[0].join(' '))).toMatch(/boom/);
+    copy.requestSucceeded("Couldn't check Codex status.");
+    await fail();
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('round 2: shortLine, the WRAP rule for a one-line string beside a retry button', () => {
+  it('swaps a trailing "try again" line for its short form, and leaves anything else', async () => {
+    const { shortLine } = await import('../../src/lib/errorCopy');
+    expect(shortLine("Couldn't load your projects. Nebula didn't respond. Try again."))
+      .toBe("Couldn't load your projects. Nebula didn't respond.");
+    expect(shortLine("Couldn't load your projects. Couldn't reach Nebula. Check your connection and try again."))
+      .toBe("Couldn't load your projects. Couldn't reach Nebula. Check your connection.");
+    // GM's 4xx fallback keeps its "Try again" (listed for GM).
+    const refused = "Couldn't open the project. That didn't work. Try again, or reload if it keeps happening.";
+    expect(shortLine(refused)).toBe(refused);
+    expect(shortLine('Projects could not be loaded.')).toBe('Projects could not be loaded.');
   });
 });

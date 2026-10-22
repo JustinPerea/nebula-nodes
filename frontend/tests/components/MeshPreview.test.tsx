@@ -86,6 +86,29 @@ describe('MeshPreview', () => {
     expect(document.querySelector('model-viewer')).toBeNull();
   });
 
+  it('error-copy round 2 (GM): a 503 says "Couldn\'t load the 3D preview." and the reason, never HTTP 503', async () => {
+    const webglContext = { getExtension: vi.fn().mockReturnValue(null) } as unknown as WebGLRenderingContext;
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(webglContext);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 503 })));
+    render(<MeshPreview src="/api/outputs/run/a.glb" />);
+    const preview = screen.getByRole('button', { name: /open glb model preview/i });
+    fireEvent.click(preview);
+    await waitFor(() => expect(preview.getAttribute('data-status')).toBe('error'));
+    const copy = document.querySelector('.mesh-modal__fallback-copy')?.textContent ?? '';
+    expect(copy).toBe("Couldn't load the 3D preview. Nebula didn't respond. Try again.");
+    expect(copy).not.toMatch(/HTTP|503/);
+  });
+
+  it('error-copy round 2: a download that can\'t reach Nebula says "Couldn\'t download the 3D model."', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    render(<MeshPreview src="/api/outputs/run/world.ply" />);
+    fireEvent.click(screen.getByRole('button', { name: /open ply splat export preview/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /download/i }));
+    expect((await screen.findByRole('alert')).textContent)
+      .toBe("Couldn't download the 3D model. Couldn't reach Nebula. Check your connection and try again.");
+  });
+
   it('presents PLY output as a valid download-only splat instead of a broken model viewer', async () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);
