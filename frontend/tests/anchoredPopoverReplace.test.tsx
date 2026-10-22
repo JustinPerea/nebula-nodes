@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { useAnchoredPopover } from '../src/components/asset-move/anchoredPopover';
@@ -18,12 +18,12 @@ const placed: Array<{ left: number; top: number } | null> = [];
 function Probe({ revision }: { revision: number }) {
   const anchor = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
-  const list = useRef<HTMLDivElement>(null);
-  const position = useAnchoredPopover(anchor, panel, () => {}, 'auto', 280, list.current, revision);
+  const [list, setList] = useState<HTMLDivElement | null>(null);
+  const position = useAnchoredPopover(anchor, panel, () => {}, 'auto', 280, list, revision);
   placed.push(position);
   return (
     <div>
-      <div ref={list} data-testid="list" />
+      <div ref={setList} data-testid="list" />
       <button ref={anchor} type="button">Show</button>
       <div ref={panel} />
     </div>
