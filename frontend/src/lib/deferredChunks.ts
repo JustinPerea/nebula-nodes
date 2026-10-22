@@ -112,4 +112,6 @@ export const DEFERRED_MODULES: readonly string[] = [
   'components/nodes/MoodboardAdapterLine.tsx',
   'lib/moodboardAdapters.ts',
   'store/moodboardAdapterStore.ts',
+  // Settings' tabs load with their own dynamic import (Settings.tsx).
+  'components/panels/settings/PersonalAgentsSection.tsx',
 ];
