@@ -99,6 +99,7 @@ export const DEFERRED_MODULES: readonly string[] = [
   'lib/agentNotesView.ts',
   'lib/agentNotesBoard.ts',
   'lib/assetProposalReview.ts',
+  'lib/canvasProposalReview.ts',
   'lib/goToCanvas.ts',
   'lib/commonsUnsaved.ts',
   'store/assetProposalReviewRequest.ts',

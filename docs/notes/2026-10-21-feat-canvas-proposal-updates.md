@@ -1,0 +1,130 @@
+# 2026-10-21 — Every canvas proposal posts an Update
+
+Branch `feat/canvas-proposal-updates`, stacked on `feat/updates-corner-every-screen` at e2c6242b (Q107/Q108, not merged yet). Uncommitted (the coordinator commits). No paid provider call, no package installed.
+
+- **What changed and why.**
+  - **Q112**, Justin: "a) Yes, every one: "Claude Code proposes 3 changes on the canvas", with Review taking you to the canvas and its bar. It settles like the others (Accepted, Rejected, Expired, Closed: Nebula restarted)."
+  - Before, only asset proposals (a cover, Send notes, a Commons change) posted an Update (Q92 a, #149). A canvas proposal (MCP `propose_change`, `nebula propose`, `POST /api/canvas/proposals`) posted none, so on Projects or in a studio nothing told the person one was waiting.
+  - Now every canvas proposal posts exactly one Update on the list of the project it was made in:
+    - The author is the agent (its name and colour). Nebula writes it (`source: "nebula"`, `about: "proposal"`).
+    - The text comes from a fixed template, never from the agent: "Claude Code proposes 3 changes on the canvas", "proposes 1 change", or "proposes a run on the canvas" when it only runs nodes.
+    - It carries `proposal: {id, kind: "canvas", targetId: <project id>}` and one Review action (`proposal.review`, `target: "canvas"`).
+  - **One place.** All three surfaces reach `create_canvas_proposal`, which calls `_post_canvas_update`.
+  - **Review** takes the person to the canvas from any screen (`lib/goToCanvas.ts`; from Projects it opens the project first). The bar then shows that proposal (its `focusedId`), even when other proposals are waiting. Its ghosts and the nodes it touches come into view on the corner's spring, and the bar takes the keyboard focus with a 1.6 s ring on `--agent-log-spring`. With reduced motion the ring is a plain outline. Accept itself never takes focus. The Updates list closes once Review succeeds.
+  - **It settles in place.** When the proposal ends, the Update gets `resolvedAt`, `resolvedBy`, `readAt` and an `outcome`, and its Review goes. Every way a canvas proposal ends today (found in `canvas_proposals.py` and `main.py`):
+    - accepted: "Accepted" (the accept route, by the person);
+    - rejected: "Rejected" (by the person; their reason never goes in);
+    - withdrawn by its agent (Q109's withdraw): "Withdrawn by <agent>", the asset proposals' wording;
+    - expired, by the sweep on any read or by a new one-shot timer: "Expired";
+    - invalidated, all as "No longer fits" (the asset proposals' wording for the same case):
+      - a node it needs was deleted (the person's delete, an agent's `edit_canvas`/`apply` remove, a restore);
+      - the canvas was cleared;
+      - the canvas was replaced (an import, or opening another project);
+      - at Accept, it no longer fits (the person's later edit of a value it sets, what it runs changed, or staging fails). This one is `resolvedBy: person`, since their click found it.
+    - Nebula restarted while it was open: "Closed: Nebula restarted" (`asset_proposals.RESTART_OUTCOME`), on the same settle path the asset Updates use.
+  - `_settle_asset_updates` is renamed `_settle_proposal_updates` and now handles both kinds. It runs on `list_notes`, on a tab's socket connect and on a project switch.
+  - **Not counted against the agent.** `post_proposal` never touches the rate limiter. A proposal leaves all six `post_note`s a minute, and an agent that used them still gets its proposal's Update. The 200-per-project cap prunes as before.
+  - **Live everywhere.** Each post and settle goes out as an `agentNotes` socket op (`added`, `resolved`) for the open project, so it lands live on every screen. A settle in another project (after a project switch) sends nothing; that list reloads when the project opens.
+  - **Agent support.**
+    - `propose_change`'s docstring says each proposal posts an Update with Review that the person sees on every screen, so "don't also post_note to announce it". It also lists the outcomes, including "Withdrawn by <you> (withdraw_proposal)".
+    - `list_notes`'s docstring now names `propose_change` and the plain "Accepted"/"Rejected".
+    - The same goes in `nebula propose`'s description ("don't also send a `nebula note` about it"), docs/MCP-SETUP.md (a new "The Update." paragraph under Proposals, the Updates section, the rate-limit rule) and skills/nebula/SKILL.md (Propose, and the Updates paragraph).
+    - The proposal view carries `update: {id, projectId}`, as an asset proposal's does.
+    - The first-turn MCP INSTRUCTIONS are untouched.
+    - No new tool: Review is a person-only click, and agents read the outcome through `list_notes` / `nebula notes`.
+  - The plan (`docs/moodboard-canvas-plan.md` §5.9) gets a Q112 line.
+  - **Q111**, Justin: "a) Leave them, and the PR says so. Such a wire shows on the canvas like any other (and in look_at_canvas for agents), so you or an agent can delete it." I recorded it with the date in the ghost-wire open item of `docs/notes/2026-10-21-fix-canvas-drops-agent-unwires.md`. The rest of that note is unchanged.
+- **Decisions not in the spec.**
+  - **What counts as a change.** Each new node, each wire and each existing node whose params change counts as one. These are the groups the bar itself lists. Runs and a new node's name don't count. A run-only proposal reads "<agent> proposes a run on the canvas", not "0 changes".
+  - **No agent note in the Update.** This follows the asset proposals (names only). The note is on the bar, one Review away.
+  - **Replacing, almost never.** "Every one": unlike an asset proposal's (one per agent and target), a canvas proposal's Update replaces no other, with one exception added after review (see Review): a new proposal replaces the same agent's canvas Updates that the agent withdrew itself.
+  - **No Update with no project open** (`update: null`), as for asset proposals.
+  - **`resolvedBy`.** `person` for accept, reject and an invalidation found at Accept; the agent for a withdraw; `system` otherwise.
+  - **A Review whose proposal isn't in the bar within 3 s** fails with "This proposal is no longer waiting for you." The list stays open showing that line, and the bar's focus is cleared. The backend settles the Update itself, so this only covers the short gap.
+  - `brief()` (`start_here`, `nebula context`) does not get `update` for canvas proposals. #155 changed that function, and the view already carries it.
+- **Where this touches canvas_proposals.py (for the merge with #155).**
+  - A new `update` field on `Proposal`, after `closed_at`.
+  - `"update"` added at the end of `view()`'s dict.
+  - A new block just before `canvas_proposals = ProposalBook()` at the end of the file: `change_count`, `update_text`, `update_outcome`.
+  - None of these touch #155's lines (`agent_wording`, `withdraw_call`, `cant_run`, `open_unrunnable`, `brief`).
+  - In main.py, the canvas import is a separate line next to the asset_proposals import, and the create route's new call sits one line above `view = _proposal_view(proposal)`.
+  - After review, the create route also has an early `return {"proposal": view}` just above the `proposalOpened` broadcast (a proposal that closed while its Update was written). It deliberately names neither `warning` nor `still_open`: #155 removes `warning`, and the merged tree (checked with `git merge-tree`, objects only: clean) runs with it as is. The coordinator may wrap it in `agent_wording(...)` after the merge if wanted.
+  - I checked with `git merge-tree` (objects only; nothing touched here): merging this change with origin/main (d128fb9b) is **clean**. On that merged tree (a scratch copy, since deleted), these files pass: `test_canvas_proposal_updates`, `test_canvas_proposals`, `test_proposal_restart_outcome`, `test_asset_proposal_updates` and `test_first_turn_instructions` (127 passed), and `test_mcp_tools`, `test_first_turn_cli` and `test_agent_notes` (83 passed).
+- **Tradeoffs.**
+  - On the canvas the card drops next to the bar that already shows the proposal. Justin accepted this cost.
+  - The bar is in the startup entry. Its change is a few lines (`focusedId`, `tabIndex`), +129 bytes raw: 511,253 → 511,382 of 512,000. The Review helper (`lib/canvasProposalReview.ts`) is a deferred module, listed in `DEFERRED_MODULES`.
+  - Each proposal with an Update gets a one-shot expiry timer (as asset proposals do). It is a `call_later` on the loop, at most 12 open at once.
+- **Surprises.**
+  - The `store.focusedId` field already existed in the proposals store, with nothing reading it. It now drives which proposal the bar shows.
+  - My first rewrap of `list_notes`'s docstring split "Closed: Nebula restarted" across a line. `test_proposal_restart_outcome` caught it.
+  - In the live check my first Accept selector (`::-p-text(Accept)`) hit "See what Accept writes" instead of the button. That was a harness mistake; the button works.
+- **Tests (written first, seen failing).**
+  - **Backend: `tests/test_canvas_proposal_updates.py` (22 tests).** All 22 failed first:
+    - 16 found no Update (`not enough values to unpack`);
+    - `KeyError: 'update'` on the view;
+    - no second Update for a second proposal;
+    - no "proposes N changes" text;
+    - the cap test found no proposal note;
+    - the docs test found no "Update" in `propose_change`.
+    - What they cover: MCP `propose_change` and CLI `run_propose` each post one Update (template text, author, colour, Review, no note, the `added` op, the journal, the view's `update`); what counts as a change; every proposal gets its own Update; no project, no Update; the post_note budget and its 429; the cap; accept, reject (no reason), withdraw, expiry by timer and by read, a node delete, clear and import, the person's later edit at Accept, opening another project (settled in its own project, no message to the open one), a restart via `list_notes` and via a tab reconnecting; an open one is left alone; MCP `list_notes` shows the outcome; `nebula notes` prints `[Rejected]`; the agent docs.
+  - **Frontend.**
+    - `ProposalBar.test.tsx`, 1 new test: the bar shows the proposal Review asked for, then paging moves on and clears it; the bar has `tabindex=-1`.
+    - `AgentNotesEveryScreen.test.tsx`, 5 new tests:
+      - Review from Projects opens the project on the canvas with that proposal focused, frames it (`setViewport`), gives the bar focus and closes the list;
+      - Review from Moodboard Studio goes back to the canvas the way its Back does;
+      - Review on the canvas focuses it in place;
+      - a gone proposal says "no longer waiting" and keeps the list;
+      - a settled one shows "Accepted" in place of Review.
+    - 5 failed first: the bar one, plus the 4 Review tests, which threw "This update's proposal can't be opened from here.". The settled-outcome test passed by design (the outcome display is generic).
+- **Live check.**
+  - Setup: isolated backend on 8847 (temp HOME, every `NEBULA_*` root in scratch, no keys or tokens) and Vite on 5847 with `VITE_NEBULA_BACKEND_PORT=8847`. Before opening the page I checked through Vite that `/api/projects` listed only the seeded project. Headless Chromium blocked 8000-8010 and 5173 on 127.0.0.1, localhost and [::1] (CDP `setBlockedURLs` plus a dead proxy). One real MCP stdio agent named "Claude Code", and the `nebula` CLI as "Codex". All proposals used free nodes (text-input, combine-text), and none ran anything.
+  - At 1440x900:
+    1. **Card on Projects.** The person was on Projects. The agent made one text node (`edit_canvas`), then proposed 1 node + 1 wire + 1 param change. About 1.6 s later "Claude Code · waiting for your OK · Claude Code proposes 3 changes on the canvas · Review" dropped from the chip on Projects.
+    2. **Review.** From the list, Review opened Harbor's canvas. The bar showed "Join the lighthouse line into a combined prompt" and had focus (ring on), the ghost was in view, and the list closed.
+    3. **Accept.** The list entry read "Accepted" with no buttons. `list_notes` said Accepted, by person.
+    4. **Withdraw.** In Creator Studio, `nebula propose --as Codex` made "Codex proposes 1 change on the canvas" drop live, and `nebula proposal withdraw` settled it as "Withdrawn by Codex". `nebula notes` printed both outcomes.
+    5. **Restart.** A third proposal was reviewed from Creator Studio (canvas, bar focused). Back on Projects, I restarted the isolated backend with it open (same person token). About 0.6 s after the backend was up, the tab's list read "Closed: Nebula restarted" (`resolvedBy` system).
+  - At 1280x800: on Projects the card sat at x 796-1156 below the chip (1011-1156). Review led to the canvas with the bar focused and the ghost in view, and Reject read "Rejected".
+  - Screenshots: `scratchpad/q112/shots/` (replaced by the review re-run below, 01-09).
+  - **Blocked requests: 0 during the run.** The canary probe blocked 2 (8000 and 5173) and got 0 canary hits. No proxy failures during the run.
+  - **Console.** 16 errors, all `ERR_CONNECTION_REFUSED` on `ws://127.0.0.1:8847/ws` while the backend was down for the restart. None otherwise.
+- **Gates (2026-10-21, load average 10-16 from other sessions).**
+  - **Backend whole suite** (iso.sh): **9473 passed, 61 skipped, 0 failed** (22:20).
+  - **Frontend whole `vitest run`:** 52 failed, 3943 passed (22 of 336 files failed), run alongside the backend suite. 38 of the 52 were "Test timed out".
+    - None of the 22 files is one this change touches.
+    - Each of the 22 passes alone, 304 tests: CharacterStudioView 9, CommonsDetail 1, MoodboardStudioFieldUndo 22, App.commonsLifecycle 1, App.workspaceNavigation 8, ChatPanel.commons 8, ChatPanel.personal 12, CommandPalette 3, commonsDrafts 6, ArtDirectionNodes 6, AssetStudioDrafts 22, CinemaUploadControls 10, CreateView.reuse 6, ModelDiscovery.integration 4, ModelPicker 11, NodeInspectorPopover 14, ResultsGallery 8, ConnectionPopup 16, GraphFileActions 25, NodeLibrary 20, panelRenderScope 4, Settings 68.
+    - The two changed test files pass together: 49/49.
+  - `tsc -b` rc 0, and `npm run -s lint` rc 0.
+  - `vite build` plus the budget passed: **511,382 bytes raw** / 149,548 gzip (618 under 512,000; +129 over the parent's 511,253).
+- **Review (three confirmed findings, fixed tests-first).**
+  - **A proposal that closed while its Update was being written kept a live Review** (two findings, same race). `create_canvas_proposal` puts the proposal in the book, then waits on the Update's write (a project_store transaction off the loop). A close in that gap (the person deletes a node it needs, clears the canvas, opens another project, or the agent withdraws) found no Update yet, so `_follow_canvas_updates` skipped it. The Update then kept Review, the route still sent `proposalOpened` for a dead proposal (the bar showed Accept, which 409s), and a late settle after the book dropped it would have read "Closed: Nebula restarted" though Nebula never restarted.
+    - Fix (main.py): `_post_canvas_update` checks `proposal.is_open` once the Update exists; if it closed, it settles it at once through `_follow_canvas_updates` (the real outcome, "No longer fits" / "Withdrawn by ...") and schedules no timer. `create_canvas_proposal` returns early with the view (its real status and reason) when the proposal closed, so no `proposalOpened` and no agent pointer. The `proposal.created` journal entry still lands after the close's entry.
+    - Test: `test_a_proposal_that_closes_while_its_update_is_written_settles_at_once` (a stubbed `post_proposal` invalidates the proposal before writing). Failed first with `KeyError: 'resolvedAt'` (the Update was left open).
+  - **No bound on canvas-proposal Updates.** A propose/withdraw loop (Q109's "withdraw it first, then propose again", or a buggy agent) added one Update per cycle, each a card on whatever screen the person was on; withdrawn ones are read, so under the 200 cap they pushed out the person's older read Updates.
+    - Fix (agent_notes.py `_same_ask`): a new canvas proposal's Update replaces that same agent's canvas Updates that it withdrew itself (`resolvedBy.kind == "agent"`, which only a withdraw sets). Open ones, another agent's, and those accepted, rejected, expired, no longer fitting or closed by a restart stay. The ids go out as the socket's `removed`, which the client already drops. Docs say it: `propose_change`'s docstring, MCP-SETUP's "The Update." paragraph, the skill.
+    - Test: `test_a_new_proposal_folds_away_the_same_agents_withdrawn_update`. Failed first: the withdrawn Update was still on the list.
+    - **For Justin:** this narrows Q112 a's "every one" for the agent's own withdrawn proposals only. The reviewer suggested raising it with you; the other option was a per-agent limit on proposal Updates (post_note's 6 a minute), which would also hold back a real burst of proposals. Easy to undo (one branch in `_same_ask`).
+  - **Live re-run** (backend 8847, Vite 5847 with `VITE_NEBULA_BACKEND_PORT=8847`, temp HOME and `NEBULA_*` roots in scratch, no keys or tokens; one real MCP stdio agent "Claude Code", the CLI as "Codex"; free nodes only, nothing ran):
+    - 1440x900, on Projects: "Claude Code proposes 3 changes on the canvas" with Review dropped live. Review from the list opened Harbor's canvas with the bar showing it and focused; Accept: the entry read "Accepted".
+    - Codex proposed and withdrew: "Withdrawn by Codex". Codex proposed again: the withdrawn entry left the list and the new one showed with Review (2 entries, not 3).
+    - Back on Projects, restarted the isolated backend with that one open: "Closed: Nebula restarted".
+    - 1280x800, on Projects: the card at x 796-1156; Review led to the canvas with the bar focused; Reject: "Rejected".
+    - The race itself can't be timed live (one project_store write); the test covers it.
+    - Blocked requests during the run: 0 (canary: 2 blocked, 0 canary hits, 0 proxy failures). Console: only `[ws]` errors while the backend was down for the restart, plus the canary page's expected failures.
+    - Screenshots: `scratchpad/q112/shots/01-09`.
+  - No frontend file changed in this round.
+  - Gates after the fixes: backend whole suite (iso.sh) **9475 passed, 61 skipped, 0 failed** (+2, the two new tests); focused `test_canvas_proposal_updates` 24/24 and, with `test_asset_proposal_updates`, `test_canvas_proposals`, `test_agent_notes`, `test_proposal_restart_outcome`, 147/147. Frontend gates not re-run (no frontend file changed since the build gates above).
+- **Open items.**
+  - `start_here` / `nebula context` list open canvas proposals without their Update id (`brief()`; see above). Agents read it from the view or `list_notes`.
+  - Review from the card leaves the card up for the rest of its 4 s hold, next to the bar (the accepted cost).
+  - An expiry wasn't watched live (15 minutes). The timer and the read path are covered by tests.
+- **After merging main (#155) and the parent branch (coordinator).**
+  - Both merges were clean. The create route's early return, for a proposal that closed while its Update was being written, now goes through `agent_wording` too, so the agent's other open proposals that can't run still come back in `stillOpen` with the reminder.
+  - `agent_wording` gives a proposal that is no longer open no `warning` or `withdrawWith` (there is nothing to withdraw). MCP and the CLI word the HTTP answer again through it, so this holds on every surface. Test first: `test_each_surface_names_its_own_withdraw_call` failed on the old wording.
+  - The flood fix (a new proposal folds away the same agent's withdrawn Update) narrows "every one" for withdrawn proposals only. It went to Justin as Q115 before merge.
+- **Merging #159 (Q113 c, coordinator).** Three conflicts, all kept both sides:
+  - list_notes' docstring now says board Updates show in Moodboard Studio under "This board" (Q113), and that both propose_change and propose_asset_change post their own Update (Q112).
+  - The plan doc's §5.9 keeps the Q112 and Q113 paragraphs.
+  - The corner's imports.
+  A canvas proposal's Update sits in the project section, so its Review runs through the app adapter, as before. tsc and lint pass; the corner, board and proposal-bar tests 103/103; the proposal, notes and MCP backend tests 182/182.
+- **Merging #161 (the app-wide focus ring, coordinator).** #161's sweep test (`tests/focusRingCss.test.ts`) flagged this branch's `.proposal-bar:focus { outline: none; }`, which cleared the bar's focus mark with nothing in its place. It now follows #161's pattern for the asset strip: no outline for a mouse-driven focus, and the neutral token ring on `:focus-visible`, so a keyboard user who presses Review sees where focus went. The agent-colour Review flash is unchanged. The sweep, proposal-bar and corner tests pass (123), and lint is clean.

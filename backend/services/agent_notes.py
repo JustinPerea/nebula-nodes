@@ -77,8 +77,9 @@ ACTIONS: dict[str, dict[str, Any]] = {
     "history.restore": {"labels": ("Restore",), "keys": {"boardId": str, "historyIds": list}},
     "proposal.accept": {"labels": ("Accept",), "keys": {"proposalId": str}},
     "proposal.reject": {"labels": ("Reject",), "keys": {"proposalId": str}},
-    # An asset proposal's Update (Q92 a): takes the person to where they decide
-    # it (``target`` is the proposal's kind: project, moodboard or commons).
+    # A proposal's Update (Q92 a, Q112 a): takes the person to where they decide
+    # it (``target`` is the proposal's kind: project, moodboard, commons, or
+    # canvas for a canvas proposal, whose ``targetId`` is its project).
     "proposal.review": {"labels": ("Review",), "keys": {"proposalId": str, "target": str, "targetId": str}},
 }
 
@@ -783,15 +784,21 @@ class AgentNotes:
         return {"note": note_view(note), "unread": unread, "projectId": project_id, "removed": removed}
 
 
-    # -- an asset proposal's Update (Justin's Q92 a) ------------------------------
+    # -- a proposal's Update (Justin's Q92 a, Q112 a) -----------------------------
     def post_proposal(self, *, author: Mapping[str, Any], text: str,
-                      proposal: Mapping[str, Any]) -> dict[str, Any]:
-        """The Update an asset proposal posts on the open project's list:
-        written by Nebula from names only (``source: "nebula"``), attributed
-        to the proposing agent, ``about: "proposal"``, with one Review action.
-        One per agent and target: an earlier one from the same agent about the
+                      proposal: Mapping[str, Any], project_id: str | None = None) -> dict[str, Any]:
+        """The Update a proposal posts on the open project's list (or
+        ``project_id``'s, the project a canvas proposal was made in): written
+        by Nebula from names only (``source: "nebula"``), attributed to the
+        proposing agent, ``about: "proposal"``, with one Review action. It
+        skips the agent's rate limit: Nebula writes it on the agent's behalf,
+        following the one proposal already made. An asset proposal's is one
+        per agent and target: an earlier one from the same agent about the
         same project, board or reference leaves the list (the socket's
-        ``removed``), so a re-proposal replaces it instead of stacking."""
+        ``removed``), so a re-proposal replaces it instead of stacking. A
+        canvas proposal's replaces only the same agent's canvas Updates it
+        withdrew itself (``_same_ask``); every other one stays (Q112 a:
+        "every one")."""
         clean_author = _clean_author(author)
         ref = {"id": str(proposal["id"])[:64], "kind": str(proposal["kind"])[:16],
                "targetId": str(proposal["targetId"])[:128]}
@@ -809,7 +816,7 @@ class AgentNotes:
             notes.append(note)
             return unread_count(notes), removed + _prune(notes, MAX_PROJECT_NOTES)
 
-        project_id, (unread, removed) = self._write_project(mutate)
+        project_id, (unread, removed) = self._write_project(mutate, project_id=project_id)
         return {"note": note_view(note), "unread": unread, "projectId": project_id, "removed": removed}
 
     def retarget_proposal(self, project_id: str, note_id: str, proposal_id: str) -> dict[str, Any] | None:
@@ -854,13 +861,24 @@ class AgentNotes:
 
 
 def _same_ask(note: Mapping[str, Any], new: Mapping[str, Any]) -> bool:
-    """Whether ``note`` is the same agent's Update about the same target as ``new``."""
+    """Whether ``new`` replaces ``note`` on the list. An asset proposal's:
+    the same agent's Update about the same target. A canvas proposal's is its
+    own ask (Q112 a, "every one"), so it replaces only the same agent's
+    canvas Updates that the agent withdrew itself: Q109's "withdraw it
+    first, then propose again" is a revision, and without this a
+    propose/withdraw loop stacks one read Update per cycle, which the cap
+    then makes push the person's older Updates out. Open ones, and those the
+    person decided, expired or a restart closed, stay."""
     if note.get("about") != "proposal" or not isinstance(note.get("proposal"), Mapping):
         return False
     old_author, author = note.get("author") or {}, new["author"]
-    return (old_author.get("kind") == author["kind"] and old_author.get("id") == author["id"]
-            and note["proposal"].get("kind") == new["proposal"]["kind"]
-            and note["proposal"].get("targetId") == new["proposal"]["targetId"])
+    if old_author.get("kind") != author["kind"] or old_author.get("id") != author["id"]:
+        return False
+    if note["proposal"].get("kind") != new["proposal"]["kind"]:
+        return False
+    if new["proposal"]["kind"] == "canvas":
+        return bool(note.get("resolvedAt")) and (note.get("resolvedBy") or {}).get("kind") == "agent"
+    return note["proposal"].get("targetId") == new["proposal"]["targetId"]
 
 
 def note_summary(note: Mapping[str, Any]) -> str:

@@ -19,8 +19,10 @@ import { selectCanvasList, useAgentNotesStore, type SurfaceList } from '../../st
 import { hydrateBoard, selectBoardList, setBoardInView } from '../../lib/agentNotesBoard';
 import { wsClient } from '../../lib/wsClient';
 import { useBoardCanvasStore } from '../../store/boardCanvasStore';
-import { useCanvasProposalsStore } from '../../store/canvasProposalsStore';
+import { useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasProposalsStore';
 import { reviewAssetProposal } from '../../lib/assetProposalReview';
+import { reviewCanvasProposal } from '../../lib/canvasProposalReview';
+import { ghostBoxes } from '../../lib/canvasProposals';
 import { goToCanvas, onCanvas, whenReady } from '../../lib/goToCanvas';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
@@ -781,8 +783,24 @@ function useAppAdapter(keptWith: string): AgentNotesAdapter {
       // Show writes nothing: it frames and outlines, and leaves the selection
       // (which agents read, and the journal records) as it is.
       const state = store.getState();
+      reveal(note.refs.map((id) => nodeRect(state.nodeLookup, id)).filter((r): r is FlowBoxRect => r !== null));
+    }
+
+    /** A canvas proposal's Review (Q112 a): its ghosts and the nodes it touches, in view. */
+    function frameProposal(entry: ProposalEntry) {
+      const state = store.getState();
+      const rects: FlowBoxRect[] = ghostBoxes(entry.view, useCanvasProposalsStore.getState().drag[entry.view.id])
+        .map((b) => ({ left: b.x, top: b.y, right: b.x + b.width, bottom: b.y + b.height }));
+      for (const id of entry.view.references) {
+        const rect = nodeRect(state.nodeLookup, id);
+        if (rect) rects.push(rect);
+      }
+      reveal(rects);
+    }
+
+    function reveal(rects: FlowBoxRect[]) {
+      const state = store.getState();
       if (state.nodes.some((node) => node.dragging) || state.userSelectionActive) return;
-      const rects = note.refs.map((id) => nodeRect(state.nodeLookup, id)).filter((r): r is FlowBoxRect => r !== null);
       if (rects.length === 0) return;
       const block = {
         left: Math.min(...rects.map((r) => r.left)),
@@ -825,6 +843,10 @@ function useAppAdapter(keptWith: string): AgentNotesAdapter {
         });
       },
       runAction: async (_note, action) => {
+        // A canvas proposal's Update (Q112 a): the canvas, with it in the bar.
+        if (action.op.kind === 'proposal.review' && action.op.target === 'canvas') {
+          return reviewCanvasProposal(action.op, frameProposal);
+        }
         // An asset proposal's Update (Q92 a): go where the person decides it.
         if (action.op.kind === 'proposal.review') return reviewAssetProposal(action.op);
         const proposals = useCanvasProposalsStore.getState();

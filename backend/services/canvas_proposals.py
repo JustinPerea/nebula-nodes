@@ -645,6 +645,10 @@ def agent_wording(response: Mapping[str, Any], *, lister: str = READY_NODES_HTTP
     view = out.get("proposal") if isinstance(out.get("proposal"), Mapping) else {}
     proposal_id = str(view.get("id") or "") or None
     warning = readiness_warning(view.get("cost") or {}, lister=lister, proposal_id=proposal_id, withdraw=withdraw)
+    if view.get("status", OPEN) != OPEN:
+        # It closed already (it can while its Update is written), so there is nothing to withdraw.
+        out.pop("warning", None)
+        warning = None
     out.pop("withdrawWith", None)
     if warning:
         out["warning"] = warning
@@ -751,6 +755,9 @@ class Proposal:
     id_map: dict[str, str] | None = None
     run_node_ids: list[str] | None = None
     closed_at: float | None = None
+    # Its Update on the project's list ({id, projectId}; Justin's Q112 a), or
+    # None when no project was open. main posts it and settles it.
+    update: dict[str, str] | None = None
 
     @property
     def references(self) -> set[str]:
@@ -975,6 +982,7 @@ class ProposalBook:
             "reason": proposal.reason,
             "idMap": dict(proposal.id_map) if proposal.id_map else None,
             "runNodeIds": list(proposal.run_node_ids) if proposal.run_node_ids else None,
+            "update": dict(proposal.update) if proposal.update else None,
         }
 
     def person_values(self, proposal: Proposal) -> dict[str, Any]:
@@ -1040,6 +1048,46 @@ def _ports_for(ref: str, definition: Mapping[str, Any], edges: Iterable[Proposed
         "inputs": [_port_info(inputs.get(handle), handle) for handle in wanted_in],
         "outputs": [_port_info(outputs.get(handle), handle) for handle in wanted_out],
     }
+
+
+# -- the Update each proposal posts (Justin's Q112 a, 2026-10-21) --------------
+#
+# "a) Yes, every one: "Claude Code proposes 3 changes on the canvas", with
+# Review taking you to the canvas and its bar. It settles like the others
+# (Accepted, Rejected, Expired, Closed: Nebula restarted)." main posts it on
+# the project's Updates when the proposal opens and settles it when it ends.
+
+def change_count(spec: ProposalSpec) -> int:
+    """What the Update counts as a change: each new node, each wire and each
+    existing node whose params change (the bar's own groups). A run changes
+    nothing on the canvas, and a name belongs to its new node."""
+    return len(spec.nodes) + len(spec.edges) + len(spec.params)
+
+
+def update_text(proposal: Proposal) -> str:
+    """The Update's line, from a fixed template: never the agent's note
+    (that is the bar's), as an asset proposal's never is."""
+    agent = proposal.agent.name
+    count = change_count(proposal.spec)
+    if count == 0:
+        return f"{agent} proposes a run on the canvas"
+    return f"{agent} proposes {count} change{'' if count == 1 else 's'} on the canvas"
+
+
+# How the Update reads once its proposal closed, in place of Review. A
+# restart's line is asset_proposals.RESTART_OUTCOME (main settles it).
+_OUTCOMES = {"accepted": "Accepted", "rejected": "Rejected", "expired": "Expired",
+             "invalidated": "No longer fits"}
+
+
+def update_outcome(proposal: Proposal) -> str:
+    """Short, never the person's reason: "Accepted", "Rejected", "Expired",
+    "Withdrawn by <agent>" or "No longer fits" (a node it needed was
+    deleted, the canvas was cleared or replaced, or what it changes was
+    edited since)."""
+    if proposal.status == "withdrawn":
+        return f"Withdrawn by {proposal.agent.name}"
+    return _OUTCOMES.get(proposal.status, "No longer fits")
 
 
 canvas_proposals = ProposalBook()

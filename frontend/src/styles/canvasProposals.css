@@ -249,6 +249,30 @@
   border-left-color: rgb(255 255 255 / 0.3);
 }
 
+/* Review on the proposal's Update (Q112 a) focuses the bar: a ring in the
+ * agent's colour springs in on the agent log's spring and settles, as the
+ * asset proposals' strip does. */
+.proposal-bar:focus {
+  outline: none;
+}
+
+/* From the keyboard the bar shows the neutral ring (#161); the agent-colour
+ * ring below is the Review flash. */
+.proposal-bar:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #e8e6e1);
+  outline-offset: var(--sr-focus-offset, 2px);
+}
+
+.proposal-bar[data-review='true'] {
+  animation: proposal-bar-review 1600ms var(--agent-log-spring, cubic-bezier(0.2, 0.9, 0.3, 1.2)) both;
+}
+
+@keyframes proposal-bar-review {
+  0% { box-shadow: 0 16px 42px rgb(0 0 0 / 0.38), 0 0 0 0 var(--agent-color); }
+  25% { box-shadow: 0 16px 42px rgb(0 0 0 / 0.38), 0 0 0 3px var(--agent-color); }
+  100% { box-shadow: 0 16px 42px rgb(0 0 0 / 0.38), 0 0 0 0 transparent; }
+}
+
 .proposal-bar__main {
   display: flex;
   flex: 1;
@@ -586,9 +610,13 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 @media (prefers-reduced-motion: reduce) {
   .proposal-ghosts,
   .proposal-bar,
+  .proposal-bar[data-review='true'],
   .canvas-undo-notice {
     animation: none;
     transition: none;
+  }
+  .proposal-bar[data-review='true'] {
+    box-shadow: 0 16px 42px rgb(0 0 0 / 0.38), 0 0 0 2px var(--agent-color);
   }
 }
 

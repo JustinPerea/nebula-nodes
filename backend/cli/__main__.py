@@ -262,7 +262,9 @@ def build_parser() -> argparse.ArgumentParser:
             "--rename +up=\"Hero, upscaled\" --run +up --wait --timeout 100. "
             "New nodes use refs like +up; existing nodes use their ids (n4). Or pass --file plan.json "
             "with {note, nodes, edges, params, run, rename}. A proposal can't move, remove, unwire or "
-            "arrange nodes, or rename existing ones: `nebula apply` does that directly."
+            "arrange nodes, or rename existing ones: `nebula apply` does that directly. Each proposal also "
+            "posts an Update (\"Codex proposes 3 changes on the canvas\", with Review) that the person sees "
+            "on every screen, so don't also send a `nebula note` about it; `nebula notes` shows how it ended."
         ),
     )
     propose_p.add_argument("--file", help="JSON file with {note, nodes, edges, params, run, rename}")

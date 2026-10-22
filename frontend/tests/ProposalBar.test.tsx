@@ -176,6 +176,21 @@ describe('ProposalBar', () => {
     expect(screen.getByRole('alert').textContent).toBe('Only the canvas can accept this. Reload the page.');
   });
 
+  it("shows the proposal its Update's Review asked for, and paging moves on from it (Q112 a)", () => {
+    open(proposal('p_a', { createdAt: 1 }));
+    open(proposal('p_b', { createdAt: 2, note: 'Make the cold take' }), 'key-b');
+    render(<ProposalBar />);
+    expect(screen.getByText('Generate the warm take')).toBeTruthy();
+    act(() => useCanvasProposalsStore.getState().focus('p_b'));
+    expect(screen.getByText('Make the cold take')).toBeTruthy();
+    expect(screen.getByText(/2 of 2/)).toBeTruthy();
+    // The bar can take the keyboard (Review focuses it), never Accept itself.
+    expect(document.querySelector('.proposal-bar')?.getAttribute('tabindex')).toBe('-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Next proposal' }));
+    expect(screen.getByText('Generate the warm take')).toBeTruthy();
+    expect(useCanvasProposalsStore.getState().focusedId).toBeNull();
+  });
+
   it('pages between several proposals and frames ghosts with Show', () => {
     open(proposal('p_a', { createdAt: 1, note: 'older' }));
     open(proposal('p_b', { createdAt: 2, note: 'newer' }), 'key-b');

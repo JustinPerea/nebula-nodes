@@ -722,9 +722,11 @@ nebula notes --unread                                   # the list, newest first
 
 Over MCP: `post_note(text, board?, refs?, about?)` and
 `list_notes(board?, unread?)`. The words "note" stay in the tool names; on
-screen they are Updates. A proposal outside the canvas (`propose_asset_change`)
-posts its own Update with **Review**, and marks it with how it ended; see
-[Proposals outside the canvas](#proposals-outside-the-canvas).
+screen they are Updates. Every proposal posts its own Update with **Review**
+and marks it with how it ended: a canvas one (`propose_change`, `nebula
+propose`; see [Proposals](#proposals)) and one outside the canvas
+(`propose_asset_change`; see [Proposals outside the canvas](#proposals-outside-the-canvas)).
+Don't post an update to announce a proposal.
 
 Rules:
 
@@ -746,7 +748,8 @@ Rules:
   punctuation or extra spaces. On the canvas every board the project can see
   is checked (its own and the Global ones).
 - At most 6 a minute per agent per canvas or board (429
-  `notes_rate_limited`); 200 kept per project and 100 per board, the oldest
+  `notes_rate_limited`); a proposal's Update is Nebula's, so it neither
+  counts nor is refused. 200 kept per project and 100 per board, the oldest
   read ones dropped first.
 - Agents post and list. Only the person marks updates read (opening the list
   marks them all; `{upTo}` reads that one and everything older, `{ids}` just
@@ -773,6 +776,34 @@ paid)**). They can drag ghosts before accepting; the nodes land where they
 dropped them. Accept adds everything in one step (one undo) and starts the
 runs from the canvas, as if the person had clicked Run. Use proposals before
 anything that costs money or reworks the person's graph.
+
+**The Update.** Every canvas proposal also posts an Update in the Updates
+corner (Justin's Q112 a, 2026-10-21), so the person hears of it on every
+screen, not only on the canvas: "Claude Code proposes 3 changes on the
+canvas" ("proposes 1 change", or "proposes a run on the canvas" when it
+only runs nodes). Each new node, each wire and each existing node whose
+params change counts as one change; runs and names don't. Nebula writes it
+from that template, never from the agent's note (the note is the bar's), and
+attributes it to the agent (`source: "nebula"`, `about: "proposal"`,
+`proposal: {id, kind: "canvas", targetId: <project id>}`). Its one
+**Review** action (`proposal.review`, `target: "canvas"`) takes the person
+to the canvas from any screen, with that proposal shown in the bar and its
+ghosts in view. Every proposal gets its own Update, on the list of the
+project it was made in. None replaces another, with one exception: your next
+proposal replaces the Update of one you withdrew yourself (the socket's
+`removed`), so withdrawing and proposing again leaves one Update, not two; with no project open there is
+none (`update: null`). It doesn't count against the agent's `post_note`
+limit, so don't also post an update to announce the proposal. The view's
+`update` is `{id, projectId}`. When the proposal closes the Update gets
+`resolvedAt`, `resolvedBy`, `readAt` and an `outcome` in place of Review:
+"Accepted", "Rejected" (never the person's reason), "Withdrawn by Claude
+Code", "Expired" (on time, even when nobody reads proposals), "No longer
+fits" (a node it needs was deleted, the canvas was cleared or replaced by an
+import or another project, or what it changes was edited since), or
+"Closed: Nebula restarted" (proposals live in memory; settled the next time
+the list is read: `list_notes`, the person's tab reconnecting, a project
+switch). The socket sends `agentNotes` op `added` and then `resolved` for
+the open project. Agents read it with `list_notes` / `nebula notes`.
 
 ```bash
 nebula propose --note "Widen the take and upscale it" \
