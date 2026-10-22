@@ -541,9 +541,9 @@ for your own action. What you noticed, a report or a suggestion goes in
 `nebula note`: the person reads it under Updates in the top right of
 every screen (the canvas, Projects, the studios, the Commons), saved with
 the project. `--board <name>` keeps it with a moodboard instead (there `#12`
-names image 12; read it back with `nebula notes --board <name>`), but a
-board's updates are not on screen yet, so leave out `--board` to reach the
-person.
+names image 12; read it back with `nebula notes --board <name>`): the person
+sees it in Moodboard Studio's corner under "This board" while that board is
+open, and on no other screen, so leave out `--board` to reach them anywhere.
 One plain line, 240 characters, at most 6 a minute; never quote a private
 note; `--since-last-turn` for what they changed since your last turn. Your
 proposals outside the canvas post their own Update (you don't post one):

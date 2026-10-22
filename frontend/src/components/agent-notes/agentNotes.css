@@ -391,6 +391,55 @@ body.app-slava-restraint .agent-notes-root {
   list-style: none;
 }
 
+/* Two lists in one (Moodboard Studio, Q113 c): "This board", then the
+ * project's. Each heading carries what the header's right side says on a
+ * single list: where that list is kept. */
+.agent-notes-section + .agent-notes-section {
+  border-top: 1px solid var(--an-edge);
+}
+
+.agent-notes-section__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 16px 8px 18px;
+  border-bottom: 1px solid var(--an-edge);
+  background: var(--an-hover);
+}
+
+.agent-notes-section__title {
+  color: var(--an-ink-bold);
+  font: 600 12px/1 var(--an-ui);
+}
+
+.agent-notes-section__count {
+  color: var(--an-muted);
+  font: 400 11px/1 var(--an-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-notes-section__kept {
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--an-muted);
+  font: 400 12px/1 var(--an-ui);
+  white-space: nowrap;
+}
+
+.agent-notes-section__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-notes-section__empty {
+  margin: 0;
+  padding: 12px 16px 13px 18px;
+  color: var(--an-muted);
+  font: 400 12px/1.4 var(--an-ui);
+}
+
 .agent-notes-panel__empty {
   display: grid;
   gap: 6px;

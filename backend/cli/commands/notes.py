@@ -85,8 +85,11 @@ def run_note(client: NebulaClient, args: argparse.Namespace, *, out: TextIO | No
         print(json.dumps(result, indent=2, ensure_ascii=False), file=out)
         return 0
     note = result.get("note") or {}
-    where = "this board's" if board_id else "the canvas's"
-    print(f"Posted to {where} Updates (the person reads it in the top right): {note.get('text', text)}", file=out)
+    # A board's Updates show in Moodboard Studio on that board (Q113 c), the
+    # project's in the top right of every screen.
+    where = ("this board's Updates (the person reads it in Moodboard Studio on that board, under This board)"
+             if board_id else "the canvas's Updates (the person reads it in the top right)")
+    print(f"Posted to {where}: {note.get('text', text)}", file=out)
     dropped = result.get("dropped") or []
     if dropped:
         print(f"Not on {'the board' if board_id else 'the canvas'}, left out: {', '.join(map(str, dropped))}",

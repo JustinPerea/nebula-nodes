@@ -21,7 +21,9 @@ type FlowProps = {
   selectionOnDrag?: boolean;
   children?: ReactNode;
 };
-const flow = vi.hoisted(() => ({ props: null as FlowProps | null, setViewport: vi.fn(), fitView: vi.fn() }));
+const flow = vi.hoisted(() => ({ props: null as FlowProps | null, setViewport: vi.fn(), fitView: vi.fn(),
+  getNodesBounds: vi.fn<(nodes: unknown[]) => { x: number; y: number; width: number; height: number }>(
+    () => ({ x: 0, y: 0, width: 100, height: 100 })) }));
 vi.mock('@xyflow/react', async (importOriginal) => ({
   ...await importOriginal<typeof import('@xyflow/react')>(),
   ReactFlow: (props: FlowProps) => { flow.props = props; return <div data-testid="flow">{props.children}</div>; },
@@ -29,7 +31,7 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
   useReactFlow: () => ({
     screenToFlowPosition: ({ x, y }: { x: number; y: number }) => ({ x: x * 2, y: y * 2 }),
     setViewport: flow.setViewport, fitView: flow.fitView,
-    getViewport: () => ({ x: 0, y: 0, zoom: 1 }), getNodesBounds: () => ({ x: 0, y: 0, width: 100, height: 100 }),
+    getViewport: () => ({ x: 0, y: 0, zoom: 1 }), getNodesBounds: flow.getNodesBounds,
   }),
   useStoreApi: () => ({ getState: () => ({ width: 1000, height: 700, minZoom: 0.1, maxZoom: 2 }), subscribe: () => () => {} }),
 }));
@@ -73,7 +75,7 @@ beforeEach(() => {
   flow.props = null;
   moves = [];
   drops = [];
-  useBoardCanvasStore.setState({ selection: {}, viewports: {} });
+  useBoardCanvasStore.setState({ selection: {}, viewports: {}, frameRequest: null });
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
@@ -219,6 +221,29 @@ describe('the camera', () => {
     fireEvent.click(view.getByRole('button', { name: 'Zoom in' }));
     expect(spring.calls[0].cancel).toHaveBeenCalledTimes(1);
     expect(spring.calls[1].cancel).not.toHaveBeenCalled();
+  });
+});
+
+describe('Show from an Update (Q113 c)', () => {
+  it('frames the cards it names on a spring, once, and only on its own board', async () => {
+    spring.calls = [];
+    mount();
+    act(() => useBoardCanvasStore.getState().requestFrame('other', ['c2']));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+    expect(spring.calls).toHaveLength(0);
+    flow.getNodesBounds.mockClear();
+    act(() => useBoardCanvasStore.getState().requestFrame('k1', ['c2']));
+    await vi.waitFor(() => expect(spring.calls).toHaveLength(1));
+    expect((flow.getNodesBounds.mock.calls[0][0] as Node[]).map((node) => node.id)).toEqual(['c2']);
+    expect(useBoardCanvasStore.getState().frameRequest).toBeNull();
+    expect(useBoardCanvasStore.getState().viewports.k1).toEqual(spring.calls[0].to);
+  });
+
+  it('a request made before the Board view mounts (Show from List) frames once it has mounted', async () => {
+    spring.calls = [];
+    act(() => useBoardCanvasStore.getState().requestFrame('k1', ['c1', 'c2']));
+    mount();
+    await vi.waitFor(() => expect(spring.calls).toHaveLength(1));
   });
 });
 

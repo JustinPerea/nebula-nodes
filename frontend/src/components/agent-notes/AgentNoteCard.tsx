@@ -67,7 +67,7 @@ export function AgentNoteCard({
         </button>
       </div>
       <p className="agent-note-card__text" onClick={() => { onRead(); if (note.refs.length > 0) onShow(); }}>
-        {noteText(note)}
+        {noteText(note, adapter.numberFor)}
       </p>
       <NoteButtons
         note={note}
