@@ -151,7 +151,7 @@ def test_link_folder_refusals_are_written_copy(client, tmp_path):
     (tmp_path / "link").symlink_to(real)
     link = client.post("/api/commons/folders", json={"path": str(tmp_path / "link")}, headers=h)
     assert link.status_code == 422
-    assert link.json()["detail"] == "Choose a real folder, not a symlink."
+    assert link.json()["detail"] == "Choose the folder itself, not a shortcut to it."  # GM, round 3
 
 
 def _asset(client, h) -> str:
@@ -215,7 +215,7 @@ def test_written_evaluation_reasons_stay_as_they_are(client):
     h = human()
     r = client.post("/api/commons/evaluation/prepare", json={"path": "relative/path"}, headers=h)
     assert r.status_code == 409
-    assert r.json()["detail"] == "Use an absolute folder path."
+    assert r.json()["detail"] == "Enter the folder's full path, starting with /."  # round 3
 
 
 # -- the specific text reaches the terminal ------------------------------------

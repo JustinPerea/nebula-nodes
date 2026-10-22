@@ -18,7 +18,7 @@ from commons.measure import CODE_VERSION, measure_image, phash, phash_distance
 from commons.reader import TYPE_STYLES, SPACING, LAYOUTS, MEDIA, ROLES
 from commons.search import AXES
 from commons.vocab import load_vocabulary
-from commons.person_copy import FOLDER_UNREADABLE
+from commons.person_copy import FALLBACK, FOLDER_UNREADABLE
 
 VERSION = 'heldout-1'
 FIELDS = dict(type_style=TYPE_STYLES, spacing_density=SPACING, layout=LAYOUTS, medium=MEDIA)
@@ -38,6 +38,10 @@ class EvaluationError(ValueError):
 
 # Written to GM's patterns for the scan's technical failures (listed for GM).
 SCAN_FILE_UNREADABLE = "A file in that folder couldn't be read. Check that it opens, then scan again."
+# GM, error-copy round 3 (folders.py:96, verbatim): the folder's own line.
+FOLDER_SHORTCUT = "Choose the folder itself, not a shortcut to it."
+REFERENCE_GONE = "That reference isn't in this held-out set. Reload to get the latest references."
+INTEGRITY = "The held-out set doesn't match what was saved, so Nebula stopped and changed nothing."
 
 
 def canonical(value):
@@ -69,7 +73,8 @@ def clusters(rows):
 def select(rows):
     components = clusters(rows)
     if len(components) < 45:
-        raise EvaluationError(f'Need at least 45 distinct perceptual-hash clusters; found {len(components)}. No batch created.')
+        raise EvaluationError(f'Blind labeling needs at least 45 references that look different from each other. '
+                              f'You have {len(components)}. Add more, then try again.')
     groups = defaultdict(deque)
     for component in components:
         # Stable hash ranking avoids filename order deciding the content of the evaluation.
@@ -86,7 +91,7 @@ def select(rows):
 
 def _inventory(root):
     if not root.is_dir() or root.is_symlink():
-        raise EvaluationError('Choose a real folder, not a symlink.')
+        raise EvaluationError(FOLDER_SHORTCUT)
     paths, excluded = [], []
     def fail(error):
         raise EvaluationError(f'Cannot enumerate source folder: {error}', FOLDER_UNREADABLE)
@@ -95,7 +100,7 @@ def _inventory(root):
             path = Path(directory) / name
             if path.is_symlink():
                 raise EvaluationError(f'Resolve symlink before selection: {path.relative_to(root)}',
-                                      'A file in that folder is a symlink. Replace it with the real file, then scan again.')
+                                      'A file in that folder is a shortcut. Replace it with the file itself, then scan again.')
         for name in sorted(files):
             path = Path(directory) / name
             if path.suffix.lower().lstrip('.') in media.ACCEPTED_EXT:
@@ -103,7 +108,8 @@ def _inventory(root):
             else:
                 excluded.append(str(path.relative_to(root)))
         if len(paths) + len(excluded) > 5000:
-            raise EvaluationError('Folder exceeds the 5,000-file scan limit; no batch created.')
+            raise EvaluationError('Blind labeling can scan up to 5,000 files. That folder has more than 5,000. '
+                                  'Choose a smaller folder, then try again.')
     return sorted(paths), sorted(excluded)
 
 
@@ -123,15 +129,20 @@ def _snapshot(path, root):
     with os.fdopen(fd, 'rb') as source:
         before = os.fstat(source.fileno())
         if not stat.S_ISREG(before.st_mode):
-            raise EvaluationError('Only regular media files can be scanned.')
+            raise EvaluationError('Only regular media files can be scanned.',
+                                  'Blind labeling can only scan image and video files. Remove anything else from that folder, then try again.')
         if is_dataless(before):
-            raise EvaluationError('File is still dataless after download.')
+            raise EvaluationError('File is still dataless after download.',
+                                  "A file in that folder is still only in iCloud. Download it in Finder, then try again.")
         if before.st_size > media.VIDEO_CAP:
-            raise EvaluationError('File exceeds media size cap.')
+            raise EvaluationError('File exceeds media size cap.',
+                                  f'Each file can be up to {media.VIDEO_CAP // (1024 * 1024)} MB. A file in that folder is larger. '
+                                  'Remove it, then try again.')
         data = source.read(media.VIDEO_CAP + 1)
         after = os.fstat(source.fileno())
     if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
-        raise EvaluationError('Source changed during scan; retry before labeling.')
+        raise EvaluationError('Source changed during scan; retry before labeling.',
+                          'A file in that folder changed while Nebula scanned it. Try again.')
     sniffed = media.sniff(data)
     media.check_size(sniffed.media, len(data))
     if sniffed.media == 'image':
@@ -146,7 +157,8 @@ def _snapshot(path, root):
             times = media.keyframe_times(info['duration'], media.scene_cuts(video))
             images = [media.load_image(media.extract_frame(video, t), 'image/png') for t in times]
         if not images:
-            raise EvaluationError('Video yielded no keyframes.')
+            raise EvaluationError('Video yielded no keyframes.',
+                                  "A video in that folder has no frames Nebula can read. Remove it, then try again.")
     png = media.encode_png(images[0])
     return {'rel': str(path.relative_to(root)), 'source_sha256': sha(data), 'image_sha256': sha(png),
             'hashes': sorted(set(phash(image) for image in images)), 'media': sniffed.media,
@@ -158,11 +170,16 @@ def _check_preimport(conn):
     if existing and (existing['sealed'] or existing['closed']):
         ended = 'sealed' if existing['sealed'] else 'closed as assisted review'
         raise EvaluationError(f'A held-out batch already exists ({ended}). A new blind batch needs a '
-                              'separately chosen unseen set, which is not supported yet.')
+                              'separately chosen unseen set, which is not supported yet.',
+                              f'This library already has a held-out set, and it is {ended}. '
+                              'Nebula can make only one held-out set per library for now.')
     if existing:
-        raise EvaluationError('A held-out batch already exists. Continue its labels.')
-    if conn.execute('SELECT 1 FROM assets').fetchone() or conn.execute('SELECT 1 FROM analyses').fetchone():
-        raise EvaluationError('Select held-out references before any import or analysis.')
+        raise EvaluationError('This library already has a held-out set. Continue its labels.')
+    references = conn.execute('SELECT count(*) FROM assets').fetchone()[0]
+    if references or conn.execute('SELECT 1 FROM analyses').fetchone():
+        raise EvaluationError('Select held-out references before any import or analysis.',
+                              f'Blind labeling has to choose its references before any are added. This library already has '
+                              f'{references}. Prepare the held-out set in a library with no references yet.')
 
 
 async def prepare(store, path, *, downloader=None):
@@ -170,7 +187,7 @@ async def prepare(store, path, *, downloader=None):
         _check_preimport(conn)
     root = Path(path).expanduser()
     if not root.is_absolute():
-        raise EvaluationError('Use an absolute folder path.')
+        raise EvaluationError("Enter the folder's full path, starting with /.")
     paths, excluded = await asyncio.to_thread(_inventory, root)
     downloader = downloader or DatalessDownloader()
     rows, total = [], 0
@@ -184,7 +201,9 @@ async def prepare(store, path, *, downloader=None):
             raise EvaluationError(f'Cannot read {path.relative_to(root)}: {exc}', SCAN_FILE_UNREADABLE) from exc
         total += len(row['_png'])
         if total > 256 * 1024 * 1024:
-            raise EvaluationError('Decoded snapshot set exceeds 256 MB; no batch created.')
+            raise EvaluationError('Decoded snapshot set exceeds 256 MB; no batch created.',
+                                  'Blind labeling can read up to 256 MB of images from one folder. That folder has more. '
+                                  'Choose a smaller folder, then try again.')
         rows.append(row)
     return await asyncio.to_thread(_persist, store, root, rows, excluded)
 
@@ -220,11 +239,11 @@ def _persist(store, root, rows, excluded):
 def _batch(conn, revision=None, *, mutable=False):
     row = conn.execute('SELECT * FROM evaluation_batch WHERE id=1').fetchone()
     if row is None:
-        raise EvaluationError('No held-out batch. Prepare a folder first.')
+        raise EvaluationError("There's no held-out set yet. Prepare a folder first.")
     if mutable and row['sealed']:
-        raise EvaluationError('Labels are sealed and cannot be changed.')
+        raise EvaluationError("These labels are sealed, so they can't change.")
     if mutable and row['closed']:
-        raise EvaluationError('This batch was closed as assisted review; blind labels are read-only.')
+        raise EvaluationError("This held-out set was closed as assisted review, so its blind labels can't change.")
     if revision is not None and (type(revision) is not int or revision != row['revision']):
         raise EvaluationError('Labels changed in another window. Reload before saving.')
     return row
@@ -233,7 +252,7 @@ def _batch(conn, revision=None, *, mutable=False):
 def _item(conn, position):
     row = conn.execute('SELECT * FROM evaluation_items WHERE position=?', (position,)).fetchone()
     if row is None:
-        raise EvaluationError('Reference not found.')
+        raise EvaluationError('Reference not found.', REFERENCE_GONE)
     return row
 
 
@@ -251,16 +270,18 @@ def _verify(conn, batch):
     covers every held-out cluster.
     """
     if sha(batch['manifest'].encode()) != batch['manifest_hash']:
-        raise EvaluationError('Integrity check failed: the manifest no longer matches its hash. Nothing was changed.')
+        raise EvaluationError('Integrity check failed: the manifest no longer matches its hash. Nothing was changed.',
+                              INTEGRITY)
     manifest = json.loads(batch['manifest'])
     rows = conn.execute('SELECT position, image FROM evaluation_items ORDER BY position').fetchall()
     if len(rows) != len(manifest['heldout']) or any(
             sha(row['image']) != manifest['heldout'][row['position']]['image_sha256'] for row in rows):
-        raise EvaluationError('Integrity check failed: a reference image changed. Nothing was changed.')
+        raise EvaluationError('Integrity check failed: a reference image changed. Nothing was changed.', INTEGRITY)
     quarantined = {r[0] for r in conn.execute('SELECT phash FROM quarantine')}
     needed = {h for entry in manifest['heldout'] for n in entry['members'] for h in manifest['inventory'][n]['hashes']}
     if needed - quarantined:
-        raise EvaluationError('Integrity check failed: a held-out cluster is missing from quarantine. Nothing was changed.')
+        raise EvaluationError('Integrity check failed: a held-out cluster is missing from quarantine. Nothing was changed.',
+                              INTEGRITY)
     return manifest, sorted(quarantined)
 
 
@@ -302,20 +323,21 @@ def _bump(conn):
 
 def lock_accents(store, position, revision, points, no_accents):
     if type(no_accents) is not bool or not isinstance(points, list) or len(points) > 100 or bool(points) == no_accents:
-        raise EvaluationError('Mark 1–100 accent points, or explicitly record no accents.')
+        raise EvaluationError('Mark 1–100 accent points, or explicitly record no accents.',
+                              'Mark between 1 and 100 accent points, or check \u201cI don\u2019t see any accent colors\u201d.')
     with store.db.tx() as conn:
         _batch(conn, revision, mutable=True)
         row = _item(conn, position)
         if row['accents'] is not None:
-            raise EvaluationError('Accent observations are already locked.')
+            raise EvaluationError("This reference's accents are already saved, so they can't change.")
         image = media.load_image(row['image'], 'image/png')
         accents = []
         for point in points:
             if not isinstance(point, dict) or set(point) != {'x','y'}:
-                raise EvaluationError('Each accent needs x and y coordinates only.')
+                raise EvaluationError('Each accent needs x and y coordinates only.', FALLBACK)
             x, y = point['x'], point['y']
             if any(type(v) not in (int, float) or not math.isfinite(v) or not 0 <= v <= 1 for v in (x,y)):
-                raise EvaluationError('Accent coordinates must be between 0 and 1.')
+                raise EvaluationError('Accent coordinates must be between 0 and 1.', FALLBACK)
             rgb = image.getpixel((min(image.width-1,int(x*image.width)),min(image.height-1,int(y*image.height))))
             accents.append(dict(x=x,y=y,hex='#' + ''.join(f'{c:02x}' for c in rgb)))
         conn.execute('UPDATE evaluation_items SET accents=? WHERE position=?',
@@ -326,24 +348,30 @@ def lock_accents(store, position, revision, points, no_accents):
 
 def validate_labels(labels, palette, *, vocabulary, complete=False):
     if not isinstance(labels, dict) or set(labels) != {'tags','axes','palette_roles','keywords','no_keywords','flagged'}:
-        raise EvaluationError('Invalid ground-truth label fields.')
+        raise EvaluationError('Invalid ground-truth label fields.', FALLBACK)
     for field in ('tags','axes','palette_roles'):
         if not isinstance(labels[field], dict):
-            raise EvaluationError(f'{field} must be an object.')
+            raise EvaluationError(f'{field} must be an object.', FALLBACK)
     if set(labels['tags']) - set(FIELDS) or any(v not in FIELDS[k] for k,v in labels['tags'].items()):
-        raise EvaluationError('Unknown structure label.')
+        raise EvaluationError('Unknown structure label.', FALLBACK)
     if set(labels['axes']) - set(AXES) or any(type(v) not in (int,float) or not math.isfinite(v) or not -1 <= v <= 1 for v in labels['axes'].values()):
-        raise EvaluationError('Each character value must be a finite number from -1 to 1.')
+        raise EvaluationError('Each character value must be a finite number from -1 to 1.', FALLBACK)
     indexes = {str(p['index']) for p in palette}
     if set(labels['palette_roles']) - indexes or any(v not in ROLES for v in labels['palette_roles'].values()):
-        raise EvaluationError('Invalid palette role or index.')
+        raise EvaluationError('Invalid palette role or index.', FALLBACK)
     words = labels['keywords']
     if not isinstance(words,list) or any(not isinstance(w,str) for w in words) or len(words)>12 or len(set(words))!=len(words) or set(words)-set(vocabulary):
-        raise EvaluationError('Choose up to 12 distinct canonical keywords.')
+        if isinstance(words, list) and len(words) > 12:
+            raise EvaluationError('Choose up to 12 distinct canonical keywords.',
+                                  f'Each reference can have up to 12 keywords. This one has {len(words)}. '
+                                  'Remove some, then save again.')
+        raise EvaluationError('Choose up to 12 distinct canonical keywords.', FALLBACK)
     if type(labels['no_keywords']) is not bool or type(labels['flagged']) is not bool or (words and labels['no_keywords']):
-        raise EvaluationError('Invalid explicit-absence or review flag.')
+        raise EvaluationError('Invalid explicit-absence or review flag.', FALLBACK)
     if complete and (set(labels['tags']) != set(FIELDS) or set(labels['axes']) != set(AXES) or set(labels['palette_roles']) != indexes or not (words or labels['no_keywords']) or labels['flagged']):
-        raise EvaluationError('All 15 references need complete labels and cleared review flags before sealing.')
+        raise EvaluationError('All 15 references need complete labels and cleared review flags before sealing.',
+                              'Sealing needs every field labeled on all 15 references, with no review flags left. '
+                              'Finish them, then seal.')
 
 
 def save_labels(store, position, revision, labels):
@@ -351,7 +379,8 @@ def save_labels(store, position, revision, labels):
         batch = _batch(conn, revision, mutable=True)
         row = _item(conn, position)
         if row['accents'] is None:
-            raise EvaluationError('Save blind accent observations before labeling the palette.')
+            raise EvaluationError('Save blind accent observations before labeling the palette.',
+                                  "Save this reference's accents before you label its palette.")
         validate_labels(labels, json.loads(row['palette']), vocabulary=json.loads(batch['manifest'])['vocabulary_terms'])
         conn.execute('UPDATE evaluation_items SET labels=? WHERE position=?', (canonical(labels),position))
         _bump(conn)
@@ -364,17 +393,22 @@ def seal(store, revision):
         if batch['sealed']:
             return _view(conn)
         if batch['closed']:
-            raise EvaluationError('This batch was closed as assisted review; it cannot be sealed.')
+            raise EvaluationError("This held-out set was closed as assisted review, so it can't be sealed.")
         if conn.execute('SELECT 1 FROM assisted_reviews').fetchone():
-            raise EvaluationError('This batch is now assisted review; it cannot be sealed as independent blind labels.')
+            raise EvaluationError("The agent graded some of these references, so they can't be sealed as blind labels. "
+                                  'Close them as assisted review instead.')
         _verify(conn, batch)
         rows = conn.execute('SELECT * FROM evaluation_items ORDER BY position').fetchall()
         if len(rows)!=15:
-            raise EvaluationError('The evaluation requires exactly 15 references.')
+            raise EvaluationError('The evaluation requires exactly 15 references.',
+                                  f'Sealing needs exactly 15 references. This held-out set has {len(rows)}.')
         labels = []
         for row in rows:
             if row['accents'] is None or row['labels'] is None:
-                raise EvaluationError('Finish all 15 references before sealing.')
+                done = sum(r['accents'] is not None and r['labels'] is not None for r in rows)
+                raise EvaluationError('Finish all 15 references before sealing.',
+                                      f'Sealing needs all 15 references labeled. {done} of 15 are done. '
+                                      'Finish the rest, then seal.')
             value = json.loads(row['labels'])
             palette = json.loads(row['palette'])
             validate_labels(value, palette, vocabulary=json.loads(batch['manifest'])['vocabulary_terms'], complete=True)
@@ -397,13 +431,14 @@ def close(store, revision, *, actor, acknowledge):
     working, makes blind drafts read-only and stops new grading attempts.
     """
     if acknowledge is not True:
-        raise EvaluationError('Confirm that this batch becomes assisted review, not blind ground truth.')
+        raise EvaluationError('Confirm that this batch becomes assisted review, not blind ground truth.',
+                              'Confirm that these labels become assisted review, then close the batch.')
     with store.db.tx() as conn:
         batch = _batch(conn)
         if batch['closed']:
             return _view(conn)  # a double click or a stale window gets the same record
         if batch['sealed']:
-            raise EvaluationError('This batch is sealed as blind ground truth; there is nothing to close.')
+            raise EvaluationError("These labels are sealed as blind ground truth, so there's nothing to close.")
         _batch(conn, revision)
         if conn.execute("SELECT 1 FROM assisted_reviews WHERE status='running'").fetchone():
             raise EvaluationError('A grading attempt is still running. Close after it finishes.')

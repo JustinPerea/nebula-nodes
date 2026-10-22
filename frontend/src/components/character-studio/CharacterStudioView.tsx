@@ -111,7 +111,7 @@ export function CharacterStudioView() {
   const enterCharacterEditor = useUIStore((s) => s.enterCharacterEditor);
 
   const studio = useAssetStudioDraft('character', characterEditorScope, characterEditorId, emptyDraft);
-  const { draft, savedId, thumbnail, saveState, loadError, saveError, loaded,
+  const { draft, savedId, thumbnail, saveState, loadError, saveError, retry, loaded,
     dirty, pendingSaveId, key, revision, epoch, projectId, projectReady, verifyProject, setDraft, initialize, patch } = studio;
   const loading = !loaded;
   const [railScope, setRailScope] = useState<AssetScope>(characterEditorScope);
@@ -382,6 +382,15 @@ export function CharacterStudioView() {
   // whatever scope it was opened with (a node's Open button guesses, and a
   // draft kept from an earlier visit loads without a fetch). The rail opens
   // on that scope, and says so when it's another project's Character.
+  /** Retry is a save, so it shows only beside a save's own failure (GM,
+   * error-copy round 3: "A Retry that does something else is a defect."). */
+  const canRetry = Boolean(saveError) && retry === 'save';
+  /** A failed save that another line (no project open) replaced is still
+   * owed: Error, dirty, and autosave waits while it says Error. The toolbar
+   * keeps its Retry (a save) for it; the notice's line, which no save
+   * redoes, keeps its own words and no Retry (round 3 review). */
+  const toolbarCanRetry = saveState === 'error' && (retry === 'save' || (retry == null && dirty));
+
   const characterProjectName = useProjectName(draft.projectId);
   const characterHome: AssetHome | null = loaded && savedId
     ? assetHome(draft.projectId, projectId, characterProjectName) : null;
@@ -391,6 +400,7 @@ export function CharacterStudioView() {
     <div className="character-studio-view">
       <CharacterStudioToolbar
           saveState={saveState}
+          canRetry={toolbarCanRetry}
           saveError={saveError === null ? null : typeof saveError === 'string' ? saveError : oneLine(saveError)}
           onRetry={() => void persist()}
           onDelete={savedId && !isDraftId ? () => { void deleteCharacterNow(); } : undefined}
@@ -470,15 +480,15 @@ export function CharacterStudioView() {
 
             {saveError && (
               <div className="character-studio-view__notice character-studio-view__notice--error">
-                {/* Its own Retry is the retry: GM's short line (WRAP rule). */}
-                <FailureLines failure={saveError} retry />{' '}
+                {/* Its own Retry (a save) is the retry: GM's short line (WRAP rule). */}
+                <FailureLines failure={saveError} retry={canRetry} />{canRetry && <>{' '}
                 <button
                   type="button"
                   className="character-studio-view__retry"
                   onClick={() => void persist()}
                 >
                   Retry
-                </button>
+                </button></>}
               </div>
             )}
 

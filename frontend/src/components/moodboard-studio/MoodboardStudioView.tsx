@@ -247,8 +247,12 @@ export function MoodboardStudioView() {
   const exitMoodboardEditor = useUIStore((s) => s.exitMoodboardEditor);
 
   const studio = useAssetStudioDraft('moodboard', moodboardEditorScope, moodboardEditorId, emptyDraft);
-  const { draft: storedDraft, savedId, saveState, saveError, saveErrorRetry, loadError, loaded,
+  const { draft: storedDraft, savedId, saveState, saveError, retry, retryStep, loadError, loaded,
     dirty, pendingSaveId, pendingAnalysisId, key, revision, epoch, projectId, projectReady, verifyProject, setDraft, initialize, patch } = studio;
+  // The steps undo and redo would take next: a failed undo's Retry runs only
+  // while its step is still that one (round 3; else it is hidden).
+  const nextUndoId = useBoardUndoStore((state) => state.history(key, epoch).done.at(-1)?.id ?? null);
+  const nextRedoId = useBoardUndoStore((state) => state.history(key, epoch).undone.at(-1)?.id ?? null);
   const draft = withBriefFields(storedDraft);
   const loading = !loaded;
   const [uploading, setUploading] = useState(false);
@@ -806,12 +810,12 @@ export function MoodboardStudioView() {
     } catch (err) {
       undoStore.restoreTaken(key, step, from);
       // The step names its own action (the edit request's heading is the
-      // board save's), and the toolbar's Retry saves, it doesn't undo again:
-      // GM's full line, not the short one (WRAP applies to a real retry).
+      // board save's), and the toolbar's Retry runs the same undo (or redo)
+      // of this step again (GM, round 3: "Make Retry redo the failed action").
       store.failSave(key, attempt.id, {
         ...failureCopy(err),
         heading: direction === 'undo' ? "Couldn't undo the change." : "Couldn't redo the change.",
-      }, { retry: false });
+      }, { retry: direction, step: step.id });
     }
   };
 
@@ -891,7 +895,10 @@ export function MoodboardStudioView() {
       if (ownsAnalysis()) store.patch(targetKey, { draft: moodboardToDraft(updated), savedId: updated.id,
         thumbnail: updated.thumbnail, dirty: false, loaded: true, saveState: 'saved' });
     } catch (err) {
-      if (ownsAnalysis()) store.patch(targetKey, { saveError: failureCopy(err, { heading: "Couldn't analyze the board." }), saveState: 'error' });
+      if (ownsAnalysis()) {
+        store.patch(targetKey, { saveError: failureCopy(err, { heading: "Couldn't analyze the board." }), saveState: 'error',
+          retry: 'analyze', retryStep: null });
+      }
     } finally {
       store.clearAnalysis(targetKey, attempt.id);
     }
@@ -927,7 +934,7 @@ export function MoodboardStudioView() {
       if (isCurrent() && !useAssetStudioDraftStore.getState().entries[key]?.pendingSaveId) moveDraft(kept);
       else rememberBrief(kept);
     } catch (err) {
-      if (isCurrent()) patch({ saveError: failureCopy(err, { heading: "Couldn't keep your brief." }) });
+      if (isCurrent()) patch({ saveError: failureCopy(err, { heading: "Couldn't save your brief." }) });
     }
   };
 
@@ -996,14 +1003,32 @@ export function MoodboardStudioView() {
   const previewView = storedImageView(previewThumbnail);
   const analysis = draft.analysis;
 
+  /** The toolbar's Retry runs exactly the action that failed (GM, error-copy
+   * round 3: "A Retry that does something else is a defect."): a save, an
+   * analyze, or the same undo or redo while its step is still the next one.
+   * A line no button redoes (an upload, the brief) gets no Retry of its own,
+   * so it keeps its full reason. But a failed save it replaced is still
+   * owed (Error, dirty, and autosave waits while it says Error): the toolbar
+   * keeps a Retry for it, and that Retry saves (round 3 review). */
+  const canRetry = saveState === 'error' && (retry === 'save' || retry === 'analyze'
+    || (retry === 'undo' && Boolean(retryStep) && nextUndoId === retryStep)
+    || (retry === 'redo' && Boolean(retryStep) && nextRedoId === retryStep));
+  const saveOwed = saveState === 'error' && dirty && retry == null;
+  const retryFailed = () => {
+    if (retry === 'analyze') void runAnalyze();
+    else if (retry === 'undo' && retryStep) void runUndo('undo', retryStep);
+    else if (retry === 'redo') void runUndo('redo');
+    else void persist();
+  };
+
   const header = (
     <WorkspaceHeader title="Moodboard" onBack={exitMoodboardEditor} className="moodboard-studio-toolbar">
       <ViewSwitch view={view} onChange={setView} />
       <div className={`moodboard-studio-toolbar__state moodboard-studio-toolbar__state--${saveState}`}>
         {saveState === 'saving' ? 'Saving' : saveState === 'saved' ? 'Saved' : saveState === 'error' ? 'Error' : 'Draft'}
       </div>
-      {saveState === 'error' && (
-        <button type="button" className="moodboard-studio-toolbar__button" onClick={() => void persist()}>
+      {(canRetry || saveOwed) && (
+        <button type="button" className="moodboard-studio-toolbar__button" onClick={retryFailed}>
           Retry
         </button>
       )}
@@ -1064,10 +1089,9 @@ export function MoodboardStudioView() {
       {deleting.error && !deleting.lastDeleted && (
         <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert"><FailureLines failure={deleting.error} /></div>
       )}
-      {/* The toolbar's Retry shows with a failed save: the reason is GM's short line (WRAP rule). */}
+      {/* Beside the toolbar's Retry (it redoes this failure) the reason is GM's short line (WRAP rule). */}
       {saveError && <div className="moodboard-studio__notice moodboard-studio__notice--error">
-        {/* Short line only beside a Retry that redoes it: a save's own failure. */}
-        <FailureLines failure={saveError} retry={saveState === 'error' && saveErrorRetry === true} /></div>}
+        <FailureLines failure={saveError} retry={canRetry} /></div>}
       {moving.error && (
         <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert"><FailureLines failure={moving.error} /></div>
       )}

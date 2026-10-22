@@ -63,7 +63,7 @@ export function RunHistoryPanel() {
     try {
       await deleteProviderRecovery(runId, nodeId);
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Could not clear the recovery safeguard.');
+      alert(error instanceof Error ? error.message : "Couldn't forget the recovery safeguard.");
     } finally {
       setClearingRecovery(null);
     }

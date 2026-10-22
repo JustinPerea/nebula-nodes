@@ -12,6 +12,7 @@ from commons.person_copy import Refused
 
 # Written for the person (GM - Design, error-copy round 2); agents and the log keep the message.
 OUTSIDE_IMAGE = "That region is outside the image. Draw it again."
+REGION_GONE = "That region isn't on this reference anymore. Reload to get the latest version."
 
 DEFAULT_DAILY_CAP = 20
 QUARANTINE_DISTANCE = 8
@@ -74,8 +75,8 @@ def write_analysis_ok(store, asset_id: str, *, fields: dict, raw_output: str, fe
             (aid, asset_id, prompt_version, model_id, code_version, vocab_version, json.dumps(fields),
              raw_output, json.dumps(fewshot_ids), duration_ms, now),
         )
-        conn.execute("UPDATE assets SET analysis_state = 'ready', last_error = NULL, next_attempt_at = NULL "
-                     "WHERE id = ?", (asset_id,))
+        conn.execute("UPDATE assets SET analysis_state = 'ready', last_error = NULL, last_error_kind = NULL, "
+                     "next_attempt_at = NULL WHERE id = ?", (asset_id,))
         existing = [json.loads(r["box"]) for r in conn.execute(
             "SELECT box FROM regions WHERE asset = ? AND status != 'deleted'", (asset_id,))]
         for region in proposed_regions:
@@ -103,7 +104,13 @@ def write_analysis_ok(store, asset_id: str, *, fields: dict, raw_output: str, fe
 
 def write_analysis_failed(store, asset_id: str, *, error: str, raw_output: str | None, prompt_version: str,
                           model_id: str, vocab_version: str, fewshot_ids: list[str],
-                          max_attempts: int = 3, code_version: str = "measure-1") -> dict:
+                          max_attempts: int = 3, code_version: str = "measure-1",
+                          error_kind: str | None = None) -> dict:
+    """Record a failed analysis. `error_kind` is why, for the person's UI
+    (commons/analysis_errors.py); left out, it is read from `error`'s text."""
+    from commons import analysis_errors
+
+    kind = error_kind if error_kind in analysis_errors.KINDS else analysis_errors.classify_text(error)
     aid = new_id("ana")
     now = datetime.now(timezone.utc)
     with store.db.tx() as conn:
@@ -116,11 +123,11 @@ def write_analysis_failed(store, asset_id: str, *, error: str, raw_output: str |
         attempts = conn.execute("SELECT attempts FROM assets WHERE id = ?", (asset_id,)).fetchone()[0]
         if attempts < max_attempts:
             due = _iso(now + timedelta(seconds=30 * 2 ** attempts))
-            conn.execute("UPDATE assets SET analysis_state = 'queued', next_attempt_at = ?, last_error = ? "
-                         "WHERE id = ?", (due, error[:500], asset_id))
+            conn.execute("UPDATE assets SET analysis_state = 'queued', next_attempt_at = ?, last_error = ?, "
+                         "last_error_kind = ? WHERE id = ?", (due, error[:500], kind, asset_id))
         else:
-            conn.execute("UPDATE assets SET analysis_state = 'analysis_failed', last_error = ? WHERE id = ?",
-                         (error[:500], asset_id))
+            conn.execute("UPDATE assets SET analysis_state = 'analysis_failed', last_error = ?, last_error_kind = ? "
+                         "WHERE id = ?", (error[:500], kind, asset_id))
         store.emit(conn, "analysis_failed", {"asset": asset_id, "analysis": aid, "error": error[:200]},
                    "worker:analysis")
         terminal = attempts >= max_attempts
@@ -270,8 +277,7 @@ def add_comment(store, membership_id: str, *, text: str, actor: str, region_id: 
         with store.db.read() as conn:
             region = conn.execute("SELECT asset FROM regions WHERE id = ?", (region_id,)).fetchone()
         if membership is None or region is None or region["asset"] != membership["asset"]:
-            raise Refused("region not found on this asset",
-                          "That region isn't on this reference anymore. Reload to get the latest version.")
+            raise Refused("region not found on this asset", REGION_GONE)
     cid = new_id("cmt")
     with store.db.tx() as conn:
         conn.execute("INSERT INTO comments(id, membership, region, actor, text, source_date, created_at) "

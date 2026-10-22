@@ -86,6 +86,7 @@ from services.node_registry import NodeRegistry
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
 from services import agent_start, input_sizes, node_categories, node_lookup
 from services import output_thumbnail
+from services import refusal_copy
 from services.node_errors import NodeErrors
 from services import project_cover
 from services.cli_graph import SHORT_ID_RE, CLIGraph
@@ -328,31 +329,93 @@ provider_start_guard = ProviderStartGuard(
 )
 
 
+# A node's World Labs paid state, in the person's words (GM - Design, error-copy
+# round 3: "'settle' and 'start' are internal. Write it as: 'This node is still
+# waiting on World Labs. Check the job in Marble, then {the node's actual button
+# label} before you delete it.'"). Each state names the control that clears it:
+# the status bar's "Checked Marble — unlock" (an ambiguous start), Run History's
+# "Checked Marble — forget" (a recovery record), the node's own ID fields (an ID
+# in its params, named by their labels), or, while a start is still in flight,
+# no button: the run has to finish. `subject` is "This node is" for a node's own
+# refusal, "A node is" for one about the whole canvas; `then` ends the line
+# ("delete it", "try again"). Agents keep the specific text, unchanged.
+WORLD_LABS_WAITING = "still waiting on World Labs."
+_RECOVERY_FIELDS_FALLBACK = "Resume Operation ID and Existing World ID"
+
+
+def _paid_state_person(state: str, *, subject: str, then: str, fields: str = _RECOVERY_FIELDS_FALLBACK) -> str:
+    waiting = f"{subject} {WORLD_LABS_WAITING}"
+    if state == "active":
+        return f"{waiting} Let its run finish, then {then}."
+    if state == "ambiguity":
+        return f"{waiting} Check the job in Marble, then use \u201cChecked Marble \u2014 unlock\u201d before you {then}."
+    if state == "recovery":
+        return (f"{waiting} Check the job in Marble, then use \u201cChecked Marble \u2014 forget\u201d "
+                f"in Run History before you {then}.")
+    return f"{waiting} Check the job in Marble, then clear the node's {fields} before you {then}."
+
+
+def _recovery_field_labels(nodes: list[dict[str, Any]]) -> str:
+    """The labels (node_definitions.json) of the recovery ID fields `nodes`
+    hold, in policy order: a World node's "Resume Operation ID" and "Existing
+    World ID", a World export node's "Resume Export Operation ID"."""
+    labels: list[str] = []
+    for node in nodes:
+        definition_id = str(node.get("definitionId") or "")
+        policy = operation_policy(definition_id)
+        if policy is None:
+            continue
+        operation, resource = recovery_identifiers(definition_id, node.get("params") or {})
+        definition = node_registry.get(definition_id) or {}
+        names = {param.get("key"): param.get("label") for param in definition.get("params") or []
+                 if isinstance(param, dict)}
+        for key, value in ((policy.recovery_operation_param, operation), (policy.recovery_resource_param, resource)):
+            label = names.get(key) if key and value else None
+            if isinstance(label, str) and label and label not in labels:
+                labels.append(label)
+    if not labels:
+        return _RECOVERY_FIELDS_FALLBACK
+    return labels[0] if len(labels) == 1 else ", ".join(labels[:-1]) + " and " + labels[-1]
+
+
+def _graph_paid_refusal(specific: str, state: str, fields: str = _RECOVERY_FIELDS_FALLBACK) -> HTTPException:
+    """409 for replacing the whole canvas (clear it, open or make a project,
+    replace the graph, restore a bundle) while World Labs state holds a node.
+    The person's line leaves the action out: the screen's own heading
+    ("Couldn't clear the canvas.") names it."""
+    return refusal_copy.refusal(409, specific, _paid_state_person(state, subject="A node is", then="try again",
+                                                                  fields=fields), route="canvas")
+
+
+def _graph_settling_specific(action: str) -> str:
+    return (f"Cannot {action} while a World Labs paid start is settling. "
+            "Stop the run and wait for its terminal state first.")
+
+
 def _reject_graph_replacement_during_paid_start(action: str) -> None:
     if provider_start_guard.has_active():
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"Cannot {action} while a World Labs paid start is settling. "
-                "Stop the run and wait for its terminal state first."
-            ),
-        )
-    canonical_checkpoints = _graph_worldlabs_recovery_checkpoints(
-        list(cli_graph.nodes.values())
+        raise _graph_paid_refusal(_graph_settling_specific(action), "active")
+    nodes = list(cli_graph.nodes.values())
+    canonical_checkpoints = _graph_worldlabs_recovery_checkpoints(nodes)
+    if provider_start_guard.list():
+        state = "ambiguity"
+    elif provider_recovery_store.list():
+        state = "recovery"
+    elif canonical_checkpoints:
+        state = "params"
+    elif _graph_recovery_bootstrap_error is not None:
+        # Nebula couldn't journal a recovery it read from the canvas. Rare,
+        # with no record to name, so the person reads the recovery line
+        # (listed for GM).
+        state = "recovery"
+    else:
+        return
+    raise _graph_paid_refusal(
+        f"Cannot {action} while unresolved World Labs paid state exists. "
+        "Check Marble and resolve the exact recovery/ambiguity record first.",
+        state,
+        _recovery_field_labels(nodes) if state == "params" else _RECOVERY_FIELDS_FALLBACK,
     )
-    if (
-        provider_start_guard.list()
-        or provider_recovery_store.list()
-        or canonical_checkpoints
-        or _graph_recovery_bootstrap_error is not None
-    ):
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"Cannot {action} while unresolved World Labs paid state exists. "
-                "Check Marble and resolve the exact recovery/ambiguity record first."
-            ),
-        )
 
 
 @contextmanager
@@ -372,13 +435,7 @@ def _paid_graph_mutation(action: str):
             _graph_recovery_bootstrap_error = None
             yield
     except ProviderStartConflictError as exc:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"Cannot {action} while a World Labs paid start is settling. "
-                "Stop the run and wait for its terminal state first."
-            ),
-        ) from exc
+        raise _graph_paid_refusal(_graph_settling_specific(action), "active") from exc
     except ProviderStartPersistenceError as exc:
         raise HTTPException(
             status_code=507,
@@ -3447,6 +3504,8 @@ async def chat_websocket(websocket: WebSocket) -> None:
 
 def _personal_agent_http_error(exc: personal_agents.PersonalAgentError) -> HTTPException:
     status = {"not_found": 404, "conflict": 409}.get(exc.code, 400)
+    if status == 404:  # GM's 404 pattern (error-copy round 3); these routes are the person's only
+        return refusal_copy.not_found(exc.message, "agent", "agents")
     return HTTPException(status_code=status, detail=exc.message)
 
 
@@ -3475,7 +3534,7 @@ async def update_personal_agent(agent_id: str, body: dict[str, Any]) -> dict[str
     """Switch an agent on or off, rename or recolor it (custom: also its command)."""
     require_person(current_request_headers())
     if not personal_agents.ID_RE.fullmatch(agent_id):
-        raise HTTPException(status_code=404, detail="No agent with that id")
+        raise refusal_copy.not_found("No agent with that id", "agent", "agents")
     try:
         view = await asyncio.to_thread(personal_agents.update_agent, _STATE_DIR, agent_id, body)
     except personal_agents.PersonalAgentError as exc:
@@ -3495,7 +3554,7 @@ async def delete_personal_agent(agent_id: str) -> dict[str, Any]:
     except personal_agents.PersonalAgentError as exc:
         raise _personal_agent_http_error(exc) from exc
     if not removed:
-        raise HTTPException(status_code=404, detail="No custom agent with that id")
+        raise refusal_copy.not_found("No custom agent with that id", "agent", "agents")
     await acp_sessions.close_stale(_STATE_DIR)
     return {"ok": True}
 
@@ -3741,7 +3800,7 @@ async def update_agent_app(app_id: str, body: dict[str, Any]) -> dict[str, Any]:
     except app_tokens.AppTokenError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if app_view is None:
-        raise HTTPException(status_code=404, detail="No connected app with that id")
+        raise refusal_copy.not_found("No connected app with that id", "app", "apps")
     return {"app": app_view}
 
 
@@ -3752,7 +3811,7 @@ async def revoke_agent_app(app_id: str) -> dict[str, Any]:
     The person's only."""
     require_person(current_request_headers())
     if not (app_tokens.valid_id(app_id) and app_token_store.revoke(app_id)):
-        raise HTTPException(status_code=404, detail="No connected app with that id")
+        raise refusal_copy.not_found("No connected app with that id", "app", "apps")
     return {"status": "revoked"}
 
 
@@ -4843,6 +4902,10 @@ class AgentNotesReadBody(BaseModel):
 
 
 def _note_http_error(exc: NoteError) -> HTTPException | JSONResponse:
+    if exc.code == "note_not_found":
+        # GM's 404 pattern for the person (error-copy round 3); agents keep the detail.
+        detail = refusal_copy.refusal_detail(exc.detail, refusal_copy.gone("update", "updates"))
+        return JSONResponse(status_code=exc.status, content={"detail": detail, "code": exc.code})
     if exc.code:
         return JSONResponse(status_code=exc.status, content={"detail": exc.detail, "code": exc.code})
     return HTTPException(status_code=exc.status, detail=exc.detail)
@@ -4964,7 +5027,7 @@ def _live_board_for_notes(moodboard_id: str) -> dict[str, Any] | JSONResponse:
     try:
         board = store.get(moodboard_id, laid_out=False)
     except ValueError:
-        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
     if board is None:
         return _asset_not_found("moodboard", moodboard_id)
     return board
@@ -5674,7 +5737,7 @@ async def get_canvas_proposal(proposal_id: str, request: Request) -> dict[str, A
     if proposal is None and asset_proposals.get(proposal_id) is not None:
         return await _get_asset_proposal(proposal_id, wait)  # a project's or a board's (U16)
     if proposal is None:
-        raise HTTPException(status_code=404, detail=_gone_proposal_detail(proposal_id))
+        raise refusal_copy.not_found(_gone_proposal_detail(proposal_id), "proposal", "proposals")
     loop = asyncio.get_running_loop()
     deadline = loop.time() + wait
     cursor = canvas_events.latest
@@ -5706,7 +5769,7 @@ async def withdraw_canvas_proposal(proposal_id: str) -> dict[str, Any]:
     if proposal is None and asset_proposals.get(proposal_id) is not None:
         return await _withdraw_asset_proposal(proposal_id, identity)  # a project's or a board's (U16)
     if proposal is None:
-        raise HTTPException(status_code=404, detail=f"No proposal {proposal_id[:20]}")
+        raise refusal_copy.not_found(f"No proposal {proposal_id[:20]}", "proposal", "proposals")
     if proposal.agent.id != identity.id:
         raise HTTPException(status_code=403, detail="Only the agent that proposed this can withdraw it")
     try:
@@ -5731,7 +5794,7 @@ async def _decidable_proposal(proposal_id: str) -> Proposal:
     supplied = lower.get(_PROPOSAL_KEY_HEADER) or ""
     proposal = canvas_proposals.get(proposal_id)
     if proposal is None:
-        raise HTTPException(status_code=404, detail="This proposal is no longer available")
+        raise refusal_copy.not_found("This proposal is no longer available", "proposal", "proposals")
     if not supplied or not secrets.compare_digest(supplied.encode(), proposal.accept_key.encode()):
         raise HTTPException(status_code=403, detail="This proposal can only be accepted from the Nebula canvas.")
     await _sweep_proposals()
@@ -6473,7 +6536,7 @@ async def _get_asset_proposal(proposal_id: str, wait: float) -> dict[str, Any]:
     await _sweep_asset_proposals()
     proposal = asset_proposals.get(proposal_id)
     if not isinstance(proposal, AssetProposal) or not await _commons_proposal_visible(proposal, current_request_headers()):
-        raise HTTPException(status_code=404, detail=_gone_proposal_detail(proposal_id))
+        raise refusal_copy.not_found(_gone_proposal_detail(proposal_id), "proposal", "proposals")
     loop = asyncio.get_running_loop()
     deadline = loop.time() + wait
     cursor = canvas_events.latest
@@ -6497,7 +6560,7 @@ async def _withdraw_asset_proposal(proposal_id: str, identity: Any) -> dict[str,
     await _sweep_asset_proposals()
     proposal = asset_proposals.get(proposal_id)
     if not isinstance(proposal, AssetProposal) or not await _commons_proposal_visible(proposal, current_request_headers()):
-        raise HTTPException(status_code=404, detail=f"No proposal {proposal_id[:20]}")
+        raise refusal_copy.not_found(f"No proposal {proposal_id[:20]}", "proposal", "proposals")
     if proposal.agent.id != identity.id:
         raise HTTPException(status_code=403, detail="Only the agent that proposed this can withdraw it")
     if proposal.id in _asset_deciding:
@@ -6520,7 +6583,7 @@ async def _decidable_asset_proposal(proposal_id: str) -> AssetProposal:
     supplied = lower.get(_PROPOSAL_KEY_HEADER) or ""
     proposal = asset_proposals.get(proposal_id)
     if not isinstance(proposal, AssetProposal):
-        raise HTTPException(status_code=404, detail="This proposal is no longer available")
+        raise refusal_copy.not_found("This proposal is no longer available", "proposal", "proposals")
     if not supplied or not secrets.compare_digest(supplied.encode(), proposal.accept_key.encode()):
         raise HTTPException(status_code=403, detail="This proposal can only be decided from Nebula, where you saw it.")
     await _sweep_asset_proposals()
@@ -7436,10 +7499,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     )
 
     if not sub_nodes:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Node '{request.target_node_id}' not found in graph",
-        )
+        raise _node_gone(request.target_node_id, f"Node '{request.target_node_id}' not found in graph")
     _note_run_nodes(run_id, sub_nodes)
 
     _validate_cinema_base_models(sub_nodes)
@@ -7588,7 +7648,7 @@ def _run_cancelled_actor(run_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
 async def get_execution_status(run_id: str) -> dict:
     record = execution_runs.get(run_id)
     if record is None:
-        raise HTTPException(status_code=404, detail=f"run '{run_id}' not found")
+        raise refusal_copy.not_found(f"run '{run_id}' not found", "run", "runs")
     return {"runId": run_id, "status": record.status}
 
 
@@ -7922,7 +7982,7 @@ async def _promote_shot_variation(
     async with _shot_merge_lock(node_id):
         node = cli_graph.nodes.get(node_id)
         if node is None:
-            raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+            raise _node_gone(node_id)
         if node.get("definitionId") != "cinema-scene":
             raise HTTPException(status_code=400, detail=f"Node '{node_id}' is not a cinema-scene node")
 
@@ -7940,7 +8000,7 @@ async def _promote_shot_variation(
             None,
         )
         if target_shot is None:
-            raise HTTPException(status_code=404, detail=f"Shot '{shot_id}' not found in scene")
+            raise refusal_copy.not_found(f"Shot '{shot_id}' not found in scene", "shot", "shots")
 
         variations = target_shot.get("variations")
         if not isinstance(variations, list) or index >= len(variations):
@@ -8014,7 +8074,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
 
     target = next((n for n in nodes if n.id == request.node_id), None)
     if target is None:
-        raise HTTPException(status_code=404, detail=f"Node '{request.node_id}' not found in graph")
+        raise _node_gone(request.node_id, f"Node '{request.node_id}' not found in graph")
     if target.definition_id != "cinema-scene":
         raise HTTPException(status_code=400, detail=f"Node '{request.node_id}' is not a cinema-scene node")
 
@@ -8028,7 +8088,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
         None,
     )
     if shot is None:
-        raise HTTPException(status_code=404, detail=f"Shot '{request.shot_id}' not found in scene")
+        raise refusal_copy.not_found(f"Shot '{request.shot_id}' not found in scene", "shot", "shots")
 
     # Build a single-shot copy of the scene so the handler regenerates ONLY this
     # shot. The seed is applied per-pass via the shot's `_seedOverride` (which the
@@ -8040,7 +8100,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
 
     sub_nodes, sub_edges = get_subgraph(patched_nodes, request.edges, request.node_id)
     if not sub_nodes:
-        raise HTTPException(status_code=404, detail=f"Node '{request.node_id}' not found in graph")
+        raise _node_gone(request.node_id, f"Node '{request.node_id}' not found in graph")
     _note_run_nodes(run_id, sub_nodes)
     fresh_paid_ancestors = _fresh_paid_worldlabs_claims(sub_nodes)
     if fresh_paid_ancestors:
@@ -9519,7 +9579,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
     with _paid_graph_mutation("update graph node parameters"):
         node = cli_graph.nodes.get(node_id)
         if not node:
-            raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+            raise _node_gone(node_id)
         params_before = copy.deepcopy(node.get("params") or {})
 
         raw_params = body.get("params", {})
@@ -9552,7 +9612,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
                 try:
                     candidate.update_params(node_id, params)
                 except ValueError:
-                    raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+                    raise _node_gone(node_id)
                 _commit_graph_candidate_with_recoveries(
                     candidate,
                     [candidate.nodes[node_id]],
@@ -9562,7 +9622,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
                 try:
                     cli_graph.update_params(node_id, params)
                 except ValueError:
-                    raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+                    raise _node_gone(node_id)
     await _broadcast_graph_sync(edit=True)
     publish_action(f"Updated {node_id} params")
     changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
@@ -9642,13 +9702,13 @@ async def configure_universal_node(node_id: str, body: dict[str, Any]) -> dict[s
     _check_workspace_revision()
     node = cli_graph.nodes.get(node_id)
     if node is None:
-        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+        raise _node_gone(node_id)
     definition_id, model = _universal_request(body, str(node.get("definitionId") or ""))
     data = await _universal_data(definition_id, model)
     with _paid_graph_mutation("set a node's model"):
         node = cli_graph.nodes.get(node_id)
         if node is None or node.get("definitionId") != definition_id:
-            raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+            raise _node_gone(node_id)
         params_before = copy.deepcopy(node.get("params") or {})
         configured = universal_ports.configure(definition_id, params_before, model, data)
         removed = [copy.deepcopy(edge) for edge in cli_graph.edges
@@ -9685,7 +9745,7 @@ async def rename_graph_node(node_id: str, body: dict[str, Any]) -> dict:
     _check_workspace_revision()
     node = cli_graph.nodes.get(node_id)
     if not node:
-        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+        raise _node_gone(node_id)
     raw = body.get("label")
     if not isinstance(raw, str):
         raise HTTPException(status_code=400, detail="label must be a string")
@@ -9738,7 +9798,7 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
     normalized: dict[str, dict[str, float]] = {}
     for node_id, raw_position in raw_positions.items():
         if node_id not in cli_graph.nodes:
-            raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+            raise _node_gone(node_id)
         if not isinstance(raw_position, dict):
             raise HTTPException(status_code=400, detail=f"Position for '{node_id}' must be an object")
         try:
@@ -9866,12 +9926,14 @@ async def delete_provider_recovery(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if active:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "Cannot delete a World Labs recovery checkpoint while that "
-                    "node's paid start is still settling"
-                ),
+            # Run History's "Checked Marble — forget": the same "still
+            # waiting" line as the node's own refusal (round 3 review).
+            raise refusal_copy.refusal(
+                409,
+                "Cannot delete a World Labs recovery checkpoint while that "
+                "node's paid start is still settling",
+                _paid_state_person("active", subject="This node is", then="try again"),
+                route="canvas",
             )
         try:
             removed = provider_recovery_store.delete(
@@ -9968,33 +10030,29 @@ async def acknowledge_provider_start_ambiguity(
 
 # What the person's canvas reads when a node can't go (error-copy review, GM:
 # never ids in what the person reads; "People get the written line and agents
-# keep the specific detail"). Agents keep the detail with the id, unchanged.
-NODE_PAID_STATE_PERSON = ("This node has a World Labs start that isn't settled yet. "
-                          "Check Marble, then settle it before you delete the node.")
+# keep the specific detail"). Round 3: _paid_state_person, by the record that
+# holds the node; an ID in its params names that node's own fields by their
+# labels (round 3 review: a World export node has only "Resume Export
+# Operation ID"). Agents keep the detail with the id, unchanged.
 NODE_GONE_PERSON = "That node isn't on the canvas anymore."
 
 
-def _person_reads_reply() -> bool:
-    """Whether a refusal's words go to the person: a browser page (the canvas,
-    with or without this launch's person token; see _from_a_browser) with no
-    agent marker. It picks words, never authority. An agent, the CLI, MCP or
-    a script keeps the specific detail it fixes its call with."""
-    headers = current_request_headers() or {}
-    if has_agent_marker(headers):
-        return False
-    lower = {str(key).lower() for key in headers}
-    return "origin" in lower or "sec-fetch-site" in lower
-
-
 def _node_refusal(status: int, specific: str, person: str) -> HTTPException:
-    return HTTPException(status_code=status, detail=person if _person_reads_reply() else specific)
+    return refusal_copy.refusal(status, specific, person, route="canvas")
+
+
+def _node_gone(node_id: str, specific: str | None = None) -> HTTPException:
+    """404 for a node that isn't on the canvas: GM's line for the person
+    (approved round 3), the id for agents."""
+    return _node_refusal(404, specific or f"Node '{node_id}' not found", NODE_GONE_PERSON)
 
 
 def _ensure_node_deletable(node_id: str, node: dict[str, Any]) -> None:
     """Refuse (409) to delete a node that still carries World Labs paid state.
 
     Call inside _paid_graph_mutation so no paid start can land in between.
-    The person reads NODE_PAID_STATE_PERSON; an agent reads the node's id.
+    The person reads _paid_state_person for the record that holds it; an
+    agent reads the node's id.
     """
     try:
         active = provider_start_guard.has_active_node(node_id)
@@ -10011,13 +10069,17 @@ def _ensure_node_deletable(node_id: str, node: dict[str, Any]) -> None:
     live_checkpoint = has_recovery_identity(
         str(node.get("definitionId") or ""), params
     )
-    if active or held or recovered or live_checkpoint:
+    state = ("active" if active else "ambiguity" if held else "recovery" if recovered
+             else "params" if live_checkpoint else None)
+    if state is not None:
         raise _node_refusal(
             409,
             f"Cannot delete {node_id}: it has unresolved World Labs paid state. "
             "Check Marble, then resolve its exact recovery/ambiguity record "
             "first.",
-            NODE_PAID_STATE_PERSON,
+            _paid_state_person(state, subject="This node is", then="delete it",
+                               fields=_recovery_field_labels([node]) if state == "params"
+                               else _RECOVERY_FIELDS_FALLBACK),
         )
 
 
@@ -10028,7 +10090,7 @@ async def delete_graph_node(node_id: str) -> dict:
     with _paid_graph_mutation("delete a graph node"):
         node = cli_graph.nodes.get(node_id)
         if node is None:
-            raise _node_refusal(404, f"Node '{node_id}' not found", NODE_GONE_PERSON)
+            raise _node_gone(node_id)
         _ensure_node_deletable(node_id, node)
         _guard_approved_runs(lambda probe: probe.remove_node(node_id))
         label = _node_label(node_id)
@@ -10037,7 +10099,7 @@ async def delete_graph_node(node_id: str) -> dict:
         try:
             cli_graph.remove_node(node_id)
         except ValueError:
-            raise _node_refusal(404, f"Node '{node_id}' not found", NODE_GONE_PERSON)
+            raise _node_gone(node_id)
     await _broadcast_graph_sync(edit=True)
     publish_action(f"Removed {node_id}")
     _journal(
@@ -11834,7 +11896,7 @@ def _project_id_or_404(project_id: str, catalog: dict[str, Any]) -> dict[str, An
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     project = catalog["projects"].get(project_id)
     if project is None:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise refusal_copy.not_found("Project not found", "project", "projects")
     return project
 
 
@@ -12748,7 +12810,7 @@ def _trashed_or_404(project_id: str, catalog: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     entry = (catalog.get("trash") or {}).get(project_id)
     if entry is None:
-        raise HTTPException(status_code=404, detail="That project is no longer in Recently deleted")
+        raise refusal_copy.refusal(404, "That project is no longer in Recently deleted", refusal_copy.gone_from_trash("project"))
     return entry
 
 
@@ -14093,7 +14155,7 @@ async def get_character(char_id: str) -> dict:
     try:
         char = store.get(char_id)
     except ValueError:
-        raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
+        raise refusal_copy.not_found(f"Character '{char_id}' not found", "character", "characters")
     if char is None:
         return _asset_not_found("character", char_id)
     return char
@@ -14116,7 +14178,7 @@ async def update_character(char_id: str, body: CharacterUpdate) -> dict:
         try:
             stored = store.get(char_id)
         except ValueError:
-            raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
+            raise refusal_copy.not_found(f"Character '{char_id}' not found", "character", "characters")
         # Not live: the in_trash 404 the Studio offers Restore from, before
         # any check (a Studio sends the views it read, held links too).
         if stored is None:
@@ -14143,7 +14205,7 @@ async def update_character(char_id: str, body: CharacterUpdate) -> dict:
             "character": exc.character,
         })
     except ValueError:
-        raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
+        raise refusal_copy.not_found(f"Character '{char_id}' not found", "character", "characters")
     await _broadcast_stored_asset("character", character, edit={})
     return character
 
@@ -14156,7 +14218,7 @@ async def delete_character(char_id: str) -> dict:
     try:
         record = store.delete(char_id, deleted_by=actor_record(actor_for_headers(current_request_headers())))
     except (KeyError, ValueError):
-        raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
+        raise refusal_copy.not_found(f"Character '{char_id}' not found", "character", "characters")
     await _broadcast_stored_asset("character", None, char_id, deleted=True)
     return {"status": "trashed", "id": char_id, "trashed": record}
 
@@ -14218,7 +14280,7 @@ async def get_moodboard(moodboard_id: str) -> dict:
         # image (services/moodboard_layout.file_aspect). Reading writes nothing.
         moodboard = await asyncio.to_thread(store.get, moodboard_id)
     except ValueError:
-        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
     if moodboard is None:
         return _asset_not_found("moodboard", moodboard_id)
     return _moodboard_out(moodboard)
@@ -14401,9 +14463,10 @@ async def analyze_moodboard_route(moodboard_id: str) -> dict:
         # saves an old board's layout) finds its image headers already read.
         moodboard = await asyncio.to_thread(store.get, moodboard_id)
     except ValueError:
-        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
     if moodboard is None:
-        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+        # In Recently deleted: say so (and how to restore it), as GET does.
+        return _asset_not_found("moodboard", moodboard_id)
 
     from services.moodboard_analysis import analysis_is_current, analyze_moodboard
     from services.moodboard_store import VersionConflict
@@ -14425,7 +14488,7 @@ async def analyze_moodboard_route(moodboard_id: str) -> dict:
             if not analysis_is_current(moodboard, analysis):
                 analysis = await asyncio.to_thread(analyze_moodboard, moodboard)
         except (KeyError, ValueError):
-            raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+            raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
     await _broadcast_stored_asset("moodboard", moodboard, edit=_UNTOUCHED_LAYOUT)
     await _say_agent_action(moodboard_actions.describe_write("analyzed", moodboard))
     return _moodboard_out(moodboard)
@@ -14453,9 +14516,9 @@ async def dry_run_moodboard_analysis(moodboard_id: str, body: MoodboardDryRunReq
     try:
         moodboard = _moodboard_store().get(moodboard_id, laid_out=False)  # nor does the dry run
     except ValueError:
-        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
     if moodboard is None:
-        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
     # It reads every image file, so it runs off the event loop.
     return await asyncio.to_thread(dry_run, moodboard, thresholds)
 
@@ -14472,9 +14535,9 @@ def _reader_board(moodboard_id: str) -> dict:
     try:
         board = _moodboard_store().get(moodboard_id, laid_out=False)  # a read never writes the board
     except ValueError:
-        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
     if board is None:
-        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
     return board
 
 
@@ -14649,7 +14712,7 @@ async def delete_moodboard(moodboard_id: str) -> dict:
     try:
         record = store.delete(moodboard_id, deleted_by=actor_record(actor_for_headers(current_request_headers())))
     except (KeyError, ValueError):
-        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
     await _broadcast_stored_asset("moodboard", None, moodboard_id, deleted=True)
     await _say_agent_action(moodboard_actions.describe_write("deleted", record))
     return {"status": "trashed", "id": moodboard_id, "trashed": record}
@@ -14694,15 +14757,17 @@ async def _move_stored_asset(kind: str, asset_id: str, body: AssetMoveBody) -> d
     try:
         live = store.get(asset_id)
     except ValueError:
-        raise HTTPException(status_code=404, detail=f"{noun} '{asset_id}' not found")
+        raise _stored_asset_gone(kind, f"{noun} '{asset_id}' not found")
     if live is None:
         record = _trashed_asset(kind, asset_id)
         if record is None:
-            raise HTTPException(status_code=404, detail=f"{noun} '{asset_id}' not found")
+            raise _stored_asset_gone(kind, f"{noun} '{asset_id}' not found")
         return JSONResponse(status_code=409, content={
-            "detail": (f"{noun} '{asset_id}' is in Recently deleted. Restore it first "
-                       f"(nebula trash restore {kind} {asset_id}, or POST /api/trash/{kind}/{asset_id}/restore), "
-                       "then move it."),
+            "detail": refusal_copy.refusal_detail(
+                f"{noun} '{asset_id}' is in Recently deleted. Restore it first "
+                f"(nebula trash restore {kind} {asset_id}, or POST /api/trash/{kind}/{asset_id}/restore), "
+                "then move it.",
+                f"That {_person_noun(kind)} is in Recently deleted. Restore it first, then move it."),
             "code": "in_trash",
             "trashed": record,
         })
@@ -14710,7 +14775,7 @@ async def _move_stored_asset(kind: str, asset_id: str, body: AssetMoveBody) -> d
     try:
         before, after, moved = store.move(asset_id, target)
     except KeyError:  # deleted between the read and the move
-        raise HTTPException(status_code=404, detail=f"{noun} '{asset_id}' not found")
+        raise _stored_asset_gone(kind, f"{noun} '{asset_id}' not found")
     except FileExistsError as exc:
         raise HTTPException(status_code=409, detail=(
             f"{noun} '{asset_id}' can't move: {exc}. Nothing was changed.")) from exc
@@ -14783,16 +14848,31 @@ def _asset_noun(kind: str) -> str:
     return "Moodboard" if kind == "moodboard" else "Character"
 
 
+def _person_noun(kind: str) -> str:
+    """The thing as the person's UI names it (GM's 404 pattern, error-copy round 3)."""
+    return {"style": "style", "moodboard": "board"}.get(kind, "character")
+
+
+def _stored_asset_gone(kind: str, specific: str) -> HTTPException:
+    noun = _person_noun(kind)
+    return refusal_copy.not_found(specific, noun, f"{noun}s")
+
+
 def _asset_not_found(kind: str, asset_id: str) -> JSONResponse:
     """404 for a board or character that isn't live. When it is in Recently
     deleted the body says so (code "in_trash", with the trash record), so a
-    card can offer Restore instead of "not found"."""
+    card can offer Restore instead of "not found". The person reads GM's
+    lines (error-copy round 3); agents keep the id and the restore command."""
     record = _trashed_asset(kind, asset_id)
+    noun = _person_noun(kind)
     if record is None:
-        return JSONResponse(status_code=404, content={"detail": f"{_asset_noun(kind)} '{asset_id}' not found"})
+        return JSONResponse(status_code=404, content={"detail": refusal_copy.refusal_detail(
+            f"{_asset_noun(kind)} '{asset_id}' not found", refusal_copy.gone(noun, f"{noun}s"))})
     return JSONResponse(status_code=404, content={
-        "detail": (f"{_asset_noun(kind)} '{asset_id}' is in Recently deleted. Restore it with "
-                   f"nebula trash restore {kind} {asset_id} (POST /api/trash/{kind}/{asset_id}/restore)."),
+        "detail": refusal_copy.refusal_detail(
+            f"{_asset_noun(kind)} '{asset_id}' is in Recently deleted. Restore it with "
+            f"nebula trash restore {kind} {asset_id} (POST /api/trash/{kind}/{asset_id}/restore).",
+            f"That {noun} is in Recently deleted. Restore it, then try again."),
         "code": "in_trash",
         "trashed": record,
     })
@@ -14856,7 +14936,7 @@ async def restore_trashed(kind: str, item_id: str) -> dict[str, Any]:
         live = _stored_asset(kind, item_id)
         if live is not None:
             return {"restored": kind, "id": item_id, "asset": _asset_out(kind, live), "alreadyRestored": True}
-        raise HTTPException(status_code=404, detail=f"{_asset_noun(kind)} '{item_id}' isn't in Recently deleted")
+        raise refusal_copy.refusal(404, f"{_asset_noun(kind)} '{item_id}' isn't in Recently deleted", refusal_copy.gone_from_trash(_person_noun(kind)))
     await _broadcast_stored_asset(kind, asset)
     if kind == "moodboard":
         await _say_agent_action(moodboard_actions.describe_write("restored", asset))
@@ -14880,7 +14960,7 @@ async def purge_trashed(kind: str, item_id: str) -> dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except KeyError:
-        raise HTTPException(status_code=404, detail=f"{_asset_noun(kind)} '{item_id}' isn't in Recently deleted")
+        raise refusal_copy.refusal(404, f"{_asset_noun(kind)} '{item_id}' isn't in Recently deleted", refusal_copy.gone_from_trash(_person_noun(kind)))
     # A card that showed it "in Recently deleted" now says it's gone.
     await _broadcast_stored_asset(kind, None, item_id, deleted=True)
     if kind == "style":
@@ -15073,7 +15153,7 @@ async def delete_preset(preset_id: str) -> dict:
     try:
         record = preset_store.delete(preset_id, deleted_by=actor_record(actor_for_headers(current_request_headers())))
     except (KeyError, ValueError):
-        raise HTTPException(status_code=404, detail=f"Style '{preset_id}' not found")
+        raise refusal_copy.not_found(f"Style '{preset_id}' not found", "style", "styles")
     await _style_written("deleted", record, deleted=True)
     return {"status": "trashed", "id": preset_id, "trashed": record}
 

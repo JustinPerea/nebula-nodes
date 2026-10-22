@@ -265,6 +265,13 @@ Commons and `nebula proposal <proposal id> --wait` follows it.
 `nebula commons collections`, `status`, `borrowings`, `fidelity <id>` and
 `concentration` read the rest. Blind labeling and the agent review stay the
 person's alone.
+A reference whose analysis failed carries `last_error` (the reader's text)
+and `last_error_kind` (`unavailable`, `unreadable` or `other`) in
+`nebula commons get <id>`.
+
+Refusals give you the specific text (an id, the field, the command to run);
+the person's canvas gets a written line instead. Read `detail`, not the
+person's wording.
 
 ## Moodboards
 

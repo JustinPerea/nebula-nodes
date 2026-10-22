@@ -67,7 +67,11 @@ async function backend(input: RequestInfo | URL, init?: RequestInit): Promise<Re
   const method = (init?.method ?? 'GET').toUpperCase();
   if (url.pathname === '/api/moodboards/g1/edits' && method === 'POST' && state.edits) return fail(state.edits);
   if (url.pathname === '/api/moodboards/g1' && method === 'PUT' && state.put) return fail(state.put);
+  if (url.pathname === '/api/moodboards/g1/edits' && method === 'POST') {
+    return json({ board: { ...board(), version: 2 }, version: 2, applied: [], undo: { ops: [] } });
+  }
   if (url.pathname === '/api/moodboards/g1/analyze' && method === 'POST' && state.analyze) return fail(state.analyze);
+  if (url.pathname === '/api/moodboards/g1/analyze' && method === 'POST') return json(board());
   if (url.pathname === '/api/moodboards/g1' && method === 'GET') return state.load ? fail(state.load) : json(board());
   if (url.pathname === '/api/moodboards' && method === 'GET') return json(url.searchParams.get('scope') === 'global' ? [board()] : []);
   return json({});
@@ -174,16 +178,35 @@ describe('a board save that fails', () => {
   });
 });
 
-// Review of round 2: the toolbar's Retry saves the board; it never analyzes
-// again. So an analyze failure is no save failure: its reason keeps GM's
-// "Try again" (WRAP applies only where the button retries the action).
+// Round 3 (GM): "Make Retry redo the failed action, never a different one."
+// The toolbar's Retry after an analyze failure analyzes again, so the notice
+// takes GM's short line (WRAP: "The button is the retry"). On 867f254e the
+// Retry saved the board instead and the line kept its "Try again".
 describe('an analyze that fails', () => {
-  it.each(cases)('after %s says "Couldn\'t analyze the board." over GM\'s full line', async (_name, failure, line) => {
+  it.each(cases)('after %s says "Couldn\'t analyze the board." over GM\'s short line, beside Retry', async (_name, failure, _line, short) => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     state.analyze = failure;
     await openStudio();
     fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
-    expect(lines(await notice())).toEqual(["Couldn't analyze the board.", line]);
+    expect(lines(await notice())).toEqual(["Couldn't analyze the board.", short]);
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+  });
+
+  it('Retry analyzes again, and never saves the board instead', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    state.analyze = 503;
+    await openStudio();
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
+    await waitFor(async () => expect(lines(await notice())[0]).toBe("Couldn't analyze the board."));
+    const sent = () => vi.mocked(fetch).mock.calls.map(([input, init]) =>
+      `${(init?.method ?? 'GET').toUpperCase()} ${new URL(String(input)).pathname}`);
+    const before = sent().length;
+    state.analyze = null;
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(sent().slice(before)).toContain('POST /api/moodboards/g1/analyze'));
+    expect(sent().slice(before).filter((call) => call.startsWith('PUT ') || call.endsWith('/edits'))).toEqual([]);
+    await waitFor(() => expect(document.querySelector('.moodboard-studio__notice--error')).toBeNull());
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
   });
 
   it('a save failure after it takes the short line again (its Retry saves)', async () => {
@@ -195,5 +218,48 @@ describe('an analyze that fails', () => {
     state.edits = 503;
     fireEvent.change(screen.getAllByRole('slider', { name: /^Weight/ })[0], { target: { value: '0.5' } });
     await waitFor(async () => expect(lines(await notice())).toEqual([SAVE, NO_ANSWER_SHORT]));
+  });
+});
+
+// Round 3: a line that no button redoes shows no Retry, and keeps GM's full line.
+describe('a line no Retry redoes', () => {
+  it('has no Retry beside it, and its reason keeps "Try again"', async () => {
+    await openStudio();
+    const key = Object.keys(useAssetStudioDraftStore.getState().entries)[0];
+    act(() => {
+      useAssetStudioDraftStore.getState().patch(key, { saveState: 'error',
+        saveError: { heading: "Couldn't upload the image.", reason: NO_ANSWER } });
+    });
+    expect(lines(await notice())).toEqual(["Couldn't upload the image.", NO_ANSWER]);
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+  });
+});
+
+// Review of round 3: a failed save is still owed when an upload or brief
+// failure replaces its line. The toolbar keeps its Retry, and that Retry
+// saves (the save is the action that failed and still has to happen);
+// autosave waits while the board says Error. The notice keeps the upload's
+// own full line, since its Retry doesn't redo the upload.
+describe('a save still owed under another failure', () => {
+  it('keeps the toolbar Retry, and Retry saves the board again', async () => {
+    state.edits = 503;
+    await openStudio();
+    fireEvent.change(screen.getAllByRole('slider', { name: /^Weight/ })[0], { target: { value: '0.5' } });
+    await waitFor(async () => expect(lines(await notice())).toEqual([SAVE, NO_ANSWER_SHORT]));
+    const key = Object.keys(useAssetStudioDraftStore.getState().entries)[0];
+    // What the upload's catch does (MoodboardStudioView: patch({ saveError })).
+    act(() => {
+      useAssetStudioDraftStore.getState().patch(key, {
+        saveError: { heading: "Couldn't upload the image.", reason: NO_ANSWER } });
+    });
+    expect(lines(await notice())).toEqual(["Couldn't upload the image.", NO_ANSWER]);
+    const sent = () => vi.mocked(fetch).mock.calls.map(([input, init]) =>
+      `${(init?.method ?? 'GET').toUpperCase()} ${new URL(String(input)).pathname}`);
+    const before = sent().length;
+    state.edits = null;
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(sent().slice(before).some((call) =>
+      call === 'POST /api/moodboards/g1/edits' || call === 'PUT /api/moodboards/g1')).toBe(true));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull());
   });
 });

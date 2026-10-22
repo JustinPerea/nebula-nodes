@@ -110,3 +110,33 @@ async def test_review_api_requires_human_and_records_only_explicit_acceptance(st
     item = response.json()['items'][0]
     response = client.put('/api/commons/review/items/0', headers=headers, json={'revision': item['revision'], 'labels': item['proposal']['labels']})
     assert response.status_code == 200 and response.json()['items'][0]['reviewed_at']
+
+
+# Review of error-copy round 3: the daily-cap refusal gives the real count and
+# a next step that works. With Analysis calls per day set to 0 nothing was
+# made and tomorrow won't help; with the cap lowered below today's calls the
+# count is the calls made, not the cap. (GM's pattern: what's needed, the
+# count, then what to do.) Agents keep 'Daily model call cap reached.'.
+@pytest.mark.asyncio
+@pytest.mark.parametrize('cap,calls,line', [
+    (0, 0, 'Agent review needs at least 1 analysis call a day. Analysis calls per day is set to 0 in Settings. '
+           'Raise it, then try again.'),
+    (5, 12, 'Commons has made 12 analysis calls today, and the daily cap is 5. '
+            'Try again tomorrow, or raise Analysis calls per day in Settings.'),
+    (3, 3, 'Commons has made 3 analysis calls today, and the daily cap is 3. '
+           'Try again tomorrow, or raise Analysis calls per day in Settings.'),
+])
+async def test_the_daily_cap_refusal_says_the_real_count_and_a_step_that_works(store, source, monkeypatch, cap, calls,
+                                                                              line):
+    from commons import records
+    monkeypatch.setenv('NEBULA_COMMONS_REVIEW_CALL_BUDGET', '15')
+    await evaluation.prepare(store, str(source))
+    store.set_setting('daily_cap', cap)
+    for _ in range(calls):
+        records.meter_increment(store)
+    async def reader(*args, **kwargs):  # pragma: no cover - the cap refuses first
+        raise AssertionError('no model call past the cap')
+    with pytest.raises(evaluation.EvaluationError) as refused:
+        await review.propose(store, 0, reader=reader)
+    assert refused.value.person == line
+    assert str(refused.value) == 'Daily model call cap reached.'

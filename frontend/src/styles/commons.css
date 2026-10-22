@@ -1142,3 +1142,34 @@ body.app-slava-restraint .commons-leave__actions {
     animation: none;
   }
 }
+
+/* A failed analysis (error-copy round 3): GM's heading over its reason, Retry
+   at the end, and the raw last_error behind a native, collapsed Details
+   disclosure (the node error's pattern: keyboard and screen reader for free,
+   no motion). */
+body.app-slava-restraint .commons-analysis-failure {
+  align-items: flex-start;
+}
+
+body.app-slava-restraint .commons-analysis-failure__text {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+body.app-slava-restraint .commons-analysis-failure__details summary {
+  cursor: pointer;
+  width: fit-content;
+  color: var(--sr-ink-light);
+}
+
+body.app-slava-restraint .commons-analysis-failure__raw {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-label);
+  color: var(--sr-ink-light);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

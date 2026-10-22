@@ -28,7 +28,7 @@ export function ProviderRecoveryStatus() {
     try {
       await acknowledge(ambiguity.kind, ambiguity.nodeId);
     } catch (error) {
-      setUnlockError(error instanceof Error ? error.message : 'Could not unlock this node.');
+      setUnlockError(error instanceof Error ? error.message : "Couldn't unlock the node.");
     } finally {
       setUnlocking(null);
     }

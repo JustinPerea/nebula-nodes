@@ -28,6 +28,7 @@ from commons import evaluation, review, borrow, folders, intake, media, person_c
 from commons.effective import effective
 from commons.reader import MODEL_ID, PROMPT_VERSION
 from commons.store import _BLOB_KEY, CommonsStore
+from services import refusal_copy
 
 def activation_dep() -> None:
     """Reject before route dependencies can open the store or allocate workers."""
@@ -77,13 +78,7 @@ def out(actor: actors_mod.Actor, payload: Any) -> Any:
     return payload if actor.is_human else untrusted.wrap_fields(payload, TEXT_KEYS)
 
 
-_URL = re.compile(r"\b([a-zA-Z][a-zA-Z0-9+.-]*://)(?:[^\s/?#@]*@)?([^\s?#]*)(?:\?[^\s#]*)?(?:#\S*)?")
-
-
-def log_safe(text: str) -> str:
-    """`text` for the terminal: every URL without its sign-in part, query or
-    fragment (a signed link the person pasted carries its key there)."""
-    return _URL.sub(lambda m: m.group(1) + m.group(2), text)
+log_safe = refusal_copy.log_safe
 
 
 def log_refusal(message: str, *args: Any) -> None:
@@ -93,16 +88,29 @@ def log_refusal(message: str, *args: Any) -> None:
     logger.warning(message, *(log_safe(str(arg)) for arg in args))
 
 
+def _log_commons(route: str | None, specific: str) -> None:
+    log_refusal("commons %s refused (the person was told written copy): %s", route, specific)
+
+
 def refuse(actor: actors_mod.Actor | None, status: int, specific: str, person: str, route: str) -> HTTPException:
     """A refusal said twice (GM - Design, error-copy round 2: "People get the
-    written line and agents keep the specific detail"). An agent gets the
+    written line and agents keep the specific detail"), chosen by the one
+    shared helper (services/refusal_copy.py) from the actor: an agent gets the
     specific text it gets today, to fix its call; the person gets `person`,
-    written copy, and the specific text goes to the log (log_refusal). `actor`
-    None is a human-only route (Depends(human_dep))."""
-    if actor is not None and not actor.is_human:
-        return HTTPException(status_code=status, detail=specific)
-    log_refusal("commons %s refused (the person was told written copy): %s", route, specific)
-    return HTTPException(status_code=status, detail=person)
+    written copy, and the specific text goes to the log. `actor` None is a
+    human-only route (Depends(human_dep))."""
+    return refusal_copy.refusal(status, specific, person, actor=actor, route=route, log=_log_commons)
+
+
+def gone(actor: actors_mod.Actor | None, specific: str, thing: str, things: str, route: str) -> HTTPException:
+    """A 404 (GM, error-copy round 3): "That {thing} isn't there anymore.
+    Reload to get the latest {things}." for the person; agents keep `specific`."""
+    return refuse(actor, 404, specific, refusal_copy.gone(thing, things), route)
+
+
+# GM's 404 pattern (error-copy round 3) for the person's Commons screens.
+FOLDER_GONE = "That folder isn't linked anymore. Reload to get the latest folders."
+MEMBERSHIP_GONE = "That reference isn't in this collection anymore. Reload to get the latest references."
 
 
 def _effective_brand(actor, brand: str | None) -> str | None:
@@ -187,7 +195,7 @@ def patch_collection(collection_id: str, body: CollectionPatch, actor=Depends(hu
                      store=Depends(store_dep)) -> dict:
     existing = store.get_collection(collection_id)
     if existing is None or existing["kind"] == "system":
-        raise HTTPException(status_code=404, detail="collection not found")
+        raise gone(None, "collection not found", "collection", "collections", "collections")
     fields = body.model_dump(exclude_unset=True)
     kwargs: dict[str, Any] = {"name": (fields.get("name") or "").strip() or None}
     if "brand" in fields:
@@ -195,7 +203,7 @@ def patch_collection(collection_id: str, body: CollectionPatch, actor=Depends(hu
     try:
         return store.update_collection(collection_id, actor=actor.id, **kwargs)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail="collection not found") from exc
+        raise gone(None, "collection not found", "collection", "collections", "collections") from exc
 
 
 # -- search + detail -------------------------------------------------------------
@@ -225,12 +233,12 @@ def _asset_access(store, actor, asset_id: str, brand: str | None):
     """Shared asset visibility gate, including scope and quarantine."""
     asset = store.get_asset(asset_id)
     if asset is None:
-        raise HTTPException(status_code=404, detail="asset not found")
+        raise gone(actor, "asset not found", "reference", "references", "assets")
     scope = _scope(store, actor, brand)
     memberships = [m for m in store.memberships_for_asset(asset_id) if actor.is_human or m["collection"] in scope]
     quarantined = records.is_quarantined(store, asset_id)
     if not actor.is_human and (not memberships or quarantined):
-        raise HTTPException(status_code=404, detail="asset not found")
+        raise gone(actor, "asset not found", "reference", "references", "assets")
     return asset, memberships, quarantined
 
 
@@ -446,14 +454,14 @@ async def link_folder(body: FolderIn, actor=Depends(human_dep), store=Depends(st
 @router.patch("/folders/{link_id}", dependencies=[Depends(json_body)])
 def patch_folder(link_id: str, body: FolderPatch, actor=Depends(human_dep), store=Depends(store_dep)) -> dict:
     if store.get_folder_link(link_id) is None:
-        raise HTTPException(status_code=404, detail="folder not linked")
+        raise refuse(None, 404, "folder not linked", FOLDER_GONE, "folders")
     return store.update_folder_ignores(link_id, body.ignores, actor=actor.id)
 
 
 @router.post("/folders/{link_id}/rescan", status_code=202)
 async def rescan(link_id: str, actor=Depends(human_dep), store=Depends(store_dep)) -> dict:
     if store.get_folder_link(link_id) is None:
-        raise HTTPException(status_code=404, detail="folder not linked")
+        raise refuse(None, 404, "folder not linked", FOLDER_GONE, "folders")
     runtime.spawn(folders.scan_and_fetch(store, link_id, downloader=runtime.get_downloader()))
     return {"status": "scanning"}
 
@@ -485,7 +493,7 @@ def patch_membership(membership_id: str, body: MembershipPatch, actor=Depends(hu
                      store=Depends(store_dep)) -> dict:
     m = store.get_membership(membership_id)
     if m is None:
-        raise HTTPException(status_code=404, detail="membership not found")
+        raise refuse(None, 404, "membership not found", MEMBERSHIP_GONE, "memberships")
     changes = body.model_dump(exclude_unset=True)
     if "role" in changes:
         _check_role(changes["role"] or "")
@@ -503,7 +511,7 @@ def accept_membership(membership_id: str, actor=Depends(human_dep), store=Depend
     try:
         m = store.accept_membership(membership_id, actor=actor.id)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail="membership not found") from exc
+        raise refuse(None, 404, "membership not found", MEMBERSHIP_GONE, "memberships") from exc
     search.reindex_asset(store, m["asset"])
     _curated("membership", {"assetId": m["asset"], "membershipId": membership_id, "collectionId": m["collection"],
                             "change": ["accepted"]}, actor)
@@ -520,7 +528,7 @@ class CorrectionIn(BaseModel):
 @router.post("/assets/{asset_id}/corrections", dependencies=[Depends(json_body)])
 def add_correction(asset_id: str, body: CorrectionIn, actor=Depends(human_dep), store=Depends(store_dep)) -> dict:
     if store.get_asset(asset_id) is None:
-        raise HTTPException(status_code=404, detail="asset not found")
+        raise gone(None, "asset not found", "reference", "references", "assets")
     try:
         row = records.add_correction(store, asset_id, field_path=body.field_path, op=body.op, value=body.value,
                                      actor=actor.id, reason=body.reason)
@@ -545,7 +553,7 @@ class RegionPatch(BaseModel):
 @router.post("/assets/{asset_id}/regions", dependencies=[Depends(json_body)])
 def add_region(asset_id: str, body: RegionIn, actor=Depends(human_dep), store=Depends(store_dep)) -> dict:
     if store.get_asset(asset_id) is None:
-        raise HTTPException(status_code=404, detail="asset not found")
+        raise gone(None, "asset not found", "reference", "references", "assets")
     try:
         region = records.add_region(store, asset_id, box=body.box, label=body.label, actor=actor.id)
     except ValueError as exc:
@@ -560,7 +568,7 @@ def patch_region(region_id: str, body: RegionPatch, actor=Depends(human_dep), st
     try:
         region = records.update_region(store, region_id, actor=actor.id, **fields)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail="region not found") from exc
+        raise refuse(None, 404, "region not found", records.REGION_GONE, "regions") from exc
     except ValueError as exc:
         raise refuse(None, 422, str(exc), person_copy.person_line(exc), "regions") from exc
     _curated("region", {"assetId": region["asset"], "regionId": region_id, "change": sorted(fields)}, actor)
@@ -570,7 +578,7 @@ def patch_region(region_id: str, body: RegionPatch, actor=Depends(human_dep), st
 @router.post("/assets/{asset_id}/reanalyze")
 def reanalyze(asset_id: str, actor=Depends(human_dep), store=Depends(store_dep)) -> dict:
     if store.get_asset(asset_id) is None:
-        raise HTTPException(status_code=404, detail="asset not found")
+        raise gone(None, "asset not found", "reference", "references", "assets")
     records.requeue(store, asset_id, actor=actor.id)
     return {"queued": True}
 
@@ -591,7 +599,7 @@ def reanalyze_stale(body: StaleIn, actor=Depends(human_dep), store=Depends(store
 @router.delete("/assets/{asset_id}")
 def purge(asset_id: str, actor=Depends(human_dep), store=Depends(store_dep)) -> dict:
     if store.get_asset(asset_id) is None:
-        raise HTTPException(status_code=404, detail="asset not found")
+        raise gone(None, "asset not found", "reference", "references", "assets")
     store.delete_asset(asset_id, actor=actor.id)
     return {"purged": asset_id}
 
@@ -613,7 +621,7 @@ def comment(body: CommentIn, actor=Depends(actor_dep), store=Depends(store_dep))
     if body.membership_id:
         candidates = [m for m in candidates if m["id"] == body.membership_id]
     if not candidates or (not actor.is_human and records.is_quarantined(store, body.asset_id)):
-        raise HTTPException(status_code=404, detail="asset not found in this scope")
+        raise gone(actor, "asset not found in this scope", "reference", "references", "comments")
     try:
         return out(actor, records.add_comment(store, candidates[0]["id"], text=body.text, actor=actor.id,
                                               region_id=body.region_id))

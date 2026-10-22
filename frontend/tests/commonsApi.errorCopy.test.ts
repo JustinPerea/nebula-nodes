@@ -53,6 +53,11 @@ describe('Commons request failures carry copy and keep their status', () => {
     expect(saveFailure(error).retry).toBe(true);
   });
 
+  it('the export says "ZIP" in capitals, as everywhere else (GM, round 3)', async () => {
+    answer = () => new Response('', { status: 503 });
+    expect((await failure(() => commonsApi.exportZip())).heading).toBe("Couldn't export the ZIP.");
+  });
+
   it('a 503 with no JSON body no longer says "Commons request failed (503)"', async () => {
     answer = () => new Response('Service Unavailable', { status: 503 });
     expect((await failure(() => commonsApi.status())).reason).toBe(NO_ANSWER);

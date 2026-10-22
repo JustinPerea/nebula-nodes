@@ -5,6 +5,8 @@ import type { SaveState } from './CharacterStudioView';
 
 interface CharacterStudioToolbarProps {
   saveState: SaveState;
+  /** Retry redoes the failure: a save's own (round 3). Hidden for any other line. */
+  canRetry?: boolean;
   saveError: string | null;
   onRetry: () => void;
   /** Shown for a saved Character: moves it to Recently deleted. */
@@ -29,6 +31,7 @@ const SAVE_LABEL: Record<SaveState, string> = {
  *  affordance when a write fails. */
 export function CharacterStudioToolbar({
   saveState,
+  canRetry = saveState === 'error',
   saveError,
   onRetry,
   onDelete,
@@ -48,7 +51,7 @@ export function CharacterStudioToolbar({
           {label}
         </span>
       )}
-      {saveState === 'error' && (
+      {saveState === 'error' && canRetry && (
         <button
           type="button"
           className="character-studio-toolbar__retry"

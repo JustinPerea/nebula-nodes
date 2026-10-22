@@ -84,7 +84,9 @@ export async function acknowledgeProviderStartAmbiguity(
   nodeId: string,
   runId: string,
 ): Promise<void> {
-  await apiRequest("Couldn't unlock the provider start.",
+  // Round 3 (GM): the label the person clicked. The status bar's "Checked
+  // Marble — unlock" unlocks one node (its label: "unlock node n1").
+  await apiRequest("Couldn't unlock the node.",
     `/api/provider-start-ambiguities/${encodeURIComponent(kind)}/${encodeURIComponent(nodeId)}/${encodeURIComponent(runId)}`,
     { method: 'DELETE' },
   );
@@ -105,7 +107,8 @@ export async function deleteProviderRecovery(
   if ([...query.keys()].length !== 1) {
     throw new Error('Provider recovery deletion requires exactly one recovery ID.');
   }
-  await apiRequest("Couldn't clear the provider recovery.",
+  // Run History's "Checked Marble — forget" forgets a "World Labs recovery safeguard".
+  await apiRequest("Couldn't forget the recovery safeguard.",
     `/api/provider-recoveries/${encodeURIComponent(runId)}/${encodeURIComponent(nodeId)}?${query.toString()}`,
     { method: 'DELETE' },
   );
@@ -766,7 +769,7 @@ export async function analyzeMoodboard(id: string): Promise<Moodboard> {
 /** Keep a board's hand-written brief after the board changed: clears
  *  "board changed since you edited this" until the next change. */
 export async function keepMoodboardBriefOverride(id: string): Promise<Moodboard> {
-  const heading = "Couldn't keep your brief.";
+  const heading = "Couldn't save your brief."; // GM, round 3
   const response = await apiRequest(heading, `/api/moodboards/${encodeURIComponent(id)}/brief-override/keep`,
     { method: 'POST' }, { allow: [404] });
   if (!response.ok) throw await moodboardWriteError(response, heading);
