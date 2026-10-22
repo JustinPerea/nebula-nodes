@@ -19,6 +19,7 @@ vi.mock('../../lib/wsClient', () => ({
 }));
 
 import { RecentlyDeletedAssets, UndoDeleteToast, UNDO_VISIBLE_MS } from './AssetTrash';
+import { RequestFailedError } from '../../lib/errorCopy';
 import { RestoreTrashedAsset } from '../nodes/RestoreTrashedAsset';
 import { useStoredAssetsStore } from '../../store/storedAssetsStore';
 import { publishOpenProject } from '../../lib/currentProject';
@@ -113,7 +114,10 @@ describe('RecentlyDeletedAssets', () => {
 
   it('asks before deleting for good, and shows the refusal when the backend says no', async () => {
     trash.fetchTrash.mockResolvedValue([board({ deletedBy: { kind: 'person', name: 'You' } })]);
-    trash.purgeTrashed.mockRejectedValueOnce(new Error('Only the person can do this from the Nebula canvas.'));
+    // What lib/trash's purgeTrashed throws (apiRequest): a request's own line. Round 3b: the list
+    // shows a request's line and never another error's message.
+    trash.purgeTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't delete the board for good.", 403,
+      { detail: 'Only the person can do this from the Nebula canvas.' }));
     render(<RecentlyDeletedAssets kind="moodboard" scope="global" />);
     fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
     expect(screen.getByText(/by you/)).toBeTruthy();
@@ -122,7 +126,7 @@ describe('RecentlyDeletedAssets', () => {
     expect(screen.getByRole('group', { name: 'This can’t be undone.' })).toBeTruthy();
     fireEvent.click(screen.getAllByRole('button', { name: 'Delete forever' }).at(-1)!);
     await waitFor(() => expect(trash.purgeTrashed).toHaveBeenCalledWith('moodboard', 'b1'));
-    expect((await screen.findByRole('alert')).textContent).toContain('Only the person');
+    expect((await screen.findByRole('alert')).textContent).toContain("Couldn't delete the board for good. Only the person can do this from the Nebula canvas.");
   });
 
   it('keeps Styles too, in their own words, and restores one as kind "style"', async () => {

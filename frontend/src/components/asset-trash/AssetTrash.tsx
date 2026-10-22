@@ -8,7 +8,7 @@ import {
 } from '../../lib/trash';
 import type { AssetScope } from '../../store/uiStore';
 import { wsClient } from '../../lib/wsClient';
-import { oneLine, type FailureCopy } from '../../lib/errorCopy';
+import { failureMessage, oneLine, shortReason, type FailureCopy } from '../../lib/errorCopy';
 import '../../styles/asset-trash.css';
 import { useCurrentProjectId } from '../../lib/currentProject';
 
@@ -137,7 +137,8 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
       await work();
       after?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'That didn’t work. Try again.');
+      // A request's own line; never another error's message (round 3b).
+      setError(failureMessage(err, ''));
     } finally {
       setBusy(false);
       setReload((value) => value + 1);
@@ -196,7 +197,8 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
 export interface UndoDeleteToastProps {
   name: string;
   busy?: boolean;
-  /** One line here: a toast (GM: "Couldn't {verb} {object}. {reason}" in one string). */
+  /** Undo's own failure, one line (GM: "Couldn't {verb} {object}. {reason}"
+   * in one string), short: the Undo beside it redoes it (round 3b). */
   error?: string | FailureCopy | null;
   onUndo: () => void;
   onDismiss: () => void;
@@ -214,7 +216,7 @@ export function UndoDeleteToast({ name, busy = false, error = null, onUndo, onDi
     <div className="asset-trash__toast" role="status" aria-live="polite"
       onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
       onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
-      <span className="asset-trash__toast-text">{error ? (typeof error === 'string' ? error : oneLine(error)) : `Moved “${name || 'Untitled'}” to Recently deleted`}</span>
+      <span className="asset-trash__toast-text">{error ? (typeof error === 'string' ? error : oneLine({ ...error, reason: shortReason(error.reason) })) : `Moved “${name || 'Untitled'}” to Recently deleted`}</span>
       <button type="button" className="asset-trash__toast-undo" disabled={busy} onClick={onUndo}>Undo</button>
       <button type="button" className="asset-trash__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
     </div>

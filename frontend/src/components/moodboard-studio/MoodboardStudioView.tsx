@@ -1077,17 +1077,21 @@ export function MoodboardStudioView() {
 
   const loadingBlock = (
     <div className="moodboard-studio-view__loading">
-      {loadError ? <div role="alert"><FailureLines failure={loadError} retry /></div> : 'Loading Moodboard...'}
-      {loadError && <button type="button" className="moodboard-studio-toolbar__button"
-        onClick={() => { if (!projectReady) void verifyProject(); else patch({ loadError: null, revision: revision + 1 }); }}>Retry loading</button>}
+      {/* Retry loading reloads the board, so it shows (with GM's short line)
+          only for a load that failed; with no project open there's nothing
+          to reload, and the line says what to do (round 3b). */}
+      {loadError ? <div role="alert"><FailureLines failure={loadError} retry={projectReady} /></div> : 'Loading Moodboard...'}
+      {loadError && projectReady && <button type="button" className="moodboard-studio-toolbar__button"
+        onClick={() => patch({ loadError: null, revision: revision + 1 })}>Retry loading</button>}
     </div>
   );
 
   const notices = (
     <>
       {loadError && <div className="moodboard-studio__notice moodboard-studio__notice--warn"><FailureLines failure={loadError} /></div>}
-      {deleting.error && !deleting.lastDeleted && (
-        <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert"><FailureLines failure={deleting.error} /></div>
+      {/* A delete's failure shows here even while the last delete's Undo toast is up (round 3b). */}
+      {deleting.deleteError && (
+        <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert"><FailureLines failure={deleting.deleteError} /></div>
       )}
       {/* Beside the toolbar's Retry (it redoes this failure) the reason is GM's short line (WRAP rule). */}
       {saveError && <div className="moodboard-studio__notice moodboard-studio__notice--error">
@@ -1236,7 +1240,7 @@ export function MoodboardStudioView() {
   const shownToast = toast && toast.key === key ? toast : null;
   const trashToast = deleting.lastDeleted && (
     <UndoDeleteToast key={deleting.lastDeleted.id} name={deleting.lastDeleted.name} busy={deleting.busy}
-      error={deleting.error} onDismiss={deleting.dismiss}
+      error={deleting.undoError} onDismiss={deleting.dismiss}
       onUndo={() => { void deleting.undo().then((asset) => { if (asset) openRestored(asset.id, asset.scope); }); }} />
   );
 

@@ -41,7 +41,7 @@ import { ProjectHome } from './components/projects/ProjectHome';
 // Asset proposals (a pinned cover, a board's Send notes) reach this tab on any screen.
 import './store/assetProposalsSocket';
 import { useHomeSettingsDock } from './components/projects/useHomeSettingsDock';
-import { useProjectStore } from './store/projectStore';
+import { projectRetryOffer, useProjectStore } from './store/projectStore';
 import { listCoverChoices } from './lib/projects';
 import './App.css';
 import './styles/layouts.css';
@@ -259,7 +259,7 @@ export default function App() {
       onDelete={(id) => void projects.remove(id)} trash={projects.trash} lastDeleted={projects.lastDeleted}
       onRestore={(id) => void projects.restore(id)} onPurge={(id) => void projects.purge(id)}
       onEmptyTrash={() => void projects.emptyTrash()} onDismissUndo={projects.dismissUndo}
-      onRetry={() => void projects.retry()} settingsOpen={homeSettings.open} onToggleSettings={homeSettings.toggle}
+      onRetry={() => void projects.retry()} retry={projectRetryOffer(projects)} settingsOpen={homeSettings.open} onToggleSettings={homeSettings.toggle}
       loadCoverChoices={listCoverChoices} onPinCover={(id, url) => void projects.pinCover(id, url)} />;
   } else if (isCanvas) {
     mainView = <Canvas />;

@@ -24,20 +24,25 @@ export interface DeletedAsset {
 export function useAssetDelete(kind: 'moodboard' | 'character' | 'style') {
   const [lastDeleted, setLastDeleted] = useState<DeletedAsset | null>(null);
   const [busy, setBusy] = useState(false);
-  /** A failure as heading + reason (a Studio's two-line notice; the toast shows it as one line). */
-  const [error, setError] = useState<FailureCopy | null>(null);
+  /** Failures as heading + reason, kept apart (error copy round 3b): a
+   * delete's shows in the Studio's notice; Undo's own shows in the toast,
+   * beside the Undo that redoes it. The toast's Undo restores the asset
+   * deleted last, so a later delete's failure must not sit beside it. */
+  const [deleteError, setDeleteError] = useState<FailureCopy | null>(null);
+  const [undoError, setUndoError] = useState<FailureCopy | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const remove = useCallback(async (asset: DeletedAsset): Promise<boolean> => {
     setBusy(true);
-    setError(null);
+    setDeleteError(null);
     try {
       await (kind === 'moodboard' ? deleteMoodboard(asset.id)
         : kind === 'style' ? deletePreset(asset.id) : deleteCharacter(asset.id));
       setLastDeleted(asset);
+      setUndoError(null);
       return true;
     } catch (err) {
-      setError(failureCopy(err, { heading: `Couldn't delete the ${NOUN[kind]}.` }));
+      setDeleteError(failureCopy(err, { heading: `Couldn't delete the ${NOUN[kind]}.` }));
       return false;
     } finally {
       setBusy(false);
@@ -49,13 +54,13 @@ export function useAssetDelete(kind: 'moodboard' | 'character' | 'style') {
     const asset = lastDeleted;
     if (!asset) return null;
     setBusy(true);
-    setError(null);
+    setUndoError(null);
     try {
       await restoreTrashed(kind, asset.id);
       setLastDeleted(null);
       return asset;
     } catch (err) {
-      setError(failureCopy(err, { heading: `Couldn't restore the ${NOUN[kind]}.` }));
+      setUndoError(failureCopy(err, { heading: `Couldn't restore the ${NOUN[kind]}.` }));
       return null;
     } finally {
       setBusy(false);
@@ -63,8 +68,8 @@ export function useAssetDelete(kind: 'moodboard' | 'character' | 'style') {
     }
   }, [kind, lastDeleted]);
 
-  const dismiss = useCallback(() => { setLastDeleted(null); setError(null); }, []);
+  const dismiss = useCallback(() => { setLastDeleted(null); setUndoError(null); }, []);
   const refresh = useCallback(() => setRefreshKey((value) => value + 1), []);
 
-  return { lastDeleted, busy, error, refreshKey, remove, undo, dismiss, refresh };
+  return { lastDeleted, busy, deleteError, undoError, refreshKey, remove, undo, dismiss, refresh };
 }

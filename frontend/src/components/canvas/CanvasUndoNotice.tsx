@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
 import { useGraphStore } from '../../store/graphStore';
+import { NOTICE_HOLD_MS, noticeHoldMs } from '../../lib/canvasNoticeHold';
 
-/** How long a notice stays up. Long enough to reach the button. */
-export const UNDO_NOTICE_MS = 6000;
+/** How long a notice with Undo or Redo stays up. Long enough to reach the button. */
+export const UNDO_NOTICE_MS = NOTICE_HOLD_MS;
 
 /**
  * A short line when someone else's edit changes this canvas: "Claude changed
@@ -26,7 +27,7 @@ export function CanvasUndoNotice() {
     if (!notice) return;
     const timer = window.setTimeout(() => {
       if (useGraphStore.getState().undoNotice?.id === notice.id) dismiss();
-    }, UNDO_NOTICE_MS);
+    }, noticeHoldMs(notice.text, notice.offer));
     return () => window.clearTimeout(timer);
   }, [notice, dismiss]);
 
@@ -40,7 +41,7 @@ export function CanvasUndoNotice() {
   return (
     <div
       key={notice.id}
-      className="canvas-undo-notice"
+      className={notice.offer ? 'canvas-undo-notice' : 'canvas-undo-notice canvas-undo-notice--message'}
       role="status"
       aria-live="polite"
       style={notice.agentColor ? { ['--agent-color' as string]: notice.agentColor } : undefined}

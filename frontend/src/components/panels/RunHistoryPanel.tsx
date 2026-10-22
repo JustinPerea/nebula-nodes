@@ -6,6 +6,8 @@ import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { PaperRunInspection } from './PaperRunInspection';
 import { BatchRunInspection } from './BatchRunInspection';
 import { ScrollFade } from '../ScrollFade';
+import { FORGET_RECOVERY_HEADING } from '../../lib/api';
+import { failureMessage } from '../../lib/errorCopy';
 import type { PaperSourceRecord } from '../../lib/paperSource';
 import {
   formatRunAge,
@@ -63,7 +65,9 @@ export function RunHistoryPanel() {
     try {
       await deleteProviderRecovery(runId, nodeId);
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Couldn't forget the recovery safeguard.");
+      // Round 3b: a request's line or the store's written one; any other
+      // error says GM's general line, never its own message.
+      alert(failureMessage(error, FORGET_RECOVERY_HEADING));
     } finally {
       setClearingRecovery(null);
     }

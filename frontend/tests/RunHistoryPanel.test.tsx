@@ -308,8 +308,10 @@ describe('RunHistoryPanel replay actions', () => {
       name: 'Checked Marble; forget recovery for world-node',
     }));
 
+    // Error copy round 3b: an error that isn't a request's never shows its
+    // own message; it says GM's general line under the button's heading.
     await waitFor(() => expect(alert).toHaveBeenCalledWith(
-      'Backend still has an active provider task.',
+      "Couldn't forget the recovery safeguard. That didn't work. Try again, or reload if it keeps happening.",
     ));
     expect(screen.getByTitle('world-node · operation-saved')).toBeInTheDocument();
     expect(screen.getByRole('button', {

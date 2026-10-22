@@ -164,7 +164,8 @@ export function MaskPainterModal(props: ComponentProps<typeof DeferredMaskPainte
       chunk={DeferredMaskPainterModal}
       failed={({ retry, retrying }) => (
         <MaskPainterShell onClose={props.onClose} busy={retrying}>
-          <div className="mask-painter__empty" role="alert">Could not load the mask painter. Check your connection and try again.</div>
+          {/* GM's WRAP rule (round 3b): Try again is beside it and loads it again. */}
+          <div className="mask-painter__empty" role="alert">Couldn't load the mask painter. Check your connection.</div>
           <div className="mask-painter__toolbar">
             <div className="mask-painter__spacer" />
             <button type="button" className="mask-painter__cancel" onClick={props.onClose}>Close</button>

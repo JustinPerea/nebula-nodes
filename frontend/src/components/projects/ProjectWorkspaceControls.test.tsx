@@ -31,6 +31,20 @@ describe('ProjectWorkspaceControls', () => {
     expect(screen.queryByRole('textbox')).toBeNull();
   });
 
+  it('error-copy round 3b: "Save failed · Retry" saves, whatever failure the Projects screen last showed', () => {
+    const retry = vi.fn(async () => {});
+    const retrySave = vi.fn(async () => {});
+    useProjectStore.setState({ saveStatus: 'error', error: "Couldn't rename the project. Nebula didn't respond. Try again.",
+      saveError: "Couldn't save the project. Nebula didn't respond. Try again.", retry, retrySave } as never);
+    render(<ProjectWorkspaceControls />);
+    const button = screen.getByRole('button', { name: 'Save failed · Retry' });
+    // Its tooltip is the save's own failure, short (the button is the retry).
+    expect(button.getAttribute('title')).toBe("Couldn't save the project. Nebula didn't respond.");
+    fireEvent.click(button);
+    expect(retrySave).toHaveBeenCalledTimes(1);
+    expect(retry).not.toHaveBeenCalled();
+  });
+
   it('ignores blank or unchanged names and cancels with Escape', () => {
     render(<ProjectWorkspaceControls />);
     const name = screen.getByRole('button', { name: 'Rename project Glass campaign' });

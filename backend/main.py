@@ -355,6 +355,53 @@ def _paid_state_person(state: str, *, subject: str, then: str, fields: str = _RE
     return f"{waiting} Check the job in Marble, then clear the node's {fields} before you {then}."
 
 
+UNLOCK_BUTTON = "\u201cChecked Marble \u2014 unlock\u201d"
+FORGET_BUTTON = "\u201cChecked Marble \u2014 forget\u201d"
+# Round 3b: a canvas edit that raced a change to the shared recovery journal.
+CANVAS_JOB_CHANGED_PERSON = "A node's World Labs job changed while Nebula saved the canvas. Reload, then try again."
+
+
+def _paid_capacity_person(limit: int | None, *, what: str) -> str:
+    """A full World Labs journal, in GM's pattern (round 3b): what's needed,
+    the count, then what to do. `what` is "this run" or "this change"."""
+    if limit:
+        jobs = "job that is" if limit == 1 else "jobs that are"
+        head = f"Nebula can track up to {limit} World Labs {jobs} still waiting, and {what} would go over that."
+    else:
+        head = f"Nebula can't track more World Labs jobs that are still waiting, and {what} would go over that."
+    return (f"{head} Check them in Marble, clear some with {UNLOCK_BUTTON} or {FORGET_BUTTON} in Run History, "
+            "then try again.")
+
+
+def _paid_job_changed_person(button: str) -> str:
+    """The hold or record the button acts on changed since the page read it
+    (a newer start replaced it): round 3b."""
+    return f"This node is waiting on a newer World Labs job. Reload to see it, check it in Marble, then use {button}."
+
+
+def _start_refusal(exc: ProviderStartConflictError, *, own_node: bool = False, what: str = "this run") -> HTTPException:
+    """409 for a paid start the guard refused, worded by the code it was
+    raised with (ProviderStartConflictError.reason, never its text): the
+    person reads _paid_state_person's line for the state that holds the
+    canvas, agents the exact text. `own_node`: the request names the node
+    whose start is in flight ("Checked Marble — unlock" on that node)."""
+    reason = getattr(exc, "reason", "active")
+    if reason == "cancelled":
+        # A Stop that beat the run's admission: it names no World Labs state
+        # (listed for GM, round 3b).
+        return HTTPException(status_code=409, detail=str(exc))
+    if reason == "capacity":
+        person = _paid_capacity_person(getattr(exc, "limit", None), what=what)
+    elif reason == "changed":
+        person = _paid_job_changed_person(UNLOCK_BUTTON)
+    else:
+        state = "active" if reason in {"active", "busy"} else reason
+        subject = "This node is" if own_node and reason == "active" else "A node is"
+        person = _paid_state_person(state, subject=subject, then="try again",
+                                    fields=getattr(exc, "fields", None) or _RECOVERY_FIELDS_FALLBACK)
+    return refusal_copy.refusal(409, str(exc), person, route="run")
+
+
 def _recovery_field_labels(nodes: list[dict[str, Any]]) -> str:
     """The labels (node_definitions.json) of the recovery ID fields `nodes`
     hold, in policy order: a World node's "Resume Operation ID" and "Existing
@@ -490,9 +537,10 @@ def _seed_shared_graph_recoveries_for_api(
     try:
         return _ensure_shared_graph_recoveries(nodes, source=source)
     except ProviderRecoveryCapacityError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise refusal_copy.refusal(409, str(exc), _paid_capacity_person(exc.limit, what="this change"),
+                                   route="canvas") from exc
     except ProviderRecoveryConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise refusal_copy.refusal(409, str(exc), CANVAS_JOB_CHANGED_PERSON, route="canvas") from exc
     except ProviderRecoveryPersistenceError as exc:
         raise HTTPException(
             status_code=507,
@@ -7217,12 +7265,18 @@ def _claim_fresh_paid_worldlabs_starts(
             claimed_node_ids & (recovered_node_ids | canonical_recovery_node_ids)
         )
         if stale_nodes:
+            # The person's line names what clears it (round 3b): Run History's
+            # forget for a record, else the node's own ID fields.
+            journaled = any(node_id in recovered_node_ids for node_id in stale_nodes)
             raise ProviderStartConflictError(
                 "Fresh World Labs start blocked because Nebula already has a "
                 "recovery checkpoint for node(s): "
                 + ", ".join(stale_nodes)
                 + ". Restore or explicitly delete the checkpoint before starting "
-                "new paid work."
+                "new paid work.",
+                reason="recovery" if journaled else "params",
+                fields=None if journaled else _recovery_field_labels(
+                    [cli_graph.nodes[node_id] for node_id in stale_nodes if node_id in cli_graph.nodes]),
             )
         provider_recovery_store.reserve(
             run_id=run_id,
@@ -7257,7 +7311,8 @@ def _claim_fresh_paid_worldlabs_starts(
         )
     except ProviderRecoveryCapacityError as exc:
         provider_recovery_store.release_reservations(run_id)
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise refusal_copy.refusal(409, str(exc), _paid_capacity_person(exc.limit, what="this run"),
+                                   route="run") from exc
     except ProviderRecoveryPersistenceError as exc:
         provider_recovery_store.release_reservations(run_id)
         raise HTTPException(
@@ -7272,7 +7327,7 @@ def _claim_fresh_paid_worldlabs_starts(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ProviderStartConflictError as exc:
         provider_recovery_store.release_reservations(run_id)
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise _start_refusal(exc) from exc
     except ProviderStartPersistenceError as exc:
         provider_recovery_store.release_reservations(run_id)
         raise HTTPException(
@@ -9943,7 +9998,8 @@ async def delete_provider_recovery(
                 existing_world_id=existing_world_id,
             )
         except ProviderRecoveryConflictError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise refusal_copy.refusal(409, str(exc), _paid_job_changed_person(f"{FORGET_BUTTON} in Run History"),
+                                       route="canvas") from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except ProviderRecoveryPersistenceError as exc:
@@ -10008,7 +10064,9 @@ async def acknowledge_provider_start_ambiguity(
             run_id=run_id,
         )
     except ProviderStartConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        # "Checked Marble — unlock" (round 3b): the person reads the line for
+        # why it can't unlock yet; agents keep the exact text.
+        raise _start_refusal(exc, own_node=True) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ProviderStartPersistenceError as exc:

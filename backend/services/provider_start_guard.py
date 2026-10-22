@@ -32,7 +32,25 @@ AMBIGUITY_MESSAGE = (
 
 
 class ProviderStartConflictError(RuntimeError):
-    """A fresh paid start is already active or held for acknowledgement."""
+    """A fresh paid start is already active or held for acknowledgement.
+
+    `reason` says which, for the person's line (main.py words it; the message
+    is the specific text agents keep, error copy round 3b): "active" (this
+    node's start is still in flight), "busy" (another start holds the paid
+    lifecycle), "ambiguity" (a start held until someone checks Marble and
+    unlocks it), "capacity" (the journal is full; `limit` is its size),
+    "changed" (the hold changed since it was read), "recovery" / "params" (a
+    recovery record or an ID in the node's params blocks a fresh start),
+    "cancelled" (a Stop arrived before the run was admitted)."""
+
+    default_reason = "active"
+
+    def __init__(self, message: str = "", *, reason: str | None = None, limit: int | None = None,
+                 fields: str | None = None) -> None:
+        super().__init__(message)
+        self.reason = reason or self.default_reason
+        self.limit = limit
+        self.fields = fields
 
 
 class ProviderStartPersistenceError(RuntimeError):
@@ -41,6 +59,8 @@ class ProviderStartPersistenceError(RuntimeError):
 
 class ProviderStartCancelledError(ProviderStartConflictError):
     """A durable Stop intent arrived before paid-start admission."""
+
+    default_reason = "cancelled"
 
 
 class ProviderStartCancellationCapacityError(RuntimeError):
@@ -112,7 +132,8 @@ class ProviderStartGuard:
                 held_key, active_run = next(iter(active_leases.items()))
                 raise ProviderStartConflictError(
                     f"Fresh paid {held_key[0]} start is already active for node "
-                    f"'{held_key[1]}' in run '{active_run}'"
+                    f"'{held_key[1]}' in run '{active_run}'",
+                    reason="busy",
                 )
             try:
                 self._acquire_lifecycle(run_id)
@@ -141,7 +162,8 @@ class ProviderStartGuard:
                                 f"Fresh paid {key[0]} start is safety-locked after an "
                                 "ambiguous provider response for node "
                                 f"'{blocking_hold['nodeId']}'; check Marble and "
-                                "explicitly unlock that hold"
+                                "explicitly unlock that hold",
+                                reason="ambiguity",
                             )
                     occupied = set(self._ambiguities) | set(self._pending)
                     if len(occupied | set(keys)) > self._max_records:
@@ -150,7 +172,9 @@ class ProviderStartGuard:
                         raise ProviderStartConflictError(
                             "World Labs paid-start safety journal is at capacity; "
                             "resolve an existing recovery or ambiguity before "
-                            "starting more paid work"
+                            "starting more paid work",
+                            reason="capacity",
+                            limit=self._max_records,
                         )
 
                     # Commit a pre-POST intent before provider traffic. If this
@@ -401,7 +425,8 @@ class ProviderStartGuard:
                 self._reload_locked()
                 if key in self._pending and self._active.get(key) != run_id:
                     raise ProviderStartConflictError(
-                        "Cannot replace a paid-start intent owned by another backend"
+                        "Cannot replace a paid-start intent owned by another backend",
+                        reason="busy",
                     )
                 if (
                     key not in self._pending
@@ -410,7 +435,9 @@ class ProviderStartGuard:
                     >= self._max_records
                 ):
                     raise ProviderStartConflictError(
-                        "World Labs paid-start safety journal is at capacity"
+                        "World Labs paid-start safety journal is at capacity",
+                        reason="capacity",
+                        limit=self._max_records,
                     )
                 self._pending.pop(key, None)
                 self._ambiguities.pop(key, None)
@@ -507,7 +534,8 @@ class ProviderStartGuard:
             if key in self._active:
                 raise ProviderStartConflictError(
                     "Cannot acknowledge a World Labs paid-start ambiguity while "
-                    "that provider handshake is still active"
+                    "that provider handshake is still active",
+                    reason="active",
                 )
             acknowledgement_run = f"ack-{uuid4().hex}"
             try:
@@ -519,7 +547,8 @@ class ProviderStartGuard:
                     if current is not None and current.get("runId") != run_id:
                         raise ProviderStartConflictError(
                             "World Labs paid-start ambiguity changed; refresh before "
-                            "acknowledging the newer hold"
+                            "acknowledging the newer hold",
+                            reason="changed",
                         )
                     previous = dict(self._ambiguities)
                     removed = self._ambiguities.pop(key, None) is not None
@@ -818,7 +847,8 @@ class ProviderStartGuard:
         if self._lifecycle_fd is not None:
             held_run = self._lifecycle_run_id or "unknown"
             raise ProviderStartConflictError(
-                f"Fresh paid World Labs start is already active in run '{held_run}'"
+                f"Fresh paid World Labs start is already active in run '{held_run}'",
+                reason="busy",
             )
         path = self._path
         if path is None:
@@ -837,7 +867,8 @@ class ProviderStartGuard:
             if exc.errno in {errno.EACCES, errno.EAGAIN, errno.EWOULDBLOCK}:
                 raise ProviderStartConflictError(
                     "Fresh paid World Labs start is already active in another "
-                    "Nebula backend process"
+                    "Nebula backend process",
+                    reason="busy",
                 ) from exc
             raise ProviderStartPersistenceError(
                 "provider start guard write failed: lifecycle lock unavailable"

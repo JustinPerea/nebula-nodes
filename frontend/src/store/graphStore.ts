@@ -59,6 +59,7 @@ import {
   cancelExecution as apiCancelExecution,
   acknowledgeProviderStartAmbiguity as apiAcknowledgeProviderStartAmbiguity,
   deleteProviderRecovery as apiDeleteProviderRecovery,
+  FORGET_RECOVERY_HEADING,
   generateCinemaShot as apiGenerateShot,
   promoteCinemaShotVariation as apiPromoteShotVariation,
   getExecutionStatus as apiGetExecutionStatus,
@@ -74,7 +75,8 @@ import {
   rewriteExecutionAssetUrls,
 } from '../lib/backend';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
-import { REFUSED_FALLBACK_COPY, copyForStatus, failureCopy, readDetail, requestError, warnFailure } from '../lib/errorCopy';
+import { waitingOnWorldLabs } from '../lib/worldLabsWaiting';
+import { FailureNotice, REFUSED_FALLBACK_COPY, copyForStatus, failureCopy, readDetail, requestError, warnFailure } from '../lib/errorCopy';
 import {
   RUNTIME_FIELDS, applySlice, diffCanvas, edgeKey, editArrivedText, foldArrange, foreignSource, isForeignEdit, isOwnEcho,
   restoreRequest, undoNoticeText, type EditOrigin, type ForeignEdit,
@@ -801,6 +803,10 @@ interface GraphState {
   handleExecutionEvent: (event: ExecutionEvent) => void;
   hydrateProviderRecoveries: (checkpoints: ProviderRecoveryCheckpoint[]) => void;
   deleteProviderRecovery: (runId: string, nodeId: string) => Promise<void>;
+  /** The Delete key's guard (Canvas onBeforeDelete): false, with the canvas
+   * notice saying why, when one of `nodeIds` holds World Labs state, so React
+   * Flow removes neither the nodes nor their wires (round 3b). */
+  allowCanvasDelete: (nodeIds: string[]) => boolean;
   hydrateProviderStartAmbiguities: (ambiguities: ProviderStartAmbiguity[]) => void;
   hydrateExecutionStatuses: (statuses: ExecutionStatusResult[]) => void;
   acknowledgeProviderStartAmbiguity: (
@@ -1710,8 +1716,12 @@ async function deleteCLIOriginNode(nodeId: string): Promise<void> {
 
 /** The nodes stay on the canvas (their delete wasn't confirmed). GM's
  * pattern: "Couldn't delete the node." then the reason, each reason once. */
+function deletionHeading(count: number): string {
+  return count === 1 ? "Couldn't delete the node." : `Couldn't delete ${count} nodes.`;
+}
+
 function reportNodeDeletionFailure(reasons: string[], count: number): void {
-  const heading = count === 1 ? "Couldn't delete the node." : `Couldn't delete ${count} nodes.`;
+  const heading = deletionHeading(count);
   const message = `${heading} ${[...new Set(reasons)].join(' ')}`;
   console.warn(`[nebula] ${message}`);
   if (typeof window !== 'undefined' && typeof window.alert === 'function') {
@@ -2008,6 +2018,23 @@ function warnBlockedProviderStart(ambiguity: ProviderStartAmbiguity): void {
 function nodeHasProviderSafety(state: GraphState, nodeId: string): boolean {
   return state.providerRecoveries.some((checkpoint) => checkpoint.nodeId === nodeId)
     || state.providerStartAmbiguities.some((ambiguity) => ambiguity.nodeId === nodeId);
+}
+
+/**
+ * The person asked to delete `ids` and the canvas keeps them, because one
+ * holds World Labs state (error copy round 3b: a refusal that says nothing
+ * is the worst kind). True when it refused: it says why once, in the
+ * canvas's short notice ("Couldn't delete the node." and the backend's
+ * per-state line, lib/worldLabsWaiting), and sends nothing. An agent's delete
+ * goes through the backend, which refuses it with its own text.
+ */
+function refuseHeldNodeDelete(state: GraphState, ids: string[], set: GraphSet): boolean {
+  const held = ids.filter((nodeId) => nodeHasProviderSafety(state, nodeId));
+  if (held.length === 0) return false;
+  // The backend's order: an unconfirmed start before a recovery record.
+  const unlock = held.some((nodeId) => state.providerStartAmbiguities.some((ambiguity) => ambiguity.nodeId === nodeId));
+  set({ undoNotice: { id: ++undoNoticeSeq, text: `${deletionHeading(ids.length)} ${waitingOnWorldLabs(ids.length, unlock)}`, offer: null } });
+  return true;
 }
 
 /**
@@ -3288,7 +3315,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     if (state.isExecuting) return;
     const selectedIds = state.nodes.filter((node) => node.selected).map((node) => node.id);
     if (selectedIds.length === 0) return;
-    if (selectedIds.some((nodeId) => nodeHasProviderSafety(state, nodeId))) return;
+    if (refuseHeldNodeDelete(state, selectedIds, set)) return;
     // Route through the normal React Flow removal path so one undo snapshot,
     // backend mirroring, edge cleanup, and Remotion source pruning stay atomic.
     get().onNodesChange(selectedIds.map((id) => ({ id, type: 'remove' as const })));
@@ -3693,10 +3720,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     return tempId;
   },
 
+  allowCanvasDelete: (nodeIds) => !refuseHeldNodeDelete(get(), nodeIds, set),
+
   onNodesChange: (changes) => {
     if (get().isExecuting && changes.some((change) => change.type === 'remove')) return;
     const removedIds = changes.filter((c): c is NodeChange & { type: 'remove' } => c.type === 'remove').map((c) => c.id);
-    if (removedIds.some((nodeId) => nodeHasProviderSafety(get(), nodeId))) return;
+    if (refuseHeldNodeDelete(get(), removedIds, set)) return;
     const cliRemovedIds = removedIds.filter((nodeId) => CLI_ID_RE.test(nodeId));
     if (cliRemovedIds.length === 0) {
       applyCanvasNodeChanges(changes, set, get);
@@ -5138,7 +5167,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const isCreateInput = inputNode?.data.definitionId === 'text-input' || inputNode?.data.definitionId === 'image-input';
       if (!stillUsed && isCreateInput) toRemove.add(inputId);
     }
-    if ([...toRemove].some((nodeId) => nodeHasProviderSafety(get(), nodeId))) return;
+    if (refuseHeldNodeDelete(get(), [...toRemove], set)) return;
     get().onNodesChange([...toRemove].map((id) => ({ id, type: 'remove' as const })));
   },
 
@@ -5178,7 +5207,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   deleteNode: (nodeId) => {
-    if (get().isExecuting || nodeHasProviderSafety(get(), nodeId)) return;
+    if (get().isExecuting || refuseHeldNodeDelete(get(), [nodeId], set)) return;
     get().onNodesChange([{ id: nodeId, type: 'remove' }]);
   },
 
@@ -6058,14 +6087,17 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   deleteProviderRecovery: async (runId, nodeId) => {
+    // Round 3b: the person reads these (Run History alerts them), so they are
+    // written lines under the button's heading, not developer text.
     if (get().isExecuting) {
-      throw new Error('Wait for the active run to finish before clearing recovery safety.');
+      throw new FailureNotice(FORGET_RECOVERY_HEADING, 'Let the run finish, then try again.');
     }
     const expected = get().providerRecoveries.find(
       (checkpoint) => checkpoint.runId === runId && checkpoint.nodeId === nodeId,
     );
     if (!expected || expected.durable === false) {
-      throw new Error('That durable provider recovery checkpoint is no longer current.');
+      throw new FailureNotice(FORGET_RECOVERY_HEADING,
+        "That recovery safeguard isn't there anymore. Reload to get the latest run history.");
     }
     await apiDeleteProviderRecovery(runId, nodeId, expected);
     set((state) => {

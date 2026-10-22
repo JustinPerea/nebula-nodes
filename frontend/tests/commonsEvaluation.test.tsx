@@ -119,3 +119,15 @@ it('offers sealing and the abandon close before any agent grade', async () => {
   expect(screen.getByText('Seal all 15 labels')).toBeTruthy();
   expect(screen.getByText('Close without sealing…')).toBeTruthy();
 });
+
+it('error copy round 3b: the intro uses GM\'s words for what Blind labeling picks, not "near-duplicate clusters"', async () => {
+  api.get.mockResolvedValue(null);
+  render(<CommonsEvaluation />);
+  await screen.findByText('Prepare the held-out set');
+  // GM's refusal says "references that look different from each other"; the intro now says the same.
+  expect(screen.getByText(/Nebula picks 15 references to label and 30 to tune with/).textContent).toBe(
+    'Scan a local folder before you import it. Nebula picks 15 references to label and 30 to tune with, '
+    + 'choosing references that look different from each other and spreading them across subfolders. '
+    + 'It never uses the 15, or anything that looks like them, as examples.');
+  expect(document.body.textContent).not.toMatch(/near-duplicate|clusters|quarantined/);
+});

@@ -14,6 +14,7 @@ vi.mock('../../src/lib/backend', async (importOriginal) => ({
 import { useGraphStore } from '../../src/store/graphStore';
 import { wsClient, type ExecutionEvent } from '../../src/lib/wsClient';
 import { GRAPH_PARAMS_VERSION } from '../../src/lib/savedParamsUpgrades';
+import { noticeHoldMs } from '../../src/lib/canvasNoticeHold';
 import { CanvasUndoNotice, UNDO_NOTICE_MS } from '../../src/components/canvas/CanvasUndoNotice';
 
 const node = (id: string): Node<NodeData> => ({
@@ -68,5 +69,31 @@ describe('CanvasUndoNotice', () => {
     act(() => agentAdds('n2'));
     act(() => { vi.advanceTimersByTime(UNDO_NOTICE_MS + 10); });
     expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  // Error copy round 3b (live check): a refusal line ("Couldn't delete the node. This node is still
+  // waiting on World Labs. …") was cut to one line with an ellipsis, so the step it names ("use
+  // “Checked Marble — forget” in Run History") never showed, and it left after 6 seconds, before
+  // it could be read. A notice with no button wraps and stays up for its reading time.
+  it('a refusal line wraps (no one-line ellipsis) and stays up long enough to read', () => {
+    vi.useFakeTimers();
+    const text = "Couldn't delete the node. This node is still waiting on World Labs. Check the job in Marble, then use “Checked Marble — forget” in Run History before you delete it.";
+    render(<CanvasUndoNotice />);
+    act(() => useGraphStore.setState({ undoNotice: { id: 9001, text, offer: null } }));
+    expect(screen.getByRole('status')).toHaveTextContent(text);
+    expect(screen.getByRole('status').classList.contains('canvas-undo-notice--message')).toBe(true);
+    const hold = noticeHoldMs(text, null);
+    expect(hold).toBeGreaterThan(UNDO_NOTICE_MS);
+    act(() => { vi.advanceTimersByTime(UNDO_NOTICE_MS + 10); });
+    expect(screen.queryByRole('status')).not.toBeNull();
+    act(() => { vi.advanceTimersByTime(hold); });
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('a short line with a button keeps the 6-second hold and its one line', () => {
+    render(<CanvasUndoNotice />);
+    act(() => agentAdds('n2'));
+    expect(screen.getByRole('status').classList.contains('canvas-undo-notice--message')).toBe(false);
+    expect(noticeHoldMs('Claude changed the canvas', 'undo')).toBe(UNDO_NOTICE_MS);
   });
 });
