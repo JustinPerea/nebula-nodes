@@ -34,7 +34,8 @@ def test_pending_paid_intent_becomes_ambiguity_after_restart(tmp_path: Path) -> 
             "nodeId": "world-node",
             "kind": ENVIRONMENT,
             "message": (
-                "World Labs may have accepted a paid start without returning a "
+                # Error copy round 3c (GM): "World Labs run", not "paid start".
+                "World Labs may have accepted a World Labs run without returning a "
                 "recovery ID. Check Marble before unlocking; do not rerun blindly."
             ),
             "durable": True,

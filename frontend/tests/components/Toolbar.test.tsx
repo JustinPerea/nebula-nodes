@@ -244,7 +244,7 @@ describe('Canvas toolbar hierarchy', () => {
     render(<Toolbar />);
     const { panel } = openActions();
     expect(within(panel).getByRole('button', { name: 'Save graph' })).toBeDisabled();
-    expect(within(panel).getByRole('button', { name: 'Save graph' })).toHaveAccessibleDescription('Resolve the World Labs paid-start review before saving.');
+    expect(within(panel).getByRole('button', { name: 'Save graph' })).toHaveAccessibleDescription('Resolve the World Labs run review before saving.');
     expect(within(panel).getByRole('button', { name: 'Load graph' })).toBeEnabled();
   });
 

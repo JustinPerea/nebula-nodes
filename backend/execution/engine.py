@@ -65,6 +65,7 @@ from models.events import (
 from execution import gating, provider_calls
 from services.moodboard_brief import apply_to_generator as apply_board_to_generator
 from execution.missing_credential import MissingCredentialError
+from execution.person_line import person_line
 
 CycleError = _GraphlibCycleError
 
@@ -1596,6 +1597,7 @@ async def _execute_graph(
                     friendly=friendly,
                     missing_credential=isinstance(exc, MissingCredentialError)
                     and handler_calls.get(nid, 0) <= 1,
+                    person=person_line(exc),
                 )
             )
             return nid, False, 0
@@ -1656,7 +1658,8 @@ async def _execute_graph(
             except Exception as exc:
                 category, friendly, retryable = classify_error(str(exc))
                 await emit(ErrorEvent(node_id=nid, error=str(exc), category=category,
-                                      friendly=friendly, retryable=retryable))
+                                      friendly=friendly, retryable=retryable,
+                                      person=person_line(exc)))
                 return nid, False, 0
 
         executed_count = 0

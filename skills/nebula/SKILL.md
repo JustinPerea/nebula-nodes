@@ -273,7 +273,11 @@ Refusals give you the specific text (an id, the field, the command to run);
 the person's canvas gets a written line instead. Read `detail`, not the
 person's wording. That includes the World Labs holds: a run start, "Checked
 Marble — unlock" and "Checked Marble — forget" refused while a job is still
-waiting keep their exact text for you.
+waiting keep their exact text for you. A node's run error works the same way:
+`error` (in `nebula result`, `nebula look` and the run record) is the specific
+text, ids and parameter names included; the card shows a written line (the
+graph's `errorPerson`, when the node's handler wrote one) that you shouldn't
+parse.
 
 ## Moodboards
 

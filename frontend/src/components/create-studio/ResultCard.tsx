@@ -133,6 +133,9 @@ function ResultCardOutput({ node, prompt, url, onOpenInCanvas, onUseAsInput, onD
           streamingPartials={node.data.streamingPartials}
           streamingSvg={node.data.streamingSvg}
           error={node.data.error}
+          errorCategory={node.data.errorCategory}
+          errorFriendly={node.data.errorFriendly}
+          errorPerson={node.data.errorPerson}
         />
         {canZoom && (
           <button

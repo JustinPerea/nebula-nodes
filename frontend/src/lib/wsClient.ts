@@ -241,7 +241,8 @@ export type ExecutionEvent = (
       withheld?: Record<string, string> | null }
   /** A gate upstream withheld this node's input, so it never ran (backend execution/gating.py). */
   | { type: 'skipped'; nodeId: string; reason: string; gateNodeId?: string | null }
-  | { type: 'error'; nodeId: string; error: string; retryable: boolean; category?: ErrorCategory; friendly?: string; variant?: VariantScope | null }
+  /** `person`: the handler's line for the person (error copy round 3c); `error` is the specific text agents keep. */
+  | { type: 'error'; nodeId: string; error: string; retryable: boolean; category?: ErrorCategory; friendly?: string; person?: string | null; variant?: VariantScope | null }
   | { type: 'validationError'; errors: Array<{ nodeId: string; portId: string; message: string }> }
   | { type: 'graphComplete'; duration: number; nodesExecuted: number; nodesSkipped?: number }
   | { type: 'graphCancelled' }

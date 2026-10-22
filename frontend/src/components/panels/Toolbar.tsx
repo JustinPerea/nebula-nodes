@@ -85,7 +85,7 @@ export function Toolbar() {
       : 'Wait for the active run to finish.';
   const saveBlockedReason = !canLoad
     ? loadBlockedReason
-    : 'Resolve the World Labs paid-start review before saving.';
+    : 'Resolve the World Labs run review before saving.';
 
   const closeActions = useCallback((restoreFocus = false) => {
     setActionsOpen(false);

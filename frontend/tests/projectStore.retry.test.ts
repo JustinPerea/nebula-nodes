@@ -136,7 +136,8 @@ describe('Projects: Try again redoes the failed action', () => {
   it('a create whose reply was lost: Try again reloads the saved projects, as its line says, and never creates twice', async () => {
     vi.mocked(projects.createProject).mockRejectedValueOnce(unavailable("Couldn't create the project."));
     await useProjectStore.getState().createProject('Fresh');
-    expect(useProjectStore.getState().error).toBe('Could not confirm the project change. Try again to reload saved projects safely.');
+    // Round 3c (GM): "Couldn't confirm…" with the same object, then the mapped reason line.
+    expect(useProjectStore.getState().error).toBe("Couldn't confirm the project change. Nebula didn't respond. Try again.");
     expect(offer()).toBe('reload');
     await useProjectStore.getState().retry();
     expect(projects.createProject).toHaveBeenCalledTimes(1);
@@ -198,7 +199,7 @@ describe('Projects: Try again redoes the failed action', () => {
   it('deleting the open project with no reply: Try again reloads the saved projects (the full line), never a second delete', async () => {
     vi.mocked(projects.deleteProject).mockRejectedValueOnce(unavailable("Couldn't delete the project."));
     await useProjectStore.getState().remove('alpha');
-    expect(useProjectStore.getState().error).toBe('Could not confirm the project was deleted. Try again to reload saved projects safely.');
+    expect(useProjectStore.getState().error).toBe("Couldn't confirm the project was deleted. Nebula didn't respond. Try again.");
     expect(offer()).toBe('reload');
     await useProjectStore.getState().retry();
     expect(projects.deleteProject).toHaveBeenCalledTimes(1);
@@ -342,10 +343,65 @@ describe('Projects: review fixes', () => {
   it('a run that is only going keeps the busy line with Try again (it can succeed once the run ends)', async () => {
     useGraphStore.setState({ isExecuting: true });
     await useProjectStore.getState().open('beta');
-    expect(useProjectStore.getState().error).toBe('Finish or stop the current run and let pending edits finish before switching projects.');
+    // Round 3c (GM): "A run is still going. Let it finish or stop it, then try again."
+    expect(useProjectStore.getState().error).toBe("Couldn't open the project. A run is still going. Let it finish or stop it, then try again.");
     expect(offer()).toBe('redo');
     useGraphStore.setState({ isExecuting: false });
     await useProjectStore.getState().retry();
     expect(useProjectStore.getState()).toMatchObject({ screen: 'workspace', error: null });
   });
 });
+
+// Error copy round 3c (GM - Design), the Projects screen's older lines:
+// ""Could not confirm…" → "Couldn't confirm…" with the same object, then the
+// mapped reason line." and ""Finish or stop the current run…" → "A run is
+// still going. Let it finish or stop it, then try again."" Every variant.
+describe('round 3c: the older Projects lines', () => {
+  const STILL_GOING = 'A run is still going. Let it finish or stop it, then try again.';
+
+  it('a lost create reply with no connection: the connection line after the heading', async () => {
+    vi.mocked(projects.createProject).mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch'),
+      { heading: "Couldn't create the project." }));
+    await useProjectStore.getState().createProject('Fresh');
+    expect(useProjectStore.getState().error).toBe("Couldn't confirm the project change. Couldn't reach Nebula. Check your connection and try again.");
+    expect(offer()).toBe('reload');
+  });
+
+  it('New project while a run is going', async () => {
+    useGraphStore.setState({ isExecuting: true });
+    await useProjectStore.getState().createProject('New');
+    expect(useProjectStore.getState().error).toBe(`Couldn't create the project. ${STILL_GOING}`);
+    expect(offer()).toBe('redo');
+    expect(projects.createProject).not.toHaveBeenCalled();
+  });
+
+  it('deleting the open project while a run is going', async () => {
+    useGraphStore.setState({ isExecuting: true });
+    await useProjectStore.getState().remove('alpha');
+    expect(useProjectStore.getState().error).toBe(`Couldn't delete the project. ${STILL_GOING}`);
+    expect(offer()).toBe('redo');
+    expect(projects.deleteProject).not.toHaveBeenCalled();
+  });
+
+  it('a canvas that turned busy while the switch was saving, and one that refuses the load', async () => {
+    const original = useGraphStore.getState().reserveGraphImport;
+    useGraphStore.setState({ reserveGraphImport: () => false });
+    try {
+      await useProjectStore.getState().open('beta');
+      expect(useProjectStore.getState().error).toBe(`Couldn't open the project. ${STILL_GOING}`);
+    } finally { useGraphStore.setState({ reserveGraphImport: original }); }
+    const load = useGraphStore.getState().loadProjectGraph;
+    useGraphStore.setState({ loadProjectGraph: () => false });
+    try {
+      await useProjectStore.getState().open('beta');
+      expect(useProjectStore.getState().error).toBe(`Couldn't open the project. ${STILL_GOING}`);
+    } finally { useGraphStore.setState({ loadProjectGraph: load }); }
+  });
+
+  it('no line on the Projects screen still says "Could not" or "Finish or stop"', async () => {
+    const source = await import('../src/store/projectStore.ts?raw').then((module) => module.default as string);
+    expect(source).not.toMatch(/Could not confirm|Finish or stop|still busy\. Finish|became busy/);
+    expect(source).not.toMatch(/\(\$\{(reason|error)/);
+  });
+});
+

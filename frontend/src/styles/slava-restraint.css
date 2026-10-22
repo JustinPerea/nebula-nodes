@@ -4037,7 +4037,7 @@ body.app-slava-restraint .model-node__error--blocked {
   opacity: 0.92;
 }
 body.app-slava-restraint .model-node__error-details summary {
-  color: var(--sr-mono);
+  color: var(--sr-ink-light);
 }
 
 /* ─────────────────────────────────────────────────────────────────────

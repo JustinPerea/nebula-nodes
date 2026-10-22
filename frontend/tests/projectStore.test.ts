@@ -205,7 +205,8 @@ describe('saved project coordinator', () => {
     useGraphStore.setState({ isExecuting: true });
     await useProjectStore.getState().remove('alpha');
     expect(projects.deleteProject).not.toHaveBeenCalled();
-    expect(useProjectStore.getState().error).toContain('before deleting the open project');
+    // Error copy round 3c (GM): every "Finish or stop …" variant reads this way.
+    expect(useProjectStore.getState().error).toBe("Couldn't delete the project. A run is still going. Let it finish or stop it, then try again.");
   });
   it('can return Home and resume the active canvas during a run, but rejects changing projects', async () => {
     await useProjectStore.getState().initialize();

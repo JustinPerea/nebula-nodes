@@ -790,6 +790,11 @@ export interface NodeData {
    *  still holds the raw provider string for the expandable debug details. */
   errorCategory?: string;
   errorFriendly?: string;
+  /** The person's line for a run error (error copy round 3c, GM - Design:
+   *  "the canvas shows the written line"): the handler wrote it, with no ids
+   *  or record names. `error` keeps the specific text for agents; the card
+   *  never shows it beside this line (lib/nodeErrorCopy.ts). */
+  errorPerson?: string;
   /** UI-only: why the latest run skipped this node, e.g. "Jev Decide failed
    *  (answered no, 0.12)", and the gate node that caused it. */
   skipReason?: string;

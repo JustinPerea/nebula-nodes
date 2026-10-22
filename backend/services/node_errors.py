@@ -5,8 +5,8 @@ here, so it is still there when the page reloads, the person switches
 projects and back, or the backend restarts:
 
 - every graph the page loads says it (main._cli_node_to_rf: state "error"
-  with the card's error, errorFriendly and errorCategory), in graphSync and
-  GET /api/projects/{id} alike;
+  with the card's error, errorFriendly, errorCategory and errorPerson), in
+  graphSync and GET /api/projects/{id} alike;
 - look_at_canvas and `nebula look` give it as the node's `error`, and
   view_output and `nebula path` answer with it instead of "no output yet".
 
@@ -74,7 +74,7 @@ class NodeErrors:
                 continue
             kept = {
                 str(node_id): {key: _clip(value) for key, value in entry.items()
-                               if key in {"error", "hint", "category"} and value}
+                               if key in {"error", "hint", "category", "person"} and value}
                 for node_id, entry in nodes.items()
                 if isinstance(entry, dict) and entry.get("error")
             }
@@ -127,10 +127,14 @@ class NodeErrors:
     # -- the open project's nodes -------------------------------------------
 
     def record(self, node_id: str, message: str, *, friendly: str | None = None,
-               category: str | None = None) -> None:
+               category: str | None = None, person: str | None = None) -> None:
         if not node_id or not message:
             return
         entry = {"error": _clip(message)}
+        # The person's line (error copy round 3c): the card shows it, agents
+        # never get it from here (get() is the specific text, word for word).
+        if person:
+            entry["person"] = _clip(person)
         hint = _clip(friendly) if friendly else ""
         # classify_error's fallback is the message itself less its full stop.
         if hint and hint.rstrip(".") != entry["error"].rstrip("."):
@@ -158,7 +162,8 @@ class NodeErrors:
     def observe(self, event: Any) -> None:
         """Follow one execution event the way the canvas card does."""
         if isinstance(event, ErrorEvent):
-            self.record(event.node_id, event.error, friendly=event.friendly, category=event.category)
+            self.record(event.node_id, event.error, friendly=event.friendly, category=event.category,
+                        person=event.person)
         elif isinstance(event, (ExecutingEvent, ExecutedEvent, SkippedEvent)):
             self.forget(event.node_id)
 
@@ -183,7 +188,8 @@ class NodeErrors:
             return None
         return {"state": "error", "error": entry["error"],
                 **({"errorFriendly": entry["hint"]} if entry.get("hint") else {}),
-                **({"errorCategory": entry["category"]} if entry.get("category") else {})}
+                **({"errorCategory": entry["category"]} if entry.get("category") else {}),
+                **({"errorPerson": entry["person"]} if entry.get("person") else {})}
 
     def forget_canvas(self) -> None:
         """The open project's canvas was replaced or cleared: node ids restart.

@@ -84,6 +84,32 @@ afterEach(async () => {
   setProjectContext(null);
 });
 
+// Error copy round 3c (GM - Design): "Reasons in parentheses: move each into
+// its own sentence after the heading. No parentheses in error copy." Before:
+// "… couldn't be saved as a recovered project yet (<error.message>). …" and
+// "… but this window couldn't follow (<error.message>). Try again to load it."
+describe('the Projects lines that gave a reason in parentheses', () => {
+  it('a recovered copy that failed: the reason is its own sentence, the short line beside Try again', async () => {
+    editCanvas();
+    vi.mocked(projects.recoverProject).mockRejectedValueOnce(
+      new projects.ProjectRequestError("Nebula didn't respond. Try again.", 503, { heading: "Couldn't recover the project." }));
+    reportParamsOutdated(NEXT);
+    await vi.waitFor(() => expect(useProjectStore.getState().error).toBe(
+      "Nebula was updated while this tab was open. Your unsaved edits couldn't be saved as a recovered project yet. Nebula didn't respond. Try again before reloading."));
+  });
+
+  it("a switch this window couldn't follow: the reason is its own sentence", async () => {
+    vi.mocked(projects.listProjects).mockRejectedValueOnce(
+      new projects.ProjectRequestError("Nebula didn't respond. Try again.", 503, { heading: "Couldn't load your projects." }));
+    emit({ type: 'graphSync', workspaceRevision: 'rev-b', paramsVersion: GRAPH_PARAMS_VERSION, nodes: [], edges: [], empty: true,
+      projectSwitch: { projectId: 'beta', projectName: 'beta', previousProjectId: 'alpha', previousProjectName: 'alpha',
+        previousRevision: 'rev-a', actor: { kind: 'agent', name: 'Claude' } } });
+    await vi.waitFor(() => expect(useProjectStore.getState().error).toBe(
+      "Claude opened “beta”, but this window couldn't follow. Nebula didn't respond. Try again to load it."));
+    expect(useProjectStore.getState().error).not.toMatch(/[()]/);
+  });
+});
+
 describe('a backend at a newer params version', () => {
   it('reloads a clean tab without a recovered copy or a save', async () => {
     emit({ type: 'graphSync', workspaceRevision: 'rev-rotated', paramsVersion: NEXT, nodes: [], edges: [], empty: true });
@@ -135,7 +161,11 @@ describe('a backend at a newer params version', () => {
     editCanvas();
     vi.mocked(projects.recoverProject).mockRejectedValueOnce(new Error('Recovery disk full'));
     reportParamsOutdated(NEXT);
-    await vi.waitFor(() => expect(useProjectStore.getState().error).toContain('Recovery disk full'));
+    // Error copy round 3c (GM): no reason in parentheses, and never an error's
+    // own message: a failure that isn't a request's says no reason at all here
+    // (GM's general line would say "reload", which drops these edits).
+    await vi.waitFor(() => expect(useProjectStore.getState().error).toBe(
+      "Nebula was updated while this tab was open. Your unsaved edits couldn't be saved as a recovered project yet. Try again before reloading."));
     expect(reloadPage).not.toHaveBeenCalled();
     const leave = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(leave);

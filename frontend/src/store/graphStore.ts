@@ -75,7 +75,7 @@ import {
   rewriteExecutionAssetUrls,
 } from '../lib/backend';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
-import { waitingOnWorldLabs } from '../lib/worldLabsWaiting';
+import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, waitingOnWorldLabs } from '../lib/worldLabsWaiting';
 import { FailureNotice, REFUSED_FALLBACK_COPY, copyForStatus, failureCopy, readDetail, requestError, warnFailure } from '../lib/errorCopy';
 import {
   RUNTIME_FIELDS, applySlice, diffCanvas, edgeKey, editArrivedText, foldArrange, foreignSource, isForeignEdit, isOwnEcho,
@@ -337,6 +337,10 @@ function markNodesErrored(
         ...node.data,
         state: 'error' as const,
         error: message,
+        // A line Nebula wrote (a refused start): no older run's reading beside it.
+        errorCategory: undefined,
+        errorFriendly: undefined,
+        errorPerson: undefined,
         progress: undefined,
         streamingText: undefined,
         streamingPartials: undefined,
@@ -371,6 +375,7 @@ function markNodesWithValidationErrors(
         error: messageByNode.get(node.id) ?? globalMessage ?? fallback,
         errorCategory: undefined,
         errorFriendly: undefined,
+        errorPerson: undefined,
         progress: undefined,
         streamingText: undefined,
         streamingPartials: undefined,
@@ -1729,8 +1734,6 @@ function reportNodeDeletionFailure(reasons: string[], count: number): void {
   }
 }
 
-const WORLD_LABS_STATUS_UNCERTAIN_WARNING =
-  'Nebula could not confirm whether this World Labs start was accepted. Run remains locked to prevent duplicate paid work. Check Marble before clearing or retrying.';
 
 function trackedRunHasFreshPaidWorldLabs(runId: string, get: GraphGet): boolean {
   const record = get().runHistory.find((candidate) => candidate.id === runId);
@@ -2952,6 +2955,7 @@ wsClient.subscribe((event) => {
             // category must not sit beside a newer message.
             ...(cliNode.data.state === 'error' ? {
               errorFriendly: cliNode.data.errorFriendly, errorCategory: cliNode.data.errorCategory,
+              errorPerson: cliNode.data.errorPerson,
             } : {}),
             keyStatus,
             ...(changedOutput ? clearBatchPreview() : {}),
@@ -6016,6 +6020,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           error: event.error,
           errorCategory: event.category,
           errorFriendly: event.friendly,
+          errorPerson: event.person ?? undefined,
           progress: undefined,
           streamingText: undefined,
           streamingPartials: undefined,
@@ -6028,7 +6033,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         for (const error of event.errors) {
           if (error.nodeId && ((runId && ownsRun(runId)) || !scopeOverlaps([error.nodeId]))) {
             get().updateNodeData(error.nodeId, {
-              state: 'error', error: error.message, errorCategory: undefined, errorFriendly: undefined,
+              state: 'error', error: error.message, errorCategory: undefined, errorFriendly: undefined, errorPerson: undefined,
             });
           }
         }

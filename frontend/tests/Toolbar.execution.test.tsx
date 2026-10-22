@@ -105,7 +105,7 @@ describe('Toolbar execution lifecycle', () => {
     expect(save).toBeDisabled();
     expect(save).toHaveAttribute(
       'title',
-      'Resolve the World Labs paid-start review before saving.',
+      'Resolve the World Labs run review before saving.',
     );
     fireEvent(window, new CustomEvent('nebula:save'));
 

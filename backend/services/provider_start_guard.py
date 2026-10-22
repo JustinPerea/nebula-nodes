@@ -25,10 +25,27 @@ MAX_RUN_ID_CHARS = 128
 CANCEL_FILTER_BITS = 1_048_576
 CANCEL_FILTER_HASHES = 7
 CANCEL_FILTER_BYTES = CANCEL_FILTER_BITS // 8
+# The status bar shows a hold's message after its heading ("A World Labs run
+# needs your check."), and agents read it in providerHolds. Error copy round
+# 3c (GM - Design): "People never see the word "start"; they ran a World Labs
+# job. ... write "World Labs run" wherever they now say "paid start". Keep the
+# rest of each line." No fact an agent needs was in the old words.
 AMBIGUITY_MESSAGE = (
-    "World Labs may have accepted a paid start without returning a recovery ID. "
+    "World Labs may have accepted a World Labs run without returning a recovery ID. "
     "Check Marble before unlocking; do not rerun blindly."
 )
+NONDURABLE_RECOVERY_MESSAGE = (
+    "World Labs returned a recovery ID, but Nebula could not save that ID durably. "
+    "Use the live ID; do not submit a fresh World Labs run from a stale tab."
+)
+# A hold saved before round 3c keeps the words it was saved with; reading it
+# gives today's, so the status bar never shows "paid start" again.
+_LEGACY_MESSAGES = {
+    "World Labs may have accepted a paid start without returning a recovery ID. "
+    "Check Marble before unlocking; do not rerun blindly.": AMBIGUITY_MESSAGE,
+    "World Labs returned a recovery ID, but Nebula could not save that ID durably. "
+    "Use the live ID; do not submit a fresh paid start from a stale tab.": NONDURABLE_RECOVERY_MESSAGE,
+}
 
 
 class ProviderStartConflictError(RuntimeError):
@@ -508,11 +525,7 @@ class ProviderStartGuard:
                     "runId": run_id,
                     "nodeId": node_id,
                     "kind": key[0],
-                    "message": (
-                        "World Labs returned a recovery ID, but Nebula could not "
-                        "save that ID durably. Use the live ID; do not submit a "
-                        "fresh paid start from a stale tab."
-                    ),
+                    "message": NONDURABLE_RECOVERY_MESSAGE,
                     "durable": True,
                 }
                 self._pending.pop(key, None)
@@ -714,7 +727,7 @@ class ProviderStartGuard:
                     raise ValueError("provider start guard contains duplicate records")
                 raw_message = raw.get("message")
                 message = (
-                    raw_message
+                    _LEGACY_MESSAGES.get(raw_message, raw_message)
                     if isinstance(raw_message, str)
                     and 0 < len(raw_message) <= 2048
                     else AMBIGUITY_MESSAGE
