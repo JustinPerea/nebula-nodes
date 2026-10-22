@@ -28,7 +28,7 @@ import {
 import { ChatModelPicker } from './ChatModelPicker';
 import { PermissionCard, type PermissionRequestPart, type PermissionStatus } from './PermissionCard';
 import { PersonalAgentWarning } from './PersonalAgentWarning';
-import { PERSONAL_AGENTS_CHANGED_EVENT } from './settings/PersonalAgentsSection';
+import { PERSONAL_AGENTS_CHANGED_EVENT } from '../../lib/personalAgentsEvents';
 import '../../styles/personal-agents.css';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl, personTokenForSocket } from '../../lib/backend';
 import { DEFAULT_BACKEND_PORT, devProxyPort } from '../../lib/devBackendPort';
