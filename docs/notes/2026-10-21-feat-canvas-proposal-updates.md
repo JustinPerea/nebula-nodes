@@ -127,3 +127,4 @@ Branch `feat/canvas-proposal-updates`, stacked on `feat/updates-corner-every-scr
   - The plan doc's §5.9 keeps the Q112 and Q113 paragraphs.
   - The corner's imports.
   A canvas proposal's Update sits in the project section, so its Review runs through the app adapter, as before. tsc and lint pass; the corner, board and proposal-bar tests 103/103; the proposal, notes and MCP backend tests 182/182.
+- **Merging #161 (the app-wide focus ring, coordinator).** #161's sweep test (`tests/focusRingCss.test.ts`) flagged this branch's `.proposal-bar:focus { outline: none; }`, which cleared the bar's focus mark with nothing in its place. It now follows #161's pattern for the asset strip: no outline for a mouse-driven focus, and the neutral token ring on `:focus-visible`, so a keyboard user who presses Review sees where focus went. The agent-colour Review flash is unchanged. The sweep, proposal-bar and corner tests pass (123), and lint is clean.

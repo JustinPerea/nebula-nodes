@@ -251,9 +251,16 @@
 
 /* Review on the proposal's Update (Q112 a) focuses the bar: a ring in the
  * agent's colour springs in on the agent log's spring and settles, as the
- * asset proposals' strip does. The bar itself never shows a focus outline. */
+ * asset proposals' strip does. */
 .proposal-bar:focus {
   outline: none;
+}
+
+/* From the keyboard the bar shows the neutral ring (#161); the agent-colour
+ * ring below is the Review flash. */
+.proposal-bar:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #e8e6e1);
+  outline-offset: var(--sr-focus-offset, 2px);
 }
 
 .proposal-bar[data-review='true'] {
