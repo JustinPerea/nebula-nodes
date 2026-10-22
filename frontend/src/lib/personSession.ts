@@ -85,6 +85,13 @@ function allowedBackend(origin: string): boolean {
   return originAllowedByPin(origin, backendPortEnv());
 }
 
+/** Whether this page runs in the desktop app (its shell hands over the
+ * person token), not a plain browser tab. Error copy reads it (GM,
+ * error-copy round 2): a reload helps in the app, a fresh link in a tab. */
+export function inDesktopShell(): boolean {
+  return hasDesktopBridge();
+}
+
 function hasDesktopBridge(): boolean {
   return typeof window !== 'undefined' && typeof window.nebulaDesktop?.apiBaseUrl === 'string'
     && Boolean(window.nebulaDesktop.apiBaseUrl);

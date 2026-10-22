@@ -51,14 +51,14 @@ import { JEV_CARD_FIELDS, jevCardText, jevResultKey, upstreamPortValues } from '
 async function downloadOutput(url: string, filename: string): Promise<void> {
   try {
     await downloadWorldAsset(url, filename, {
+      heading: "Couldn't download the output.",
       tooLargeMessage:
         'This output is too large for a safe in-browser download. Use the local Nebula output folder instead.',
     });
   } catch (err) {
-    console.error('Download failed:', err);
-    window.alert(
-      `Download failed: ${err instanceof Error ? err.message : 'The output could not be downloaded.'}`,
-    );
+    console.error('[nebula] output download', err);
+    // The message is already "Couldn't download the output. <reason>".
+    window.alert(err instanceof Error ? err.message : "Couldn't download the output.");
   }
 }
 

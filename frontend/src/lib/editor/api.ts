@@ -1,5 +1,5 @@
 import { type EditClip, clipSpeed } from './virtualPlayback';
-import { apiFetch } from '../backend';
+import { apiRequest } from '../apiRequest';
 
 interface PreviewRenderResponse {
   previewUrl: string;
@@ -19,15 +19,11 @@ export async function renderPreview(req: { sourceUrl: string; clips: EditClip[] 
     sourceUrl: req.sourceUrl,
     clips: req.clips.map(augmentForBackend),
   };
-  const response = await apiFetch('/api/video-edit/preview-render', {
+  const response = await apiRequest("Couldn't render the preview.", '/api/video-edit/preview-render', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`Render preview failed: ${detail}`);
-  }
   const responseBody = (await response.json()) as PreviewRenderResponse;
   return responseBody.previewUrl;
 }

@@ -1,3 +1,5 @@
+import { REFUSED_FALLBACK_COPY } from './errorCopy';
+
 export type ChatCancellationState = 'idle' | 'requested' | 'failed';
 
 export type ChatCancellationEvent =
@@ -18,14 +20,17 @@ export interface ChatCancellationNotice {
   tone?: 'error';
 }
 
+/** A failed Stop, GM's pattern (error-copy round 2): "Couldn't stop the
+ * reply." then a written reason (the caller's), never "failed:" or raw text;
+ * GM's general line when there is none. */
 export function chatCancellationNotice(
   status: 'requested' | 'confirmed' | 'failed',
-  message?: string,
+  reason?: string,
 ): ChatCancellationNotice {
   if (status === 'requested') return { text: 'Cancellation requested…' };
   if (status === 'confirmed') return { text: 'Cancelled.' };
   return {
-    text: `Warning: Cancellation failed: ${message || 'unknown error'}`,
+    text: `Couldn't stop the reply. ${reason || REFUSED_FALLBACK_COPY}`,
     tone: 'error',
   };
 }
@@ -36,7 +41,7 @@ export function chatCancellationDisconnectNotice(
   return state === 'requested'
     ? chatCancellationNotice(
         'failed',
-        'connection closed before backend cleanup was confirmed.',
+        'The connection closed before Nebula confirmed it stopped.',
       )
     : null;
 }

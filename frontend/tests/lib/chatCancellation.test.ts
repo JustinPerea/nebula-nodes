@@ -46,10 +46,21 @@ describe('chat cancellation truth state', () => {
       state: 'failed',
       busy: false,
     });
+    // error-copy round 2 (GM): "Couldn't {verb} {object}." then the reason,
+    // never "failed:".
     expect(chatCancellationDisconnectNotice('requested')).toEqual({
-      text: 'Warning: Cancellation failed: connection closed before backend cleanup was confirmed.',
+      text: "Couldn't stop the reply. The connection closed before Nebula confirmed it stopped.",
       tone: 'error',
     });
     expect(chatCancellationDisconnectNotice('idle')).toBeNull();
+  });
+
+  it('a failed stop names the action and a written reason (error-copy round 2)', () => {
+    expect(chatCancellationNotice('failed', "Couldn't reach Nebula. Check your connection and try again.")).toEqual({
+      text: "Couldn't stop the reply. Couldn't reach Nebula. Check your connection and try again.",
+      tone: 'error',
+    });
+    expect(chatCancellationNotice('failed').text)
+      .toBe("Couldn't stop the reply. That didn't work. Try again, or reload if it keeps happening.");
   });
 });

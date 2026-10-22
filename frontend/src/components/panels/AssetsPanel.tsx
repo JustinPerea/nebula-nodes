@@ -24,6 +24,8 @@ import { useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
 import { RecentlyDeletedAssets, UndoDeleteToast } from '../asset-trash/AssetTrash';
 import { useAssetDelete } from '../../hooks/useAssetDelete';
 import '../../styles/panels.css';
+import { FailureLines } from '../failure/FailureLines';
+import { failureMessage } from '../../lib/errorCopy';
 import '../../styles/character-studio.css';
 import '../../styles/moodboard-studio.css';
 
@@ -115,7 +117,8 @@ export function AssetsPanel() {
     };
     load()
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load assets.');
+        // Each list's request names itself ("Couldn't load the boards. <reason>").
+        if (!cancelled) setError(failureMessage(err, "Couldn't load your assets."));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -285,7 +288,7 @@ export function AssetsPanel() {
             <div className="character-palette__empty character-palette__empty--error" role="alert">{moveError}</div>
           )}
           {tab === 'styles' && deleting.error && !deleting.lastDeleted && (
-            <div className="character-palette__empty character-palette__empty--error" role="alert">{deleting.error}</div>
+            <div className="character-palette__empty character-palette__empty--error" role="alert"><FailureLines failure={deleting.error} /></div>
           )}
 
           {!noProject && !busy && !failed && tab === 'characters' && (

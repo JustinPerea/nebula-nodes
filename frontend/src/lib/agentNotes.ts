@@ -1,4 +1,4 @@
-import { apiFetch } from './backend';
+import { apiRequest } from './apiRequest';
 
 /**
  * Updates: what an agent or the board reader noticed, saved with the project
@@ -177,19 +177,8 @@ function base(surface: AgentNotesSurface): string {
     : `/api/moodboards/${encodeURIComponent(surface.boardId)}/agent-notes`;
 }
 
-async function detailOf(response: Response, fallback: string): Promise<string> {
-  try {
-    const body = (await response.json()) as { detail?: unknown };
-    if (typeof body?.detail === 'string' && body.detail) return body.detail;
-  } catch {
-    /* not JSON */
-  }
-  return fallback;
-}
-
 export async function fetchAgentNotes(surface: AgentNotesSurface): Promise<AgentNotesListing> {
-  const response = await apiFetch(base(surface));
-  if (!response.ok) throw new Error(await detailOf(response, `Couldn't load updates (${response.status})`));
+  const response = await apiRequest("Couldn't load the updates.", base(surface));
   return (await response.json()) as AgentNotesListing;
 }
 
@@ -199,12 +188,11 @@ export async function markAgentNotesRead(
   upTo?: string,
   ids?: string[],
 ): Promise<{ ids: string[]; unread: number; projectId?: string | null }> {
-  const response = await apiFetch(`${base(surface)}/read`, {
+  const response = await apiRequest("Couldn't mark the updates read.", `${base(surface)}/read`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(ids ? { ids } : upTo ? { upTo } : {}),
   });
-  if (!response.ok) throw new Error(await detailOf(response, `Couldn't mark updates read (${response.status})`));
   return (await response.json()) as { ids: string[]; unread: number; projectId?: string | null };
 }
 
@@ -212,7 +200,6 @@ export async function dismissAgentNote(
   surface: AgentNotesSurface,
   id: string,
 ): Promise<{ note?: unknown; unread: number }> {
-  const response = await apiFetch(`${base(surface)}/${encodeURIComponent(id)}/dismiss`, { method: 'POST' });
-  if (!response.ok) throw new Error(await detailOf(response, `Couldn't dismiss the update (${response.status})`));
+  const response = await apiRequest("Couldn't dismiss the update.", `${base(surface)}/${encodeURIComponent(id)}/dismiss`, { method: 'POST' });
   return (await response.json()) as { note?: unknown; unread: number };
 }

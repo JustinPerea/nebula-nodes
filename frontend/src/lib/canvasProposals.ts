@@ -1,6 +1,8 @@
 import type { Edge, InternalNode, Node } from '@xyflow/react';
 import type { ModelNodeDefinition, NodeData } from '../types';
 import { apiFetch } from './backend';
+import { apiRequest } from './apiRequest';
+import { RequestFailedError } from './errorCopy';
 import { formatUsd, formatUsdRange } from './pricing';
 import { resolveAnchor, type Point } from './agentCursorMotion';
 import type { ProposalNotReady, ProposalPersonValues, ProposalView } from './wsClient';
@@ -29,24 +31,17 @@ export interface AcceptedProposal {
 }
 
 /** A failed accept/reject, keeping the HTTP status so the bar can explain a 403. */
-export class ProposalRequestError extends Error {
-  readonly status: number;
-
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
+/** A refused accept or reject: heading + reason like every request's error
+ * (GM, error-copy round 2); `status` tells a gone proposal from a refusal. */
+export class ProposalRequestError extends RequestFailedError {
+  constructor(status: number, reason: string, options: { heading?: string; detail?: unknown } = {}) {
+    super(options.heading ?? '', status, { reason, detail: options.detail });
+    this.name = 'ProposalRequestError';
   }
 }
 
-async function detailOf(response: Response, fallback: string): Promise<string> {
-  try {
-    const body = (await response.json()) as { detail?: unknown };
-    if (typeof body?.detail === 'string' && body.detail) return body.detail;
-  } catch {
-    /* not JSON */
-  }
-  return fallback;
-}
+const asProposalError = (error: RequestFailedError) =>
+  new ProposalRequestError(error.status, error.reason, { heading: error.heading, detail: error.detail });
 
 /**
  * Accept a proposal. The key came only over this canvas's WebSocket; the
@@ -58,14 +53,11 @@ export async function acceptProposal(
   acceptKey: string,
   positions: Record<string, Point>,
 ): Promise<AcceptedProposal> {
-  const response = await apiFetch(`/api/canvas/proposals/${encodeURIComponent(id)}/accept`, {
+  const response = await apiRequest("Couldn't accept the proposal.", `/api/canvas/proposals/${encodeURIComponent(id)}/accept`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Nebula-Proposal-Key': acceptKey },
     body: JSON.stringify(Object.keys(positions).length > 0 ? { positions } : {}),
-  });
-  if (!response.ok) {
-    throw new ProposalRequestError(response.status, await detailOf(response, `Couldn't accept (${response.status})`));
-  }
+  }, { as: asProposalError });
   const body = (await response.json()) as Partial<AcceptedProposal>;
   return {
     status: 'accepted',
@@ -80,14 +72,11 @@ export async function acceptProposal(
 }
 
 export async function rejectProposal(id: string, acceptKey: string, reason?: string): Promise<void> {
-  const response = await apiFetch(`/api/canvas/proposals/${encodeURIComponent(id)}/reject`, {
+  await apiRequest("Couldn't reject the proposal.", `/api/canvas/proposals/${encodeURIComponent(id)}/reject`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Nebula-Proposal-Key': acceptKey },
     body: JSON.stringify(reason ? { reason } : {}),
-  });
-  if (!response.ok) {
-    throw new ProposalRequestError(response.status, await detailOf(response, `Couldn't reject (${response.status})`));
-  }
+  }, { as: asProposalError });
 }
 
 /**

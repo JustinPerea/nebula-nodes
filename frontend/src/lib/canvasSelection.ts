@@ -1,18 +1,14 @@
 import JSZip from 'jszip';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../types';
-import { apiFetch, backendAssetUrlSync } from './backend';
+import { backendAssetUrlSync } from './backend';
+import { apiRequest } from './apiRequest';
 import {
   GRAPH_BUNDLE_MAX_ASSET_BYTES,
   GRAPH_BUNDLE_MAX_TOTAL_BYTES,
 } from './graphFileShared';
 import { readBoundedAssetResponse } from './boundedAsset';
-import {
-  ConnectionLostError,
-  RequestFailedError,
-  copyForStatus,
-  isConnectionFailure,
-} from './errorCopy';
+import { ConnectionLostError, copyForStatus, isConnectionFailure, requestError, requestSucceeded } from './errorCopy';
 import { isSafeWorldUrl, parseWorldValue } from './worldValue';
 
 
@@ -22,15 +18,14 @@ export function selectedNodeIds(nodes: Node<NodeData>[]): string[] {
 
 
 export async function publishCanvasSelection(nodeIds: string[], signal?: AbortSignal): Promise<void> {
-  const response = await apiFetch('/api/canvas/selection', {
+  // Background sync, never shown; named like every request so the console
+  // says what failed, once.
+  await apiRequest("Couldn't share the selection.", '/api/canvas/selection', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ nodeIds }),
     signal,
   });
-  if (!response.ok) {
-    throw new Error(`Selection sync failed: HTTP ${response.status}`);
-  }
 }
 
 
@@ -39,8 +34,31 @@ export interface DownloadableOutput {
   label: string;
   portId: string;
   url: string;
+  /** The output's data type ("Image", "Video", "World"), for a node with no name. */
+  type?: string;
 }
 
+
+/** The data type a port's value says it is ("Image"), if any. */
+function valueType(value: unknown): string | undefined {
+  return value && typeof value === 'object' && typeof (value as { type?: unknown }).type === 'string'
+    ? (value as { type: string }).type : undefined;
+}
+
+/** How a too-large output is named to the person (GM, error-copy round 2):
+ * by the name its card shows on the canvas, never "n1:image"; with no name,
+ * by its type, "This image". */
+function outputName(output: DownloadableOutput): string {
+  const label = output.label?.trim();
+  if (label) return label;
+  const noun = output.type?.trim().toLowerCase();
+  return `This ${noun || 'output'}`;
+}
+
+/** GM's lines, verbatim. */
+export const SELECTION_TOO_LARGE_COPY = 'Those outputs are too large for one ZIP. Download fewer at a time.';
+const outputTooLarge = (output: DownloadableOutput) => `${outputName(output)} is too large for the ZIP. Download it on its own.`;
+const DOWNLOAD_OUTPUTS = "Couldn't download the outputs.";
 
 function outputUrls(value: unknown): string[] {
   if (typeof value === 'string') {
@@ -78,6 +96,7 @@ export function collectDownloadableOutputs(nodes: Node<NodeData>[]): Downloadabl
           label: node.data.label,
           portId,
           url,
+          type: valueType(value),
         }];
       }),
     ),
@@ -113,23 +132,21 @@ export async function downloadSelectedOutputs(nodes: Node<NodeData>[]): Promise<
   let totalBytes = 0;
   for (const output of outputs) {
     const remainingBytes = GRAPH_BUNDLE_MAX_TOTAL_BYTES - totalBytes;
-    if (remainingBytes <= 0) {
-      throw new Error('Selected outputs exceed the safe ZIP size limit. Download fewer outputs at once.');
-    }
+    if (remainingBytes <= 0) throw new Error(SELECTION_TOO_LARGE_COPY);
     // An asset URL, not an API path, so apiFetch can't make this request;
     // turn its failures into copy the same way (error-copy review): the
-    // selection toolbar shows this error as the Download button's title.
+    // selection toolbar shows this error as the Download button's title, one
+    // line: "Couldn't download the outputs. <reason>".
     const response = await fetch(backendAssetUrlSync(output.url), { cache: 'no-store' })
       .catch((error: unknown) => {
-        throw isConnectionFailure(error) ? new ConnectionLostError(error) : error;
+        throw isConnectionFailure(error) ? new ConnectionLostError(error, { heading: DOWNLOAD_OUTPUTS }) : error;
       });
     if (!response.ok) {
-      throw new RequestFailedError(
-        copyForStatus(response.status, undefined),
-        response.status,
-        `${output.nodeId}:${output.portId}`,
-      );
+      // The ids stay for the console, not the title.
+      throw await requestError(DOWNLOAD_OUTPUTS, response,
+        { detail: `${output.nodeId}:${output.portId}`, reason: copyForStatus(response.status, undefined) });
     }
+    requestSucceeded(DOWNLOAD_OUTPUTS);
     let bytes: Uint8Array;
     try {
       bytes = await readBoundedAssetResponse(
@@ -137,9 +154,10 @@ export async function downloadSelectedOutputs(nodes: Node<NodeData>[]): Promise<
         Math.min(GRAPH_BUNDLE_MAX_ASSET_BYTES, remainingBytes),
       );
     } catch {
-      throw new Error(
-        `Output ${output.nodeId}:${output.portId} exceeds the safe ZIP size limit. Download it separately.`,
-      );
+      // Too large for what's left of the ZIP: the whole selection when other
+      // outputs already filled it, else this one.
+      throw new Error(remainingBytes < GRAPH_BUNDLE_MAX_ASSET_BYTES && totalBytes > 0
+        ? SELECTION_TOO_LARGE_COPY : outputTooLarge(output));
     }
     totalBytes += bytes.byteLength;
     const base = `${safeFilenamePart(output.nodeId)}-${safeFilenamePart(output.label)}-${safeFilenamePart(output.portId)}`;

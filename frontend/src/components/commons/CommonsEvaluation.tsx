@@ -103,7 +103,7 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
     setBusy(true); setError('');
     const attempt = (async (): Promise<SaveResult> => {
       try { setBatch(await action()); setDirty(false); return { ok: true }; }
-      catch (e) { const failure = saveFailure(e); setError(failure.reason); return failure; }
+      catch (e) { const failure = saveFailure(e); setError(failure.message); return failure; }
       finally { setBusy(false); }
     })();
     setSaving(attempt);

@@ -204,6 +204,12 @@ describe('ProjectHome', () => {
     expect(actions.onRetry).toHaveBeenCalledTimes(1);
   });
 
+  it('error-copy round 2 (GM\'s WRAP rule): beside "Try again" the reason drops its own "try again"', () => {
+    render(<ProjectHome {...props({ projects: [], error: "Couldn't load your projects. Nebula didn't respond. Try again." })} />);
+    expect(screen.getByRole('alert').querySelector('span')?.textContent)
+      .toBe("Couldn't load your projects. Nebula didn't respond.");
+  });
+
   it('disables mutating actions while busy and exposes loading before a project list arrives', () => {
     const { rerender } = render(<ProjectHome {...props({ busy: true, error: 'Please retry.' })} />);
     for (const name of ['New project', 'Open Glass campaign', 'Rename Glass campaign', 'Delete Glass campaign', 'Try again']) {

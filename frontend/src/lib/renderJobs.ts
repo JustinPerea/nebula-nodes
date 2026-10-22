@@ -1,4 +1,4 @@
-import { apiFetch } from './backend';
+import { apiRequest } from './apiRequest';
 import { clipSpeed, type EditClip } from './editor/virtualPlayback';
 import type { VideoGraphManifest } from '../types/video';
 
@@ -17,12 +17,10 @@ export type VideoExportFormat = 'mp4' | 'mov' | 'webm' | 'gif';
 export type VideoExportResolution = 'source' | '1080p' | '720p' | '480p';
 export type VideoExportQuality = 'high' | 'balanced' | 'small';
 
-async function parseJobResponse(response: Response, action: string): Promise<RenderJob> {
-  if (!response.ok) {
-    let detail = '';
-    try { detail = ((await response.json()) as { detail?: string }).detail ?? ''; } catch { /* ignore */ }
-    throw new Error(detail || `${action} failed: ${response.status}`);
-  }
+/** Each call names its action (GM, error-copy round 2); apiRequest says
+ * the reason, never the status. */
+async function job(heading: string, path: string, init?: RequestInit): Promise<RenderJob> {
+  const response = await apiRequest(heading, path, init);
   return response.json() as Promise<RenderJob>;
 }
 
@@ -34,31 +32,27 @@ export async function startVideoExport(input: {
   quality: VideoExportQuality;
 }): Promise<RenderJob> {
   const clips = input.clips.map((clip) => ({ ...clip, speed: clipSpeed(clip) }));
-  const response = await apiFetch('/api/video-edit/export', {
+  return job("Couldn't export the video.", '/api/video-edit/export', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...input, clips }),
   });
-  return parseJobResponse(response, 'Video export');
 }
 
 export async function startRemotionRender(manifest: VideoGraphManifest): Promise<RenderJob> {
-  const response = await apiFetch('/api/remotion-render', {
+  return job("Couldn't start the render.", '/api/remotion-render', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ manifest }),
   });
-  return parseJobResponse(response, 'Remotion export');
 }
 
 export async function getRenderJob(jobId: string): Promise<RenderJob> {
-  const response = await apiFetch(`/api/render-jobs/${encodeURIComponent(jobId)}`);
-  return parseJobResponse(response, 'Render status');
+  return job("Couldn't check the render.", `/api/render-jobs/${encodeURIComponent(jobId)}`);
 }
 
 export async function cancelRenderJob(jobId: string): Promise<RenderJob> {
-  const response = await apiFetch(`/api/render-jobs/${encodeURIComponent(jobId)}`, {
+  return job("Couldn't cancel the render.", `/api/render-jobs/${encodeURIComponent(jobId)}`, {
     method: 'DELETE',
   });
-  return parseJobResponse(response, 'Render cancellation');
 }

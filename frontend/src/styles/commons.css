@@ -346,6 +346,7 @@ body.app-slava-restraint .commons-messages {
 }
 
 body.app-slava-restraint .commons-notice {
+  text-wrap: pretty;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -354,6 +355,12 @@ body.app-slava-restraint .commons-notice {
   padding: 6px 10px;
   background: var(--sr-surface-control);
   color: var(--sr-ink-light);
+}
+
+/* Several upload failures, one per file (CommonsView). */
+body.app-slava-restraint .commons-notice__list {
+  display: block;
+  min-width: 0;
 }
 
 body.app-slava-restraint .commons-notice--error {
@@ -1117,6 +1124,7 @@ body.app-slava-restraint .commons-leave__line {
 }
 
 body.app-slava-restraint .commons-leave__reason {
+  text-wrap: pretty;
   margin: 4px 0 0;
   color: var(--sr-ink-meta);
   overflow-wrap: anywhere;

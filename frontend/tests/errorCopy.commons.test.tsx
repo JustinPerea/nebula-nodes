@@ -16,6 +16,13 @@ import type { EvaluationBatch } from '../src/lib/commonsEvaluationTypes';
 
 const LOST = "Couldn't reach Nebula. Check your connection and try again.";
 const NO_ANSWER = "Nebula didn't respond. Try again.";
+// Round 2 (GM's WRAP rule): "when the surface already has a retry button, the
+// reason line drops its 'try again'. The button is the retry." The leave
+// popover offers Save and leave, so it says these.
+const LOST_SHORT = "Couldn't reach Nebula. Check your connection.";
+const NO_ANSWER_SHORT = "Nebula didn't respond.";
+// Round 2: the banner is a one-line surface: "Couldn't {verb} {object}. {reason}".
+const LABELS = "Couldn't save your labels.";
 const CONFLICT = 'Labels changed in another window. Reload before saving.';
 
 vi.mock('../src/components/commons/CommonsDetail', () => ({ CommonsDetail: () => null }));
@@ -76,12 +83,12 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-const cases: Array<[string, Failure, string]> = [
-  ['a lost connection', 'network', LOST],
-  ['a 503', 503, NO_ANSWER],
-  ['a 502', 502, NO_ANSWER],
-  ['a 429', 429, NO_ANSWER],
-  ['a 408', 408, NO_ANSWER],
+const cases: Array<[string, Failure, string, string]> = [
+  ['a lost connection', 'network', LOST, LOST_SHORT],
+  ['a 503', 503, NO_ANSWER, NO_ANSWER_SHORT],
+  ['a 502', 502, NO_ANSWER, NO_ANSWER_SHORT],
+  ['a 429', 429, NO_ANSWER, NO_ANSWER_SHORT],
+  ['a 408', 408, NO_ANSWER, NO_ANSWER_SHORT],
 ];
 
 describe('the red banner above Blind labeling', () => {
@@ -89,13 +96,13 @@ describe('the red banner above Blind labeling', () => {
     await waitFor(() => expect(document.querySelector('.commons-notice--error[role="alert"]')).not.toBeNull());
     return document.querySelector('.commons-notice--error[role="alert"]')!;
   };
-  it.each(cases)('after %s says GM\'s line, not the raw message', async (_name, failure, line) => {
+  it.each(cases)('after %s says the heading and GM\'s line, not the raw message', async (_name, failure, line) => {
     state.labels = failure;
     render(<CommonsEvaluation />);
     fireEvent.click(await screen.findByText('Set neutral'));
     fireEvent.click(screen.getByText('Save labels'));
     const alert = await banner();
-    expect(alert).toHaveTextContent(line);
+    expect(alert.textContent).toBe(`${LABELS} ${line}`);
     expect(alert).not.toHaveTextContent('Failed to fetch');
     expect(alert).not.toHaveTextContent(/Commons request failed|\(\d{3}\)/);
   });
@@ -105,7 +112,7 @@ describe('the red banner above Blind labeling', () => {
     render(<CommonsEvaluation />);
     fireEvent.click(await screen.findByText('Set neutral'));
     fireEvent.click(screen.getByText('Save labels'));
-    expect(await banner()).toHaveTextContent(CONFLICT);
+    expect((await banner()).textContent).toBe(`${LABELS} ${CONFLICT}`);
   });
 });
 
@@ -124,11 +131,11 @@ describe('the leave popover\'s reason line', () => {
     return popover();
   }
 
-  it.each(cases)('after %s reads GM\'s line under the heading, and Save and leave is offered again', async (_name, failure, line) => {
+  it.each(cases)('after %s reads GM\'s short line under the heading, and Save and leave is offered again', async (_name, failure, _line, short) => {
     state.labels = failure;
     const shown = await failSaveAndLeave();
     expect(shown.querySelector('.commons-leave__line')).toHaveTextContent("Couldn't save your labels.");
-    expect(shown.querySelector('.commons-leave__reason')?.textContent).toBe(line);
+    expect(shown.querySelector('.commons-leave__reason')?.textContent).toBe(short);
     expect(shown).not.toHaveTextContent('Failed to fetch');
     expect(within(shown).getByRole('button', { name: 'Save and leave' })).toBeTruthy();
     expect(useUIStore.getState().viewMode).toBe('commons');

@@ -3,6 +3,7 @@ import { backendAssetUrlSync } from '../../lib/backend';
 import { cinemaLookLabel, defaultCinemaLook, defaultCinemaPalette } from '../../lib/cinemaArtDirection';
 import { attachCinemaReferences, removeCinemaReferenceUpload, retryCinemaReferenceUpload } from '../../lib/cinemaUploads';
 import { useCinemaUploadStore } from '../../store/cinemaUploadStore';
+import { shortLine } from '../../lib/errorCopy';
 import type { CinemaSceneSpec } from '../../types';
 import { CinemaLookControls, CinemaPaletteControls } from './CinemaArtDirectionControls';
 
@@ -142,7 +143,10 @@ export function CinemaSharedControls({ cinemaNodeId, scene, connectedRefs = [], 
             <div key={upload.id} className="cinema-reference-upload" aria-busy={upload.status === 'uploading'}>
               <span className="cinema-reference-upload__name">{upload.name}</span>
               <span className="cinema-reference-upload__status" role={upload.status === 'error' ? 'alert' : 'status'}>
-                {upload.status === 'uploading' ? 'Uploading…' : upload.error ?? 'Could not upload this image.'}
+                {/* GM's WRAP rule: with Retry shown, the reason drops its own "try again". */}
+                {upload.status === 'uploading' ? 'Uploading…'
+                  : upload.canRetry ? shortLine(upload.error ?? "Couldn't upload this image.")
+                    : upload.error ?? "Couldn't upload this image."}
               </span>
               <div className="cinema-reference-upload__actions">
                 {upload.status === 'error' && upload.canRetry && (

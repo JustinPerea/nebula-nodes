@@ -1,6 +1,6 @@
 import type { InternalNode, Node } from '@xyflow/react';
 import type { NodeData } from '../types';
-import { apiFetch } from './backend';
+import { apiRequest } from './apiRequest';
 import type { Pin } from './wsClient';
 
 export type { Pin } from './wsClient';
@@ -15,35 +15,22 @@ export interface PinListing {
   pins: Pin[];
 }
 
-async function detailOf(response: Response, fallback: string): Promise<string> {
-  try {
-    const body = (await response.json()) as { detail?: unknown };
-    if (typeof body?.detail === 'string' && body.detail) return body.detail;
-  } catch {
-    /* not JSON */
-  }
-  return fallback;
-}
-
 export async function fetchPins(): Promise<PinListing> {
-  const response = await apiFetch('/api/canvas/pins');
-  if (!response.ok) throw new Error(await detailOf(response, `Couldn't load notes (${response.status})`));
+  const response = await apiRequest("Couldn't load the notes.", '/api/canvas/pins');
   return (await response.json()) as PinListing;
 }
 
 export async function createPin(text: string, target: PinTarget): Promise<Pin> {
-  const response = await apiFetch('/api/canvas/pins', {
+  const response = await apiRequest("Couldn't save the note.", '/api/canvas/pins', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text, ...target }),
   });
-  if (!response.ok) throw new Error(await detailOf(response, `Couldn't save the note (${response.status})`));
   return ((await response.json()) as { pin: Pin }).pin;
 }
 
 export async function deletePin(id: string): Promise<void> {
-  const response = await apiFetch(`/api/canvas/pins/${encodeURIComponent(id)}`, { method: 'DELETE' });
-  if (!response.ok) throw new Error(await detailOf(response, `Couldn't delete the note (${response.status})`));
+  await apiRequest("Couldn't delete the note.", `/api/canvas/pins/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
 /** Backend graph ids look like n12; only those can carry pins (and be seen by agents). */

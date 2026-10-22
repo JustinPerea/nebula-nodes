@@ -222,7 +222,8 @@ describe('WorldPreview', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Panorama/i }));
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Download failed. The asset could not be reached.',
+      // error-copy round 2 (GM): the heading names the action, the reason says why.
+      "Couldn't download the world. Couldn't reach Nebula. Check your connection and try again.",
     );
     expect(screen.getByRole('alert')).not.toHaveTextContent('CORS detail');
   });

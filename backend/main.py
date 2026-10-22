@@ -9966,10 +9966,35 @@ async def acknowledge_provider_start_ambiguity(
     }
 
 
+# What the person's canvas reads when a node can't go (error-copy review, GM:
+# never ids in what the person reads; "People get the written line and agents
+# keep the specific detail"). Agents keep the detail with the id, unchanged.
+NODE_PAID_STATE_PERSON = ("This node has a World Labs start that isn't settled yet. "
+                          "Check Marble, then settle it before you delete the node.")
+NODE_GONE_PERSON = "That node isn't on the canvas anymore."
+
+
+def _person_reads_reply() -> bool:
+    """Whether a refusal's words go to the person: a browser page (the canvas,
+    with or without this launch's person token; see _from_a_browser) with no
+    agent marker. It picks words, never authority. An agent, the CLI, MCP or
+    a script keeps the specific detail it fixes its call with."""
+    headers = current_request_headers() or {}
+    if has_agent_marker(headers):
+        return False
+    lower = {str(key).lower() for key in headers}
+    return "origin" in lower or "sec-fetch-site" in lower
+
+
+def _node_refusal(status: int, specific: str, person: str) -> HTTPException:
+    return HTTPException(status_code=status, detail=person if _person_reads_reply() else specific)
+
+
 def _ensure_node_deletable(node_id: str, node: dict[str, Any]) -> None:
     """Refuse (409) to delete a node that still carries World Labs paid state.
 
     Call inside _paid_graph_mutation so no paid start can land in between.
+    The person reads NODE_PAID_STATE_PERSON; an agent reads the node's id.
     """
     try:
         active = provider_start_guard.has_active_node(node_id)
@@ -9987,13 +10012,12 @@ def _ensure_node_deletable(node_id: str, node: dict[str, Any]) -> None:
         str(node.get("definitionId") or ""), params
     )
     if active or held or recovered or live_checkpoint:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"Cannot delete {node_id}: it has unresolved World Labs paid state. "
-                "Check Marble, then resolve its exact recovery/ambiguity record "
-                "first."
-            ),
+        raise _node_refusal(
+            409,
+            f"Cannot delete {node_id}: it has unresolved World Labs paid state. "
+            "Check Marble, then resolve its exact recovery/ambiguity record "
+            "first.",
+            NODE_PAID_STATE_PERSON,
         )
 
 
@@ -10004,7 +10028,7 @@ async def delete_graph_node(node_id: str) -> dict:
     with _paid_graph_mutation("delete a graph node"):
         node = cli_graph.nodes.get(node_id)
         if node is None:
-            raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+            raise _node_refusal(404, f"Node '{node_id}' not found", NODE_GONE_PERSON)
         _ensure_node_deletable(node_id, node)
         _guard_approved_runs(lambda probe: probe.remove_node(node_id))
         label = _node_label(node_id)
@@ -10013,7 +10037,7 @@ async def delete_graph_node(node_id: str) -> dict:
         try:
             cli_graph.remove_node(node_id)
         except ValueError:
-            raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+            raise _node_refusal(404, f"Node '{node_id}' not found", NODE_GONE_PERSON)
     await _broadcast_graph_sync(edit=True)
     publish_action(f"Removed {node_id}")
     _journal(

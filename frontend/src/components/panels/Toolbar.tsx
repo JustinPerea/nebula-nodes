@@ -21,7 +21,8 @@ import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { canLoadGraph, canSaveGraph, requestGraphLoad, requestGraphSave } from '../../lib/graphFileActions';
 import { fetchCLIGraph } from '../../lib/api';
-import { apiFetch } from '../../lib/backend';
+import { apiRequest } from '../../lib/apiRequest';
+import { failureMessage } from '../../lib/errorCopy';
 import { CANVAS_FIT_DURATION, CANVAS_ZOOM_DURATION, computeCanvasFitPadding } from '../../lib/canvasFit';
 import { displayKey } from '../../lib/keyboardShortcuts';
 import { describeRunScope, runChipLabel, summarizeRunScope } from '../../lib/runScope';
@@ -32,6 +33,8 @@ import { useFitCanvasView } from '../../hooks/useFitCanvasView';
 import type { Edge, Node } from '@xyflow/react';
 import '../../styles/panels.css';
 import '../../styles/canvas-toolbar.css';
+
+const CLEAR_CANVAS = "Couldn't clear the canvas.";
 
 
 export function Toolbar() {
@@ -165,21 +168,15 @@ export function Toolbar() {
     try {
       // force: the person just confirmed, and a project with nodes needs it
       // (the backend refuses a clear without it, 409).
-      const response = await apiFetch('/api/graph?force=true', { method: 'DELETE' });
-      if (!response.ok) {
-        let detail = '';
-        try { detail = (await response.json()).detail ?? ''; } catch {
-          /* Status fallback below. */
-        }
-        throw new Error(detail || `Clear failed: HTTP ${response.status}.`);
-      }
+      // GM, error-copy round 2: "Couldn't clear the canvas." then the reason.
+      await apiRequest(CLEAR_CANVAS, '/api/graph?force=true', { method: 'DELETE' });
       // A successful backend clear proves no provider safety record remains;
       // unlike ordinary snapshot hydration, this is authoritative removal.
       useGraphStore.setState({ providerRecoveries: [], providerStartAmbiguities: [] });
       useGraphStore.getState().clearGraph({ undoStep });
     } catch (error) {
       useGraphStore.getState().cancelUndoStep(undoStep);
-      alert(error instanceof Error ? error.message : 'Could not clear the graph.');
+      alert(failureMessage(error, CLEAR_CANVAS));
     }
   }, []);
 

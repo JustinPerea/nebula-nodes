@@ -6,6 +6,7 @@ import { actorLabel } from '../../lib/trash';
 import { CrabMark } from '../brand/CrabMark';
 import { ProposalsFor } from '../proposals/ProposalsFor';
 import { UpdatesSlot } from '../agent-notes/UpdatesSlot';
+import { failureMessage, shortLine } from '../../lib/errorCopy';
 import '../../styles/project-home.css';
 
 export interface ProjectSummary {
@@ -107,7 +108,7 @@ function CoverPicker({ project, busy, load, onPin, onClose }: {
   useEffect(() => {
     let live = true;
     load(project.id).then((found) => { if (live) setChoices(found); })
-      .catch((error: unknown) => { if (live) setFailed(error instanceof Error ? error.message : 'Could not load the images.'); });
+      .catch((error: unknown) => { if (live) setFailed(failureMessage(error, "Couldn't load the cover choices.")); });
     return () => { live = false; };
   }, [load, project.id]);
   const pinned = choices?.pinned ?? null;
@@ -357,7 +358,8 @@ export function ProjectHome({ projects, loading, busy, error, onCreate, onOpen, 
           <button className="project-home__new" type="button" disabled={loading || busy} onClick={() => onCreate()}><Plus aria-hidden="true" />New project</button>
         </section>
 
-        {error && <div className="project-home__error" role="alert"><span>{error}</span><button type="button" disabled={loading || busy} onClick={onRetry}>Try again</button></div>}
+        {/* GM's WRAP rule: "Try again" is the retry, so the reason drops its own. */}
+        {error && <div className="project-home__error" role="alert"><span>{shortLine(error)}</span><button type="button" disabled={loading || busy} onClick={onRetry}>Try again</button></div>}
 
         <section className="project-home__projects" aria-labelledby="recent-projects-title">
           <div className="project-home__section-header">

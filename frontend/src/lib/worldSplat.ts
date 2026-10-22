@@ -2,6 +2,10 @@ import { utils as sparkUtils } from '@sparkjsdev/spark';
 import { backendAssetUrlSync } from './backend';
 import { AssetByteLimitError, readBoundedAssetResponse } from './boundedAsset';
 import { isSafeWorldUrl } from './worldValue';
+import { ConnectionLostError, requestError, requestSucceeded } from './errorCopy';
+
+/** GM's heading for the world preview (error-copy round 2). */
+const LOAD_WORLD = "Couldn't load the world.";
 
 // Spark expands compressed SPZ data into substantially larger GPU buffers.
 // Keep the source ceiling below the graph/download ceilings so an imported
@@ -176,12 +180,12 @@ export async function fetchWorldSplatBytes(
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
-    throw new Error('The spatial preview could not be reached.');
+    throw new ConnectionLostError(error, { heading: LOAD_WORLD });
   }
 
-  if (!response.ok) {
-    throw new Error(`The spatial preview server returned HTTP ${response.status}.`);
-  }
+  // GM's line for the status; the status itself stays in the console.
+  if (!response.ok) throw await requestError(LOAD_WORLD, response);
+  requestSucceeded(LOAD_WORLD);
 
   try {
     const bytes = await readBoundedAssetResponse(

@@ -636,6 +636,27 @@ describe('graph import memory ceiling', () => {
     expect(alertSpy).not.toHaveBeenCalled();
   });
 
+  it.each([
+    // error-copy round 2 (GM): "Couldn't restore the asset." then the reason,
+    // never "(HTTP 503)"; on 1fc3d846 this said "Failed to load graph: Asset
+    // restore failed (HTTP 503)".
+    [new Response('', { status: 503 }), "Couldn't restore the asset. Nebula didn't respond. Try again."],
+    [new Response('', { status: 400 }), "Couldn't restore the asset. That didn't work. Try again, or reload if it keeps happening."],
+    [new Response(JSON.stringify({ detail: 'That bundle has too many files.' }), { status: 422, headers: { 'Content-Type': 'application/json' } }),
+      "Couldn't restore the asset. That bundle has too many files."],
+  ])('a refused restore names the action and the reason (%#)', async (answer, line) => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(answer));
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    Object.defineProperty(window, 'showOpenFilePicker', {
+      configurable: true,
+      value: vi.fn().mockResolvedValue([{ getFile: vi.fn().mockResolvedValue(zipSelection()) }]),
+    });
+    await expect(loadFromFile()).resolves.toBeNull();
+    expect(alertSpy).toHaveBeenCalledWith(line);
+  });
+
   it('rejects a malformed graph returned by restore before deserializing it', async () => {
     const malformedGraph = {
       ...validRestoredGraph(),

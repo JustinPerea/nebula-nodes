@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { failureCopy, type FailureCopy } from '../lib/errorCopy';
 import { moveStoredAsset } from '../lib/api';
 import { currentProject } from '../lib/currentProject';
 import { assetStudioDraftKey, resolveAssetStudioDraftKey, useAssetStudioDraftStore,
@@ -37,7 +38,8 @@ export interface StudioMoveRequest {
  */
 export function useStudioAssetMove(kind: AssetStudioKind) {
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  /** A failure as heading + reason (the Studio's two-line notice), or a line of the Studio's own. */
+  const [error, setError] = useState<string | FailureCopy | null>(null);
   // Bumped after each move so the rail lists again even when its tab stays.
   const [moves, setMoves] = useState(0);
 
@@ -75,7 +77,7 @@ export function useStudioAssetMove(kind: AssetStudioKind) {
         result = await moveStoredAsset(kind, id, target);
       } catch (err) {
         release();
-        setError(err instanceof Error ? err.message : 'Move failed.');
+        setError(failureCopy(err, { heading: kind === 'moodboard' ? "Couldn't move the board." : "Couldn't move the character." }));
         return false;
       }
       const latest = useAssetStudioDraftStore.getState();

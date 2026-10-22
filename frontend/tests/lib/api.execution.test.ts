@@ -106,8 +106,10 @@ describe('execution API run correlation', () => {
     const rejection = executeGraph(nodes, edges, 'run-rejected');
 
     await expect(rejection).rejects.toBeInstanceOf(ExecutionStartRejectedError);
+    // error-copy round 2 (GM): the heading names the action, then the reason.
     await expect(rejection).rejects.toMatchObject({
-      message: 'A paid start is already active.',
+      message: "Couldn't start the run. A paid start is already active.",
+      reason: 'A paid start is already active.',
       status: 409,
     });
   });
@@ -124,7 +126,8 @@ describe('execution API run correlation', () => {
 
       const rejection = executeGraph(nodes, edges, `run-ambiguous-${status}`);
 
-      await expect(rejection).rejects.toThrow('Upstream response was lost.');
+      // GM: a 408/5xx says Nebula didn't respond, whatever its body said.
+      await expect(rejection).rejects.toThrow("Couldn't start the run. Nebula didn't respond. Try again.");
       await expect(rejection).rejects.not.toBeInstanceOf(ExecutionStartRejectedError);
     },
   );

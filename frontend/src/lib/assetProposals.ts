@@ -1,4 +1,5 @@
-import { apiFetch } from './backend';
+import { apiRequest } from './apiRequest';
+import { RequestFailedError } from './errorCopy';
 
 /** Proposals outside the graph (backend services/asset_proposals.py, U16):
  * a cover the person pinned on a project, a board's Send notes, curating a
@@ -68,28 +69,24 @@ export interface AssetProposalClosedEvent {
   targetId: string;
 }
 
-export class AssetProposalError extends Error {
-  readonly status: number;
-
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
+/** A refused accept, reject or list: heading + reason like every request's
+ * error (GM, error-copy round 2); `status` stays for the store. */
+export class AssetProposalError extends RequestFailedError {
+  constructor(status: number, reason: string, options: { heading?: string; detail?: unknown } = {}) {
+    super(options.heading ?? '', status, { reason, detail: options.detail });
+    this.name = 'AssetProposalError';
   }
 }
 
+const asAssetProposalError = (error: RequestFailedError) =>
+  new AssetProposalError(error.status, error.reason, { heading: error.heading, detail: error.detail });
+
 async function decide(id: string, acceptKey: string, verb: 'accept' | 'reject', body?: unknown): Promise<void> {
-  const response = await apiFetch(`/api/asset-proposals/${encodeURIComponent(id)}/${verb}`, {
+  await apiRequest(`Couldn't ${verb} the proposal.`, `/api/asset-proposals/${encodeURIComponent(id)}/${verb}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Nebula-Proposal-Key': acceptKey },
     body: JSON.stringify(body ?? {}),
-  });
-  if (response.ok) return;
-  let detail = '';
-  try {
-    const parsed = (await response.json()) as { detail?: unknown };
-    if (typeof parsed?.detail === 'string') detail = parsed.detail;
-  } catch { /* not JSON */ }
-  throw new AssetProposalError(response.status, detail || `Couldn't ${verb} (${response.status})`);
+  }, { as: asAssetProposalError });
 }
 
 /** The key came only over this tab's WebSocket; the backend also needs the person token. */
@@ -99,8 +96,7 @@ export const rejectAssetProposal = (id: string, acceptKey: string, reason?: stri
 
 /** The open ones (no keys); reading them also lets the backend close those that no longer fit. */
 export async function listAssetProposals(): Promise<AssetProposalView[]> {
-  const response = await apiFetch('/api/asset-proposals');
-  if (!response.ok) throw new AssetProposalError(response.status, `Couldn't list proposals (${response.status})`);
+  const response = await apiRequest("Couldn't load the proposals.", '/api/asset-proposals', undefined, { as: asAssetProposalError });
   const body = (await response.json()) as { proposals?: AssetProposalView[] };
   return Array.isArray(body.proposals) ? body.proposals : [];
 }

@@ -60,6 +60,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
 import { MOODBOARD_VIEW_KEY, useBoardCanvasStore } from '../../store/boardCanvasStore';
 import { useBoardUndoStore } from '../../lib/boardUndo';
+import { RequestFailedError } from '../../lib/errorCopy';
 
 const card = (id: string, x = 0, y = 0): MoodboardPlacement => ({ id: `c-${id}`, frameId: null, x, y, w: 480, h: 270,
   weight: 1, placedBy: 'person', placedAt: '2026-10-20T00:00:00+00:00' });
@@ -240,6 +241,25 @@ describe('a drag on the board', () => {
     press('z', { metaKey: true, shiftKey: true });
     await waitFor(() => expect(server.edits[2]).toEqual([{ op: 'restore', slices: [{ part: 'tag', tag: 'u2' }] }]));
     expect(await screen.findByText('card #1 at 300,40')).toBeTruthy();
+  });
+
+  // Review of error-copy round 2: the toolbar's Retry saves the board, it
+  // doesn't undo again, so a failed undo names its own action and keeps
+  // GM's full line ("Try again"): WRAP is only for a button that retries it.
+  it('a failed undo says "Couldn\'t undo the change." over GM\'s full line', async () => {
+    await openStudio({ view: 'board' });
+    act(() => board.props!.onMove([{ placement: 'c-i1', x: 300, y: 40 }]));
+    await waitFor(() => expect(server.edits).toHaveLength(1), { timeout: 400 });
+    api.editMoodboard.mockRejectedValueOnce(new RequestFailedError("Couldn't save the board.", 503));
+    press('z', { metaKey: true });
+    const notice = await waitFor(() => {
+      const shown = document.querySelector('.moodboard-studio__notice--error');
+      expect(shown).not.toBeNull();
+      return shown!;
+    });
+    expect([notice.querySelector('.failure-lines__heading')?.textContent,
+      notice.querySelector('.failure-lines__reason')?.textContent])
+      .toEqual(["Couldn't undo the change.", "Nebula didn't respond. Try again."]);
   });
 
   it('a step whose cards changed since says so instead of moving them', async () => {

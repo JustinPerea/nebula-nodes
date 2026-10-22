@@ -1,6 +1,6 @@
 import { personTokenForSocket } from './backend';
-
-const SESSION_MESSAGE = 'no UI session: use a fresh Commons dev link from the backend terminal';
+import { commonsSessionCopy } from './errorCopy';
+import { inDesktopShell } from './personSession';
 
 export interface ChatAuthority {
   personToken?: string;
@@ -14,6 +14,8 @@ export interface ChatAuthority {
 export async function chatAuthority(socketUrl: string, commonsEnabled: boolean, brand: string): Promise<ChatAuthority> {
   const personToken = await personTokenForSocket(socketUrl);
   if (!commonsEnabled) return personToken ? { personToken } : {};
-  if (!personToken) throw new Error(SESSION_MESSAGE);
+  // No person session (GM, error-copy round 2): the chat panel shows this
+  // line under its own send; the same words as the Commons' own 401.
+  if (!personToken) throw new Error(commonsSessionCopy(inDesktopShell()));
   return { brand: brand.trim() || null, personToken };
 }

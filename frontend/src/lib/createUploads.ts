@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useCreateDraftStore } from '../store/createDraftStore';
 
 import { uploadReference } from './uploadReference';
+import { failureMessage } from './errorCopy';
 export { uploadReference, type UploadedReference } from './uploadReference';
 
 // Transient files/controllers never enter browser storage or saved recipes.
@@ -31,7 +32,8 @@ async function finishUpload(sessionId: string, id: string, attempt: string) {
     useCreateDraftStore.getState().updateDraft(sessionId, (draft) => {
       if (!draft.uploads.some((upload) => upload.id === id && upload.attempt === attempt && upload.status === 'uploading')) return {};
       return { uploads: draft.uploads.map((upload) => upload.id === id
-        ? { ...upload, status: 'error', error: error instanceof Error ? error.message : 'Could not upload this image. Please try again.' }
+        // uploadReference's error names the file and the reason (error-copy round 2).
+        ? { ...upload, status: 'error', error: failureMessage(error, `Couldn't upload ${upload.name}.`) }
         : upload) };
     });
   } finally {

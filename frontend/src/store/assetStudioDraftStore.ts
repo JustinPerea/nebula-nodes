@@ -1,15 +1,24 @@
 import { create } from 'zustand';
+import type { FailureCopy } from '../lib/errorCopy';
 
 export type AssetStudioKind = 'character' | 'moodboard';
 export type AssetStudioSaveState = 'draft' | 'idle' | 'saving' | 'saved' | 'error';
+export type StudioFailure = string | FailureCopy;
 
 export interface AssetStudioDraftEntry<D = unknown> {
   draft: D;
   savedId: string | null;
   thumbnail: string;
   saveState: AssetStudioSaveState;
-  loadError: string | null;
-  saveError: string | null;
+  /** A failure as the Studio shows it: a request's heading and reason
+   * (two lines, components/failure/FailureLines), or a line of its own. */
+  loadError: StudioFailure | null;
+  saveError: StudioFailure | null;
+  /** The toolbar's Retry (a save) is the retry for `saveError`, so the
+   * notice takes GM's short line (WRAP rule). Only a save's own failure
+   * (failSave) sets it; any other line patched in clears it, since Retry
+   * doesn't run that action again (analyze, undo). */
+  saveErrorRetry?: boolean;
   loaded: boolean;
   dirty: boolean;
   revision: number;
@@ -47,7 +56,9 @@ interface AssetStudioDraftState {
   reset: (key: string, draft: unknown) => void;
   beginSave: (key: string) => { id: string; revision: number; entry: AssetStudioDraftEntry } | null;
   finishSave: (key: string, id: string, revision: number, savedId: string, thumbnail: string) => boolean;
-  failSave: (key: string, id: string, message: string) => void;
+  /** `retry: false` for a failure the toolbar's Retry (a save) doesn't
+   * redo, such as an undo sent as an edit. */
+  failSave: (key: string, id: string, message: StudioFailure, options?: { retry?: boolean }) => void;
   copyTo: (key: string, destination: string) => void;
   /** The asset moved (Global <-> a project): drafts kept for it take its new
    * `projectId` and the key of its new scope, so a later save never sends
@@ -67,7 +78,10 @@ export const useAssetStudioDraftStore = create<AssetStudioDraftState>((set, get)
   }),
   patch: (key, patch) => set((state) => {
     key = resolveAssetStudioDraftKey(state, key);
-    return state.entries[key] ? { entries: { ...state.entries, [key]: { ...state.entries[key], ...patch } } } : {};
+    if (!state.entries[key]) return {};
+    const next = { ...state.entries[key], ...patch };
+    if ('saveError' in patch && !('saveErrorRetry' in patch)) next.saveErrorRetry = false;
+    return { entries: { ...state.entries, [key]: next } };
   }),
   edit: (key, update) => set((state) => {
     key = resolveAssetStudioDraftKey(state, key);
@@ -100,10 +114,11 @@ export const useAssetStudioDraftStore = create<AssetStudioDraftState>((set, get)
       saveState: dirty ? 'draft' : 'saved', saveError: null });
     return true;
   },
-  failSave: (key, id, message) => {
+  failSave: (key, id, message, options = {}) => {
     key = resolveAssetStudioDraftKey(get(), key);
     if (get().entries[key]?.pendingSaveId !== id) return;
-    get().patch(key, { pendingSaveId: null, dirty: true, saveState: 'error', saveError: message });
+    get().patch(key, { pendingSaveId: null, dirty: true, saveState: 'error', saveError: message,
+      saveErrorRetry: options.retry ?? true });
   },
   copyTo: (key, destination) => {
     const source = resolveAssetStudioDraftKey(get(), key);

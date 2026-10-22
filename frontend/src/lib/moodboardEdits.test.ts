@@ -107,7 +107,7 @@ describe('writes sent with baseVersion', () => {
     expect(JSON.parse(init.body)).toEqual({ ops: [{ op: 'weight', image: 'i1', value: 0.5 }], baseVersion: 3 });
     backend.apiFetch.mockResolvedValueOnce(json(422, { detail: 'op 1 (weight): value must be 0 to 1' }));
     await expect(editMoodboard('b1', [{ op: 'weight', image: 'i1', value: 5 }])).rejects.toThrow(
-      'Save failed: op 1 (weight): value must be 0 to 1');
+      "Couldn't save the board. op 1 (weight): value must be 0 to 1"); // error-copy round 2 (GM's heading)
   });
 });
 

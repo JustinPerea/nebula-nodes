@@ -1,7 +1,7 @@
 import { useEffect, useState, type RefObject } from 'react';
 import { setCommonsLeaveAsk, whenCommonsClean } from '../../lib/commonsUnsaved';
 import { CommonsRequestError } from '../../lib/commonsRequestError';
-import { canTryAgain, copyForError } from '../../lib/errorCopy';
+import { canTryAgain, failureCopy, oneLine } from '../../lib/errorCopy';
 
 /**
  * Leaving the Commons with unsaved labels (commons-leave, GM - Design,
@@ -14,8 +14,11 @@ import { canTryAgain, copyForError } from '../../lib/errorCopy';
  * as #163 built them (lib/commonsUnsaved), with no popover.
  */
 
-/** `retry`: saving again could work (GM: only then is Save and leave offered again). */
-export type SaveResult = { ok: true } | { ok: false; reason: string; retry: boolean };
+/** `retry`: saving again could work (GM: only then is Save and leave offered
+ * again). `reason` is the popover's line under its own heading, in its short
+ * form (GM's WRAP rule: Save and leave is the retry); `message` is the
+ * one-line form for the panel's banner ("Couldn't save your labels. ..."). */
+export type SaveResult = { ok: true } | { ok: false; reason: string; message: string; retry: boolean };
 type SaveFailure = Extract<SaveResult, { ok: false }>;
 
 /**
@@ -24,12 +27,15 @@ type SaveFailure = Extract<SaveResult, { ok: false }>;
  * rate limit (408, 429; lib/errorCopy canTryAgain); not after a refusal the
  * same request would get again: a conflict ("changed in another window"), a
  * closed batch, no session (any other 4xx). The reason is copy: a Commons
- * request's message already is (lib/commonsApi); any other error says the
+ * request's error carries it (lib/commonsApi); any other error says the
  * connection line or GM's general line, never its own message.
  */
 export function saveFailure(error: unknown): SaveFailure {
-  if (error instanceof CommonsRequestError) return { ok: false, reason: error.message, retry: canTryAgain(error.status) };
-  return { ok: false, reason: copyForError(error), retry: true };
+  const retry = error instanceof CommonsRequestError ? canTryAgain(error.status) : true;
+  const copy = failureCopy(error, { heading: "Couldn't save your labels." });
+  // The popover offers Save and leave whenever saving again could work, so
+  // its reason is the short form; a refusal's reason has no short form.
+  return { ok: false, reason: failureCopy(error, { short: retry }).reason, message: oneLine(copy), retry };
 }
 
 /**

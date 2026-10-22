@@ -16,6 +16,13 @@ import type { Moodboard } from '../../types';
 
 const LOST = "Couldn't reach Nebula. Check your connection and try again.";
 const NO_ANSWER = "Nebula didn't respond. Try again.";
+// Round 2 (GM): "Change 'Save failed: <reason>' to 'Couldn't save the board.
+// <reason>' so it matches everything else", heading on line 1, reason on
+// line 2; and the WRAP rule: with Retry shown, "the reason line drops its
+// 'try again'. The button is the retry."
+const SAVE = "Couldn't save the board.";
+const LOST_SHORT = "Couldn't reach Nebula. Check your connection.";
+const NO_ANSWER_SHORT = "Nebula didn't respond.";
 
 vi.mock('../../lib/wsClient', () => ({
   wsClient: { subscribe: () => () => {}, connect: () => {}, send: () => {} },
@@ -30,8 +37,8 @@ import { setOpenProject } from '../../test/projectState';
 import { useUIStore } from '../../store/uiStore';
 import { useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
 
-type Failure = 'network' | 503 | 500 | 429 | 'detail-409' | 'bare-400' | 'bare-403' | 'bare-413';
-const state: { edits: Failure | null; put: Failure | null } = { edits: null, put: null };
+type Failure = 'network' | 503 | 500 | 429 | 'detail-409' | 'bare-400' | 'bare-403' | 'bare-413' | 'field-list' | 'conflict';
+const state: { edits: Failure | null; put: Failure | null; load: Failure | null; analyze: Failure | null } = { edits: null, put: null, load: null, analyze: null };
 
 const board = (): Moodboard => ({
   id: 'g1', name: 'Global board', version: 1, notes: '', mode: 'look', strength: 0.7,
@@ -49,6 +56,9 @@ function fail(failure: Failure): Response {
   if (failure === 'bare-400') return new Response('', { status: 400 });
   if (failure === 'bare-403') return new Response('', { status: 403 });
   if (failure === 'bare-413') return new Response('', { status: 413 });
+  if (failure === 'field-list') return json({ detail: [{ loc: ['body', 'ops', 0, 'images', 0, 'url'], msg: 'field required', type: 'missing' }] }, 422);
+  // Someone else saved the board: the Studio rebases and sends again, three times.
+  if (failure === 'conflict') return json({ detail: 'version conflict', code: 'version_conflict', board: { ...board(), version: 7 } }, 409);
   return new Response('<html>Service Unavailable</html>', { status: failure, headers: { 'content-type': 'text/html' } });
 }
 
@@ -57,7 +67,8 @@ async function backend(input: RequestInfo | URL, init?: RequestInit): Promise<Re
   const method = (init?.method ?? 'GET').toUpperCase();
   if (url.pathname === '/api/moodboards/g1/edits' && method === 'POST' && state.edits) return fail(state.edits);
   if (url.pathname === '/api/moodboards/g1' && method === 'PUT' && state.put) return fail(state.put);
-  if (url.pathname === '/api/moodboards/g1' && method === 'GET') return json(board());
+  if (url.pathname === '/api/moodboards/g1/analyze' && method === 'POST' && state.analyze) return fail(state.analyze);
+  if (url.pathname === '/api/moodboards/g1' && method === 'GET') return state.load ? fail(state.load) : json(board());
   if (url.pathname === '/api/moodboards' && method === 'GET') return json(url.searchParams.get('scope') === 'global' ? [board()] : []);
   return json({});
 }
@@ -65,11 +76,13 @@ async function backend(input: RequestInfo | URL, init?: RequestInit): Promise<Re
 beforeEach(() => {
   state.edits = null;
   state.put = null;
+  state.load = null;
+  state.analyze = null;
   vi.stubGlobal('fetch', vi.fn(backend));
   useAssetStudioDraftStore.setState({ entries: {}, aliases: {} });
   setOpenProject(['p1', 'Project']);
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 async function openStudio() {
   act(() => { useUIStore.getState().enterMoodboardEditor('g1', 'global'); });
@@ -82,37 +95,70 @@ const notice = async () => {
   return document.querySelector('.moodboard-studio__notice--error')!;
 };
 
-const cases: Array<[string, Failure, string]> = [
-  ['a lost connection', 'network', LOST],
-  ['a 503', 503, NO_ANSWER],
-  ['a 500', 500, NO_ANSWER],
-  ['a 429', 429, NO_ANSWER],
+const cases: Array<[string, Failure, string, string]> = [
+  ['a lost connection', 'network', LOST, LOST_SHORT],
+  ['a 503', 503, NO_ANSWER, NO_ANSWER_SHORT],
+  ['a 500', 500, NO_ANSWER, NO_ANSWER_SHORT],
+  ['a 429', 429, NO_ANSWER, NO_ANSWER_SHORT],
 ];
 
+/** The notice's two lines. */
+const lines = (shown: Element) => [shown.querySelector('.failure-lines__heading')?.textContent,
+  shown.querySelector('.failure-lines__reason')?.textContent];
+
 describe('a board save that fails', () => {
-  it.each(cases)('an image edit after %s says GM\'s line', async (_name, failure, line) => {
+  it.each(cases)('an image edit after %s says the heading over GM\'s short line (Retry is shown)', async (_name, failure, _line, short) => {
     state.edits = failure;
     await openStudio();
     fireEvent.change(screen.getAllByRole('slider', { name: /^Weight/ })[0], { target: { value: '0.5' } });
     const shown = await notice();
-    expect(shown.textContent).toBe(line);
+    expect(lines(shown)).toEqual([SAVE, short]);
     expect(screen.queryByText(/Failed to fetch|Save failed: \d{3}/)).toBeNull();
     // Retry stays: saving again can work.
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
   });
 
-  it.each(cases)('a board field (its name) after %s says GM\'s line', async (_name, failure, line) => {
+  it.each(cases)('a board field (its name) after %s says the heading over GM\'s short line', async (_name, failure, _line, short) => {
     state.put = failure;
     await openStudio();
     fireEvent.change(screen.getByDisplayValue('Global board'), { target: { value: 'Renamed' } });
-    expect((await notice()).textContent).toBe(line);
+    expect(lines(await notice())).toEqual([SAVE, short]);
   });
 
-  it('a 4xx keeps the backend\'s reason', async () => {
+  it('a 4xx keeps the backend\'s reason under "Couldn\'t save the board."', async () => {
     state.edits = 'detail-409';
     await openStudio();
     fireEvent.change(screen.getAllByRole('slider', { name: /^Weight/ })[0], { target: { value: '0.5' } });
-    expect((await notice()).textContent).toBe('Save failed: This board is locked while it is being moved.');
+    expect(lines(await notice())).toEqual([SAVE, 'This board is locked while it is being moved.']);
+  });
+
+  it('a FastAPI field list is not a reason: GM\'s fallback line, the list only in the console', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    state.edits = 'field-list';
+    await openStudio();
+    fireEvent.change(screen.getAllByRole('slider', { name: /^Weight/ })[0], { target: { value: '0.5' } });
+    expect(lines(await notice())).toEqual([SAVE, "That didn't work. Try again, or reload if it keeps happening."]);
+    expect(screen.queryByText(/field required|images\.0\.url/)).toBeNull();
+    expect(vi.mocked(console.warn).mock.calls.some((call) => JSON.stringify(call).includes('field required'))).toBe(true);
+  });
+
+  it('after three conflicts in a row: GM\'s line, no version number', async () => {
+    state.edits = 'conflict';
+    await openStudio();
+    fireEvent.change(screen.getAllByRole('slider', { name: /^Weight/ })[0], { target: { value: '0.5' } });
+    const shown = await notice();
+    expect(lines(shown)).toEqual([SAVE, 'This board changed in another window. Reload to get the latest version.']);
+    expect(shown.textContent).not.toMatch(/version 7|\d/);
+  });
+
+  it('a board that fails to load says "Couldn\'t load the board." over GM\'s short line, beside Retry loading', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    state.load = 503;
+    act(() => { useUIStore.getState().enterMoodboardEditor('g1', 'global'); });
+    render(<MoodboardStudioView />);
+    const alert = await screen.findByRole('alert');
+    await waitFor(() => expect(lines(alert)).toEqual(["Couldn't load the board.", NO_ANSWER_SHORT]));
+    expect(screen.getByRole('button', { name: 'Retry loading' })).toBeTruthy();
   });
 
   it.each([
@@ -123,6 +169,31 @@ describe('a board save that fails', () => {
     state.edits = failure;
     await openStudio();
     fireEvent.change(screen.getAllByRole('slider', { name: /^Weight/ })[0], { target: { value: '0.5' } });
-    expect((await notice()).textContent).toBe(line);
+    // GM's 4xx fallback keeps its "Try again" beside Retry (listed for GM).
+    expect(lines(await notice())).toEqual([SAVE, line]);
+  });
+});
+
+// Review of round 2: the toolbar's Retry saves the board; it never analyzes
+// again. So an analyze failure is no save failure: its reason keeps GM's
+// "Try again" (WRAP applies only where the button retries the action).
+describe('an analyze that fails', () => {
+  it.each(cases)('after %s says "Couldn\'t analyze the board." over GM\'s full line', async (_name, failure, line) => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    state.analyze = failure;
+    await openStudio();
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
+    expect(lines(await notice())).toEqual(["Couldn't analyze the board.", line]);
+  });
+
+  it('a save failure after it takes the short line again (its Retry saves)', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    state.analyze = 503;
+    await openStudio();
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
+    await waitFor(async () => expect(lines(await notice())[0]).toBe("Couldn't analyze the board."));
+    state.edits = 503;
+    fireEvent.change(screen.getAllByRole('slider', { name: /^Weight/ })[0], { target: { value: '0.5' } });
+    await waitFor(async () => expect(lines(await notice())).toEqual([SAVE, NO_ANSWER_SHORT]));
   });
 });

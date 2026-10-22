@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 vi.mock('../../lib/backend', async (importOriginal) => ({ ...(await importOriginal<object>()), backendAssetUrlSync: (url: string) => url }));
 
@@ -33,5 +33,24 @@ describe('Character Studio reference views', () => {
 
     expect([...container.querySelectorAll('img')].map((img) => img.getAttribute('src'))).toEqual([views[0], ...views]);
     expect(screen.queryByText('Image link from outside Nebula')).toBeNull();
+  });
+});
+
+// error-copy round 2 (GM): "Couldn't upload {filename}." then the reason;
+// on 1fc3d846 this said "Upload failed — retry." whatever happened.
+describe('Character Studio reference upload failures', () => {
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+  it.each([
+    [async () => new Response('', { status: 503 }), "Couldn't upload side.png. Nebula didn't respond. Try again."],
+    [async () => { throw new TypeError('Failed to fetch'); }, "Couldn't upload side.png. Couldn't reach Nebula. Check your connection and try again."],
+  ])('names the file and the reason (%#)', async (answer, line) => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(answer));
+    const { container } = render(<CharacterDefinitionPanel thumbnail="" onChange={() => {}} draft={draft([])} />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [new File(['x'], 'side.png', { type: 'image/png' })] } });
+    await waitFor(() => expect(container.querySelector('.character-def__error')?.textContent).toBe(line));
   });
 });
