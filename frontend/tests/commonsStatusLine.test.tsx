@@ -36,7 +36,7 @@ it('waits for sealed labels on a blind batch', () => {
 
 it('shows the normal worker line once the batch is closed', () => {
   render(<StatusLine status={status({ evaluation_waiting: false, evaluation_state: 'closed', evaluation_assisted: true })} onStart={vi.fn()} onStop={vi.fn()} />);
-  expect(screen.getByText('Idle · nothing queued')).toBeTruthy();
+  expect(screen.getByText('Idle')).toBeTruthy();
   expect(screen.queryByText(/paused/i)).toBeNull();
 });
 
@@ -55,24 +55,27 @@ const cases: Array<[string, Partial<CommonsStatus>, string, string | null, RegEx
   ['the agent-review pause', { evaluation_waiting: true, evaluation_state: 'open', evaluation_assisted: true },
     'Paused · close agent review to resume', null,
     [/^Library analysis is paused: the agent graded these references before the blind labels were sealed/, /Close them as an assisted review/, /to resume\.$/]],
-  // A pause only lifts: a stopped worker still needs Start (review of sf). The
-  // tooltip says so, and Start is there.
+  // A pause only lifts: a stopped worker still needs Start (review of sf). GM:
+  // "\"Paused\" next to \"Start\" reads as a contradiction, and it hides the
+  // state the person has to act on first. When the worker is stopped, start
+  // the label with \"Stopped\" and give it the stopped colour." The tooltip
+  // says both steps, and Start is there.
   ['the sealed-labels pause with the worker stopped', { evaluation_waiting: true, evaluation_state: 'open', evaluation_assisted: false, worker: stopped },
-    'Paused until labels are sealed', 'Start',
+    'Stopped · labels not sealed', 'Start',
     [/^Library analysis is paused while blind labeling is open/, /Seal the labels/, /then press Start/, /won't resume on its own\.$/]],
   ['the agent-review pause with the worker stopped', { evaluation_waiting: true, evaluation_state: 'open', evaluation_assisted: true, worker: stopped },
-    'Paused · close agent review to resume', 'Start',
+    'Stopped · agent review open', 'Start',
     [/^Library analysis is paused: the agent graded these references/, /Close them as an assisted review/, /then press Start/, /won't resume on its own\.$/]],
   ['the sealed-labels pause with the call budget used', { evaluation_waiting: true, evaluation_state: 'open', evaluation_assisted: false,
     worker: { state: 'budget_exhausted', running: false, budget_used: 40, budget: 40 } },
-    'Paused until labels are sealed', null,
+    'Stopped · labels not sealed', null,
     [/Seal the labels/, /then restart Nebula/, /call budget is used/]],
   ['a stopped worker', { worker: stopped }, 'Stopped', 'Start',
     [/^Library analysis is stopped\./, /Start runs it/]],
   ['a stopped worker with a queue', { worker: stopped, queue: queue(12, 3) }, 'Stopped · 12 queued · 3 held', 'Start',
     [/^Library analysis is stopped\./, /12 references are waiting to be read/, /3 references added by agents are held until you accept them in the Inbox/, /Start runs it/]],
   ['a busy machine', { worker: { state: 'paused_load', running: true, budget_used: 0, budget: null }, load: 41.5, load_threshold: 32 },
-    'Paused · machine busy (41.5/32)', 'Stop',
+    'Paused · computer busy (41.5/32)', 'Stop',
     [/^Library analysis is paused while this computer is busy/, /load average is 41\.5/, /above 32/, /Pause above load/, /resumes on its own/]],
   ['the daily cap', { worker: { state: 'cap_reached', running: true, budget_used: 0, budget: null },
     meter: { calls: 20, cap: 20, remaining: 0, resets_at: RESETS_AT } },
@@ -95,9 +98,9 @@ const cases: Array<[string, Partial<CommonsStatus>, string, string | null, RegEx
     'Analyzing · 12 queued', 'Stop', [/^Library analysis is reading references: 12 waiting\.$/]],
   ['the last reference in analysis', { worker: { state: 'analyzing', running: true, budget_used: 0, budget: null } },
     'Analyzing', 'Stop', [/^Library analysis is reading references\.$/]],
-  ['an idle worker', {}, 'Idle · nothing queued', 'Stop',
+  ['an idle worker', {}, 'Idle', 'Stop',
     [/^Library analysis is running and has nothing to read\./, /New references are read as they arrive\.$/]],
-  ['one held reference', { queue: queue(0, 1) }, 'Idle · nothing queued · 1 held', 'Stop',
+  ['one held reference', { queue: queue(0, 1) }, 'Idle · 1 held', 'Stop',
     [/1 reference added by an agent is held until you accept it in the Inbox\./]],
 ];
 
@@ -130,12 +133,13 @@ it.each(cases)('says %s in a short status, with the full explanation as its tool
 
 // The parts (counts, load, the reset time) make some statuses longer than the
 // state alone. The longest realistic ones, measured live at Inter 400 11px:
-// "Paused · machine busy (140.2/128) · 99 held" 230.1 px beside Stop (245 px
+// "Paused · computer busy (140.2/128) · 99 held" 235.8 px beside Stop (245 px
 // of room at 1280), "Stopped · call budget used (9999/9999) · 99 held" 257.5
 // px with no control (301 px). Characters stand in for pixels here (jsdom
 // has no layout); the ellipsis stays as the safety net beyond these.
 it.each([
-  ['beside a control', { worker: { state: 'paused_load', running: true, budget_used: 0, budget: null }, load: 140.2, load_threshold: 128, queue: queue(0, 99) }, 43],
+  // 44 characters since GM's "computer busy" (it matches the tooltip's "this computer"): 235.8 px, measured.
+  ['beside a control', { worker: { state: 'paused_load', running: true, budget_used: 0, budget: null }, load: 140.2, load_threshold: 128, queue: queue(0, 99) }, 44],
   ['beside a control', { worker: stopped, queue: queue(9999, 999) }, 43],
   ['beside a control', { worker: { state: 'analyzing', running: true, budget_used: 0, budget: null }, queue: queue(999, 99) }, 43],
   ['beside a control', { worker: { state: 'cap_reached', running: true, budget_used: 0, budget: null }, queue: queue(0, 99),
@@ -157,6 +161,22 @@ it('promises nothing it cannot keep: a stopped worker never resumes on its own',
     meter: { calls: 0, cap: 0, remaining: 0, resets_at: RESETS_AT } }));
   expect(zero.text).not.toMatch(/until/);
   expect(zero.title).not.toMatch(/on its own|used today's 0/);
+});
+
+it('gives a stopped worker the stopped colour even while a pause also holds', () => {
+  for (const assisted of [false, true]) {
+    const { line } = rendered(status({ evaluation_waiting: true, evaluation_state: 'open', evaluation_assisted: assisted, worker: stopped }));
+    expect(line.classList.contains('commons-status--stopped')).toBe(true);
+    cleanup();
+  }
+  const budget = rendered(status({ evaluation_waiting: true, evaluation_state: 'open', evaluation_assisted: false,
+    worker: { state: 'budget_exhausted', running: false, budget_used: 40, budget: 40 } }));
+  expect(budget.line.classList.contains('commons-status--stopped')).toBe(true);
+  cleanup();
+  // Running, the pause keeps GM's pause strings and no stopped colour.
+  const running = rendered(status({ evaluation_waiting: true, evaluation_state: 'open', evaluation_assisted: false }));
+  expect(running.text).toBe('Paused until labels are sealed');
+  expect(running.line.classList.contains('commons-status--stopped')).toBe(false);
 });
 
 it('starts the worker from the pause line when it is stopped', () => {

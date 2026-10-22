@@ -176,16 +176,22 @@ export function StatusLine({ status, onStart, onStop }: { status: CommonsStatus 
     // Sealing or closing only lifts the hold: a stopped worker (the default at
     // launch) stays stopped, so the tooltip promises a resume only when it
     // runs, and Start is here when it doesn't (review of sf).
+    // Stopped, the label leads with that, in the stopped colour: GM, "\"Paused\"
+    // next to \"Start\" reads as a contradiction, and it hides the state the
+    // person has to act on first." The tooltip names both steps.
     const { running, state } = status.worker;
     const after = running
       ? ' to resume.'
       : state === 'budget_exhausted'
         ? ", then restart Nebula: this run's call budget is used, so it won't resume on its own."
         : ", then press Start: library analysis is stopped, so it won't resume on its own.";
-    return <span className="commons-status">{status.evaluation_assisted
-      ? <StatusText text="Paused · close agent review to resume"
+    const text = status.evaluation_assisted
+      ? (running ? 'Paused · close agent review to resume' : 'Stopped · agent review open')
+      : (running ? 'Paused until labels are sealed' : 'Stopped · labels not sealed');
+    return <span className={running ? 'commons-status' : 'commons-status commons-status--stopped'}>{status.evaluation_assisted
+      ? <StatusText text={text}
           title={`Library analysis is paused: the agent graded these references before the blind labels were sealed, so they can no longer be sealed as blind labels. Close them as an assisted review (in Agent review or Blind labeling)${after}`} />
-      : <StatusText text="Paused until labels are sealed"
+      : <StatusText text={text}
           title={`Library analysis is paused while blind labeling is open, so it can't sway your reference labels. Seal the labels, or close the batch without sealing, in Blind labeling${after}`} />}
       {!running && state !== 'budget_exhausted'
         && <button type="button" className="commons-button commons-button--primary" onClick={onStart}>Start</button>}
@@ -228,13 +234,13 @@ export function StatusLine({ status, onStart, onStop }: { status: CommonsStatus 
       title = `Library analysis is paused: it made ${calls} analysis calls today, and the daily cap is ${cap} (Analysis calls per day, in Settings). It resumes on its own at ${resets}.`;
     }
   } else if (state === 'paused_load') {
-    text = `Paused · machine busy (${status.load}/${status.load_threshold})`;
+    text = `Paused · computer busy (${status.load}/${status.load_threshold})`;
     title = `Library analysis is paused while this computer is busy: its load average is ${status.load}, above ${status.load_threshold} (Pause above load, in Settings). It resumes on its own when the load drops.`;
   } else if (waiting || state === 'analyzing') {
     text = `Analyzing${waiting ? ` · ${waiting} queued` : ''}`;
     title = `Library analysis is reading references${waiting ? `: ${waiting} waiting` : ''}.`;
   } else {
-    text = 'Idle · nothing queued';
+    text = 'Idle';
     title = 'Library analysis is running and has nothing to read. New references are read as they arrive.';
   }
   return (

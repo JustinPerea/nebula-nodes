@@ -31,7 +31,7 @@ body.app-slava-restraint .commons-view--detail {
 
 body.app-slava-restraint .commons-toolbar {
   /* The worker status's narrowest width: its first words and an ellipsis
-   * ("Paused until labels are…", "Paused · machine busy (4…"), measured at
+   * ("Paused until labels are…", "Paused · computer busy (…"), measured at
    * the status's 11 px (p157c). Every status now shows whole at 1280 (sf);
    * this is the safety net. */
   --commons-status-min: 12.5em;

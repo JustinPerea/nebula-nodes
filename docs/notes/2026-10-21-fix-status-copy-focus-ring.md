@@ -13,14 +13,17 @@ Branch `fix/status-copy-focus-ring`, from main `4fc4ce68` (after #157). Uncommit
 | Old | New | Tooltip (title) |
 |---|---|---|
 | Connecting… | Connecting… | Connecting to library analysis… |
-| Library analysis paused until reference labels are sealed | **Paused until labels are sealed** | Library analysis is paused while blind labeling is open, so it can't sway your reference labels. Seal the labels, or close the batch without sealing, in Blind labeling to resume. (Worker stopped: "…in Blind labeling, then press Start: library analysis is stopped, so it won't resume on its own.", with Start beside the text.) |
-| Library analysis paused · close the agent review to resume | **Paused · close agent review to resume** | Library analysis is paused: the agent graded these references before the blind labels were sealed, so they can no longer be sealed as blind labels. Close them as an assisted review (in Agent review or Blind labeling) to resume. (Worker stopped: "…, then press Start: …", with Start.) |
+| Library analysis paused until reference labels are sealed | **Paused until labels are sealed** | Library analysis is paused while blind labeling is open, so it can't sway your reference labels. Seal the labels, or close the batch without sealing, in Blind labeling to resume. (Worker stopped: see the next rows.) |
+| Library analysis paused · close the agent review to resume | **Paused · close agent review to resume** | Library analysis is paused: the agent graded these references before the blind labels were sealed, so they can no longer be sealed as blind labels. Close them as an assisted review (in Agent review or Blind labeling) to resume. (Worker stopped: see the next rows.) |
+| (the sealed-labels pause, worker stopped) | **Stopped · labels not sealed** [Start], stopped colour | The sealed-labels tooltip, ending "…in Blind labeling, then press Start: library analysis is stopped, so it won't resume on its own." |
+| (the agent-review pause, worker stopped) | **Stopped · agent review open** [Start], stopped colour | The agent-review tooltip, ending "…(in Agent review or Blind labeling), then press Start: library analysis is stopped, so it won't resume on its own." |
+| (the sealed-labels pause, call budget used) | **Stopped · labels not sealed**, stopped colour, no control | The sealed-labels tooltip, ending "…then restart Nebula: this run's call budget is used, so it won't resume on its own." |
 | Worker stopped [Start] | Stopped [Start] | Library analysis is stopped. Start runs it while Nebula is open. |
 | Worker stopped · 12 queued · 3 held [Start] | Stopped · 12 queued · 3 held [Start] | Library analysis is stopped. 12 references are waiting to be read. 3 references added by agents are held until you accept them in the Inbox. Start runs it while Nebula is open. |
 | Analyzing (12 queued) [Stop] | Analyzing · 12 queued [Stop] | Library analysis is reading references: 12 waiting. |
 | Analyzing (0 queued) [Stop] | Analyzing [Stop] | Library analysis is reading references. |
-| Worker idle [Stop] | Idle · nothing queued [Stop] | Library analysis is running and has nothing to read. New references are read as they arrive. |
-| Paused: machine busy (load 41.5 / 32) [Stop] | Paused · machine busy (41.5/32) [Stop] | Library analysis is paused while this computer is busy: its load average is 41.5, above 32 (Pause above load, in Settings). It resumes on its own when the load drops. |
+| Worker idle [Stop] | **Idle** [Stop] | Library analysis is running and has nothing to read. New references are read as they arrive. |
+| Paused: machine busy (load 41.5 / 32) [Stop] | **Paused · computer busy (41.5/32)** [Stop] | Library analysis is paused while this computer is busy: its load average is 41.5, above 32 (Pause above load, in Settings). It resumes on its own when the load drops. |
 | Daily cap reached, resets 09:00 AM [Stop] | Paused until 9:00 AM · daily cap [Stop] | Library analysis is paused: it made 20 analysis calls today, and the daily cap is 20 (Analysis calls per day, in Settings). It resumes on its own at 9:00 AM. |
 | Daily cap reached, resets 09:00 AM [Stop] (cap set to 0) | Paused · daily cap is 0 [Stop] | Library analysis is paused: Analysis calls per day is set to 0 in Settings, so it reads nothing. Raise it to resume. |
 | Call budget used (40/40) | Stopped · call budget used (40/40) | Library analysis is stopped: it used this run's call budget (40 of 40 calls). Restart Nebula to reset it. |
@@ -37,6 +40,19 @@ Branch `fix/status-copy-focus-ring`, from main `4fc4ce68` (after #157). Uncommit
   - The cap and budget tooltips name the settings by their labels in Commons Settings ("Analysis calls per day", "Pause above load").
   - The character cap in the test is 37, GM's own assisted string; its "about 36" was a guide. The binding limit is pixels, measured live.
 - **Agents.** None of these strings reach agents. `commons_status` (MCP) and `nebula commons status` (CLI, which prints the JSON) return the route's structured state. Nothing in docs/MCP-SETUP.md, skills/nebula/SKILL.md or `commons/skill.py` quoted the old wording. So agents keep the state, and the UI copy did not move to them. What did change: the `commons_status` docstring now says what `held` means, lists the worker states, and says what lifts each pause and that analysis then resumes only if `worker.running` (`evaluation_assisted` was in the payload but undocumented). docs/MCP-SETUP.md says the tool returns structured state, not the toolbar's wording. A backend test pins both.
+
+### GM's review of the table (coordinator, 2026-10-21)
+
+GM approved the table and the focus ring, with three changes, now built test-first (8 tests failed on the old copy, then passed):
+- **Stopped while a pause holds:** ""Paused" next to "Start" reads as a contradiction, and it hides the state the person has to act on first. When the worker is stopped, start the label with "Stopped" and give it the stopped colour." So: "Stopped · labels not sealed" and "Stopped · agent review open", with Start and `commons-status--stopped`. The tooltips are as written. With the call budget used (no Start, since a restart resets it), the same rule gives "Stopped · labels not sealed" in the stopped colour, and the tooltip says to restart Nebula.
+- "Idle · nothing queued" → **"Idle"** (the tooltip says the rest; "Idle · 3 held" still works).
+- "Paused · machine busy (41.5/32)" → **"Paused · computer busy (41.5/32)"**, to match the tooltip's "this computer".
+- Measured at Inter 400 11 px in Chromium with the bundled font:
+  - Stopped · labels not sealed: 140.8 px.
+  - Stopped · agent review open: 149.2 px.
+  - Paused · computer busy (41.5/32): 175.6 px.
+  - Idle: 18.8 px.
+  - The tightest, Paused · computer busy (140.2/128) · 99 held: 235.8 px against 244-245 px of room beside Stop. It shows whole; the test's character proxy for that row is 44.
 
 ## 2. The focus ring, app-wide
 
