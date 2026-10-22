@@ -5,7 +5,7 @@ import { readDraft, useCreateDraftStore } from './createDraftStore';
 import { useArrangeStore } from './arrangeStore';
 import { fetchCLIGraph } from '../lib/api';
 import { rewriteBackendAssetUrls } from '../lib/backend';
-import { normalizeRuntimeMediaParams } from '../lib/graphFile';
+import { normalizeRuntimeMediaParams } from '../lib/graphFileShared';
 import { GRAPH_PARAMS_VERSION } from '../lib/savedParamsUpgrades';
 import { getProjectContext, setProjectContext } from '../lib/projectContext';
 import { currentProjectOf, publishOpenProject } from '../lib/currentProject';

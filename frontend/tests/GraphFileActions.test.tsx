@@ -229,12 +229,14 @@ describe('workspace-independent graph file actions', () => {
     let resolveSave!: () => void;
     mocks.saveToFile.mockReturnValue(new Promise<void>((resolve) => { resolveSave = resolve; }));
     const rendered = render(<StrictMode><GraphFileActions /></StrictMode>);
-    act(() => { requestGraphSave(); requestGraphSave(); requestGraphLoad(); });
+    // Save reaches lib/graphFile.ts through its deferred import (a microtask
+    // later); the guard is taken before that await, so the repeats still drop.
+    await act(async () => { requestGraphSave(); requestGraphSave(); requestGraphLoad(); });
     expect(mocks.saveToFile).toHaveBeenCalledOnce();
     expect(mocks.loadFromFile).not.toHaveBeenCalled();
     await act(async () => resolveSave());
     rendered.unmount();
-    act(() => { requestGraphSave(); requestGraphLoad(); });
+    await act(async () => { requestGraphSave(); requestGraphLoad(); });
     expect(mocks.saveToFile).toHaveBeenCalledOnce();
     expect(mocks.loadFromFile).not.toHaveBeenCalled();
   });

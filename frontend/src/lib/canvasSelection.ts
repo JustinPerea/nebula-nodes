@@ -5,7 +5,7 @@ import { apiFetch, backendAssetUrlSync } from './backend';
 import {
   GRAPH_BUNDLE_MAX_ASSET_BYTES,
   GRAPH_BUNDLE_MAX_TOTAL_BYTES,
-} from './graphFile';
+} from './graphFileShared';
 import { readBoundedAssetResponse } from './boundedAsset';
 import { isSafeWorldUrl, parseWorldValue } from './worldValue';
 
