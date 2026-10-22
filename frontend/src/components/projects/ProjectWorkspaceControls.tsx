@@ -4,7 +4,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useGraphStore } from '../../store/graphStore';
 import './ProjectWorkspaceControls.css';
 
-export function ProjectWorkspaceControls() {
+export function ProjectWorkspaceControls({ homeBlocked }: { homeBlocked?: string }) {
   const project = useProjectStore((state) => state.activeProject);
   const screen = useProjectStore((state) => state.screen);
   const status = useProjectStore((state) => state.saveStatus);
@@ -22,7 +22,7 @@ export function ProjectWorkspaceControls() {
   return (
     <div className="project-workspace-controls">
       <button type="button" className="project-workspace-controls__home" aria-label="Back to projects"
-        title="Projects" disabled={busy} onClick={() => void useProjectStore.getState().goHome()}>
+        title={homeBlocked ?? 'Projects'} disabled={busy || !!homeBlocked} onClick={() => void useProjectStore.getState().goHome()}>
         <Home size={16} aria-hidden="true" />
       </button>
       {draft !== null
