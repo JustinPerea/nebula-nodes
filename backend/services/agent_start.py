@@ -121,7 +121,8 @@ HINTS: dict[str, dict[str, str]] = {
                 "to its moodboard input instead."),
     },
 }
-PRICES = "USD per run at default settings: [low, high], \"free\", or null (no list price)"
+PRICES = ("USD per run at default settings: [low, high], \"free\", \"by input size\" (priced from the "
+          "input file's size when it runs; the node's details give the rate), or null (no list price)")
 
 
 def size(value: Any) -> int:

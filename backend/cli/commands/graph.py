@@ -48,11 +48,34 @@ def run_show(client: NebulaClient) -> None:
     print(format_graph(state, node_defs))
 
 
+# A saved graph past this isn't one `nebula save` wrote.
+_MAX_SAVED_GRAPH_BYTES = 64 * 1024 * 1024
+
+
+def _is_saved_graph(path) -> bool:
+    """Whether the file at ``path`` is a graph export (`nebula save`'s JSON)."""
+    try:
+        if not path.is_file() or path.stat().st_size > _MAX_SAVED_GRAPH_BYTES:
+            return False
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, UnicodeDecodeError, RecursionError):
+        return False
+    return isinstance(data, dict) and isinstance(data.get("nodes"), list)
+
+
 def run_save(client: NebulaClient, filepath: str) -> None:
     try:
         path = require_allowed_path(filepath)
     except ProtectedPathError as exc:
         print(f"error: {exc}", file=sys.stderr)
+        sys.exit(1)
+    if path.exists() and not _is_saved_graph(path):
+        # It replaces only an earlier export. Anything else (an image or clip
+        # in Nebula's output folder, which the spending check prices runs
+        # from because nothing an agent runs changes it: services/input_sizes.py)
+        # is left as it is.
+        print(f"error: {filepath} already exists and isn't a saved graph, so it was left as it is. "
+              "Save to a new file name.", file=sys.stderr)
         sys.exit(1)
     state = client.get_graph()
     # Keep the previous export intact until the complete replacement is ready.

@@ -6,7 +6,7 @@ import {
   routeUnavailable, selectRoute, settingText, usesRoutePlan, withWiredBlockers, type DirectBlock, type HiddenStop,
   type RouteFix,
 } from './directRoute';
-import { estimateRoutes, formatUsdRange, routePriceUnconfirmed, type PricingTable } from './pricing';
+import { awaitsInput, entryForRoute, estimateRoutes, formatUsdRange, routePriceUnconfirmed, type PricingTable } from './pricing';
 import type { ProviderSetupTarget } from './providerReadiness';
 
 /**
@@ -147,6 +147,9 @@ function price(definition: ModelNodeDefinition, route: RouteSpec, estimates: Ret
   wired: Iterable<string>): { price: string; priceTitle?: string } {
   if (plan) return { price: '-', priceTitle: 'Billed to your Krea plan' };
   const estimate = estimates[route.id];
+  if (!estimate && awaitsInput(entryForRoute(pricing?.nodes[definition.id], route.pricing ?? route.id))) {
+    return { price: 'by size', priceTitle: "Priced from the input's size when it runs" };
+  }
   if (!estimate || estimate.currency !== 'usd') return { price: '-', priceTitle: 'No list price for these settings' };
   const unconfirmed = routePriceUnconfirmed(definition, route.id, pricing, params, wired);
   return {

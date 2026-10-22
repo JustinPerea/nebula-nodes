@@ -35,6 +35,7 @@ from services.output import (
     materialize_media_value,
     portable_output_ref,
     resolve_output_ref,
+    seal_run_dir,
     write_manifest,
 )
 from services.document_extract import extract_text
@@ -993,6 +994,9 @@ async def execute_graph(
         execution_run_dir.reset(run_dir_token)
         execution_run_id.reset(token)
         execution_variant.reset(variant_token)
+        # Its handlers are done writing: a price may now be measured from
+        # what they made (services/input_sizes.py, output.is_being_written).
+        seal_run_dir(run_dir)
 
 
 async def _execute_graph(

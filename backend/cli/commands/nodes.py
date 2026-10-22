@@ -6,7 +6,7 @@ import shlex
 from services import node_categories, node_readiness
 
 from ..client import NebulaClient
-from ..formatter import format_agent_nodes, format_node_detail
+from ..formatter import format_agent_nodes, format_node_detail, format_price_line
 from ..parser import START_LINE
 
 
@@ -105,3 +105,9 @@ def run_info(client: NebulaClient, node_id: str) -> None:
     if isinstance(node.get("lookup"), str):
         print(node["lookup"])
     print(format_node_detail(node))
+    try:
+        price = format_price_line(client.get_agent_node(node_id))
+    except Exception:  # noqa: BLE001 - an older backend has no price to add; the rest stands
+        price = None
+    if price:
+        print(price)

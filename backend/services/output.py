@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import base64
+import errno
 import ipaddress
 import json
 import logging
 import mimetypes
 import os
 import re
+import shutil
 import socket
 import threading
 from contextvars import ContextVar
@@ -98,8 +100,23 @@ execution_run_dir: ContextVar[Path | None] = ContextVar(
 )
 
 
+# Run folders Nebula may still be writing into (services/input_sizes.py): a
+# handler's clip grows while ffmpeg or a download writes it, so a price
+# measured from it then would be smaller than what the provider is sent. A
+# folder joins when it is made and leaves when its writer says it's done
+# (seal_run_dir: the engine at a run's end, a render job, the edit preview).
+# One that is never sealed stays unmeasured, which is the safe side: its
+# node needs a proposal. Process-local: a restart ends every writer. A single
+# file joins too while link_new copies it in at its final name on a volume
+# with no hard links.
+_LIVE_RUN_DIRS: set[str] = set()
+_LIVE_RUN_DIRS_LOCK = threading.Lock()
+
+
 def create_run_dir(run_id: str | None = None) -> Path:
-    """Create a collision-proof output directory for one execution run."""
+    """Create a collision-proof output directory for one execution run.
+
+    It counts as being written until ``seal_run_dir`` (see _LIVE_RUN_DIRS)."""
     require_allowed_path(OUTPUT_ROOT)
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S_%f")
     safe_run_id = re.sub(r"[^A-Za-z0-9_-]+", "-", str(run_id or "run")).strip("-")
@@ -107,11 +124,95 @@ def create_run_dir(run_id: str | None = None) -> Path:
     for _attempt in range(10):
         run_dir = OUTPUT_ROOT / f"{timestamp}-{safe_run_id}-{uuid4().hex[:8]}"
         try:
-            run_dir.mkdir(parents=True, exist_ok=False)
+            with _LIVE_RUN_DIRS_LOCK:
+                run_dir.mkdir(parents=True, exist_ok=False)
+                _LIVE_RUN_DIRS.add(str(run_dir.resolve()))
             return run_dir
         except FileExistsError:
             continue
     raise RuntimeError("could not allocate a unique output directory")
+
+
+def seal_run_dir(run_dir: Path | str | None) -> None:
+    """Say a run folder's writer is done: its files can be measured now."""
+    if run_dir is None:
+        return
+    with _LIVE_RUN_DIRS_LOCK:
+        _LIVE_RUN_DIRS.discard(str(Path(run_dir).resolve()))
+
+
+def is_being_written(path: Path | str) -> bool:
+    """True when ``path`` is inside a run folder Nebula may still be writing."""
+    resolved = Path(path).resolve()
+    with _LIVE_RUN_DIRS_LOCK:
+        live = list(_LIVE_RUN_DIRS)
+    return any(resolved == Path(folder) or resolved.is_relative_to(folder) for folder in live)
+
+
+# os.link's errors on a volume that has no hard links (exFAT, FAT, many SMB
+# shares: EPERM/ENOTSUP), across volumes (EXDEV) or past a link count (EMLINK).
+_NO_HARD_LINK = frozenset({errno.EPERM, errno.ENOTSUP, errno.EOPNOTSUPP, errno.EXDEV, errno.EMLINK})
+
+
+def link_new(source: Path | str, target: Path | str) -> None:
+    """Put ``source``'s bytes at ``target``, a name nothing holds yet:
+    FileExistsError when something does (it is left as it was).
+
+    A hard link makes it appear whole at once. Where the volume has none
+    (an external exFAT drive is common for video), the bytes are copied
+    into a file created exclusively at ``target`` ("xb"), so an existing
+    file is still never replaced; while that copy runs the name counts as
+    being written (is_being_written), so no price is measured from it half
+    copied. A failed copy removes what it wrote."""
+    target = Path(target)
+    try:
+        os.link(source, target)
+        return
+    except FileExistsError:
+        raise
+    except OSError as exc:
+        if exc.errno not in _NO_HARD_LINK:
+            raise
+    live = str(target.resolve())
+    with _LIVE_RUN_DIRS_LOCK:
+        _LIVE_RUN_DIRS.add(live)
+    try:
+        with open(target, "xb") as out:
+            try:
+                with open(source, "rb") as inp:
+                    shutil.copyfileobj(inp, out)
+                out.flush()
+                os.fsync(out.fileno())
+            except BaseException:
+                out.close()
+                target.unlink(missing_ok=True)
+                raise
+    finally:
+        with _LIVE_RUN_DIRS_LOCK:
+            _LIVE_RUN_DIRS.discard(live)
+
+
+def write_new_file(path: Path | str, data: bytes) -> bool:
+    """Write ``data`` to a new file at ``path`` that appears whole, never
+    half-written, and never replaces a file already there.
+
+    The bytes go to a dot-named temporary file in the same folder first,
+    then a hard link puts it at ``path`` (which fails if something is
+    there) and the temporary name goes. Returns False when ``path`` already
+    existed (it is left as it was). A content-addressed caller (an upload's
+    sha256 name) treats False as "already stored". On a volume with no
+    hard links it is copied in exclusively instead (link_new)."""
+    target = Path(path)
+    temporary = target.with_name(f".{target.name}.{uuid4().hex}.part")
+    with temporary.open("xb") as handle:
+        handle.write(data)
+    try:
+        link_new(temporary, target)
+    except FileExistsError:
+        return False
+    finally:
+        temporary.unlink(missing_ok=True)
+    return True
 
 
 def get_run_dir() -> Path:

@@ -120,7 +120,10 @@ def test_cli_export_failure_preserves_existing_file_and_cleans_temporary(
     tmp_path, monkeypatch
 ):
     target = tmp_path / "export.json"
-    target.write_text("existing export")
+    # An earlier export: run_save replaces only a saved graph (any other
+    # existing file is refused, tests/test_input_size_security.py).
+    existing = json.dumps({"nodes": [{"id": "n1"}], "edges": []})
+    target.write_text(existing)
     client = Mock()
     client.get_graph.return_value = {"nodes": [], "edges": []}
 
@@ -131,5 +134,5 @@ def test_cli_export_failure_preserves_existing_file_and_cleans_temporary(
     with pytest.raises(OSError, match="simulated disk failure"):
         run_save(client, str(target))
 
-    assert target.read_text() == "existing export"
+    assert target.read_text() == existing
     assert list(tmp_path.iterdir()) == [target]

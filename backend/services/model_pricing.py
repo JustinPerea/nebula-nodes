@@ -24,6 +24,9 @@ Shape of one entry (keyed by node definition id)::
                                                      # prices as unset
       "unconfirmed": true,                           # the page doesn't state this price exactly
                                                      # (also on one row: that row's price only)
+      "sizing": {"port": "image", "output": "upscale",   # measured quantities, see below
+                 "megapixel": 1000000, "roundUp": ["(larger megapixels)"],
+                 "say": "$0.001 per megapixel of ..."},
       "notes": "...",
       "sources": [{"url": "https://...", "quote": "..."}],
       "checked": "2026-10-10"
@@ -77,10 +80,32 @@ parentheses and can never be a param's key:
   ``(wired X)`` stays priced with X wired: the wire is accounted for (the
   wired-port rule above skips X when every row and extra naming X names
   ``(wired X)`` too).
-- RUN_TIME_VARIABLES depend on the source clip a run is given (its length,
-  its frame size), which only exists once the upstream node has run. An entry
-  that reads one keeps the provider's real formula, and is unpriced before
-  the run: never priced as one unit.
+- RUN_TIME_VARIABLES depend on the input a run is given (an image's size, a
+  clip's length and frame size), which only exists once that file does. An
+  entry that reads one keeps the provider's real formula. The ones in
+  SIZED_VARIABLES are measured from the input file when the run is checked
+  (``size``, services/input_sizes.py), for an entry with ``sizing``:
+
+  - ``port``: the input port whose file is measured.
+  - ``output``: how the output frame follows from the input and the params.
+    Left out, the output is the input's size. ``upscale``: ``upscale_mode``
+    factor (the default) multiplies both sides by ``upscale_factor``;
+    target sets one side to ``target_resolution`` (720p, 1080p...) and,
+    since the vendors don't say which, both ways are computed (short side =
+    target, long side = target) and the larger counts.
+  - ``megapixel``: pixels per megapixel, 1,000,000 unless the vendor says
+    otherwise (BFL: 1,048,576). Where the vendor doesn't say, 1,000,000 is
+    the side that costs more.
+  - ``roundUp``: quantities rounded up to a whole number, as Nebula's
+    conservative reading where the vendor doesn't say how it rounds.
+  - ``say``: one line for agents, "$0.001 per megapixel of ...".
+
+  The quantities: ``(input megapixels)``, ``(output megapixels)`` (one
+  frame), ``(larger megapixels)`` (the larger of the two), ``(source
+  seconds)`` and ``(source frames)`` (the clip's). Without a size, or with
+  one that lacks what the entry reads, the node is unpriced (``awaiting
+  input`` in estimate_run). ``(output tier)`` is never measured: fal doesn't
+  say where its tiers split, so an entry reading it stays unpriced.
 
 ``frontend/src/lib/pricing.ts`` implements the same estimate; both are tested
 against ``tests/fixtures/pricing_cases.json`` so they cannot drift.
@@ -100,7 +125,9 @@ PRICING_PATH = Path(__file__).resolve().parent.parent / "data" / "model_pricing.
 CURRENCIES = ("usd", "krea_cu")
 # megapixel-second: one megapixel of output frame for one second of output
 # video (BFL and Replicate price FLUX Video Upscale this way).
-PER_UNITS = ("image", "video", "second", "request", "megapixel-second")
+# megapixel: one megapixel of image (SeedVR2); megapixel-frame: one megapixel
+# of one output video frame (SeedVR2 Video).
+PER_UNITS = ("image", "video", "second", "request", "megapixel-second", "megapixel", "megapixel-frame")
 # The wired-port price variable (see the module docstring) and its values.
 VIDEO_MODE = "(mode)"
 VIDEO_MODES = ("t2v", "i2v", "v2v")
@@ -114,7 +141,11 @@ WIRED_VALUES = ("yes", "no")
 # Price variables known only once the run's source clip is: FLUX Video Edit [fast]
 # bills the source's length, Upscale its output frame size too (source size
 # times upscale_factor squared), and fal's upscale tiers by that output size.
-RUN_TIME_VARIABLES = ("(source seconds)", "(output megapixels)", "(output tier)")
+SIZED_VARIABLES = ("(input megapixels)", "(output megapixels)", "(larger megapixels)", "(source seconds)",
+                   "(source frames)")
+RUN_TIME_VARIABLES = (*SIZED_VARIABLES, "(output tier)")
+SIZING_OUTPUTS = ("upscale",)
+DEFAULT_MEGAPIXEL = 1_000_000
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -333,6 +364,36 @@ def _validate_entry(
     for key in blank if isinstance(blank, list) else []:
         if key not in params:
             problems.append(f"{where} whitespaceUnset names unknown param '{key}'")
+    problems += _sizing_problems(where, entry, definition, ports)
+
+
+def _sizing_problems(where: str, entry: Mapping[str, Any], definition: Mapping[str, Any],
+                     ports: set[str]) -> list[str]:
+    sizing = entry.get("sizing")
+    measured = priced_keys(entry) & set(SIZED_VARIABLES)
+    never = priced_keys(entry) & (set(RUN_TIME_VARIABLES) - set(SIZED_VARIABLES))
+    if sizing is None:
+        # An entry that also reads a quantity Nebula can't measure stays unpriced anyway.
+        return [f"{where} reads {sorted(measured)}, so it needs sizing (the input port they are measured from)"] \
+            if measured and not never else []
+    if not isinstance(sizing, Mapping):
+        return [f"{where} sizing must be an object"]
+    problems = []
+    if sizing.get("port") not in ports:
+        problems.append(f"{where} sizing.port must be one of the node's input ports {sorted(ports)}")
+    if sizing.get("output") is not None and sizing.get("output") not in SIZING_OUTPUTS:
+        problems.append(f"{where} sizing.output must be one of {SIZING_OUTPUTS} or left out")
+    megapixel = sizing.get("megapixel", DEFAULT_MEGAPIXEL)
+    if isinstance(megapixel, bool) or not isinstance(megapixel, int) or megapixel <= 0:
+        problems.append(f"{where} sizing.megapixel must be a whole number of pixels")
+    rounded = sizing.get("roundUp", [])
+    if not isinstance(rounded, list) or any(key not in SIZED_VARIABLES for key in rounded):
+        problems.append(f"{where} sizing.roundUp must list quantities from {SIZED_VARIABLES}")
+    if not isinstance(sizing.get("say"), str) or not sizing["say"].strip():
+        problems.append(f"{where} sizing.say must say the price in one line")
+    if not measured:
+        problems.append(f"{where} has sizing but reads none of {SIZED_VARIABLES}")
+    return problems
 
 
 def _utility_entry_problems(where: str, entry: Mapping[str, Any], definition: Mapping[str, Any]) -> list[str]:
@@ -470,12 +531,112 @@ def _price_values(entry: Mapping[str, Any], definition: Mapping[str, Any], param
     return values
 
 
+def _positive(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    amount = float(value)
+    return amount if math.isfinite(amount) and amount > 0 else None
+
+
+def _target_side(value: Any) -> float | None:
+    """720 from "720p" (a target_resolution option)."""
+    text = str(value or "").strip().lower()
+    return _multiplier(text[:-1]) if text.endswith("p") else None
+
+
+def _output_pixels(sizing: Mapping[str, Any], values: Mapping[str, Any], width: float, height: float) -> float | None:
+    """Pixels in one output frame, by the entry's ``sizing.output`` rule."""
+    rule = sizing.get("output")
+    if rule is None:
+        return width * height
+    if rule != "upscale":
+        return None
+    mode = _as_match_value(values.get("upscale_mode") or "factor")
+    if mode == "factor":
+        factor = _multiplier(values.get("upscale_factor"))
+        return None if factor is None else width * factor * height * factor
+    if mode == "target":
+        side = _target_side(values.get("target_resolution"))
+        if side is None:
+            return None
+        short, long = min(width, height), max(width, height)
+        # Which side the target sets isn't said: price both and take the larger.
+        return max(side * side * long / short, side * side * short / long)
+    return None
+
+
+def sized_quantities(entry: Mapping[str, Any], values: Mapping[str, Any],
+                     size: Mapping[str, Any] | None) -> dict[str, float] | None:
+    """The SIZED_VARIABLES an entry reads, measured from its input's ``size``
+    ({width, height, seconds, frames}); None when any of them can't be."""
+    sizing = entry.get("sizing")
+    wanted = priced_keys(entry) & set(SIZED_VARIABLES)
+    if not isinstance(sizing, Mapping) or not isinstance(size, Mapping):
+        return None
+    megapixel = sizing.get("megapixel", DEFAULT_MEGAPIXEL)
+    if isinstance(megapixel, bool) or not isinstance(megapixel, int) or megapixel <= 0:
+        return None
+    quantities: dict[str, float] = {}
+    if wanted & {"(input megapixels)", "(output megapixels)", "(larger megapixels)"}:
+        width, height = _positive(size.get("width")), _positive(size.get("height"))
+        if width is None or height is None:
+            return None
+        output = _output_pixels(sizing, values, width, height)
+        if output is None or not math.isfinite(output) or output <= 0:
+            return None
+        quantities["(input megapixels)"] = width * height / megapixel
+        quantities["(output megapixels)"] = output / megapixel
+        quantities["(larger megapixels)"] = max(quantities["(input megapixels)"], quantities["(output megapixels)"])
+    for key, field in (("(source seconds)", "seconds"), ("(source frames)", "frames")):
+        if key in wanted:
+            amount = _positive(size.get(field))
+            if amount is None:
+                return None
+            quantities[key] = amount
+    for key in sizing.get("roundUp") or []:
+        if key in quantities:
+            # A hair over a whole number from float noise isn't another unit.
+            quantities[key] = float(math.ceil(quantities[key] - 1e-9))
+    return {key: quantities[key] for key in wanted}
+
+
+def awaits_input(entry: Mapping[str, Any] | None) -> bool:
+    """Whether this single-route entry is priced from its input's size, so a
+    run without a measured input is unpriced only until the input exists."""
+    if not entry or not isinstance(entry.get("sizing"), Mapping):
+        return False
+    priced = priced_keys(entry)
+    return bool(priced & set(SIZED_VARIABLES)) and not priced & (set(RUN_TIME_VARIABLES) - set(SIZED_VARIABLES))
+
+
+def sizing_ports(entry: Mapping[str, Any] | None) -> set[str]:
+    """The input ports an entry (or any of its routes) measures."""
+    if not isinstance(entry, Mapping):
+        return set()
+    entries = list((entry.get("routes") or {}).values()) if isinstance(entry.get("routes"), Mapping) else [entry]
+    return {str(item["sizing"]["port"]) for item in entries
+            if isinstance(item, Mapping) and isinstance(item.get("sizing"), Mapping) and item["sizing"].get("port")}
+
+
+def size_note(entry: Mapping[str, Any] | None, definition: Mapping[str, Any]) -> str | None:
+    """One line for agents: the entry's ``sizing.say`` and when it's priced,
+    e.g. "...; priced from your image's size when you run it"."""
+    if not awaits_input(entry):
+        return None
+    sizing = entry["sizing"]  # type: ignore[index]
+    port = next((p for p in definition.get("inputPorts") or []
+                 if isinstance(p, Mapping) and p.get("id") == sizing.get("port")), {})
+    kind = "video" if str(port.get("dataType") or "").lower() == "video" else "image"
+    return f"{str(sizing.get('say') or '').strip()}; priced from your {kind}'s size when you run it"
+
+
 def estimate_node(
     entry: Mapping[str, Any] | None,
     definition: Mapping[str, Any],
     params: Mapping[str, Any] | None,
     route_provider: str | None = None,
     wired: Iterable[str] = (),
+    size: Mapping[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """{currency, low, high} for one run of this node, or None if unpriced.
 
@@ -485,8 +646,10 @@ def estimate_node(
     them is only known at run time (the wire's value replaces the param), so
     the run is unpriced. Not just the rows that name it: a more general row
     or a skipped extra would price it wrong. The wired ports also give the
-    VIDEO_MODE and REFERENCES an entry may match, and an entry reading a RUN_TIME_VARIABLES
-    quantity is unpriced. A ``routes`` entry prices the route
+    VIDEO_MODE and REFERENCES an entry may match. An entry reading a
+    RUN_TIME_VARIABLES quantity is priced only from ``size``, the measured
+    input of its ``sizing`` port ({width, height, seconds, frames}), and is
+    unpriced without one. A ``routes`` entry prices the route
     ``route_provider`` names, or nothing when it isn't given."""
     routed = entry_for_route(entry, route_provider)
     if not routed:
@@ -498,9 +661,15 @@ def estimate_node(
     entry = routed
     wired = {str(port) for port in wired}
     priced = priced_keys(entry)
-    if (priced - wire_aware_keys(entry)) & wired or priced & set(RUN_TIME_VARIABLES):
+    # The sizing port is measured, not read as a setting.
+    if (priced - wire_aware_keys(entry)) & wired:
         return None
     values = _price_values(entry, definition, params, wired)
+    if priced & set(RUN_TIME_VARIABLES):
+        measured = sized_quantities(entry, values, size) if awaits_input(entry) else None
+        if measured is None:
+            return None
+        values.update(measured)
     for row in entry.get("rows") or []:
         if _matches(values, row.get("match") or {}):
             bounds = _price_bounds(row.get("price"))
@@ -696,8 +865,13 @@ def estimate_run(
     api_keys: Mapping[str, Any],
     multipliers: Mapping[str, tuple[int, int]] | None = None,
     wired: Mapping[str, Iterable[str] | Mapping[str, int]] | None = None,
+    sizes: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """USD estimate for a set of nodes, each {id, definitionId, params, name}.
+
+    ``sizes`` maps a node id to the measured input of its entry's sizing
+    port (services/input_sizes.run_input_sizes). A node priced by its input's
+    size without one is unpriced and listed in ``awaitingInput`` too.
 
     ``wired`` maps a node id to its input ports that have an edge into them
     (``wired_ports``); a priced setting that arrives by wire leaves the node
@@ -723,6 +897,7 @@ def estimate_run(
     plan_runs: dict[str, dict[str, Any]] = {}
     plus: list[str] = []
     unavailable: dict[str, str] = {}
+    awaiting: list[str] = []
     for item in items:
         node_id = str(item["id"])
         definition = definitions.get(str(item.get("definitionId") or "")) or {}
@@ -764,12 +939,13 @@ def estimate_run(
             price_key = route_price_key(definition, node_route.select_route(definition, routed, api_keys))
         else:
             price_key = route_provider(definition, api_keys, routed)
-        estimate = estimate_node(
-            nodes_pricing.get(definition.get("id") or item.get("definitionId")),
-            definition, params, price_key, ports,
-        )
+        entry = nodes_pricing.get(definition.get("id") or item.get("definitionId"))
+        size = (sizes or {}).get(node_id) if str(item.get("definitionId")) != CINEMA_SCENE else None
+        estimate = estimate_node(entry, definition, params, price_key, ports, size)
         if estimate is None or estimate["currency"] != "usd":
             unpriced.append(node_id)
+            if size is None and awaits_input(entry_for_route(entry, price_key)):
+                awaiting.append(node_id)
             continue
         run_low, run_high = (multipliers or {}).get(node_id, (1, 1))
         line = {"low": estimate["low"] * run_low * calls, "high": estimate["high"] * run_high * calls,
@@ -789,6 +965,7 @@ def estimate_run(
         "planRuns": plan_runs,
         "plus": plus,
         "unavailable": unavailable,
+        "awaitingInput": awaiting,
     }
 
 
@@ -818,13 +995,14 @@ def route_price_unconfirmed(entry: Mapping[str, Any] | None, definition: Mapping
 
 def estimate_routes(
     definition: Mapping[str, Any], params: Mapping[str, Any] | None, ports: Iterable[str] | Mapping[str, int] = (),
-    pricing: Mapping[str, Any] | None = None,
+    pricing: Mapping[str, Any] | None = None, size: Mapping[str, Any] | None = None,
 ) -> dict[str, dict[str, Any] | None]:
     """{route id: the estimate on that route, or None} for a route-table
     node: what each row of the provider switcher shows at these params. None
     when the route can't take the run (route_block) or has no list price.
-    ``ports`` are the wired input ports (or a port -> count map). Keys don't
-    matter here: a row shows its price whether or not its key is set."""
+    ``ports`` are the wired input ports (or a port -> count map); ``size``
+    the measured input, for a route priced by it. Keys don't matter here: a
+    row shows its price whether or not its key is set."""
     from services import node_route
 
     if not node_route.has_routes(definition):
@@ -839,5 +1017,5 @@ def estimate_routes(
             estimates[str(route["id"])] = None
             continue
         key = str(route.get("pricing") or route["id"])
-        estimates[str(route["id"])] = estimate_node(entry, definition, params, key, wired)
+        estimates[str(route["id"])] = estimate_node(entry, definition, params, key, wired, size)
     return estimates

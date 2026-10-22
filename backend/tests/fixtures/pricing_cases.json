@@ -1,5 +1,5 @@
 {
-  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them. The `table` node is a five-route table (services/node_route.py routes): its price entry keys each route by its `pricing` or id, `runCases` price a whole run (estimate_run / summarizeRunScope) with the keys in `apiKeys`, and `routeEstimateCases` give each route's price (estimate_routes / estimateRoutes). A route entry with `unconfirmed: true` is a price the provider's page doesn't state exactly (the switcher marks it with *; route_price_unconfirmed / routePriceUnconfirmed). The `moded` node prices by `(mode)`, a price variable read from the wired ports (v2v with start_video, i2v with start_image, keyframes or end_image, else t2v; model_pricing.VIDEO_MODE / pricing.ts VIDEO_MODE), and `tooled` by run-time quantities of its source clip ((source seconds), (output megapixels): RUN_TIME_VARIABLES), so it is unpriced before the run. `shippedRouteCases` price the registry's route-table nodes with the shipped table (backend/data/model_pricing.json): each route's price as a number, a [low, high] range, or null, and optionally `unconfirmed`: whether each route's price is marked at those params (route_price_unconfirmed / routePriceUnconfirmed; a row may carry its own `unconfirmed`, as FLUX.2's Flash and Klein rows on fal do). `shippedRunCases` price a whole run of a registry node on the shipped table (estimate_run / summarizeRunScope) with the keys in `apiKeys` and the ports in `wired` (one edge each). Krea 3 also prices by `(references)`, read from the wired ports: `some` with an edge into `images`, else `none` (model_pricing.REFERENCES / pricing.ts REFERENCES). The `tiered` node prices by `(wired refs)`, read from the wired ports: `yes` with an edge into `refs`, else `no` (model_pricing.WIRED_PREFIX / pricing.ts WIRED_PREFIX); every row that reads the `refs` param also reads `(wired refs)`, so a wire into `refs` is priced, not unknown, while the `loose` node's row reads `refs` alone and stays unpriced with it wired. Krea 2 prices by k2BillingTier this way (shippedRunCases), and its entries list the params the handler strips in `whitespaceUnset`, so a whitespace-only value there prices as unset (only those params: `tiered` counts a whitespace `refs` as set).",
+  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them. The `table` node is a five-route table (services/node_route.py routes): its price entry keys each route by its `pricing` or id, `runCases` price a whole run (estimate_run / summarizeRunScope) with the keys in `apiKeys`, and `routeEstimateCases` give each route's price (estimate_routes / estimateRoutes). A route entry with `unconfirmed: true` is a price the provider's page doesn't state exactly (the switcher marks it with *; route_price_unconfirmed / routePriceUnconfirmed). The `moded` node prices by `(mode)`, a price variable read from the wired ports (v2v with start_video, i2v with start_image, keyframes or end_image, else t2v; model_pricing.VIDEO_MODE / pricing.ts VIDEO_MODE), and `tooled` by run-time quantities of its source clip ((source seconds), (output megapixels): RUN_TIME_VARIABLES), so it is unpriced before the run. `shippedRouteCases` price the registry's route-table nodes with the shipped table (backend/data/model_pricing.json): each route's price as a number, a [low, high] range, or null, and optionally `unconfirmed`: whether each route's price is marked at those params (route_price_unconfirmed / routePriceUnconfirmed; a row may carry its own `unconfirmed`, as FLUX.2's Flash and Klein rows on fal do). `shippedRunCases` price a whole run of a registry node on the shipped table (estimate_run / summarizeRunScope) with the keys in `apiKeys` and the ports in `wired` (one edge each). Krea 3 also prices by `(references)`, read from the wired ports: `some` with an edge into `images`, else `none` (model_pricing.REFERENCES / pricing.ts REFERENCES). The `tiered` node prices by `(wired refs)`, read from the wired ports: `yes` with an edge into `refs`, else `no` (model_pricing.WIRED_PREFIX / pricing.ts WIRED_PREFIX); every row that reads the `refs` param also reads `(wired refs)`, so a wire into `refs` is priced, not unknown, while the `loose` node's row reads `refs` alone and stays unpriced with it wired. Krea 2 prices by k2BillingTier this way (shippedRunCases), and its entries list the params the handler strips in `whitespaceUnset`, so a whitespace-only value there prices as unset (only those params: `tiered` counts a whitespace `refs` as set). A case's optional `size` is the measured input of the port its entry's `sizing` names ({width, height, seconds, frames}: model_pricing.estimate_node size / pricing.ts estimateNode size): the `sized` node prices per megapixel of the larger of input and output, rounded up, and `tooled` per megapixel-second of output; without a size both are unpriced. `sizedRunCases` price a whole run of a registry node on the shipped table with its sizing port wired from an Image Input or Video Input whose file measured `size` (estimate_run sizes / summarizeRunScope sizes); `awaitingInput` is whether the node is unpriced only because its input's size isn't known.",
   "definitions": {
     "img": {
       "id": "img",
@@ -616,6 +616,17 @@
               "value": 1
             }
           ]
+        },
+        {
+          "key": "upscale_factor",
+          "default": 2
+        }
+      ],
+      "inputPorts": [
+        {
+          "id": "video",
+          "dataType": "Video",
+          "required": true
         }
       ]
     },
@@ -644,6 +655,53 @@
       "inputPorts": [
         {
           "id": "refs"
+        }
+      ]
+    },
+    "sized": {
+      "id": "sized",
+      "apiProvider": "fal",
+      "inputPorts": [
+        {
+          "id": "image",
+          "dataType": "Image",
+          "required": true
+        }
+      ],
+      "params": [
+        {
+          "key": "upscale_mode",
+          "default": "factor",
+          "options": [
+            {
+              "value": "factor"
+            },
+            {
+              "value": "target"
+            }
+          ]
+        },
+        {
+          "key": "upscale_factor",
+          "default": 2
+        },
+        {
+          "key": "target_resolution",
+          "default": "1080p",
+          "options": [
+            {
+              "value": "720p"
+            },
+            {
+              "value": "1080p"
+            },
+            {
+              "value": "1440p"
+            },
+            {
+              "value": "2160p"
+            }
+          ]
         }
       ]
     }
@@ -1174,7 +1232,13 @@
             "quote": "fixture"
           }
         ],
-        "checked": "2026-10-15"
+        "checked": "2026-10-15",
+        "sizing": {
+          "port": "video",
+          "output": "upscale",
+          "megapixel": 1048576,
+          "say": "$0.07-0.10 per megapixel-second of output"
+        }
       },
       "tiered": {
         "currency": "usd",
@@ -1222,6 +1286,34 @@
             "price": 0.035
           }
         ]
+      },
+      "sized": {
+        "currency": "usd",
+        "per": "megapixel",
+        "multiplyBy": [
+          "(larger megapixels)"
+        ],
+        "rows": [
+          {
+            "match": {},
+            "price": 0.001
+          }
+        ],
+        "sizing": {
+          "port": "image",
+          "output": "upscale",
+          "roundUp": [
+            "(larger megapixels)"
+          ],
+          "say": "$0.001 per megapixel of the larger of input and output, rounded up to a whole megapixel"
+        },
+        "sources": [
+          {
+            "url": "https://example.com/pricing",
+            "quote": "fixture"
+          }
+        ],
+        "checked": "2026-10-21"
       }
     }
   },
@@ -1868,6 +1960,236 @@
         "low": 0.035,
         "high": 0.035
       }
+    },
+    {
+      "name": "sized input: factor 2 on a 1000x1000 image makes 4 MP, $0.004",
+      "nodeId": "sized",
+      "params": {},
+      "wired": [
+        "image"
+      ],
+      "size": {
+        "width": 1000,
+        "height": 1000
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 0.004,
+        "high": 0.004
+      }
+    },
+    {
+      "name": "sized input: with no measured input it is unpriced",
+      "nodeId": "sized",
+      "params": {},
+      "wired": [
+        "image"
+      ],
+      "expected": null
+    },
+    {
+      "name": "sized input: target mode prices the output both ways and takes the larger (short side 1080 on 1000x500: 2.33 MP, rounded up to 3)",
+      "nodeId": "sized",
+      "params": {
+        "upscale_mode": "target",
+        "target_resolution": "1080p"
+      },
+      "wired": [
+        "image"
+      ],
+      "size": {
+        "width": 1000,
+        "height": 500
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 0.003,
+        "high": 0.003
+      }
+    },
+    {
+      "name": "sized input: target mode on a square input sets both sides (2160p: 4.67 MP, rounded up to 5)",
+      "nodeId": "sized",
+      "params": {
+        "upscale_mode": "target",
+        "target_resolution": "2160p"
+      },
+      "wired": [
+        "image"
+      ],
+      "size": {
+        "width": 1000,
+        "height": 1000
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 0.005,
+        "high": 0.005
+      }
+    },
+    {
+      "name": "sized input: target mode that shrinks a large input counts the input (12 MP)",
+      "nodeId": "sized",
+      "params": {
+        "upscale_mode": "target",
+        "target_resolution": "720p"
+      },
+      "wired": [
+        "image"
+      ],
+      "size": {
+        "width": 4000,
+        "height": 3000
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 0.012,
+        "high": 0.012
+      }
+    },
+    {
+      "name": "sized input: a megapixel and a bit rounds up to two",
+      "nodeId": "sized",
+      "params": {
+        "upscale_factor": 1
+      },
+      "wired": [
+        "image"
+      ],
+      "size": {
+        "width": 1001,
+        "height": 1000
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 0.002,
+        "high": 0.002
+      }
+    },
+    {
+      "name": "sized input: under a megapixel rounds up to one",
+      "nodeId": "sized",
+      "params": {
+        "upscale_factor": 1.5
+      },
+      "wired": [
+        "image"
+      ],
+      "size": {
+        "width": 640,
+        "height": 480
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 0.001,
+        "high": 0.001
+      }
+    },
+    {
+      "name": "sized input: an unreadable factor is unpriced",
+      "nodeId": "sized",
+      "params": {
+        "upscale_factor": "abc"
+      },
+      "wired": [
+        "image"
+      ],
+      "size": {
+        "width": 1000,
+        "height": 1000
+      },
+      "expected": null
+    },
+    {
+      "name": "sized input: a target the rule can't read is unpriced",
+      "nodeId": "sized",
+      "params": {
+        "upscale_mode": "target",
+        "target_resolution": "huge"
+      },
+      "wired": [
+        "image"
+      ],
+      "size": {
+        "width": 1000,
+        "height": 1000
+      },
+      "expected": null
+    },
+    {
+      "name": "sized input: an unknown mode is unpriced",
+      "nodeId": "sized",
+      "params": {
+        "upscale_mode": "crop"
+      },
+      "wired": [
+        "image"
+      ],
+      "size": {
+        "width": 1000,
+        "height": 1000
+      },
+      "expected": null
+    },
+    {
+      "name": "sized input: a size without width and height is unpriced",
+      "nodeId": "sized",
+      "params": {},
+      "wired": [
+        "image"
+      ],
+      "size": {
+        "seconds": 5
+      },
+      "expected": null
+    },
+    {
+      "name": "sized input: a zero-pixel size is unpriced",
+      "nodeId": "sized",
+      "params": {},
+      "wired": [
+        "image"
+      ],
+      "size": {
+        "width": 0,
+        "height": 1000
+      },
+      "expected": null
+    },
+    {
+      "name": "sized input: a video clip prices per megapixel-second of output (1280x720 x2 = 3.52 MP of 1,048,576 px, 5 s, precise)",
+      "nodeId": "tooled",
+      "params": {
+        "creativity": 0
+      },
+      "wired": [
+        "video"
+      ],
+      "size": {
+        "width": 1280,
+        "height": 720,
+        "seconds": 5
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 1.23046875,
+        "high": 1.23046875
+      }
+    },
+    {
+      "name": "sized input: a clip measured without its length is unpriced",
+      "nodeId": "tooled",
+      "params": {
+        "creativity": 0
+      },
+      "wired": [
+        "video"
+      ],
+      "size": {
+        "width": 1280,
+        "height": 720
+      },
+      "expected": null
     }
   ],
   "runCases": [
@@ -2948,6 +3270,232 @@
         "high": 0.0175,
         "unavailable": false,
         "plan": false
+      }
+    }
+  ],
+  "sizedRunCases": [
+    {
+      "name": "SeedVR2 Upscale at factor 2 on a 1000x1000 upload: 4 MP, $0.004",
+      "nodeId": "seedvr2-upscale",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "set"
+      },
+      "port": "image",
+      "size": {
+        "width": 1000,
+        "height": 1000
+      },
+      "expected": {
+        "low": 0.004,
+        "high": 0.004,
+        "awaitingInput": false
+      }
+    },
+    {
+      "name": "SeedVR2 Upscale with no measured input waits for its input, unpriced",
+      "nodeId": "seedvr2-upscale",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "set"
+      },
+      "port": "image",
+      "expected": {
+        "low": null,
+        "high": null,
+        "awaitingInput": true
+      }
+    },
+    {
+      "name": "SeedVR2 Upscale in target mode takes the larger output (1080 short side on 1000x500: 3 MP)",
+      "nodeId": "seedvr2-upscale",
+      "params": {
+        "upscale_mode": "target",
+        "target_resolution": "1080p"
+      },
+      "apiKeys": {
+        "FAL_KEY": "set"
+      },
+      "port": "image",
+      "size": {
+        "width": 1000,
+        "height": 500
+      },
+      "expected": {
+        "low": 0.003,
+        "high": 0.003,
+        "awaitingInput": false
+      }
+    },
+    {
+      "name": "SeedVR2 Upscale in target mode on a big input counts the input (4000x3000 at 720p: 12 MP)",
+      "nodeId": "seedvr2-upscale",
+      "params": {
+        "upscale_mode": "target",
+        "target_resolution": "720p"
+      },
+      "apiKeys": {
+        "FAL_KEY": "set"
+      },
+      "port": "image",
+      "size": {
+        "width": 4000,
+        "height": 3000
+      },
+      "expected": {
+        "low": 0.012,
+        "high": 0.012,
+        "awaitingInput": false
+      }
+    },
+    {
+      "name": "SeedVR2 Video Upscale prices output width x height x frames (640x360 x2, 121 frames: 111.5 MP)",
+      "nodeId": "seedvr-video-upscale",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "set"
+      },
+      "port": "video",
+      "size": {
+        "width": 640,
+        "height": 360,
+        "seconds": 4.04,
+        "frames": 121
+      },
+      "expected": {
+        "low": 0.1115136,
+        "high": 0.1115136,
+        "awaitingInput": false
+      }
+    },
+    {
+      "name": "SeedVR2 Video Upscale with no measured clip waits for its input",
+      "nodeId": "seedvr-video-upscale",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "set"
+      },
+      "port": "video",
+      "expected": {
+        "low": null,
+        "high": null,
+        "awaitingInput": true
+      }
+    },
+    {
+      "name": "FLUX Video Upscale on BFL, precise: 1280x720 x2 for 4.2 s (rounded up to 5) at $0.07 per MP-second of 1,048,576 px",
+      "nodeId": "flux-video-upscale",
+      "params": {
+        "creativity": 0
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "set"
+      },
+      "port": "video",
+      "size": {
+        "width": 1280,
+        "height": 720,
+        "seconds": 4.2,
+        "frames": 126
+      },
+      "expected": {
+        "low": 1.23046875,
+        "high": 1.23046875,
+        "awaitingInput": false
+      }
+    },
+    {
+      "name": "FLUX Video Upscale on Replicate, creative: 1,000,000 px megapixels, the side that costs more",
+      "nodeId": "flux-video-upscale",
+      "params": {},
+      "apiKeys": {
+        "REPLICATE_API_TOKEN": "set"
+      },
+      "port": "video",
+      "size": {
+        "width": 1280,
+        "height": 720,
+        "seconds": 5,
+        "frames": 150
+      },
+      "expected": {
+        "low": 1.8432,
+        "high": 1.8432,
+        "awaitingInput": false
+      }
+    },
+    {
+      "name": "FLUX Video Upscale on fal stays unpriced: fal doesn't say where its output tiers split",
+      "nodeId": "flux-video-upscale",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "set"
+      },
+      "port": "video",
+      "size": {
+        "width": 1280,
+        "height": 720,
+        "seconds": 5,
+        "frames": 150
+      },
+      "expected": {
+        "low": null,
+        "high": null,
+        "awaitingInput": false
+      }
+    },
+    {
+      "name": "FLUX Video Edit [fast] on BFL: 4.2 s rounds up to 5 s at $0.03",
+      "nodeId": "flux-video-edit",
+      "params": {},
+      "apiKeys": {
+        "BFL_API_KEY": "set"
+      },
+      "port": "start_video",
+      "size": {
+        "width": 1280,
+        "height": 720,
+        "seconds": 4.2,
+        "frames": 126
+      },
+      "expected": {
+        "low": 0.15,
+        "high": 0.15,
+        "awaitingInput": false
+      }
+    },
+    {
+      "name": "FLUX Video Edit [fast] on fal: 4.2 s rounds up to 5 s at $0.03",
+      "nodeId": "flux-video-edit",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "set"
+      },
+      "port": "start_video",
+      "size": {
+        "width": 1280,
+        "height": 720,
+        "seconds": 4.2,
+        "frames": 126
+      },
+      "expected": {
+        "low": 0.15,
+        "high": 0.15,
+        "awaitingInput": false
+      }
+    },
+    {
+      "name": "FLUX Video Edit [fast] with no measured clip waits for its input",
+      "nodeId": "flux-video-edit",
+      "params": {},
+      "apiKeys": {
+        "BFL_API_KEY": "set"
+      },
+      "port": "start_video",
+      "expected": {
+        "low": null,
+        "high": null,
+        "awaitingInput": true
       }
     }
   ]

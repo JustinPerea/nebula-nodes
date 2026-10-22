@@ -872,7 +872,7 @@
           "multiplyBy": [
             "(source seconds)"
           ],
-          "notes": "$0.03 a second of output (BFL's card secondPrice 3 credits); the output keeps the source clip's length, so the price is known once the source clip is: unpriced before the run.",
+          "notes": "$0.03 a second of output (BFL's card secondPrice 3 credits); the output keeps the source clip's length, so the run is priced from the clip's length when it is checked, and unpriced while the clip doesn't exist yet. Nebula rounds a clip's length up to the next whole second (the page doesn't say how a part second bills, so Nebula prices the side that costs more).",
           "sources": [
             {
               "url": "https://docs.bfl.ai/quick_start/pricing",
@@ -887,7 +887,14 @@
               "quote": "1 credit equals $0.01 USD."
             }
           ],
-          "checked": "2026-10-15"
+          "checked": "2026-10-15",
+          "sizing": {
+            "port": "start_video",
+            "roundUp": [
+              "(source seconds)"
+            ],
+            "say": "$0.03 per second of the source clip, rounded up to a whole second"
+          }
         },
         "fal": {
           "currency": "usd",
@@ -901,14 +908,21 @@
           "multiplyBy": [
             "(source seconds)"
           ],
-          "notes": "$0.03 a second of output, the length of the source clip: unpriced before the run. fal's model page and pricing API agree.",
+          "notes": "$0.03 a second of output, the length of the source clip: priced from the clip's length when the run is checked, unpriced while the clip doesn't exist yet. fal's model page and pricing API agree. Nebula rounds a clip's length up to the next whole second (the page doesn't say how a part second bills, so Nebula prices the side that costs more).",
           "sources": [
             {
               "url": "https://fal.ai/models/blackforestlabs/flux-3/edit-video/llms.txt",
               "quote": "Your request will be charged at **$0.03** per second of generated video (720p)."
             }
           ],
-          "checked": "2026-10-15"
+          "checked": "2026-10-15",
+          "sizing": {
+            "port": "start_video",
+            "roundUp": [
+              "(source seconds)"
+            ],
+            "say": "$0.03 per second of the source clip, rounded up to a whole second"
+          }
         }
       }
     },
@@ -935,7 +949,7 @@
             "(output megapixels)",
             "(source seconds)"
           ],
-          "notes": "Per megapixel-second of output (1 MP = 1,048,576 px), $0.07 precise and $0.10 creative (BFL's cards mpSecondPrice 7 and 10 credits). Output frame size is the source's size times upscale_factor squared and the duration is the source's, both known only at run time: unpriced before the run.",
+          "notes": "Per megapixel-second of output (1 MP = 1,048,576 px), $0.07 precise and $0.10 creative (BFL's cards mpSecondPrice 7 and 10 credits). Output frame size is the source's size times upscale_factor on each side and the duration is the source's: priced from the source clip when the run is checked, unpriced while the clip doesn't exist yet. Nebula rounds a clip's length up to the next whole second (the page doesn't say how a part second bills, so Nebula prices the side that costs more).",
           "sources": [
             {
               "url": "https://docs.bfl.ai/quick_start/pricing",
@@ -950,7 +964,16 @@
               "quote": "1 credit equals $0.01 USD."
             }
           ],
-          "checked": "2026-10-15"
+          "checked": "2026-10-15",
+          "sizing": {
+            "port": "video",
+            "output": "upscale",
+            "megapixel": 1048576,
+            "roundUp": [
+              "(source seconds)"
+            ],
+            "say": "$0.07 (precise) or $0.10 (creative) per megapixel-second of output (1 MP = 1,048,576 px; output = the clip's size times upscale_factor), seconds rounded up"
+          }
         },
         "fal": {
           "currency": "usd",
@@ -1003,7 +1026,7 @@
           "multiplyBy": [
             "(source seconds)"
           ],
-          "notes": "Per second of output by output tier and mode. fal doesn't say where the tiers split or what an output under 1080p costs, and the tier depends on the source's size times upscale_factor: unconfirmed, and unpriced before the run.",
+          "notes": "Per second of output by output tier and mode. fal doesn't say where the tiers split or what an output under 1080p costs, so Nebula can't tell which tier a clip bills even once it is measured: unconfirmed, and unpriced (agents propose it).",
           "sources": [
             {
               "url": "https://fal.ai/models/blackforestlabs/flux-video-upscale/llms.txt",
@@ -1034,14 +1057,22 @@
             "(output megapixels)",
             "(source seconds)"
           ],
-          "notes": "Per output megapixel-second: precise $0.07, creative $0.10. Replicate doesn't say whether its megapixel is 1,048,576 or 1,000,000 px, so unconfirmed; unpriced before the run either way (output size and length come from the source).",
+          "notes": "Per output megapixel-second: precise $0.07, creative $0.10. Replicate doesn't say whether its megapixel is 1,048,576 or 1,000,000 px, so unconfirmed, and Nebula counts 1,000,000 px (the side that costs more). Priced from the source clip when the run is checked (output = its size times upscale_factor on each side, for its length), unpriced while the clip doesn't exist yet. Nebula rounds a clip's length up to the next whole second (the page doesn't say how a part second bills, so Nebula prices the side that costs more).",
           "sources": [
             {
               "url": "https://replicate.com/black-forest-labs/flux-video-upscale",
               "quote": "\"metric\": \"video_output_megapixel_seconds\", \"price\": \"$0.07\", \"title\": \"per output video megapixel per second\" (Precise); \"$0.10\" (Creative)"
             }
           ],
-          "checked": "2026-10-15"
+          "checked": "2026-10-15",
+          "sizing": {
+            "port": "video",
+            "output": "upscale",
+            "roundUp": [
+              "(source seconds)"
+            ],
+            "say": "$0.07 (precise) or $0.10 (creative) per megapixel-second of output (1 MP = 1,000,000 px; output = the clip's size times upscale_factor), seconds rounded up"
+          }
         }
       }
     },
@@ -16198,6 +16229,82 @@
           "checked": "2026-10-14"
         }
       }
+    },
+    "seedvr-video-upscale": {
+      "currency": "usd",
+      "per": "megapixel-frame",
+      "unconfirmed": true,
+      "priceParams": [
+        "upscale_mode",
+        "upscale_factor",
+        "target_resolution"
+      ],
+      "rows": [
+        {
+          "match": {},
+          "price": 0.001
+        }
+      ],
+      "multiplyBy": [
+        "(output megapixels)",
+        "(source frames)"
+      ],
+      "sizing": {
+        "port": "video",
+        "output": "upscale",
+        "say": "$0.001 per megapixel of upscaled video (output width x height x frames)"
+      },
+      "notes": "$0.001 per megapixel of the upscaled video, width x height x frames, at 1,000,000 px a megapixel (fal's worked example: 1920x1080 with 121 frames is $0.25). Output = the clip's size times upscale_factor in factor mode; in target mode fal doesn't say which side target_resolution sets, so both are computed and the larger counts. Frames are the source clip's (fal doesn't say the output keeps them, so unconfirmed). Priced from the source clip when the run is checked, unpriced while it doesn't exist yet.",
+      "sources": [
+        {
+          "url": "https://fal.ai/models/fal-ai/seedvr/upscale/video",
+          "quote": "Your request will cost $0.001 per megapixel of video data (width × height × frames)."
+        },
+        {
+          "url": "https://fal.ai/models/fal-ai/seedvr/upscale/video/llms.txt",
+          "quote": "if your upscaled video is 1920×1080 with 121 frames, the total cost will be $0.25."
+        }
+      ],
+      "checked": "2026-10-21"
+    },
+    "seedvr2-upscale": {
+      "currency": "usd",
+      "per": "megapixel",
+      "unconfirmed": true,
+      "priceParams": [
+        "upscale_mode",
+        "upscale_factor",
+        "target_resolution"
+      ],
+      "rows": [
+        {
+          "match": {},
+          "price": 0.001
+        }
+      ],
+      "multiplyBy": [
+        "(larger megapixels)"
+      ],
+      "sizing": {
+        "port": "image",
+        "output": "upscale",
+        "roundUp": [
+          "(larger megapixels)"
+        ],
+        "say": "$0.001 per megapixel of the larger of input and output, rounded up to a whole megapixel"
+      },
+      "notes": "$0.001 per megapixel. fal doesn't say whether it counts the input's or the output's megapixels, how it rounds, or any minimum, so the price is unconfirmed and Nebula counts the larger of the two (the output, unless target mode shrinks a big input), at 1,000,000 px a megapixel, rounded up to the next whole megapixel: rounding up is Nebula's conservative assumption, not fal's stated rule. Output = the input's size times upscale_factor in factor mode; in target mode fal doesn't say which side target_resolution sets, so both are computed (short side = target, long side = target) and the larger counts. Priced from the input image's size when the run is checked (an upload, or an output that already exists), unpriced while that image doesn't exist yet.",
+      "sources": [
+        {
+          "url": "https://fal.ai/models/fal-ai/seedvr/upscale/image",
+          "quote": "Your request will cost $0.001 per megapixel"
+        },
+        {
+          "url": "https://fal.ai/models/fal-ai/seedvr/upscale/image/llms.txt",
+          "quote": "Price: $0.001 per megapixels"
+        }
+      ],
+      "checked": "2026-10-21"
     },
     "veo-3": {
       "currency": "usd",
