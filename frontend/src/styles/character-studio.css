@@ -390,8 +390,8 @@ body.app-slava-restraint .character-def__textarea {
 body.app-slava-restraint .character-def__input:focus,
 body.app-slava-restraint .character-def__select:focus,
 body.app-slava-restraint .character-def__textarea:focus {
-  outline: none;
-  border-color: var(--sr-accent);
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
 }
 
 body.app-slava-restraint .character-def__textarea {
@@ -637,6 +637,10 @@ body.app-slava-restraint .assets-panel__search {
   background: var(--sr-glass, rgba(255, 255, 255, 0.5));
   color: var(--sr-ink, #1a1a1a);
 }
+body.app-slava-restraint .assets-panel__search:focus-visible {
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
+}
 
 body.app-slava-restraint .character-palette__scope {
   display: flex;
@@ -664,7 +668,7 @@ body.app-slava-restraint .assets-item--selected .assets-item__select {
 
 body.app-slava-restraint .assets-item__select:focus-visible,
 body.app-slava-restraint .assets-item__action:focus-visible {
-  outline: 2px solid var(--sr-accent);
+  outline: var(--sr-focus-outline);
   outline-offset: 1px;
 }
 

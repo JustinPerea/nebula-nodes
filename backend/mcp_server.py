@@ -1465,10 +1465,16 @@ def commons_collections(brand: str | None = None, ctx: Context | None = None) ->
 @_tool(annotations=_READ)
 def commons_status(ctx: Context | None = None) -> dict:
     """The analysis worker and queue: `queue` (queued, analyzing,
-    analysis_failed, held, ready), `worker`, today's reading `meter`,
-    `agent_adds` (what agents may still add today), and whether blind
-    labeling holds analysis (`evaluation_waiting`). A reference you just
-    added is read once it leaves the queue."""
+    analysis_failed, held, ready; `held` are agent adds over today's cap,
+    waiting until the person accepts them in the Inbox), `worker` (`state`:
+    stopped, running, idle, analyzing, paused_load, cap_reached or
+    budget_exhausted), today's reading `meter`, `agent_adds` (what agents may
+    still add today), and whether blind labeling holds analysis
+    (`evaluation_waiting`): the hold lifts once the person's reference labels
+    are sealed, or, when `evaluation_assisted` says the agent graded them
+    first, once the person closes the agent review. Analysis then resumes
+    only if `worker.running` (a stopped worker still needs the person to
+    start it). A reference you just added is read once it leaves the queue."""
     return _commons_call("GET", "/api/commons/status", _client_name(ctx))
 
 

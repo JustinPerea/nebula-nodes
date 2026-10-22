@@ -379,8 +379,8 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 }
 
 .proposal-bar__details-toggle:focus-visible {
-  outline: 2px solid #fff;
-  outline-offset: 2px;
+  outline: var(--sr-focus-outline, 2px solid #fff);
+  outline-offset: var(--sr-focus-offset, 2px);
 }
 
 .proposal-bar__details-toggle[aria-expanded='true'] .proposal-bar__chevron {
@@ -481,8 +481,8 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 }
 
 .proposal-bar__button:focus-visible {
-  outline: 2px solid #fff;
-  outline-offset: 2px;
+  outline: var(--sr-focus-outline, 2px solid #fff);
+  outline-offset: var(--sr-focus-offset, 2px);
 }
 
 .proposal-bar__button--primary {

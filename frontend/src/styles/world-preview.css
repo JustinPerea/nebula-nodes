@@ -24,8 +24,8 @@
 }
 
 .world-preview:focus-visible {
-  outline: 2px solid #67e8f9;
-  outline-offset: 2px;
+  outline: var(--sr-focus-outline, 2px solid #67e8f9);
+  outline-offset: var(--sr-focus-offset, 2px);
 }
 
 .world-preview__thumbnail,
@@ -271,8 +271,8 @@ body:not(.app-slava-restraint) .model-node__preview--world {
 .world-modal__button:focus-visible,
 .world-modal__icon-button:focus-visible,
 .world-modal__segmented button:focus-visible {
-  outline: 2px solid #67e8f9;
-  outline-offset: 2px;
+  outline: var(--sr-focus-outline, 2px solid #67e8f9);
+  outline-offset: var(--sr-focus-offset, 2px);
 }
 
 .world-modal__toolbar {
@@ -362,8 +362,8 @@ body:not(.app-slava-restraint) .model-node__preview--world {
 .world-environment-viewer__interactive-canvas:focus-visible {
   /* A negative offset keeps the native focus paint inside the clipped stage.
    * Unlike an inset shadow, the outline is painted above canvas pixels. */
-  outline: 3px solid #67e8f9;
-  outline-offset: -3px;
+  outline: var(--sr-focus-outline, 3px solid #67e8f9);
+  outline-offset: -2px;
 }
 
 .world-environment-viewer__backdrop,
@@ -487,14 +487,13 @@ body.app-slava-restraint :is(
   .world-modal__icon-button,
   .world-modal__segmented button
 ):focus-visible {
-  outline: 2px solid var(--sr-accent);
+  outline: var(--sr-focus-outline);
   outline-offset: var(--sr-focus-offset);
-  box-shadow: 0 0 0 4px var(--sr-accent-soft);
 }
 
 body.app-slava-restraint .world-environment-viewer__interactive-canvas:focus-visible {
-  outline: 3px solid var(--sr-accent);
-  outline-offset: -3px;
+  outline: var(--sr-focus-outline);
+  outline-offset: -2px;
 }
 
 body.app-slava-restraint .world-preview__placeholder {

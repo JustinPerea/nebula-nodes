@@ -217,7 +217,7 @@ html body .moodboard-studio-view.moodboard-studio-view--board {
 
 .moodboard-board__control:focus-visible,
 .moodboard-board__control:has(.moodboard-board__file:focus-visible) {
-  outline: 2px solid var(--mb-board-select);
+  outline: var(--sr-focus-outline, 2px solid var(--mb-board-select));
   outline-offset: 1px;
 }
 
@@ -402,7 +402,7 @@ html body .moodboard-board-panel .moodboard-def__row {
 }
 
 .moodboard-view-switch__option:focus-visible {
-  outline: 2px solid var(--mb-board-select);
+  outline: var(--sr-focus-outline, 2px solid var(--mb-board-select));
   outline-offset: 1px;
 }
 
@@ -500,7 +500,7 @@ html body .moodboard-board-panel .moodboard-def__row {
 
 .moodboard-board-toast__action:focus-visible,
 .moodboard-board-toast__close:focus-visible {
-  outline: 2px solid var(--mb-board-select);
+  outline: var(--sr-focus-outline, 2px solid var(--mb-board-select));
   outline-offset: 1px;
 }
 

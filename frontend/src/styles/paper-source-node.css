@@ -29,7 +29,7 @@
 .paper-source-node button,
 .paper-source-node__action-link { padding: 5px 7px; border-radius: 4px; cursor: pointer; font: inherit; }
 .paper-source-node__action-link { text-decoration: none; }
-.paper-source-node a:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.paper-source-node a:focus-visible { outline: var(--sr-focus-outline, 2px solid currentColor); outline-offset: var(--sr-focus-offset, 2px); }
 .paper-source-node button:disabled { opacity: 0.45; cursor: default; }
 .paper-source-node select,
 .paper-source-node input { width: 100%; padding: 5px; font: inherit; border-radius: 4px; box-sizing: border-box; }

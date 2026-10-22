@@ -183,3 +183,29 @@ def test_an_empty_listing_still_answers_the_client(tools):
     assert answer("commons_borrowings", {"asset": tools.acme_only}) == {"borrowings": []}
     listed = answer("commons_collections", {"brand": "acme"})
     assert [c["id"].startswith("col_") for c in listed["collections"]] == [True, True]
+
+
+def test_status_explains_both_pauses_as_state_not_ui_copy():
+    """sf (GM - Design shortened the Commons toolbar's worker status). Agents
+    keep the structured state, never the person's status line: the tool says
+    what each field means and what resumes each pause, so an agent can explain
+    it the way the tooltip does."""
+    doc = mcp_server.commons_status.__doc__ or ""
+    for word in ("evaluation_waiting", "evaluation_assisted", "held", "paused_load", "cap_reached",
+                 "budget_exhausted", "sealed", "closes the agent review", "Inbox"):
+        assert word in doc, word
+    setup = (REPO / "docs" / "MCP-SETUP.md").read_text()
+    assert "`evaluation_assisted`" in setup
+
+
+def test_status_does_not_promise_a_stopped_worker_resumes():
+    """Review of sf: a pause only lifts. A stopped worker (the default at
+    launch) stays stopped after the labels are sealed, so the tool tells
+    agents that analysis resumes only if `worker.running`."""
+    doc = " ".join((mcp_server.commons_status.__doc__ or "").split())
+    assert "it resumes once" not in doc
+    assert "the hold lifts once" in doc
+    assert "worker.running" in doc
+    setup = " ".join((REPO / "docs" / "MCP-SETUP.md").read_text().split())
+    assert "what resumes it" not in setup
+    assert "`worker.running`" in setup

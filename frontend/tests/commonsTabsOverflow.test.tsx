@@ -191,6 +191,7 @@ it('lets the worker status, not a spacer, take the toolbar\'s free room, with St
   expect(actions.querySelector('.commons-spacer')).toBeNull();
   const line = start.closest('.commons-status')!;
   expect(actions.lastElementChild).toBe(line);
-  expect(line.querySelector('.commons-status__text')?.getAttribute('title')).toBe('Worker stopped');
+  expect(line.querySelector('.commons-status__text')?.textContent).toBe('Stopped');
+  expect(line.querySelector('.commons-status__text')?.getAttribute('title')).toMatch(/^Library analysis is stopped\./);
   expect(line.lastElementChild).toBe(start);
 });

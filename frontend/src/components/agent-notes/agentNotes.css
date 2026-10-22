@@ -81,7 +81,7 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 .agent-notes-chip:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--an-ink) 55%, transparent);
+  outline: var(--sr-focus-outline, 2px solid var(--an-ink));
   outline-offset: 2px;
 }
 
@@ -101,6 +101,13 @@ body.app-slava-restraint .agent-notes-root {
 .agent-notes-chip--ringed::after {
   opacity: 1;
   transition: opacity var(--spring-pop-ms) var(--spring-pop);
+}
+
+/* The unread ring fills 1-3px outside the chip, so while it shows the focus
+ * ring moves out to 4-6px: the whole lime ring stays visible, with a 1px gap
+ * (GM: the neutral ring "stays clear of ... the lime unread ring"; review of sf). */
+.agent-notes-chip--ringed:focus-visible {
+  outline-offset: 4px;
 }
 
 .agent-notes-chip__dots {
@@ -264,7 +271,7 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 .agent-note-card__close:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--an-ink) 55%, transparent);
+  outline: var(--sr-focus-outline, 2px solid var(--an-ink));
   outline-offset: 1px;
 }
 
@@ -295,7 +302,7 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 .agent-note-card__summary:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--an-ink) 55%, transparent);
+  outline: var(--sr-focus-outline, 2px solid var(--an-ink));
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -341,7 +348,7 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 .agent-notes-panel:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--an-ink) 40%, transparent);
+  outline: var(--sr-focus-outline, 2px solid var(--an-ink));
   outline-offset: 2px;
 }
 
@@ -439,7 +446,7 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 .agent-notes-panel__see-all:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--an-ink) 55%, transparent);
+  outline: var(--sr-focus-outline, 2px solid var(--an-ink));
   outline-offset: 3px;
   border-radius: 2px;
 }
@@ -466,7 +473,7 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 .agent-notes-entry:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--an-ink) 45%, transparent);
+  outline: var(--sr-focus-outline, 2px solid var(--an-ink));
   outline-offset: -2px;
 }
 
@@ -564,7 +571,7 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 .agent-notes-btn:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--an-ink) 55%, transparent);
+  outline: var(--sr-focus-outline, 2px solid var(--an-ink));
   outline-offset: 1px;
 }
 

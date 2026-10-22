@@ -152,5 +152,13 @@ a {
 .provider-recovery-status button:hover,
 .provider-recovery-status button:focus-visible {
   background: rgb(255 255 255 / 14%);
+}
+
+.provider-recovery-status button:hover {
   outline: 1px solid rgb(255 210 180 / 58%);
+}
+
+.provider-recovery-status button:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #fff);
+  outline-offset: var(--sr-focus-offset, 2px);
 }

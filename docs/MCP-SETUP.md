@@ -262,8 +262,11 @@ The server exposes these tools for building and running (see
   an attribute taken from one. Since 2026-10-20 (Justin's Q63 b):
   `commons_collections` lists the collections (`{"collections": [...]}`;
   `commons_add` takes one's id), `commons_status` the analysis queue,
-  worker and meters, `commons_borrowings` the recorded borrowings
-  (`{"borrowings": [...]}`; `asset` narrows it),
+  worker and meters as structured state (not the Commons toolbar's
+  wording; `evaluation_waiting` with `evaluation_assisted` says which
+  pause holds analysis and what lifts it; analysis then resumes only if
+  `worker.running`), `commons_borrowings` the
+  recorded borrowings (`{"borrowings": [...]}`; `asset` narrows it),
   `commons_concentration` each reference's share of them, and
   `commons_fidelity` checks a borrowing against the output it was used in
   and saves the result. Curating (corrections, regions, a reference's role,
