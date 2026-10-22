@@ -4,6 +4,7 @@ import type { Character, Moodboard } from '../types';
 import { actorLabel, type TrashedItem } from './trash';
 import { MoodboardVersionConflict, type MoodboardEditResult, type MoodboardOp } from './moodboardEdits';
 import { CharacterVersionConflict } from './characterEdits';
+import { RequestFailedError, copyForStatus, detailText, failureKind, readDetail } from './errorCopy';
 import type {
   ProviderRecoveryCheckpoint,
   ProviderStartAmbiguity,
@@ -746,20 +747,31 @@ type MoodboardCreateInput = Omit<Moodboard, 'id' | 'version' | 'thumbnail' | 'cr
   & { briefOverride?: { text: string } | null };
 type MoodboardUpdateInput = Partial<MoodboardCreateInput>;
 
-/** The backend's reason a moodboard call was refused (a string, or FastAPI's
- *  list of field errors), so Studio can say what to fix. */
+/** Why a moodboard call failed, as copy (lib/errorCopy.ts, GM error-copy):
+ *  GM's "Nebula didn't respond. Try again." for 408, 429 and 5xx; else the
+ *  backend's reason (a string, or FastAPI's list of field errors) after
+ *  "<what> failed:", so Studio can say what to fix; else GM's line for the
+ *  status, which stands alone as GM's other lines do. Never the status code;
+ *  the error keeps it, and the raw detail, for debugging. */
 async function moodboardError(response: Response, what: string): Promise<Error> {
-  let detail = '';
-  try {
-    const body = (await response.json()).detail;
-    if (typeof body === 'string') detail = body;
-    else if (Array.isArray(body)) {
-      detail = body.map((item: { loc?: unknown[]; msg?: string }) =>
-        [Array.isArray(item.loc) ? item.loc.filter((part) => part !== 'body').join('.') : '', item.msg ?? '']
-          .filter(Boolean).join(': ')).join('; ');
-    }
-  } catch { /* not JSON */ }
-  return new Error(detail ? `${what} failed: ${detail}` : `${what} failed: ${response.status}`);
+  const body = await readDetail(response);
+  let detail = detailText(body);
+  if (Array.isArray(body)) {
+    detail = body.map((item: { loc?: unknown[]; msg?: string }) =>
+      [Array.isArray(item.loc) ? item.loc.filter((part) => part !== 'body').join('.') : '', item.msg ?? '']
+        .filter(Boolean).join(': ')).join('; ');
+  }
+  const message = failureKind(response.status) === 'refused' && detail
+    ? `${what} failed: ${detail}`
+    : copyForStatus(response.status, undefined);
+  return new RequestFailedError(message, response.status, body);
+}
+
+/** Why a read of a board failed, as copy: GM's lines for 408, 429 and 5xx,
+ *  else the backend's reason, else GM's line for the status. */
+async function loadError(response: Response): Promise<Error> {
+  const detail = await readDetail(response);
+  return new RequestFailedError(copyForStatus(response.status, detail), response.status, detail);
 }
 
 /** Why a write to a saved board failed: that it went to Recently deleted
@@ -776,7 +788,7 @@ export async function fetchMoodboards(scope: 'project' | 'global', projectId?: s
   const params = new URLSearchParams({ scope });
   if (scope === 'project') params.append('projectId', await resolveProjectId(projectId));
   const response = await apiFetch(`/api/moodboards?${params.toString()}`);
-  if (!response.ok) throw new Error(`Fetch moodboards failed: ${response.status}`);
+  if (!response.ok) throw await loadError(response);
   return response.json();
 }
 
@@ -784,7 +796,7 @@ export async function fetchMoodboards(scope: 'project' | 'global', projectId?: s
 export async function fetchMoodboard(id: string): Promise<Moodboard | null> {
   const response = await apiFetch(`/api/moodboards/${encodeURIComponent(id)}`);
   if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`Fetch moodboard failed: ${response.status}`);
+  if (!response.ok) throw await loadError(response);
   return response.json();
 }
 
@@ -840,7 +852,7 @@ export async function editMoodboard(id: string, ops: MoodboardOp[], baseVersion?
 
 export async function analyzeMoodboard(id: string): Promise<Moodboard> {
   const response = await apiFetch(`/api/moodboards/${id}/analyze`, { method: 'POST' });
-  if (!response.ok) throw new Error(`Analyze moodboard failed: ${response.status}`);
+  if (!response.ok) throw await moodboardError(response, 'Analyze');
   return response.json();
 }
 
@@ -855,7 +867,7 @@ export async function keepMoodboardBriefOverride(id: string): Promise<Moodboard>
 /** Moves the board to Recently deleted; the result is its trash record. */
 export async function deleteMoodboard(id: string): Promise<TrashedItem> {
   const response = await apiFetch(`/api/moodboards/${encodeURIComponent(id)}`, { method: 'DELETE' });
-  if (!response.ok) throw new Error(`Delete moodboard failed: ${response.status}`);
+  if (!response.ok) throw await moodboardError(response, 'Delete');
   return ((await response.json()) as { trashed: TrashedItem }).trashed;
 }
 
@@ -908,6 +920,6 @@ export async function lookupStoredAsset<K extends 'moodboard' | 'character'>(
     } catch { /* not JSON: plain not found */ }
     return { status: 'missing' };
   }
-  if (!response.ok) throw new Error(`Fetch ${kind} failed: ${response.status}`);
+  if (!response.ok) throw await loadError(response);
   return { status: 'ready', asset: await response.json() };
 }

@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EvaluationBatch } from '../src/lib/commonsEvaluationTypes';
 import type { ReviewBatch } from '../src/lib/commonsReviewTypes';
+import { CommonsRequestError } from '../src/lib/commonsRequestError';
 
 /**
  * The real Blind labeling and Agent review panels inside the real Commons
@@ -143,7 +144,7 @@ describe('Blind labeling keeps its draft across sections', () => {
   });
 
   it('a failed Save labels in the popover keeps the person and the draft, with the reason', async () => {
-    evaluation.labels.mockRejectedValue(new Error('Labels changed in another window. Reload before saving.'));
+    evaluation.labels.mockRejectedValue(new CommonsRequestError('Labels changed in another window. Reload before saving.', 409));
     render(<CommonsView />);
     await openBlindLabeling();
     setTypeStyle();

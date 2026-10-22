@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { getBackendBaseUrl, backendAssetUrlSync, rewriteExecutionAssetUrls } from '../../src/lib/backend';
 
+const LOST_CONNECTION = "Couldn't reach Nebula. Check your connection and try again.";
+
 // In test mode discovery resolves to http://localhost:8000 and caches it, so
 // backendAssetUrlSync can rewrite server-relative asset paths to an absolute
 // backend origin (the real-world case: frontend and backend on different ports).
@@ -136,7 +138,9 @@ describe('apiFetch rediscovery replay safety', () => {
       ))).toEqual([['http://old.example:8000/api/execute', { method: 'POST', headers: expect.any(Headers) }]]);
 
       await expect(backend.apiFetch('/api/execute-node', { method: 'POST' }))
-        .rejects.toThrow('connection reset after mutation');
+        // No answer is said in words (error-copy); the browser's error is the cause.
+        .rejects.toMatchObject({ name: 'ConnectionLostError', message: LOST_CONNECTION,
+          cause: expect.objectContaining({ message: 'connection reset after mutation' }) });
       expect(fetchMock.mock.calls.filter(([input]) => (
         String(input).endsWith('/api/execute-node')
       ))).toEqual([['http://old.example:8000/api/execute-node', { method: 'POST', headers: expect.any(Headers) }]]);
@@ -386,7 +390,8 @@ describe('no retry, rediscovery, or replay with injected endpoint (VAL-TRANSPORT
     vi.stubGlobal('fetch', fetchSpy);
 
     const backend = await import('../../src/lib/backend');
-    await expect(backend.apiFetch('/api/read')).rejects.toThrow('connection reset after send');
+    await expect(backend.apiFetch('/api/read')).rejects.toMatchObject({ name: 'ConnectionLostError', message: LOST_CONNECTION,
+      cause: expect.objectContaining({ message: 'connection reset after send' }) });
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(String(fetchSpy.mock.calls[0][0])).toBe(`${INJECTED_API}/api/read`);
   });
@@ -792,7 +797,7 @@ describe('browser person link', () => {
     sessionStorage.setItem('nebula.person', JSON.stringify({ token: TOKEN, backend: 'http://127.0.0.1:8131' }));
     const backend = await importFresh();
     fetchSpy.mockRejectedValue(new TypeError('Failed to fetch'));
-    await expect(backend.apiFetch('/api/settings')).rejects.toThrow('Failed to fetch');
+    await expect(backend.apiFetch('/api/settings')).rejects.toThrow(LOST_CONNECTION);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(fetchSpy.mock.calls.every(([url]) => String(url).startsWith('http://127.0.0.1:8131/'))).toBe(true);
   });

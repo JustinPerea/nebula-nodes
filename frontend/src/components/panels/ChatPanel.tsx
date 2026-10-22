@@ -34,6 +34,7 @@ import { claimIntent } from '../../lib/heldIntents';
 import '../../styles/personal-agents.css';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl, personTokenForSocket } from '../../lib/backend';
 import { DEFAULT_BACKEND_PORT, devProxyPort } from '../../lib/devBackendPort';
+import { ConnectionLostError, NO_ANSWER_STATUS } from '../../lib/errorCopy';
 import { chatAuthority } from '../../lib/commonsChatAuthority';
 import { onPersonConnected, reportPersonRequired } from '../../lib/personSession';
 import { normalizeAgentEventSource } from '../../lib/agentEvents';
@@ -93,8 +94,16 @@ const CHAT_PANEL_RESIZE_CURSORS: Record<string, string> = {
   bl: 'nesw-resize',
 };
 
-function isBackendUnavailableError(message: string | null): boolean {
-  if (!message) return false;
+/** Whether a failed status check means the Nebula backend itself is down.
+ * Read from the error's kind, not its words: apiFetch throws a
+ * ConnectionLostError (status 0, message GM's connection line) when no
+ * answer comes back (error-copy review, 2026-10-22). The message checks stay
+ * for a dev proxy answering 50x and for errors thrown outside apiFetch. */
+function isBackendUnavailableError(error: unknown): boolean {
+  if (!error) return false;
+  if (error instanceof ConnectionLostError || error instanceof TypeError) return true;
+  if ((error as { status?: unknown }).status === NO_ANSWER_STATUS) return true;
+  const message = error instanceof Error ? error.message : String(error);
   const lower = message.toLowerCase();
   return (
     lower.includes('failed to fetch') ||
@@ -483,8 +492,10 @@ export function ChatPanel() {
 
   const [claudeStatus, setClaudeStatus] = useState<ClaudeStatus | null>(null);
   const [claudeStatusError, setClaudeStatusError] = useState<string | null>(null);
+  const [claudeBackendOffline, setClaudeBackendOffline] = useState(false);
   const [codexStatus, setCodexStatus] = useState<CodexStatus | null>(null);
   const [codexStatusError, setCodexStatusError] = useState<string | null>(null);
+  const [codexBackendOffline, setCodexBackendOffline] = useState(false);
   const [codexLoginState, setCodexLoginState] = useState<CodexChatGPTLoginState | null>(null);
   const [codexLoginError, setCodexLoginError] = useState<string | null>(null);
   const [codexLoginBusy, setCodexLoginBusy] = useState(false);
@@ -560,6 +571,7 @@ export function ChatPanel() {
     const refresh = () => {
       if (cancelled) return;
       setClaudeStatusError(null);
+      setClaudeBackendOffline(false);
       fetchClaudeStatus()
         .then((status) => {
           if (cancelled) return;
@@ -572,6 +584,7 @@ export function ChatPanel() {
           if (cancelled) return;
           setClaudeStatus(null);
           setClaudeStatusError(err instanceof Error ? err.message : String(err));
+          setClaudeBackendOffline(isBackendUnavailableError(err));
           retryTimer = window.setTimeout(refresh, 3000);
         });
     };
@@ -591,6 +604,7 @@ export function ChatPanel() {
     const refresh = () => {
       if (cancelled) return;
       setCodexStatusError(null);
+      setCodexBackendOffline(false);
       fetchCodexStatus()
         .then((status) => {
           if (cancelled) return;
@@ -603,6 +617,7 @@ export function ChatPanel() {
           if (cancelled) return;
           setCodexStatus(null);
           setCodexStatusError(err instanceof Error ? err.message : String(err));
+          setCodexBackendOffline(isBackendUnavailableError(err));
           retryTimer = window.setTimeout(refresh, 3000);
         });
     };
@@ -643,6 +658,7 @@ export function ChatPanel() {
         setCodexLoginState(loginState);
         setCodexStatus(status);
         setCodexStatusError(null);
+        setCodexBackendOffline(false);
         if (!loginState.running && status.loggedIn && status.mode === 'chatgpt') {
           setCatalogRefresh((value) => value + 1);
         } else {
@@ -663,7 +679,7 @@ export function ChatPanel() {
   }, [agent, codexLoginState?.running]);
 
   const claudeStatusLabel = useMemo(() => {
-    if (isBackendUnavailableError(claudeStatusError)) return 'Nebula backend offline';
+    if (claudeBackendOffline) return 'Nebula backend offline';
     if (claudeStatusError) return 'Claude status unavailable';
     if (!claudeStatus) return 'Checking Claude…';
     if (!claudeStatus.installed) return 'Claude not installed';
@@ -672,10 +688,10 @@ export function ChatPanel() {
     if (claudeStatus.subscriptionType) return `Claude · ${claudeStatus.subscriptionType}`;
     if (claudeStatus.authMethod) return `Claude · ${claudeStatus.authMethod}`;
     return 'Claude logged in';
-  }, [claudeStatus, claudeStatusError, activeCatalog]);
+  }, [claudeStatus, claudeStatusError, claudeBackendOffline, activeCatalog]);
 
   const codexStatusLabel = useMemo(() => {
-    if (isBackendUnavailableError(codexStatusError)) return 'Nebula backend offline';
+    if (codexBackendOffline) return 'Nebula backend offline';
     if (codexStatusError) return 'Codex status unavailable';
     if (!codexStatus) return 'Checking Codex…';
     if (!codexStatus.installed) return 'Codex not installed';
@@ -684,11 +700,11 @@ export function ChatPanel() {
     if (codexStatus.mode === 'api') return 'Codex · API billing';
     if (codexStatus.mode === 'access_token') return 'Codex · access token';
     return 'Codex logged in';
-  }, [codexStatus, codexStatusError]);
+  }, [codexStatus, codexStatusError, codexBackendOffline]);
 
   const agentConnectHint = useMemo(() => {
     if (agent === 'claude') {
-      const backendUnavailable = isBackendUnavailableError(claudeStatusError);
+      const backendUnavailable = claudeBackendOffline;
       const needsConnection = Boolean(claudeStatusError || !claudeStatus?.installed || !claudeStatus?.loggedIn);
       if (backendUnavailable) {
         return {
@@ -718,7 +734,7 @@ export function ChatPanel() {
       };
     }
     if (agent === 'codex') {
-      const backendUnavailable = isBackendUnavailableError(codexStatusError);
+      const backendUnavailable = codexBackendOffline;
       const needsConnection = Boolean(
         codexStatusError ||
         !codexStatus?.installed ||
@@ -754,7 +770,7 @@ export function ChatPanel() {
       };
     }
     return null;
-  }, [agent, claudeStatus, claudeStatusError, claudeStatusLabel, codexStatus, codexStatusError, codexStatusLabel, activeCatalog]);
+  }, [agent, claudeStatus, claudeStatusError, claudeBackendOffline, claudeStatusLabel, codexStatus, codexStatusError, codexBackendOffline, codexStatusLabel, activeCatalog]);
 
   useEffect(() => {
     if (!notice) return;
