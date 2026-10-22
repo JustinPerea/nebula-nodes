@@ -9,6 +9,8 @@ interface WorkspaceHeaderProps {
   onBack?: () => void;
   backLabel?: string;
   backDisabled?: boolean;
+  /** Why Projects can't be left for now (its button's title while disabled). */
+  homeBlocked?: string;
   className?: string;
   navigation?: ReactNode;
   children?: ReactNode;
@@ -18,12 +20,12 @@ interface WorkspaceHeaderProps {
 }
 
 /** One current workspace identity, with its actual return destination. */
-export function WorkspaceHeader({ title, onBack, backLabel = 'Canvas', backDisabled = false,
+export function WorkspaceHeader({ title, onBack, backLabel = 'Canvas', backDisabled = false, homeBlocked,
   className = '', navigation, children, updatesSlot = true }: WorkspaceHeaderProps) {
   return (
     <header className={`workspace-header${updatesSlot ? ' workspace-header--updates-slot' : ''} ${className}`} aria-label="Workspace">
       <div className="workspace-header__identity">
-        <ProjectWorkspaceControls />
+        <ProjectWorkspaceControls homeBlocked={homeBlocked} />
         {onBack && <button type="button" className={`workspace-header__back${navigation ? ' workspace-header__back--navigation' : ''}`} onClick={onBack}
           disabled={backDisabled} aria-label={`Back to ${backLabel}`} title={navigation ? `Back to ${backLabel}` : undefined}>
           <ArrowLeft size={16} aria-hidden="true" />
