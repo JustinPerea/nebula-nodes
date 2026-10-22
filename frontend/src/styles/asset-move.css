@@ -54,10 +54,15 @@
   text-align: left;
   cursor: pointer;
 }
-.asset-move__item:hover:not([aria-disabled="true"]),
-.asset-move__item:focus-visible {
+.asset-move__item:hover:not([aria-disabled="true"]) {
   background: var(--sr-accent-soft, rgba(255, 90, 31, 0.12));
-  outline: none;
+}
+/* Keyboard focus: the neutral ring inside the menu's edge, not the orange
+ * hover wash (orange means the agent and the primary action). */
+.asset-move__item:focus-visible {
+  background: var(--sr-surface-control-hover, rgba(255, 255, 255, 0.05));
+  outline: var(--sr-focus-outline, 2px solid #e8e6e1);
+  outline-offset: -2px;
 }
 .asset-move__item[aria-disabled="true"] { cursor: default; color: var(--sr-ink-faint, rgba(0, 0, 0, 0.4)); }
 /* A radio item (the Commons toolbar's More): the checked one carries a mark,

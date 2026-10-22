@@ -54,8 +54,8 @@
 }
 
 .canvas-pin__badge:focus-visible {
-  outline: 2px solid #fff;
-  outline-offset: 2px;
+  outline: var(--sr-focus-outline, 2px solid #fff);
+  outline-offset: var(--sr-focus-offset, 2px);
 }
 
 .canvas-pin__card {

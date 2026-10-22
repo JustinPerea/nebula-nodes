@@ -152,52 +152,107 @@ const STATUS_POLL_MS = 5000;
 const SEARCH_DEBOUNCE_MS = 250;
 
 /**
- * The worker's status text. It is the one toolbar item whose length nobody
- * picks ("Library analysis paused until reference labels are sealed" wrapped
- * the header to two rows), so it gives way first: it truncates on one line
- * down to a minimum that keeps its first words (commons.css), with the whole
- * status as its own text (read by assistive tech) and its title (the tooltip).
+ * The worker's status text. GM - Design: "Keep the worker status to its state
+ * plus one action, short enough to show whole at 1280 (about 36 characters),
+ * with the full explanation in the tooltip." The text is the status a person
+ * reads at a glance; its title (the tooltip) says what it means and what
+ * resumes it. It still truncates on one line down to a minimum (commons.css),
+ * the safety net for a status longer than the room (p157c), and it stays the
+ * element's own text, so assistive tech reads it.
  */
-function StatusText({ text }: { text: string }) {
+function StatusText({ text, title }: { text: string; title: string }) {
   // Its length caps the room a short status reserves (commons.css).
   const style = { '--commons-status-chars': [...text].length } as CSSProperties;
-  return <span className="commons-status__text" title={text} style={style}>{text}</span>;
+  return <span className="commons-status__text" title={title} style={style}>{text}</span>;
 }
 
+const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
+
 export function StatusLine({ status, onStart, onStop }: { status: CommonsStatus | null; onStart: () => void; onStop: () => void }) {
-  if (!status) return <span className="commons-status"><StatusText text="Connecting…" /></span>;
+  if (!status) {
+    return <span className="commons-status"><StatusText text="Connecting…" title="Connecting to library analysis…" /></span>;
+  }
   if (status.evaluation_waiting) {
-    return <span className="commons-status"><StatusText text={status.evaluation_assisted
-      ? 'Library analysis paused · close the agent review to resume'
-      : 'Library analysis paused until reference labels are sealed'} /></span>;
+    // GM: "the label names whatever has to be fixed first, and the tooltip
+    // lists anything still blocking after that." Sealing or closing only
+    // lifts the hold: a stopped worker (the default at launch) stays stopped,
+    // so the label leads with "Stopped", in the stopped colour, and Start is
+    // here ("\"Paused\" next to \"Start\" reads as a contradiction"). A used
+    // call budget comes first of all: only a restart resets it.
+    const { running, state } = status.worker;
+    const then = status.evaluation_assisted ? 'the agent review is closed' : 'the reference labels are sealed';
+    if (state === 'budget_exhausted') {
+      const budget = status.worker.budget ?? '∞';
+      return (
+        <span className="commons-status commons-status--stopped">
+          <StatusText text={`Stopped · call budget used (${status.worker.budget_used}/${budget})`}
+            title={`Library analysis is stopped: it used this run's call budget (${status.worker.budget_used} of ${budget} calls). Restart Nebula to reset it. Analysis then stays paused until ${then}.`} />
+        </span>
+      );
+    }
+    const after = running
+      ? ' to resume.'
+      : ", then press Start: library analysis is stopped, so it won't resume on its own.";
+    const text = status.evaluation_assisted
+      ? (running ? 'Paused · close agent review to resume' : 'Stopped · agent review open')
+      : (running ? 'Paused until labels are sealed' : 'Stopped · labels not sealed');
+    return <span className={running ? 'commons-status' : 'commons-status commons-status--stopped'}>{status.evaluation_assisted
+      ? <StatusText text={text}
+          title={`Library analysis is paused: the agent graded these references before the blind labels were sealed, so they can no longer be sealed as blind labels. Close them as an assisted review (in Agent review or Blind labeling)${after}`} />
+      : <StatusText text={text}
+          title={`Library analysis is paused while blind labeling is open, so it can't sway your reference labels. Seal the labels, or close the batch without sealing, in Blind labeling${after}`} />}
+      {!running && <button type="button" className="commons-button commons-button--primary" onClick={onStart}>Start</button>}
+    </span>;
   }
   const waiting = status.queue.queued ?? 0;
   const held = status.queue.held ?? 0;
+  // Agent adds over today's cap wait in the Inbox: a part of every worker status.
   const tail = held ? ` · ${held} held` : '';
+  const heldNote = held
+    ? ` ${held} ${plural(held, 'reference added by an agent is held until you accept it', 'references added by agents are held until you accept them')} in the Inbox.`
+    : '';
   const { state, running } = status.worker;
   if (!running && state !== 'budget_exhausted') {
+    const queued = waiting ? ` ${waiting} ${plural(waiting, 'reference is', 'references are')} waiting to be read.` : '';
     return (
       <span className="commons-status commons-status--stopped">
-        <StatusText text={`Worker stopped${waiting ? ` · ${waiting} queued` : ''}${tail}`} />
+        <StatusText text={`Stopped${waiting ? ` · ${waiting} queued` : ''}${tail}`}
+          title={`Library analysis is stopped.${queued}${heldNote} Start runs it while Nebula is open.`} />
         <button type="button" className="commons-button commons-button--primary" onClick={onStart}>Start</button>
       </span>
     );
   }
   let text: string;
+  let title: string;
   if (state === 'budget_exhausted') {
-    text = `Call budget used (${status.worker.budget_used}/${status.worker.budget ?? '∞'})`;
+    const budget = status.worker.budget ?? '∞';
+    text = `Stopped · call budget used (${status.worker.budget_used}/${budget})`;
+    title = `Library analysis is stopped: it used this run's call budget (${status.worker.budget_used} of ${budget} calls). Restart Nebula to reset it.`;
   } else if (state === 'cap_reached' || status.meter.remaining === 0) {
-    text = `Daily cap reached, resets ${new Date(status.meter.resets_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    // Settings takes a cap from 0: a cap of 0 never resets, and a cap lowered
+    // below today's calls is not the number made (review of sf).
+    const { calls, cap } = status.meter;
+    if (cap === 0) {
+      text = 'Paused · daily cap is 0';
+      title = 'Library analysis is paused: Analysis calls per day is set to 0 in Settings, so it reads nothing. Raise it to resume.';
+    } else {
+      const resets = new Date(status.meter.resets_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      text = `Paused until ${resets} · daily cap`;
+      title = `Library analysis is paused: it made ${calls} analysis calls today, and the daily cap is ${cap} (Analysis calls per day, in Settings). It resumes on its own at ${resets}.`;
+    }
   } else if (state === 'paused_load') {
-    text = `Paused: machine busy (load ${status.load} / ${status.load_threshold})`;
+    text = `Paused · computer busy (${status.load}/${status.load_threshold})`;
+    title = `Library analysis is paused while this computer is busy: its load average is ${status.load}, above ${status.load_threshold} (Pause above load, in Settings). It resumes on its own when the load drops.`;
   } else if (waiting || state === 'analyzing') {
-    text = `Analyzing (${waiting} queued)`;
+    text = `Analyzing${waiting ? ` · ${waiting} queued` : ''}`;
+    title = `Library analysis is reading references${waiting ? `: ${waiting} waiting` : ''}.`;
   } else {
-    text = 'Worker idle';
+    text = 'Idle';
+    title = 'Library analysis is running and has nothing to read. New references are read as they arrive.';
   }
   return (
     <span className={`commons-status commons-status--${state}`}>
-      <StatusText text={`${text}${tail}`} />
+      <StatusText text={`${text}${tail}`} title={`${title}${heldNote}`} />
       {running && <button type="button" className="commons-button" onClick={onStop}>Stop</button>}
     </span>
   );

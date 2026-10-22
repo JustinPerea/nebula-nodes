@@ -238,8 +238,8 @@
 }
 
 .asset-proposal__button:focus-visible {
-  outline: 2px solid var(--sr-accent, #5b9dff);
-  outline-offset: 2px;
+  outline: var(--sr-focus-outline, 2px solid #e8e6e1);
+  outline-offset: var(--sr-focus-offset, 2px);
 }
 
 /* A pin whose image left the project (Q90 a): why the cover is automatic. */
@@ -254,6 +254,13 @@
  * the agent log's spring and settles, then the strip looks as before. */
 .asset-proposal:focus {
   outline: none;
+}
+
+/* Review moves focus to the strip (tabIndex -1). From the keyboard it shows
+ * the neutral ring; the agent-colour ring below is the Review flash. */
+.asset-proposal:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #e8e6e1);
+  outline-offset: var(--sr-focus-offset, 2px);
 }
 
 .asset-proposals[data-review='true'] .asset-proposal {

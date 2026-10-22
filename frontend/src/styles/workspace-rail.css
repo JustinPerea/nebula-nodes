@@ -98,8 +98,8 @@
 }
 
 .workspace-rail__item:focus-visible {
-  outline: 2px solid var(--sr-accent, #ff5a1f);
-  outline-offset: 2px;
+  outline: var(--sr-focus-outline, 2px solid #e8e6e1);
+  outline-offset: var(--sr-focus-offset, 2px);
 }
 
 .workspace-rail__item:active {
