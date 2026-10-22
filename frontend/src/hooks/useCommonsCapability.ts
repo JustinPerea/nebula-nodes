@@ -24,8 +24,11 @@ export function useCommonsCapability(): void {
         routed = true;
         useUIStore.getState().enterCommons();
       } else if (routed) {
-        routed = false;
         useUIStore.getState().exitCommons();
+        // Still routed when the Commons kept the person (unsaved labels): it
+        // pushes #commons back on top of the entry they went back to, so
+        // Back after a save reaches that entry and leaves as usual.
+        routed = useUIStore.getState().viewMode === 'commons';
       }
     };
     sync();

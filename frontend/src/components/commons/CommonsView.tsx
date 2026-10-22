@@ -18,7 +18,7 @@ import { CommonsProposalsLine } from './CommonsProposalsLine';
 import { WorkspaceHeader } from '../WorkspaceHeader';
 import { ToolbarMenuPopover } from '../asset-move/AssetMoveMenu';
 import { workspaceLabel } from '../../lib/workspaceLabel';
-import { setCommonsUnsaved } from '../../lib/commonsUnsaved';
+import { COMMONS_UNSAVED_REASON, setCommonsUnsaved } from '../../lib/commonsUnsaved';
 import '../../styles/commons.css';
 
 type Tab = 'all' | 'inbox' | 'settings' | 'labeling' | 'review';
@@ -276,9 +276,20 @@ export function CommonsView() {
   const [labelingDirty, setLabelingDirty] = useState(false);
   // The Updates corner leaves the Commons too (Show, See all, Review): it
   // reads this and refuses while a panel holds unsaved work (p157 review).
+  // So do the stores (uiStore, projectStore): nothing leaves the Commons then.
   useEffect(() => {
     setCommonsUnsaved(labelingDirty);
     return () => setCommonsUnsaved(false);
+  }, [labelingDirty]);
+  // The browser's Back or a hash edit doesn't leave either (the hash routes'
+  // exits are held): the URL goes back to what's shown. Pushed, not replaced:
+  // after a Back the current entry is the one the person went back to (the
+  // canvas), and it must survive so the next Back after a save reaches it.
+  useEffect(() => {
+    if (!labelingDirty) return;
+    const stay = (event: HashChangeEvent) => window.history.pushState(window.history.state, '', event.oldURL);
+    window.addEventListener('hashchange', stay);
+    return () => window.removeEventListener('hashchange', stay);
   }, [labelingDirty]);
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [rows, setRows] = useState<SearchRow[]>([]);
@@ -460,7 +471,8 @@ export function CommonsView() {
 
   return (
     <div className={`commons-view${selectedId && tab !== 'settings' && tab !== 'labeling' && tab !== 'review' ? ' commons-view--detail' : ''}`}>
-      <WorkspaceHeader title="Commons" onBack={exitCommons} backLabel={workspaceLabel(returnView)} backDisabled={labelingDirty} className="commons-toolbar">
+      <WorkspaceHeader title="Commons" onBack={exitCommons} backLabel={workspaceLabel(returnView)} backDisabled={labelingDirty}
+        homeBlocked={labelingDirty ? COMMONS_UNSAVED_REASON : undefined} className="commons-toolbar">
         <div className="commons-tabs" role="tablist" aria-label="Commons sections">
           {TABS.map((t) => {
             const folds = FOLDED_TABS.includes(t);

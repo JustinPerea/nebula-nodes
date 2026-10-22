@@ -17,6 +17,7 @@ import { wsClient } from '../lib/wsClient';
 import type { ProjectSwitch } from '../lib/wsClient';
 import { isOwnEcho, type EditOrigin } from '../lib/canvasUndo';
 import { TAB_ID } from '../lib/tabId';
+import { holdCommonsExits, holdProjects, refuseWhileCommonsUnsaved } from '../lib/commonsUnsaved';
 import type { ProjectSnapshot, ProjectSummary, SavedProject, TrashedProject } from '../lib/projects';
 
 /** An agent (or a script) opened or made a project and this tab followed it.
@@ -736,7 +737,8 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
   }
 }
 
-export const useProjectStore = create<ProjectState>((set, get) => ({
+// Projects waits while the Commons holds unsaved labels (lib/commonsUnsaved).
+export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectState>(holdProjects, (set, get) => ({
   screen: 'home', initialized: false, loading: true, busy: false,
   projects: [], activeProject: null, trash: [], lastDeleted: null, workspaceRevision: '', error: null,
   saveStatus: 'saved', dirty: false, switchNotice: null,
@@ -874,6 +876,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
   dismissUndo: () => set({ lastDeleted: null }),
   goHome: async () => {
+    // The person's own way to Projects: refused, as the corner's Review is.
+    refuseWhileCommonsUnsaved();
     if (get().busy) return;
     set({ screen: 'home', error: null });
     useUIStore.setState({ onboardingActive: false, isPlaying: false });
@@ -962,7 +966,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       } catch (error) { showError(error); }
     }
   },
-}));
+})));
 
 // "This project" for Characters, Moodboards and Styles follows the open
 // canvas project (lib/currentProject): this store is its only source.

@@ -1,16 +1,31 @@
+import type { StateCreator } from 'zustand';
+
 /**
  * Whether the Commons holds unsaved work: Blind labeling or Agent review has
  * unsaved labels, or is saving or generating (their onDirtyChange). The
  * Commons disables its own Back, tabs and More then; CommonsView publishes it
- * here so the Updates corner, which shows on every screen (Q107 a), refuses to
- * leave the Commons too (goToCanvas, Review). A plain module, not a store
- * field: only the Commons (lazy) and the corner (deferred) read it, so it
- * stays out of the startup entry, and nothing renders from it.
+ * here so nothing else takes the person out of the Commons either. A plain
+ * module, not a store field: nothing renders from it.
+ *
+ * The stores read it where a view would be left (commons-exits, 2026-10-22):
+ * App unmounts CommonsView, and its labels with it, as soon as uiStore's
+ * viewMode leaves 'commons', the capability goes off, or projectStore's
+ * screen goes to Projects, whoever writes it (an agent's open_project, a
+ * second tab, the hash route, Settings in another tab). So both stores' set
+ * goes through holdCommonsExits, and no caller has to remember to ask.
  */
 let unsaved = false;
+let whenClean: (() => void)[] = [];
+
+export const COMMONS_UNSAVED_REASON = 'The Commons has unsaved changes: save or discard them first.';
 
 export function setCommonsUnsaved(value: boolean): void {
   unsaved = value;
+  if (value) return;
+  // What waited for a clean Commons (an exit a store held) goes now.
+  const held = whenClean;
+  whenClean = [];
+  for (const exit of held) exit();
 }
 
 export function commonsUnsaved(): boolean {
@@ -19,5 +34,47 @@ export function commonsUnsaved(): boolean {
 
 /** Throws, with the reason the corner shows, while the Commons holds unsaved work. */
 export function refuseWhileCommonsUnsaved(): void {
-  if (unsaved) throw new Error('The Commons has unsaved changes: save or discard them first.');
+  if (unsaved) throw new Error(COMMONS_UNSAVED_REASON);
+}
+
+type Write<T> = Partial<T> | ((state: T) => Partial<T>);
+/** A rule for one store: `next` without what would leave the Commons. */
+export type CommonsHold<T> = (state: T, next: Partial<T>, later: (exit: () => void) => void,
+  set: (partial: Write<T>) => void) => Partial<T>;
+
+/**
+ * Store middleware: while the Commons holds unsaved work, every write (the
+ * store's own set and setState from outside alike) goes through `hold`
+ * first, which returns it without the part that would leave the Commons. An
+ * exit `hold` passes to `later` runs once the Commons is clean. A replacing
+ * write (tests resetting a store) is let through.
+ */
+export function holdCommonsExits<T>(hold: CommonsHold<T>, config: StateCreator<T>): StateCreator<T> {
+  return (set, get, api) => {
+    const raw = set as (partial: T | Write<T>, replace?: boolean) => void;
+    const guarded = (partial: T | Write<T>, replace?: boolean): void => {
+      if (!unsaved || replace) return raw(partial, replace);
+      raw((state: T) => hold(state, typeof partial === 'function' ? (partial as (state: T) => Partial<T>)(state) : partial,
+        (exit) => { whenClean.push(exit); }, guarded));
+    };
+    api.setState = guarded as typeof set;
+    return config(guarded as typeof set, get, api);
+  };
+}
+
+let projectsHeld = false;
+/**
+ * projectStore's rule: Projects waits until the Commons is clean (a second
+ * tab's open, a lost switch, a params stop), unless a later write shows the
+ * workspace again. goHome, the person's own way there, refuses instead.
+ */
+export function holdProjects<T extends { screen: 'home' | 'workspace' }>(state: T, next: Partial<T>,
+  later: (exit: () => void) => void, set: (partial: Partial<T>) => void): Partial<T> {
+  if (!next.screen) return next;
+  projectsHeld = next.screen === 'home' && state.screen !== 'home';
+  if (!projectsHeld) return next;
+  later(() => { if (projectsHeld) { projectsHeld = false; set({ screen: 'home' } as Partial<T>); } });
+  const { screen: _held, ...rest } = next;
+  void _held;
+  return rest as Partial<T>;
 }
