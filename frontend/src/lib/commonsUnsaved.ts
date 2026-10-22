@@ -2,9 +2,9 @@ import type { StateCreator } from 'zustand';
 
 /**
  * Whether the Commons holds unsaved work: Blind labeling or Agent review has
- * unsaved labels, or is saving or generating (their onDirtyChange). The
- * Commons disables its own Back, tabs and More then; CommonsView publishes it
- * here so nothing else takes the person out of the Commons either. A plain
+ * unsaved labels, or is saving them, or Agent review is grading (the panels'
+ * onWork, components/commons/commonsLeave.ts). CommonsView publishes it here
+ * so nothing takes the person out of the Commons without asking. A plain
  * module, not a store field: nothing renders from it.
  *
  * The stores read it where a view would be left (commons-exits, 2026-10-22):
@@ -17,22 +17,61 @@ import type { StateCreator } from 'zustand';
 let unsaved = false;
 let whenClean: (() => void)[] = [];
 
-export const COMMONS_UNSAVED_REASON = 'The Commons has unsaved changes: save or discard them first.';
+const COMMONS_UNSAVED_REASON = 'The Commons has unsaved changes: save or discard them first.';
 
 export function setCommonsUnsaved(value: boolean): void {
   unsaved = value;
   if (value) return;
-  // What waited for a clean Commons (an exit a store held) goes now.
+  // What waited for a clean Commons (an exit a store held, a leave the
+  // person chose) goes now.
   const held = whenClean;
   whenClean = [];
   for (const exit of held) exit();
+}
+
+/** Runs `exit` now if the Commons is clean, else once it is. Returns a cancel. */
+export function whenCommonsClean(exit: () => void): () => void {
+  if (!unsaved) {
+    exit();
+    return () => {};
+  }
+  whenClean.push(exit);
+  return () => { whenClean = whenClean.filter((queued) => queued !== exit); };
+}
+
+/**
+ * How the Commons asks before the person leaves it (commons-leave, GM -
+ * Design): its popover, anchored to what they clicked. `leave` runs once they
+ * chose Save and leave, Discard and leave or Stop and leave and the Commons is
+ * clean; never on Stay. `busy` marks the clicked control while a save already
+ * in progress is awaited. CommonsView registers it while it shows.
+ */
+export type CommonsLeaveAsk = (anchor: HTMLElement | null, leave: () => void, busy?: (on: boolean) => void) => void;
+let ask: CommonsLeaveAsk | null = null;
+
+export function setCommonsLeaveAsk(next: CommonsLeaveAsk | null): void {
+  ask = next;
+}
+
+/**
+ * The person's own way out of the Commons from elsewhere (the Updates corner's
+ * Show, See all, Review): false when nothing is unsaved (go now); true when
+ * the Commons asks instead, and `leave` then runs only if they leave.
+ */
+export function askBeforeLeavingCommons(anchor: HTMLElement | null, leave: () => void, busy?: (on: boolean) => void): boolean {
+  if (!unsaved || !ask) return false;
+  ask(anchor, leave, busy);
+  return true;
 }
 
 export function commonsUnsaved(): boolean {
   return unsaved;
 }
 
-/** Throws, with the reason the corner shows, while the Commons holds unsaved work. */
+/**
+ * Throws while the Commons holds unsaved work: the net under the person's
+ * exits that didn't ask first (askBeforeLeavingCommons).
+ */
 export function refuseWhileCommonsUnsaved(): void {
   if (unsaved) throw new Error(COMMONS_UNSAVED_REASON);
 }

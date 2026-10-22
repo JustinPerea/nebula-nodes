@@ -1,43 +1,114 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { commonsEvaluationApi as api } from '../../lib/commonsApi';
 import { evaluationComplete } from '../../lib/commonsEvaluationTypes';
 import type { AccentPoint, EvaluationBatch, EvaluationItem, EvaluationLabels } from '../../lib/commonsEvaluationTypes';
 import { CommonsCloseBatch } from './CommonsCloseBatch';
+import { saveFailure, type LabelingWork, type SaveResult } from './commonsLeave';
 import { SectionEyebrow } from './CommonsSectionEyebrow';
 import '../../styles/commons-evaluation.css';
 
 const pretty = (value: string) => value === 'n_a' ? 'Not applicable' : value.replaceAll('_', ' ');
 const emptyLabels = (): EvaluationLabels => ({ tags: {}, axes: {}, palette_roles: {}, keywords: [], no_keywords: false, flagged: false });
 
-export function CommonsEvaluation({ onDirtyChange }: { onDirtyChange?: (dirty: boolean) => void }) {
+/** The open reference's draft: its own save and discard, for the Commons' leave popover. */
+type DraftActions = { save: () => Promise<SaveResult>; discard: () => void };
+
+/**
+ * Preparing the held-out set, a folder scan that can take minutes, outlives
+ * the panel (commons-leave review). It isn't a label save, so a leave doesn't
+ * wait for it, and the backend's scan doesn't stop when the person leaves.
+ * A Blind labeling mounted meanwhile takes it up still running (so no second
+ * scan starts) and shows its batch or its error; until a panel has shown
+ * the outcome, the scan stays here for the next one.
+ */
+interface Scan { path: string; result: Promise<EvaluationBatch> }
+let scan: Scan | null = null;
+type ScanOutcome = { batch: EvaluationBatch } | { error: string };
+
+function followScan(pending: Scan, live: () => boolean, show: (outcome: ScanOutcome) => void): void {
+  const settle = (outcome: ScanOutcome) => {
+    if (!live()) return;
+    if (scan === pending) scan = null;
+    show(outcome);
+  };
+  pending.result.then((batch) => settle({ batch }), (e: Error) => settle({ error: e.message }));
+}
+
+/**
+ * Blind labeling. `onWork` is the panel contract (commons-leave): an unsaved
+ * draft, a label write in flight, and the draft's own save and discard.
+ * `active`: shown now; the Commons keeps it mounted, hidden, in its other
+ * sections, and it reloads the batch on coming back unless a draft is open.
+ */
+export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: LabelingWork | null) => void; active?: boolean }) {
   const [batch, setBatch] = useState<EvaluationBatch | null>(null);
   const headingId = useId();
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
+  /** A scan still running (or settled unseen) when this panel mounted. */
+  const [resumed] = useState(() => scan);
+  const [loading, setLoading] = useState(resumed === null);
+  const [busy, setBusy] = useState(resumed !== null);
+  /** A label write (accents, labels, seal) in flight; preparing the set isn't one. */
+  const [saving, setSaving] = useState<Promise<SaveResult> | null>(null);
+  const draft = useRef<DraftActions | null>(null);
   const [error, setError] = useState('');
-  const [path, setPath] = useState('');
+  const [path, setPath] = useState(resumed?.path ?? '');
   const [index, setIndex] = useState(0);
   const [review, setReview] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+  const showScan = useCallback((outcome: ScanOutcome) => {
+    setBusy(false);
+    if ('batch' in outcome) setBatch(outcome.batch); else setError(outcome.error);
+  }, []);
   useEffect(() => {
     let cancelled = false;
+    if (resumed) {
+      followScan(resumed, () => !cancelled, showScan);
+      return () => { cancelled = true; };
+    }
     api.get().then((value) => { if (!cancelled) setBatch(value); }, (e: Error) => { if (!cancelled) setError(e.message); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [resumed, showScan]);
   useEffect(() => {
-    onDirtyChange?.(dirty || busy);
-    return () => onDirtyChange?.(false);
-  }, [dirty, busy, onDirtyChange]);
+    onWork?.({ unsaved: dirty, saving, running: false,
+      save: () => draft.current?.save() ?? Promise.resolve({ ok: true }),
+      discard: () => draft.current?.discard(), stop: () => {} });
+  }, [dirty, saving, onWork]);
+  useEffect(() => () => onWork?.(null), [onWork]);
+  // Back from another section: what changed meanwhile (an agent grade turns
+  // sealing into an assisted close), unless the person has a draft open.
+  const idle = useRef(true);
+  useEffect(() => { idle.current = !dirty && !busy; });
+  const wasActive = useRef(active);
+  useEffect(() => {
+    const returned = active && !wasActive.current;
+    wasActive.current = active;
+    if (!returned || !idle.current) return;
+    let cancelled = false;
+    api.get().then((value) => { if (!cancelled && idle.current) setBatch(value); }, () => undefined);
+    return () => { cancelled = true; };
+  }, [active]);
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => { if (dirty) e.preventDefault(); };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirty]);
-  async function run(action: () => Promise<EvaluationBatch>) {
+  /** A label write, which a leave waits for (preparing the set isn't one: see Scan). */
+  function run(action: () => Promise<EvaluationBatch>): Promise<SaveResult> {
     setBusy(true); setError('');
-    try { setBatch(await action()); setDirty(false); } catch (e) { setError((e as Error).message); }
-    finally { setBusy(false); }
+    const attempt = (async (): Promise<SaveResult> => {
+      try { setBatch(await action()); setDirty(false); return { ok: true }; }
+      catch (e) { const failure = saveFailure(e); setError(failure.reason); return failure; }
+      finally { setBusy(false); }
+    })();
+    setSaving(attempt);
+    void attempt.then(() => setSaving((current) => (current === attempt ? null : current)));
+    return attempt;
   }
   // The section's name is its h2, set as the eyebrow line and merged with
   // the old eyebrow (GM review of PR #157, round 2), at every width. Under
@@ -57,7 +128,13 @@ export function CommonsEvaluation({ onDirtyChange }: { onDirtyChange?: (dirty: b
         {review ? 'Keep labeling' : `Review batch · ${count} / 15`}</button>}
     </header>
     {error && <p role="alert" className="commons-notice commons-notice--error">{error}</p>}
-    {!batch ? <form className="evaluation-setup" onSubmit={(e) => { e.preventDefault(); void run(() => api.prepare(path)); }}>
+    {!batch ? <form className="evaluation-setup" onSubmit={(e) => {
+      e.preventDefault();
+      const started: Scan = { path, result: api.prepare(path) };
+      scan = started;
+      setBusy(true); setError('');
+      followScan(started, () => mounted.current, showScan);
+    }}>
       <h3 className="evaluation-step">Prepare the held-out set</h3>
       <p>Scan a local folder before importing it. Choose 15 references and 30 tuning references from distinct near-duplicate clusters, spread across subfolders. The held-out clusters stay quarantined.</p>
       <p>Files in iCloud download before they are read. This scans and snapshots media; it does not import references or run the model. The set cannot be regenerated here.</p>
@@ -86,15 +163,16 @@ export function CommonsEvaluation({ onDirtyChange }: { onDirtyChange?: (dirty: b
       </div> : <div className="evaluation-workspace">
         <nav aria-label="Held-out references">{batch.items.map((item, n) => <button key={item.position} disabled={busy || dirty} aria-current={index === n ? 'true' : undefined}
           onClick={() => setIndex(n)}>Reference {String(n + 1).padStart(2, '0')} <span>{evaluationComplete(item, batch) ? '✓' : item.labels?.flagged ? '⚑' : ''}</span></button>)}</nav>
-        <ReferenceForm key={`${index}:${batch.revision}`} batch={batch} item={batch.items[index]} busy={busy} dirty={dirty} onDirty={setDirty} run={run} />
+        <ReferenceForm key={`${index}:${batch.revision}`} batch={batch} item={batch.items[index]} busy={busy} dirty={dirty} onDirty={setDirty} run={run} draftRef={draft} />
       </div>}
     </>}
   </section>;
 }
 
-function ReferenceForm({ batch, item, busy, dirty, onDirty, run }: {
+function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
   batch: EvaluationBatch; item: EvaluationItem; busy: boolean; dirty: boolean;
-  onDirty: (value: boolean) => void; run: (action: () => Promise<EvaluationBatch>) => Promise<void>;
+  onDirty: (value: boolean) => void; run: (action: () => Promise<EvaluationBatch>) => Promise<SaveResult>;
+  draftRef: { current: DraftActions | null };
 }) {
   const [points, setPoints] = useState<AccentPoint[]>(item.accents ?? []);
   const [noAccents, setNoAccents] = useState(item.no_accents ?? false);
@@ -120,6 +198,16 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run }: {
     return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [item.position]);
   const change = (patch: Partial<EvaluationLabels>) => { setLabels((current) => ({ ...current, ...patch })); onDirty(true); };
+  const saveAccents = () => run(() => api.accents(item.position, batch.revision, points.map(({ x, y }) => ({ x, y })), noAccents));
+  const saveLabels = () => run(() => api.labels(item.position, batch.revision, labels));
+  const discard = () => {
+    setLabels(structuredClone(item.labels ?? emptyLabels())); setPoints(item.accents ?? []);
+    setNoAccents(item.no_accents ?? false); onDirty(false);
+  };
+  // This step's own save and discard, for the Commons' leave popover.
+  useEffect(() => { draftRef.current = { save: item.accent_locked ? saveLabels : saveAccents, discard }; });
+  useEffect(() => () => { draftRef.current = null; }, [draftRef]);
+  const unsavedMark = dirty && !busy && <span className="commons-unsaved">Unsaved</span>;
   const mark = (point: AccentPoint) => {
     if (readonly || item.accent_locked || !url || points.length >= 100) return;
     setPoints([...points, point]); setNoAccents(false); onDirty(true);
@@ -152,8 +240,8 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run }: {
         {points.map((point, n) => <div className="evaluation-point" key={n}>Accent {n + 1} · {Math.round(point.x * 100)}%, {Math.round(point.y * 100)}%
           <button className="commons-button" disabled={readonly} onClick={() => { setPoints(points.filter((_, i) => i !== n)); onDirty(true); }}>Remove accent {n + 1}</button></div>)}
         <label><input type="checkbox" checked={noAccents} disabled={readonly || !url} onChange={(e) => { setNoAccents(e.target.checked); setPoints([]); onDirty(true); }} /> I don’t see any accent colors</label>
-        <button className="commons-button commons-button--primary" disabled={readonly || !url || (!points.length && !noAccents)}
-          onClick={() => void run(() => api.accents(item.position, batch.revision, points.map(({ x, y }) => ({ x, y })), noAccents))}>Save accents & reveal labels</button>
+        <div className="evaluation-save"><button className="commons-button commons-button--primary" disabled={readonly || !url || (!points.length && !noAccents)}
+          onClick={() => void saveAccents()}>Save accents & reveal labels</button>{unsavedMark}</div>
       </> : <fieldset disabled={readonly}>
         <small>C1 · STRUCTURE & CHARACTER</small><h3 className="evaluation-step">Describe the visual language.</h3>
         {Object.entries(batch.fields).map(([key, values]) => <label key={key}>{pretty(key)}<select value={labels.tags[key] ?? ''}
@@ -178,13 +266,10 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run }: {
           <button className="commons-button" key={word} disabled={labels.keywords.length >= 12} onClick={() => { change({ keywords: [...labels.keywords, word], no_keywords: false }); setQuery(''); }}>{pretty(word)}</button>)}</div>
         <label><input type="checkbox" checked={labels.no_keywords} onChange={(e) => change({ no_keywords: e.target.checked, keywords: [] })} /> No applicable keywords</label>
         <label><input type="checkbox" checked={labels.flagged} onChange={(e) => change({ flagged: e.target.checked })} /> I need to revisit this reference</label>
-        <button className="commons-button commons-button--primary" disabled={!dirty} onClick={() => void run(() => api.labels(item.position, batch.revision, labels))}>Save labels</button>
+        <div className="evaluation-save"><button className="commons-button commons-button--primary" disabled={!dirty} onClick={() => void saveLabels()}>Save labels</button>{unsavedMark}</div>
       </fieldset>}
-      {dirty && !busy && <button className="commons-button" onClick={() => {
-        setLabels(structuredClone(item.labels ?? emptyLabels())); setPoints(item.accents ?? []);
-        setNoAccents(item.no_accents ?? false); onDirty(false);
-      }}>Discard unsaved changes</button>}
-      <p role="status">{batch.sealed ? 'Sealed · read only' : batch.state === 'closed' ? 'Closed · read only' : busy ? 'Saving…' : dirty ? 'Unsaved changes · save before changing reference' : 'Saved on this computer'}</p>
+      {dirty && !busy && <button className="commons-button" onClick={discard}>Discard unsaved changes</button>}
+      <p role="status">{batch.sealed ? 'Sealed · read only' : batch.state === 'closed' ? 'Closed · read only' : busy ? 'Saving…' : dirty ? 'Save before changing reference' : 'Saved on this computer'}</p>
     </div>
   </>;
 }

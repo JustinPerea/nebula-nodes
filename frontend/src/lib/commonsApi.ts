@@ -1,4 +1,5 @@
 import { apiFetch } from './backend';
+import { CommonsRequestError } from './commonsRequestError';
 import {
   forgetPersonCredential, personToken, refreshPersonCredential, resetPersonSessionForTests,
 } from './personSession';
@@ -19,7 +20,7 @@ const SESSION_MESSAGE = 'no UI session: use a fresh Commons dev link from the ba
 async function resolveToken(): Promise<string> {
   const token = await personToken();
   if (token) return token;
-  throw new Error(SESSION_MESSAGE);
+  throw new CommonsRequestError(SESSION_MESSAGE, 401);
 }
 
 export async function resolveCommonsToken(): Promise<string> {
@@ -53,12 +54,12 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
     // restarted backend. A new terminal link restores explicit authority.
     session = null;
     forgetPersonCredential();
-    throw new Error(SESSION_MESSAGE);
+    throw new CommonsRequestError(SESSION_MESSAGE, 401);
   }
   if (!response.ok) {
     let detail = `Commons request failed (${response.status})`;
     try { detail = (await response.json()).detail ?? detail; } catch { /* keep default */ }
-    throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+    throw new CommonsRequestError(typeof detail === 'string' ? detail : JSON.stringify(detail), response.status);
   }
   const type = response.headers.get('content-type') ?? '';
   return (type.includes('application/json') ? response.json() : response.blob()) as Promise<T>;

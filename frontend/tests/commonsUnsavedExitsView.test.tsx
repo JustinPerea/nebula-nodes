@@ -1,12 +1,14 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { LabelingWork } from '../src/components/commons/commonsLeave';
 
 /**
  * The Commons' own ways out while it holds unsaved labels (commons-exits,
  * 2026-10-22): the browser's Back or a hash edit stays in the Commons and
- * puts the URL back, and the header's Projects button is disabled with the
- * reason, as Back already is. After a save each works again.
+ * puts the URL back, and the header's Projects button asks first
+ * (commons-leave: GM - Design replaced #163's disabled button and its
+ * reason with the leave popover). After a save each works again.
  */
 const commons = vi.hoisted(() => ({
   status: vi.fn(), collections: vi.fn(), search: vi.fn(), folders: vi.fn(), settings: vi.fn(), candidates: vi.fn(),
@@ -21,13 +23,15 @@ vi.mock('../src/lib/commonsCapability', () => ({ fetchCommonsEnabled: capability
 vi.mock('../src/components/commons/CommonsDetail', () => ({ CommonsDetail: () => null }));
 vi.mock('../src/components/commons/CommonsMedia', () => ({ CommonsMedia: () => null }));
 vi.mock('../src/components/agent-notes/UpdatesSlot', () => ({ UpdatesSlot: () => null }));
-/** Blind labeling with a label set: dirty on mount; Save reports it clean, as the real panel does. */
-function LabelingPanel({ onDirtyChange }: { onDirtyChange?: (dirty: boolean) => void }) {
+/** Blind labeling with a label set: unsaved on mount; Save reports it clean, as the real panel does (the panel contract, onWork). */
+function LabelingPanel({ onWork }: { onWork?: (work: LabelingWork | null) => void }) {
+  const [unsaved, setUnsaved] = useState(true);
   useEffect(() => {
-    onDirtyChange?.(true);
-    return () => onDirtyChange?.(false);
-  }, [onDirtyChange]);
-  return <button type="button" onClick={() => onDirtyChange?.(false)}>Save labels</button>;
+    onWork?.({ unsaved, saving: null, running: false, save: async () => { setUnsaved(false); return { ok: true }; },
+      discard: () => setUnsaved(false), stop: () => {} });
+  }, [onWork, unsaved]);
+  useEffect(() => () => onWork?.(null), [onWork]);
+  return <button type="button" onClick={() => setUnsaved(false)}>Save labels</button>;
 }
 vi.mock('../src/components/commons/CommonsReview', () => ({ CommonsReview: LabelingPanel }));
 vi.mock('../src/components/commons/CommonsEvaluation', () => ({ CommonsEvaluation: LabelingPanel }));
@@ -37,7 +41,6 @@ const { useUIStore } = await import('../src/store/uiStore');
 const { useProjectStore } = await import('../src/store/projectStore');
 const { useCommonsCapability } = await import('../src/hooks/useCommonsCapability');
 
-const REASON = 'The Commons has unsaved changes: save or discard them first.';
 const initialUI = useUIStore.getState();
 const initialProjects = useProjectStore.getState();
 
@@ -137,15 +140,22 @@ describe('the browser Back button or a hash edit', () => {
 });
 
 describe("the header's Projects button", () => {
-  it('is disabled with the reason while labels are unsaved, and works after saving', async () => {
+  // GM - Design changed this expectation (commons-leave): enabled, with no
+  // "save or discard" title; a click asks in the leave popover.
+  it('stays enabled while labels are unsaved and asks; after saving it goes to Projects at once', async () => {
     render(<Shell />);
     await openLabeling();
     const home = screen.getByRole('button', { name: 'Back to projects' });
-    expect(home).toBeDisabled();
-    expect(home).toHaveAttribute('title', REASON);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Save labels' }));
     expect(home).toBeEnabled();
     expect(home).toHaveAttribute('title', 'Projects');
+    fireEvent.click(home);
+    expect(screen.getByRole('alertdialog')).toHaveTextContent("Your labels aren't saved.");
+    expect(useProjectStore.getState().screen).toBe('workspace');
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Stay' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save labels' }));
+    fireEvent.click(home);
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    await vi.waitFor(() => expect(useProjectStore.getState().screen).toBe('home'));
   });
 });

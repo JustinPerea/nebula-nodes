@@ -7,8 +7,9 @@ import { refuseWhileCommonsUnsaved } from './commonsUnsaved';
  * own Back goes (Q107 a: the Updates corner is on every screen, and its
  * "Show on canvas" works from there). Projects opens the open project's
  * workspace first. Only the Updates corner, a deferred chunk, imports this.
- * Refuses while the Commons holds unsaved labels, as the Commons' own Back
- * does (p157 review): leaving would unmount them.
+ * Refuses while the Commons holds unsaved labels (leaving would unmount
+ * them): the corner asks first (askBeforeLeavingCommons, commons-leave), so
+ * this is the net under a caller that didn't.
  */
 export async function goToCanvas(): Promise<void> {
   refuseWhileCommonsUnsaved();

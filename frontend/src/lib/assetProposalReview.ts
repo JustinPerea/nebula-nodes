@@ -19,9 +19,11 @@ export async function reviewAssetProposal(op: Record<string, unknown>): Promise<
   if (!targetId || (kind !== 'project' && kind !== 'moodboard' && kind !== 'commons')) {
     throw new Error("This update's proposal can't be opened from here.");
   }
-  // Every Review leaves (or, for a Commons ask, moves within) the screen it
-  // starts on: not while the Commons holds unsaved labels (p157 review).
-  refuseWhileCommonsUnsaved();
+  // Every Review but a Commons ask leaves the screen it starts on: not while
+  // the Commons holds unsaved labels unless the person chose to leave (the
+  // corner asks first, commons-leave). A Commons ask opens in the Commons,
+  // another of its sections, where unsaved labels keep.
+  if (kind !== 'commons') refuseWhileCommonsUnsaved();
   const ui = useUIStore.getState();
   if (kind === 'commons' && !ui.commonsEnabled) {
     throw new Error('Turn on the Commons in Settings to review this proposal.');

@@ -18,7 +18,10 @@ import { CommonsProposalsLine } from './CommonsProposalsLine';
 import { WorkspaceHeader } from '../WorkspaceHeader';
 import { ToolbarMenuPopover } from '../asset-move/AssetMoveMenu';
 import { workspaceLabel } from '../../lib/workspaceLabel';
-import { COMMONS_UNSAVED_REASON, setCommonsUnsaved } from '../../lib/commonsUnsaved';
+import { setCommonsUnsaved } from '../../lib/commonsUnsaved';
+import { useProjectStore } from '../../store/projectStore';
+import { useCommonsLeave } from './commonsLeave';
+import { CommonsLeavePopover } from './CommonsLeavePopover';
 import '../../styles/commons.css';
 
 type Tab = 'all' | 'inbox' | 'settings' | 'labeling' | 'review';
@@ -110,9 +113,10 @@ function useFoldFocusHandoff(folded: boolean, tab: Tab) {
 }
 
 /** The folded sections' button and menu (the app's toolbar menu, AssetMoveMenu's). */
-function MoreSections({ tab, disabled, onChoose, triggerRef, onFocus, onBlur }: {
+function MoreSections({ tab, unsaved, onChoose, triggerRef, onFocus, onBlur }: {
   tab: Tab;
-  disabled: boolean;
+  /** A folded section holds unsaved labels: More carries its mark. */
+  unsaved: boolean;
   onChoose: (tab: Tab) => void;
   triggerRef: RefObject<HTMLButtonElement | null>;
   onFocus: () => void;
@@ -132,11 +136,11 @@ function MoreSections({ tab, disabled, onChoose, triggerRef, onFocus, onBlur }: 
   return (
     <>
       <button ref={triggerRef} type="button" className={`commons-tab commons-tabs__more${active ? ' commons-tab--active' : ''}`}
-        aria-label={active ? `More: ${tabLabel(tab)}` : 'More'} aria-haspopup="menu" aria-expanded={open}
-        aria-controls={open ? menuId : undefined} disabled={disabled} onClick={() => setOpen((value) => !value)}
+        aria-label={`${active ? `More: ${tabLabel(tab)}` : 'More'}${unsaved ? ' · Unsaved' : ''}`} aria-haspopup="menu" aria-expanded={open}
+        aria-controls={open ? menuId : undefined} onClick={() => setOpen((value) => !value)}
         onFocus={onFocus}
         onBlur={(event) => onBlur(event, event.relatedTarget instanceof Element && Boolean(event.relatedTarget.closest(`[id="${menuId}"]`)))}>
-        More<span className="asset-move__caret" aria-hidden="true">▾</span>
+        More{unsaved && <span className="commons-tab__dot" aria-hidden="true" />}<span className="asset-move__caret" aria-hidden="true">▾</span>
       </button>
       {open && (
         <ToolbarMenuPopover anchorRef={triggerRef} id={menuId} label="More Commons sections" onClose={close}
@@ -273,24 +277,38 @@ export function CommonsView() {
   const [tab, setTab] = useState<Tab>('all');
   const folded = useToolbarFolds();
   const foldFocus = useFoldFocusHandoff(folded, tab);
-  const [labelingDirty, setLabelingDirty] = useState(false);
-  // The Updates corner leaves the Commons too (Show, See all, Review): it
-  // reads this and refuses while a panel holds unsaved work (p157 review).
-  // So do the stores (uiStore, projectStore): nothing leaves the Commons then.
+  // Blind labeling and Agent review stay mounted once opened, hidden while
+  // another section shows, so their drafts (and a grading run) live as long
+  // as the Commons: moving between sections isn't leaving (commons-leave).
+  const [opened, setOpened] = useState<Tab[]>([]);
+  if ((tab === 'labeling' || tab === 'review') && !opened.includes(tab)) setOpened([...opened, tab]);
+  const backRef = useRef<HTMLButtonElement>(null);
+  const leave = useCommonsLeave(backRef);
+  const [busyAt, setBusyAt] = useState<'back' | 'home' | null>(null);
+  // A leave waiting on a save in progress marks its control; a later one takes the mark over.
+  const busyFor = useCallback((which: 'back' | 'home') => (on: boolean) =>
+    setBusyAt((at) => (on ? which : at === which ? null : at)), []);
+  // While a panel holds unsaved work nothing leaves the Commons without
+  // asking: the stores hold agents' and the system's exits (lib/commonsUnsaved),
+  // and the person's own exits ask here (leave.request).
   useEffect(() => {
-    setCommonsUnsaved(labelingDirty);
+    setCommonsUnsaved(leave.hold);
     return () => setCommonsUnsaved(false);
-  }, [labelingDirty]);
-  // The browser's Back or a hash edit doesn't leave either (the hash routes'
-  // exits are held): the URL goes back to what's shown. Pushed, not replaced:
-  // after a Back the current entry is the one the person went back to (the
-  // canvas), and it must survive so the next Back after a save reaches it.
+  }, [leave.hold]);
+  // The browser's Back or a hash edit: the hash routes' exits are held, the
+  // URL goes back to what's shown, and the popover asks, anchored to Back.
+  // Pushed, not replaced: after a Back the current entry is the one the
+  // person went back to, and it must survive, so leaving is one Back to it.
+  const { request } = leave;
   useEffect(() => {
-    if (!labelingDirty) return;
-    const stay = (event: HashChangeEvent) => window.history.pushState(window.history.state, '', event.oldURL);
+    if (!leave.hold) return;
+    const stay = (event: HashChangeEvent) => {
+      window.history.pushState(window.history.state, '', event.oldURL);
+      request({ anchor: backRef.current, go: () => window.history.back(), busy: busyFor('back') });
+    };
     window.addEventListener('hashchange', stay);
     return () => window.removeEventListener('hashchange', stay);
-  }, [labelingDirty]);
+  }, [leave.hold, request, busyFor]);
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [rows, setRows] = useState<SearchRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -449,8 +467,8 @@ export function CommonsView() {
   };
 
   // A reference an agent asks to change: its detail, where the proposal waits.
+  // Another section of the same Commons: unsaved labels keep (commons-leave).
   const reviewProposal = (id: string) => {
-    if (labelingDirty) return;
     setSelectedId(id);
     if (tab !== 'all' && tab !== 'inbox') setTab('all');
   };
@@ -471,14 +489,17 @@ export function CommonsView() {
 
   return (
     <div className={`commons-view${selectedId && tab !== 'settings' && tab !== 'labeling' && tab !== 'review' ? ' commons-view--detail' : ''}`}>
-      <WorkspaceHeader title="Commons" onBack={exitCommons} backLabel={workspaceLabel(returnView)} backDisabled={labelingDirty}
-        homeBlocked={labelingDirty ? COMMONS_UNSAVED_REASON : undefined} className="commons-toolbar">
+      <WorkspaceHeader title="Commons" backLabel={workspaceLabel(returnView)} className="commons-toolbar" backRef={backRef}
+        onBack={() => request({ anchor: backRef.current, go: exitCommons, busy: busyFor('back') }, true)}
+        backBusy={busyAt === 'back'} homeBusy={busyAt === 'home'}
+        onHome={(button) => request({ anchor: button, go: () => void useProjectStore.getState().goHome(), busy: busyFor('home') }, true)}>
         <div className="commons-tabs" role="tablist" aria-label="Commons sections">
           {TABS.map((t) => {
             const folds = FOLDED_TABS.includes(t);
+            const marked = (t === 'labeling' && leave.unsaved.labeling) || (t === 'review' && leave.unsaved.review);
             return (
               <button
-                key={t} type="button" role="tab" disabled={labelingDirty} aria-selected={tab === t}
+                key={t} type="button" role="tab" aria-selected={tab === t}
                 className={`commons-tab${tab === t ? ' commons-tab--active' : ''}${folds ? ' commons-tab--overflow' : ''}`}
                 // Folded, the open one is hidden on screen (commons.css): keep Tab off it.
                 tabIndex={folded && folds && tab === t ? -1 : undefined}
@@ -488,11 +509,12 @@ export function CommonsView() {
                 onClick={() => setTab(t)}
               >
                 {tabLabel(t)}
+                {marked && <><span className="commons-tab__dot" aria-hidden="true" /><span className="commons-sr-only"> · Unsaved</span></>}
               </button>
             );
           })}
         </div>
-        <MoreSections tab={tab} disabled={labelingDirty} onChoose={setTab} triggerRef={foldFocus.moreRef}
+        <MoreSections tab={tab} unsaved={leave.unsaved.labeling} onChoose={setTab} triggerRef={foldFocus.moreRef}
           onFocus={() => foldFocus.onFocus('more')} onBlur={foldFocus.onBlur} />
         <label className="commons-field commons-field--inline">
           Add to
@@ -576,7 +598,19 @@ export function CommonsView() {
         </section>
       )}
 
-      {tab === 'review' ? <CommonsReview onDirtyChange={setLabelingDirty} /> : tab === 'labeling' ? <CommonsEvaluation onDirtyChange={setLabelingDirty} /> : tab === 'settings' ? (
+      {/* Hidden, not unmounted, while another section shows (display: contents
+          otherwise, so each panel stays the view's grid item; commons.css). */}
+      {opened.includes('review') && (
+        <div className="commons-panel-slot" hidden={tab !== 'review'}>
+          <CommonsReview active={tab === 'review'} onWork={leave.report.review} />
+        </div>
+      )}
+      {opened.includes('labeling') && (
+        <div className="commons-panel-slot" hidden={tab !== 'labeling'}>
+          <CommonsEvaluation active={tab === 'labeling'} onWork={leave.report.labeling} />
+        </div>
+      )}
+      {tab === 'review' || tab === 'labeling' ? null : tab === 'settings' ? (
         <main className="commons-main commons-main--settings">
           <CommonsSettings status={status} onOpenAsset={openAsset} onChanged={refresh} />
         </main>
@@ -610,6 +644,10 @@ export function CommonsView() {
         </>
       )}
       {promptElement}
+      {leave.asking && (
+        <CommonsLeavePopover asking={leave.asking} unsaved={leave.unsaved.labeling || leave.unsaved.review} running={leave.running}
+          onChoose={(choice) => void leave.choose(choice)} onStay={leave.close} />
+      )}
     </div>
   );
 }

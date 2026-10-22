@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { ProjectWorkspaceControls } from './projects/ProjectWorkspaceControls';
 import { UpdatesSlot } from './agent-notes/UpdatesSlot';
@@ -9,8 +9,12 @@ interface WorkspaceHeaderProps {
   onBack?: () => void;
   backLabel?: string;
   backDisabled?: boolean;
-  /** Why Projects can't be left for now (its button's title while disabled). */
-  homeBlocked?: string;
+  backRef?: Ref<HTMLButtonElement>;
+  /** Back is waiting on a save in progress: it reads "Saving…" (commons-leave). */
+  backBusy?: boolean;
+  /** Projects through the screen's own exit (the Commons asks first); default goHome. */
+  onHome?: (button: HTMLButtonElement) => void;
+  homeBusy?: boolean;
   className?: string;
   navigation?: ReactNode;
   children?: ReactNode;
@@ -20,16 +24,17 @@ interface WorkspaceHeaderProps {
 }
 
 /** One current workspace identity, with its actual return destination. */
-export function WorkspaceHeader({ title, onBack, backLabel = 'Canvas', backDisabled = false, homeBlocked,
-  className = '', navigation, children, updatesSlot = true }: WorkspaceHeaderProps) {
+export function WorkspaceHeader({ title, onBack, backLabel = 'Canvas', backDisabled = false, backRef, backBusy = false,
+  onHome, homeBusy, className = '', navigation, children, updatesSlot = true }: WorkspaceHeaderProps) {
   return (
     <header className={`workspace-header${updatesSlot ? ' workspace-header--updates-slot' : ''} ${className}`} aria-label="Workspace">
       <div className="workspace-header__identity">
-        <ProjectWorkspaceControls homeBlocked={homeBlocked} />
-        {onBack && <button type="button" className={`workspace-header__back${navigation ? ' workspace-header__back--navigation' : ''}`} onClick={onBack}
-          disabled={backDisabled} aria-label={`Back to ${backLabel}`} title={navigation ? `Back to ${backLabel}` : undefined}>
+        <ProjectWorkspaceControls onHome={onHome} homeBusy={homeBusy} />
+        {onBack && <button ref={backRef} type="button" className={`workspace-header__back${navigation ? ' workspace-header__back--navigation' : ''}`} onClick={onBack}
+          disabled={backDisabled} aria-label={backBusy ? 'Saving…' : `Back to ${backLabel}`} aria-busy={backBusy || undefined}
+          title={navigation ? `Back to ${backLabel}` : undefined}>
           <ArrowLeft size={16} aria-hidden="true" />
-          <span className={navigation ? 'workspace-header__navigation-label' : undefined}>{backLabel}</span>
+          <span className={navigation ? 'workspace-header__navigation-label' : undefined}>{backBusy ? 'Saving…' : backLabel}</span>
         </button>}
         <h1 className={`workspace-header__title${navigation ? ' workspace-header__navigation-label' : ''}`} data-workspace-heading tabIndex={-1}>{title}</h1>
         {navigation}

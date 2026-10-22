@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { LabelingWork } from '../src/components/commons/commonsLeave';
 
 /**
  * p157 review: the Commons keeps its "unsaved labels" state to itself
@@ -21,12 +22,12 @@ vi.mock('../src/lib/commonsApi', () => ({
 }));
 vi.mock('../src/components/commons/CommonsDetail', () => ({ CommonsDetail: () => null }));
 vi.mock('../src/components/commons/CommonsMedia', () => ({ CommonsMedia: () => null }));
-/** A panel with unsaved work, reported the way the real ones do (dirty on mount, clean on unmount). */
-function DirtyPanel({ onDirtyChange }: { onDirtyChange?: (dirty: boolean) => void }) {
+/** A panel with unsaved work, reported the way the real ones do (the panel contract: unsaved on mount, gone on unmount). */
+function DirtyPanel({ onWork }: { onWork?: (work: LabelingWork | null) => void }) {
   useEffect(() => {
-    onDirtyChange?.(dirty.value);
-    return () => onDirtyChange?.(false);
-  }, [onDirtyChange]);
+    onWork?.({ unsaved: dirty.value, saving: null, running: false, save: async () => ({ ok: true }), discard: () => {}, stop: () => {} });
+    return () => onWork?.(null);
+  }, [onWork]);
   return <p>panel</p>;
 }
 vi.mock('../src/components/commons/CommonsReview', () => ({ CommonsReview: DirtyPanel }));

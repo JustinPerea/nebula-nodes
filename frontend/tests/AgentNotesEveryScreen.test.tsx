@@ -567,55 +567,92 @@ describe('a step away that can\'t go through says why', () => {
     await vi.waitFor(() => expect(alertText()).toBe(NOT_OPENED));
   });
 
-  // The Commons disables its own Back, tabs and More while Blind labeling or
-  // Agent review holds unsaved work. The corner leaves the Commons too (See
-  // all, Show, Review): it refuses the same way, and says why.
+  // While Blind labeling or Agent review holds unsaved work, the corner's
+  // ways out of the Commons (See all, Show, Review) ask first through the
+  // Commons' popover, anchored to the clicked button (commons-leave, GM -
+  // Design; #163 refused with a reason). The step runs only once the person
+  // chose to leave and the Commons is clean. CommonsView registers the ask;
+  // here a stand-in records it.
   describe('from the Commons with unsaved labels', () => {
-    const UNSAVED = 'The Commons has unsaved changes: save or discard them first.';
+    type Asked = { anchor: HTMLElement | null; leave: () => void };
+    let asked: Asked[] = [];
     async function unsaved(value: boolean) {
-      const { setCommonsUnsaved } = await import('../src/lib/commonsUnsaved');
+      const { setCommonsUnsaved, setCommonsLeaveAsk } = await import('../src/lib/commonsUnsaved');
+      setCommonsLeaveAsk(value ? (anchor, leave) => { asked.push({ anchor, leave }); } : null);
       setCommonsUnsaved(value);
     }
+    /** The person chose a leave: the Commons is clean, then the step runs. */
+    async function chooseLeave() {
+      const { setCommonsUnsaved } = await import('../src/lib/commonsUnsaved');
+      setCommonsUnsaved(false);
+      act(() => { asked[asked.length - 1].leave(); });
+    }
+    beforeEach(() => { asked = []; });
     afterEach(async () => { await unsaved(false); });
 
-    it('See all stays in the Commons and says why', async () => {
+    it('See all asks, anchored to See all, and goes to the canvas once they leave', async () => {
       on('commons');
       await unsaved(true);
       render(<AppAgentNotes />);
       sync([note('an_1')]);
       fireEvent.click(chip());
-      fireEvent.click(screen.getByRole('button', { name: 'See all actions →' }));
-      await vi.waitFor(() => expect(alertText()).toBe(UNSAVED));
+      const seeAll = screen.getByRole('button', { name: 'See all actions →' });
+      fireEvent.click(seeAll);
+      expect(asked).toHaveLength(1);
+      expect(asked[0].anchor).toBe(seeAll);
       expect(useUIStore.getState().viewMode).toBe('commons');
-      expect(useUIStore.getState().agentLogOpen).toBe(false);
+      expect(within(screen.getByRole('dialog', { name: 'Updates' })).queryByRole('alert')).toBeNull();
+      await chooseLeave();
+      await vi.waitFor(() => expect(useUIStore.getState().viewMode).toBe('canvas'));
     });
 
-    it('Show stays in the Commons and says why', async () => {
+    it('Show asks, anchored to Show, and goes to the canvas once they leave', async () => {
       on('commons');
       await unsaved(true);
       render(<AppAgentNotes />);
       sync([note('an_1')]);
-      fireEvent.click(within(openEntry()).getByRole('button', { name: 'Show on canvas' }));
-      await vi.waitFor(() => expect(alertText()).toBe(UNSAVED));
+      const show = within(openEntry()).getByRole('button', { name: 'Show on canvas' });
+      fireEvent.click(show);
+      expect(asked).toHaveLength(1);
+      expect(asked[0].anchor).toBe(show);
       expect(useUIStore.getState().viewMode).toBe('commons');
+      await chooseLeave();
+      await vi.waitFor(() => expect(useUIStore.getState().viewMode).toBe('canvas'));
     });
 
-    it.each([['moodboard', 'mb1'], ['project', 'dusk'], ['commons', 'ast_1']] as const)(
-      'Review on a %s ask stays in the Commons and says why',
+    it.each([['moodboard', 'mb1'], ['project', 'dusk']] as const)(
+      'Review on a %s ask asks, anchored to Review, and goes once they leave',
       async (target, targetId) => {
         on('commons');
         await unsaved(true);
         render(<AppAgentNotes />);
         sync([ask(target, targetId)]);
-        fireEvent.click(within(openEntry()).getByRole('button', { name: 'Review' }));
-        await vi.waitFor(() => expect(alertText()).toBe(UNSAVED));
+        const review = within(openEntry()).getByRole('button', { name: 'Review' });
+        fireEvent.click(review);
+        expect(asked).toHaveLength(1);
+        expect(asked[0].anchor).toBe(review);
         expect(useUIStore.getState().viewMode).toBe('commons');
         expect(goHome).not.toHaveBeenCalled();
         expect(useAssetProposalsStore.getState().review).toBeNull();
+        await chooseLeave();
+        if (target === 'project') await vi.waitFor(() => expect(goHome).toHaveBeenCalledTimes(1));
+        else await vi.waitFor(() => expect(useUIStore.getState().viewMode).toBe('moodboard-editor'));
+        expect(useAssetProposalsStore.getState().review).toMatchObject({ kind: target, targetId });
       },
     );
 
-    it('once saved, See all goes to the canvas', async () => {
+    it("Review on a Commons ask doesn't leave the Commons, so it opens the reference without asking", async () => {
+      on('commons');
+      await unsaved(true);
+      render(<AppAgentNotes />);
+      sync([ask('commons', 'ast_1')]);
+      fireEvent.click(within(openEntry()).getByRole('button', { name: 'Review' }));
+      await vi.waitFor(() => expect(useAssetProposalsStore.getState().review).toMatchObject({ kind: 'commons', targetId: 'ast_1' }));
+      expect(asked).toHaveLength(0);
+      expect(useUIStore.getState().viewMode).toBe('commons');
+    });
+
+    it('once saved, See all goes to the canvas without asking', async () => {
       on('commons');
       await unsaved(true);
       await unsaved(false);
@@ -624,6 +661,7 @@ describe('a step away that can\'t go through says why', () => {
       fireEvent.click(chip());
       fireEvent.click(screen.getByRole('button', { name: 'See all actions →' }));
       await vi.waitFor(() => expect(useUIStore.getState().viewMode).toBe('canvas'));
+      expect(asked).toHaveLength(0);
     });
   });
 });

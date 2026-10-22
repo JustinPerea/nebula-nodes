@@ -1,4 +1,5 @@
-import type { CSSProperties } from 'react';
+import { useContext, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
+import { LeaveBusyContext } from './leaveBusy';
 import type { AgentNote, AgentNoteAction, AgentNoteAuthor } from '../../lib/agentNotes';
 import { authorInitials, noteControls, type NoteButton } from '../../lib/agentNotesView';
 
@@ -48,6 +49,24 @@ export function AuthorDot({
   );
 }
 
+/**
+ * A corner button that reads "Saving…" while the Commons' save in progress
+ * holds the leave it asked for (commons-leave, LeaveBusyContext).
+ */
+export function BusyButton({ className, onClick, children }: {
+  className: string;
+  onClick: (event: MouseEvent<HTMLButtonElement>) => void;
+  children: ReactNode;
+}) {
+  const [element, setElement] = useState<HTMLButtonElement | null>(null);
+  const busy = useContext(LeaveBusyContext) === element && element !== null;
+  return (
+    <button ref={setElement} type="button" className={className} aria-busy={busy || undefined} onClick={onClick}>
+      {busy ? 'Saving…' : children}
+    </button>
+  );
+}
+
 /** The update's own buttons (edit actions first, then Show) or its greyed state. */
 export function NoteButtons({
   note,
@@ -57,8 +76,9 @@ export function NoteButtons({
 }: {
   note: AgentNote;
   adapter: AgentNotesAdapter;
-  onAction: (action: AgentNoteAction) => void;
-  onShow: () => void;
+  /** `anchor`: the clicked button, where the Commons asks before leaving. */
+  onAction: (action: AgentNoteAction, anchor: HTMLElement) => void;
+  onShow: (anchor: HTMLElement) => void;
 }) {
   const controls = noteControls(note, { showLabel: adapter.showLabel(note), actionState: adapter.actionState });
   if (controls.buttons.length === 0 && !controls.state) return null;
@@ -66,18 +86,17 @@ export function NoteButtons({
     <div className="agent-notes-acts">
       {controls.state && <span className="agent-notes-acts__state">{controls.state}</span>}
       {controls.buttons.map((button: NoteButton) => (
-        <button
+        <BusyButton
           key={button.kind === 'show' ? 'show' : button.label}
-          type="button"
           className={`agent-notes-btn${button.kind === 'action' && button.primary ? ' agent-notes-btn--primary' : ''}`}
           onClick={(event) => {
             event.stopPropagation();
-            if (button.kind === 'show') onShow();
-            else onAction(button.action);
+            if (button.kind === 'show') onShow(event.currentTarget);
+            else onAction(button.action, event.currentTarget);
           }}
         >
           {button.label}
-        </button>
+        </BusyButton>
       ))}
     </div>
   );

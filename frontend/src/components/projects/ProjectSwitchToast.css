@@ -62,3 +62,11 @@
 @media (prefers-reduced-motion: reduce) {
   .project-switch-toast { animation: none; }
 }
+/* Over the Commons (a switch held behind unsaved labels, commons-leave) it
+ * stays clear of the labeling panels' form column, where Save is (at most
+ * 390 px plus the panel's 28 px padding on the right; commons-evaluation.css),
+ * so its centered width leaves that room on both sides. The leave popover
+ * sits above it (commons.css). */
+body:has(.commons-view) .project-switch-toast {
+  max-width: min(640px, calc(100vw - 2 * (418px + 8px)));
+}
