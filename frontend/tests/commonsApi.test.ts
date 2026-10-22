@@ -8,6 +8,7 @@ vi.mock('../src/lib/backend', () => ({
 
 import { commonsApi, commonsEvaluationApi, filtersToRequest, resetCommonsSessionForTests } from '../src/lib/commonsApi';
 import { EMPTY_FILTERS } from '../src/lib/commonsTypes';
+import { CommonsRequestError } from '../src/lib/commonsRequestError';
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -66,6 +67,23 @@ describe('commonsApi', () => {
     expect(sessionStorage.getItem('nebula.person')).toBeNull();
     await expect(commonsApi.status()).rejects.toThrow('no UI session');
     expect(apiFetch).toHaveBeenCalledTimes(2);
+  });
+
+  // The Commons' leave popover offers a save again only when it could work:
+  // the error carries the answer's status (none for a lost connection).
+  it('throws a CommonsRequestError carrying the status of a refused request', async () => {
+    apiFetch.mockResolvedValueOnce(json({ detail: 'Labels changed in another window. Reload before saving.' }, 409));
+    const conflict = await commonsApi.status().catch((error: unknown) => error);
+    expect(conflict).toBeInstanceOf(CommonsRequestError);
+    expect(conflict).toMatchObject({ status: 409, message: 'Labels changed in another window. Reload before saving.' });
+    apiFetch.mockResolvedValueOnce(json({ detail: 'database is locked' }, 503));
+    expect(await commonsApi.status().catch((error: unknown) => error)).toMatchObject({ status: 503 });
+    apiFetch.mockImplementation(async () => json({ detail: 'invalid UI session token' }, 401));
+    const session = await commonsApi.status().catch((error: unknown) => error);
+    expect(session).toBeInstanceOf(CommonsRequestError);
+    expect(session).toMatchObject({ status: 401 });
+    sessionStorage.clear();
+    expect(await commonsApi.status().catch((error: unknown) => error)).toMatchObject({ status: 401 });
   });
 
   it('makes no request from a desktop window that may not have the token', async () => {

@@ -97,3 +97,11 @@ body.app-slava-restraint .project-workspace-controls button:focus-visible {
   body.app-slava-restraint :is(.project-workspace-controls__status, .project-workspace-controls__count) { display: none; }
   body.app-slava-restraint .project-workspace-controls__name { max-width: 100px; }
 }
+/* Waiting on the Commons' save in progress before Projects (commons-leave). */
+body.app-slava-restraint .project-workspace-controls__home[aria-busy="true"] {
+  grid-auto-flow: column;
+  gap: 6px;
+  width: auto;
+  padding: 0 8px;
+}
+body.app-slava-restraint .project-workspace-controls__busy { font-size: 12px; white-space: nowrap; }

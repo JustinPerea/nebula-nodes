@@ -1043,3 +1043,94 @@ body.app-slava-restraint .commons-prompt__actions {
     transform: none;
   }
 }
+
+/* -- leaving with unsaved labels (commons-leave) ------------------------------ */
+
+/* Blind labeling and Agent review stay mounted, hidden, in the other
+ * sections; shown, the slot steps aside so the panel is the view's grid item. */
+body.app-slava-restraint .commons-panel-slot:not([hidden]) {
+  display: contents;
+}
+
+/* The mark on a section holding unsaved labels (and on More while it folds
+ * there): the app's attention dot (settings.css .settings-row__dot--warn),
+ * not orange, which means the agent and the primary action. */
+body.app-slava-restraint .commons-tab__dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--sr-warning);
+  vertical-align: middle;
+}
+
+body.app-slava-restraint .commons-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The popover: the toolbar menu's surface (asset-move.css), above the
+ * project-switch toast (60) so nothing covers it. It springs in on the
+ * corner's POP spring (lib/springs.ts, set on its style). */
+body.app-slava-restraint .commons-leave {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: var(--sr-layer-modal-control, 61);
+  width: max-content;
+  max-width: min(320px, calc(100vw - 16px));
+  padding: 12px;
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: 6px;
+  background: var(--sr-canvas-elevated, var(--sr-canvas));
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+  font-size: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  pointer-events: none;
+}
+
+body.app-slava-restraint .commons-leave--open {
+  opacity: 1;
+  pointer-events: auto;
+  animation: commons-leave-in var(--spring-pop-ms, 420ms) var(--spring-pop, var(--commons-spring)) both;
+}
+
+@keyframes commons-leave-in {
+  from { opacity: 0; transform: scale(0.97) translateY(-2px); }
+  to { opacity: 1; transform: none; }
+}
+
+body.app-slava-restraint .commons-leave__line {
+  margin: 0;
+  color: var(--sr-ink);
+  font-weight: 600;
+}
+
+body.app-slava-restraint .commons-leave__reason {
+  margin: 4px 0 0;
+  color: var(--sr-ink-meta);
+  overflow-wrap: anywhere;
+}
+
+body.app-slava-restraint .commons-leave__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .commons-leave--open {
+    animation: none;
+  }
+}

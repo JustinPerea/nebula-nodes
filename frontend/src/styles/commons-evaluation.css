@@ -335,3 +335,23 @@ body.app-slava-restraint .commons-evaluation input::placeholder {
   margin:0 0 12px;
   padding-left:18px;
 }
+/* A panel's Save with "Unsaved" beside it while the draft is unsaved
+ * (commons-leave), in the panel's own muted ink and the section eyebrow's
+ * letterforms (#157's heading pattern, .commons-eyebrow). */
+.evaluation-save {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:10px;
+  margin:20px 0 0;
+}
+body.app-slava-restraint .evaluation-save .commons-button--primary,
+.evaluation-save .commons-button--primary {
+  margin:0;
+}
+.commons-unsaved {
+  color:#6d7a63;
+  font-size:10px;
+  letter-spacing:1.5px;
+  text-transform:uppercase;
+}

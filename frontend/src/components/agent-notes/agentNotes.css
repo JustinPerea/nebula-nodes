@@ -86,12 +86,13 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 /* The ring shows whenever there is anything unread and the list is closed,
- * at any count (GM review of PR #157, round 2), in the newest author's colour. */
+ * at any count (GM review of PR #157, round 2), in the newest author's colour,
+ * lightened where needed to clear 3:1 on the header (--an-ring, lib/unreadRing). */
 .agent-notes-chip::after {
   content: '';
   position: absolute;
   inset: -3px;
-  border: 2px solid var(--an-newest);
+  border: 2px solid var(--an-ring, var(--an-newest));
   border-radius: 999px;
   opacity: 0;
   pointer-events: none;
@@ -104,8 +105,8 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 /* The unread ring fills 1-3px outside the chip, so while it shows the focus
- * ring moves out to 4-6px: the whole lime ring stays visible, with a 1px gap
- * (GM: the neutral ring "stays clear of ... the lime unread ring"; review of sf). */
+ * ring moves out to 4-6px: the whole unread ring stays visible, with a 1px gap
+ * (GM, review of #161: the neutral focus ring stays clear of the unread ring). */
 .agent-notes-chip--ringed:focus-visible {
   outline-offset: 4px;
 }

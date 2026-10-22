@@ -30,6 +30,9 @@ import { AgentNoteCard, AgentNotesSummaryCard } from './AgentNoteCard';
 import { AgentNotesList, type AgentNotesListSection } from './AgentNotesList';
 import { AuthorDot, type AgentNotesAdapter } from './AgentNoteParts';
 import { UPDATES_SLOT_EVENT } from './UpdatesSlot';
+import { LeaveBusyContext } from './leaveBusy';
+import { askBeforeLeavingCommons } from '../../lib/commonsUnsaved';
+import { unreadRingColor } from '../../lib/unreadRing';
 import './agentNotes.css';
 
 /** A card stays about 4 s (GM's v5.2 holds 2.6 to 3.8 s), longer while hovered or focused. */
@@ -368,6 +371,8 @@ export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSecti
   const [queue, setQueue] = useState<string[]>([]);
   const [card, setCard] = useState<Card | null>(null);
   const [leaving, setLeaving] = useState(false);
+  /** The control waiting on the Commons' save in progress (commons-leave). */
+  const [leaveBusy, setLeaveBusy] = useState<HTMLElement | null>(null);
   const [pop, setPop] = useState(0);
 
   const openRef = useRef(open);
@@ -539,6 +544,8 @@ export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSecti
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as globalThis.Node | null;
       if (target && (listRef.current?.contains(target) || chipRef.current?.contains(target))) return;
+      // The Commons' leave popover asks about a step from this list: it stays.
+      if (target instanceof Element && target.closest('[data-leave-popover]')) return;
       setOpen(false);
       setNewCount(0);
       setOutline('hover', null);
@@ -598,9 +605,23 @@ export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSecti
     if (!openRef.current) openListRef.current();
   }
 
-  function runAction(note: AgentNote, action: AgentNoteAction) {
+  /**
+   * A step that leaves the Commons while it holds unsaved labels: the Commons
+   * asks first, anchored to the clicked control (commons-leave), and the step
+   * runs again once the person chose to leave. True when it asked.
+   */
+  function askingFirst(anchor: HTMLElement | undefined, step: () => void): boolean {
+    const at = anchor ?? null;
+    return askBeforeLeavingCommons(at, step, (on) => setLeaveBusy((busy) => (on ? at : busy === at ? null : busy)));
+  }
+
+  function runAction(note: AgentNote, action: AgentNoteAction, anchor?: HTMLElement) {
     const section = sectionHolding(sectionsRef.current, note.id);
     if (!section) return;
+    // Review leaves for where the proposal is decided; a Commons ask opens
+    // in the Commons, another of its sections, which isn't leaving.
+    if (action.op.kind === 'proposal.review' && action.op.target !== 'commons'
+      && askingFirst(anchor, () => runAction(note, action, anchor))) return;
     useAgentNotesStore.getState().clearError();
     void Promise.resolve()
       .then(() => section.adapter.runAction(note, action))
@@ -612,10 +633,11 @@ export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSecti
       .catch(fail);
   }
 
-  function show(note: AgentNote) {
+  function show(note: AgentNote, anchor?: HTMLElement) {
     if (note.refs.length === 0) return;
     const section = sectionHolding(sectionsRef.current, note.id);
     if (!section) return;
+    if (!onCanvas() && askingFirst(anchor, () => show(note, anchor))) return;
     // From another screen Show opens the canvas: the list steps aside once
     // it is there. One that can't go keeps the list open, with its reason.
     // On its own screen (the canvas, or the board in the Studio) it stays open.
@@ -631,7 +653,8 @@ export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSecti
       : null);
   }
 
-  function seeAll() {
+  function seeAll(anchor?: HTMLElement) {
+    if (!onCanvas() && askingFirst(anchor, () => seeAll(anchor))) return;
     useAgentNotesStore.getState().clearError();
     // On the canvas the list steps aside for the log at once, as before.
     if (onCanvas()) closeList(false);
@@ -661,6 +684,7 @@ export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSecti
   const rootStyle = springCssVars() as CSSProperties;
 
   return (
+    <LeaveBusyContext.Provider value={leaveBusy}>
     <div className="agent-notes-root" style={rootStyle}>
       <button
         ref={chipRef}
@@ -669,7 +693,7 @@ export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSecti
         aria-label={count > 0 ? `Updates, ${count} unread` : 'Updates'}
         aria-expanded={open}
         aria-haspopup="dialog"
-        style={{ '--an-newest': newest } as CSSProperties}
+        style={{ '--an-newest': newest, '--an-ring': unreadRingColor(newest) } as CSSProperties}
         onClick={() => (open ? closeList(false) : openList())}
         onKeyDown={(event) => {
           if (event.key === 'Escape' && open) {
@@ -706,8 +730,8 @@ export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSecti
             void dismiss(cardSection.surface, cardNote.id);
             setLeaving(true);
           }}
-          onAction={(action) => runAction(cardNote, action)}
-          onShow={() => show(cardNote)}
+          onAction={(action, anchor) => runAction(cardNote, action, anchor)}
+          onShow={(anchor) => show(cardNote, anchor)}
         />
       )}
       {card && !open && card.kind === 'summary' && (
@@ -737,6 +761,7 @@ export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSecti
         />
       )}
     </div>
+    </LeaveBusyContext.Provider>
   );
 }
 

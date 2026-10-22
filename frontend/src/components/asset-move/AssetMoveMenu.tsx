@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import type { MoveChoice } from '../../lib/assetMove';
+import { useAnchoredPopover } from './anchoredPopover';
 import '../../styles/asset-move.css';
 
 /**
@@ -71,18 +72,9 @@ export function ToolbarMenuPopover<C extends ToolbarMenuChoice>({ anchorRef, id,
   onClose: (returnFocus: boolean) => void;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
-
-  useLayoutEffect(() => {
-    const anchor = anchorRef.current?.getBoundingClientRect();
-    const menu = menuRef.current?.getBoundingClientRect();
-    if (!anchor) return;
-    const width = menu?.width ?? 220;
-    // Right-aligned under the button (it sits at the toolbar's right end), kept on screen.
-    const left = Math.min(Math.max(8, anchor.right - width), Math.max(8, window.innerWidth - width - 8));
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- DOM measurement: the menu's place depends on its own rendered size
-    setPosition({ left, top: anchor.bottom + 6 });
-  }, [anchorRef]);
+  const dismiss = useCallback(() => onClose(false), [onClose]);
+  // Right-aligned under the button (it sits at the toolbar's right end), kept on screen.
+  const position = useAnchoredPopover(anchorRef, menuRef, dismiss, 'end');
 
   useEffect(() => {
     if (!position) return;
@@ -90,21 +82,6 @@ export function ToolbarMenuPopover<C extends ToolbarMenuChoice>({ anchorRef, id,
     (menu?.querySelector<HTMLElement>(`${ITEM}:not([aria-disabled="true"])`)
       ?? menu?.querySelector<HTMLElement>(ITEM))?.focus();
   }, [position]);
-
-  useEffect(() => {
-    const outside = (event: Event) => {
-      const target = event.target as Node | null;
-      if (target && (menuRef.current?.contains(target) || anchorRef.current?.contains(target))) return;
-      onClose(false);
-    };
-    const resize = () => onClose(false);
-    document.addEventListener('pointerdown', outside, true);
-    window.addEventListener('resize', resize);
-    return () => {
-      document.removeEventListener('pointerdown', outside, true);
-      window.removeEventListener('resize', resize);
-    };
-  }, [anchorRef, onClose]);
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     const items = [...(menuRef.current?.querySelectorAll<HTMLElement>(ITEM) ?? [])];

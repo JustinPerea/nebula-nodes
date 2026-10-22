@@ -2,7 +2,7 @@ import { type CSSProperties, type KeyboardEvent, type Ref } from 'react';
 import type { AgentNote, AgentNoteAction } from '../../lib/agentNotes';
 import { clockTime, noteDone, noteLabel, noteText, offersNotNow } from '../../lib/agentNotesView';
 import { ScrollFade } from '../ScrollFade';
-import { AuthorDot, NoteButtons, type AgentNotesAdapter } from './AgentNoteParts';
+import { AuthorDot, BusyButton, NoteButtons, type AgentNotesAdapter } from './AgentNoteParts';
 
 /** One list in the opened Updates: its updates (newest first) and how to draw and run them. */
 export interface AgentNotesListSection {
@@ -46,9 +46,10 @@ export function AgentNotesList({
   now: number;
   onClose: (returnFocus: boolean) => void;
   /** "See all actions →": null while the Agent log is switched off. */
-  onSeeAll: (() => void) | null;
-  onAction: (note: AgentNote, action: AgentNoteAction) => void;
-  onShow: (note: AgentNote) => void;
+  /** `anchor`: what was clicked, where the Commons asks before leaving (commons-leave). */
+  onSeeAll: ((anchor: HTMLElement) => void) | null;
+  onAction: (note: AgentNote, action: AgentNoteAction, anchor?: HTMLElement) => void;
+  onShow: (note: AgentNote, anchor?: HTMLElement) => void;
   onHover: (note: AgentNote | null) => void;
   /** The last thing that failed (a dismiss the server refused), if any. */
   error: string | null;
@@ -70,7 +71,7 @@ export function AgentNotesList({
     if (event.target !== event.currentTarget) return;
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
-      onShow(note);
+      onShow(note, event.currentTarget);
     }
   }
 
@@ -91,7 +92,7 @@ export function AgentNotesList({
         onMouseLeave={() => onHover(null)}
         onFocus={(event) => { if (event.target === event.currentTarget) onHover(note); }}
         onBlur={(event) => { if (event.target === event.currentTarget) onHover(null); }}
-        onClick={() => { if (showable) onShow(note); }}
+        onClick={(event) => { if (showable) onShow(note, event.currentTarget); }}
         onKeyDown={(event) => rowKeyDown(event, note)}
       >
         <div className="agent-notes-entry__who">
@@ -104,8 +105,8 @@ export function AgentNotesList({
         <NoteButtons
           note={note}
           adapter={adapter}
-          onAction={(action) => onAction(note, action)}
-          onShow={() => onShow(note)}
+          onAction={(action, anchor) => onAction(note, action, anchor)}
+          onShow={(anchor) => onShow(note, anchor)}
         />
       </li>
     );
@@ -160,9 +161,9 @@ export function AgentNotesList({
       <div className="agent-notes-panel__foot">
         <span className="agent-notes-panel__foot-note">{notNow ? 'Not now hides a suggestion for good' : ''}</span>
         {onSeeAll && (
-          <button type="button" className="agent-notes-panel__see-all" onClick={onSeeAll}>
+          <BusyButton className="agent-notes-panel__see-all" onClick={(event) => onSeeAll(event.currentTarget)}>
             See all actions →
-          </button>
+          </BusyButton>
         )}
       </div>
     </div>

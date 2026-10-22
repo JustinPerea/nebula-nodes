@@ -4,7 +4,8 @@ import { useProjectStore } from '../../store/projectStore';
 import { useGraphStore } from '../../store/graphStore';
 import './ProjectWorkspaceControls.css';
 
-export function ProjectWorkspaceControls({ homeBlocked }: { homeBlocked?: string }) {
+/** `onHome`: the screen's own way to Projects (the Commons asks first); `homeBusy`: it waits on a save. */
+export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?: (button: HTMLButtonElement) => void; homeBusy?: boolean }) {
   const project = useProjectStore((state) => state.activeProject);
   const screen = useProjectStore((state) => state.screen);
   const status = useProjectStore((state) => state.saveStatus);
@@ -21,9 +22,11 @@ export function ProjectWorkspaceControls({ homeBlocked }: { homeBlocked?: string
   const label = status === 'saving' ? 'Saving…' : status === 'error' ? 'Save failed' : status === 'unsaved' ? 'Unsaved changes' : 'Saved';
   return (
     <div className="project-workspace-controls">
-      <button type="button" className="project-workspace-controls__home" aria-label="Back to projects"
-        title={homeBlocked ?? 'Projects'} disabled={busy || !!homeBlocked} onClick={() => void useProjectStore.getState().goHome()}>
+      <button type="button" className="project-workspace-controls__home" aria-label={homeBusy ? 'Saving…' : 'Back to projects'}
+        aria-busy={homeBusy || undefined} title="Projects" disabled={busy}
+        onClick={(event) => (onHome ? onHome(event.currentTarget) : void useProjectStore.getState().goHome())}>
         <Home size={16} aria-hidden="true" />
+        {homeBusy && <span className="project-workspace-controls__busy">Saving…</span>}
       </button>
       {draft !== null
         ? <input className="project-workspace-controls__name project-workspace-controls__name-input" aria-label="Project name"

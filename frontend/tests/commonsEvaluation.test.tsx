@@ -2,6 +2,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { CommonsEvaluation } from '../src/components/commons/CommonsEvaluation';
 import { evaluationComplete, type EvaluationBatch } from '../src/lib/commonsEvaluationTypes';
+import { CommonsRequestError } from '../src/lib/commonsRequestError';
+import type { LabelingWork } from '../src/components/commons/commonsLeave';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), prepare: vi.fn(), image: vi.fn(), accents: vi.fn(), labels: vi.fn(), seal: vi.fn() }));
 vi.mock('../src/lib/commonsApi', () => ({ commonsEvaluationApi: api }));
@@ -50,6 +52,38 @@ it('preserves unsaved labels when a stale revision is rejected', async () => {
   await screen.findByRole('alert');
   expect(screen.getByLabelText('quiet loud').getAttribute('aria-valuetext')).toBe('0');
   expect((screen.getByText('Review batch · 0 / 15') as HTMLButtonElement).disabled).toBe(true);
+});
+
+// GM (commons-leave): "UNSAVED" beside Save gives the state, so the status
+// line keeps only the rule. And the leave popover offers Save and leave
+// again only when saving again could work: a conflict can't, a lost
+// connection or a server error can.
+it('says only the rule while unsaved, and tells a leave whether saving again could work', async () => {
+  const value = batch(); value.items[0].accent_locked = true; value.items[0].palette = [{ index: 0, hex: '#ff0000', share: 1 }];
+  api.get.mockResolvedValue(value);
+  let work: LabelingWork | null = null;
+  render(<CommonsEvaluation onWork={(next) => { work = next; }} />);
+  await screen.findByText('Set neutral');
+  fireEvent.click(screen.getByText('Set neutral'));
+  expect(screen.getByText('Save before changing reference')).toBeTruthy();
+  expect(screen.queryByText(/Unsaved changes ·/)).toBeNull();
+  await waitFor(() => expect(work?.unsaved).toBe(true));
+
+  api.labels.mockRejectedValueOnce(new CommonsRequestError('Labels changed in another window. Reload before saving.', 409));
+  expect(await work!.save()).toEqual({ ok: false, reason: 'Labels changed in another window. Reload before saving.', retry: false });
+  api.labels.mockRejectedValueOnce(new CommonsRequestError('Commons request failed (503)', 503));
+  expect(await work!.save()).toEqual({ ok: false, reason: 'Commons request failed (503)', retry: true });
+  api.labels.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+  expect(await work!.save()).toEqual({ ok: false, reason: 'Failed to fetch', retry: true });
+  // GM: a timeout or a rate limit is a 4xx that works on a second try.
+  for (const status of [408, 429]) {
+    api.labels.mockRejectedValueOnce(new CommonsRequestError('Try again', status));
+    expect(await work!.save()).toEqual({ ok: false, reason: 'Try again', retry: true });
+  }
+  for (const status of [400, 401, 403, 404, 413, 422]) {
+    api.labels.mockRejectedValueOnce(new CommonsRequestError('Refused', status));
+    expect(await work!.save()).toEqual({ ok: false, reason: 'Refused', retry: false });
+  }
 });
 
 it('does not treat untouched zero sliders, missing keywords, or review flags as complete', () => {
