@@ -404,8 +404,8 @@ body.app-slava-restraint .remotion-properties-panel__section textarea {
 
 body.app-slava-restraint .remotion-properties-panel__section input:focus,
 body.app-slava-restraint .remotion-properties-panel__section textarea:focus {
-  outline: none;
-  border-color: var(--sr-accent);
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
 }
 
 body.app-slava-restraint .remotion-properties-panel__field-label {

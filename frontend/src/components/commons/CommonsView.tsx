@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import type { CSSProperties, FocusEvent as ReactFocusEvent, RefObject } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { targetsOf, useAssetProposalsStore } from '../../store/assetProposalsStore';
 import { openOnce } from '../../store/assetProposalReviewRequest';
@@ -15,50 +16,243 @@ import { CommonsReview } from './CommonsReview';
 import { CommonsSettings } from './CommonsSettings';
 import { CommonsProposalsLine } from './CommonsProposalsLine';
 import { WorkspaceHeader } from '../WorkspaceHeader';
+import { ToolbarMenuPopover } from '../asset-move/AssetMoveMenu';
 import { workspaceLabel } from '../../lib/workspaceLabel';
+import { setCommonsUnsaved } from '../../lib/commonsUnsaved';
 import '../../styles/commons.css';
 
 type Tab = 'all' | 'inbox' | 'settings' | 'labeling' | 'review';
 type PageResult = Extract<UrlAddResult, { kind: 'page' }>;
 
+const TABS: Tab[] = ['all', 'inbox', 'review', 'labeling', 'settings'];
+/**
+ * The two least-used sections: Blind labeling (an occasional evaluation
+ * session) and Settings (set once). While the Updates chip takes its room in
+ * the header below 1440 px they fold into More (commons.css), so the toolbar
+ * keeps one row (GM review of Q107 a). All, Inbox and Agent review, the
+ * add controls and the worker line are what a visit acts on, so they stay.
+ */
+const FOLDED_TABS: Tab[] = ['labeling', 'settings'];
+
+function tabLabel(tab: Tab): string {
+  return tab === 'all' ? 'All' : tab === 'inbox' ? 'Inbox' : tab === 'labeling' ? 'Blind labeling' : tab === 'review' ? 'Agent review' : 'Settings';
+}
+
+/** commons.css's fold: below this width, while the Updates chip shows. */
+const FOLD_QUERY = '(max-width: 1439px)';
+
+function subscribeFold(onChange: () => void) {
+  const query = window.matchMedia?.(FOLD_QUERY);
+  query?.addEventListener('change', onChange);
+  // The chip comes and goes with the open project (body.agent-notes-shown).
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  return () => {
+    query?.removeEventListener('change', onChange);
+    observer.disconnect();
+  };
+}
+
+function foldedNow(): boolean {
+  return Boolean(window.matchMedia?.(FOLD_QUERY).matches) && document.body.classList.contains('agent-notes-shown');
+}
+
+/** Whether the toolbar folds right now, as the stylesheet decides it. */
+function useToolbarFolds(): boolean {
+  return useSyncExternalStore(subscribeFold, foldedNow, () => false);
+}
+
+type FoldFocus = 'more' | 'tab' | null;
+
+/**
+ * Crossing the fold hides More or the folded tabs. If one of them had focus,
+ * the browser drops it to <body>; this moves it to the counterpart now on
+ * screen (More, or the open folded tab, else the first one). The blur and the
+ * media change can come in either order, so a blur to nowhere keeps the mark
+ * for two frames, and the move waits one frame and only takes focus from
+ * <body> or from these controls.
+ */
+function useFoldFocusHandoff(folded: boolean, tab: Tab) {
+  const moreRef = useRef<HTMLButtonElement>(null);
+  const tabRefs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
+  const mark = useRef<{ kind: FoldFocus; seq: number }>({ kind: null, seq: 0 });
+  const wasFolded = useRef(folded);
+
+  useEffect(() => {
+    if (wasFolded.current === folded) return;
+    wasFolded.current = folded;
+    if (!mark.current.kind) return;
+    const frame = requestAnimationFrame(() => {
+      const at = document.activeElement;
+      const ours = at === moreRef.current || FOLDED_TABS.some((t) => tabRefs.current[t] === at);
+      if (at && at !== document.body && !ours) return;
+      const target = folded ? moreRef.current : tabRefs.current[FOLDED_TABS.includes(tab) ? tab : FOLDED_TABS[0]];
+      target?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [folded, tab]);
+
+  const onFocus = useCallback((kind: Exclude<FoldFocus, null>) => {
+    mark.current = { kind, seq: mark.current.seq + 1 };
+  }, []);
+  const onBlur = useCallback((event: ReactFocusEvent<HTMLElement>, keep = false) => {
+    if (keep) return;
+    if (event.relatedTarget) {
+      mark.current = { kind: null, seq: mark.current.seq + 1 };
+      return;
+    }
+    const seq = mark.current.seq;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (mark.current.seq === seq) mark.current = { kind: null, seq: seq + 1 };
+    }));
+  }, []);
+  return { moreRef, tabRefs, onFocus, onBlur };
+}
+
+/** The folded sections' button and menu (the app's toolbar menu, AssetMoveMenu's). */
+function MoreSections({ tab, disabled, onChoose, triggerRef, onFocus, onBlur }: {
+  tab: Tab;
+  disabled: boolean;
+  onChoose: (tab: Tab) => void;
+  triggerRef: RefObject<HTMLButtonElement | null>;
+  onFocus: () => void;
+  /** `keep`: focus went into this menu, so More still holds it. */
+  onBlur: (event: ReactFocusEvent<HTMLElement>, keep: boolean) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const menuId = useId();
+  const close = useCallback((returnFocus: boolean) => {
+    setOpen(false);
+    if (returnFocus) triggerRef.current?.focus();
+  }, [triggerRef]);
+  // With a folded section open, More stands in for its hidden tab. Its text
+  // stays "More": "Blind labeling" is 46 px wider and wraps the toolbar at
+  // 1280 (measured), so the menu marks the open one instead (asset-move.css).
+  const active = FOLDED_TABS.includes(tab);
+  return (
+    <>
+      <button ref={triggerRef} type="button" className={`commons-tab commons-tabs__more${active ? ' commons-tab--active' : ''}`}
+        aria-label={active ? `More: ${tabLabel(tab)}` : 'More'} aria-haspopup="menu" aria-expanded={open}
+        aria-controls={open ? menuId : undefined} disabled={disabled} onClick={() => setOpen((value) => !value)}
+        onFocus={onFocus}
+        onBlur={(event) => onBlur(event, event.relatedTarget instanceof Element && Boolean(event.relatedTarget.closest(`[id="${menuId}"]`)))}>
+        More<span className="asset-move__caret" aria-hidden="true">▾</span>
+      </button>
+      {open && (
+        <ToolbarMenuPopover anchorRef={triggerRef} id={menuId} label="More Commons sections" onClose={close}
+          choices={FOLDED_TABS.map((id) => ({ id, label: tabLabel(id), checked: id === tab }))}
+          onChoose={(choice) => { close(true); onChoose(choice.id); }} />
+      )}
+    </>
+  );
+}
+
 const NEW_COLLECTION = '__new__';
 const STATUS_POLL_MS = 5000;
 const SEARCH_DEBOUNCE_MS = 250;
 
+/**
+ * The worker's status text. GM - Design: "Keep the worker status to its state
+ * plus one action, short enough to show whole at 1280 (about 36 characters),
+ * with the full explanation in the tooltip." The text is the status a person
+ * reads at a glance; its title (the tooltip) says what it means and what
+ * resumes it. It still truncates on one line down to a minimum (commons.css),
+ * the safety net for a status longer than the room (p157c), and it stays the
+ * element's own text, so assistive tech reads it.
+ */
+function StatusText({ text, title }: { text: string; title: string }) {
+  // Its length caps the room a short status reserves (commons.css).
+  const style = { '--commons-status-chars': [...text].length } as CSSProperties;
+  return <span className="commons-status__text" title={title} style={style}>{text}</span>;
+}
+
+const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
+
 export function StatusLine({ status, onStart, onStop }: { status: CommonsStatus | null; onStart: () => void; onStop: () => void }) {
-  if (!status) return <span className="commons-status">Connecting…</span>;
+  if (!status) {
+    return <span className="commons-status"><StatusText text="Connecting…" title="Connecting to library analysis…" /></span>;
+  }
   if (status.evaluation_waiting) {
-    return <span className="commons-status">{status.evaluation_assisted
-      ? 'Library analysis paused · close the agent review to resume'
-      : 'Library analysis paused until reference labels are sealed'}</span>;
+    // GM: "the label names whatever has to be fixed first, and the tooltip
+    // lists anything still blocking after that." Sealing or closing only
+    // lifts the hold: a stopped worker (the default at launch) stays stopped,
+    // so the label leads with "Stopped", in the stopped colour, and Start is
+    // here ("\"Paused\" next to \"Start\" reads as a contradiction"). A used
+    // call budget comes first of all: only a restart resets it.
+    const { running, state } = status.worker;
+    const then = status.evaluation_assisted ? 'the agent review is closed' : 'the reference labels are sealed';
+    if (state === 'budget_exhausted') {
+      const budget = status.worker.budget ?? '∞';
+      return (
+        <span className="commons-status commons-status--stopped">
+          <StatusText text={`Stopped · call budget used (${status.worker.budget_used}/${budget})`}
+            title={`Library analysis is stopped: it used this run's call budget (${status.worker.budget_used} of ${budget} calls). Restart Nebula to reset it. Analysis then stays paused until ${then}.`} />
+        </span>
+      );
+    }
+    const after = running
+      ? ' to resume.'
+      : ", then press Start: library analysis is stopped, so it won't resume on its own.";
+    const text = status.evaluation_assisted
+      ? (running ? 'Paused · close agent review to resume' : 'Stopped · agent review open')
+      : (running ? 'Paused until labels are sealed' : 'Stopped · labels not sealed');
+    return <span className={running ? 'commons-status' : 'commons-status commons-status--stopped'}>{status.evaluation_assisted
+      ? <StatusText text={text}
+          title={`Library analysis is paused: the agent graded these references before the blind labels were sealed, so they can no longer be sealed as blind labels. Close them as an assisted review (in Agent review or Blind labeling)${after}`} />
+      : <StatusText text={text}
+          title={`Library analysis is paused while blind labeling is open, so it can't sway your reference labels. Seal the labels, or close the batch without sealing, in Blind labeling${after}`} />}
+      {!running && <button type="button" className="commons-button commons-button--primary" onClick={onStart}>Start</button>}
+    </span>;
   }
   const waiting = status.queue.queued ?? 0;
   const held = status.queue.held ?? 0;
+  // Agent adds over today's cap wait in the Inbox: a part of every worker status.
   const tail = held ? ` · ${held} held` : '';
+  const heldNote = held
+    ? ` ${held} ${plural(held, 'reference added by an agent is held until you accept it', 'references added by agents are held until you accept them')} in the Inbox.`
+    : '';
   const { state, running } = status.worker;
   if (!running && state !== 'budget_exhausted') {
+    const queued = waiting ? ` ${waiting} ${plural(waiting, 'reference is', 'references are')} waiting to be read.` : '';
     return (
       <span className="commons-status commons-status--stopped">
-        Worker stopped{waiting ? ` · ${waiting} queued` : ''}{tail}
+        <StatusText text={`Stopped${waiting ? ` · ${waiting} queued` : ''}${tail}`}
+          title={`Library analysis is stopped.${queued}${heldNote} Start runs it while Nebula is open.`} />
         <button type="button" className="commons-button commons-button--primary" onClick={onStart}>Start</button>
       </span>
     );
   }
   let text: string;
+  let title: string;
   if (state === 'budget_exhausted') {
-    text = `Call budget used (${status.worker.budget_used}/${status.worker.budget ?? '∞'})`;
+    const budget = status.worker.budget ?? '∞';
+    text = `Stopped · call budget used (${status.worker.budget_used}/${budget})`;
+    title = `Library analysis is stopped: it used this run's call budget (${status.worker.budget_used} of ${budget} calls). Restart Nebula to reset it.`;
   } else if (state === 'cap_reached' || status.meter.remaining === 0) {
-    text = `Daily cap reached, resets ${new Date(status.meter.resets_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    // Settings takes a cap from 0: a cap of 0 never resets, and a cap lowered
+    // below today's calls is not the number made (review of sf).
+    const { calls, cap } = status.meter;
+    if (cap === 0) {
+      text = 'Paused · daily cap is 0';
+      title = 'Library analysis is paused: Analysis calls per day is set to 0 in Settings, so it reads nothing. Raise it to resume.';
+    } else {
+      const resets = new Date(status.meter.resets_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      text = `Paused until ${resets} · daily cap`;
+      title = `Library analysis is paused: it made ${calls} analysis calls today, and the daily cap is ${cap} (Analysis calls per day, in Settings). It resumes on its own at ${resets}.`;
+    }
   } else if (state === 'paused_load') {
-    text = `Paused: machine busy (load ${status.load} / ${status.load_threshold})`;
+    text = `Paused · computer busy (${status.load}/${status.load_threshold})`;
+    title = `Library analysis is paused while this computer is busy: its load average is ${status.load}, above ${status.load_threshold} (Pause above load, in Settings). It resumes on its own when the load drops.`;
   } else if (waiting || state === 'analyzing') {
-    text = `Analyzing (${waiting} queued)`;
+    text = `Analyzing${waiting ? ` · ${waiting} queued` : ''}`;
+    title = `Library analysis is reading references${waiting ? `: ${waiting} waiting` : ''}.`;
   } else {
-    text = 'Worker idle';
+    text = 'Idle';
+    title = 'Library analysis is running and has nothing to read. New references are read as they arrive.';
   }
   return (
     <span className={`commons-status commons-status--${state}`}>
-      {text}{tail}
+      <StatusText text={`${text}${tail}`} title={`${title}${heldNote}`} />
       {running && <button type="button" className="commons-button" onClick={onStop}>Stop</button>}
     </span>
   );
@@ -77,7 +271,15 @@ export function CommonsView() {
     }
   };
   const [tab, setTab] = useState<Tab>('all');
+  const folded = useToolbarFolds();
+  const foldFocus = useFoldFocusHandoff(folded, tab);
   const [labelingDirty, setLabelingDirty] = useState(false);
+  // The Updates corner leaves the Commons too (Show, See all, Review): it
+  // reads this and refuses while a panel holds unsaved work (p157 review).
+  useEffect(() => {
+    setCommonsUnsaved(labelingDirty);
+    return () => setCommonsUnsaved(false);
+  }, [labelingDirty]);
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [rows, setRows] = useState<SearchRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -260,16 +462,26 @@ export function CommonsView() {
     <div className={`commons-view${selectedId && tab !== 'settings' && tab !== 'labeling' && tab !== 'review' ? ' commons-view--detail' : ''}`}>
       <WorkspaceHeader title="Commons" onBack={exitCommons} backLabel={workspaceLabel(returnView)} backDisabled={labelingDirty} className="commons-toolbar">
         <div className="commons-tabs" role="tablist" aria-label="Commons sections">
-          {(['all', 'inbox', 'review', 'labeling', 'settings'] as Tab[]).map((t) => (
-            <button
-              key={t} type="button" role="tab" disabled={labelingDirty} aria-selected={tab === t}
-              className={`commons-tab${tab === t ? ' commons-tab--active' : ''}`}
-              onClick={() => setTab(t)}
-            >
-              {t === 'all' ? 'All' : t === 'inbox' ? `Inbox` : t === 'labeling' ? 'Blind labeling' : t === 'review' ? 'Agent review' : 'Settings'}
-            </button>
-          ))}
+          {TABS.map((t) => {
+            const folds = FOLDED_TABS.includes(t);
+            return (
+              <button
+                key={t} type="button" role="tab" disabled={labelingDirty} aria-selected={tab === t}
+                className={`commons-tab${tab === t ? ' commons-tab--active' : ''}${folds ? ' commons-tab--overflow' : ''}`}
+                // Folded, the open one is hidden on screen (commons.css): keep Tab off it.
+                tabIndex={folded && folds && tab === t ? -1 : undefined}
+                ref={folds ? (el) => { foldFocus.tabRefs.current[t] = el; } : undefined}
+                onFocus={folds ? () => foldFocus.onFocus('tab') : undefined}
+                onBlur={folds ? (event) => foldFocus.onBlur(event) : undefined}
+                onClick={() => setTab(t)}
+              >
+                {tabLabel(t)}
+              </button>
+            );
+          })}
         </div>
+        <MoreSections tab={tab} disabled={labelingDirty} onChoose={setTab} triggerRef={foldFocus.moreRef}
+          onFocus={() => foldFocus.onFocus('more')} onBlur={foldFocus.onBlur} />
         <label className="commons-field commons-field--inline">
           Add to
           <select value={target} onChange={(event) => void chooseTarget(event.target.value)}>
@@ -319,7 +531,7 @@ export function CommonsView() {
             </div>
           )}
         </div>
-        <span className="commons-spacer" />
+        {/* The status takes the row's free room itself (commons.css): no spacer. */}
         <StatusLine
           status={status}
           onStart={() => workerAction(commonsApi.workerStart)}

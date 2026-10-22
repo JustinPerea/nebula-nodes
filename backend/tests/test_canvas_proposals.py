@@ -1353,6 +1353,12 @@ def test_each_surface_names_its_own_withdraw_call():
     ready = agent_wording({"proposal": {"id": "p_1", "cost": {"notReady": []}}}, lister=READY_NODES_MCP,
                           withdraw=WITHDRAW_MCP)
     assert ready == {"proposal": {"id": "p_1", "cost": {"notReady": []}}}
+    # One that already closed (Q112: it closed while its Update was written)
+    # can't be withdrawn, so it gets neither line; its other open ones still do.
+    closed = agent_wording({**answer, "proposal": {**answer["proposal"], "status": "invalidated"}},
+                           lister=READY_NODES_MCP, withdraw=WITHDRAW_MCP)
+    assert "warning" not in closed and "withdrawWith" not in closed
+    assert closed["stillOpen"] == mcp["stillOpen"] and closed["reminder"] == mcp["reminder"]
 
 
 def test_the_same_agents_next_proposal_says_its_unrunnable_one_is_still_open(api, monkeypatch):

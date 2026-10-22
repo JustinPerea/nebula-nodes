@@ -227,7 +227,13 @@ the ghost shows the name and accepting applies it), `--run`, `--file`,
 `--wait` and `--json`. It doesn't take `apply`'s `--move`, `--remove`,
 `--unwire` or `--arrange`, or a rename of a node already on the canvas
 (use `nebula rename`). The person accepts or rejects it on the canvas; you
-can't accept it.
+can't accept it. Each proposal also posts an Update the person sees on
+every screen ("Codex proposes 3 changes on the canvas", with Review, which
+takes them to the canvas and its bar), so don't also post a `nebula note`
+about it. `nebula notes` shows how it ended: `[Accepted]`, `[Rejected]`,
+`[Withdrawn by <you>]`, `[Expired]`, `[No longer fits]` or
+`[Closed: Nebula restarted]` (ask again then). Proposing again after you
+withdraw one replaces the withdrawn one's Update.
 
 ```bash
 nebula propose --note "Upscale the wide take" \
@@ -436,7 +442,9 @@ nebula moodboard delete <board>
   proposal (a cover, Send notes, Commons curation) also posts an Update in
   the person's Updates corner ("<you> asks to ...", with Review); a new one
   on the same target replaces it, and `nebula notes` shows how it ended
-  (an expired one says "Expired" on time; ask again if you still want it). A Moodboard
+  (an expired one says "Expired" on time; one that was open when Nebula
+  restarted says "Closed: Nebula restarted", since proposals don't survive a
+  restart; either way, ask again if you still want it). A Moodboard
   node's `send_notes` param (`board`, `yes`, `no`) can
   override it per node; moving it toward sending is also the person's, so
   propose it. That includes pointing a node on `yes` at another board: set
@@ -559,12 +567,17 @@ nebula notes --unread          # your updates the person hasn't opened
 
 `--say` (on `point`, `pin resolve`) and `--note` (on `apply`, `propose`) are
 for your own action. What you noticed, a report or a suggestion goes in
-`nebula note`: the person reads it under Updates in the top right, saved with
-the project (`--board <name>` for a moodboard's, where `#12` names image 12).
+`nebula note`: the person reads it under Updates in the top right of
+every screen (the canvas, Projects, the studios, the Commons), saved with
+the project. `--board <name>` keeps it with a moodboard instead (there `#12`
+names image 12; read it back with `nebula notes --board <name>`): the person
+sees it in Moodboard Studio's corner under "This board" while that board is
+open, and on no other screen, so leave out `--board` to reach them anywhere.
 One plain line, 240 characters, at most 6 a minute; never quote a private
 note; `--since-last-turn` for what they changed since your last turn. Your
-proposals outside the canvas post their own Update (you don't post one):
-`nebula notes` lists it with `[outcome]` once it closed.
+proposals, on the canvas and outside it, post their own Update (you don't
+post one, and it doesn't count toward the 6): `nebula notes` lists it with
+`[outcome]` once it closed.
 
 A project's cover: agents set it (MCP `set_project_cover`) while the person
 hasn't pinned one, and propose a change to the person's pin

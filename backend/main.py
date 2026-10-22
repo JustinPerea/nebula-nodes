@@ -185,7 +185,9 @@ from services.canvas_proposals import (
 # Proposals outside the graph: a project's cover, a board's Send notes (U16).
 from services.asset_proposals import AssetProposal, asset_proposals
 from services.asset_proposals import parse_change as parse_asset_change, summary as asset_proposal_summary
-from services.asset_proposals import outcome_line as asset_outcome_line, update_text as asset_update_text
+from services.asset_proposals import RESTART_OUTCOME, outcome_line as asset_outcome_line, update_text as asset_update_text
+# Each canvas proposal's Update too (Justin's Q112 a).
+from services.canvas_proposals import update_outcome as canvas_outcome_line, update_text as canvas_update_text
 from services.agent_presence import request_headers_scope
 from services.local_guard import host_allowed
 from services import run_approvals as approvals
@@ -2941,7 +2943,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         export = await export_graph_for_frontend()
         await websocket.send_text(json.dumps({"type": "graphSync", **export}))
         await websocket.send_text(json.dumps(_pins_message()))
-        await _settle_asset_updates()
+        await _settle_proposal_updates()
         await websocket.send_text(json.dumps(_canvas_notes_message()))
         while True:
             raw = await websocket.receive_text()
@@ -4905,7 +4907,7 @@ def _note_author() -> AgentIdentity:
 async def list_canvas_agent_notes(unread: int = 0) -> Any:
     """The open project's Updates, newest first (``?unread=1`` for unread only)."""
     try:
-        await _settle_asset_updates()  # never list an expired proposal as waiting
+        await _settle_proposal_updates()  # never list an expired proposal as waiting
         return agent_notes.canvas_list(unread_only=bool(unread))
     except NoteError as exc:
         return _raise_note_error(exc)
@@ -5088,6 +5090,7 @@ async def _announce_closed_proposals(
             await manager.broadcast_raw(_proposal_closed_message(proposal))
         except Exception:  # noqa: BLE001 - the canvas also hides expired proposals locally
             pass
+    await _follow_canvas_updates(proposals, actor=actor)
 
 
 async def _sweep_proposals() -> None:
@@ -5594,6 +5597,7 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         )
     except ProposalError as exc:
         raise _proposal_http_error(exc) from exc
+    await _post_canvas_update(proposal)  # Q112 a: the person hears of it on every screen
     view = _proposal_view(proposal)
     # The agent's other open proposals here that can't run: Justin (Q109)
     # keeps them, and the agent is told to withdraw one this replaces.
@@ -5613,6 +5617,13 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         },
         summary=f'proposed {proposal.id}: "{spec.note}"',
     )
+    if not proposal.is_open:
+        # It closed while its Update was being written (see
+        # _post_canvas_update): the canvas already heard proposalClosed, so
+        # it never gets it as open (Accept would only fail). The agent reads
+        # the real status, and its reason, in the view; agent_wording gives a
+        # closed one no readiness warning, but still names the agent's others.
+        return agent_wording({"proposal": view, **({"stillOpen": still_open} if still_open else {})})
     # The accept key goes only to the person's canvas sockets.
     try:
         await manager.broadcast_browser({
@@ -5646,6 +5657,13 @@ async def list_canvas_proposals() -> dict[str, Any]:
     return {"proposals": [_proposal_view(p) for p in canvas_proposals.open_list()]}
 
 
+def _gone_proposal_detail(proposal_id: str) -> str:
+    """A proposal Nebula no longer has: decided ones go after 30 minutes, and
+    open ones live in memory, so a restart closes them (Q108 a)."""
+    return (f"No proposal {proposal_id[:20]} (decided proposals are kept for 30 minutes, and a restart of "
+            "Nebula closes open ones: propose again if you still want it)")
+
+
 @app.get("/api/canvas/proposals/{proposal_id}")
 async def get_canvas_proposal(proposal_id: str, request: Request) -> dict[str, Any]:
     """One proposal; with ?wait=<seconds> (≤25) wait for the person to decide."""
@@ -5656,7 +5674,7 @@ async def get_canvas_proposal(proposal_id: str, request: Request) -> dict[str, A
     if proposal is None and asset_proposals.get(proposal_id) is not None:
         return await _get_asset_proposal(proposal_id, wait)  # a project's or a board's (U16)
     if proposal is None:
-        raise HTTPException(status_code=404, detail=f"No proposal {proposal_id[:20]} (decided proposals are kept for 30 minutes)")
+        raise HTTPException(status_code=404, detail=_gone_proposal_detail(proposal_id))
     loop = asyncio.get_running_loop()
     deadline = loop.time() + wait
     cursor = canvas_events.latest
@@ -5868,6 +5886,7 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
         await manager.broadcast_raw(_proposal_closed_message(proposal))
     except Exception:  # noqa: BLE001
         pass
+    await _follow_canvas_updates([proposal], actor=person)
     focus = next(iter(id_map.values()), None) or next(iter(sorted(proposal.references, key=_node_order)), None)
     if focus is not None:
         try:
@@ -6145,12 +6164,15 @@ async def _asset_expiry_check(proposal_id: str) -> None:
 _ASSET_UPDATE_KINDS = ("project", "moodboard", "commons")
 
 
-async def _settle_asset_updates() -> None:
+async def _settle_proposal_updates() -> None:
     """Before the open project's Updates are listed: sweep, then resolve any
-    asset proposal Update whose proposal can no longer be decided. Proposals
-    live in memory and Updates on the project, so after a restart an Update
-    can outlive its proposal; its Review would lead nowhere."""
+    proposal Update (an asset proposal's, or a canvas proposal's since
+    Justin's Q112 a) whose proposal can no longer be decided. Proposals live
+    in memory and Updates on the project, so after a restart an Update can
+    outlive its proposal; its Review would lead nowhere. Runs on list_notes,
+    on a tab's socket connect and on a project switch."""
     await _sweep_asset_proposals()
+    await _sweep_proposals()
     try:
         listing = await asyncio.to_thread(agent_notes.canvas_list)
     except (NoteError, ProjectStoreError):
@@ -6159,12 +6181,24 @@ async def _settle_asset_updates() -> None:
     for note in listing.get("notes") or []:
         ref = note.get("proposal")
         if (note.get("about") != "proposal" or note.get("source") != "nebula" or note.get("resolvedAt")
-                or not isinstance(ref, Mapping) or ref.get("kind") not in _ASSET_UPDATE_KINDS):
+                or not isinstance(ref, Mapping)):
             continue
-        proposal = asset_proposals.get(str(ref.get("id") or ""))
-        if isinstance(proposal, AssetProposal) and proposal.is_open:
+        kind = ref.get("kind")
+        if kind in _ASSET_UPDATE_KINDS:
+            proposal: Any = asset_proposals.get(str(ref.get("id") or ""))
+            known = isinstance(proposal, AssetProposal)
+        elif kind == "canvas":
+            proposal = canvas_proposals.get(str(ref.get("id") or ""))
+            known = isinstance(proposal, Proposal)
+        else:
             continue
-        outcome = asset_outcome_line(proposal) if isinstance(proposal, AssetProposal) else "Expired"
+        if known and proposal.is_open:
+            continue
+        # Not in memory: Nebula restarted while it was open (Q108 a).
+        if not known:
+            outcome = RESTART_OUTCOME
+        else:
+            outcome = asset_outcome_line(proposal) if kind in _ASSET_UPDATE_KINDS else canvas_outcome_line(proposal)
         try:
             result = await asyncio.to_thread(agent_notes.resolve_proposal, project_id, note["id"],
                                              outcome=outcome, by={"kind": "system"})
@@ -6174,6 +6208,100 @@ async def _settle_asset_updates() -> None:
             await _broadcast_raw_quietly(_notes_message("canvas", "resolved", project_id=project_id,
                                                         ids=[note["id"]], note=result["note"],
                                                         unread=result["unread"]))
+
+
+# ---- the Update each canvas proposal posts (Justin's Q112 a, 2026-10-21) ----
+#
+# "a) Yes, every one: "Claude Code proposes 3 changes on the canvas", with
+# Review taking you to the canvas and its bar. It settles like the others
+# (Accepted, Rejected, Expired, Closed: Nebula restarted)." Every surface
+# (MCP propose_change, `nebula propose`, HTTP) proposes through
+# create_canvas_proposal, which posts it here. Nebula writes it for the agent:
+# it skips the agent's post_note rate limit, and the project's cap prunes it.
+
+async def _post_canvas_update(proposal: Proposal) -> None:
+    if not proposal.project_id:
+        return  # no project open: the bar and the Agent log are the only notice, as before
+    try:
+        result = await asyncio.to_thread(
+            agent_notes.post_proposal, author={"kind": "agent", **proposal.agent.as_dict()},
+            text=canvas_update_text(proposal), project_id=proposal.project_id,
+            proposal={"id": proposal.id, "kind": "canvas", "targetId": proposal.project_id})
+    except (NoteError, ProjectStoreError):
+        return
+    note = result["note"]
+    proposal.update = {"id": note["id"], "projectId": result["projectId"]}
+    await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"], note=note,
+                                                unread=result["unread"], removed=result["removed"]))
+    _journal_note(note, "canvas")
+    if not proposal.is_open:
+        # It closed while the Update was being written (a node it needs
+        # deleted, the canvas cleared, another project opened, withdrawn):
+        # that close found no Update to settle, so settle it now.
+        await _follow_canvas_updates([proposal])
+        return
+    _schedule_canvas_expiry(proposal)
+
+
+def _canvas_resolved_by(proposal: Proposal, actor: Mapping[str, Any] | None) -> dict[str, Any]:
+    if proposal.status == "withdrawn":
+        return {"kind": "agent", "name": proposal.agent.name}
+    if proposal.status in ("accepted", "rejected") or (actor or {}).get("kind") == "person":
+        return {"kind": "person"}
+    return {"kind": "system"}
+
+
+async def _follow_canvas_updates(proposals: list[Proposal], *, actor: Mapping[str, Any] | None = None) -> None:
+    """Closed canvas proposals: each one's Update says how it ended and is
+    read, so its Review goes. Every way one ends comes through here:
+    accepted, rejected, withdrawn, expired (the sweep and the timer below),
+    and invalidated (a node it needs deleted, the canvas cleared or replaced
+    by an import or another project, or no longer fitting at Accept)."""
+    for proposal in proposals:
+        ref = proposal.update
+        if not ref or proposal.is_open:
+            continue
+        try:
+            result = await asyncio.to_thread(agent_notes.resolve_proposal, ref["projectId"], ref["id"],
+                                             outcome=canvas_outcome_line(proposal),
+                                             by=_canvas_resolved_by(proposal, actor))
+        except (NoteError, ProjectStoreError):
+            continue
+        if result is None:
+            continue
+        # Only the open project's list is on the person's screen; another
+        # project's reloads with it when they open it.
+        if result["projectId"] == project_store.read().get("activeProjectId"):
+            await _broadcast_raw_quietly(_notes_message("canvas", "resolved", project_id=result["projectId"],
+                                                        ids=[ref["id"]], note=result["note"], unread=result["unread"]))
+
+
+# On time, not on the next read: an agent that proposes and stops, with the
+# person on Projects, reads nothing, so without a timer the Update would keep
+# its Review past the proposal's 15 minutes.
+_proposal_expiry_tasks: set[asyncio.Task[Any]] = set()
+
+
+def _schedule_canvas_expiry(proposal: Proposal) -> None:
+    """Check the proposal just after it is due (canvas_proposals' clock)."""
+    delay = max(0.0, proposal.expires_at - canvas_proposals.now()) + 0.5
+    try:
+        _call_later(delay, _start_canvas_expiry_check, proposal.id)
+    except RuntimeError:  # no running loop (a script): the next read sweeps
+        pass
+
+
+def _start_canvas_expiry_check(proposal_id: str) -> None:
+    task = asyncio.get_running_loop().create_task(_canvas_expiry_check(proposal_id))
+    _proposal_expiry_tasks.add(task)
+    task.add_done_callback(_proposal_expiry_tasks.discard)
+
+
+async def _canvas_expiry_check(proposal_id: str) -> None:
+    await _sweep_proposals()
+    proposal = canvas_proposals.get(proposal_id)
+    if isinstance(proposal, Proposal) and proposal.is_open and proposal.expires_at > canvas_proposals.now():
+        _schedule_canvas_expiry(proposal)  # not due yet: look again then
 
 
 async def _follow_cover_proposals(exported: dict[str, Any]) -> None:
@@ -6345,7 +6473,7 @@ async def _get_asset_proposal(proposal_id: str, wait: float) -> dict[str, Any]:
     await _sweep_asset_proposals()
     proposal = asset_proposals.get(proposal_id)
     if not isinstance(proposal, AssetProposal) or not await _commons_proposal_visible(proposal, current_request_headers()):
-        raise HTTPException(status_code=404, detail=f"No proposal {proposal_id[:20]} (decided proposals are kept for 30 minutes)")
+        raise HTTPException(status_code=404, detail=_gone_proposal_detail(proposal_id))
     loop = asyncio.get_running_loop()
     deadline = loop.time() + wait
     cursor = canvas_events.latest
@@ -8334,7 +8462,7 @@ async def _broadcast_graph_sync(
         # Updates belong to the project record too: an open or create brings
         # that project's list; an import keeps the project, and its list.
         if safe_reason != "import":
-            await _settle_asset_updates()
+            await _settle_proposal_updates()
             await _broadcast_raw_quietly(_canvas_notes_message())
         await _journal_detached_pins(detached, "the canvas was replaced")
         # Proposals point at node ids that just restarted: none of them still fit.

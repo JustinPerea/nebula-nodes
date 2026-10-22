@@ -277,8 +277,11 @@ The server exposes these tools for building and running (see
   an attribute taken from one. Since 2026-10-20 (Justin's Q63 b):
   `commons_collections` lists the collections (`{"collections": [...]}`;
   `commons_add` takes one's id), `commons_status` the analysis queue,
-  worker and meters, `commons_borrowings` the recorded borrowings
-  (`{"borrowings": [...]}`; `asset` narrows it),
+  worker and meters as structured state (not the Commons toolbar's
+  wording; `evaluation_waiting` with `evaluation_assisted` says which
+  pause holds analysis and what lifts it; analysis then resumes only if
+  `worker.running`), `commons_borrowings` the
+  recorded borrowings (`{"borrowings": [...]}`; `asset` narrows it),
   `commons_concentration` each reference's share of them, and
   `commons_fidelity` checks a borrowing against the output it was used in
   and saves the result. Curating (corrections, regions, a reference's role,
@@ -342,8 +345,12 @@ And these canvas tools:
   noticed goes in `post_note` instead (see [Updates](#updates)).
 - `post_note` / `list_notes`: post what the agent noticed, a report or a
   suggestion, and read the list back. The person reads them under
-  **Updates** in the top right of the canvas, saved with the project (or
-  with a board, with `board`). See [Updates](#updates).
+  **Updates** in the top right of every screen (the canvas, Projects, the
+  studios, the Commons), saved with the project. Updates posted with
+  `board` are kept with that board: the person sees them in Moodboard
+  Studio's corner under "This board" (above the project's) while that board
+  is open, and on no other screen, so post without `board` to reach the
+  person anywhere. See [Updates](#updates).
 - `wait_for_canvas_change`: blocks until the person (or another agent)
   changes the canvas, then returns what changed and who did it. It skips
   your own edits. When the person undoes your edit with Cmd+Z, the events
@@ -700,27 +707,41 @@ Rules:
 
 `say` is for your own action. What you noticed, a report or a suggestion
 goes in an **update**: the person reads it in the Updates corner in the top
-right of the canvas, not at your cursor. A card drops from the "Updates"
-chip for about four seconds and outlines the nodes it names in your colour;
-the chip counts the updates the person hasn't opened; the list keeps every
-one, newest first, with your name, the time and a "Show on canvas" button
-that frames what it names. Updates are saved with the project (beside the
+right, not at your cursor. The corner is on every screen (the canvas,
+Projects, Moodboard Studio, the Commons, Creator Studio and the other
+studios; Justin's Q107 a, 2026-10-21) and always shows the open project's
+list, so an update reaches the person wherever they work; with no project
+open (a first start with no projects yet) there is no list and no corner.
+A card drops from the "Updates" chip for about four seconds and outlines the
+nodes it names in your colour; the chip counts the updates the person
+hasn't opened; the list keeps every one, newest first, with your name, the
+time and a "Show on canvas" button that frames what it names (from another
+screen it opens the canvas first). Updates are saved with the project (beside the
 canvas snapshot, like pins, so autosave never touches them) and switch with
-it; a moodboard's are saved beside the board (`<moodboards>/.notes/<id>.json`,
-never in the board file).
+it. A moodboard's (posted with `board` / `--board`) are saved beside the board
+(`<moodboards>/.notes/<id>.json`, never in the board file). While the person
+has that board open in Moodboard Studio, the corner's list shows them first,
+under "This board" ("kept with this board"), then the project's, with one
+count for both; opening the list reads both, and with no board updates the
+list is just the project's. "Show #12" / "Show on board" selects and frames
+the images on the board. Every other screen shows only the project's list,
+so leave out `board` to reach the person anywhere. You read them back with
+`list_notes(board=...)` or `nebula notes --board <name>`.
 
 ```bash
 nebula note "The two portrait branches use different seeds; I'll match them" --node n4 --node n7
-nebula note "#12 reads painterly and dither" --board Dusk --ref 12
+nebula note "#12 reads painterly and dither" --board Dusk --ref 12   # shown in Moodboard Studio on Dusk, under This board
 nebula note "You moved the lake into Painterly" --board Dusk --since-last-turn
 nebula notes --unread                                   # the list, newest first
 ```
 
 Over MCP: `post_note(text, board?, refs?, about?)` and
 `list_notes(board?, unread?)`. The words "note" stay in the tool names; on
-screen they are Updates. A proposal outside the canvas (`propose_asset_change`)
-posts its own Update with **Review**, and marks it with how it ended; see
-[Proposals outside the canvas](#proposals-outside-the-canvas).
+screen they are Updates. Every proposal posts its own Update with **Review**
+and marks it with how it ended: a canvas one (`propose_change`, `nebula
+propose`; see [Proposals](#proposals)) and one outside the canvas
+(`propose_asset_change`; see [Proposals outside the canvas](#proposals-outside-the-canvas)).
+Don't post an update to announce a proposal.
 
 Rules:
 
@@ -742,7 +763,8 @@ Rules:
   punctuation or extra spaces. On the canvas every board the project can see
   is checked (its own and the Global ones).
 - At most 6 a minute per agent per canvas or board (429
-  `notes_rate_limited`); 200 kept per project and 100 per board, the oldest
+  `notes_rate_limited`); a proposal's Update is Nebula's, so it neither
+  counts nor is refused. 200 kept per project and 100 per board, the oldest
   read ones dropped first.
 - Agents post and list. Only the person marks updates read (opening the list
   marks them all; `{upTo}` reads that one and everything older, `{ids}` just
@@ -769,6 +791,34 @@ paid)**). They can drag ghosts before accepting; the nodes land where they
 dropped them. Accept adds everything in one step (one undo) and starts the
 runs from the canvas, as if the person had clicked Run. Use proposals before
 anything that costs money or reworks the person's graph.
+
+**The Update.** Every canvas proposal also posts an Update in the Updates
+corner (Justin's Q112 a, 2026-10-21), so the person hears of it on every
+screen, not only on the canvas: "Claude Code proposes 3 changes on the
+canvas" ("proposes 1 change", or "proposes a run on the canvas" when it
+only runs nodes). Each new node, each wire and each existing node whose
+params change counts as one change; runs and names don't. Nebula writes it
+from that template, never from the agent's note (the note is the bar's), and
+attributes it to the agent (`source: "nebula"`, `about: "proposal"`,
+`proposal: {id, kind: "canvas", targetId: <project id>}`). Its one
+**Review** action (`proposal.review`, `target: "canvas"`) takes the person
+to the canvas from any screen, with that proposal shown in the bar and its
+ghosts in view. Every proposal gets its own Update, on the list of the
+project it was made in. None replaces another, with one exception: your next
+proposal replaces the Update of one you withdrew yourself (the socket's
+`removed`), so withdrawing and proposing again leaves one Update, not two; with no project open there is
+none (`update: null`). It doesn't count against the agent's `post_note`
+limit, so don't also post an update to announce the proposal. The view's
+`update` is `{id, projectId}`. When the proposal closes the Update gets
+`resolvedAt`, `resolvedBy`, `readAt` and an `outcome` in place of Review:
+"Accepted", "Rejected" (never the person's reason), "Withdrawn by Claude
+Code", "Expired" (on time, even when nobody reads proposals), "No longer
+fits" (a node it needs was deleted, the canvas was cleared or replaced by an
+import or another project, or what it changes was edited since), or
+"Closed: Nebula restarted" (proposals live in memory; settled the next time
+the list is read: `list_notes`, the person's tab reconnecting, a project
+switch). The socket sends `agentNotes` op `added` and then `resolved` for
+the open project. Agents read it with `list_notes` / `nebula notes`.
 
 ```bash
 nebula propose --note "Widen the take and upscale it" \
@@ -1040,18 +1090,24 @@ reference out of the inbox"). Names only: never the agent's note, a board's
 notes, a private note or Commons text. It carries `proposal: {id, kind,
 targetId}` and one **Review** action (`proposal.review`), which takes the
 person to the Projects screen with that card's strip in view, to Moodboard
-Studio on that board, or to the Commons on that reference. One per agent and
+Studio on that board, or to the Commons on that reference, from whichever
+screen they are on. One per agent and
 target: a new proposal on the same target replaces the agent's earlier
 Update (the socket's `removed`), and while the agent still has another
 proposal open there, closing one leaves the Update asking about the other.
 When the last one closes the Update gets `resolvedAt`, `resolvedBy` (`person`,
 the agent, or `system`), `readAt` and a short `outcome` ("Accepted: the cover
 changed", "You kept your cover", "You kept the notes here", "Applied",
-"Withdrawn by Claude Code", "Expired", "No longer fits"), and shows that in
-place of Review. Expiry lands on time, even when nobody reads proposals:
-Nebula checks each proposal when it is due, and `list_notes` never lists an
-expired one as waiting. After a restart (proposals are memory only) an
-Update whose proposal is gone resolves as "Expired". The socket sends `agentNotes` op `resolved` (op `changed`
+"Withdrawn by Claude Code", "Expired", "No longer fits", "Closed: Nebula
+restarted"), and shows that in place of Review. Expiry lands on time, even
+when nobody reads proposals: Nebula checks each proposal when it is due, and
+`list_notes` never lists an expired one as waiting. Proposals are memory
+only, so after a restart an Update whose proposal was still open resolves
+as "Closed: Nebula restarted" (Justin's Q108 a, 2026-10-21) the next time
+its list is read (`list_notes`, the person's tab reconnecting, a project
+switch); "Expired" stays for a proposal that really waited 15 minutes. The
+agent can ask again: propose it once more if you still want it (a
+`get_proposal` on the old id is a 404 that says so). The socket sends `agentNotes` op `resolved` (op `changed`
 when it moved to the other proposal) for the open project. With no project
 open there is no Update (`update: null`); the Agent log line still is.
 Agents read it with `list_notes` / `nebula notes` and through the view's

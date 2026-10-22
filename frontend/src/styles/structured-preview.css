@@ -478,8 +478,8 @@ body.app-slava-restraint .structured-preview__copy:hover {
 
 body.app-slava-restraint .structured-expandable__toggle:focus-visible,
 body.app-slava-restraint .structured-preview__copy:focus-visible {
-  outline: 1px solid var(--sr-ink-light);
-  outline-offset: 2px;
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
 }
 
 body.app-slava-restraint .structured-expandable__body {

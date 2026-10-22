@@ -44,7 +44,7 @@ body.app-slava-restraint .project-home__intro { margin-top: 14px; color: var(--s
 body.app-slava-restraint .project-home button { font-family: var(--sr-ui); cursor: pointer; }
 body.app-slava-restraint .project-home button:disabled { opacity: var(--sr-disabled-opacity); cursor: default; }
 body.app-slava-restraint .project-home button:focus-visible,
-body.app-slava-restraint .project-home input:focus-visible { outline: 2px solid var(--sr-accent); outline-offset: 4px; }
+body.app-slava-restraint .project-home input:focus-visible { outline: var(--sr-focus-outline); outline-offset: 4px; }
 body.app-slava-restraint .project-home__new { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; gap: 8px; min-height: 44px; padding: 0 18px; border: 1px solid var(--sr-ink); border-radius: var(--sr-node-media-radius); background: var(--sr-ink); color: var(--sr-canvas); font-size: 13px; font-weight: 600; transition: background var(--sr-motion-fast), border-color var(--sr-motion-fast); }
 body.app-slava-restraint .project-home__new:hover:not(:disabled) { background: var(--sr-ink-bold); border-color: var(--sr-ink-bold); }
 body.app-slava-restraint .project-home__new svg,

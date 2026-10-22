@@ -338,6 +338,11 @@ describe('Settings > Personal agents: Gemini and Antigravity', () => {
       render(<PersonalAgentsSection />);
       expect(await screen.findByText(/40 MB of 113 MB/)).toBeInTheDocument();
       const calls = apiMocks.fetchPersonalAgents.mock.calls.length;
+      // The poll starts in an effect after the list renders. Let React run it
+      // before the clock moves: run alone, this test moved the clock first and
+      // no poll was set yet (0 timers), so it failed every time.
+      await act(async () => {});
+      expect(vi.getTimerCount()).toBeGreaterThan(0);
       await act(async () => { vi.advanceTimersByTime(2100); });
       expect(apiMocks.fetchPersonalAgents.mock.calls.length).toBeGreaterThan(calls);
     } finally {

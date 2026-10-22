@@ -316,7 +316,9 @@ export default function App() {
       {isCanvas && <ChatLauncher />}
       {isCanvas && <Toolbar />}
       {isCanvas && <AgentLog />}
-      {isCanvas && <AgentNotes />}
+      {/* Updates on every screen, with the open project's list (Q107 a); one
+          mount, so the list, the card and the count carry across screens. */}
+      {!isBrandShowcase && <AgentNotes />}
       {!isHome && !isBrandShowcase && !isCommons && <CommandPalette />}
       {isCanvas && <OnboardingOverlay />}
       {isCanvas && <KeyboardShortcuts />}

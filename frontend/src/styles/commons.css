@@ -30,6 +30,11 @@ body.app-slava-restraint .commons-view--detail {
 /* -- toolbar ------------------------------------------------------------------ */
 
 body.app-slava-restraint .commons-toolbar {
+  /* The worker status's narrowest width: its first words and an ellipsis
+   * ("Paused until labels are…", "Paused · computer busy (…"), measured at
+   * the status's 11 px (p157c). Every status now shows whole at 1280 (sf);
+   * this is the safety net. */
+  --commons-status-min: 12.5em;
   grid-area: toolbar;
   display: flex;
   align-items: center;
@@ -74,6 +79,43 @@ body.app-slava-restraint .commons-tab:hover {
 body.app-slava-restraint .commons-tab--active {
   color: var(--sr-ink);
   border-color: var(--sr-edge-strong);
+}
+
+/* More holds Blind labeling and Settings, only while the toolbar folds. */
+body.app-slava-restraint .commons-tabs__more {
+  display: none;
+  align-items: center;
+}
+
+/* The Updates chip takes its room at the header's right end (Q107 a). Below
+ * 1440 px the toolbar no longer fits one row beside it (measured: the full
+ * chip needs 1406 px, the compact one below 1360 px needs 1346), so the two
+ * least-used sections fold into More (CommonsView). That frees about the
+ * room the compact chip takes (GM review: no two-row wrap at 1280). */
+@media (max-width: 1439px) {
+  body.app-slava-restraint.agent-notes-shown .commons-tab--overflow:not(.commons-tab--active) {
+    display: none;
+  }
+
+  /* The open folded section stays the tablist's selected tab for assistive
+   * tech, hidden only on screen (More shows it); CommonsView takes it out of
+   * the Tab order while it folds. */
+  body.app-slava-restraint.agent-notes-shown .commons-tab--overflow.commons-tab--active {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  body.app-slava-restraint.agent-notes-shown .commons-tabs__more {
+    display: inline-flex;
+  }
 }
 
 body.app-slava-restraint .commons-button {
@@ -135,13 +177,39 @@ body.app-slava-restraint .commons-link:disabled {
   text-decoration: none;
 }
 
+/* The worker status gives way before the toolbar wraps (p157c): it takes the
+ * row's free room and right-aligns its text against its control; when the
+ * room runs short the text truncates on one line down to
+ * --commons-status-min (or its own length, if shorter). Only that minimum
+ * counts toward the row (inline-size containment), so no status length can
+ * wrap the header. Start / Stop never shrinks. The status stays the
+ * element's text; its title explains it in full (CommonsView). */
 body.app-slava-restraint .commons-status {
   display: inline-flex;
+  flex: 1 1 auto;
+  justify-content: flex-end;
   align-items: center;
   gap: 8px;
   color: var(--sr-ink-meta);
   font-size: 11px;
   white-space: nowrap;
+}
+
+body.app-slava-restraint .commons-status__text {
+  flex: 1 1 auto;
+  /* A short status reserves no more than its length: 1ch per character is
+   * wider than this face's average glyph at 11 px (6.9 px against 5.2-5.9
+   * measured), so "Stopped" never truncates. */
+  min-width: min(var(--commons-status-min), calc(var(--commons-status-chars, 99) * 1ch));
+  contain: inline-size;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: right;
+}
+
+body.app-slava-restraint .commons-status > .commons-button {
+  flex: none;
 }
 
 body.app-slava-restraint .commons-status--stopped,
@@ -257,6 +325,17 @@ body.app-slava-restraint .commons-heading {
   color: var(--sr-ink);
   font-size: 13px;
   font-weight: 700;
+}
+
+/* Settings opens with its name as its h2 (GM review of PR #157). It has no
+ * display line, so the h2 sits one step above its 13 px section titles (round
+ * 2: "about 20px against their 14"), at the Commons' existing step size and
+ * weight (commons-evaluation.css `.evaluation-step`, 22px / 450), not a new
+ * size. Blind labeling and Agent review set their h2 as the eyebrow line
+ * instead (`.commons-eyebrow`). */
+body.app-slava-restraint .commons-settings > .commons-panel-title {
+  font-size: 22px;
+  font-weight: 450;
 }
 
 /* -- messages + page candidates ---------------------------------------------- */

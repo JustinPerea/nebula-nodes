@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { commonsReviewApi as api, commonsEvaluationApi } from '../../lib/commonsApi';
 import type { EvaluationLabels } from '../../lib/commonsEvaluationTypes';
 import type { ReviewBatch, ReviewItem } from '../../lib/commonsReviewTypes';
 import { CommonsCloseBatch } from './CommonsCloseBatch';
+import { SectionEyebrow } from './CommonsSectionEyebrow';
 import '../../styles/commons-evaluation.css';
 import '../../styles/commons-review.css';
 
@@ -10,6 +11,7 @@ const pretty = (text: string) => text === 'n_a' ? 'Not applicable' : text.replac
 
 export function CommonsReview({ onDirtyChange }: { onDirtyChange?: (dirty: boolean) => void }) {
   const [batch, setBatch] = useState<ReviewBatch | null>(null);
+  const headingId = useId();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [index, setIndex] = useState(0);
@@ -81,14 +83,21 @@ export function CommonsReview({ onDirtyChange }: { onDirtyChange?: (dirty: boole
     } catch (e) { setError((e as Error).message); }
     finally { pendingWrites.current--; setSaving(false); }
   }
-  if (loading) return <p className="commons-notice">Loading agent reviews…</p>;
+  // The section's name is its h2, set as the eyebrow line like Blind
+  // labeling's (GM review of PR #157, round 2). The display line below it is
+  // a styled p, no longer a second h1 on the page.
+  const eyebrow = <SectionEyebrow id={headingId} name="Agent review" detail="agent grades · your judgment" />;
+  if (loading) return <section className="commons-evaluation commons-review" aria-labelledby={headingId}>
+    <header className="evaluation-heading"><div>{eyebrow}</div></header>
+    <p className="commons-notice">Loading agent reviews…</p>
+  </section>;
   const reviewed = batch?.items.filter((i) => i.reviewed_at).length ?? 0;
   const ready = batch?.items.filter((i) => i.status === 'ready').length ?? 0;
   const running = generating || batch?.items.some((i) => i.status === 'running');
   const item = batch?.items[index];
-  return <section className="commons-evaluation commons-review" aria-label="Agent reference review">
+  return <section className="commons-evaluation commons-review" aria-labelledby={headingId}>
     <header className="evaluation-heading"><div>
-      <small>AGENT GRADES · YOUR JUDGMENT</small><h1>Does this read right?</h1>
+      {eyebrow}<p className="evaluation-title">Does this read right?</p>
       <p>See the agent’s take. Agree, or change the parts you see differently.</p>
     </div><div className="review-progress"><strong>{reviewed} / {batch?.items.length ?? 15} reviewed</strong>
       <p>{ready} grades ready{running ? ' · Grading in progress…' : ''}</p>
@@ -137,7 +146,7 @@ function ReferenceImage({ item }: { item: ReviewItem }) {
     }, (e: Error) => { if (!controller.signal.aborted) setError(e.message); });
     return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [item.position]);
-  return <div className="evaluation-image"><h2>Reference {String(item.position + 1).padStart(2, '0')}</h2>
+  return <div className="evaluation-image"><h3 className="evaluation-step">Reference {String(item.position + 1).padStart(2, '0')}</h3>
     {error ? <p role="alert">{error}</p> : url ? <img className="review-reference" src={url} alt={`Reference ${item.position + 1}`} /> : <p>Loading image…</p>}
     {item.proposal && <p>{item.proposal.model} · {item.proposal.prompt_version}</p>}
   </div>;
@@ -152,7 +161,7 @@ function ReviewForm({ batch, item, dirty, saving, generating, onDirty, onAccept 
   const [editing, setEditing] = useState(false);
   const [query, setQuery] = useState('');
   const disabled = saving || generating;
-  if (!item.proposal || !labels) return <div className="evaluation-form"><h2>{item.status === 'failed' ? 'Grade unavailable' : item.status === 'running' ? 'The agent is looking…' : 'Waiting for a grade'}</h2>
+  if (!item.proposal || !labels) return <div className="evaluation-form"><h3 className="evaluation-step">{item.status === 'failed' ? 'Grade unavailable' : item.status === 'running' ? 'The agent is looking…' : 'Waiting for a grade'}</h3>
     <p>{item.error ?? 'The complete grade will appear here. There is nothing to fill out first.'}</p></div>;
   const change = (patch: Partial<EvaluationLabels>) => { setLabels({ ...labels, ...patch }); onDirty(true); };
   const fields = item.proposal.fields;
@@ -161,15 +170,15 @@ function ReviewForm({ batch, item, dirty, saving, generating, onDirty, onAccept 
     onClick={() => void onAccept(labels)}>{saving ? 'Saving…' : dirty ? 'Save corrections & next' : item.reviewed_at ? 'Keep this review & next' : 'Agree & next'}</button>;
   return <div className="evaluation-form">
     <small>{item.reviewed_at ? 'YOUR SAVED REVIEW' : 'PROPOSED BY THE AGENT'}</small>
-    <h2>{fields.summary.value}</h2><p>{fields.composition_notes.value}</p>
+    <h3 className="evaluation-step">{fields.summary.value}</h3><p>{fields.composition_notes.value}</p>
     <div className="review-actions">{agreement}<button className="commons-button" disabled={disabled} onClick={() => setEditing(!editing)}>{editing ? 'Hide editing controls' : 'Edit grades'}</button></div>
     <fieldset disabled={disabled}>
-      <h3>Structure</h3>{Object.entries(batch.fields).map(([key, values]) => <div className="review-grade" key={key}>
+      <h4 className="evaluation-subhead">Structure</h4>{Object.entries(batch.fields).map(([key, values]) => <div className="review-grade" key={key}>
         <label>{pretty(key)}{editing ? <select value={labels.tags[key]} onChange={(e) => change({ tags: { ...labels.tags, [key]: e.target.value } })}>
           {values.map((value) => <option key={value} value={value}>{pretty(value)}</option>)}
         </select> : <strong>{pretty(labels.tags[key])}</strong>}</label><p className="review-reason">Agent: {reason(key)}</p>
       </div>)}
-      <h3>Character</h3>{batch.axes.map((key) => <div className="review-grade" key={key}>
+      <h4 className="evaluation-subhead">Character</h4>{batch.axes.map((key) => <div className="review-grade" key={key}>
         <label>{pretty(key)} <strong>{labels.axes[key].toFixed(2)}</strong>
           {editing ? <input aria-label={pretty(key)} type="range" min={-1} max={1} step={0.05} value={labels.axes[key]}
             onChange={(e) => change({ axes: { ...labels.axes, [key]: Number(e.target.value) } })} />
@@ -177,12 +186,12 @@ function ReviewForm({ batch, item, dirty, saving, generating, onDirty, onAccept 
         </label><div className="review-axis-ends"><span>−1 {key.split('_')[0]}</span><span>+1 {key.split('_')[1]}</span></div>
         <p className="review-reason">Agent: {fields.axes[key].why}</p>
       </div>)}
-      <h3>Color roles</h3>{item.palette?.map((p) => <label key={p.index} className="evaluation-role"><span style={{ background: p.hex }} title={p.hex} />
+      <h4 className="evaluation-subhead">Color roles</h4>{item.palette?.map((p) => <label key={p.index} className="evaluation-role"><span style={{ background: p.hex }} title={p.hex} />
         <span className="review-swatch-label">P{p.index} · {p.share * 100 < 0.1 ? '<0.1' : (p.share * 100).toFixed(1)}%</span>
         {editing ? <select aria-label={`Role for P${p.index}`} value={labels.palette_roles[p.index]} onChange={(e) => change({ palette_roles: { ...labels.palette_roles, [p.index]: e.target.value } })}>
           {batch.roles.map((role) => <option key={role}>{role}</option>)}</select> : <strong>{labels.palette_roles[p.index]}</strong>}
       </label>)}
-      <h3>Keywords</h3><div className="evaluation-keywords">{labels.keywords.map((word) => editing ?
+      <h4 className="evaluation-subhead">Keywords</h4><div className="evaluation-keywords">{labels.keywords.map((word) => editing ?
         <button className="commons-button" key={word} onClick={() => { const words = labels.keywords.filter((w) => w !== word); change({ keywords: words, no_keywords: !words.length }); }}>{pretty(word)} ×</button>
         : <span className="review-keyword" key={word}>{pretty(word)}</span>)}{!labels.keywords.length && <span>No applicable keywords</span>}</div>
       {editing && <><input aria-label="Search keywords" value={query} placeholder="Add a keyword…" onChange={(e) => setQuery(e.target.value)} />

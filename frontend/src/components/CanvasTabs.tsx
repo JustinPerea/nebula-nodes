@@ -54,7 +54,7 @@ export function CanvasTabs() {
   return (
     <div className="canvas-tabs-wrap">
       <WorkspaceHeader title="Canvas" className="workspace-header--canvas"
-        navigation={<WorkspaceModeNavigation />} />
+        navigation={<WorkspaceModeNavigation />} updatesSlot={false} />
     </div>
   );
 }

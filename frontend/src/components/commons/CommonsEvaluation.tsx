@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { commonsEvaluationApi as api } from '../../lib/commonsApi';
 import { evaluationComplete } from '../../lib/commonsEvaluationTypes';
 import type { AccentPoint, EvaluationBatch, EvaluationItem, EvaluationLabels } from '../../lib/commonsEvaluationTypes';
 import { CommonsCloseBatch } from './CommonsCloseBatch';
+import { SectionEyebrow } from './CommonsSectionEyebrow';
 import '../../styles/commons-evaluation.css';
 
 const pretty = (value: string) => value === 'n_a' ? 'Not applicable' : value.replaceAll('_', ' ');
@@ -10,6 +11,7 @@ const emptyLabels = (): EvaluationLabels => ({ tags: {}, axes: {}, palette_roles
 
 export function CommonsEvaluation({ onDirtyChange }: { onDirtyChange?: (dirty: boolean) => void }) {
   const [batch, setBatch] = useState<EvaluationBatch | null>(null);
+  const headingId = useId();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -37,18 +39,26 @@ export function CommonsEvaluation({ onDirtyChange }: { onDirtyChange?: (dirty: b
     try { setBatch(await action()); setDirty(false); } catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
   }
-  if (loading) return <p className="commons-notice">Loading held-out references…</p>;
+  // The section's name is its h2, set as the eyebrow line and merged with
+  // the old eyebrow (GM review of PR #157, round 2), at every width. Under
+  // the page's h1, "Commons"; the display line is a styled p, and the steps
+  // are h3 under the h2.
+  const eyebrow = <SectionEyebrow id={headingId} name="Blind labeling" detail="C1 / C2 human ground truth" />;
+  if (loading) return <section className="commons-evaluation" aria-labelledby={headingId}>
+    <header className="evaluation-heading"><div>{eyebrow}</div></header>
+    <p className="commons-notice">Loading held-out references…</p>
+  </section>;
   const count = batch?.items.filter((item) => evaluationComplete(item, batch)).length ?? 0;
-  return <section className="commons-evaluation" aria-label="Blind reference labeling">
+  return <section className="commons-evaluation" aria-labelledby={headingId}>
     <header className="evaluation-heading">
-      <div><small>C1 / C2 · HUMAN GROUND TRUTH</small><h1>A fresh pair of eyes.</h1>
+      <div>{eyebrow}<p className="evaluation-title">A fresh pair of eyes.</p>
         <p>Describe what you see. Accent observations come before palette swatches.</p></div>
       {batch && <button className="commons-button" disabled={busy || dirty} onClick={() => setReview(!review)}>
         {review ? 'Keep labeling' : `Review batch · ${count} / 15`}</button>}
     </header>
     {error && <p role="alert" className="commons-notice commons-notice--error">{error}</p>}
     {!batch ? <form className="evaluation-setup" onSubmit={(e) => { e.preventDefault(); void run(() => api.prepare(path)); }}>
-      <h2>Prepare the held-out set</h2>
+      <h3 className="evaluation-step">Prepare the held-out set</h3>
       <p>Scan a local folder before importing it. Choose 15 references and 30 tuning references from distinct near-duplicate clusters, spread across subfolders. The held-out clusters stay quarantined.</p>
       <p>Files in iCloud download before they are read. This scans and snapshots media; it does not import references or run the model. The set cannot be regenerated here.</p>
       <label>Folder path<input value={path} onChange={(e) => setPath(e.target.value)} placeholder="Absolute path to the reference folder" required disabled={busy} /></label>
@@ -57,7 +67,7 @@ export function CommonsEvaluation({ onDirtyChange }: { onDirtyChange?: (dirty: b
       {batch.sealed && <p className="commons-notice" role="status">Human labels sealed. The fixed denominator is 150 fields.</p>}
       {batch.state === 'closed' && <p className="commons-notice" role="status">Closed without sealing: an assisted review record, not blind ground truth. Blind drafts are read only. SHA-256: {batch.close_hash}</p>}
       {review ? <div className="evaluation-review">
-        <h2>One last look.</h2><p>{count} of 15 complete. Every reference stays in the denominator. Keywords are scored separately.</p>
+        <h3 className="evaluation-step">One last look.</h3><p>{count} of 15 complete. Every reference stays in the denominator. Keywords are scored separately.</p>
         {batch.items.map((item, n) => <div key={item.position}>
           <span>Reference {String(n + 1).padStart(2, '0')} · {evaluationComplete(item, batch) ? 'Ready' : item.labels?.flagged ? 'Needs review' : 'Incomplete'}</span>
           <button className="commons-button" onClick={() => { setIndex(n); setReview(false); }}>Review reference</button>
@@ -116,7 +126,7 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run }: {
   };
   return <>
     <div className="evaluation-image">
-      <h2>Reference {String(item.position + 1).padStart(2, '0')}</h2>
+      <h3 className="evaluation-step">Reference {String(item.position + 1).padStart(2, '0')}</h3>
       {imageError && <p role="alert">{imageError}</p>}
       {!url && !imageError && <p>Loading original image…</p>}
       <div className="evaluation-canvas" style={{ width: `min(100%, ${item.width / item.height * 64}vh)` }}>
@@ -138,30 +148,30 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run }: {
     </div>
     <div className="evaluation-form">
       {!item.accent_locked ? <>
-        <small>C2 · ACCENT OBSERVATIONS</small><h2>What catches your eye?</h2><p>Choose the colors that stand out, even when they occupy very little space.</p>
+        <small>C2 · ACCENT OBSERVATIONS</small><h3 className="evaluation-step">What catches your eye?</h3><p>Choose the colors that stand out, even when they occupy very little space.</p>
         {points.map((point, n) => <div className="evaluation-point" key={n}>Accent {n + 1} · {Math.round(point.x * 100)}%, {Math.round(point.y * 100)}%
           <button className="commons-button" disabled={readonly} onClick={() => { setPoints(points.filter((_, i) => i !== n)); onDirty(true); }}>Remove accent {n + 1}</button></div>)}
         <label><input type="checkbox" checked={noAccents} disabled={readonly || !url} onChange={(e) => { setNoAccents(e.target.checked); setPoints([]); onDirty(true); }} /> I don’t see any accent colors</label>
         <button className="commons-button commons-button--primary" disabled={readonly || !url || (!points.length && !noAccents)}
           onClick={() => void run(() => api.accents(item.position, batch.revision, points.map(({ x, y }) => ({ x, y })), noAccents))}>Save accents & reveal labels</button>
       </> : <fieldset disabled={readonly}>
-        <small>C1 · STRUCTURE & CHARACTER</small><h2>Describe the visual language.</h2>
+        <small>C1 · STRUCTURE & CHARACTER</small><h3 className="evaluation-step">Describe the visual language.</h3>
         {Object.entries(batch.fields).map(([key, values]) => <label key={key}>{pretty(key)}<select value={labels.tags[key] ?? ''}
           onChange={(e) => { const tags = { ...labels.tags }; if (e.target.value) tags[key] = e.target.value; else delete tags[key]; change({ tags }); }}>
           <option value="">Choose one…</option>{values.map((value) => <option key={value} value={value}>{pretty(value)}</option>)}
         </select></label>)}
-        <h3>Character</h3>
+        <h4 className="evaluation-subhead">Character</h4>
         {batch.axes.map((key) => <div className="evaluation-axis" key={key}><label>{pretty(key)} · {labels.axes[key]?.toFixed(2) ?? 'Unanswered'}
           <input aria-label={pretty(key)} aria-valuetext={labels.axes[key] === undefined ? 'Unanswered' : String(labels.axes[key])} type="range" min={-1} max={1} step={0.05} value={labels.axes[key] ?? 0}
             onChange={(e) => change({ axes: { ...labels.axes, [key]: Number(e.target.value) } })} /></label>
           <div><span>−1 {key.split('_')[0]}</span><button className="commons-button" onClick={() => change({ axes: { ...labels.axes, [key]: 0 } })}>Set neutral</button><span>+1 {key.split('_')[1]}</span></div>
         </div>)}
-        <h3>Assign color roles</h3><p>Measured palette · accent observations are already locked.</p>
+        <h4 className="evaluation-subhead">Assign color roles</h4><p>Measured palette · accent observations are already locked.</p>
         {item.palette?.map((p) => <label key={p.index} className="evaluation-role"><span style={{ background: p.hex }} />P{p.index}
           <select aria-label={`Role for P${p.index}`} value={labels.palette_roles[p.index] ?? ''} onChange={(e) => {
             const roles = { ...labels.palette_roles }; if (e.target.value) roles[p.index] = e.target.value; else delete roles[p.index]; change({ palette_roles: roles });
           }}><option value="">Choose a role…</option>{batch.roles.map((role) => <option key={role}>{role}</option>)}</select></label>)}
-        <h3>Keywords · {labels.keywords.length} / 12</h3>
+        <h4 className="evaluation-subhead">Keywords · {labels.keywords.length} / 12</h4>
         <div className="evaluation-keywords">{labels.keywords.map((word) => <button className="commons-button" key={word} onClick={() => change({ keywords: labels.keywords.filter((w) => w !== word) })}>{pretty(word)} ×</button>)}</div>
         <input aria-label="Search keywords" placeholder="Search the shared vocabulary…" value={query} onChange={(e) => setQuery(e.target.value)} />
         <div className="evaluation-keywords">{query.trim() && batch.keywords.filter((word) => word.includes(query.trim().toLowerCase().replaceAll(' ', '_')) && !labels.keywords.includes(word)).slice(0, 20).map((word) =>
