@@ -11,8 +11,9 @@
  * Signature moves:
  *   • Translucent dark-glass panels (backdrop-filter blur) — chrome reads
  *     as a quiet overlay on the canvas, not as opaque slabs
- *   • Single accent color — used ONLY for focus rings, primary CTA,
- *     selected state. Everything else is monochrome.
+ *   • Single accent color — used ONLY for the primary CTA, selected
+ *     state and the agent. Focus rings are a light neutral (sf, GM -
+ *     Design). Everything else is monochrome.
  *   • Clean grotesk for body text + headers; NOT extreme weight
  *   • Bold-then-light same-paragraph two-tone in headlines (Slava's
  *     characteristic Nothing-OS hierarchy)
@@ -61,8 +62,9 @@ body.app-slava-restraint {
   --sr-ink-meta: rgba(255, 255, 255, 0.40);     /* metadata, secondary */
   --sr-ink-faint: rgba(255, 255, 255, 0.20);    /* footers, tertiary */
 
-  /* Single accent — Nothing-orange placeholder. Used only for focus,
-   * primary CTA, selected state. Never as a ground. */
+  /* Single accent — Nothing-orange placeholder. Used only for the primary
+   * CTA, selected state and the agent. Never as a ground, never for focus
+   * (--sr-focus-outline). */
   --sr-accent: #FF5A1F;
   --sr-accent-hover: #ff6b34;
   --sr-accent-soft: rgba(255, 90, 31, 0.10);
@@ -293,7 +295,13 @@ body.app-slava-restraint {
   --sr-motion-handle: 220ms cubic-bezier(0.32, 0.72, 0, 1);
   --sr-motion-panel: 500ms cubic-bezier(0.32, 0.72, 0, 1);
   --sr-motion-emphasized: 140ms cubic-bezier(0.05, 0.7, 0.1, 1);
-  --sr-focus-outline: 2px solid var(--sr-accent-soft);
+  /* Keyboard focus: a light neutral ring (GM - Design, sf). Orange already
+   * means the agent and the primary action, so focus is drawn in the primary
+   * type colour, which carries no meaning of its own and clears 3:1 on every
+   * dark surface (tests/focusRingCss.test.ts). The twin is for the one light
+   * surface a ring sits on: the Commons evaluation form. */
+  --sr-focus-outline: 2px solid var(--sr-ink);
+  --sr-focus-outline-on-light: 2px solid var(--sr-canvas);
   --sr-focus-offset: 2px;
 
   --sr-layer-panel: 10;
@@ -310,6 +318,30 @@ body.app-slava-restraint {
   --sr-layer-node-image-ports: 5;
   --sr-layer-node-image-header: 6;
   --sr-layer-drag: 10000;
+}
+
+/* The ring wherever no component draws its own: it replaces the browser's
+ * default focus ring. :where() keeps it at zero specificity, so every
+ * component rule (and its offset) still wins. */
+:where(body.app-slava-restraint :focus-visible) {
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
+}
+
+/* A canvas node with keyboard focus (Tab onto the card). React Flow clears
+ * the wrapper's outline (.react-flow__node.selectable:focus-visible), and the
+ * wrapper's box isn't the card's, so the ring goes on the drawn card. It is
+ * the neutral ring, so it never reads as the agent's orange outline (the
+ * cards an Update names) or the selected card's category ring. A node type
+ * without a .model-node__card gets it on its wrapper. */
+body.app-slava-restraint .canvas-wrapper .react-flow__node:focus-visible .model-node__card {
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
+}
+
+body.app-slava-restraint .canvas-wrapper .react-flow__node:focus-visible:not(:has(.model-node__card)) {
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
 }
 
 body.app-slava-restraint .toolbar__icon,
@@ -556,7 +588,6 @@ body.app-slava-restraint :is(.panel__header-action, .model-node__header-action):
 body.app-slava-restraint :is(.panel__header-action, .model-node__header-action):focus-visible {
   outline: var(--sr-focus-outline);
   outline-offset: var(--sr-focus-offset);
-  border-color: var(--sr-accent);
   opacity: 1;
 }
 
@@ -627,7 +658,6 @@ body.app-slava-restraint :is(
 ):focus-visible {
   outline: var(--sr-focus-outline);
   outline-offset: var(--sr-focus-offset);
-  border-color: var(--sr-accent);
 }
 
 /* Popovers — keep connection creation/context menus off the old Default skin
@@ -897,7 +927,6 @@ body.app-slava-restraint .chat__codeblock-apply:focus-visible,
 body.app-slava-restraint .chat__tool-header:focus-visible {
   outline: var(--sr-focus-outline);
   outline-offset: var(--sr-focus-offset);
-  border-color: var(--sr-accent);
 }
 
 body.app-slava-restraint .chat-panel__meta,
@@ -1209,7 +1238,7 @@ body.app-slava-restraint .chat-panel__input-row {
 }
 
 body.app-slava-restraint .chat-panel__input-row:focus-within {
-  border-color: var(--sr-accent);
+  border-color: var(--sr-edge-strong);
   background: rgba(0, 0, 0, 0.42);
 }
 
@@ -1410,9 +1439,8 @@ body.app-slava-restraint .panel__search {
   border-radius: var(--sr-radius-pill);
   padding: 8px 14px;
 }
+/* Focus: the token ring (the :is() focus-visible rule above), not an orange border. */
 body.app-slava-restraint .panel__search:focus {
-  outline: none;
-  border-color: var(--sr-accent);
   background: rgba(0, 0, 0, 0.45);
 }
 body.app-slava-restraint .panel__search::placeholder {
@@ -1938,8 +1966,6 @@ body.app-slava-restraint .inspector__field {
   transition: border-color var(--sr-motion-fast), background-color var(--sr-motion-fast);
 }
 body.app-slava-restraint .inspector__field:focus {
-  outline: none;
-  border-color: var(--sr-accent);
   background: var(--sr-surface-control-focus);
 }
 body.app-slava-restraint .inspector__field::placeholder {
@@ -2433,7 +2459,7 @@ body.app-slava-restraint .agent-log__hide:hover {
 }
 
 body.app-slava-restraint .agent-log__hide:focus-visible {
-  outline: 1px solid var(--sr-edge-strong);
+  outline: var(--sr-focus-outline);
   outline-offset: 1px;
   color: var(--sr-ink);
 }
@@ -2472,8 +2498,8 @@ body.app-slava-restraint .agent-log-hidden-notice__action:hover {
 }
 
 body.app-slava-restraint .agent-log-hidden-notice__action:focus-visible {
-  outline: 1px solid var(--sr-edge-strong);
-  outline-offset: 2px;
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
 }
 
 /* The divider runs under the whole row, hide control included. */
@@ -3196,7 +3222,13 @@ body.app-slava-restraint .model-node__label-input {
   border-radius: var(--sr-node-label-input-radius);
   color: var(--sr-ink-bold);
   background: var(--sr-surface-control-focus);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sr-accent) 55%, transparent);
+}
+
+/* The field only exists while renaming (it saves on blur), so its ring is
+ * its focus: the token, tight to the field so the header doesn't shift. */
+body.app-slava-restraint .model-node__label-input:focus-visible {
+  outline: var(--sr-focus-outline);
+  outline-offset: 0;
 }
 
 body.app-slava-restraint .model-node__label-input::placeholder {
@@ -3907,7 +3939,6 @@ body.app-slava-restraint .model-node__loop-toggle--on {
 body.app-slava-restraint .model-node__loop-toggle:focus-visible {
   outline: var(--sr-focus-outline);
   outline-offset: var(--sr-focus-offset);
-  border-color: var(--sr-accent);
 }
 
 body.app-slava-restraint .model-node--image-surface .model-node__ports {
@@ -4123,7 +4154,6 @@ body.app-slava-restraint .canvas-tabs__btn:disabled {
 body.app-slava-restraint .canvas-tabs__btn:focus-visible {
   outline: var(--sr-focus-outline);
   outline-offset: var(--sr-focus-offset);
-  border-color: var(--sr-accent);
 }
 
 body.app-slava-restraint .canvas-tabs__btn:active:not(:disabled) {
@@ -4176,7 +4206,6 @@ body.app-slava-restraint .editor-view--empty button:focus-visible,
 body.app-slava-restraint .editor-preview--error button:focus-visible {
   outline: var(--sr-focus-outline);
   outline-offset: var(--sr-focus-offset);
-  border-color: var(--sr-accent);
 }
 
 body.app-slava-restraint .editor-view__button-icon,
@@ -4464,7 +4493,6 @@ body.app-slava-restraint .editor-transport__preset:focus-visible,
 body.app-slava-restraint .editor-transport__range:focus-visible {
   outline: var(--sr-focus-outline);
   outline-offset: var(--sr-focus-offset);
-  border-color: var(--sr-accent);
 }
 
 body.app-slava-restraint .editor-transport__btn:disabled,

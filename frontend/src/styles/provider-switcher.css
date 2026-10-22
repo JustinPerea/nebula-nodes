@@ -222,7 +222,12 @@ body.app-slava-restraint .provider-switcher__item:hover,
 body.app-slava-restraint .provider-switcher__item:focus-visible {
   background: var(--sr-surface-control-hover);
   color: var(--sr-ink-bold);
-  outline: none;
+}
+
+/* Keyboard focus: the token ring, inside the menu's clipped edge. */
+body.app-slava-restraint .provider-switcher__item:focus-visible {
+  outline: var(--sr-focus-outline);
+  outline-offset: -2px;
 }
 
 body.app-slava-restraint .provider-switcher__row--selected .provider-switcher__item { color: var(--sr-ink-bold); }
@@ -255,10 +260,13 @@ body.app-slava-restraint .provider-switcher__setup {
   transition: background-color var(--sr-motion-fast);
 }
 
-body.app-slava-restraint .provider-switcher__setup:hover,
-body.app-slava-restraint .provider-switcher__setup:focus-visible {
+body.app-slava-restraint .provider-switcher__setup:hover {
   background: var(--sr-accent-soft);
-  outline: none;
+}
+
+body.app-slava-restraint .provider-switcher__setup:focus-visible {
+  outline: var(--sr-focus-outline);
+  outline-offset: -2px;
 }
 
 body.app-slava-restraint .provider-switcher__alternative {
@@ -269,11 +277,14 @@ body.app-slava-restraint .provider-switcher__alternative {
   transition: background-color var(--sr-motion-fast), border-color var(--sr-motion-fast);
 }
 
-body.app-slava-restraint .provider-switcher__alternative:hover,
-body.app-slava-restraint .provider-switcher__alternative:focus-visible {
+body.app-slava-restraint .provider-switcher__alternative:hover {
   border-color: var(--sr-accent-border-strong);
   background: var(--sr-accent-hover-soft);
-  outline: none;
+}
+
+body.app-slava-restraint .provider-switcher__alternative:focus-visible {
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
 }
 
 body.app-slava-restraint .provider-switcher__stop {
@@ -298,7 +309,11 @@ body.app-slava-restraint .model-node__provider-chip:focus-visible,
 body.app-slava-restraint .model-node__provider-chip[aria-expanded="true"] {
   border-color: var(--sr-edge-strong);
   color: var(--sr-ink);
-  outline: none;
+}
+
+body.app-slava-restraint .model-node__provider-chip:focus-visible {
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
 }
 
 body.app-slava-restraint .model-node__provider-chip--blocked,
@@ -322,7 +337,8 @@ body.app-slava-restraint .model-node__provider-note {
 body.app-slava-restraint .model-node__provider-note-dismiss { color: var(--sr-ink-meta); }
 
 body.app-slava-restraint .model-node__provider-note-dismiss:hover,
-body.app-slava-restraint .model-node__provider-note-dismiss:focus-visible { color: var(--sr-ink-bold); outline: none; }
+body.app-slava-restraint .model-node__provider-note-dismiss:focus-visible { color: var(--sr-ink-bold); }
+body.app-slava-restraint .model-node__provider-note-dismiss:focus-visible { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); }
 
 /* -- Other skins: a plain dark fallback ------------------------------------ */
 
@@ -368,7 +384,8 @@ body.app-slava-restraint .provider-switcher__pill .provider-switcher__chip-text 
 
 body.app-slava-restraint .provider-switcher__pill:hover,
 body.app-slava-restraint .provider-switcher__pill:focus-visible,
-body.app-slava-restraint .provider-switcher__pill[aria-expanded="true"] { border-color: var(--sr-edge-strong); outline: none; }
+body.app-slava-restraint .provider-switcher__pill[aria-expanded="true"] { border-color: var(--sr-edge-strong); }
+body.app-slava-restraint .provider-switcher__pill:focus-visible { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); }
 
 .param-pills__note { display: inline-flex; align-items: center; gap: 6px; }
 

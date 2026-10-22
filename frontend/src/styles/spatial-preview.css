@@ -181,7 +181,11 @@
 .spatial-preview__asset:focus-visible {
   border-color: color-mix(in srgb, var(--spatial-preview-accent) 48%, transparent);
   background: color-mix(in srgb, var(--spatial-preview-accent) 10%, transparent);
-  outline: none;
+}
+
+.spatial-preview__asset:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #e8e6e1);
+  outline-offset: var(--sr-focus-offset, 2px);
 }
 
 .spatial-preview__asset span,

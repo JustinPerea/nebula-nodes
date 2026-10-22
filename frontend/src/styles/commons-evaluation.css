@@ -246,8 +246,15 @@
 .evaluation-hash {
   overflow-wrap:anywhere;
 }
-.commons-evaluation :focus-visible {
-  outline:2px solid #91b769;
+/* Focus: the app's neutral ring on the green-black panel. The form is a
+ * light card (#eff1e8), where the light ring would not show (1.1:1), so it
+ * takes the token's dark twin. Both beat the Commons view's own focus rule. */
+body.app-slava-restraint .commons-view .commons-evaluation :focus-visible {
+  outline:var(--sr-focus-outline);
+  outline-offset:3px;
+}
+body.app-slava-restraint .commons-view .commons-evaluation .evaluation-form :focus-visible {
+  outline:var(--sr-focus-outline-on-light);
   outline-offset:3px;
 }
 @media(max-width:1000px) {
