@@ -29,6 +29,8 @@ import { ChatModelPicker } from './ChatModelPicker';
 import { PermissionCard, type PermissionRequestPart, type PermissionStatus } from './PermissionCard';
 import { PersonalAgentWarning } from './PersonalAgentWarning';
 import { PERSONAL_AGENTS_CHANGED_EVENT } from '../../lib/personalAgentsEvents';
+import { CHAT_SEND_EVENT, type ChatSendDetail } from '../../lib/chatSend';
+import { claimIntent } from '../../lib/heldIntents';
 import '../../styles/personal-agents.css';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl, personTokenForSocket } from '../../lib/backend';
 import { DEFAULT_BACKEND_PORT, devProxyPort } from '../../lib/devBackendPort';
@@ -1271,10 +1273,15 @@ export function ChatPanel() {
   // `nebula:chat-send` with a pre-composed message. We open the panel if it's
   // closed, drop the message into the input, and auto-send when the socket is
   // ready and not already streaming. If busy, the user can hit Send themselves.
+  // The panel is a deferred chunk: a send that came before it arrived was held
+  // by its wrapper (DeferredPanels.tsx, which also opened the panel) and is
+  // handed over here, where the panel takes the event over (lib/heldIntents.ts).
   const sendRef = useRef<() => void>(() => {});
   useEffect(() => {
     function onChatSend(e: Event) {
-      const detail = (e as CustomEvent<{ message?: string; sourceNodeId?: string }>).detail;
+      receive((e as CustomEvent<ChatSendDetail | undefined>).detail);
+    }
+    function receive(detail: ChatSendDetail | undefined) {
       const msg = String(detail?.message ?? '').trim();
       if (!msg) return;
       if (!useUIStore.getState().panels.chat.visible) {
@@ -1292,8 +1299,13 @@ export function ChatPanel() {
         }
       }, 120);
     }
-    window.addEventListener('nebula:chat-send', onChatSend);
-    return () => window.removeEventListener('nebula:chat-send', onChatSend);
+    window.addEventListener(CHAT_SEND_EVENT, onChatSend);
+    const claim = claimIntent<ChatSendDetail>('chat-send');
+    if (claim.held) receive(claim.held);
+    return () => {
+      claim.release();
+      window.removeEventListener(CHAT_SEND_EVENT, onChatSend);
+    };
   }, []);
 
   // DEV-only window bridge for scripted UI capture (the nebula-nodes-visuals

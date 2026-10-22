@@ -22,11 +22,9 @@ import { ContextMenu } from './ContextMenu';
 import { AgentNoteOutlines, ConnectionPopup } from './DeferredPanels';
 import { SelectionToolbar } from './SelectionToolbar';
 import { CanvasNavigation } from './CanvasNavigation';
-import { AgentCursorLayer } from './canvas/AgentCursorLayer';
-import { PinLayer } from './canvas/PinLayer';
 import { PinComposer } from './canvas/PinComposer';
-import { ProposalLayer } from './canvas/ProposalLayer';
-import { ProposalBar } from './canvas/ProposalBar';
+// Loaded after the first paint (lib/deferredChunks.ts); they draw only what the socket or a fetch brings in.
+import { AgentCursorLayer, PinLayer, ProposalBar, ProposalLayer } from './canvas/DeferredCanvasOverlays';
 import { CanvasViewReporter } from './canvas/CanvasViewReporter';
 import { ArrangeController } from './canvas/ArrangeController';
 import { selectMeasuring, useArrangeStore } from '../store/arrangeStore';

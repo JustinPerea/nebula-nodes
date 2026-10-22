@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useUIStore, type LeftDock } from '../store/uiStore';
 import type { OnboardingTarget } from '../lib/onboarding';
+import { COMMAND_PALETTE_OPEN_EVENT } from '../lib/commandPaletteKeys';
 import '../styles/workspace-rail.css';
 
 interface RailItemProps {
@@ -134,7 +135,7 @@ export function WorkspaceRail() {
             label="Search commands and nodes"
             icon={Search}
             shortcut="⌘K"
-            onClick={() => window.dispatchEvent(new CustomEvent('nebula:command-palette-open'))}
+            onClick={() => window.dispatchEvent(new CustomEvent(COMMAND_PALETTE_OPEN_EVENT))}
           />
         </div>
 
