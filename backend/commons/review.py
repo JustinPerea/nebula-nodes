@@ -74,8 +74,8 @@ def _reserve(store, position):
             # was made and tomorrow won't help; a cap lowered below today's
             # calls names the calls made (round 3 review).
             raise ev.EvaluationError('Daily model call cap reached.', (
-                'Agent review needs at least 1 analysis call a day. Analysis calls per day is set to 0 in Settings. '
-                'Raise it, then try again.' if meter['cap'] == 0 else
+                'Agent review needs at least 1 analysis call a day, and Settings has it at 0. '
+                'Raise \u201cAnalysis calls per day\u201d, then try again.' if meter['cap'] == 0 else
                 f"Commons has made {meter['calls']} analysis calls today, and the daily cap is {meter['cap']}. "
                 'Try again tomorrow, or raise Analysis calls per day in Settings.'))
         # Meter and reservation commit together, before the external call.

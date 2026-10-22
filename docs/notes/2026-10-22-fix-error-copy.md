@@ -453,5 +453,141 @@ Isolated backend on 8781 through `iso.sh` (temp HOME, every NEBULA_* root in the
 - seal incomplete -> "Sealing needs every field labeled on all 15 references, with no review flags left. Finish them, then seal."; count -> "Sealing needs exactly 15 references. This held-out set has {n}."; unfinished -> "Sealing needs all 15 references labeled. {done} of 15 are done. Finish the rest, then seal."
 - closed can't seal -> "This held-out set was closed as assisted review, so it can't be sealed."; agent-graded -> "The agent graded some of these references, so they can't be sealed as blind labels. Close them as assisted review instead."
 - close needs confirmation -> "Confirm that these labels become assisted review, then close the batch."; sealed has nothing to close -> "These labels are sealed as blind ground truth, so there's nothing to close."
-- Agent review: closed -> "This held-out set is closed, so the agent can't grade it again."; graded once -> "The agent has graded this reference once already. Nebula grades each reference only once."; budget off -> "Agent review is off on this Nebula. Start it with a call budget (NEBULA_COMMONS_REVIEW_CALL_BUDGET), then try again."; budget used -> "Agent review can grade {budget} references, and it has graded {used}. Restart Nebula with a larger call budget to grade more."; daily cap -> "Commons has made {calls} analysis calls today, and the daily cap is {cap}. Try again tomorrow, or raise Analysis calls per day in Settings." (review: was "made all {cap}", wrong when the cap was lowered below today's calls), and with the cap at 0 -> "Agent review needs at least 1 analysis call a day. Analysis calls per day is set to 0 in Settings. Raise it, then try again." (review); not graded yet -> "Wait for the agent to grade this reference before you review it."
+- Agent review: closed -> "This held-out set is closed, so the agent can't grade it again."; graded once -> "The agent has graded this reference once already. Nebula grades each reference only once."; budget off -> "Agent review is off on this Nebula. Start it with a call budget (NEBULA_COMMONS_REVIEW_CALL_BUDGET), then try again."; budget used -> "Agent review can grade {budget} references, and it has graded {used}. Restart Nebula with a larger call budget to grade more."; daily cap -> "Commons has made {calls} analysis calls today, and the daily cap is {cap}. Try again tomorrow, or raise Analysis calls per day in Settings." (review: was "made all {cap}", wrong when the cap was lowered below today's calls), and with the cap at 0 -> "Agent review needs at least 1 analysis call a day, and Settings has it at 0. Raise “Analysis calls per day”, then try again." (review; GM's rewrite after #168); not graded yet -> "Wait for the agent to grade this reference before you review it."
 - Kept as they were: "Labels changed in another window. Reload before saving." and "A grading attempt is still running. Close after it finishes."
+
+## Round 3b: Retry that retries, and the last internal words
+
+Branch `fix/error-copy-3b`, from `a42ef37a` (#168's head). GM - Design owns the copy. GM, verbatim: "Never show raw error.message strings in UI."; "when the surface already has a retry button, the reason line drops its "try again". The button is the retry."; "make Retry redo the failed action, never a different one. If that's more than a small change, hide Retry for those failures instead. A Retry that does something else is a defect."; "People get the written line and agents keep the specific detail. Keep it that way."; ""settle" and "start" are internal."; the delete line "This node is still waiting on World Labs. Check the job in Marble, then {the node's actual button label} before you delete it."; and the pattern "say what's needed in plain words, give the count, then what to do."
+
+### What changed and why
+
+- **Projects' Try again redoes the failed action (item 1).** `store/projectStore.ts` records what failed beside every error (`errorRetry`: list/load, open, create, rename, delete, restore, purge, empty Recently deleted, cover, save) and `retry()` redoes exactly that. `projectRetryOffer(state)` tells `ProjectHome` what the button does: `redo` (the short line: the button is the retry), `reload` (Try again only reloads the saved projects, so the full line stays, which says so), or `none` (no Try again, full line). A refusal the backend made for good (`RequestFailedError` with a 4xx `canTryAgain` says no to) never offers Try again. Per failure:
+  - Listing at startup or after a refresh: Try again lists again (redo). Kept as before. Review: a startup load refused for good (a 4xx) keeps Try again too, in the `reload` form with the whole line (see "Review (round 3b)").
+  - Open answered 5xx or lost: Try again lists the saved projects, then opens that same project; if the first open had landed it shows it without a second open (redo).
+  - Open refused (World Labs state, a 404, a params stop): the full line, no Try again.
+  - Create whose reply was lost after the canvas was reserved: "Could not confirm the project change. Try again to reload saved projects safely." Try again reloads (`reload`, full line) and never creates twice. A create stopped before it was sent (a failed flush): Try again creates it (redo).
+  - Rename, cover pin: Try again sends the same rename / pin (redo).
+  - Delete, restore, delete for good, empty Recently deleted: Try again lists first, then redoes it only on what is still there (a delete that already landed sends nothing and shows the undo; a restore of something gone shows no Try again). Deleting the open project with no reply keeps "Could not confirm the project was deleted. Try again to reload saved projects safely." (`reload`).
+  - Autosave: the canvas "Save failed · Retry" now calls `retrySave()` (it used to run Projects' list retry); its tooltip is the save's own short line. A later failure of another kind doesn't change what the save Retry does (`saveError` is kept apart from `error`).
+  - Params-version stops that need a reload, a rebuild or a restart: no Try again. The recovered-project line and "follow another window" failures: Try again reloads (`load`).
+- **Retry sweep (item 2), every retry button in the frontend, with its verdict:**
+  - Projects Try again: fixed (above).
+  - Canvas workspace controls "Save failed · Retry": fixed (saves; was a list reload).
+  - Settings Try again: OK (re-reads settings, the failed action). Settings tab load boundary: no button.
+  - Mask painter Try again (`DeferredPanels`): OK (loads it again); its line lost its "try again" (WRAP): "Couldn't load the mask painter. Check your connection." Other deferred boundaries: no button.
+  - Chat model picker "Retry model discovery": OK (re-fetches the catalog).
+  - Board and Character toolbar Retry and notices: OK (round 3).
+  - Board/Character/Assets "Retry loading": fixed, hidden while no project is open (it ran `verifyProject` with nothing to verify, a no-op).
+  - Commons detail analysis Retry: OK (re-analyzes). Cinema reference upload Retry: OK (re-uploads the same file, gated by `canRetry`). Create chips Retry / Attach again: OK. Cinema shot "Retry connection": OK (re-sends the handoff). Run History "Retry failed": OK (re-runs the failed run).
+  - Undo in the delete toast (`UndoDeleteToast`): fixed. It showed any later delete's failure beside the earlier delete's Undo; `useAssetDelete` now keeps `deleteError` (the Studio notice) apart from `undoError` (the toast), and the toast shows only Undo's own failure, short (Undo redoes it).
+  - Recently deleted (`AssetTrash` list): no retry button; it showed a thrown error's message, now `failureMessage` (a request's own line).
+  - Agent notes corner, Commons leave popover: no retry button / OK (rounds 1-2).
+- **Forget and unlock never show a raw message (item 3).** `graphStore.deleteProviderRecovery` throws `FailureNotice` (new in `lib/errorCopy.ts`: a written heading and reason) instead of `Error('Wait for the active run to finish before clearing recovery safety.')` and `Error('That durable provider recovery checkpoint is no longer current.')`. Run History and the status bar's unlock show `failureMessage(error, heading)`: a request's own line, the store's written one, or GM's general line, never another error's message.
+- **World Labs refusals raised with a code at the source (item 4).** `ProviderStartConflictError` carries `reason` (busy, active, ambiguity, capacity, changed, recovery, params, cancelled) and `limit`/`fields`; `ProviderRecoveryCapacityError` carries `limit`. Each raise site sets them. `main.py` `_start_refusal` words the person's line from the code, never from the text, and `refusal_copy.refusal` gives agents, the CLI, MCP and scripts the exact old text. Same checks, same statuses (409). Lines under "Round 3b lines for GM".
+- **Canvas Delete key on a held node (item 5).** It used to drop the press without a word. `graphStore.refuseHeldNodeDelete` puts "Couldn't delete the node." and the same per-state line the backend sends into the canvas's own notice (`undoNotice`), once per press; nothing is sent. `Canvas.tsx` uses React Flow's `onBeforeDelete` (store `allowCanvasDelete`), so the guard runs before React Flow removes the node's wires (before, a press dropped the wires of a node it kept). One source: the lines live in `lib/worldLabsWaiting.ts`, and `backend/tests/test_error_copy_round3b.py` pins them equal to `_paid_state_person`. Agent delete is untouched.
+- **The canvas notice shows the whole line (found live).** The notice cut the line to one row with an ellipsis ("…Check the job…"), hiding the step, and left after 6 s. A notice with no button now wraps (`.canvas-undo-notice--message`) and stays for its reading time (`lib/canvasNoticeHold.ts`: at least 6 s, 2 s + 18 characters a second; about 11 s for the delete line). Notices with Undo/Redo are unchanged. This also fixes the wire-sync failure notices, which used the same one-row style.
+- **Blind labeling intro (item 6).** Old: "Scan a local folder before importing it. Choose 15 references and 30 tuning references from distinct near-duplicate clusters, spread across subfolders. The held-out clusters stay quarantined." New: "Scan a local folder before you import it. Nebula picks 15 references to label and 30 to tune with, choosing references that look different from each other and spreading them across subfolders. It never uses the 15, or anything that looks like them, as examples."
+- **Agent support.** No new tool or route: agents keep every specific text word for word (tested over HTTP, MCP stdio and the CLI). `docs/MCP-SETUP.md` (a paragraph under "Refusal text") and `skills/nebula/SKILL.md` say the World Labs refusals keep their exact text for agents. `backend/mcp_server.py` unchanged; its INSTRUCTIONS name only real tools.
+
+### Decisions not in GM's message
+
+- **A create is never redone blind.** A lost create reply may have made the project; a second create would make a second one. Its Try again reloads, and the line says that, so it keeps the full line (GM: hide or keep the full reason when Try again doesn't redo).
+- **Delete-type redos list first.** Redoing a delete, restore, purge or empty blindly could act on something another window already changed; listing first keeps the redo to what is still there.
+- **"Couldn't delete 2 nodes."** when a multi-select press holds a held node, with the canvas-wide line ("A node is … before you try again."). GM's words cover one node; for GM to confirm.
+- **The notice's reading time** (18 characters a second) is mine; for GM.
+- **The Run start "cancelled before it started" 409** keeps its text for everyone: it names no World Labs state and carries a run id (listed for GM).
+
+### Tradeoffs
+
+- `retry()` is a dispatch on the recorded action rather than a per-call closure, so the store stays serializable and testable; each action's redo lives beside the action.
+- The notice now grows to three lines at 1280 for the delete line; it sits above the bottom toolbar and never covers the canvas controls.
+
+### Tests (written first; each failed on the old code)
+
+Red logs in the session scratchpad (`error-copy-3b/red-*.log`).
+- Projects: `frontend/tests/projectStore.retry.test.ts` (16 tests, every failure above) red **14 failed, 2 passed** (the two that passed: the listing retry, and a delete whose reply was lost after it landed, which the old relist already handled); `ProjectHome.test.tsx` and `ProjectWorkspaceControls.test.tsx` (+1 each) red **2 failed, 24 passed**.
+- Forget/unlock: `frontend/tests/providerRecoveryCopy.test.tsx` (5) red **4 failed, 1 passed** (the request's own line already passed); `RunHistoryPanel.test.tsx` pin updated to GM's general line.
+- Delete key: `frontend/tests/store/graphStore.heldNodeDelete.test.ts` (5) red **5 failed**.
+- Backend: `backend/tests/test_error_copy_round3b.py` (12: each start code for the person and the agent, both capacities, the codes set at the source, unlock in flight / changed / another process, forget changed, canvas capacity and race, and the frontend notice pinned to the backend's words) red **11 failed, 1 passed** (the pin passed because `worldLabsWaiting.ts` was written with the backend's words first).
+- Intro: `tests/commonsEvaluation.test.tsx` (+1) red **1 failed, 6 passed**. Sweep: `tests/components/retrySweep.round3b.test.tsx` (4) and the mask painter line in `DeferredRetryPanels.test.tsx`, red **5 failed, 6 passed**.
+- Notice (found live): `tests/components/CanvasUndoNotice.test.tsx` (+2) red **2 failed, 3 passed**.
+- Fixtures updated to the new shapes (they failed in the full run, then passed): `AssetTrash.test.tsx` (the purge mock now throws what `purgeTrashed` really throws, a `RequestFailedError`), `DeferredLoadFailure.test.tsx` (the mask painter line), `App.canvasFocus.test.tsx` (an error fixture now carries its `errorRetry`, as the store always sets one).
+
+### Live check
+
+Isolated backend on 8783 through `iso.sh` (temp HOME, every NEBULA_* root in the scratchpad, no keys or tokens in its environment), Vite on 5783 with `VITE_NEBULA_BACKEND_PORT=8783`. 8000-8010 and 5173 blocked (CDP `Network.setBlockedURLs` plus the dead proxy `127.0.0.1:9`), canary 8799 unreachable, **0 blocked attempts**. Narrow CDP Fetch interception failed only the two requests named below. Nothing paid ran (the World Labs export node only carried a recovery ID). **38 PASS, 0 FAIL** at 1440x900 and 1280x800:
+- Projects, open answered 503 (once): "Couldn't open the project. Nebula didn't respond." beside one Try again; Try again opened that same project (two open requests, both for it) at 1440 (Live B) and 1280 (Live A).
+- An environment node wired to a World Labs export node holding a recovery record. Delete key on the export node: the notice "Couldn't delete the node. This node is still waiting on World Labs. Check the job in Marble, then use “Checked Marble — forget” in Run History before you delete it.", whole (wrapped, not clipped), still up after 6.6 s; no delete request reached the backend; both nodes and the wire stayed, at both sizes. The backend's own refusal for the page is the same line; an agent gets "Cannot delete n2: …".
+- A refused open (Live B while A holds the record): "Couldn't open the project. A node is still waiting on World Labs. … before you try again." whole, no Try again, A still open, at both sizes. Over HTTP the page read that line; an agent header and a script got "Cannot switch projects while unresolved World Labs paid state exists. …".
+- Run History "Checked Marble — forget" with the request failed offline (CDP): "Couldn't forget the recovery safeguard. Couldn't reach Nebula. Check your connection and try again."; the record stayed.
+- A forget for an older job: the page got "This node is waiting on a newer World Labs job. Reload to see it, check it in Marble, then use “Checked Marble — forget” in Run History."; an agent got "World Labs recovery checkpoint changed; refresh before deleting the newer checkpoint".
+- MCP stdio (63 tools): `open_project` and `remove_from_canvas` returned the exact "Cannot switch projects …" and "Cannot delete n2: …". CLI `nebula project open` and `nebula delete`: the same texts, exit 1.
+- No page errors, no status code on screen. Servers stopped by port, state deleted.
+
+### Gates
+
+- Backend whole suite (`iso.sh`): **9782 passed, 71 skipped**.
+- Vitest whole suite: first run **20 failed / 4700 passed** in 11 files; 17 were load timeouts (those files pass alone) and 3 were stale fixtures this round's changes broke (`AssetTrash.test.tsx`, `DeferredLoadFailure.test.tsx`, `App.canvasFocus.test.tsx`, fixed above). Second whole run: **4708 passed, 12 failed** in 5 files under full-suite load (CommandPalette, ResultsGallery, GraphFileActions, NodeLibrary, Settings: 5 "timed out" plus waits); those 5 files alone pass **127/127**.
+- `tsc -b` clean; lint clean; `vite build` + budget **358,908 bytes raw** / 107,530 gzip (limit 512,000).
+
+### Review (round 3b)
+
+Two findings from the adversarial review, each checked by a refuter. Tests first: 4 new tests in `frontend/tests/projectStore.retry.test.ts` red **4 failed, 17 passed** on the uncommitted change (the fifth new test, a plain busy run keeping its Try again, is a guard and passed before and after); after the fix 21/21.
+- **A 4xx at startup hid Try again and stranded the screen.** `initialize()` sent its failure through `showError`, which drops the retry for any refusal for good. A 4xx on the startup load (the active project deleted between the listing and its read, so its read gets a 404; or a refused recovered copy) left the Projects screen with no Try again while `initialized` stayed false, so New project, Open and Delete did nothing; only a page reload got out, and that throws away the unsaved work the recovered copy was keeping. Now `initialize()` always keeps Try again: a refusal for good gets `{ action: 'load', full: true }` (the `reload` form, with the whole line, since Try again only reads the saved projects again), anything else keeps `{ action: 'load' }`. Test: listing resolves, the active project's read rejects 404; offer is `reload`, and Try again lists again and reaches `initialized: true`.
+- **A World Labs hold on the canvas got a Try again that could never work.** Opening another project, making a new one, or deleting the open project while a node holds an unconfirmed World Labs start (or Nebula couldn't confirm a World Labs run) is refused in the browser by `canSwitchProject()`, without a request. It showed "Finish or stop the current run …" (naming a run that may not exist, never World Labs or the unlock button) beside a Try again that redid the same check and failed every time until the person pressed “Checked Marble — unlock”. Now `activate()` (open and create, before and after the flush) and `remove()` (the open project) check for the hold first and show the backend's own line for that state, from `lib/worldLabsWaiting.ts` (`SOME_NODE_WAITING_UNLOCK`, already pinned to the backend's words): "Couldn't open the project." / "Couldn't create the project." / "Couldn't delete the project." + "A node is still waiting on World Labs. Check the job in Marble, then use “Checked Marble — unlock” before you try again." No Try again (a `WorldLabsHold` error counts as refused for good), nothing sent. A run that is only going keeps the busy line and its Try again: that one can succeed once the run ends (tested). The same button label clears both kinds of hold (the status bar shows “Checked Marble — unlock” for an unconfirmed start and for an unconfirmed run), so one line covers both.
+- **Live check (review fixes)**, isolated backend 8783 + Vite 5783 (`VITE_NEBULA_BACKEND_PORT=8783`), 8000-8010 and 5173 blocked (CDP `Network.setBlockedURLs` plus the dead proxy), canary 8799 unreachable, **0 blocked attempts**, nothing paid (the hold was written into the isolated guard file; unlock is a local request). **29 PASS, 0 FAIL** at 1440x900 and 1280x800: a startup read of the open project answered with the backend's own 404 body (replayed once by CDP Fetch) showed "Couldn't load the project. That project isn't there anymore. Reload to get the latest projects." whole beside Try again; Try again read it again and loaded the cards, and Open worked. With the hold on the open canvas, Open, New project and Delete (the open project) each showed GM's line whole with no Try again and sent no open, create or delete; after “Checked Marble — unlock”, Open went through. Screenshots in the session scratchpad (`error-copy-3b/review-fix/shots/`).
+- **For GM:** the Projects lines for a hold, listed under "Round 3b lines for GM".
+
+### Open items
+
+- A recovered copy that the backend refuses for good (for example too large) is sent again by every Try again at startup and refused again; the screen keeps the whole line and Try again, but the only way past it is a reload, which drops that unsaved copy. This is how it was before round 3b; dropping the copy without asking would be worse. Needs a decision (offer "Continue without the copy"?).
+- The status bar's "Paid start needs review." and the ambiguity/uncertain warnings (`AMBIGUITY_MESSAGE`, `WORLD_LABS_STATUS_UNCERTAIN_WARNING`) still use "paid start": status text, not refusals. For GM.
+- `handlers/worldlabs.py` run errors ("paid-start safety hold …") are a node's run error, outside this round.
+- `/api/quick` and `/api/execution-cancellations` 409s are agent-only; 5xx details stay (the person reads GM's no-response line).
+- The Projects screen still shows the store's own written lines ("Finish or stop the current run …", "Could not confirm …" with "Could not", and the follow/params lines that put a reason in parentheses). Written, not raw, but older wording; for GM.
+- A backend delete refusal (a race past the canvas guard) still alerts, while the guard uses the notice; one mechanism would be tidier.
+
+## Round 3b lines for GM
+
+Old -> new. Old is what the person read before (the guard's own text); agents, MCP, the CLI and scripts still get it word for word.
+
+**Starting a run (Run, and anything that starts World Labs work)**
+- "Fresh paid {kind} start is already active for node 'n2' in run 'r'" / "Fresh paid World Labs start is already active in run 'r'" / "… in another Nebula backend process" / "Cannot replace a paid-start intent owned by another backend" -> "A node is still waiting on World Labs. Let its run finish, then try again."
+- "Fresh paid {kind} start is safety-locked after an ambiguous provider response for node 'n2'; check Marble and explicitly unlock that hold" -> "A node is still waiting on World Labs. Check the job in Marble, then use “Checked Marble — unlock” before you try again."
+- "Fresh World Labs start blocked because Nebula already has a recovery checkpoint for node(s): n2. Restore or explicitly delete the checkpoint before starting new paid work." -> a record: "A node is still waiting on World Labs. Check the job in Marble, then use “Checked Marble — forget” in Run History before you try again."; an ID in the node's fields: "A node is still waiting on World Labs. Check the job in Marble, then clear the node's {field labels} before you try again."
+- "World Labs paid-start safety journal is at capacity; resolve an existing recovery or ambiguity before starting more paid work" and "provider recovery journal is at capacity; resolve an existing checkpoint before starting more paid work" -> "Nebula can track up to {n} World Labs jobs that are still waiting, and this run would go over that. Check them in Marble, clear some with “Checked Marble — unlock” or “Checked Marble — forget” in Run History, then try again."
+
+**Canvas edits**
+- "provider recovery journal is at capacity; resolve an existing checkpoint before importing more paid state" -> the capacity line with "this change".
+- "World Labs recovery checkpoint changed; use a new graph mutation identity" -> "A node's World Labs job changed while Nebula saved the canvas. Reload, then try again."
+
+**"Checked Marble — unlock"** (heading "Couldn't unlock the node.")
+- "Cannot acknowledge a World Labs paid-start ambiguity while that provider handshake is still active" -> "This node is still waiting on World Labs. Let its run finish, then try again."
+- "World Labs paid-start ambiguity changed; refresh before acknowledging the newer hold" -> "This node is waiting on a newer World Labs job. Reload to see it, check it in Marble, then use “Checked Marble — unlock”."
+- Another backend holding the lifecycle -> "A node is still waiting on World Labs. Let its run finish, then try again."
+
+**"Checked Marble — forget"** (heading "Couldn't forget the recovery safeguard.")
+- "World Labs recovery checkpoint changed; refresh before deleting the newer checkpoint" -> "This node is waiting on a newer World Labs job. Reload to see it, check it in Marble, then use “Checked Marble — forget” in Run History."
+- Store (no request): "Wait for the active run to finish before clearing recovery safety." -> "Let the run finish, then try again."; "That durable provider recovery checkpoint is no longer current." -> "That recovery safeguard isn't there anymore. Reload to get the latest run history."; any other error -> "That didn't work. Try again, or reload if it keeps happening."
+
+**Canvas Delete key on a held node** (new; before, nothing was said)
+- "Couldn't delete the node." + "This node is still waiting on World Labs. Check the job in Marble, then use “Checked Marble — unlock” before you delete it." / "… use “Checked Marble — forget” in Run History before you delete it."; several nodes: "Couldn't delete 2 nodes. A node is still waiting on World Labs. … before you try again."
+
+**Projects screen, World Labs hold on the open canvas** (review; no request is made)
+- "Finish or stop the current run and let pending edits finish before switching projects." (opening another project, New project) -> "Couldn't open the project." / "Couldn't create the project." + "A node is still waiting on World Labs. Check the job in Marble, then use “Checked Marble — unlock” before you try again." No Try again.
+- "Finish or stop the current run before deleting the open project." -> "Couldn't delete the project." + the same line. No Try again.
+- Kept for a run that is only going (no hold): the two "Finish or stop …" lines, with Try again.
+
+**Other**
+- Mask painter: "Could not load the mask painter. Check your connection and try again." -> "Couldn't load the mask painter. Check your connection." (Try again beside it).
+- Blind labeling intro: see item 6 above.
+- Kept: "run 'x' was cancelled before it started" (a Stop that beat the run; no World Labs state).
+
+## GM's read of round 3 (after #168) and what 3b took from it
+
+- **Confirmed by GM**, verbatim: "#168 "Round 3 lines for GM" read in full. All four of your calls are confirmed: 1. "Couldn't unlock the node." / "Couldn't forget the recovery safeguard." 2. The four state versions, plus the canvas-wide "A node is still waiting on World Labs." set. 3. The two Recently deleted lines. 4. The cap-0 case." And: "Everything else stands as written, including the Blind labeling old → new list and the 404 set."
+- **The cap-0 line**, GM's rewrite: "Agent review needs at least 1 analysis call a day, and Settings has it at 0. Raise “Analysis calls per day”, then try again." (`backend/commons/review.py`; the test in `test_commons_review.py` failed first on the old line).
+- **The silent Delete notice** uses the node line for its state that already exists, as GM asked ("Don't add a new one"): `lib/worldLabsWaiting.ts` holds the backend's words, pinned equal by `test_error_copy_round3b.py`.
+- **Open item (GM, not for now):** ""Checked Marble — unlock" and "Checked Marble — forget" are clumsy as button labels. If you touch them again, "I've checked Marble — unlock" or a two-step "Unlock…" with the Marble reminder in the confirm would read better."
+- **Possibly the same note for GM:** the Commons status tooltip from #161 ("Library analysis is paused: Analysis calls per day is set to 0 in Settings, so it reads nothing. Raise it to resume.") and the daily-cap refusal ("…or raise Analysis calls per day in Settings.") name the setting the same way GM just rewrote; GM said everything else stands, so they are unchanged.

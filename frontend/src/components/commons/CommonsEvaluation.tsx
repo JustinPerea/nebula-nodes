@@ -136,7 +136,8 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
       followScan(started, () => mounted.current, showScan);
     }}>
       <h3 className="evaluation-step">Prepare the held-out set</h3>
-      <p>Scan a local folder before importing it. Choose 15 references and 30 tuning references from distinct near-duplicate clusters, spread across subfolders. The held-out clusters stay quarantined.</p>
+      {/* Round 3b: GM's words from the refusal ("references that look different from each other"). */}
+      <p>Scan a local folder before you import it. Nebula picks 15 references to label and 30 to tune with, choosing references that look different from each other and spreading them across subfolders. It never uses the 15, or anything that looks like them, as examples.</p>
       <p>Files in iCloud download before they are read. This scans and snapshots media; it does not import references or run the model. The set cannot be regenerated here.</p>
       <label>Folder path<input value={path} onChange={(e) => setPath(e.target.value)} placeholder="Absolute path to the reference folder" required disabled={busy} /></label>
       <button className="commons-button commons-button--primary" disabled={busy || !path.trim()}>{busy ? 'Downloading and scanning…' : 'Prepare 15 held-out references'}</button>

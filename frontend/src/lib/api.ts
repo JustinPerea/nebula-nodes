@@ -79,6 +79,11 @@ export async function cancelExecution(runId: string): Promise<ExecutionCancellat
   return response.json();
 }
 
+/** The headings for the two "Checked Marble" buttons (round 3, GM: named
+ * after the button the person clicked); the store and the screens use these. */
+export const UNLOCK_NODE_HEADING = "Couldn't unlock the node.";
+export const FORGET_RECOVERY_HEADING = "Couldn't forget the recovery safeguard.";
+
 export async function acknowledgeProviderStartAmbiguity(
   kind: ProviderStartKind,
   nodeId: string,
@@ -86,7 +91,7 @@ export async function acknowledgeProviderStartAmbiguity(
 ): Promise<void> {
   // Round 3 (GM): the label the person clicked. The status bar's "Checked
   // Marble — unlock" unlocks one node (its label: "unlock node n1").
-  await apiRequest("Couldn't unlock the node.",
+  await apiRequest(UNLOCK_NODE_HEADING,
     `/api/provider-start-ambiguities/${encodeURIComponent(kind)}/${encodeURIComponent(nodeId)}/${encodeURIComponent(runId)}`,
     { method: 'DELETE' },
   );
@@ -108,7 +113,7 @@ export async function deleteProviderRecovery(
     throw new Error('Provider recovery deletion requires exactly one recovery ID.');
   }
   // Run History's "Checked Marble — forget" forgets a "World Labs recovery safeguard".
-  await apiRequest("Couldn't forget the recovery safeguard.",
+  await apiRequest(FORGET_RECOVERY_HEADING,
     `/api/provider-recoveries/${encodeURIComponent(runId)}/${encodeURIComponent(nodeId)}?${query.toString()}`,
     { method: 'DELETE' },
   );

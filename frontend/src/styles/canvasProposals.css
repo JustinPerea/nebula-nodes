@@ -560,6 +560,15 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   white-space: nowrap;
 }
 
+/* A written line with no button (a refusal) wraps, so the step it names is
+   never cut off by the ellipsis (error copy round 3b). */
+.canvas-undo-notice--message .canvas-undo-notice__text {
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+
 .canvas-undo-notice__action,
 .canvas-undo-notice__close {
   flex-shrink: 0;

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { ShieldCheck, X } from 'lucide-react';
 import { useGraphStore } from '../store/graphStore';
+import { UNLOCK_NODE_HEADING } from '../lib/api';
+import { failureMessage } from '../lib/errorCopy';
 
 /** Persistent paid-provider safety status. Recovery-journal write warnings may
  * be dismissed; an ambiguous paid start remains until the user explicitly says
@@ -28,7 +30,8 @@ export function ProviderRecoveryStatus() {
     try {
       await acknowledge(ambiguity.kind, ambiguity.nodeId);
     } catch (error) {
-      setUnlockError(error instanceof Error ? error.message : "Couldn't unlock the node.");
+      // Never an error's own message (round 3b): a request's line, else GM's general line.
+      setUnlockError(failureMessage(error, UNLOCK_NODE_HEADING));
     } finally {
       setUnlocking(null);
     }

@@ -287,8 +287,8 @@ export function AssetsPanel() {
           {moveError && (
             <div className="character-palette__empty character-palette__empty--error" role="alert">{moveError}</div>
           )}
-          {tab === 'styles' && deleting.error && !deleting.lastDeleted && (
-            <div className="character-palette__empty character-palette__empty--error" role="alert"><FailureLines failure={deleting.error} /></div>
+          {tab === 'styles' && deleting.deleteError && (
+            <div className="character-palette__empty character-palette__empty--error" role="alert"><FailureLines failure={deleting.deleteError} /></div>
           )}
 
           {!noProject && !busy && !failed && tab === 'characters' && (
@@ -377,7 +377,7 @@ export function AssetsPanel() {
           for fixed children, which would pin the toast to the panel's edge. */}
       {deleting.lastDeleted && createPortal(
         <UndoDeleteToast key={deleting.lastDeleted.id} name={deleting.lastDeleted.name} busy={deleting.busy}
-          error={deleting.error} onDismiss={deleting.dismiss}
+          error={deleting.undoError} onDismiss={deleting.dismiss}
           onUndo={() => { void deleting.undo().then((asset) => { if (asset) relist(); }); }} />,
         document.body,
       )}

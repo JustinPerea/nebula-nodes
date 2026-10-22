@@ -446,6 +446,13 @@ export function Canvas() {
   const connectStartRef = useRef<{ nodeId: string; handleId: string; handleType: 'source' | 'target' } | null>(null);
   const connectionSucceededRef = useRef(false);
 
+  // The Delete key: a node holding World Labs state stays, and the canvas
+  // says why (error copy round 3b). Refused here, before React Flow removes
+  // anything, so its wires stay too; one notice per press.
+  const onBeforeDelete = useCallback(async ({ nodes: doomed }: { nodes: { id: string }[] }) => (
+    doomed.length === 0 || useGraphStore.getState().allowCanvasDelete(doomed.map((node) => node.id))
+  ), []);
+
   const onConnectStart: OnConnectStart = useCallback((_event, params) => {
     connectionSucceededRef.current = false;
     connectStartRef.current = {
@@ -755,6 +762,7 @@ export function Canvas() {
         defaultEdgeOptions={{ type: 'typed-edge' }}
         proOptions={{ hideAttribution: true }}
         deleteKeyCode={isExecuting ? null : ['Backspace', 'Delete']}
+        onBeforeDelete={onBeforeDelete}
         {...CANVAS_INTERACTION_PROPS}
         onlyRenderVisibleElements={canvasPerfMode && !arrangeMeasuring}
       >

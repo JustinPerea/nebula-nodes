@@ -44,6 +44,11 @@ export interface ProjectHomeProps {
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
   onRetry: () => void;
+  /** What Try again does for `error` (error copy round 3b, store/projectStore
+   * projectRetryOffer): 'redo' redoes the failure (the reason is GM's short
+   * line), 'reload' only reloads the saved projects (the whole line stays),
+   * 'none' hides Try again (the whole line). */
+  retry?: 'redo' | 'reload' | 'none';
   trash?: TrashedProject[];
   lastDeleted?: { id: string; name: string } | null;
   onRestore?: (id: string) => void;
@@ -332,7 +337,7 @@ function UndoToast({ project, busy, onUndo, onDismiss }: {
 
 const noop = () => {};
 
-export function ProjectHome({ projects, loading, busy, error, onCreate, onOpen, onRename, onDelete, onRetry,
+export function ProjectHome({ projects, loading, busy, error, onCreate, onOpen, onRename, onDelete, onRetry, retry = 'redo',
   trash = [], lastDeleted = null, onRestore = noop, onPurge = noop, onEmptyTrash = noop, onDismissUndo = noop,
   settingsOpen = false, onToggleSettings, loadCoverChoices, onPinCover }: ProjectHomeProps) {
   const [query, setQuery] = useState('');
@@ -358,8 +363,10 @@ export function ProjectHome({ projects, loading, busy, error, onCreate, onOpen, 
           <button className="project-home__new" type="button" disabled={loading || busy} onClick={() => onCreate()}><Plus aria-hidden="true" />New project</button>
         </section>
 
-        {/* GM's WRAP rule: "Try again" is the retry, so the reason drops its own. */}
-        {error && <div className="project-home__error" role="alert"><span>{shortLine(error)}</span><button type="button" disabled={loading || busy} onClick={onRetry}>Try again</button></div>}
+        {/* GM's WRAP rule: where "Try again" redoes the failure it is the retry, so the
+            reason drops its own; where it only reloads, or can't help, the line stays whole. */}
+        {error && <div className="project-home__error" role="alert"><span>{retry === 'redo' ? shortLine(error) : error}</span>
+          {retry !== 'none' && <button type="button" disabled={loading || busy} onClick={onRetry}>Try again</button>}</div>}
 
         <section className="project-home__projects" aria-labelledby="recent-projects-title">
           <div className="project-home__section-header">

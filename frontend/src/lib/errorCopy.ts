@@ -144,6 +144,21 @@ export class RequestFailedError extends Error {
   }
 }
 
+/** A refusal written in the browser, where no request was made (a check
+ * the store makes before sending: a run still going, a record that's gone).
+ * Its words are copy, so failureCopy shows them like a request's (round 3b). */
+export class FailureNotice extends Error {
+  readonly heading: string;
+  readonly reason: string;
+
+  constructor(heading: string, reason: string) {
+    super(oneLine({ heading, reason }));
+    this.name = 'FailureNotice';
+    this.heading = heading;
+    this.reason = reason;
+  }
+}
+
 const isAbort = (error: unknown) => error instanceof DOMException && error.name === 'AbortError';
 
 /**
@@ -208,7 +223,7 @@ export function withHeading(error: unknown, heading: string): unknown {
 }
 
 function partsOf(error: unknown): FailureCopy | null {
-  if (error instanceof ConnectionLostError || error instanceof RequestFailedError) {
+  if (error instanceof ConnectionLostError || error instanceof RequestFailedError || error instanceof FailureNotice) {
     return { heading: error.heading, reason: error.reason };
   }
   return null;

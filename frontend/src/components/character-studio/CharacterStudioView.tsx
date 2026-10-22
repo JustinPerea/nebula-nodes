@@ -428,9 +428,10 @@ export function CharacterStudioView() {
       <main className="character-studio-view__main">
         {loading ? (
           <div className="character-studio-view__loading">
-            {loadError ? <div role="alert"><FailureLines failure={loadError} retry /></div> : 'Loading Character…'}
-            {loadError && <button type="button" className="character-studio-view__retry"
-              onClick={() => { if (!projectReady) void verifyProject(); else patch({ loadError: null, revision: revision + 1 }); }}>Retry loading</button>}
+            {/* As in the board's Studio (round 3b): no Retry loading with no project open. */}
+            {loadError ? <div role="alert"><FailureLines failure={loadError} retry={projectReady} /></div> : 'Loading Character…'}
+            {loadError && projectReady && <button type="button" className="character-studio-view__retry"
+              onClick={() => patch({ loadError: null, revision: revision + 1 })}>Retry loading</button>}
           </div>
         ) : (
           <>
@@ -439,9 +440,9 @@ export function CharacterStudioView() {
                 <FailureLines failure={loadError} />
               </div>
             )}
-            {deleting.error && !deleting.lastDeleted && (
+            {deleting.deleteError && (
               <div className="character-studio-view__notice character-studio-view__notice--error" role="alert">
-                <FailureLines failure={deleting.error} />
+                <FailureLines failure={deleting.deleteError} />
               </div>
             )}
             {moving.error && (
@@ -504,7 +505,7 @@ export function CharacterStudioView() {
       </main>
       {deleting.lastDeleted && (
         <UndoDeleteToast key={deleting.lastDeleted.id} name={deleting.lastDeleted.name} busy={deleting.busy}
-          error={deleting.error} onDismiss={deleting.dismiss} onUndo={() => { void undoDelete(); }} />
+          error={deleting.undoError} onDismiss={deleting.dismiss} onUndo={() => { void undoDelete(); }} />
       )}
     </div>
   );

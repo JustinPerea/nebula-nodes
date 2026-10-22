@@ -658,6 +658,18 @@ with `X-Nebula-Agent`, `X-Nebula-Client` or an `Agent` token always gets the
 specific text, and the Commons decides by its actor (its UI session is the
 person). Parse status codes and your detail; don't match the person's lines.
 
+Round 3b added the World Labs refusals to this split, with the same statuses
+and the same checks: "Checked Marble — unlock" (`DELETE
+/api/provider-start-ambiguities/...`: "Cannot acknowledge a World Labs
+paid-start ambiguity while that provider handshake is still active", "World
+Labs paid-start ambiguity changed; ..."), "Checked Marble — forget" (`DELETE
+/api/provider-recoveries/...`: "World Labs recovery checkpoint changed; ..."),
+a run start the paid-start guard refuses (`POST /api/execute`,
+`/api/execute-node`, shot runs: "Fresh paid ... start is safety-locked ...",
+"... already active ...", "... already has a recovery checkpoint ...", the
+journals "at capacity") and a canvas edit that races the recovery journal.
+You still get each text word for word; only the person's line is new.
+
 ### Numbers in request bodies
 
 Every JSON request body (`application/json`, `application/*+json`, any

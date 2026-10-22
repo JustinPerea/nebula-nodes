@@ -115,14 +115,16 @@ describe('a deferred panel whose chunk failed once', () => {
     const props = { imageUrl: '/api/outputs/a.png', initialMask: null, onSave: () => {}, onClose };
     const first = render(<MaskPainterModal {...props} />);
     await flush();
-    expect(screen.getByRole('alert')).toHaveTextContent(/could not load the mask painter/i);
+    // Error copy round 3b (GM's WRAP rule): Try again sits beside it and
+    // redoes the load, so the line drops its own "try again".
+    expect(screen.getByRole('alert').textContent).toBe("Couldn't load the mask painter. Check your connection.");
     first.unmount();
 
     // Paint Mask again mounts it again, which fetches again (and fails, the second time).
     render(<MaskPainterModal {...props} />);
     await flush();
     expect(chunks.loads.get('mask')).toBe(2);
-    expect(screen.getByRole('alert')).toHaveTextContent(/could not load the mask painter/i);
+    expect(screen.getByRole('alert')).toHaveTextContent(/couldn't load the mask painter/i);
 
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByRole('dialog', { name: 'Real mask painter' })).toBeInTheDocument();

@@ -210,6 +210,22 @@ describe('ProjectHome', () => {
       .toBe("Couldn't load your projects. Nebula didn't respond.");
   });
 
+  it('error-copy round 3b: Try again shows only where it redoes the failure, and keeps the full line where it only reloads', () => {
+    const line = "Couldn't open the project. Nebula didn't respond. Try again.";
+    const { rerender } = render(<ProjectHome {...props({ error: line, retry: 'redo' })} />);
+    expect(screen.getByRole('alert').querySelector('span')?.textContent).toBe("Couldn't open the project. Nebula didn't respond.");
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+    // A refusal the same request would get again: no Try again, the whole line.
+    const refusal = "Couldn't open the project. A node is still waiting on World Labs. Check the job in Marble, then use “Checked Marble — forget” in Run History before you try again.";
+    rerender(<ProjectHome {...props({ error: refusal, retry: 'none' })} />);
+    expect(screen.getByRole('alert').textContent).toBe(refusal);
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    // Try again only reloads the saved projects: the button stays, the line stays whole.
+    rerender(<ProjectHome {...props({ error: "Couldn't load the project. Nebula didn't respond. Try again.", retry: 'reload' })} />);
+    expect(screen.getByRole('alert').querySelector('span')?.textContent).toBe("Couldn't load the project. Nebula didn't respond. Try again.");
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+  });
+
   it('disables mutating actions while busy and exposes loading before a project list arrives', () => {
     const { rerender } = render(<ProjectHome {...props({ busy: true, error: 'Please retry.' })} />);
     for (const name of ['New project', 'Open Glass campaign', 'Rename Glass campaign', 'Delete Glass campaign', 'Try again']) {
