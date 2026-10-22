@@ -418,6 +418,11 @@ def build_parser() -> argparse.ArgumentParser:
     quick_p.add_argument("--param", action="append", nargs="*", default=[], metavar="key=value",
                          help="Params (e.g. --param aspect_ratio=9:16)")
 
+    upload_p = sub.add_parser(
+        "upload", help="Add a local image or video to Nebula: a copy in its output folder, held by an Image "
+                       "or Video Input on the canvas (do this before a size-priced run on your own file)")
+    upload_p.add_argument("file", help="The local file (PNG, JPEG, GIF, WebP, MP4, MOV, WebM, PDF or text)")
+
     # -- Commons --
     commons_p = sub.add_parser("commons", help="Search, read, add to and borrow from the commons")
     csub = commons_p.add_subparsers(dest="commons_cmd", required=True)
@@ -615,7 +620,7 @@ def main() -> None:
 
     from .commands import (
         apply, canvas, character, commons, context, nodes, keys, graph, execute, moodboard, quick, path, pins,
-        projects, proposals, providers, selection, spend, trash,
+        projects, proposals, providers, selection, spend, trash, upload,
     )
     from .commands import notes as notes_cmd
     from .commands import style
@@ -673,6 +678,7 @@ def main() -> None:
         "status": lambda: execute.run_status(client),
         "quick": lambda: quick.run(client, args.node_id,
                                    parse_kv_list(args.input), parse_kv_list(args.param)),
+        "upload": lambda: upload.run(client, args.file),
     }
 
     handler = dispatch.get(args.command)

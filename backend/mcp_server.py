@@ -846,8 +846,10 @@ def find_nodes(query: str = "", category: str = "", ready_only: bool = True, lim
     ("upscale", "veo", "image edit"). `category` narrows to one, e.g. image-gen, video-gen,
     audio-gen, text-gen, utility, universal. Each row has `id` (the
     definitionId for edit_canvas), `name`, `runsWith` (key, free, krea, nous)
-    and `price` ("free", {"usd": [low, high]} per run at default settings, or
-    null when Nebula has no list price). "free" is at the node's defaults: a
+    and `price` ("free", {"usd": [low, high]} per run at default settings,
+    "by input size" with a `priceNote` saying the rate for a node priced from
+    its input file's size, e.g. SeedVR2 Upscale, or null when Nebula has no
+    list price). "free" is at the node's defaults: a
     row with `needsKeyFor` (the Video QC nodes) calls a provider in another
     mode, with no list price. With ready_only=false, nodes that can't run here
     are included with `missing` saying what to set up.
@@ -868,7 +870,10 @@ def describe_node(definition_id: str, ctx: Context | None = None) -> dict[str, A
     only. The answer: input and output ports (ids to wire), params
     (type, default, options, ranges, `onlyWhen` another param has a value,
     and `optionsOnlyWhen` for options offered only for some values of another param),
-    whether it runs here, and list prices by the params that set them.
+    whether it runs here, and list prices by the params that set them
+    (`price.byInputSize` with `multiplyBy` for a price measured from the
+    input file when it runs, `price.unconfirmed` when the vendor's page
+    doesn't state it exactly).
     OpenRouter, Nous Portal and Replicate have `modelPorts`: their ports come
     from the model you set, as it says.
     A node with `routes` (one per provider, in Auto order) has
@@ -906,6 +911,28 @@ def describe_node(definition_id: str, ctx: Context | None = None) -> dict[str, A
     from urllib.parse import quote
 
     return _canvas_call("GET", f"/api/agent/nodes/{quote(definition_id, safe='')}", ctx)
+
+
+@_tool(annotations=_EDIT, waits=True)
+def upload_file(path: str, ctx: Context | None = None) -> dict[str, Any]:
+    """Add a local image or video to Nebula (`nebula upload <file>`): Nebula
+    copies it into its output folder and puts an Image Input or Video Input
+    holding the copy on the canvas. Returns `nodeId` (wire it into a node with
+    edit_canvas), `kind`, `url` ("/api/outputs/...") and `filePath`.
+
+    Do this before running a node priced from its input's size (SeedVR2,
+    FLUX Video Upscale) on a file of yours: the spending check measures only
+    files in Nebula's output folder, since one anywhere else could change
+    after the check, so a run from it is refused. PNG, JPEG, GIF, WebP, MP4,
+    MOV, WebM, PDF or text; 20 MB for an image, 500 MB for a clip. An in-app
+    chat's turn reads only its own workspace; a relative path means that
+    workspace. Download a web file first; this takes local files only."""
+    import upload_client
+
+    try:
+        return upload_client.upload(_api(), path, headers=_board_headers(ctx))
+    except upload_client.UploadError as exc:
+        raise RuntimeError(str(exc)) from exc
 
 
 @_tool(annotations=_EDIT)
@@ -1190,7 +1217,12 @@ async def run_nodes(node_id: str | None = None, wait_seconds: float = DEFAULT_RU
 
     The run is checked against the person's spending limits first. If it is
     over one, or a node has no list price, it is refused with what to do:
-    usually send the same nodes as propose_change with `run`. Waits up to
+    usually send the same nodes as propose_change with `run`. A node priced
+    from its input file's size (SeedVR2 Upscale) is checked at the size of
+    the file it gets, measured only in Nebula's output folder (add a file
+    of yours with upload_file first); an input another node makes in this
+    same run isn't known yet, so wire an Image Input holding the file into
+    it, or propose it. Waits up to
     `wait_seconds` (max 300). Finished: outputs per node, errors, `skipped`
     (nodes a gate such as Jev Decide's On Pass / On Fail withheld, with
     the reason; they never ran and cost nothing), and small previews of

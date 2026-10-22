@@ -409,12 +409,32 @@ def format_selection(selection: dict[str, Any]) -> str:
 
 
 def _price(value: Any) -> str:
-    if value == "free":
-        return "free"
+    if value in ("free", "by input size"):
+        return str(value)
     if isinstance(value, (list, tuple)) and len(value) == 2:
         low, high = float(value[0]), float(value[1])
         return _usd(high) if _usd(low) == _usd(high) else f"{_usd(low)}–{_usd(high)[1:]}"
     return "no list price"
+
+
+def format_price_line(detail: dict[str, Any]) -> str | None:
+    """`nebula info`'s PRICE line, from describe_node's answer
+    (GET /api/agent/nodes/<id>): free, the price at default settings, the
+    rate a node priced from its input's size is checked at, or no list price."""
+    price = detail.get("price")
+    if price == "free":
+        return "PRICE: free"
+    if not isinstance(price, dict):
+        note = detail.get("priceNote")
+        return f"PRICE: no list price. {note}" if note else "PRICE: no list price"
+    unconfirmed = " (unconfirmed)" if price.get("unconfirmed") else ""
+    if price.get("byInputSize"):
+        return f"PRICE: {price['byInputSize']}{unconfirmed}"
+    at = price.get("atDefaultsUsd")
+    if isinstance(at, list) and len(at) == 2:
+        billed = f" on {price['billedBy']}" if price.get("billedBy") else ""
+        return f"PRICE: {_price(at)} per run at default settings{billed}{unconfirmed}"
+    return "PRICE: no list price at default settings"
 
 
 def format_start(start: dict[str, Any]) -> str:

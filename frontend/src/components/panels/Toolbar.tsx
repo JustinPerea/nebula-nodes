@@ -26,6 +26,7 @@ import { CANVAS_FIT_DURATION, CANVAS_ZOOM_DURATION, computeCanvasFitPadding } fr
 import { displayKey } from '../../lib/keyboardShortcuts';
 import { describeRunScope, runChipLabel, summarizeRunScope } from '../../lib/runScope';
 import { usePricingStore } from '../../store/pricingStore';
+import { useInputSizeStore } from '../../store/inputSizeStore';
 import type { NodeData } from '../../types';
 import { useFitCanvasView } from '../../hooks/useFitCanvasView';
 import type { Edge, Node } from '@xyflow/react';
@@ -55,10 +56,14 @@ export function Toolbar() {
   const graphEdges = useGraphStore((s) => s.edges);
   const pricing = usePricingStore((s) => s.table);
   const apiKeys = useUIStore((s) => s.settingsCache.apiKeys);
+  const sizes = useInputSizeStore((s) => s.sizes);
+  const requestSizes = useInputSizeStore((s) => s.request);
   const runScope = useMemo(
-    () => summarizeRunScope(graphNodes ?? [], graphEdges ?? [], { kind: 'graph' }, { pricing, apiKeys }),
-    [graphNodes, graphEdges, pricing, apiKeys],
+    () => summarizeRunScope(graphNodes ?? [], graphEdges ?? [], { kind: 'graph' }, { pricing, apiKeys, sizes }),
+    [graphNodes, graphEdges, pricing, apiKeys, sizes],
   );
+  const sizeRefs = runScope.cost?.sizeRefs;
+  useEffect(() => { if (sizeRefs?.length) requestSizes(sizeRefs); }, [sizeRefs, requestSizes]);
   const runChip = runChipLabel(runScope);
   const runScopeId = useId();
   const autoLayout = useGraphStore((s) => s.autoLayout);

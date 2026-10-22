@@ -8,9 +8,8 @@ import {
   type PersonalAgent,
   type PersonalAgentList,
 } from '../../../lib/api';
+import { PERSONAL_AGENTS_CHANGED_EVENT } from '../../../lib/personalAgentsEvents';
 import '../../../styles/personal-agents.css';
-
-export const PERSONAL_AGENTS_CHANGED_EVENT = 'nebula:personal-agents-changed';
 
 const STATUS_TEXT: Record<PersonalAgent['status'], string> = {
   ready: 'Ready',

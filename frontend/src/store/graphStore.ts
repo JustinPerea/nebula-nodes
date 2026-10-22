@@ -82,6 +82,7 @@ import { TAB_ID } from '../lib/tabId';
 import { notifyJobComplete } from '../lib/jobNotifications';
 import { useUIStore } from './uiStore';
 import { usePricingStore } from './pricingStore';
+import { useInputSizeStore } from './inputSizeStore';
 import { useStoredAssetsStore } from './storedAssetsStore';
 import { runCostConfirmMessage, shouldConfirmRunCost, summarizeRunScope, type RunScope } from '../lib/runScope';
 import { useCreateDraftStore } from './createDraftStore';
@@ -3061,7 +3062,8 @@ function confirmRunCost(nodes: Node<NodeData>[], edges: Edge[], scope: RunScope)
   const pricing = usePricingStore.getState().table;
   if (!pricing || typeof window === 'undefined') return true;
   const { runCostConfirmUsd, settingsCache } = useUIStore.getState();
-  const summary = summarizeRunScope(nodes, edges, scope, { pricing, apiKeys: settingsCache.apiKeys });
+  const summary = summarizeRunScope(nodes, edges, scope,
+    { pricing, apiKeys: settingsCache.apiKeys, sizes: useInputSizeStore.getState().sizes });
   if (!shouldConfirmRunCost(summary, runCostConfirmUsd)) return true;
   return window.confirm(runCostConfirmMessage(summary));
 }

@@ -76,8 +76,11 @@ The server exposes these tools for building and running (see
 
 - `start_here`: the first-turn answer above.
 - `find_nodes`: node types to build with, best matches first, each with
-  `runsWith` (key, free, krea, nous) and a list `price` at default settings.
-  `ready_only=false` also lists nodes that can't run here, with what's
+  `runsWith` (key, free, krea, nous) and a list `price` at default settings,
+  or `"by input size"` with a `priceNote` for a node priced from its input
+  file (SeedVR2 Upscale: "$0.001 per megapixel of the larger of input and
+  output, rounded up to a whole megapixel; priced from your image's size when
+  you run it"). `ready_only=false` also lists nodes that can't run here, with what's
   `missing`. "free" is at the node's defaults: a row with `needsKeyFor` (the
   Video QC nodes) calls a provider in another mode. Every word of `query`
   must be in the id, name or description. Its CLI twin is `nebula nodes`
@@ -91,7 +94,10 @@ The server exposes these tools for building and running (see
   has no limit unless `--limit N`, because a terminal table is read whole or
   piped and a category is never cut short.
 - `describe_node`: one node type's ports, params (options, defaults, ranges)
-  and list prices by the params that set them. `definition_id` is the id, or
+  and list prices by the params that set them (`price.byInputSize` and
+  `multiplyBy` on a price read from the input file, `price.unconfirmed` when
+  the vendor's page doesn't state it exactly; a route has `priceBy`).
+  `definition_id` is the id, or
   the node type's exact display name (any case, outer spaces ignored) when
   one node type has it: `describe_node(definition_id="Moodboard")` answers
   for `nebula-moodboard`, starting with `lookup` ("Moodboard is the Moodboard
@@ -146,6 +152,15 @@ The server exposes these tools for building and running (see
   (`propose_change`) takes the same nodes, wires and params, but not moves,
   removals, unwires, `arrange`, `steps` or renames of nodes already on the
   canvas; it can name its own new nodes (`rename`).
+- `upload_file`: adds a local image or video to Nebula (`nebula upload
+  <file>`): Nebula copies it into its output folder through `POST
+  /api/uploads` and puts an Image Input or Video Input holding the copy on
+  the canvas; it returns `nodeId`, `kind`, `url` and `filePath`. The new
+  node is credited to you in the history, `nebula watch` and
+  `wait_for_canvas_change`, like any node you add. Do this
+  before running a node priced from its input's size on a file of yours
+  (see [Spending limits](#spending-limits)). An in-app chat's turn reads
+  only its own workspace, and the read follows no links.
 - `remove_from_canvas`: deletes nodes or single wires, all or nothing. Its
   result has `undo` too, which puts the nodes back with their params,
   outputs, names and wires.
@@ -858,7 +873,10 @@ price (`unpriced`) or has a cost the vendor doesn't price up front (`plus`,
 e.g. input images), so the real total can be higher. Krea runs billed to a
 Krea account's plan are listed in `plan`. `estimate` is `null` when no node
 in the run has a list price. Each entry in `cost.nodes` carries its own
-`price` ({low, high} or null). These are list prices, not a quote.
+`price` ({low, high} or null). A node priced from its input file's size is
+priced from the file it would get (an upload, or an upstream output that
+already exists); while that file doesn't exist yet it is in `unpriced` and
+`awaitingInput`. These are list prices, not a quote.
 
 **Nodes that can't run here.** `cost.notReady` lists every node the run
 reads, upstream nodes with outputs included, that can't run here as set up,
@@ -1177,6 +1195,72 @@ which has no list price; Jev mode is priced per request) and a node whose priced
 `multi_prompt` port), or is set to something the price list doesn't cover
 (multi-shot Kling). Free nodes always pass. The person's own runs from the
 canvas are never limited.
+
+Some prices depend on the input file (SeedVR2 Upscale and Video Upscale,
+FLUX Video Upscale and Edit [fast]: `sizing` in
+[MODEL-PRICING](MODEL-PRICING.md#what-counts)). The check measures the file
+the run will send: an Image Input or Video Input's file, `nebula quick`'s
+file, or (in a proposal) an upstream output that already exists. The limit
+checks the top of the computed price.
+
+Only inputs nothing can change after the check are measured, because the
+node reads its file later than the check (other nodes may run first): an
+inline `data:` image, and a file in Nebula's output folder. The file's path
+as given must be inside that folder with no `..`, and its resolved path
+too, so a link there can't point somewhere that changes; a served
+`/api/outputs/...` ref or a loopback URL to one counts. A file Nebula is
+still writing (a run's folder until the run ends, a dot-named partial file)
+isn't measured yet. No agent that reaches Nebula through its API can write
+into that folder: in-app Claude has no file-writing tool, in-app Codex's
+sandbox lists the folder read-only (its base allows writes to /tmp and
+$TMPDIR, so the folder gets its own read-only entry), and every route that
+writes there writes a new name. `nebula save` won't write over a file that
+isn't a saved graph. A local file anywhere else, a chat's workspace
+included, is refused as outside: add it first with `upload_file` (`nebula
+upload <file>`), which copies it into the folder and puts an Image Input or
+Video Input holding the copy on the canvas, then wire that in. (`nebula
+quick` copies a local image into Nebula first, so `--input image=<file>`
+works; a clip passed to it stays outside.) Every run route makes that same
+copy of an outside image, so an image still outside is one it refused: over
+20 MB, or not an image Nebula recognises. The upload refuses those too, and
+a clip over 500 MB, so such a run is proposed instead; the refusal says so
+and doesn't send you back to `nebula quick`.
+
+A clip is measured as an upper bound of what a provider decoding it would
+process: every video stream is looked at (exactly one that isn't cover art
+is measured; two or more leave it unmeasured), and its frames and seconds
+come from its demuxed packets as well as its header, so a header that
+understates the length (a fragmented MP4, a falsified MKV duration) doesn't
+lower the price. A packet that signals new parameters leaves it unmeasured.
+Known limit: a size change inside the coded bitstream (an in-band H.264 or
+HEVC SPS, a VP9 resize) shows only when decoding, so such a clip is priced
+at its header size. An image with more than one frame or size (GIF, APNG,
+animated WebP, multi-page TIFF, ICO) isn't measured. Measuring runs in a
+worker thread, never on Nebula's event loop, and gives up after 60 seconds
+or past 2,000,000 packets (the clip is then unmeasured). The packet listing
+is read as it comes, so the backend's memory doesn't grow with the clip.
+
+When the size can't be measured, the node is unpriced and the run is
+refused, and the refusal says which case it is and what to do (the same
+words on MCP, the CLI and HTTP):
+
+- The input is made by another node in the same run, that node hasn't run,
+  or Nebula is still writing it: wire an Image Input (or Video Input)
+  holding the file into the node and run that (`upload_file` / `nebula
+  upload` makes one), run an image through
+  `nebula quick <node type> --input image=<file>`, or propose it (a
+  proposal made after the upstream node has run is priced from its output).
+- The input is a local file outside Nebula's output folder: it could change
+  after the check, so add it with `upload_file` / `nebula upload <file>`
+  first, or propose it. An image over 20 MB (or one Nebula can't recognise)
+  and a clip over 500 MB can't be added, so those runs are proposed.
+- The input is a file on another host (an outside URL, including one passed
+  to `nebula quick`): it is never downloaded to price it. Download it and
+  add the local copy with `upload_file` / `nebula upload`, or propose it.
+- The file can't be measured (missing, not an image or clip Nebula opens,
+  more than one frame, size or video stream, or outside the folders Nebula
+  may read), or the port has no wire or more than one: fix the input, or
+  propose it.
 
 How it works (`backend/services/agent_spend.py`):
 

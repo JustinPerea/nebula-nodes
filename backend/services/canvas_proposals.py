@@ -22,7 +22,9 @@ Cost: each node is ``free`` (a local utility node) or ``paid`` (a provider
 call, labelled with the provider). ``estimate`` adds up list prices from
 ``data/model_pricing.json`` (see ``services/model_pricing.py``) for the nodes
 that have one; it is None when none do, and ``open`` when some paid node has
-no list price, so the real total can be higher.
+no list price, so the real total can be higher. ``awaitingInput`` (only
+when there are some) names the unpriced nodes priced from their input's
+size, which isn't known until that input exists (model_pricing sizing).
 
 Memory-only: open and recently decided proposals are lost on restart.
 """
@@ -553,6 +555,9 @@ def summarize_cost(
             "plan": list(estimate.get("plan") or []),
             "plus": list(estimate.get("plus") or []),
         }
+        if estimate.get("awaitingInput"):
+            # Priced from their input's size, which isn't known until it exists.
+            summary_estimate["awaitingInput"] = list(estimate["awaitingInput"])
     return {
         "paidRuns": paid,
         "freeRuns": len(entries) - paid,

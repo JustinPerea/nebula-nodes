@@ -6,7 +6,7 @@ import { hasRoutes, routePriceKey, routeUnavailable, selectRoute, withWiredBlock
 import { usesKreaAccount } from './kreaConnection';
 import { runRouteProvider } from './modelDiscovery';
 import { cinemaSceneBase, isLocalRun } from './nodeKeys';
-import { estimateNode, formatUsd, formatUsdRange, type PricingTable } from './pricing';
+import { awaitsInput, entryForRoute, estimateNode, formatUsd, formatUsdRange, sizingPorts, type InputSize, type PricingTable } from './pricing';
 
 /** What a run would cost, from the curated list prices. Only USD is summed. */
 export interface RunCost {
@@ -24,6 +24,14 @@ export interface RunCost {
    * with the reason (directRoute.routeUnavailable). Also in `unpriced`;
    * never priced at another route. Present only when there are some. */
   unavailable?: Record<string, string>;
+  /** Nodes priced from their input file's size, which isn't known yet (also in `unpriced`). */
+  awaitingInput: string[];
+  /** Those of them whose file exists but the backend can't measure (a file on
+   * another host, never downloaded to price it, or one it can't read). Also in
+   * `awaitingInput`. Present only when there are some. */
+  sizeUnreadable?: string[];
+  /** Input files to measure (inputSizeStore) before those can be priced. */
+  sizeRefs: Array<{ ref: string; kind: 'Image' | 'Video' }>;
 }
 
 export interface RunScopeSummary {
@@ -42,7 +50,11 @@ export interface RunScopeSummary {
 export interface RunCostContext {
   pricing: PricingTable | null;
   apiKeys: Readonly<Record<string, string>>;
+  /** Measured input files by ref (inputSizeStore), for prices that read them. */
+  sizes?: Readonly<Record<string, InputSize | null>>;
 }
+
+const INPUT_NODES: Record<string, 'Image' | 'Video'> = { 'image-input': 'Image', 'video-input': 'Video' };
 
 export type RunScope = { kind: 'graph' } | { kind: 'node'; nodeId: string } | { kind: 'cluster'; nodeIds: string[] };
 
@@ -213,7 +225,7 @@ export function summarizeRunScope(
 
   const paid: string[] = [];
   const pricing = costContext?.pricing;
-  const cost: RunCost = { low: 0, high: 0, lines: [], unpriced: [], plan: [], plus: [] };
+  const cost: RunCost = { low: 0, high: 0, lines: [], unpriced: [], plan: [], plus: [], awaitingInput: [], sizeRefs: [] };
   // Fan-out within what actually runs: a node scope already holds every
   // upstream Batch, and a cluster run sends only its own nodes and edges.
   const multipliers = pricing ? runMultipliers(included, edges) : null;
@@ -271,9 +283,27 @@ export function summarizeRunScope(
     } else {
       priceKey = runRouteProvider(definition, costContext.apiKeys, routed);
     }
-    const estimate = estimateNode(pricing.nodes[definition.id], definition, params, priceKey, ports.keys());
+    // A price read from the input file: only an Image or Video Input in this
+    // run gives a file before it runs (backend services/input_sizes.py).
+    const entry = pricing.nodes[definition.id];
+    let size: InputSize | null | undefined;
+    for (const port of calls === 1 ? sizingPorts(entry) : []) {
+      const wires = edges.filter((edge) => edge.target === node.id && edge.targetHandle === port);
+      const source = wires.length === 1 ? included.find((candidate) => candidate.id === wires[0].source) : undefined;
+      const kind = INPUT_NODES[source?.data?.definitionId ?? ''];
+      const ref = source?.data?.params?.filePath;
+      if (!kind || typeof ref !== 'string' || !ref) continue;
+      size = costContext.sizes?.[ref];
+      if (size === undefined) cost.sizeRefs.push({ ref, kind });
+      break;
+    }
+    const estimate = estimateNode(entry, definition, params, priceKey, ports.keys(), size);
     if (!estimate || estimate.currency !== 'usd') {
       cost.unpriced.push(name);
+      if (!size && awaitsInput(entryForRoute(entry, priceKey))) {
+        cost.awaitingInput.push(name);
+        if (size === null) cost.sizeUnreadable = [...(cost.sizeUnreadable ?? []), name];
+      }
       continue;
     }
     const [fewest, most] = multipliers.get(node.id) ?? [1, 1];
@@ -302,6 +332,21 @@ export function runChipLabel({ paid, cost }: RunScopeSummary): string | null {
   return exact ? `~${amount}` : amount;
 }
 
+const AWAITING = 'Priced when its input is known:';
+const UNREADABLE = "Nebula can't read the size of its input (a file on another host is never downloaded to price it):";
+
+/** The awaiting-input notes: still to be made, or there but unreadable. */
+function awaitingNotes(cost: RunCost): string[] {
+  const unreadable = cost.sizeUnreadable ?? [];
+  // Names repeat (two SeedVR2 nodes), so take each unreadable one out once.
+  const pending = [...(cost.awaitingInput ?? [])];
+  for (const name of unreadable) pending.splice(pending.indexOf(name), 1);
+  const notes: string[] = [];
+  if (pending.length) notes.push(`${AWAITING} ${nameList(pending)}`);
+  if (unreadable.length) notes.push(`${UNREADABLE} ${nameList(unreadable)}`);
+  return notes;
+}
+
 function nameList(names: string[]): string {
   return names.length <= 3 ? names.join(', ') : `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`;
 }
@@ -324,8 +369,10 @@ export function describeRunScope({ total, paid, cost, gated }: RunScopeSummary):
   }
   if (cost?.plus.length) parts.push(`Not included: ${cost.plus.join(', ')}`);
   const unavailable = Object.keys(cost?.unavailable ?? {});
-  const unpriced = cost?.unpriced.filter((name) => !unavailable.includes(name)) ?? [];
+  const awaiting = cost?.awaitingInput ?? [];
+  const unpriced = cost?.unpriced.filter((name) => !unavailable.includes(name) && !awaiting.includes(name)) ?? [];
   if (unpriced.length) parts.push(`No list price for ${nameList(unpriced)}`);
+  if (cost && awaiting.length) parts.push(...awaitingNotes(cost));
   // Each of these has its own message on the node and in the run error.
   if (unavailable.length) parts.push(`Can't run on the chosen provider: ${nameList(unavailable)}`);
   if (cost?.plan.length) parts.push(`Billed to your Krea plan: ${nameList(cost.plan)}`);
@@ -346,7 +393,9 @@ export function runCostConfirmMessage({ cost, gated }: RunScopeSummary): string 
   const notes: string[] = [];
   if (gated?.length) notes.push(`${gatedNote(gated)}.`);
   if (cost.plus.length) notes.push(`Not included: ${cost.plus.join(', ')}.`);
-  if (cost.unpriced.length) notes.push(`No list price for ${nameList(cost.unpriced)}, so it may cost more.`);
+  const unpriced = cost.unpriced.filter((name) => !cost.awaitingInput?.includes(name));
+  if (unpriced.length) notes.push(`No list price for ${nameList(unpriced)}, so it may cost more.`);
+  notes.push(...awaitingNotes(cost).map((note) => `${note}, so it may cost more.`));
   return [
     `This run could cost up to ${formatUsd(cost.high)} at list prices.`,
     lines.join('\n'),
