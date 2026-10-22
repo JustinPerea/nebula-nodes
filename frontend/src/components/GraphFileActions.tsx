@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useReactFlow, type Edge, type Node } from '@xyflow/react';
 import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
-import { loadFromFile, saveToFile } from '../lib/graphFile';
+// Save and open load lib/graphFile.ts at the moment of use (preloaded on idle).
+import { graphFileModule } from '../lib/deferredChunks';
 import { canLoadGraph, canSaveGraph, GRAPH_LOAD_EVENT, GRAPH_SAVE_EVENT } from '../lib/graphFileActions';
 import { apiFetch } from '../lib/backend';
 import { computeCanvasFitPadding } from '../lib/canvasFit';
@@ -25,6 +26,7 @@ export function GraphFileActions() {
       const ui = useUIStore.getState();
       const canvasActive = ui.viewMode === 'canvas' || (ui.viewMode === 'commons' && !ui.commonsEnabled);
       const viewport = canvasActive ? getViewport() : ui.canvasViewport ?? getViewport();
+      const { saveToFile } = await graphFileModule.load();
       await saveToFile(state.nodes, state.edges, viewport);
     } catch (error) {
       console.error('Graph save failed:', error);
@@ -39,6 +41,7 @@ export function GraphFileActions() {
     actionInFlight.current = true;
     let importReserved = false;
     try {
+      const { loadFromFile } = await graphFileModule.load();
       const result = await loadFromFile();
       if (!result || !canLoadGraph(useGraphStore.getState())) return;
       if (result.warnings.length > 0) console.warn('[nebula] Load warnings:', result.warnings);

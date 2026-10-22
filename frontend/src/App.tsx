@@ -3,22 +3,21 @@ import { ReactFlowProvider } from '@xyflow/react';
 import { Canvas } from './components/Canvas';
 import { CanvasTabs } from './components/CanvasTabs';
 import { NodeLibrary } from './components/panels/NodeLibrary';
-import { AssetsPanel } from './components/panels/AssetsPanel';
-import { AgentLog, AgentNotes, OnboardingOverlay, RunHistoryPanel } from './components/DeferredPanels';
+// Closed or empty at the first paint, loaded after it (lib/deferredChunks.ts).
+import {
+  AgentLog, AgentNotes, AssetsPanel, ChatPanel, CommandPalette, NodeInspectorPopover, OnboardingOverlay, RunHistoryPanel,
+} from './components/DeferredPanels';
 import { Settings } from './components/panels/Settings';
 import { Toolbar } from './components/panels/Toolbar';
 import { GraphFileActions } from './components/GraphFileActions';
 import { WorkspaceRail } from './components/WorkspaceRail';
 import { ChatLauncher } from './components/ChatLauncher';
-import { NodeInspectorPopover } from './components/panels/NodeInspectorPopover';
-import { ChatPanel } from './components/panels/ChatPanel';
 // The Agent log's store collects every agent's actions from page load, even
 // before the panel mounts (store/agentLogStore.ts subscribes at import).
 import './store/agentLogStore';
 // The same for Updates (store/agentNotesStore.ts): the corner is deferred,
 // its store counts from the first socket message.
 import './store/agentNotesStore';
-import { CommandPalette } from './components/CommandPalette';
 import { KeyboardShortcuts } from './components/KeyboardShortcuts';
 import { BackendConnectionStatus } from './components/BackendConnectionStatus';
 import { PersonRequiredBanner } from './components/PersonRequiredBanner';
@@ -104,9 +103,10 @@ export default function App() {
   // List prices for the Run estimate and the cost confirm, fetched once.
   useEffect(() => { void usePricingStore.getState().load(); }, []);
 
-  // Run History, the tour, the mask painter and the node mesh / world viewers
-  // live outside the startup entry (lib/deferredChunks.ts). Fetch them once
-  // the first paint is done so a later first open never waits on the network.
+  // Run History, the tour, the chat, the Inspector, the palette, the mask
+  // painter, the node mesh / world viewers and more live outside the startup
+  // entry (lib/deferredChunks.ts). Fetch them once the first paint is done so
+  // a later first open never waits on the network.
   useEffect(() => whenIdle(() => preloadAll(DEFERRED_PRELOADS)), []);
 
   // Fetch settings on mount to populate the API key cache used for warning badges

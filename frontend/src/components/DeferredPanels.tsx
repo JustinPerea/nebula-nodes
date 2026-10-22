@@ -1,15 +1,22 @@
-import { Suspense, useState, type ComponentProps, type ReactNode } from 'react';
+import { Suspense, useEffect, useState, type ComponentProps, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 import {
   DeferredAgentLog,
   DeferredAgentNoteOutlineLayer,
   DeferredAgentNotes,
+  DeferredAssetsPanel,
+  DeferredChatPanel,
+  DeferredCommandPalette,
   DeferredConnectionPopup,
   DeferredMaskPainterModal,
+  DeferredNodeInspectorPopover,
   DeferredOnboardingOverlay,
   DeferredRunHistoryPanel,
 } from '../lib/deferredChunks';
+import { CHAT_SEND_EVENT, type ChatSendDetail } from '../lib/chatSend';
+import { COMMAND_PALETTE_OPEN_EVENT, isPaletteHotkey, paletteOpenRequestApplies } from '../lib/commandPaletteKeys';
+import { dropIntent, heldIntent, holdIntent, isIntentClaimed } from '../lib/heldIntents';
 import { DeferredBoundary } from './DeferredBoundary';
 
 /**
@@ -182,3 +189,134 @@ export function MaskPainterModal(props: ComponentProps<typeof DeferredMaskPainte
   );
 }
 
+
+/**
+ * A failed chat chunk closes the chat and forgets a send held for it: the
+ * open that send made showed nothing, so a later open (or a focus that
+ * brings the chunk in) must not replay an old Enhance message.
+ */
+const closeChat = () => {
+  dropIntent('chat-send');
+  const ui = useUIStore.getState();
+  if (ui.panels.chat.visible) ui.togglePanel('chat');
+};
+const closeInspector = () => useUIStore.getState().setInspectorVisible(false);
+const closeAssets = () => {
+  const ui = useUIStore.getState();
+  if (ui.leftDock === 'assets') ui.setLeftDock(null);
+};
+
+/**
+ * The chat (second pass, 2026-10-22). Closed at every start, but it checks the
+ * agent's login while closed, so the first open already shows the status: it
+ * mounts straight away, like the Agent log, and its closed state is the
+ * nothing it drew before. A node's Enhance (or the palette's agent query) that
+ * sends to the chat before the chunk lands is held here: the chat opens at
+ * once (the launcher shows it), and the panel takes the message into its input
+ * when it arrives (lib/heldIntents.ts). A failed chunk closes the chat again,
+ * forgets the held send, and retries on the next open, when back online, or
+ * on focus.
+ */
+export function ChatPanel() {
+  const { opens } = useOpens(useUIStore((s) => s.panels.chat.visible));
+  useEffect(() => {
+    const onSend = (event: Event) => {
+      if (isIntentClaimed('chat-send')) return;
+      const detail = (event as CustomEvent<ChatSendDetail | undefined>).detail;
+      if (!String(detail?.message ?? '').trim()) return;
+      holdIntent('chat-send', detail);
+      if (!useUIStore.getState().panels.chat.visible) useUIStore.getState().togglePanel('chat');
+    };
+    window.addEventListener(CHAT_SEND_EVENT, onSend);
+    return () => {
+      window.removeEventListener(CHAT_SEND_EVENT, onSend);
+      // Left this screen before the panel arrived: the send goes with it, as the chat's state does.
+      if (!isIntentClaimed('chat-send')) dropIntent('chat-send');
+    };
+  }, []);
+  return (
+    <DeferredBoundary chunk={DeferredChatPanel} retryKey={opens} onChunkError={closeChat} failed={null}>
+      <Suspense fallback={null}>
+        <DeferredChatPanel />
+      </Suspense>
+    </DeferredBoundary>
+  );
+}
+
+/**
+ * The node Inspector popover (with the Inspector inside). Hidden at every
+ * start; it opens on a node's intent (its settings button, a double click), so
+ * it mounts on the first open and stays mounted, like Run History.
+ */
+export function NodeInspectorPopover() {
+  const { opened, opens } = useOpens(useUIStore((s) => s.panels.inspector.visible));
+  if (!opened) return null;
+  return (
+    <DeferredBoundary chunk={DeferredNodeInspectorPopover} retryKey={opens} onChunkError={closeInspector} failed={null}>
+      <Suspense fallback={null}>
+        <DeferredNodeInspectorPopover />
+      </Suspense>
+    </DeferredBoundary>
+  );
+}
+
+/**
+ * The Assets dock. App mounts it only while open (closed at every start), so
+ * each open is a new mount, which retries a chunk that failed before.
+ */
+export function AssetsPanel() {
+  return (
+    <DeferredBoundary chunk={DeferredAssetsPanel} onChunkError={closeAssets} failed={null}>
+      <Suspense fallback={null}>
+        <DeferredAssetsPanel />
+      </Suspense>
+    </DeferredBoundary>
+  );
+}
+
+/**
+ * The ⌘K palette. It draws nothing until opened, so it mounts straight away
+ * and arrives on its own. A ⌘K or a rail open that beats the chunk is held
+ * here (a second ⌘K takes it back, as it would close the palette) and the
+ * palette opens as soon as it lands (lib/heldIntents.ts); from then on the
+ * palette owns the hotkey. If the chunk failed, each held open is an intent
+ * that tries it again (`retryKey`), and a load that fails drops the hold
+ * (`onChunkError`), so a later focus or reconnect that brings the chunk in
+ * never opens the palette for an old ⌘K.
+ */
+const dropPaletteIntent = () => dropIntent('command-palette');
+
+export function CommandPalette() {
+  const [asks, setAsks] = useState(0);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (isIntentClaimed('command-palette') || !isPaletteHotkey(event)) return;
+      event.preventDefault();
+      if (heldIntent('command-palette')) dropIntent('command-palette');
+      else {
+        holdIntent('command-palette', true);
+        setAsks((n) => n + 1);
+      }
+    };
+    const onOpenRequest = () => {
+      if (isIntentClaimed('command-palette') || !paletteOpenRequestApplies()) return;
+      holdIntent('command-palette', true);
+      setAsks((n) => n + 1);
+    };
+    document.addEventListener('keydown', onKey);
+    window.addEventListener(COMMAND_PALETTE_OPEN_EVENT, onOpenRequest);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener(COMMAND_PALETTE_OPEN_EVENT, onOpenRequest);
+      // Left this screen before the palette arrived: it would have closed with it.
+      if (!isIntentClaimed('command-palette')) dropIntent('command-palette');
+    };
+  }, []);
+  return (
+    <DeferredBoundary chunk={DeferredCommandPalette} retryKey={asks} onChunkError={dropPaletteIntent} failed={null}>
+      <Suspense fallback={null}>
+        <DeferredCommandPalette />
+      </Suspense>
+    </DeferredBoundary>
+  );
+}

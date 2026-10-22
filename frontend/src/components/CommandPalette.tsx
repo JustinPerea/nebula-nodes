@@ -14,6 +14,8 @@ import { findAvailableNodePosition, type NodePosition } from '../lib/nodePlaceme
 import { computeCanvasFitPadding } from '../lib/canvasFit';
 import { useFitCanvasView } from '../hooks/useFitCanvasView';
 import { canLoadGraph, canSaveGraph, requestGraphLoad, requestGraphSave } from '../lib/graphFileActions';
+import { COMMAND_PALETTE_OPEN_EVENT, isPaletteHotkey, paletteOpenRequestApplies } from '../lib/commandPaletteKeys';
+import { claimIntent } from '../lib/heldIntents';
 import '../styles/command-palette.css';
 
 const NO_NODE_FIELDS: readonly string[] = Object.freeze([]);
@@ -135,37 +137,35 @@ export function CommandPalette() {
 
   // Global hotkey. Read viewMode imperatively so we don't resubscribe; yield to
   // the editor's own Cmd+K. Resets happen here (in the handler), not in an effect.
+  // This palette is a deferred chunk: a ⌘K or a rail open that came before it
+  // arrived was held by its wrapper (DeferredPanels.tsx) and is handed over
+  // here, where the palette takes the hotkey over (lib/heldIntents.ts).
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
-        const vm = useUIStore.getState().viewMode;
-        if (vm === 'editor' || vm === 'remotion-editor') return;
-        e.preventDefault();
-        if (openRef.current) {
-          close();
-        } else {
-          setMode('commands');
-          setQuery('');
-          setSelected(0);
-          setOpen(true);
-        }
-      }
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [close]);
-
-  useEffect(() => {
-    function onOpenRequest() {
-      if (useUIStore.getState().viewMode !== 'canvas') return;
+    const openPalette = () => {
       setMode('commands');
       setQuery('');
       setSelected(0);
       setOpen(true);
+    };
+    function onKey(e: KeyboardEvent) {
+      if (!isPaletteHotkey(e)) return;
+      e.preventDefault();
+      if (openRef.current) close();
+      else openPalette();
     }
-    window.addEventListener('nebula:command-palette-open', onOpenRequest);
-    return () => window.removeEventListener('nebula:command-palette-open', onOpenRequest);
-  }, []);
+    function onOpenRequest() {
+      if (paletteOpenRequestApplies()) openPalette();
+    }
+    document.addEventListener('keydown', onKey);
+    window.addEventListener(COMMAND_PALETTE_OPEN_EVENT, onOpenRequest);
+    const claim = claimIntent('command-palette');
+    if (claim.held) openPalette();
+    return () => {
+      claim.release();
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener(COMMAND_PALETTE_OPEN_EVENT, onOpenRequest);
+    };
+  }, [close]);
 
   // Focus the input when the palette opens (DOM side effect only).
   useEffect(() => {
