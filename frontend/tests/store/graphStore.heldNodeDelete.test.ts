@@ -18,6 +18,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * with the full heading, so they take the short one ("Couldn't delete it.",
  * and for several nodes "Couldn't delete them.", the same pattern).
  *
+ * Round 4b (GM - Design, on #181): every line for several nodes starts
+ * "Couldn't delete them.", and every forget form for several nodes ends
+ * "Check Marble, then use Run History." ("Use the same tail on every forget
+ * form that wraps, so the single-node one stays as it is."). With one of
+ * several held, the unlock line is GM's newest: "Couldn't delete them. One
+ * is waiting on World Labs. Check Marble, then unlock it." (it replaces the
+ * counted "Couldn't delete {n} nodes. One is waiting …").
+ *
  * The backend's delete refusal says its own, longer line to the person
  * (backend/main.py _paid_state_person, pinned equal to lib/worldLabsWaiting.ts
  * by backend/tests/test_error_copy_round3b.py) and the specific text to
@@ -41,19 +49,15 @@ const { useGraphStore } = await import('../../src/store/graphStore');
 const BACKEND_UNLOCK = 'This node is still waiting on World Labs. Check the job in Marble, then use “Checked Marble — unlock” before you delete it.';
 const BACKEND_FORGET = 'This node is still waiting on World Labs. Check the job in Marble, then use “Checked Marble — forget” in Run History before you delete it.';
 const BACKEND_ACTIVE = 'This node is still waiting on World Labs. Let its run finish, then delete it.';
-// GM's lines (round 4).
+// GM's lines (round 4, and round 4b for several nodes).
 const ONE_UNLOCK = "Couldn't delete the node. It's waiting on World Labs. Check Marble, then unlock it.";
 const ONE_FORGET = "Couldn't delete it. It's waiting on World Labs. Check Marble, then forget it in Run History.";
-const SOME_UNLOCK = (n: number) => `Couldn't delete ${n} nodes. One is waiting on World Labs. Check Marble, then unlock it.`;
-const SOME_FORGET = "Couldn't delete them. One is waiting on World Labs. Check Marble, then forget it in Run History.";
-// When more than one of them is held (review, round 4: "One is waiting" was
-// wrong when both were). New wording, listed for GM in the round's notes.
-// The counted heading wraps with these at 560 px (507 px of text in 504 px
-// for "Couldn't delete 2 nodes. They're …"), so they take the short heading.
+const SOME_UNLOCK = "Couldn't delete them. One is waiting on World Labs. Check Marble, then unlock it.";
+const SOME_FORGET = "Couldn't delete them. One is waiting on World Labs. Check Marble, then use Run History.";
 const ALL_UNLOCK = "Couldn't delete them. They're waiting on World Labs. Check Marble, then unlock them.";
-const ALL_FORGET = "Couldn't delete them. They're waiting on World Labs. Check Marble, then forget them in Run History.";
+const ALL_FORGET = "Couldn't delete them. They're waiting on World Labs. Check Marble, then use Run History.";
 const MANY_UNLOCK = (held: number) => `Couldn't delete them. ${held} are waiting on World Labs. Check Marble, then unlock them.`;
-const MANY_FORGET = (held: number) => `Couldn't delete them. ${held} are waiting on World Labs. Check Marble, then forget them in Run History.`;
+const MANY_FORGET = (held: number) => `Couldn't delete them. ${held} are waiting on World Labs. Check Marble, then use Run History.`;
 
 const node = (id: string, selected = false) => ({
   id, type: 'model-node', position: { x: 0, y: 0 }, selected,
@@ -105,11 +109,11 @@ describe('Delete on a node that holds World Labs state', () => {
     expect(useGraphStore.getState().nodes).toHaveLength(2);
   });
 
-  it('several selected nodes, one with an unconfirmed start: the count stays in the heading', () => {
+  it('several selected nodes, one with an unconfirmed start: GM\'s "Couldn\'t delete them. One is waiting …"', () => {
     useGraphStore.setState({ nodes: [node('n1', true), node('n2', true), node('n3', true)],
       providerRecoveries: [], providerStartAmbiguities: [ambiguity('n2')] } as never);
     useGraphStore.getState().deleteSelected();
-    expect(notice()?.text).toBe(SOME_UNLOCK(3));
+    expect(notice()?.text).toBe(SOME_UNLOCK);
     expect(useGraphStore.getState().nodes).toHaveLength(3);
   });
 
@@ -121,11 +125,11 @@ describe('Delete on a node that holds World Labs state', () => {
     expect(notice()?.text).toBe(ALL_UNLOCK);
   });
 
-  it('one of two held, an unconfirmed start: "One is waiting", the count kept', () => {
+  it('one of two held, an unconfirmed start: "One is waiting … unlock it"', () => {
     useGraphStore.setState({ nodes: [node('n1', true), node('n2', true)],
       providerRecoveries: [], providerStartAmbiguities: [ambiguity('n2')] } as never);
     useGraphStore.getState().deleteSelected();
-    expect(notice()?.text).toBe(SOME_UNLOCK(2));
+    expect(notice()?.text).toBe(SOME_UNLOCK);
   });
 
   it('two selected, both with recovery records: the line says they\'re both waiting', () => {
@@ -200,14 +204,27 @@ describe('the backend refuses a Delete the canvas didn\'t know was held', () => 
     refuseWith(BACKEND_UNLOCK, BACKEND_UNLOCK, 'A run is going.');
     useGraphStore.getState().onNodesChange([{ id: 'n1', type: 'remove' }, { id: 'n2', type: 'remove' }, { id: 'n3', type: 'remove' }]);
     await vi.waitFor(() => expect(notice()?.text).toBe(
-      "Couldn't delete 3 nodes. 2 are waiting on World Labs. Check Marble, then unlock them. A run is going."));
+      "Couldn't delete them. 2 are waiting on World Labs. Check Marble, then unlock them. A run is going."));
   });
 
   it('a held node and another reason: GM\'s sentence for the held one, the other reason kept', async () => {
     refuseWith(BACKEND_UNLOCK, 'A run is going.');
     useGraphStore.getState().onNodesChange([{ id: 'n1', type: 'remove' }, { id: 'n2', type: 'remove' }]);
     await vi.waitFor(() => expect(notice()?.text).toBe(
-      "Couldn't delete 2 nodes. One is waiting on World Labs. Check Marble, then unlock it. A run is going."));
+      "Couldn't delete them. One is waiting on World Labs. Check Marble, then unlock it. A run is going."));
+  });
+
+  it('a held node\'s forget line among another reason: the same tail as the store\'s', async () => {
+    refuseWith(BACKEND_FORGET, 'A run is going.');
+    useGraphStore.getState().onNodesChange([{ id: 'n1', type: 'remove' }, { id: 'n2', type: 'remove' }]);
+    await vi.waitFor(() => expect(notice()?.text).toBe(
+      "Couldn't delete them. One is waiting on World Labs. Check Marble, then use Run History. A run is going."));
+  });
+
+  it('two refused for other reasons only: the counted heading stays', async () => {
+    refuseWith('A run is going.');
+    useGraphStore.getState().onNodesChange([{ id: 'n1', type: 'remove' }, { id: 'n2', type: 'remove' }]);
+    await vi.waitFor(() => expect(notice()?.text).toBe("Couldn't delete 2 nodes. A run is going."));
   });
 
   it('a line GM didn\'t trim (a run still going) stays the backend\'s', async () => {

@@ -1849,8 +1849,10 @@ function deletionHeading(count: number): string {
   return count === 1 ? "Couldn't delete the node." : `Couldn't delete ${count} nodes.`;
 }
 
-/** The backend's World Labs lines read as GM's trimmed ones (round 4,
- * lib/worldLabsWaiting.ts deleteRefusalText); every other reason as given. */
+/** The backend's World Labs lines read as GM's trimmed ones (rounds 4 and
+ * 4b, lib/worldLabsWaiting.ts deleteRefusalText: with a held node the line
+ * starts with GM's own, "Couldn't delete them. …" for several); every other
+ * reason as given, after `deletionHeading` when no node is held. */
 function reportNodeDeletionFailure(reasons: string[], count: number): void {
   const message = deleteRefusalText(deletionHeading(count), count, reasons);
   console.warn(`[nebula] ${message}`);
@@ -2152,7 +2154,8 @@ function nodeHasProviderSafety(state: GraphState, nodeId: string): boolean {
  * is the worst kind). True when it refused: it says why once, in the
  * canvas's short notice (GM's one line, round 4: "Couldn't delete the node.
  * It's waiting on World Labs. Check Marble, then unlock it.", and its forms,
- * lib/worldLabsWaiting heldDeleteText), and sends nothing. An agent's delete
+ * round 4b's for several nodes among them: lib/worldLabsWaiting
+ * heldDeleteText), and sends nothing. An agent's delete
  * goes through the backend, which refuses it with its own text.
  */
 function refuseHeldNodeDelete(state: GraphState, ids: string[], set: GraphSet): boolean {

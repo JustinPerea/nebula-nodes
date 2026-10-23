@@ -8,9 +8,11 @@ import { clearBottomBarClearance, publishBottomBarClearance } from '../lib/botto
  * composer (GM - Design, 2026-10-23: "the composer publishes its top edge the
  * way the canvas bar does"), the Remotion editor's timeline tray (round 3:
  * "Yes, the Remotion tray publishes its top edge, the same as the canvas bar
- * and the composer.") and the trim editor's timeline (round 4: "A notice
- * should never sit over a timeline being edited, even one that shares its
- * column."). Each part carries `data-bottom-bar`. Measured
+ * and the composer.") and the trim editor's transport row and timeline
+ * (round 4: "A notice should never sit over a timeline being edited, even one
+ * that shares its column."; round 4b: "publish the transport's top edge as
+ * well, so notices sit over the preview's bottom edge."). Each part carries
+ * `data-bottom-bar`. Measured
  * again whenever a part or the window changes size, and whenever `key`
  * changes (a part mounting, such as the actions panel opening); cleared when
  * the bar leaves the screen.

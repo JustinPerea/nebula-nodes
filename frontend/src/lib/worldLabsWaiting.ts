@@ -16,50 +16,40 @@ export const SOME_NODE_WAITING_FORGET = "A node is still waiting on World Labs. 
 
 /**
  * What the canvas notice says when it keeps nodes because one holds World
- * Labs state (GM - Design, round 4, "TRIMS to one line at 560 px"):
- * "Couldn't delete the node. It's waiting on World Labs. Check Marble, then
- * unlock it." The forget form: "Couldn't delete the node. It's waiting on
- * World Labs. Check Marble, then forget it in Run History." If that still
- * wraps, use "Couldn't delete it." as the heading. "Couldn't delete {n}
- * nodes. One is waiting on World Labs. Check Marble, then unlock it." (and
- * the same forget form).
+ * Labs state (GM - Design, round 4, "TRIMS to one line at 560 px", and round
+ * 4b, its answers on #181).
  *
- * Measured live in the canvas notice's 12 px font at 560 px (round 4 notes):
- * the forget form wraps with "Couldn't delete the node." (543 px of text in
- * 504 px), so it takes GM's short heading (500 px). The forget form for
- * several nodes wraps too (557 px for 3 nodes), so it takes the same pattern,
- * "Couldn't delete them."; that one still wraps (540 px) and is listed for
- * GM. `unlock`: one held node has an unconfirmed start (the status bar's
- * "Checked Marble — unlock"); else a recovery record (Run History's
- * "Checked Marble — forget").
+ * One node (round 4; round 4b: "The one-node fallback is fine as measured"):
+ * - unlock: "Couldn't delete the node. It's waiting on World Labs. Check
+ *   Marble, then unlock it."
+ * - forget: "Couldn't delete it. It's waiting on World Labs. Check Marble,
+ *   then forget it in Run History." (GM's fallback heading: the full one
+ *   wraps at 560 px.)
  *
- * `held` is how many of the `count` nodes hold World Labs state. GM's copy
- * covers one; with more held, "One is waiting" would be wrong, so the line
- * says "They're waiting" (every one held) or "{held} are waiting", then
- * "unlock them" / "forget them" (round 4 review; listed for GM). Measured at
- * 560 px, the counted heading wraps with "They're waiting … unlock them."
- * (507 px of text in 504 px for 2 nodes) and with "{held} are" at 3-digit
- * counts, so with more than one held every form takes the short heading,
- * "Couldn't delete them." (the same wrap rule; the unlock forms fit, at most
- * 490 px; the forget forms still wrap, like the one above).
+ * Several nodes (round 4b), every line headed "Couldn't delete them.":
+ * - every one held: "They're waiting on World Labs. Check Marble, then unlock
+ *   them."
+ * - some held, {held} ≥ 2: "{held} are waiting on World Labs. Check Marble,
+ *   then unlock them."
+ * - one of them held: "One is waiting on World Labs. Check Marble, then
+ *   unlock it." (GM's newest line; it replaces round 4's counted "Couldn't
+ *   delete {n} nodes. One is waiting …").
+ * - every forget form ends "Check Marble, then use Run History." (GM: "Use
+ *   the same tail on every forget form that wraps, so the single-node one
+ *   stays as it is.").
+ *
+ * `unlock`: a held node has an unconfirmed start (the status bar's "Checked
+ * Marble — unlock"); else a recovery record (Run History's "Checked Marble —
+ * forget"). `held` is how many of the `count` nodes hold World Labs state.
  */
 export function heldDeleteText(count: number, unlock: boolean, held = 1): string {
   if (count === 1) {
     return unlock ? "Couldn't delete the node. It's waiting on World Labs. Check Marble, then unlock it."
       : "Couldn't delete it. It's waiting on World Labs. Check Marble, then forget it in Run History.";
   }
-  const heading = unlock && held <= 1 ? `Couldn't delete ${count} nodes.` : "Couldn't delete them.";
-  return `${heading} ${heldSentence(count, unlock, held)}`;
-}
-
-/** GM's sentence for the held nodes, after the heading: "It's waiting …" for
- * one node, "One is waiting …" for one of several, and with more than one
- * held, "They're waiting …" (all of them) or "{held} are waiting …". */
-function heldSentence(count: number, unlock: boolean, held: number): string {
-  const one = count === 1 || held <= 1;
-  const waiting = count === 1 ? "It's" : held <= 1 ? 'One is' : held >= count ? "They're" : `${held} are`;
-  const it = one ? 'it' : 'them';
-  return `${waiting} waiting on World Labs. Check Marble, then ${unlock ? `unlock ${it}.` : `forget ${it} in Run History.`}`;
+  const waiting = held <= 1 ? 'One is' : held >= count ? "They're" : `${held} are`;
+  const then = unlock ? `unlock ${held <= 1 ? 'it' : 'them'}.` : 'use Run History.';
+  return `Couldn't delete them. ${waiting} waiting on World Labs. Check Marble, then ${then}`;
 }
 
 const isHeldReason = (reason: string) => reason === NODE_WAITING_UNLOCK || reason === NODE_WAITING_FORGET;
@@ -68,12 +58,16 @@ const isHeldReason = (reason: string) => reason === NODE_WAITING_UNLOCK || reaso
  * The canvas notice for deletes the backend refused, from the reasons it gave
  * (one per refused node) under `heading` ("Couldn't delete the node." /
  * "Couldn't delete {n} nodes."). The backend's two World Labs lines are the
- * ones GM trimmed: when every reason is one, the person reads GM's line
- * (heldDeleteText); among other reasons, GM's sentence takes their place and
- * the others are kept. Every other reason is the backend's, word for word,
- * each once. An unconfirmed start wins over a recovery record, as on the
- * canvas. The held nodes are counted before duplicates go (two held nodes
- * give the same line twice), so two of them read "They're waiting".
+ * ones GM trimmed: when any reason is one, the person reads GM's line
+ * (heldDeleteText), the same words the canvas's own refusal uses, and any
+ * other reasons follow it, each once, word for word. So a held node among
+ * other reasons also reads "Couldn't delete them. One is waiting …" (round
+ * 4b: GM's lines for several nodes all drop the count; one heading for the
+ * held sentence wherever it shows). With no held node, `heading` and the
+ * backend's reasons as given. An unconfirmed start wins over a recovery
+ * record, as on the canvas. The held nodes are counted before duplicates go
+ * (two held nodes give the same line twice), so two of them read "They're
+ * waiting".
  */
 export function deleteRefusalText(heading: string, count: number, reasons: readonly string[]): string {
   const heldCount = reasons.filter(isHeldReason).length;
@@ -81,9 +75,8 @@ export function deleteRefusalText(heading: string, count: number, reasons: reado
   const held = unique.filter(isHeldReason);
   if (held.length === 0) return `${heading} ${unique.join(' ')}`;
   const unlock = held.includes(NODE_WAITING_UNLOCK);
-  if (held.length === unique.length) return heldDeleteText(count, unlock, heldCount);
   const others = unique.filter((reason) => !isHeldReason(reason));
-  return `${heading} ${[heldSentence(count, unlock, heldCount), ...others].join(' ')}`;
+  return [heldDeleteText(count, unlock, heldCount), ...others].join(' ');
 }
 
 /**

@@ -78,13 +78,20 @@
 .editor-preview__video {
   display: block;
   max-width: 100%;
-  max-height: 100%;
+  /* --notice-band-inset (VideoPreview): set only while the rendered preview
+     shows, so its native controls end above the notice band. On the picture,
+     not the preview, so the transport and timeline never move. */
+  max-height: calc(100% - var(--notice-band-inset, 0px));
+  margin-bottom: var(--notice-band-inset, 0px);
   object-fit: contain;
 }
 
+/* On the preview's top edge: its bottom edge carries the app's notices (the
+   transport publishes its top edge, GM round 4b), and a readout under a
+   notice can't be read. */
 .editor-preview__hud {
   position: absolute;
-  bottom: 8px;
+  top: 8px;
   left: 50%;
   transform: translateX(-50%);
 }
