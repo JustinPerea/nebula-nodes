@@ -778,7 +778,12 @@ export function Canvas() {
         />
         <ZoomLodController wrapperRef={wrapperRef} threshold={CANVAS_LOD_ZOOM} enabled={canvasLowDetail} />
         <CanvasFocusController />
-        <Panel position="top-center" className="selection-toolbar-panel">
+        {/* Floating panels stop below the selection toolbar (lib/bottomBar.ts
+            floatingTopLimit; GM - Design, 2026-10-23). The marker is on the
+            panel, the toolbar's layout box: the toolbar's entry animation
+            transforms it, and a measured line would ease down with it. With
+            nothing selected the panel is empty (0 px) and sets no line. */}
+        <Panel position="top-center" className="selection-toolbar-panel" data-top-bar="">
           <SelectionToolbar />
         </Panel>
         <CanvasNavigation />

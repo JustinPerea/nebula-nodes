@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { create, type StateCreator } from 'zustand';
 import {
   applyNodeChanges,
   applyEdgeChanges,
@@ -472,6 +472,48 @@ export interface UndoNotice {
 }
 
 let undoNoticeSeq = 0;
+
+/** Whether a notice's Undo or Redo still applies: its step is next in line on its stack. */
+function offerApplies(notice: UndoNotice, stacks: { undoStack: UndoEntry[]; redoStack: UndoEntry[] }): boolean {
+  if (!notice.offer || !notice.entry) return true;
+  const stack = notice.offer === 'undo' ? stacks.undoStack : stacks.redoStack;
+  return stack[stack.length - 1] === notice.entry;
+}
+
+/**
+ * GM - Design, 2026-10-23: "a notice whose button no longer applies clears
+ * when a new undo step lands." A notice with an offer shows only while its
+ * step is the top of its stack (undoStack for Undo, redoStack for Redo). Every
+ * write to the store goes through here (the store's own `set` and
+ * `useGraphStore.setState` alike), so every writer of either stack keeps it:
+ * pushUndo and its callers, an agent's edit, a step taken or put back, a
+ * graph cleared, replaced or opened. When an update leaves the notice's step
+ * off the top, the notice clears in that same update. A notice without an
+ * offer (an error, a refusal, an import's notes) is never touched.
+ */
+function withLiveNotice(state: GraphState, patch: GraphState | Partial<GraphState>): GraphState | Partial<GraphState> {
+  if (!('undoStack' in patch) && !('redoStack' in patch) && !('undoNotice' in patch)) return patch;
+  const notice = 'undoNotice' in patch ? patch.undoNotice : state.undoNotice;
+  if (!notice) return patch;
+  const stacks = {
+    undoStack: patch.undoStack ?? state.undoStack,
+    redoStack: patch.redoStack ?? state.redoStack,
+  };
+  return offerApplies(notice, stacks) ? patch : { ...patch, undoNotice: null };
+}
+
+/** The store's middleware for that rule (withLiveNotice). */
+function noticeFollowsStacks(config: StateCreator<GraphState>): StateCreator<GraphState> {
+  return (set, get, api) => {
+    const guarded = ((partial: GraphState | Partial<GraphState> | ((state: GraphState) => GraphState | Partial<GraphState>),
+      replace?: boolean) => {
+      set((state) => withLiveNotice(state, typeof partial === 'function' ? partial(state) : partial) as GraphState,
+        replace as false);
+    }) as typeof set;
+    api.setState = guarded;
+    return config(guarded, get, api);
+  };
+}
 
 function settledState(state: NodeData['state']): NodeData['state'] {
   return state === 'executing' || state === 'queued' ? 'idle' : state;
@@ -2834,11 +2876,15 @@ function sendRestore(
   if (isForeignEdit(entry) && entry.editId) body.edit = entry.editId;
   // The wires it puts back or takes off stay so until it lands (heldWires).
   const holds = [...body.wire.map((w) => holdWire(w, true)), ...body.unwire.map((w) => holdWire(w, false))];
-  // Shown once the backend answers, unless another notice came since.
+  // Shown once the backend answers, unless another notice came since, or a
+  // new step has landed since: its Redo (or Undo) would no longer apply, so
+  // the line stays away (withLiveNotice; GM - Design, 2026-10-23).
   const answerNotice = (missed: Missed) => set((state) => {
     if (notice.ownLine) {
       if (undoNoticeSeq !== notice.noticeId) return {};
-      return { undoNotice: ownStepNotice(notice.noticeId, notice.ownLine, missed, action, inverse) };
+      const shown = ownStepNotice(notice.noticeId, notice.ownLine, missed, action, inverse);
+      if (!offerApplies(shown, state)) return {};
+      return { undoNotice: shown };
     }
     const shown = state.undoNotice;
     const text = notRestoredText(missed.notReattached, missed.notReopened);
@@ -3271,7 +3317,7 @@ function confirmRunCost(nodes: Node<NodeData>[], edges: Edge[], scope: RunScope)
   return window.confirm(runCostConfirmMessage(summary));
 }
 
-export const useGraphStore = create<GraphState>((set, get) => ({
+export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get) => ({
   nodes: [],
   edges: [],
   isExecuting: activeRunOwners.size > 0,
@@ -3951,7 +3997,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       if (removing.length === 0) get().cancelUndoStep(undoStep);
       if (safeChanges.length > 0) applyCanvasNodeChanges(safeChanges, set, get, undoStep);
       const deleted = removing.filter((nodeId) => shownBefore.has(nodeId)).length;
-      if (deleted > 0 && get().undoStack.includes(undoStep)) set(deletedNotice(deleted, undoStep));
+      // Its Undo applies only while this step is next in line: after a newer
+      // step, the line would offer a button that does nothing (withLiveNotice).
+      if (deleted > 0 && get().undoStack.at(-1) === undoStep) set(deletedNotice(deleted, undoStep));
       if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length);
     });
     // An undo pressed while the deletes are on their way waits for their
@@ -6442,7 +6490,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   dismissProviderRecoveryWarning: () => set({ providerRecoveryWarning: null }),
-}));
+})));
 
 // A line from a module that doesn't import this store (lib/canvasNotice.ts,
 // round 3f) becomes the canvas notice.

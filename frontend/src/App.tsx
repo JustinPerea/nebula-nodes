@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useRef } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { Canvas } from './components/Canvas';
 import { CanvasTabs } from './components/CanvasTabs';
-import { NoticeRegion } from './components/canvas/DeferredCanvasOverlays';
+import { NoticeRegion } from './components/NoticeRegion';
 import { NodeLibrary } from './components/panels/NodeLibrary';
 // Closed or empty at the first paint, loaded after it (lib/deferredChunks.ts).
 import {
@@ -325,9 +325,11 @@ export default function App() {
       {!isBrandShowcase && <AgentNotes />}
       {!isHome && !isBrandShowcase && !isCommons && <CommandPalette />}
       {/* The app's one notice region, above every panel and Studio (GM - Design,
-          2026-10-23): the canvas's notices with their Undo or Redo, and the
-          written lines on the other screens. One mount, beside the screens. */}
-      {!isHome && !isBrandShowcase && <NoticeRegion canvas={isCanvas} />}
+          2026-10-23): the canvas's notices with their Undo or Redo and the
+          proposal bar, the written lines on the other screens, and every
+          toast on every screen ("One region, one stack, and nothing else
+          draws toasts"). One mount, beside the screens. */}
+      <NoticeRegion screen={isCanvas ? 'canvas' : isHome || isBrandShowcase ? 'home' : 'studio'} />
       {isCanvas && <OnboardingOverlay />}
       {isCanvas && <KeyboardShortcuts />}
     </ReactFlowProvider>

@@ -242,11 +242,19 @@ body:not(.app-slava-restraint) .node-inspector-popover__pin--active {
 }
 
 .node-inspector-popover__body {
+  /* Clamped shorter, the body scrolls above the fixed foot row, with a short
+     fade at its bottom edge while there is more below (ScrollFade), gone at
+     the end (GM - Design, 2026-10-23: "Let the body scroll, with a 12-16 px
+     fade at its bottom edge so the cut reads as scrollable instead of
+     broken. The foot row stays fixed."). Focus moving into the hidden part
+     scrolls the field clear of the fade. */
+  --scroll-fade-size: var(--sr-space-3, 12px);
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   padding: 10px;
   overscroll-behavior: contain;
+  scroll-padding-bottom: var(--scroll-fade-size);
 }
 
 .node-inspector-popover .inspector__actions {

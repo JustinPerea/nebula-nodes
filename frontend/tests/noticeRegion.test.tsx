@@ -188,7 +188,9 @@ describe('clicks around the region', () => {
   let sheet: HTMLStyleElement;
   beforeEach(() => {
     sheet = document.createElement('style');
-    sheet.textContent = readFileSync(join(__dirname, '../src/styles/canvasProposals.css'), 'utf8');
+    // The region's own rules (round 2: in the entry) and the notices'.
+    sheet.textContent = ['noticeRegion.css', 'canvasProposals.css']
+      .map((file) => readFileSync(join(__dirname, '../src/styles', file), 'utf8')).join('\n');
     document.head.append(sheet);
   });
   afterEach(() => sheet.remove());

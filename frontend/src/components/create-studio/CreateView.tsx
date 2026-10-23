@@ -23,6 +23,8 @@ import { PresetLibrary } from './PresetLibrary';
 import { ResultsGallery } from './ResultsGallery';
 import { ReferenceTray } from './ReferenceTray';
 import { usePrompt } from '../../hooks/usePrompt';
+import { useBottomBarClearance } from '../../hooks/useBottomBarClearance';
+import { BOTTOM_BAR_ATTR } from '../../lib/bottomBar';
 import type { AttachedRef } from './ReferenceTray';
 import '../../styles/create-studio.css';
 import '../../styles/create-gallery.css';
@@ -106,6 +108,9 @@ export function CreateView() {
   const [reusedDraft, setReusedDraft] = useState<{ previous: CreateDraftSeed; fingerprint: string; removedAttachments: boolean } | null>(null);
   const focusDraft = useRef(false);
   const composerArea = useRef<HTMLDivElement>(null);
+  // The composer is Creator Studio's bottom bar: it publishes where it starts,
+  // so the notices sit 8 px above it (GM - Design, 2026-10-23).
+  useBottomBarClearance([composerArea]);
   const canUndoReuse = reusedDraft?.fingerprint === JSON.stringify(draft);
   useEffect(() => {
     if (!focusDraft.current) return;
@@ -401,7 +406,7 @@ export function CreateView() {
           saving={savingStyle}
         />
       )}
-      <div ref={composerArea} className="create-view__composer-area">
+      <div ref={composerArea} className="create-view__composer-area" {...{ [BOTTOM_BAR_ATTR]: '' }}>
         {canUndoReuse && <div className="create-view__reuse-feedback">
           <span role="status">Settings copied to draft. Generate when ready.</span>
           {reusedDraft?.removedAttachments && <span>Unfinished attachments were removed. Reattach those files after Undo.</span>}

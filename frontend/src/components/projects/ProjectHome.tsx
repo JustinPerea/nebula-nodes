@@ -6,6 +6,7 @@ import { actorLabel } from '../../lib/trash';
 import { CrabMark } from '../brand/CrabMark';
 import { ProposalsFor } from '../proposals/ProposalsFor';
 import { UpdatesSlot } from '../agent-notes/UpdatesSlot';
+import { InNoticeRegion } from '../InNoticeRegion';
 import { failureMessage, shortLine } from '../../lib/errorCopy';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import { UnsavedEditsNotice } from './UnsavedEditsNotice';
@@ -340,14 +341,17 @@ function UndoToast({ project, busy, onUndo, onDismiss }: {
     const timer = window.setTimeout(onDismiss, UNDO_VISIBLE_MS);
     return () => window.clearTimeout(timer);
   }, [paused, onDismiss, project.id]);
+  // In the app's notice region, like every toast (GM - Design, 2026-10-23).
   return (
-    <div className="project-home__toast" role="status" aria-live="polite"
-      onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
-      onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
-      <span className="project-home__toast-text">Moved “{project.name}” to Recently deleted</span>
-      <button type="button" className="project-home__toast-undo" disabled={busy} onClick={onUndo}>Undo</button>
-      <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
-    </div>
+    <InNoticeRegion slot="project-home">
+      <div className="project-home__toast" role="status" aria-live="polite"
+        onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
+        onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
+        <span className="project-home__toast-text">Moved “{project.name}” to Recently deleted</span>
+        <button type="button" className="project-home__toast-undo" disabled={busy} onClick={onUndo}>Undo</button>
+        <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
+      </div>
+    </InNoticeRegion>
   );
 }
 
