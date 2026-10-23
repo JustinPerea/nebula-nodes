@@ -1,0 +1,22 @@
+{
+  "about": "Error copy round 3g, GM item 1 (option c): the Delete key asks only when a doomed node has pins or open proposals, the ones the backend's delete detaches or closes (canvas_pins.detach_node, canvas_proposals.invalidate_referencing, and an open project's cover proposal whose image only the doomed nodes show). backend/tests/test_error_copy_round3g.py runs each case through the real DELETE /api/graph/node and the asset-proposal sweep and checks `asks` is whether anything was detached or closed; frontend/tests/errorCopy.round3g.test.ts reads the same cases through lib/deleteConfirm.ts deleteLosesAttachments. Nodes are created in order, so their ids are n1, n2, n3. A node is a text input, or an image node whose one output is `image`.",
+  "cases": [
+    {"name": "a plain node", "nodes": [{"id": "n1"}, {"id": "n2"}], "delete": ["n1"], "asks": false},
+    {"name": "a node with an open pin", "nodes": [{"id": "n1"}], "pins": [{"on": "n1", "status": "open"}], "delete": ["n1"], "asks": true},
+    {"name": "a node with an answered pin", "nodes": [{"id": "n1"}], "pins": [{"on": "n1", "status": "resolved"}], "delete": ["n1"], "asks": true},
+    {"name": "a pin on another node", "nodes": [{"id": "n1"}, {"id": "n2"}], "pins": [{"on": "n2", "status": "open"}], "delete": ["n1"], "asks": false},
+    {"name": "a pin on the canvas, not a node", "nodes": [{"id": "n1"}], "pins": [{"on": null, "status": "open"}], "delete": ["n1"], "asks": false},
+    {"name": "an open proposal wired from the node", "nodes": [{"id": "n1"}], "proposals": [{"reads": "n1", "as": "edge", "status": "open"}], "delete": ["n1"], "asks": true},
+    {"name": "an open proposal that changes the node", "nodes": [{"id": "n1"}], "proposals": [{"reads": "n1", "as": "params", "status": "open"}], "delete": ["n1"], "asks": true},
+    {"name": "an open proposal that runs the node", "nodes": [{"id": "n1"}], "proposals": [{"reads": "n1", "as": "run", "status": "open"}], "delete": ["n1"], "asks": true},
+    {"name": "an open proposal on another node", "nodes": [{"id": "n1"}, {"id": "n2"}], "proposals": [{"reads": "n2", "as": "edge", "status": "open"}], "delete": ["n1"], "asks": false},
+    {"name": "a withdrawn proposal on the node", "nodes": [{"id": "n1"}], "proposals": [{"reads": "n1", "as": "edge", "status": "withdrawn"}], "delete": ["n1"], "asks": false},
+    {"name": "a cover proposal for the node's image", "nodes": [{"id": "n1", "image": "/api/outputs/a.png"}, {"id": "n2", "image": "/api/outputs/b.png"}], "covers": [{"to": "/api/outputs/a.png"}], "delete": ["n1"], "asks": true},
+    {"name": "a cover proposal for another node's image", "nodes": [{"id": "n1", "image": "/api/outputs/a.png"}, {"id": "n2", "image": "/api/outputs/b.png"}], "covers": [{"to": "/api/outputs/b.png"}], "delete": ["n1"], "asks": false},
+    {"name": "a cover proposal for an image another node shows too", "nodes": [{"id": "n1", "image": "/api/outputs/a.png"}, {"id": "n2", "image": "/api/outputs/a.png"}], "covers": [{"to": "/api/outputs/a.png"}], "delete": ["n1"], "asks": false},
+    {"name": "both nodes that show the proposed image", "nodes": [{"id": "n1", "image": "/api/outputs/a.png"}, {"id": "n2", "image": "/api/outputs/a.png"}, {"id": "n3", "image": "/api/outputs/b.png"}], "covers": [{"to": "/api/outputs/a.png"}], "delete": ["n1", "n2"], "asks": true},
+    {"name": "back to automatic, against a pin on the node's image", "nodes": [{"id": "n1", "image": "/api/outputs/a.png"}, {"id": "n2", "image": "/api/outputs/b.png"}], "coverPin": "/api/outputs/a.png", "covers": [{"to": null}], "delete": ["n1"], "asks": true},
+    {"name": "back to automatic, against a pin on another node's image", "nodes": [{"id": "n1", "image": "/api/outputs/a.png"}, {"id": "n2", "image": "/api/outputs/b.png"}], "coverPin": "/api/outputs/b.png", "covers": [{"to": null}], "delete": ["n1"], "asks": false},
+    {"name": "two nodes, one with a pin", "nodes": [{"id": "n1"}, {"id": "n2"}], "pins": [{"on": "n2", "status": "open"}], "delete": ["n1", "n2"], "asks": true}
+  ]
+}

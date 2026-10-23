@@ -1,6 +1,6 @@
 import { FailureLines } from '../failure/FailureLines';
 import { ErrorDetails } from '../failure/ErrorDetails';
-import { nodeErrorCopy } from '../../lib/nodeErrorCopy';
+import { nodeErrorCopy, type NodeErrorSurface } from '../../lib/nodeErrorCopy';
 import type { NodeData } from '../../types';
 
 interface NodeErrorProps {
@@ -13,7 +13,10 @@ interface NodeErrorProps {
   providerText?: boolean;
   /** The provider the run called (round 3f): GM's general line names it. */
   provider?: string;
-  /** The surface's heading, when it isn't "Couldn't run the node." (the Cinema shot panel). */
+  /** Where it shows: "shot" on the Cinema shot panel, whose heading and
+   * general line say "the shot" (rounds 3f and 3g). */
+  surface?: NodeErrorSurface;
+  /** A heading other than the surface's own. */
   heading?: string;
   raw?: string;
   /** Classes for the outer block (Create Studio's result card has its own). */
@@ -30,8 +33,8 @@ interface NodeErrorProps {
  * no category and shows as it is. Safety/moderation blocks keep their calmer
  * treatment.
  */
-export function NodeError({ category, friendly, person, providerText, provider, heading, raw, className = 'model-node__error' }: NodeErrorProps) {
-  const copy = nodeErrorCopy({ raw, category, friendly, person, providerText, provider, heading });
+export function NodeError({ category, friendly, person, providerText, provider, surface, heading, raw, className = 'model-node__error' }: NodeErrorProps) {
+  const copy = nodeErrorCopy({ raw, category, friendly, person, providerText, provider, surface, heading });
   const blocked = category === 'blocked' && !person;
   const modifier = `${className.split(' ').at(-1)}--blocked`;
   return (

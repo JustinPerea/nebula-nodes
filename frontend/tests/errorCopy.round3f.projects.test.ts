@@ -95,6 +95,7 @@ describe('the provider-readiness line', () => {
   it('an answered failure is not "isn\'t answering"', async () => {
     fetch.mockResolvedValueOnce(json(503, {}));
     await useProviderReadinessStore.getState().checkConnections();
-    expect(useProviderReadinessStore.getState().error).toBe("Couldn't check the connections. Nebula didn't respond. Try again.");
+    // Round 3g (GM): ""Nebula didn't respond" is wrong when something did answer."
+    expect(useProviderReadinessStore.getState().error).toBe("Couldn't check the connections. Try again, or reload if it keeps happening.");
   });
 });

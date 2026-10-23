@@ -11,7 +11,6 @@ import type { CinemaLook, CinemaPalette } from '../../lib/cinemaArtDirection';
 import type { CinemaSceneSpec, CinemaShot } from '../../types';
 import { shortLine } from '../../lib/errorCopy';
 import { NodeError } from '../nodes/NodeError';
-import { GENERATE_SHOT_HEADING } from '../../lib/nodeErrorCopy';
 
 interface CinemaShotPanelProps {
   cinemaNodeId: string;
@@ -130,7 +129,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
             <NodeError className="cinema-shot-panel__error" raw={shot.output.errorRaw ?? shot.output.error}
               category={shot.output.errorCategory} friendly={shot.output.errorFriendly}
               person={shot.output.errorPerson} providerText={shot.output.errorProviderText}
-              provider={shot.output.errorProvider} heading={GENERATE_SHOT_HEADING} />
+              provider={shot.output.errorProvider} surface="shot" />
           )}
         </div>
 

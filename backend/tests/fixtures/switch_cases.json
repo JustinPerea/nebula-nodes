@@ -10,7 +10,7 @@
       "click": "fal",
       "switcher": {
         "before": { "chip": "Auto · BFL", "blocked": false, "alternatives": [] },
-        "chip": "fal", "blocked": false, "alternatives": [],
+        "chip": "fal.ai", "blocked": false, "alternatives": [],
         "notes": ["1.5k isn't on fal.ai: set to 2k"]
       },
       "writes": { "_provider": "fal", "resolution": "2k" },
@@ -47,7 +47,7 @@
       "click": "alternative:openrouter",
       "switcher": {
         "before": { "chip": "Auto · fal", "blocked": true, "alternatives": ["openrouter"] },
-        "chip": "OR", "blocked": false, "alternatives": [], "notes": []
+        "chip": "OpenRouter", "blocked": false, "alternatives": [], "notes": []
       },
       "writes": { "_provider": "openrouter" },
       "run": {
@@ -69,7 +69,7 @@
       "wired": {},
       "click": "auto",
       "switcher": {
-        "before": { "chip": "Rep", "blocked": false, "alternatives": [] },
+        "before": { "chip": "Replicate", "blocked": false, "alternatives": [] },
         "chip": "Auto · BFL", "blocked": false, "alternatives": [], "notes": []
       },
       "writes": { "_provider": "auto" },
@@ -92,7 +92,7 @@
       "click": "replicate",
       "switcher": {
         "before": { "chip": "Auto · BFL", "blocked": false, "alternatives": [] },
-        "chip": "Rep", "blocked": false, "alternatives": [], "notes": []
+        "chip": "Replicate", "blocked": false, "alternatives": [], "notes": []
       },
       "writes": { "_provider": "replicate" },
       "run": {
@@ -156,8 +156,8 @@
       "wired": { "keyframes": ["https://e.com/k.png"] },
       "click": null,
       "switcher": {
-        "before": { "chip": "OR", "blocked": true, "alternatives": ["fal"] },
-        "chip": "OR", "blocked": true, "alternatives": ["fal"], "notes": []
+        "before": { "chip": "OpenRouter", "blocked": true, "alternatives": ["fal"] },
+        "chip": "OpenRouter", "blocked": true, "alternatives": ["fal"], "notes": []
       },
       "writes": {},
       "run": { "route": null, "refused": "can't run on OpenRouter" }
@@ -170,8 +170,8 @@
       "wired": { "keyframes": ["https://e.com/k.png"] },
       "click": "alternative:fal",
       "switcher": {
-        "before": { "chip": "OR", "blocked": true, "alternatives": ["fal"] },
-        "chip": "fal", "blocked": false, "alternatives": [], "notes": []
+        "before": { "chip": "OpenRouter", "blocked": true, "alternatives": ["fal"] },
+        "chip": "fal.ai", "blocked": false, "alternatives": [], "notes": []
       },
       "writes": { "_provider": "fal" },
       "run": {
@@ -194,7 +194,7 @@
       "wired": {},
       "click": "alternative:krea",
       "switcher": {
-        "before": { "chip": "fal", "blocked": true, "alternatives": ["krea"] },
+        "before": { "chip": "fal.ai", "blocked": true, "alternatives": ["krea"] },
         "chip": "Krea", "blocked": false, "alternatives": [], "notes": []
       },
       "writes": { "_provider": "krea", "_kreaAuth": "api-token" },
@@ -216,7 +216,7 @@
       "click": "fal",
       "switcher": {
         "before": { "chip": "Krea plan", "blocked": false, "alternatives": [] },
-        "chip": "fal", "blocked": false, "alternatives": [], "notes": []
+        "chip": "fal.ai", "blocked": false, "alternatives": [], "notes": []
       },
       "writes": { "_provider": "fal", "_kreaAuth": "api-token" },
       "run": {
@@ -237,7 +237,7 @@
       "click": "fal",
       "switcher": {
         "before": { "chip": "Auto · BFL", "blocked": false, "alternatives": [] },
-        "chip": "fal", "blocked": false, "alternatives": [], "notes": ["1.5K isn't on fal.ai: set to 2K"]
+        "chip": "fal.ai", "blocked": false, "alternatives": [], "notes": ["1.5K isn't on fal.ai: set to 2K"]
       },
       "writes": { "_provider": "fal", "resolution": "2k" },
       "run": {
@@ -315,8 +315,8 @@
       "wired": { "keyframes": ["https://e.com/a.png"] },
       "click": null,
       "switcher": {
-        "before": { "chip": "OR", "blocked": true, "alternatives": ["fal"] },
-        "chip": "OR", "blocked": true, "alternatives": ["fal"], "notes": []
+        "before": { "chip": "OpenRouter", "blocked": true, "alternatives": ["fal"] },
+        "chip": "OpenRouter", "blocked": true, "alternatives": ["fal"], "notes": []
       },
       "writes": {},
       "run": { "route": null, "refused": "can't run on OpenRouter" }
@@ -383,7 +383,7 @@
       "click": "bfl",
       "switcher": {
         "before": {
-          "chip": "fal",
+          "chip": "fal.ai",
           "blocked": false,
           "alternatives": []
         },
@@ -472,7 +472,7 @@
             "fal"
           ]
         },
-        "chip": "fal",
+        "chip": "fal.ai",
         "blocked": false,
         "alternatives": [],
         "notes": []
@@ -517,7 +517,7 @@
           "blocked": false,
           "alternatives": []
         },
-        "chip": "OR",
+        "chip": "OpenRouter",
         "blocked": false,
         "alternatives": [],
         "notes": [
@@ -573,7 +573,7 @@
           "blocked": false,
           "alternatives": []
         },
-        "chip": "fal",
+        "chip": "fal.ai",
         "blocked": false,
         "alternatives": [],
         "notes": [
@@ -618,11 +618,11 @@
       "click": "edit:model=\"klein-9b\"",
       "switcher": {
         "before": {
-          "chip": "fal",
+          "chip": "fal.ai",
           "blocked": false,
           "alternatives": []
         },
-        "chip": "fal",
+        "chip": "fal.ai",
         "blocked": false,
         "alternatives": [],
         "notes": [
@@ -668,11 +668,11 @@
       "click": "edit:model=\"klein-9b\"",
       "switcher": {
         "before": {
-          "chip": "fal",
+          "chip": "fal.ai",
           "blocked": false,
           "alternatives": []
         },
-        "chip": "fal",
+        "chip": "fal.ai",
         "blocked": false,
         "alternatives": [],
         "notes": [
@@ -748,7 +748,7 @@
           "blocked": true,
           "alternatives": []
         },
-        "chip": "Auto · fal",
+        "chip": "Auto · fal.ai",
         "blocked": false,
         "alternatives": [],
         "notes": []

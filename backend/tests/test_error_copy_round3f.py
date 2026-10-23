@@ -89,8 +89,38 @@ _BARE_LABEL = re.compile(r"\b(?:[Ss]et|[Cc]lear|offer|fewer|[Ll]ower|[Rr]aise|[T
                          # "the node's Tags field": a label by name, not in quotes. A port
                          # ("the node's Prompt input") is an input, not a field.
                          r"|\b[Tt]he node's (?!Model field)(?:" + _LABELS + r")\b(?! input| output)"
+                         # "in the Palette field" (round 3g review): a field named bare, the node's or not.
+                         r"|\bthe (?:" + _LABELS + r") field\b"
                          # A label filled in from a table ("Set the node's {} to"), never quoted.
                          r"|\b[Ss]et the node's \{\}")
+
+
+def _port_labels() -> list[str]:
+    """Every port label a node shows, input or output, exactly as it shows it."""
+    definitions = json.loads((BACKEND / "data" / "node_definitions.json").read_text())
+    return sorted({str(port.get("label") or "").strip() for definition in definitions.values()
+                   for port in [*(definition.get("inputPorts") or []), *(definition.get("outputPorts") or []),
+                                *(definition.get("displayOutputs") or [])]} - {""}, key=len, reverse=True)
+
+
+_PORTS = "|".join(re.escape(label) for label in _port_labels())
+# Round 3g (GM): "anything a person reads as a label on the node goes in
+# quotes, field or port." A port named by its label, bare.
+_BARE_PORT = re.compile(
+    # "the node's Prompt input", "Krea 2's Moodboard input", "this node's Image input"
+    r"\b(?:" + _PORTS + r")\s+(?:input|output|port)s?\b"
+    # "Connect the audio track to Audio" ("save to Krea Files" names where a
+    # node saves, not a port)
+    r"|\b(?:[Cc]onnect|[Dd]isconnect)\b[^.]*?(?<!save )\b(?:to|into)\s+(?:the\s+)?(?:node's\s+)?(?:" + _PORTS + r")\b"
+    # "Disconnect End image"
+    r"|\b[Dd]isconnect\s+(?:the\s+)?(?:node's\s+)?(?:" + _PORTS + r")\b"
+    # a label filled in at run time: "the node's {} input"
+    r"|\{\}\s+(?:input|output|port)s?\b")
+
+
+def port_breaks(line: str) -> bool:
+    """Whether `line` names a port by its label without quotes (round 3g)."""
+    return bool(_BARE_PORT.search(_QUOTED.sub("“”", _URL.sub("", line.strip()))))
 
 
 def rule_breaks(line: str, *, ends_in_a_sentence: bool | None = None) -> list[str]:
@@ -113,11 +143,14 @@ def rule_breaks(line: str, *, ends_in_a_sentence: bool | None = None) -> list[st
         broken.append("Vertex without AI")
     if _BARE_LABEL.search(plain):
         broken.append("a field label not in quotes")
+    if port_breaks(text):
+        broken.append("a port label not in quotes")
     return broken
 
 
 def test_the_rules_check_catches_each_shape_and_lets_gms_lines_through() -> None:
-    assert rule_breaks("Prompt input is required") == ["no final period"]
+    # Round 3g: "Prompt input" names a port by its label, bare, too.
+    assert rule_breaks("Prompt input is required") == ["no final period", "a port label not in quotes"]
     assert "an em dash or a semicolon" in rule_breaks("No mask painted yet — open the Mask Painter node.")
     assert "an em dash or a semicolon" in rule_breaks("It can't be found; it may be gone.")
     assert "a parenthesis" in rule_breaks("Turn off HD Texture (4K) or pick another model.")
@@ -144,7 +177,12 @@ def test_the_rules_check_catches_each_shape_and_lets_gms_lines_through() -> None
     assert "a field label not in quotes" in rule_breaks("Set the node's {} to a number from 0 to {}.")
     assert "a field label not in quotes" in rule_breaks("Set the node's Seed to a whole number from 0 to 9.")
     assert "a field label not in quotes" in rule_breaks("The node's Tags field takes up to 10 tags.")
+    # Round 3g review: "in the Palette field" names a field bare too.
+    assert "a field label not in quotes" in rule_breaks("Add hex swatches in the Palette field, then run the node again.")
     assert "a field label not in quotes" not in rule_breaks("The wire into the node's Prompt input brings something.")
+    # Round 3g: a port is quoted too.
+    assert "a port label not in quotes" in rule_breaks("The wire into the node's Prompt input brings something.")
+    assert "a port label not in quotes" not in rule_breaks("The wire into “Prompt” brings something it can't take.")
     assert "a field label not in quotes" not in rule_breaks("Set “Duration” to 10 or less.")
     assert "a field label not in quotes" not in rule_breaks(
         "xAI edits videos only on Grok Imagine. Pick it in the node's Model field, or disconnect the video to edit.")

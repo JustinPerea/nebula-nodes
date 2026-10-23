@@ -120,7 +120,8 @@ describe('the Cinema shot panel reads a failed shot like the node card', () => {
       errorFriendly: RAW.slice(0, 40), errorRaw: RAW });
     const error = container.querySelector('.cinema-shot-panel__error')!;
     expect(heading(error)).toBe(SHOT_HEADING);
-    expect(reason(error)).toBe(GENERAL);
+    // Round 3g (GM): the shot panel's own wording.
+    expect(reason(error)).toBe('Generate the shot again. If it keeps failing, open Details.');
     const details = error.querySelector('details')!;
     expect(details.open).toBe(false);
     expect(details.textContent).toContain('req_123');
