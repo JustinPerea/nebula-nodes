@@ -12,7 +12,7 @@ export const UNDO_NOTICE_MS = NOTICE_HOLD_MS;
  * with Redo after Cmd-Z. The person's own delete says "Deleted the node."
  * with Undo, and its undo "Restored the node." with Redo (GM, 2026-10-23). The button acts only while that edit is next in
  * line on the undo (or redo) stack, so it never undoes something else.
- * Rendered in the proposal bar's panel so the two stack instead of overlap.
+ * Rendered in the app's notice region (NoticeRegion), above every panel.
  *
  * Round 3f (GM): "Every error alert becomes a canvas notice (non-blocking,
  * dismissable)". A notice with tone 'error' (graphStore.notify) is

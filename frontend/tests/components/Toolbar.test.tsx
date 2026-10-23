@@ -106,6 +106,29 @@ describe('Canvas toolbar hierarchy', () => {
     vi.useRealTimers();
   });
 
+  // GM - Design, 2026-10-23: notices sit "just above the bottom bar", and the
+  // Inspector clamps "so it stays above the bottom bar". Both read where the
+  // bar really starts, measured here, not a fixed number.
+  it('publishes where the bar starts, its open Canvas actions panel included', () => {
+    vi.stubGlobal('innerHeight', 800);
+    const root = document.documentElement;
+    const { unmount } = render(<Toolbar />);
+    const bar = screen.getByRole('group', { name: 'Canvas controls' });
+    expect(bar).toHaveAttribute('data-bottom-bar');
+    bar.getBoundingClientRect = () => new DOMRect(395, 729, 490, 47);
+    fireEvent(window, new Event('resize'));
+    expect(root.style.getPropertyValue('--bottom-bar-clearance')).toBe('71px');
+    const { panel } = openActions();
+    // Marked as the panel: it covers only its own width (lib/bottomBar.ts).
+    expect(panel).toHaveAttribute('data-bottom-bar', 'panel');
+    panel.getBoundingClientRect = () => new DOMRect(485, 480, 310, 237);
+    fireEvent(window, new Event('resize'));
+    expect(root.style.getPropertyValue('--bottom-bar-clearance')).toBe('320px');
+    unmount();
+    expect(root.style.getPropertyValue('--bottom-bar-clearance')).toBe('');
+    vi.unstubAllGlobals();
+  });
+
   it('keeps zoom on the bar: steps, a live percentage that resets to 100%, and fit', () => {
     mocks.flow.transform = [0, 0, 0.87];
     render(<Toolbar />);

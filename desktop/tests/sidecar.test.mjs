@@ -1445,8 +1445,11 @@ describe('startSidecar — person token', () => {
       assert.equal((await put({ 'X-Nebula-Person': token })).status, 200);
       // The stdin keys arrived: the provider key is configured, and the
       // desktop-mode Krea vault opened (without a key it reports "error").
-      const settings = await (await fetch(`${handle.apiBaseUrl}/api/settings`)).json();
-      assert.equal(settings.apiKeys.FAL_KEY, '***' + falKey.slice(-4));
+      // Only the person's token reads a key's ending (Q55 a); any other
+      // caller learns only that it is set.
+      const settingsFor = async (headers) => (await (await fetch(`${handle.apiBaseUrl}/api/settings`, { headers })).json()).apiKeys;
+      assert.equal((await settingsFor({ 'X-Nebula-Person': token })).FAL_KEY, '***' + falKey.slice(-4));
+      assert.equal((await settingsFor({})).FAL_KEY, '***');
       const krea = await (await fetch(`${handle.apiBaseUrl}/api/krea/connection`)).json();
       assert.equal(krea.status, 'disconnected');
       // ...and none of the secrets is in the backend's argv or initial environment.

@@ -312,6 +312,12 @@ body.app-slava-restraint {
   --sr-layer-popover: 40;
   --sr-layer-modal: 60;
   --sr-layer-modal-control: 61;
+  /* The app's notices (NoticeRegion): above every panel, the Agent log, the
+   * chat, popovers and the Studios with their docks (Settings over a Studio is
+   * 56), below a modal that blocks the app (GM - Design, 2026-10-23: "one
+   * app-level region above every panel ... A notice with an action never sits
+   * under anything"). */
+  --sr-layer-notice: 58;
   --sr-layer-node-preview: 1;
   --sr-layer-node-header: 2;
   --sr-layer-node-floating: 3;
@@ -632,6 +638,10 @@ body.app-slava-restraint .node-inspector-popover__header {
 body.app-slava-restraint .node-inspector-popover__body {
   padding: var(--sr-space-3);
   scrollbar-color: var(--sr-node-scrollbar-color) transparent;
+}
+
+body.app-slava-restraint .node-inspector-popover__foot {
+  padding: 0 var(--sr-space-3) var(--sr-space-3);
 }
 
 body.app-slava-restraint .node-inspector-popover__pin--active {

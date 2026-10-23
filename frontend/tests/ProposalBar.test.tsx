@@ -30,6 +30,7 @@ vi.mock('../src/store/graphStore', () => {
 });
 
 const { ProposalBar } = await import('../src/components/canvas/ProposalBar');
+const { DeferredRunNotice } = await import('../src/components/canvas/DeferredRunNotice');
 const { useCanvasProposalsStore } = await import('../src/store/canvasProposalsStore');
 const { useUIStore } = await import('../src/store/uiStore');
 
@@ -72,6 +73,23 @@ describe('ProposalBar', () => {
   it('renders nothing without proposals', () => {
     const { container } = render(<ProposalBar />);
     expect(container.innerHTML).toBe('');
+  });
+
+  // GM - Design, 2026-10-23: "Proposal-bar notices and every 3g canvas notice"
+  // go to the app-level notice region (tests/noticeRegion.test.tsx), so the
+  // bar's panel holds only the bar.
+  it('leaves its notices to the app\'s notice region', () => {
+    const state = graph.state as typeof graph.state & { undoNotice?: unknown };
+    state.undoNotice = { id: 1, text: 'Imported. One note.', offer: null, tone: 'info' };
+    useCanvasProposalsStore.setState({ deferredRun: { agentName: 'Codex', nodeIds: ['n7'] } as never });
+    try {
+      const { container } = render(<ProposalBar />);
+      expect(container.innerHTML).toBe('');
+      expect(screen.queryByText(/Run them when the current run finishes/)).toBeNull();
+      expect(screen.queryByText('Imported. One note.')).toBeNull();
+    } finally {
+      delete state.undoNotice;
+    }
   });
 
   it('shows who, what and the paid run label', () => {
@@ -138,7 +156,8 @@ describe('ProposalBar', () => {
     open(proposal('p_a'));
     graph.state.isExecuting = true;
     net.apiFetch.mockResolvedValue(respond(200, { idMap: {}, runNodeIds: ['n7'], nodes: [], edges: [], updatedNodes: [] }));
-    render(<ProposalBar />);
+    // The offer is a notice in the app's notice region (NoticeRegion), beside the bar.
+    render(<><ProposalBar /><DeferredRunNotice /></>);
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Accept & run (1 paid)' }));
     });

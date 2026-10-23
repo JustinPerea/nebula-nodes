@@ -24,6 +24,7 @@ import { definitionSnap, definitionStartShapeNote, sizeNote } from '../../lib/ma
 import { paramDefaultFor, snapParamDefaults, type DefaultSnapNote } from '../../lib/paramDefaults';
 import { nodeWiredCounts, nodeWiredPorts } from '../../lib/runScope';
 import { ProviderSwitcher } from '../nodes/ProviderSwitcher';
+import { InspectorFoot } from './InspectorFoot';
 import { useProviderNoteStore } from '../../store/providerNoteStore';
 import { snapHidden } from '../../lib/providerSwitch';
 import { skippedLabel } from '../../lib/gating';
@@ -1248,7 +1249,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
           )}
         </div>
 
-        {/* Actions */}
+        {/* Actions: in the floating Inspector's foot, outside its scrolling
+            body, so the row is always whole (GM - Design, 2026-10-23). */}
+        <InspectorFoot>
         <div className="inspector__section inspector__actions">
           <button
             type="button"
@@ -1300,6 +1303,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
             <span>Delete</span>
           </button>
         </div>
+        </InspectorFoot>
       </div>
   );
 

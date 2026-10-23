@@ -5834,6 +5834,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       // The clipboard stays, so nodes copy across projects; the bumped load
       // makes it paste with its copy-time params (see CanvasClipboard).
       undoStack: [], redoStack: [], backendFreshStartPending: false,
+      // The old project's notice (its edit's Undo, its error) is about that
+      // canvas; a notice for the new one is set after this load.
+      undoNotice: null,
       providerRecoveryWarning: null, providerRecoveries: [], providerStartAmbiguities: [],
       uncertainWorldLabsRunId: null,
     });

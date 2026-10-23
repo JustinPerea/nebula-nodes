@@ -5,8 +5,13 @@
   position: fixed;
   z-index: 60;
   left: 50%;
-  /* Above the canvas toolbar, so Run stays reachable. */
-  bottom: 96px;
+  /* Above the canvas toolbar, so Run stays reachable, and above the app's
+     notices (NoticeRegion writes how tall they are, with their gap, as
+     --notice-stack-h): it is on raw z 60, over the notice layer, so at a fixed
+     96px it sat on a notice's buttons (review, 2026-10-23; GM - Design: "A
+     notice with an action never sits under anything"). With no bar measured
+     and no notice it keeps its old 96px. */
+  bottom: calc(var(--bottom-bar-clearance, 88px) + var(--sr-space-2, 8px) + var(--notice-stack-h, 0px));
   display: flex;
   align-items: center;
   gap: 4px;
@@ -21,6 +26,8 @@
   box-shadow: 0 12px 32px rgb(0 0 0 / 0.35);
   transform: translateX(-50%);
   animation: project-switch-toast-in 420ms var(--project-switch-spring) both;
+  /* Moves with a notice coming or going under it, and the bar growing. */
+  transition: bottom 420ms var(--project-switch-spring);
 }
 .project-switch-toast__text { min-width: 0; margin-right: 8px; }
 .project-switch-toast__back {
@@ -60,7 +67,7 @@
   to { opacity: 1; transform: translate(-50%, 0) scale(1); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .project-switch-toast { animation: none; }
+  .project-switch-toast { animation: none; transition: none; }
 }
 /* Over the Commons (a switch held behind unsaved labels, commons-leave) it
  * stays clear of the labeling panels' form column, where Save is (at most
