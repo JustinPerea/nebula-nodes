@@ -21,8 +21,8 @@ describe('enhancePrompt errors', () => {
       "Couldn't enhance the prompt. Try again, or reload if it keeps happening.");
   });
 
-  it('shows the person gate refusal', async () => {
+  it("shows the person gate refusal as GM's line (Q116 a: every person-only refusal)", async () => {
     apiFetch.mockResolvedValue(json({ detail: 'Only the person can do this', code: 'person_required' }, 403));
-    await expect(enhancePrompt('x')).rejects.toThrow('Only the person can do this');
+    await expect(enhancePrompt('x')).rejects.toThrow("This change needs your OK, and this tab isn't connected as you. Open the link Nebula printed when it started, then try again.");
   });
 });

@@ -23,6 +23,8 @@
  * site (warnFailure), lost connections aren't.
  */
 
+import { inDesktopShell, personUnavailableReason } from './personSession';
+
 /** No answer at all: the connection dropped, or the backend isn't there.
  * Round 3f (GM): ""Check your connection" sends people to their Wi-Fi, but
  * the backend is on this computer." apiFetch only ever calls Nebula's own
@@ -41,6 +43,41 @@ export const REFUSED_FALLBACK_COPY = "Try again, or reload if it keeps happening
 export const ACCESS_LOST_COPY = "You don't have access to this anymore. Reload to sign in again.";
 /** 413 with no reason (GM). */
 export const TOO_LARGE_COPY = "That's too large to save.";
+
+/** The person gate's code for a refusal only the person may get past: this
+ * tab isn't connected as the person (no person token, or one from before
+ * Nebula restarted), which reconnecting fixes (backend services/person_gate.py). */
+export const PERSON_REQUIRED_CODE = 'person_required';
+/** GM - Design, 2026-10-23 (Q116 a), verbatim, for every refusal that says
+ * PERSON_REQUIRED_CODE: "Use it for every person-only refusal, not just Krea
+ * billing. The agents' text stays behind Details." Classified by the answer's
+ * `code`, never its words. Round 2 (GM): "line 3 shouldn't depend on the
+ * notice being there, since it can be dismissed", so it says the fix itself.
+ * A browser tab's line; the desktop app says PERSON_REQUIRED_APP_COPY. */
+export const PERSON_REQUIRED_COPY = "This change needs your OK, and this tab isn't connected as you. "
+  + 'Open the link Nebula printed when it started, then try again.';
+/** GM - Design, 2026-10-23 (round 2), verbatim: line 3 in the desktop app. A
+ * quit and reopen gives the app a fresh backend and a fresh person token. */
+export const PERSON_REQUIRED_APP_COPY = "This change needs your OK, and this window isn't connected as you. "
+  + 'Quit Nebula and open it again, then try again.';
+
+/** GM - Design, 2026-10-23 (round 3), verbatim: line 3 in the app's two
+ * developer setups (a debug port, the dev renderer), where the banner already
+ * gives the real fix. */
+export const PERSON_REQUIRED_DEV_COPY = "This change needs your OK, and this window isn't connected as you. "
+  + 'The notice below says why.';
+
+/** Line 3 for where this page runs: `desktop` is personSession's
+ * inDesktopShell() (the preload bridge), the flag the rest of the error copy
+ * reads (commonsSessionCopy); `reason` is the shell's own, when it gave one. */
+export function personRequiredCopy(desktop: boolean = inDesktopShell(),
+  reason: string = personUnavailableReason()): string {
+  if (!desktop) return PERSON_REQUIRED_COPY;
+  return reason === 'debug-port' || reason === 'dev-renderer' ? PERSON_REQUIRED_DEV_COPY : PERSON_REQUIRED_APP_COPY;
+}
+
+const isPersonRequiredCopy = (line: string) =>
+  line === PERSON_REQUIRED_COPY || line === PERSON_REQUIRED_APP_COPY || line === PERSON_REQUIRED_DEV_COPY;
 
 /** GM's WRAP rule (round 2): "when the surface already has a retry button,
  * the reason line drops its 'try again'. The button is the retry." Only
@@ -128,7 +165,10 @@ export class ConnectionLostError extends TypeError {
 /** A request that was answered with a failure. The heading is the caller's
  * (every request names its action); the reason is copy for the status
  * (copyForStatus) unless the caller wrote one; `status`, the raw `detail`
- * and `cause` stay for debugging and the console. */
+ * and `cause` stay for debugging and the console. A person-only refusal
+ * (`code` PERSON_REQUIRED_CODE) always reads GM's line 3 (personRequiredCopy),
+ * whatever reason the caller passed: its `detail` is written for agents, and
+ * failureDetails hands it to a Details toggle. */
 export class RequestFailedError extends Error {
   readonly status: number;
   readonly detail: unknown;
@@ -138,10 +178,20 @@ export class RequestFailedError extends Error {
    * additive `storage: "full"` beside `detail`, read from the answer, never
    * from its words. The one cause a person can fix (GM). */
   readonly storageFull: boolean;
+  /** Which of the project store's limits a 413 hit (the backend's additive
+   * `limit` beside `detail`): 'projects' (how many there may be) or
+   * 'storage' (how big the catalog may grow); null when it was the request
+   * itself that was too large. Read from the answer, never its words (Q116 a). */
+  readonly storageLimit: StorageLimit | null;
+  /** The answer's structured reason beside `detail`, when it has one (the
+   * person gate's `code`: 'person_required' when this tab isn't connected as
+   * the person, which reconnecting fixes). Null otherwise. */
+  readonly code: string | null;
 
   constructor(heading: string, status: number,
-    options: { detail?: unknown; reason?: string; cause?: unknown; storageFull?: boolean } = {}) {
-    const reason = options.reason ?? copyForStatus(status, options.detail);
+    options: { detail?: unknown; reason?: string; cause?: unknown; storageFull?: boolean;
+      storageLimit?: StorageLimit | null; code?: string | null } = {}) {
+    const reason = copyForAnswer(status, options.detail, options.code ?? null, options.reason);
     super(oneLine({ heading, reason }), 'cause' in options ? { cause: options.cause } : undefined);
     this.name = 'RequestFailedError';
     this.status = status;
@@ -149,12 +199,17 @@ export class RequestFailedError extends Error {
     this.heading = heading;
     this.reason = reason;
     this.storageFull = options.storageFull === true;
+    this.storageLimit = options.storageLimit ?? null;
+    this.code = options.code ?? null;
   }
 
   get kind(): FailureKind {
     return failureKind(this.status);
   }
 }
+
+/** The project store's limits a 413 can name (backend main._storage_error_body). */
+export type StorageLimit = 'projects' | 'storage';
 
 /** A refusal written in the browser, where no request was made (a check
  * the store makes before sending: a run still going, a record that's gone).
@@ -222,6 +277,28 @@ export function copyForStatus(status: number, detail: unknown): string {
   return detailText(detail) || refusedCopy(status);
 }
 
+/** The line for an answer read by hand (a caller with no RequestFailedError):
+ * classified by the answer's `code` first, so a person-only refusal says GM's
+ * line 3 (personRequiredCopy) whatever its words (Q116 a), and otherwise as
+ * copyForStatus says, or the caller's own `reason`. A person-only refusal
+ * is a 4xx: a 5xx or no answer keeps GM's line for those. */
+export function copyForAnswer(status: number, detail: unknown, code: string | null, reason?: string): string {
+  if (code === PERSON_REQUIRED_CODE && failureKind(status) === 'refused') return personRequiredCopy();
+  return reason ?? copyForStatus(status, detail);
+}
+
+/** The text a surface keeps behind its collapsed Details toggle
+ * (components/failure/ErrorDetails) under a line that replaced it: a
+ * person-only refusal's own words, written for agents (GM, Q116 a: "The
+ * agents' text stays behind Details."). Null for anything else, and for a
+ * refusal with no words of its own. */
+export function failureDetails(error: unknown): string | null {
+  if (!(error instanceof RequestFailedError) || !isPersonRequiredCopy(error.reason)) return null;
+  if (error.code !== PERSON_REQUIRED_CODE) return null;
+  const text = detailText(error.detail);
+  return text && text !== error.reason ? text : null;
+}
+
 /** The line for a thrown error that isn't a request's answer: the
  * connection line when fetch got no answer, else GM's general line, never
  * the error's own message. */
@@ -234,14 +311,25 @@ export async function readDetail(response: Response): Promise<unknown> {
   return (await readFailureBody(response)).detail;
 }
 
+/** An answer's `detail` and `code` (the person gate's, when it has one), from
+ * one read of its body, for a caller that words the failure itself
+ * (copyForAnswer). */
+export async function readRefusal(response: Response): Promise<{ detail: unknown; code: string | null }> {
+  const { detail, code } = await readFailureBody(response);
+  return { detail, code };
+}
+
 /** An answer's `detail`, and whether it says the disk is full (the backend's
  * storage refusal, main._storage_error_body), from one read of its body. */
-async function readFailureBody(response: Response): Promise<{ detail: unknown; storageFull: boolean }> {
+interface FailureBody { detail: unknown; storageFull: boolean; storageLimit: StorageLimit | null; code: string | null }
+async function readFailureBody(response: Response): Promise<FailureBody> {
   try {
-    const body = await response.json() as { detail?: unknown; storage?: unknown } | null;
-    return { detail: body?.detail, storageFull: body?.storage === 'full' };
+    const body = await response.json() as { detail?: unknown; storage?: unknown; limit?: unknown; code?: unknown } | null;
+    const limit = body?.limit === 'projects' || body?.limit === 'storage' ? body.limit : null;
+    const code = typeof body?.code === 'string' ? body.code : null;
+    return { detail: body?.detail, storageFull: body?.storage === 'full', storageLimit: limit, code };
   } catch {
-    return { detail: undefined, storageFull: false };
+    return { detail: undefined, storageFull: false, storageLimit: null, code: null };
   }
 }
 
@@ -337,8 +425,9 @@ export function resetFailureWarningsForTests(): void {
  * deleted). */
 export async function requestError(heading: string, response: Response,
   options: { detail?: unknown; reason?: string } = {}): Promise<RequestFailedError> {
-  const body = 'detail' in options ? { detail: options.detail, storageFull: false } : await readFailureBody(response);
+  const body: FailureBody = 'detail' in options ? { detail: options.detail, storageFull: false, storageLimit: null, code: null }
+    : await readFailureBody(response);
   warnFailure(heading, response.status, body.detail);
-  return new RequestFailedError(heading, response.status,
-    { detail: body.detail, reason: options.reason, storageFull: body.storageFull });
+  return new RequestFailedError(heading, response.status, { detail: body.detail, reason: options.reason,
+    storageFull: body.storageFull, storageLimit: body.storageLimit, code: body.code });
 }

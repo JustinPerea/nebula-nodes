@@ -203,6 +203,29 @@ describe('backendWebSocketUrl with injected endpoint (VAL-TRANSPORT-005)', () =>
     expect(fetchSpy.mock.calls.flat().some((value) => String(value).includes('connectorSession'))).toBe(false);
   });
 
+  // GM's question (round 2, Q116): can the app's backend answer before the
+  // shell's token lookup lands? No: nothing is sent until it does, so no
+  // refusal can come back while the lookup is pending, and the banner never
+  // reads a half-finished one.
+  it('sends nothing to its sidecar until a slow shell lookup lands, then sends the token', async () => {
+    let answer: (value: unknown) => void = () => {};
+    const token = vi.fn(() => new Promise((resolve) => { answer = resolve; }));
+    const backend = await importWithBridge({ apiBaseUrl: 'http://127.0.0.1:56789',
+      wsBaseUrl: 'ws://127.0.0.1:56789', person: { token } } as unknown as Record<string, string>);
+    fetchSpy.mockResolvedValue({ ok: true, status: 200 });
+    const read = backend.apiFetch('/api/projects');
+    const write = backend.apiFetch('/api/settings', { method: 'PUT', body: '{}' });
+    const hello = backend.personTokenForSocket('ws://127.0.0.1:56789/ws');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(fetchSpy).not.toHaveBeenCalled();
+    answer({ ok: true, token: DESKTOP_TOKEN });
+    await Promise.all([read, write]);
+    await expect(hello).resolves.toBe(DESKTOP_TOKEN);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    for (const [, init] of fetchSpy.mock.calls) expect(new Headers(init.headers).get('X-Nebula-Person')).toBe(DESKTOP_TOKEN);
+    expect(token).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the token out of every socket URL', async () => {
     const token = vi.fn().mockResolvedValue({ ok: true, token: DESKTOP_TOKEN });
     const backend = await importWithBridge({ apiBaseUrl: 'http://127.0.0.1:56789',
@@ -222,7 +245,8 @@ describe('backendWebSocketUrl with injected endpoint (VAL-TRANSPORT-005)', () =>
     expect(new Headers(fetchSpy.mock.calls[0][1].headers).get('X-Nebula-Person')).toBeNull();
     const session = await import('../../src/lib/personSession');
     expect(session.personUnavailableReason()).toBe('debug-port');
-    expect(session.personRequiredMessage()).toMatch(/remote-debugging port/);
+    expect(session.personRequiredMessage()).toBe(
+      'Debug mode: a debugging port is open, so Settings, proposals and chats are off.');
   });
 
   afterEach(() => {

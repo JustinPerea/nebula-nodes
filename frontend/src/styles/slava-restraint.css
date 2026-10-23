@@ -1195,6 +1195,26 @@ body.app-slava-restraint .chat__system--error {
   color: var(--sr-danger);
 }
 
+/* GM, Q116 a: a person-only refusal in the chat: GM's line, the agents' text
+   behind the shared collapsed Details toggle under it. */
+body.app-slava-restraint .chat__system-details summary {
+  width: fit-content;
+  margin-top: 2px;
+  color: var(--sr-ink-light);
+  cursor: pointer;
+}
+body.app-slava-restraint .chat__system-details summary:focus-visible { outline: var(--sr-focus-outline); outline-offset: 2px; }
+body.app-slava-restraint .chat__system-details .error-details__raw {
+  display: block;
+  margin-top: 4px;
+  color: var(--sr-ink-light);
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-label);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
 body.app-slava-restraint .chat__system--success {
   color: var(--sr-success);
 }

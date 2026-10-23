@@ -76,7 +76,10 @@ import {
 } from '../lib/backend';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, waitingOnWorldLabs } from '../lib/worldLabsWaiting';
-import { FailureNotice, REFUSED_FALLBACK_COPY, copyForStatus, failureCopy, failureMessage, readDetail, requestError, warnFailure } from '../lib/errorCopy';
+import {
+  FailureNotice, REFUSED_FALLBACK_COPY, copyForAnswer, failureCopy, failureDetails, failureMessage, readRefusal, requestError,
+  warnFailure,
+} from '../lib/errorCopy';
 import { CANVAS_NOTICE_EVENT, type CanvasNoticeDetail } from '../lib/canvasNotice';
 import { cleanRemovals, deletedNoticeText, lateRestoreText, mergeRemovals, notRestoredText, pinsOnAnotherModel, restoredNoticeText, supersededBy, type RemovalRecord } from '../lib/deleteNotice';
 import { NOTHING_RAN_LINE, OTHER_NODE_LINE, SHOT_NOT_STARTED_LINE, validationReadings, writtenReading, type ValidationReading } from '../lib/validationCopy';
@@ -329,11 +332,17 @@ function markExecutionScopeQueued(
   });
 }
 
+/** `failure`, when given, is the refused start's error: a person-only
+ * refusal (GM, Q116 a) shows GM's line as the card's person line, with the
+ * backend's own words, written for agents, behind the card's Details toggle
+ * (NodeError: `person` over `raw`, `providerText`). */
 function markNodesErrored(
   nodes: Node<NodeData>[],
   nodeIds: Set<string>,
   message: string,
+  failure?: unknown,
 ): Node<NodeData>[] {
+  const hidden = failure === undefined ? null : failureDetails(failure);
   return nodes.map((node) => {
     if (!nodeIds.has(node.id)) return node;
     return {
@@ -341,12 +350,12 @@ function markNodesErrored(
       data: {
         ...node.data,
         state: 'error' as const,
-        error: message,
+        error: hidden ?? message,
         // A line Nebula wrote (a refused start): no older run's reading beside it.
         errorCategory: undefined,
         errorFriendly: undefined,
-        errorPerson: undefined,
-        errorProviderText: undefined,
+        errorPerson: hidden ? failureCopy(failure).reason : undefined,
+        errorProviderText: hidden ? true : undefined,
         errorProvider: undefined,
         progress: undefined,
         streamingText: undefined,
@@ -2483,6 +2492,7 @@ async function executeHistoricalRun(
         state.nodes,
         scopeIds,
         failureMessage(err, "Couldn't start the run."),
+        err,
       ),
       ...ownershipState(),
     }));
@@ -2548,11 +2558,13 @@ function notStartedMessage(heading: string, status: string | undefined): string 
 
 /** The reason line for a refused canvas request (error-copy round 2, GM):
  * the backend's written reason, or GM's line for the status; the status
- * itself goes to the console under `heading`, once per call site. */
+ * itself goes to the console under `heading`, once per call site. A
+ * person-only refusal says GM's line for it, by its code (Q116 a); its own
+ * words, written for agents, go to the console only. */
 async function backendRejectionReason(response: Response, heading: string): Promise<string> {
-  const detail = await readDetail(response);
+  const { detail, code } = await readRefusal(response);
   warnFailure(heading, response.status, detail);
-  return copyForStatus(response.status, detail);
+  return copyForAnswer(response.status, detail, code);
 }
 
 type NodeCreationAttempt = {
@@ -4920,6 +4932,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
           state.nodes,
           new Set(nodesInExecutionScope(state.nodes, state.edges).map((node) => node.id)),
           failureMessage(err, "Couldn't start the run."),
+          err,
         ),
         ...ownershipState(),
       }));
@@ -4996,6 +5009,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
           state.nodes,
           new Set(nodesInExecutionScope(state.nodes, state.edges, nodeId).map((node) => node.id)),
           failureMessage(err, "Couldn't run the node."),
+          err,
         ),
         ...ownershipState(),
       }));
@@ -5226,7 +5240,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       }
       closeCurrentRun(set, { status: 'failed' });
       set((state) => ({
-        nodes: markNodesErrored(state.nodes, idSet, failureMessage(err, "Couldn't start the run.")),
+        nodes: markNodesErrored(state.nodes, idSet, failureMessage(err, "Couldn't start the run."), err),
         ...ownershipState(),
       }));
     }
@@ -5291,7 +5305,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       }
       closeTrackedRun(set, runId, { status: cancellationRequestedRunIds.has(runId) ? 'cancelled' : 'failed' });
       set((state) => ({ nodes: markNodesErrored(state.nodes, idSet,
-        failureMessage(error, "Couldn't start the run.")) }));
+        failureMessage(error, "Couldn't start the run."), error) }));
     }
   },
 

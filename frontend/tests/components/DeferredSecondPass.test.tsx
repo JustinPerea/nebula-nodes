@@ -127,6 +127,19 @@ describe('deferred command palette', () => {
   }, COLD_TEST);
 });
 
+describe('the palette hotkey right after it opens', () => {
+  it('a ⌘K in the same moment as the open closes it, not opens it again', async () => {
+    await DeferredCommandPalette.preload();
+    render(<ReactFlowProvider><CommandPalette /></ReactFlowProvider>);
+    // Both land before React commits the open: the second ⌘K must still read it as open.
+    act(() => {
+      window.dispatchEvent(new CustomEvent('nebula:command-palette-open'));
+      fireEvent.keyDown(document, { key: 'k', metaKey: true });
+    });
+    expect(screen.queryByRole('button', { name: 'Toggle Run History' })).toBeNull();
+  }, COLD_TEST);
+});
+
 describe('deferred chat', () => {
   it('a chat-send that beats the chunk opens the chat and lands in its input', async () => {
     expect(DeferredChatPanel.isLoaded()).toBe(false);
