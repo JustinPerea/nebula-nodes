@@ -38,6 +38,7 @@ import type { WorldNavigationMode, WorldViewerStatus } from './WorldEnvironmentV
 import { InvalidWorldFace, WorldPreviewFace } from './WorldPreviewFace';
 import { safeWorldAsset as safeAsset, worldCaption, worldThumbnail } from '../../lib/worldCard';
 import '../../styles/world-preview.css';
+import { failureMessage } from '../../lib/errorCopy';
 
 const LazyWorldEnvironmentViewer = lazy(() =>
   import('./WorldEnvironmentViewer').then((module) => ({ default: module.WorldEnvironmentViewer })),
@@ -199,7 +200,7 @@ function WorldPreviewComponent({ value, compact = false }: WorldPreviewProps) {
       if (downloadControllerRef.current === controller) setDownloadState(null);
     } catch (error) {
       if (controller.signal.aborted) return;
-      const message = error instanceof Error ? error.message : "Couldn't download the world.";
+      const message = failureMessage(error, "Couldn't download the world.");
       if (downloadControllerRef.current === controller) {
         setDownloadState({ key, status: 'error', message });
       }

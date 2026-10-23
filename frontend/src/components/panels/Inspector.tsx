@@ -29,6 +29,7 @@ import { snapHidden } from '../../lib/providerSwitch';
 import { skippedLabel } from '../../lib/gating';
 import '../../styles/panels.css';
 import '../../styles/mask-painter.css';
+import { failureMessage } from '../../lib/errorCopy';
 
 type InspectorParamDefinition = ParamDefinition | DynamicParamDefinition;
 
@@ -326,8 +327,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        const msg = err instanceof Error ? err.message : String(err);
-        setModelLoadError(msg);
+        setModelLoadError(failureMessage(err, universalProvider === 'openrouter'
+          ? "Couldn't load the OpenRouter models." : "Couldn't load the Nous models."));
         setOpenRouterModels([]);
       })
       .finally(() => {
@@ -551,7 +552,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
             modelsLoading
               ? 'Loading models...'
               : modelLoadError
-                ? 'Could not load models'
+                ? "Couldn't load the models."
                 : 'Search models...'
           }
           value={modelSearch}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { commonsApi } from '../../lib/commonsApi';
+import { failureMessage } from '../../lib/errorCopy';
 
 type Props = {
   path: string;
@@ -24,7 +25,7 @@ export function CommonsMedia({ path, video, alt = '', loading, ...props }: Props
       url = URL.createObjectURL(blob);
       setMedia({ path, url });
     }).catch((error: unknown) => {
-      if (!controller.signal.aborted) setMedia({ path, error: error instanceof Error ? error.message : 'Could not load reference' });
+      if (!controller.signal.aborted) setMedia({ path, error: failureMessage(error, "Couldn't load this reference.") });
     });
     return () => {
       controller.abort();

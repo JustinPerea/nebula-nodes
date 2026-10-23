@@ -7,6 +7,7 @@ from typing import Literal
 
 from services.output import OUTPUT_ROOT
 from services.paper_sources import PaperSources, SourceRefreshError
+from services.paper_copy import PAPER_SOURCE_GONE_LINE, paper_person_line
 from services.paper_transport import PaperError
 
 router = APIRouter(prefix="/api/paper", tags=["paper"])
@@ -25,10 +26,11 @@ class LinkRequest(BaseModel):
 
 def error(exc):
     if isinstance(exc, SourceRefreshError):
-        return HTTPException(409 if exc.state == "missing" else 503, {"message": str(exc), "source": exc.source})
+        return HTTPException(409 if exc.state == "missing" else 503,
+                             {"message": str(exc), "person": paper_person_line(exc), "source": exc.source})
     if isinstance(exc, KeyError):
-        return HTTPException(404, "Paper source or snapshot not found")
-    return HTTPException(503, {"message": str(exc)})
+        return HTTPException(404, {"message": "Paper source or snapshot not found", "person": PAPER_SOURCE_GONE_LINE})
+    return HTTPException(503, {"message": str(exc), "person": paper_person_line(exc)})
 
 
 @router.get("/files")

@@ -3,6 +3,7 @@ import {
   getKreaConnection, connectKrea, checkKreaConnection, disconnectKrea, isKreaAuthorizationUrl, type KreaConnectionState,
 } from '../../../lib/kreaConnection';
 import { useUIStore } from '../../../store/uiStore';
+import { failureMessage } from '../../../lib/errorCopy';
 
 /**
  * Krea sign-in state and actions. Lives above the row because the row moves
@@ -51,7 +52,7 @@ export function useKreaConnection() {
     setError(null);
     setLaunchError(null);
     try { setConnection(await action()); }
-    catch (value) { setError(value instanceof Error ? value.message : "Couldn't update the Krea connection."); }
+    catch (value) { setError(failureMessage(value, "Couldn't update the Krea connection.")); }
     finally { setBusy(false); }
   }
 

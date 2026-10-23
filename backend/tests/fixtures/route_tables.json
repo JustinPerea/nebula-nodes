@@ -48,6 +48,92 @@
   "typesafe": "TypeSafe",
   "utility": "Local tools"
  },
+ "keyNames": {
+  "ANTHROPIC_API_KEY": [
+   "Anthropic",
+   "API key"
+  ],
+  "BFL_API_KEY": [
+   "Black Forest Labs",
+   "API key"
+  ],
+  "BYTEPLUS_API_KEY": [
+   "BytePlus",
+   "API key"
+  ],
+  "ELEVENLABS_API_KEY": [
+   "ElevenLabs",
+   "API key"
+  ],
+  "FAL_KEY": [
+   "fal.ai",
+   "API key"
+  ],
+  "GOOGLE_API_KEY": [
+   "Gemini",
+   "API key"
+  ],
+  "GOOGLE_VERTEX_CREDENTIALS": [
+   "Google Vertex AI",
+   "credentials"
+  ],
+  "HIGGSFIELD_API_KEY": [
+   "Higgsfield",
+   "API key"
+  ],
+  "IDEOGRAM_API_KEY": [
+   "Ideogram",
+   "API key"
+  ],
+  "KREA_API_TOKEN": [
+   "Krea",
+   "API token"
+  ],
+  "KREA_USAGE_KEY": [
+   "Krea",
+   "usage key"
+  ],
+  "MESHY_API_KEY": [
+   "Meshy",
+   "API key"
+  ],
+  "MINIMAX_API_KEY": [
+   "MiniMax",
+   "API key"
+  ],
+  "OPENAI_API_KEY": [
+   "OpenAI",
+   "API key"
+  ],
+  "OPENROUTER_API_KEY": [
+   "OpenRouter",
+   "API key"
+  ],
+  "QUIVER_API_KEY": [
+   "QuiverAI",
+   "API key"
+  ],
+  "REPLICATE_API_TOKEN": [
+   "Replicate",
+   "API token"
+  ],
+  "RUNWAY_API_KEY": [
+   "Runway",
+   "API key"
+  ],
+  "TYPESAFE_API_KEY": [
+   "TypeSafe",
+   "API key"
+  ],
+  "WORLDLABS_API_KEY": [
+   "World Labs",
+   "API key"
+  ],
+  "XAI_API_KEY": [
+   "xAI",
+   "API key"
+  ]
+ },
  "nodes": {
   "ace-step": {
    "routes": [

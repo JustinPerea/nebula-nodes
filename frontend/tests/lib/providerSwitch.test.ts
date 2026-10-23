@@ -59,6 +59,23 @@ describe('providerSwitchState', () => {
     expect(state.message).toContain("can't run on fal.ai");
   });
 
+  it("names keys by provider and never a route id or env-var name in the stop line (error copy round 3e)", () => {
+    const flux2 = NODE_DEFINITIONS['flux-2-pro'];
+    const env = /[A-Z0-9]+_(API_KEY|API_TOKEN|TOKEN|KEY|CREDENTIALS|USAGE_KEY)\b/;
+    const chosen = providerSwitchState(flux2, { _provider: 'bfl' }, context({}));
+    expect(chosen.blocked).toBe(true);
+    expect(chosen.message).toBe(
+      'FLUX.2 is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or choose another provider.');
+    const unknown = providerSwitchState(flux2, { _provider: 'xyz' }, context({ BFL_API_KEY: KEY }));
+    expect(unknown.message).toBe("FLUX.2 is set to a provider it doesn't have. Choose one in the node's provider switcher.");
+    const auto = providerSwitchState(flux2, {}, context({}));
+    expect(auto.message).toMatch(/^Add your .* in Settings, then run the node again\.$/);
+    for (const state of [chosen, unknown, auto]) {
+      expect(state.message).not.toMatch(env);
+      expect(state.message).not.toMatch(/Settings > Providers|'xyz'|\bauto\b|\(/);
+    }
+  });
+
   it('says when no provider has a key, and names the chosen route that lacks one', () => {
     expect(providerSwitchState(TABLE, {}, context({})).rows[0].label).toBe("Auto · can't run: no provider key set");
     const chosen = providerSwitchState(TABLE, { _provider: 'replicate' }, context({ BFL_API_KEY: KEY }));

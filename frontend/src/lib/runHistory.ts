@@ -494,7 +494,7 @@ function shallowParamsEqual(
 }
 
 export const WORLD_LABS_RECOVERY_VOLATILE_NOTE =
-  'Recovery ID captured, but the backend could not save it durably. Keep this tab open and copy the ID before reloading.';
+  "World Labs sent back the job's ID, but Nebula couldn't save it. Keep this tab open and copy the ID before you reload.";
 
 export function providerRecoveryWarningText(
   checkpoint: Pick<ProviderRecoveryCheckpoint, 'durable' | 'warning'>,
@@ -709,10 +709,10 @@ export const WORLD_LABS_RECOVERY_READY_NOTE =
   'Recovery ID restored. Recover resumes the accepted World Labs work without submitting a new paid operation.';
 
 export const WORLD_LABS_RECONNECTING_NOTE =
-  'Reconnecting to this World Labs run. Run remains locked until Nebula confirms its backend status.';
+  'Reconnecting to this World Labs run. Run stays off until Nebula hears back about it.';
 
 export const EXECUTION_RECONNECTING_NOTE =
-  'Reconnecting to this run. It remains active until Nebula confirms its backend status.';
+  'Reconnecting to this run. It stays active until Nebula hears back about it.';
 
 /** Confirmation removes only temporary connection advice. Provider diagnostics
  * and terminal notes remain intact. */

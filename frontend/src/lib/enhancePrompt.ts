@@ -1,4 +1,5 @@
 import { apiRequest } from './apiRequest';
+import { FailureNotice } from './errorCopy';
 
 /**
  * One-shot LLM rewrite of a Create prompt via the backend `/api/enhance-prompt`
@@ -15,6 +16,6 @@ export async function enhancePrompt(prompt: string): Promise<string> {
   });
   const data = (await res.json()) as { enhanced?: string };
   const enhanced = (data.enhanced ?? '').trim();
-  if (!enhanced) throw new Error('Enhance returned nothing.');
+  if (!enhanced) throw new FailureNotice("Couldn't enhance the prompt.", 'The model sent back an empty prompt. Try again.');
   return enhanced;
 }

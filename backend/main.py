@@ -2974,6 +2974,8 @@ def _event_to_camel(event: ExecutionEvent) -> dict[str, Any]:
                     "nodeId": e.get("node_id", e.get("nodeId", "")),
                     "portId": e.get("port_id", e.get("portId", "")),
                     "message": e.get("message", ""),
+                    # The card's line (error copy round 3e); None: GM's general line.
+                    "person": e.get("person"),
                 }
                 for e in value
             ]
@@ -2981,7 +2983,12 @@ def _event_to_camel(event: ExecutionEvent) -> dict[str, Any]:
 
 
 def _validation_response(errors: list[ValidationErrorDetail]) -> dict[str, Any]:
-    """Keep REST validation details aligned with the WebSocket event shape."""
+    """Keep REST validation details aligned with the WebSocket event shape.
+
+    The canvas's own run calls (/api/execute, a node's run, a shot): each
+    error's `message` is the specific text and `person` the card's line
+    (error copy round 3e). Agents' runs answer with _refused_cli_run, which
+    keeps `message` alone."""
     return {
         "status": "validation_error",
         "errorCount": len(errors),
@@ -2990,10 +2997,22 @@ def _validation_response(errors: list[ValidationErrorDetail]) -> dict[str, Any]:
                 "nodeId": error.node_id,
                 "portId": error.port_id,
                 "message": error.message,
+                "person": error.person,
             }
             for error in errors
         ],
     }
+
+
+def _validation_person_lines(errors: list[ValidationErrorDetail]) -> dict[str, str | None]:
+    """Node id -> the card's line for its pre-call errors (joined_lines:
+    None when one of them has none)."""
+    from execution.person_line import joined_lines
+
+    by_node: dict[str, list[str | None]] = {}
+    for error in errors:
+        by_node.setdefault(error.node_id, []).append(error.person)
+    return {node_id: joined_lines(lines) for node_id, lines in by_node.items()}
 
 
 def _validation_messages(errors: list[ValidationErrorDetail]) -> dict[str, str]:
@@ -8210,11 +8229,9 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     errors = validate_graph(sub_nodes, sub_edges, api_keys)
     if errors:
         await _announce_validation_errors(errors, run_id)
-        return {
-            "status": "validation_error",
-            "errorCount": len(errors),
-            "runId": run_id,
-        }
+        # With each error (error copy round 3e), so the shot panel can say
+        # the scene's own line rather than a general one.
+        return {**_validation_response(errors), "runId": run_id}
 
     try:
         topological_sort(sub_nodes, sub_edges)
@@ -13202,10 +13219,17 @@ async def _refused_cli_run(run_id: str, target: str | None, errors: list[Validat
     per_node = {node_id: message for node_id, message in messages.items() if node_id}
     summary = "; ".join(f"{node_id} ({_node_label(node_id)}): {message}" if node_id else message
                         for node_id, message in messages.items())
-    publish_action(f"Run stopped before it started. {summary}")
+    # The Agent Log and the cursor speak on the person's canvas: the card's
+    # lines, not the keys and ids agents read in `error` and `errors` (error
+    # copy round 3e). A graph-wide refusal alone (a cycle) has no node to name.
+    person = _validation_person_lines(errors)
+    said = {node_id: f"{_node_label(node_id)} can't run." + (f" {person[node_id]}" if person.get(node_id) else "")
+            for node_id in per_node}
+    publish_action("Run stopped before it started. "
+                   + (" ".join(said.values()) or person.get("") or "Couldn't run the canvas."))
     first = next(iter(per_node), None)
     if first is not None:
-        await _show_agent({"nodeId": first}, say=f"{_node_label(first)} can't run: {per_node[first]}")
+        await _show_agent({"nodeId": first}, say=said[first])
     response = {
         "runId": run_id,
         "targetNodeId": target,

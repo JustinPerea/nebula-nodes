@@ -71,7 +71,9 @@ def test_an_agent_run_a_node_cannot_start_fails_on_its_card_before_anything_runs
     # The canvas gets the same event a refused click on Run sends, so the card shows it.
     refused = [m for m in sent if m.get("type") == "validationError"]
     assert refused and refused[0]["runId"] == body["runId"]
-    assert {"nodeId": image, "portId": "", "message": "Missing API key: OPENAI_API_KEY"} in refused[0]["errors"]
+    # Error copy round 3e: the event also carries the card's line, beside the agents' text.
+    assert {"nodeId": image, "portId": "", "message": "Missing API key: OPENAI_API_KEY",
+            "person": "Add your OpenAI API key in Settings, then run the node again."} in refused[0]["errors"]
     # Agents read it too, and the journal says whose run failed where.
     assert _node(client, image)["error"] == "Missing API key: OPENAI_API_KEY"
     failed = [e for e in main.canvas_events.read(after=0)["events"] if e["kind"] == "run.failed"]
@@ -79,6 +81,50 @@ def test_an_agent_run_a_node_cannot_start_fails_on_its_card_before_anything_runs
     assert failed[0]["data"]["error"] == "Missing API key: OPENAI_API_KEY"
     # get_run and `nebula result` say the same thing later.
     assert client.get(f"/api/graph/runs/{body['runId']}").json() == body
+
+
+@pytest.fixture
+def agent_log():
+    """The in-app chat turn's Agent Log lines (publish_action's `thinking`
+    events, which the canvas's Agent Log panel shows as they are)."""
+    from services.chat_actions import register_action_handler, unregister_action_handler
+
+    lines: list[str] = []
+    register_action_handler(lambda event: lines.append(event["text"]) if event.get("type") == "thinking" else None)
+    yield lines
+    unregister_action_handler()
+
+
+def test_a_refused_run_tells_the_agent_log_the_persons_line(canvas, monkeypatch, agent_log):
+    """Error copy round 3e review: the Agent Log is on the person's canvas, so
+    a refused run reads the card's line there, never the key or the node id.
+    The agent's answer keeps both (`error`, `errors`)."""
+    client, main, _sent, _prompt, image = canvas
+    monkeypatch.setattr(main, "execute_graph", AsyncMock())
+
+    body = client.post("/api/graph/run", json={"targetNodeId": image}, headers=CLAUDE).json()
+
+    assert "OPENAI_API_KEY" in body["error"] and image in body["error"]
+    [line] = [text for text in agent_log if text.startswith("Run stopped before it started.")]
+    assert line == (f"Run stopped before it started. {main._node_label(image)} can't run. "
+                    "Add your OpenAI API key in Settings, then run the node again.")
+    assert "OPENAI_API_KEY" not in line and image not in line and "Missing API key" not in line
+
+
+def test_a_graph_wide_refusal_tells_the_agent_log_in_words(canvas, monkeypatch, agent_log):
+    client, main, _sent, _prompt, image = canvas
+    monkeypatch.setattr(main, "execute_graph", AsyncMock())
+    monkeypatch.setattr(main, "validate_graph", lambda *args, **kwargs: [])
+
+    def loop(*_args, **_kwargs):
+        raise main.CycleError("nodes are in a cycle", [image, image])
+
+    monkeypatch.setattr(main, "topological_sort", loop)
+    body = client.post("/api/graph/run", json={"targetNodeId": image}, headers=CLAUDE).json()
+
+    assert "Graph contains a cycle" in body["error"]
+    [line] = [text for text in agent_log if text.startswith("Run stopped before it started.")]
+    assert line == "Run stopped before it started. Couldn't run the canvas."
 
 
 def test_every_node_of_an_agent_run_shows_on_the_canvas_and_a_failure_fails_the_run(canvas, monkeypatch):

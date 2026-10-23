@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import tables from '../../../backend/tests/fixtures/route_tables.json';
 import cases from '../../../backend/tests/fixtures/route_cases.json';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
-import { allParamDefinitions, hasRoutes, KEY_PROVIDERS, PROVIDER_LABELS, routeParamDefinitions, routesOf } from '../../src/lib/directRoute';
+import { allParamDefinitions, hasRoutes, KEY_NAMES, KEY_PROVIDERS, PROVIDER_LABELS, routeParamDefinitions, routesOf } from '../../src/lib/directRoute';
 import type { ModelNodeDefinition, RouteSpec } from '../../src/types';
 
 /** backend/tests/fixtures/route_tables.json is node_route.routes_of over every
@@ -11,6 +11,7 @@ import type { ModelNodeDefinition, RouteSpec } from '../../src/types';
 type Snapshot = {
   keyProviders: Record<string, string>;
   providerLabels: Record<string, string>;
+  keyNames: Record<string, [string, string]>;
   nodes: Record<string, { routes: Record<string, unknown>[]; allParamKeys: string[]; routeParams?: Record<string, Record<string, unknown>[]> }>;
 };
 const snapshot = tables as unknown as Snapshot;
@@ -65,5 +66,9 @@ describe('routesOf (snapshot of backend node_route.routes_of)', () => {
     expect(KEY_PROVIDERS).toEqual(snapshot.keyProviders);
     expect(PROVIDER_LABELS).toEqual(snapshot.providerLabels);
     expect(KEY_PROVIDERS.BFL_API_KEY).toBe('bfl');
+  });
+
+  it("names each key the way the backend's card lines do (person_line.KEY_NAMES)", () => {
+    expect(KEY_NAMES).toEqual(snapshot.keyNames);
   });
 });

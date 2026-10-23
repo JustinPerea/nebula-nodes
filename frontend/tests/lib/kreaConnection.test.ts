@@ -5,6 +5,7 @@ import {
   isKreaAuthorizationUrl, isSafeKreaBillingUrl, startKreaTrial, kreaModeFor, nodeKeyStatus, supportsKreaAccount,
   usesKreaAccount, withNewKreaMode,
 } from '../../src/lib/kreaConnection';
+import { FailureNotice } from '../../src/lib/errorCopy';
 
 const apiFetchMock = vi.hoisted(() => vi.fn());
 vi.mock('../../src/lib/backend', () => ({ apiFetch: apiFetchMock }));
@@ -73,12 +74,30 @@ describe('Krea connection contract', () => {
   });
 
   it('keeps transport and response errors out of the visible error message', async () => {
+    // Error copy round 3e (GM): "Couldn't {verb} {object}." then the reason;
+    // never "Could not", and still never the error's own text (it can hold
+    // credential-bearing URLs).
+    const GENERAL = "That didn't work. Try again, or reload if it keeps happening.";
+    const HEADING = "Couldn't update the Krea connection.";
     apiFetchMock.mockRejectedValueOnce(new Error('https://private.test/?token=fixture-secret'));
-    await expect(connectKrea()).rejects.toThrow('Could not update the Krea connection.');
-    apiFetchMock.mockResolvedValueOnce({ ok: false, json: vi.fn() });
-    await expect(checkKreaConnection()).rejects.toThrow('Could not update the Krea connection.');
+    await expect(connectKrea()).rejects.toThrow(`${HEADING} ${GENERAL}`);
+    apiFetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch https://private.test/?token=fixture-secret'));
+    await expect(connectKrea()).rejects.toThrow(`${HEADING} Couldn't reach Nebula. Check your connection and try again.`);
+    apiFetchMock.mockResolvedValueOnce({ ok: false, status: 503, json: vi.fn() });
+    await expect(checkKreaConnection()).rejects.toThrow(`${HEADING} Nebula didn't respond. Try again.`);
     apiFetchMock.mockResolvedValueOnce({ ok: true, json: async () => { throw new Error('token=fixture'); } });
-    await expect(getKreaConnection()).rejects.toThrow('Could not update the Krea connection.');
+    const error = await getKreaConnection().catch((e: Error) => e);
+    expect(error.message).toBe(`${HEADING} ${GENERAL}`);
+    expect(error).toBeInstanceOf(FailureNotice);
+  });
+
+  it("names the plans and the trial by their action, never 'Could not'", async () => {
+    apiFetchMock.mockResolvedValueOnce({ ok: false, status: 400, json: vi.fn() });
+    await expect(getKreaPlans()).rejects.toThrow(/^Couldn't load the Krea plans\. /);
+    apiFetchMock.mockRejectedValueOnce(new Error('https://private.test/?token=fixture-secret'));
+    const trial = await startKreaTrial().catch((e: Error) => e);
+    expect(trial.message).toMatch(/^Couldn't start the Krea trial\. /);
+    expect(trial.message).not.toMatch(/token|Could not/);
   });
 
   it('loads plans and starts the trial only through the fixed plan routes', async () => {

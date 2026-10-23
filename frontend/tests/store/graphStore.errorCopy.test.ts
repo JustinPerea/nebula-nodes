@@ -68,6 +68,15 @@ describe('adding a node', () => {
     expect(alerted()).toBe("Couldn't add Text Input. Graph has protected provider state");
   });
 
+  // Round 3e (GM): the store's own lines were written for developers
+  // ("Backend returned an invalid graph export response.").
+  it('an export answer Nebula can\'t read says so in words', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('<html>', { status: 200 }));
+    expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
+    expect(alerted()).toBe("Couldn't add Text Input. Nebula couldn't read the backend's answer, so the node wasn't added. "
+      + 'Reload, then add it again.');
+  });
+
   it('a refused graph export with no reason: GM\'s line', async () => {
     fetchMock.mockResolvedValueOnce(new Response('', { status: 404 }));
     expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();

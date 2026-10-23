@@ -8,7 +8,7 @@ import {
   GRAPH_BUNDLE_MAX_TOTAL_BYTES,
 } from './graphFileShared';
 import { readBoundedAssetResponse } from './boundedAsset';
-import { ConnectionLostError, copyForStatus, isConnectionFailure, requestError, requestSucceeded } from './errorCopy';
+import { ConnectionLostError, copyForStatus, FailureNotice, isConnectionFailure, requestError, requestSucceeded } from './errorCopy';
 import { isSafeWorldUrl, parseWorldValue } from './worldValue';
 
 
@@ -132,7 +132,7 @@ export async function downloadSelectedOutputs(nodes: Node<NodeData>[]): Promise<
   let totalBytes = 0;
   for (const output of outputs) {
     const remainingBytes = GRAPH_BUNDLE_MAX_TOTAL_BYTES - totalBytes;
-    if (remainingBytes <= 0) throw new Error(SELECTION_TOO_LARGE_COPY);
+    if (remainingBytes <= 0) throw new FailureNotice('', SELECTION_TOO_LARGE_COPY);
     // An asset URL, not an API path, so apiFetch can't make this request;
     // turn its failures into copy the same way (error-copy review): the
     // selection toolbar shows this error as the Download button's title, one
@@ -156,7 +156,9 @@ export async function downloadSelectedOutputs(nodes: Node<NodeData>[]): Promise<
     } catch {
       // Too large for what's left of the ZIP: the whole selection when other
       // outputs already filled it, else this one.
-      throw new Error(remainingBytes < GRAPH_BUNDLE_MAX_ASSET_BYTES && totalBytes > 0
+      // Written lines (GM, round 2), thrown as a FailureNotice so the toolbar
+      // shows them under its heading rather than GM's general line.
+      throw new FailureNotice('', remainingBytes < GRAPH_BUNDLE_MAX_ASSET_BYTES && totalBytes > 0
         ? SELECTION_TOO_LARGE_COPY : outputTooLarge(output));
     }
     totalBytes += bytes.byteLength;

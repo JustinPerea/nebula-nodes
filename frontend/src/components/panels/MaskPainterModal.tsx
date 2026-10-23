@@ -178,7 +178,7 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
           </div>
         )}
         {imageUrl && imageFailed && (
-          <div className="mask-painter__empty">Could not load the upstream image for painting.</div>
+          <div className="mask-painter__empty">Couldn't load the upstream image for painting.</div>
         )}
 
         {imageUrl && !imageFailed && natural && viewSize && (

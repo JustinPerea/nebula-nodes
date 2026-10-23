@@ -1,6 +1,7 @@
 import { useProjectStore } from '../store/projectStore';
 import { useUIStore } from '../store/uiStore';
 import { refuseWhileCommonsUnsaved } from './commonsUnsaved';
+import { writtenLine } from './errorCopy';
 
 /**
  * Back to the open project's canvas from any screen, the way each screen's
@@ -37,9 +38,9 @@ export async function openWorkspace(): Promise<void> {
   const projects = useProjectStore.getState();
   if (projects.screen !== 'home') return;
   const id = projects.activeProject?.id;
-  if (!id) throw new Error('Open a project first: Updates are kept with a project.');
+  if (!id) throw writtenLine('Open a project first: Updates are kept with a project.');
   await projects.open(id);
-  if (useProjectStore.getState().screen !== 'workspace') throw new Error("The project didn't open. Try again.");
+  if (useProjectStore.getState().screen !== 'workspace') throw writtenLine("The project didn't open. Try again.");
 }
 
 /** Whether the canvas is the screen showing now. */

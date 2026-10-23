@@ -33,6 +33,7 @@ import { useGraphStore } from './graphStore';
 import { useUIStore } from './uiStore';
 import { resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore } from './projectStore';
 import type { ProjectSnapshot, SavedProject } from '../lib/projects';
+import { RequestFailedError } from '../lib/errorCopy';
 
 const saveProject = vi.mocked(api.saveProject);
 const summary = {
@@ -242,13 +243,14 @@ describe('an agent’s edit saves at once', () => {
   });
 
   it('a failed save of an agent’s edit reads unsaved and keeps the unload prompt armed', async () => {
-    saveProject.mockRejectedValueOnce(new Error('Disk full'));
+    // Round 3e: the API's typed refusal (ProjectRequestError is one); a plain Error's text is never shown.
+    saveProject.mockRejectedValueOnce(new RequestFailedError("Couldn't save the project.", 507, { reason: 'Disk full.' }));
     dispatch(agentEdit(['n1', 'n2', 'n3']));
     const whileSaving = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(whileSaving);
     expect(whileSaving.defaultPrevented).toBe(true);
     await vi.advanceTimersByTimeAsync(0);
-    expect(useProjectStore.getState()).toMatchObject({ dirty: true, saveStatus: 'error', error: 'Disk full' });
+    expect(useProjectStore.getState()).toMatchObject({ dirty: true, saveStatus: 'error', error: "Couldn't save the project. Disk full." });
     const afterFailure = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(afterFailure);
     expect(afterFailure.defaultPrevented).toBe(true);

@@ -283,7 +283,11 @@ you shouldn't parse. A failed Cinema shot's `output` works the same: read its
 `errorProviderText` and `errorRaw` are for the Cinema panel. A job the
 provider ran and then reported failed is never `category: "auth"`, even when
 its text says "unauthorized" (the job's input, not the key): check the job at
-the provider rather than the key.
+the provider rather than the key. A run the pre-run check refuses (a missing
+key, an unconnected input, a Batch over its cap) prints the same specific text
+as before ("Missing API key: OPENAI_API_KEY"); the card's line ("Add your
+OpenAI API key in Settings, then run the node again.") rides only on the
+canvas's own answer, so nothing you read changed.
 
 ## Moodboards
 

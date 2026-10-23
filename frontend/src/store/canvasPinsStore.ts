@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { wsClient, type CanvasPinsEvent, type Pin } from '../lib/wsClient';
 import { createPin, deletePin, fetchPins, MAX_PIN_TEXT } from '../lib/canvasPins';
+import { failureMessage } from '../lib/errorCopy';
 
 /** Where the person is about to leave a note: on a node, or at a flow-space spot. */
 export type PinComposerTarget = { nodeId: string } | { position: { x: number; y: number } };
@@ -104,7 +105,7 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
       }));
       return true;
     } catch (error) {
-      set({ composer: null, error: error instanceof Error ? error.message : String(error) });
+      set({ composer: null, error: failureMessage(error, "Couldn't add the pin.") });
       return false;
     }
   },
@@ -121,7 +122,7 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
       const restored = previous.find((pin) => pin.id === id);
       set((state) => ({
         pins: restored && !state.pins.some((p) => p.id === id) ? [...state.pins, restored] : state.pins,
-        error: error instanceof Error ? error.message : String(error),
+        error: failureMessage(error, "Couldn't remove the pin."),
       }));
     } finally {
       set((state) => {

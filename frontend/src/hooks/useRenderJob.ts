@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { cancelRenderJob, getRenderJob, type RenderJob } from '../lib/renderJobs';
+import { failureMessage } from '../lib/errorCopy';
 
 export function useRenderJob() {
   const [job, setJob] = useState<RenderJob | null>(null);
@@ -19,7 +20,7 @@ export function useRenderJob() {
           }
         })
         .catch((err: unknown) => {
-          if (!disposed) setError(err instanceof Error ? err.message : String(err));
+          if (!disposed) setError(failureMessage(err, "Couldn't check the render."));
         });
     }, 350);
     return () => {
@@ -34,7 +35,8 @@ export function useRenderJob() {
       const next = await starter();
       setJob(next);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      // The starter's own heading ("Couldn't export the video.") when it has one.
+      setError(failureMessage(err, "Couldn't start the render."));
     }
   }, []);
 
@@ -43,7 +45,7 @@ export function useRenderJob() {
     try {
       setJob(await cancelRenderJob(job.id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(failureMessage(err, "Couldn't cancel the render."));
     }
   }, [job]);
 

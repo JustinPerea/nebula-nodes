@@ -34,6 +34,7 @@ import { LeaveBusyContext } from './leaveBusy';
 import { askBeforeLeavingCommons } from '../../lib/commonsUnsaved';
 import { unreadRingColor } from '../../lib/unreadRing';
 import './agentNotes.css';
+import { failureMessage, writtenLine } from '../../lib/errorCopy';
 
 /** A card stays about 4 s (GM's v5.2 holds 2.6 to 3.8 s), longer while hovered or focused. */
 const CARD_HOLD_MS = 4000;
@@ -285,7 +286,7 @@ function seeAllActions(): Promise<void> {
     .then(() => whenReady(() => onCanvas() && agentLogHeader() !== null))
     .then((ready) => {
       if (request !== seeAllRequest || !onCanvas()) return;
-      if (!ready) throw new Error("The Agent log didn't open. Try again.");
+      if (!ready) throw writtenLine("The Agent log didn't open. Try again.");
       useUIStore.getState().openAgentLog();
       window.requestAnimationFrame(() => {
         if (onCanvas()) agentLogHeader()?.focus({ preventScroll: true });
@@ -601,7 +602,7 @@ export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSecti
    * card, or when the list closed meanwhile.
    */
   function fail(failure: unknown) {
-    useAgentNotesStore.setState({ error: failure instanceof Error ? failure.message : String(failure) });
+    useAgentNotesStore.setState({ error: failureMessage(failure, "Couldn't update the note.") });
     if (!openRef.current) openListRef.current();
   }
 
@@ -878,7 +879,7 @@ function useAppAdapter(keptWith: string): AgentNotesAdapter {
         const id = typeof action.op.proposalId === 'string' ? action.op.proposalId : '';
         if (action.op.kind === 'proposal.accept' && proposals.proposals[id]) return proposals.accept(id);
         if (action.op.kind === 'proposal.reject' && proposals.proposals[id]) return proposals.reject(id);
-        throw new Error(`"${action.label}" can't run from here.`);
+        throw writtenLine(`"${action.label}" can't run from here.`);
       },
       actionState: (action) => {
         // Review's proposal lives off the canvas; the backend resolves its Update when it closes.
@@ -918,7 +919,7 @@ function useBoardAdapter(boardId: string | null, imageIds: readonly string[]): A
         useBoardCanvasStore.getState().requestShow(boardId, onBoard);
       },
       runAction: async (_note, action) => {
-        throw new Error(`"${action.label}" can't run here yet.`);
+        throw writtenLine(`"${action.label}" can't run here yet.`);
       },
     };
   }, [boardId, order]);

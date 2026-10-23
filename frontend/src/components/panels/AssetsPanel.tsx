@@ -187,7 +187,7 @@ export function AssetsPanel() {
       useAssetStudioDraftStore.getState().rehome(kind, id, result.to);
       setRelistKey((value) => value + 1);
     } catch (err) {
-      setMoveError(err instanceof Error ? err.message : 'Move failed.');
+      setMoveError(failureMessage(err, kind === 'moodboard' ? "Couldn't move the board." : "Couldn't move the character."));
     }
     setMovingId(null);
   };

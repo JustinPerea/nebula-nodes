@@ -36,6 +36,33 @@ export const KEY_PROVIDERS: Readonly<Record<string, APIProvider>> = {
   BFL_API_KEY: 'bfl',
 };
 
+/** How a card line names each key Settings stores: the provider's own
+ * spelling and what the key is called (execution/person_line.KEY_NAMES;
+ * tests/fixtures/route_tables.json pins both). Never the env-var name. */
+export const KEY_NAMES: Readonly<Record<string, readonly [string, string]>> = {
+  ANTHROPIC_API_KEY: ['Anthropic', 'API key'],
+  BFL_API_KEY: ['Black Forest Labs', 'API key'],
+  BYTEPLUS_API_KEY: ['BytePlus', 'API key'],
+  ELEVENLABS_API_KEY: ['ElevenLabs', 'API key'],
+  FAL_KEY: ['fal.ai', 'API key'],
+  GOOGLE_API_KEY: ['Gemini', 'API key'],
+  GOOGLE_VERTEX_CREDENTIALS: ['Google Vertex AI', 'credentials'],
+  HIGGSFIELD_API_KEY: ['Higgsfield', 'API key'],
+  IDEOGRAM_API_KEY: ['Ideogram', 'API key'],
+  KREA_API_TOKEN: ['Krea', 'API token'],
+  KREA_USAGE_KEY: ['Krea', 'usage key'],
+  MESHY_API_KEY: ['Meshy', 'API key'],
+  MINIMAX_API_KEY: ['MiniMax', 'API key'],
+  OPENAI_API_KEY: ['OpenAI', 'API key'],
+  OPENROUTER_API_KEY: ['OpenRouter', 'API key'],
+  QUIVER_API_KEY: ['QuiverAI', 'API key'],
+  REPLICATE_API_TOKEN: ['Replicate', 'API token'],
+  RUNWAY_API_KEY: ['Runway', 'API key'],
+  TYPESAFE_API_KEY: ['TypeSafe', 'API key'],
+  WORLDLABS_API_KEY: ['World Labs', 'API key'],
+  XAI_API_KEY: ['xAI', 'API key'],
+};
+
 /** How errors, readiness and the run status name a provider
  * (node_route.PROVIDER_LABELS; tests/fixtures/route_tables.json pins both). */
 export const PROVIDER_LABELS: Readonly<Record<APIProvider, string>> = {
@@ -841,6 +868,39 @@ function why(route: RouteSpec, block: DirectBlock): string {
   return String(block.detail ?? block.reason);
 }
 
+/** why() for the card: a setting by its label, never its key
+ * (node_route._why_person). */
+function whyPerson(definition: ModelNodeDefinition, route: RouteSpec, block: DirectBlock): string {
+  const param = block.param ?? '';
+  const label = param ? (allParamDefinitions(definition).find((candidate) => candidate.key === param)?.label || param) : '';
+  if (block.reason === 'unsupported' && block.detail && param && block.detail.startsWith(`${param} `)) {
+    return `it doesn't take ${label} ${block.detail.slice(param.length + 1)}`;
+  }
+  if (block.reason === 'blocked') return `it doesn't take ${label}`;
+  if (block.reason === 'requires') return `it needs ${label} set`;
+  if (block.reason === 'size') return `it can't render that ${label} exactly`;
+  return why(route, block);
+}
+
+/** "OpenAI API key", "ElevenLabs or Runway API key", "Google Vertex AI
+ * credentials or Gemini API key"; null when a name isn't a key Settings
+ * stores (person_line.key_phrase). */
+export function keyPhrase(keys: readonly string[]): string | null {
+  const names = keys.map((key) => (Object.hasOwn(KEY_NAMES, key) ? KEY_NAMES[key] : null));
+  if (!names.length || names.some((name) => name === null)) return null;
+  const known = names as (readonly [string, string])[];
+  const kinds = new Set(known.map(([, kind]) => kind));
+  if (kinds.size === 1) return `${orList(known.map(([provider]) => provider))} ${known[0][1]}`;
+  return orList(known.map(([provider, kind]) => `${provider} ${kind}`));
+}
+
+/** A missing key as a pre-run line (person_line.missing_key_line). */
+export function missingKeyLine(keys: readonly string[]): string {
+  const phrase = keyPhrase(keys);
+  return phrase ? `Add your ${phrase} in Settings, then run the node again.`
+    : "Add this node's API key in Settings, then run the node again.";
+}
+
 function acceptedValues(route: RouteSpec, block: DirectBlock): string[] {
   if (block.reason !== 'unsupported' || !block.param) return [];
   const rule = routeRules(route).accepts?.[block.param];
@@ -858,21 +918,24 @@ function hiddenFixSentence(definition: ModelNodeDefinition, param: string): stri
   return `Set ${label} back to ${optionLabelOf(spec, fallback)}, or switch provider.`;
 }
 
-/** Why a route-table run can't start, in the words the router, the engine's
- * preflight and the switcher use (node_route.route_unavailable_message).
+/** Why a route-table run can't start, as the card says it: the switcher's
+ * stop line, its title, the run-cost summary (node_route.route_unavailable_line,
+ * word for word; route_cases.json `unavailableLine` pins both). No env-var
+ * names, route ids or param keys (GM - Design, error copy round 3e): a key
+ * by its provider, a setting by its label. The agents keep the router's own
+ * text (node_route.route_unavailable), which names the keys.
  * `keyless` are routes that would take the run but have no key set: a
  * `hidden` stop with no alternative names them. */
 export function routeUnavailableMessage(definition: ModelNodeDefinition, route: NodeRoute, alternatives: string[] = [], keyless: string[] = []): string {
-  const name = definition.displayName || definition.id || 'This node';
+  const name = definition.displayName || 'This node';
   const spec = route.routeId ? routeById(definition, route.routeId) : undefined;
   const others = alternatives.map((alt) => providerLabel(routeById(definition, alt)?.provider));
   const keylessLabels = keyless.map((alt) => providerLabel(routeById(definition, alt)?.provider));
   const also = others.length ? ` ${orList(others)} can take it.`
-    : keylessLabels.length ? ` ${orList(keylessLabels)} can take it (add its key in Settings > Providers).` : '';
+    : keylessLabels.length ? ` ${orList(keylessLabels)} can take it. Add its key in Settings.` : '';
   const block = route.block;
   if (block?.reason === 'unknown-provider') {
-    const ids = [AUTO, ...routesOf(definition).map((candidate) => candidate.id)];
-    return `${name} is set to provider '${block.detail}', which it doesn't have. Choose ${orList(ids)}.`;
+    return `${name} is set to a provider it doesn't have. Choose one in the node's provider switcher.`;
   }
   if (block && spec) {
     const values = acceptedValues(spec, block);
@@ -880,14 +943,16 @@ export function routeUnavailableMessage(definition: ModelNodeDefinition, route: 
       : values.length ? `Pick ${orList(values)}, or switch provider.`
       : block.reason === 'ports' ? 'Disconnect the extra inputs, or switch provider.'
         : 'Change that setting, or switch provider.';
-    return `${name} can't run on ${providerLabel(spec.provider)}: ${why(spec, block)}. ${fix}${also}`;
+    return `${name} can't run on ${providerLabel(spec.provider)}: ${whyPerson(definition, spec, block)}. ${fix}${also}`;
   }
-  const needed = route.missing?.length ? orList(route.missing) : 'a provider key';
+  const missing = route.missing ?? [];
   if (spec) {
+    const phrase = missing.length ? keyPhrase(missing) : null;
+    const needed = phrase ? `your ${phrase}` : 'a provider key';
     return `${name} is set to ${providerLabel(spec.provider)}, which needs ${needed}. `
-      + `Add it in Settings > Providers or choose another provider.${also}`;
+      + `Add it in Settings, or choose another provider.${also}`;
   }
-  return `${name} needs ${needed} in Settings > Providers.`;
+  return missingKeyLine(missing);
 }
 
 export interface RouteUnavailable {

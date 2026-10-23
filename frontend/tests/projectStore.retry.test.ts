@@ -431,3 +431,74 @@ describe('round 3c-2: the startup load never shows an error\'s own message', () 
     expect(useProjectStore.getState().error).toBe("Couldn't load the project. Nebula didn't respond. Try again.");
   });
 });
+
+describe("round 3e: every Projects action reads a plain Error through GM's mapping", () => {
+  const GENERAL = "That didn't work. Try again, or reload if it keeps happening.";
+  const RAW = 'internal: snapshot.nodes is not iterable at /Users/someone/state.json';
+
+  it.each([
+    ['rename', "Couldn't rename the project.", async () => {
+      vi.mocked(projects.renameProject).mockRejectedValueOnce(new Error(RAW));
+      await useProjectStore.getState().rename('alpha', 'New name');
+    }],
+    ['restore', "Couldn't restore the project.", async () => {
+      vi.mocked(projects.restoreProject).mockRejectedValueOnce(new Error(RAW));
+      await useProjectStore.getState().restore('alpha');
+    }],
+    ['purge', "Couldn't delete the project for good.", async () => {
+      vi.mocked(projects.purgeTrashedProject).mockRejectedValueOnce(new Error(RAW));
+      await useProjectStore.getState().purge('alpha');
+    }],
+    ['emptyTrash', "Couldn't empty Recently deleted.", async () => {
+      useProjectStore.setState({ trash: [trashed('gamma')] });
+      vi.mocked(projects.emptyProjectTrash).mockRejectedValueOnce(new Error(RAW));
+      await useProjectStore.getState().emptyTrash();
+    }],
+    ['cover', "Couldn't set the cover.", async () => {
+      vi.mocked(projects.pinProjectCover).mockRejectedValueOnce(new Error(RAW));
+      await useProjectStore.getState().pinCover('alpha', '/api/outputs/a.png');
+    }],
+    ['delete', "Couldn't delete the project.", async () => {
+      vi.mocked(projects.deleteProject).mockRejectedValueOnce(new Error(RAW));
+      await useProjectStore.getState().remove('beta');
+    }],
+    ['open', "Couldn't open the project.", async () => {
+      vi.mocked(projects.openProject).mockRejectedValueOnce(new Error(RAW));
+      await useProjectStore.getState().open('beta');
+    }],
+  ])('%s: the heading and the general line, Try again kept', async (action, heading, run) => {
+    await run();
+    const state = useProjectStore.getState();
+    expect(state.error).toBe(`${heading} ${GENERAL}`);
+    expect(state.error).not.toContain('iterable');
+    // An open that may have landed keeps 3b's Try again: read the list, then open it.
+    expect(state.errorRetry).toMatchObject(action === 'open' ? { action: 'load', reopen: 'beta' } : { action });
+    expect(offer()).toBe('redo');
+  });
+
+  it("a failed save says the save's heading, never the error's own words", async () => {
+    vi.mocked(projects.saveProject).mockRejectedValueOnce(new Error(RAW));
+    useGraphStore.setState({ nodes: [{ id: 'n9', type: 'model-node', position: { x: 0, y: 0 },
+      data: { definitionId: 'text-input', label: 'Text', params: { value: 'changed' }, state: 'idle', outputs: {} } }] });
+    await useProjectStore.getState().flush().catch(() => {});
+    const state = useProjectStore.getState();
+    expect(state.saveError).toBe(`Couldn't save the project. ${GENERAL}`);
+    expect(state.error).toBe(`Couldn't save the project. ${GENERAL}`);
+    expect(state.errorRetry?.action).toBe('save');
+  });
+
+  it('Try again still redoes the rename that failed', async () => {
+    vi.mocked(projects.renameProject).mockRejectedValueOnce(new Error(RAW));
+    await useProjectStore.getState().rename('alpha', 'New name');
+    await useProjectStore.getState().retry();
+    expect(projects.renameProject).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(projects.renameProject).mock.calls[1]).toEqual(['alpha', 'New name']);
+    expect(useProjectStore.getState().error).toBeNull();
+  });
+
+  it("a request's own written line still reads as it did", async () => {
+    vi.mocked(projects.renameProject).mockRejectedValueOnce(unavailable("Couldn't rename the project."));
+    await useProjectStore.getState().rename('alpha', 'New name');
+    expect(useProjectStore.getState().error).toBe("Couldn't rename the project. Nebula didn't respond. Try again.");
+  });
+});

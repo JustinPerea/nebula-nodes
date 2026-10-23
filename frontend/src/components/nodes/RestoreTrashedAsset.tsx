@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { restoreTrashed } from '../../lib/trash';
 import { useStoredAssetsStore, type StoredAssetKind } from '../../store/storedAssetsStore';
 import '../../styles/asset-trash.css';
+import { failureMessage } from '../../lib/errorCopy';
 
 /** Restore button for a Moodboard or Character card whose asset is in
  * Recently deleted. Agents may restore too; this is the person's way. */
@@ -19,7 +20,7 @@ export function RestoreTrashedAsset({ kind, id, className }: { kind: StoredAsset
           setError(null);
           restoreTrashed(kind, id)
             .then(() => useStoredAssetsStore.getState().refresh(kind, id))
-            .catch((err) => setError(err instanceof Error ? err.message : 'Restore failed.'))
+            .catch((err) => setError(failureMessage(err, kind === 'moodboard' ? "Couldn't restore the board." : "Couldn't restore the character.")))
             .finally(() => setBusy(false));
         }}
       >

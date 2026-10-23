@@ -59,7 +59,7 @@ export const useProviderReadinessStore = create<ProviderReadinessState>((set, ge
     } catch {
       if (request !== requestVersion || get().revision !== revision) return;
       set({ providers: {}, checkedAt: null, loading: false,
-        error: 'Connections could not be checked. Check that the Nebula backend is available, then retry.' });
+        error: "Couldn't check the connections. Make sure Nebula's backend is running, then try again." });
     }
   },
 }));

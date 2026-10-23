@@ -243,7 +243,8 @@ export type ExecutionEvent = (
   | { type: 'skipped'; nodeId: string; reason: string; gateNodeId?: string | null }
   /** `person`: the handler's line for the person (error copy round 3c); `error` is the specific text agents keep. */
   | { type: 'error'; nodeId: string; error: string; retryable: boolean; category?: ErrorCategory; friendly?: string; person?: string | null; providerText?: boolean; variant?: VariantScope | null }
-  | { type: 'validationError'; errors: Array<{ nodeId: string; portId: string; message: string }> }
+  /** `person`: each check's line for the card (error copy round 3e); `message` is the agents' text. */
+  | { type: 'validationError'; errors: Array<{ nodeId: string; portId: string; message: string; person?: string | null }> }
   | { type: 'graphComplete'; duration: number; nodesExecuted: number; nodesSkipped?: number }
   | { type: 'graphCancelled' }
   | {

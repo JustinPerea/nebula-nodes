@@ -34,7 +34,7 @@ import { claimIntent } from '../../lib/heldIntents';
 import '../../styles/personal-agents.css';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl, personTokenForSocket } from '../../lib/backend';
 import { DEFAULT_BACKEND_PORT, devProxyPort } from '../../lib/devBackendPort';
-import { CONNECTION_LOST_COPY, ConnectionLostError, NO_ANSWER_STATUS, readDetail, warnFailure } from '../../lib/errorCopy';
+import { CONNECTION_LOST_COPY, ConnectionLostError, NO_ANSWER_STATUS, readDetail, warnFailure, failureMessage, failureCopy, oneLine } from '../../lib/errorCopy';
 import { chatUploadChipError } from '../../lib/chatUploadCopy';
 import { chatAuthority } from '../../lib/commonsChatAuthority';
 import { onPersonConnected, reportPersonRequired } from '../../lib/personSession';
@@ -541,7 +541,7 @@ export function ChatPanel() {
         .catch((error: unknown) => {
           if (!cancelled) {
             setModelCatalog(null);
-            setCatalogError(error instanceof Error ? error.message : String(error));
+            setCatalogError(failureMessage(error, "Couldn't load the models."));
           }
         })
         .finally(() => { if (!cancelled) setCatalogLoading(false); });
@@ -584,7 +584,7 @@ export function ChatPanel() {
         .catch((err: unknown) => {
           if (cancelled) return;
           setClaudeStatus(null);
-          setClaudeStatusError(err instanceof Error ? err.message : String(err));
+          setClaudeStatusError(failureMessage(err, "Couldn't check Claude status."));
           setClaudeBackendOffline(isBackendUnavailableError(err));
           retryTimer = window.setTimeout(refresh, 3000);
         });
@@ -617,7 +617,7 @@ export function ChatPanel() {
         .catch((err: unknown) => {
           if (cancelled) return;
           setCodexStatus(null);
-          setCodexStatusError(err instanceof Error ? err.message : String(err));
+          setCodexStatusError(failureMessage(err, "Couldn't check Codex status."));
           setCodexBackendOffline(isBackendUnavailableError(err));
           retryTimer = window.setTimeout(refresh, 3000);
         });
@@ -638,7 +638,7 @@ export function ChatPanel() {
       setCodexLoginState(state);
       setNotice(deviceAuth ? 'Codex device login started.' : 'ChatGPT account login started.');
     } catch (err) {
-      setCodexLoginError(err instanceof Error ? err.message : String(err));
+      setCodexLoginError(failureMessage(err, "Couldn't start the ChatGPT sign-in."));
     } finally {
       setCodexLoginBusy(false);
     }
@@ -667,7 +667,7 @@ export function ChatPanel() {
         }
       } catch (err) {
         if (cancelled) return;
-        setCodexLoginError(err instanceof Error ? err.message : String(err));
+        setCodexLoginError(failureMessage(err, "Couldn't check the ChatGPT sign-in."));
         retryTimer = window.setTimeout(poll, 2500);
       }
     };
@@ -1484,7 +1484,8 @@ export function ChatPanel() {
     authorityPendingRef.current = true;
     if (commonsEnabled) setAuthorizing(true);
     try { authority = await chatAuthority(ws.url, commonsEnabled, brand); }
-    catch (error) { setNotice((error as Error).message); reportPersonRequired(); return; }
+    // The session line on its own (a FailureNotice with no heading, GM round 2).
+    catch (error) { setNotice(oneLine(failureCopy(error))); reportPersonRequired(); return; }
     finally { authorityPendingRef.current = false; if (commonsEnabled) setAuthorizing(false); }
     if (busyRef.current || ws.readyState !== WebSocket.OPEN || useUIStore.getState().commonsEnabled !== commonsEnabled) return;
 

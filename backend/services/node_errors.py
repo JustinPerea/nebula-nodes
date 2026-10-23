@@ -153,15 +153,26 @@ class NodeErrors:
         self._save()
 
     def record_validation(self, errors: Iterable[Any]) -> None:
-        """A pre-call check's errors (ValidationErrorDetail), several per node joined in order."""
+        """A pre-call check's errors (ValidationErrorDetail), several per node joined in order.
+
+        The card's line (error copy round 3e) is their `person` lines joined
+        (execution.person_line.joined_lines); a check with none (only agents
+        or a damaged saved graph reach it) is kept as category "unknown", so
+        after a reload the card shows GM's general line with the text behind
+        Details, as it did live. get() is the specific text, as before."""
+        from execution.person_line import joined_lines
+
         by_node: dict[str, list[str]] = {}
+        lines: dict[str, list[str | None]] = {}
         for error in errors:
             node_id = str(getattr(error, "node_id", "") or "")
             message = str(getattr(error, "message", "") or "")
             if node_id and message and message not in by_node.setdefault(node_id, []):
                 by_node[node_id].append(message)
+                lines.setdefault(node_id, []).append(getattr(error, "person", None))
         for node_id, messages in by_node.items():
-            self.record(node_id, "; ".join(messages))
+            person = joined_lines(lines.get(node_id, []))
+            self.record(node_id, "; ".join(messages), person=person, category=None if person else "unknown")
 
     def observe(self, event: Any) -> None:
         """Follow one execution event the way the canvas card does."""

@@ -8,6 +8,7 @@ import { usePanelFocus } from '../../hooks/usePanelFocus';
 import type { ResultContext } from '../../lib/resultContext';
 import { ResultDetails, ResultMetadata } from './ResultDetails';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
+import { failureMessage } from '../../lib/errorCopy';
 
 function firstMediaUrl(outputs: Record<string, PortValue>): string | null {
   for (const t of ['Image', 'Video', 'Audio', 'Mesh', 'SVG'] as const) {
@@ -109,7 +110,7 @@ function ResultCardOutput({ node, prompt, url, onOpenInCanvas, onUseAsInput, onD
         }, 2000);
       }
     } catch (error) {
-      if (ownsRequest()) setSaveError(error instanceof Error ? error.message : 'Could not save this output. Please try again.');
+      if (ownsRequest()) setSaveError(failureMessage(error, "Couldn't save the file."));
     } finally {
       if (ownsRequest()) {
         savePending.current = false;

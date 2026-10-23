@@ -1467,6 +1467,26 @@ def route_unavailable_message(
     return f"{name} needs {needed} in Settings > Providers."
 
 
+def _unavailable_route(
+    definition: Mapping[str, Any], params: Mapping[str, Any] | None, api_keys: Mapping[str, Any],
+) -> tuple[Route, list[str], list[str]] | None:
+    """The route a run can't start on, its alternatives and its keyless
+    routes (route_unavailable's reading), or None when it can start."""
+    if not has_routes(definition):
+        return None
+    values = params or {}
+    route = select_route(definition, values, api_keys)
+    if route.kind != UNSET:
+        return None
+    alternatives = [str(r.get("id")) for r in routes_of(definition)
+                    if r.get("id") != route.route_id and r.get("plan") != "only" and _set_keys(r, api_keys)
+                    and route_block(definition, r, values) is None]
+    hidden = route.block is not None and route.block.reason == HIDDEN
+    keyless = ([str(route.block.on)] if hidden and not alternatives and route.block.on
+               and not _set_keys(route_by_id(definition, route.block.on) or {}, api_keys) else [])
+    return route, alternatives, keyless
+
+
 def route_unavailable(
     definition: Mapping[str, Any], params: Mapping[str, Any] | None, api_keys: Mapping[str, Any],
 ) -> dict[str, Any] | None:
@@ -1480,18 +1500,11 @@ def route_unavailable(
     setting back to its default (hidden_fix), else none. An agent applies
     one as an ordinary param edit. ``params`` are routed
     (with_wired_blockers). directRoute.ts routeUnavailable is the same."""
-    if not has_routes(definition):
+    found = _unavailable_route(definition, params, api_keys)
+    if found is None:
         return None
-    values = params or {}
-    route = select_route(definition, values, api_keys)
-    if route.kind != UNSET:
-        return None
-    alternatives = [str(r.get("id")) for r in routes_of(definition)
-                    if r.get("id") != route.route_id and r.get("plan") != "only" and _set_keys(r, api_keys)
-                    and route_block(definition, r, values) is None]
+    route, alternatives, keyless = found
     hidden = route.block is not None and route.block.reason == HIDDEN
-    keyless = ([str(route.block.on)] if hidden and not alternatives and route.block.on
-               and not _set_keys(route_by_id(definition, route.block.on) or {}, api_keys) else [])
     return {
         "routeId": route.route_id,
         "missing": list(route.missing),
@@ -1500,6 +1513,59 @@ def route_unavailable(
         "fixes": [hidden_fix(definition, str(route.block.param))] if hidden else [],
         "message": route_unavailable_message(definition, route, alternatives, keyless),
     }
+
+
+def _why_person(definition: Mapping[str, Any], route: Mapping[str, Any], block: DirectBlock) -> str:
+    """_why for the card: a setting by its label, never its key."""
+    param = str(block.param or "")
+    label = _param_label(param_definition(definition, param), param) if param else ""
+    if block.reason == UNSUPPORTED and block.detail and param and block.detail.startswith(f"{param} "):
+        return f"it doesn't take {label} {block.detail[len(param) + 1:]}"
+    if block.reason == BLOCKED:
+        return f"it doesn't take {label}"
+    if block.reason == REQUIRES:
+        return f"it needs {label} set"
+    if block.reason == SIZE:
+        return f"it can't render that {label} exactly"
+    return _why(route, block)
+
+
+def route_unavailable_line(
+    definition: Mapping[str, Any], params: Mapping[str, Any] | None, api_keys: Mapping[str, Any],
+) -> str | None:
+    """route_unavailable's message as the canvas card says it (error copy
+    round 3e, GM: no keys, ids or env-var names in what the person reads; a
+    key by its provider, a setting by its label). The message itself stays
+    the agents' text. None when the run can start."""
+    from execution.person_line import key_phrase, missing_key_line
+
+    found = _unavailable_route(definition, params, api_keys)
+    if found is None:
+        return None
+    route, alternatives, keyless = found
+    name = str(definition.get("displayName") or "This node")
+    spec = route_by_id(definition, route.route_id) if route.route_id else None
+    others = [provider_label((route_by_id(definition, alt) or {}).get("provider")) for alt in alternatives]
+    keyless_labels = [provider_label((route_by_id(definition, alt) or {}).get("provider")) for alt in keyless]
+    also = (f" {_or_list(others)} can take it." if others
+            else f" {_or_list(keyless_labels)} can take it. Add its key in Settings." if keyless_labels
+            else "")
+    block = route.block
+    if block is not None and block.reason == UNKNOWN_PROVIDER:
+        return f"{name} is set to a provider it doesn't have. Choose one in the node's provider switcher."
+    if block is not None and spec is not None:
+        values = _accepted_values(spec, block)
+        fix = (_hidden_fix_sentence(definition, str(block.param)) if block.reason == HIDDEN
+               else f"Pick {_or_list(values)}, or switch provider." if values
+               else "Disconnect the extra inputs, or switch provider." if block.reason == PORTS
+               else "Change that setting, or switch provider.")
+        return f"{name} can't run on {provider_label(spec.get('provider'))}: {_why_person(definition, spec, block)}. {fix}{also}"
+    phrase = key_phrase(route.missing) if route.missing else None
+    if spec is not None:
+        needed = f"your {phrase}" if phrase else "a provider key"
+        return (f"{name} is set to {provider_label(spec.get('provider'))}, which needs {needed}. "
+                f"Add it in Settings, or choose another provider.{also}")
+    return missing_key_line(route.missing)
 
 
 # -- the routes contract --------------------------------------------------------

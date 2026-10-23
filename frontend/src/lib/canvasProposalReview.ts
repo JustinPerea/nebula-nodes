@@ -1,5 +1,6 @@
 import { useCanvasProposalsStore, type ProposalEntry } from '../store/canvasProposalsStore';
 import { goToCanvas, onCanvas, whenReady } from './goToCanvas';
+import { writtenLine } from './errorCopy';
 
 /** How long the bar's review ring shows (canvasProposals.css `proposal-bar-review`). */
 const RING_MS = 1600;
@@ -20,7 +21,7 @@ export async function reviewCanvasProposal(
   frame?: (entry: ProposalEntry) => void,
 ): Promise<void> {
   const id = typeof op.proposalId === 'string' ? op.proposalId : '';
-  if (!id) throw new Error("This update's proposal can't be opened from here.");
+  if (!id) throw writtenLine("This update's proposal can't be opened from here.");
   await goToCanvas();
   const store = useCanvasProposalsStore;
   // Asked for at once, so the bar shows it the moment it draws.
@@ -34,7 +35,7 @@ export async function reviewCanvasProposal(
   const entry = waiting();
   if (!ready || !entry) {
     if (store.getState().focusedId === id) store.getState().focus(null);
-    throw new Error('This proposal is no longer waiting for you.');
+    throw writtenLine('This proposal is no longer waiting for you.');
   }
   frame?.(entry);
   const bar = document.querySelector<HTMLElement>('.proposal-bar');

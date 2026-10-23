@@ -370,3 +370,45 @@ def model_name(model: object, definition_id: str | None = None, default: str = "
         if label:
             return label
     return _MODEL_NAMES.get(str(model), default)
+
+
+def missing_key_line(keys: Iterable[str]) -> str:
+    """The pre-run check's missing key (error copy round 3e): key_line, or,
+    for a key Settings doesn't list by name, the same line without one."""
+    return key_line(keys) or "Add this node's API key in Settings, then run the node again."
+
+
+# Common inputs said in words, as 3c's lines do ("Connect a prompt, ...").
+_PORT_WORDS = {"prompt": "a prompt", "image": "an image", "video": "a video", "audio": "audio"}
+
+
+def port_name(label: object) -> str:
+    """An input's label as a line names it: a note in its parentheses
+    ("Mask (white = edit)", "Images (1-4)") left out (GM: no parentheses)."""
+    return re.sub(r"\s*\([^)]*\)", "", str(label or "")).strip()
+
+
+def port_line(label: str) -> str:
+    """A required input with no wire, before the run (error copy round 3e):
+    in words for the common ones, else by the input's label on the card."""
+    name = port_name(label)
+    words = _PORT_WORDS.get(name.lower())
+    if words:
+        return f"Connect {words}, then run the node again."
+    if not name:
+        return "Connect the node's inputs, then run the node again."
+    return f"Connect the node's {name} input, then run the node again."
+
+
+def joined_lines(lines: Iterable[str | None]) -> str | None:
+    """Several checks' person lines on one card, in order, each once. None
+    when any check has no line: the card then shows GM's general line with
+    every specific text behind Details, so no check goes unsaid."""
+    listed = list(lines)
+    if not listed or any(not (line and line.strip()) for line in listed):
+        return None
+    kept: list[str] = []
+    for line in listed:
+        if line.strip() not in kept:  # type: ignore[union-attr]
+            kept.append(line.strip())  # type: ignore[union-attr]
+    return " ".join(kept)

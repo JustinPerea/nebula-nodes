@@ -3630,6 +3630,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "grounding",
@@ -3654,6 +3655,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "resolution",
@@ -3675,7 +3677,8 @@
         "block": null,
         "missing": []
       },
-      "unavailable": null
+      "unavailable": null,
+      "unavailableLine": null
     },
     {
       "name": "routes: Auto with only an OpenRouter key runs on OpenRouter",
@@ -3692,7 +3695,8 @@
         "block": null,
         "missing": []
       },
-      "unavailable": null
+      "unavailable": null,
+      "unavailableLine": null
     },
     {
       "name": "routes: Auto with no key is unset and names every key",
@@ -3726,7 +3730,8 @@
         "alternatives": [],
         "fixes": [],
         "message": "Fixture Image needs BFL_API_KEY, FAL_KEY, REPLICATE_API_TOKEN, OPENROUTER_API_KEY or KREA_API_TOKEN in Settings > Providers."
-      }
+      },
+      "unavailableLine": "Add your Black Forest Labs API key, fal.ai API key, Replicate API token, OpenRouter API key or Krea API token in Settings, then run the node again."
     },
     {
       "name": "routes: a missing _provider reads as Auto",
@@ -3745,7 +3750,8 @@
         "block": null,
         "missing": []
       },
-      "unavailable": null
+      "unavailable": null,
+      "unavailableLine": null
     },
     {
       "name": "routes: a blank _provider reads as Auto",
@@ -3764,7 +3770,8 @@
         "block": null,
         "missing": []
       },
-      "unavailable": null
+      "unavailable": null,
+      "unavailableLine": null
     },
     {
       "name": "routes: explicit auto is Auto",
@@ -3784,7 +3791,8 @@
         "block": null,
         "missing": []
       },
-      "unavailable": null
+      "unavailable": null,
+      "unavailableLine": null
     },
     {
       "name": "routes: explicit BFL with its key",
@@ -3803,7 +3811,8 @@
         "block": null,
         "missing": []
       },
-      "unavailable": null
+      "unavailable": null,
+      "unavailableLine": null
     },
     {
       "name": "routes: explicit fal with its key",
@@ -3823,6 +3832,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "resolution",
@@ -3847,7 +3857,8 @@
         "block": null,
         "missing": []
       },
-      "unavailable": null
+      "unavailable": null,
+      "unavailableLine": null
     },
     {
       "name": "routes: explicit Replicate with its token",
@@ -3868,6 +3879,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "grounding",
@@ -3894,6 +3906,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "resolution",
@@ -3919,6 +3932,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "resolution",
@@ -3957,7 +3971,8 @@
         ],
         "fixes": [],
         "message": "Fixture Image is set to Replicate, which needs REPLICATE_API_TOKEN. Add it in Settings > Providers or choose another provider. Black Forest Labs or fal.ai can take it."
-      }
+      },
+      "unavailableLine": "Fixture Image is set to Replicate, which needs your Replicate API token. Add it in Settings, or choose another provider. Black Forest Labs or fal.ai can take it."
     },
     {
       "name": "routes: explicit BFL with no BFL key is unset, never fal",
@@ -3993,7 +4008,8 @@
         ],
         "fixes": [],
         "message": "Fixture Image is set to Black Forest Labs, which needs BFL_API_KEY. Add it in Settings > Providers or choose another provider. fal.ai, Replicate or OpenRouter can take it."
-      }
+      },
+      "unavailableLine": "Fixture Image is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or choose another provider. fal.ai, Replicate or OpenRouter can take it."
     },
     {
       "name": "routes: explicit fal at 1.5k is blocked, not moved",
@@ -4031,7 +4047,8 @@
         ],
         "fixes": [],
         "message": "Fixture Image can't run on fal.ai: it doesn't take resolution 1.5k. Pick 768sq, 1k, 2k or 4k, or switch provider. Black Forest Labs can take it."
-      }
+      },
+      "unavailableLine": "Fixture Image can't run on fal.ai: it doesn't take Resolution 1.5k. Pick 768sq, 1k, 2k or 4k, or switch provider. Black Forest Labs can take it."
     },
     {
       "name": "routes: explicit fal at 9:21 is blocked",
@@ -4069,7 +4086,8 @@
         ],
         "fixes": [],
         "message": "Fixture Image can't run on fal.ai: it doesn't take aspect_ratio 9:21. Pick auto, 1:1 or 16:9, or switch provider. Replicate can take it."
-      }
+      },
+      "unavailableLine": "Fixture Image can't run on fal.ai: it doesn't take Aspect ratio 9:21. Pick auto, 1:1 or 16:9, or switch provider. Replicate can take it."
     },
     {
       "name": "routes: Auto with a BFL key at 1.5k stays on BFL",
@@ -4089,7 +4107,8 @@
         "block": null,
         "missing": []
       },
-      "unavailable": null
+      "unavailable": null,
+      "unavailableLine": null
     },
     {
       "name": "routes: Auto on fal at 1.5k stops with alternatives, never Replicate",
@@ -4128,7 +4147,8 @@
         ],
         "fixes": [],
         "message": "Fixture Image can't run on fal.ai: it doesn't take resolution 1.5k. Pick 768sq, 1k, 2k or 4k, or switch provider. Replicate or OpenRouter can take it."
-      }
+      },
+      "unavailableLine": "Fixture Image can't run on fal.ai: it doesn't take Resolution 1.5k. Pick 768sq, 1k, 2k or 4k, or switch provider. Replicate or OpenRouter can take it."
     },
     {
       "name": "routes: Auto with a BFL key at a value BFL refuses stops, never fal",
@@ -4165,7 +4185,8 @@
         ],
         "fixes": [],
         "message": "Fixture Image can't run on Black Forest Labs: it doesn't take safety_tolerance 5. Change that setting, or switch provider. fal.ai can take it."
-      }
+      },
+      "unavailableLine": "Fixture Image can't run on Black Forest Labs: it doesn't take Safety tolerance 5. Change that setting, or switch provider. fal.ai can take it."
     },
     {
       "name": "routes: explicit OpenRouter with five images wired is over its port limit",
@@ -4202,7 +4223,8 @@
         "alternatives": [],
         "fixes": [],
         "message": "Fixture Image can't run on OpenRouter: it takes at most 4 wired images. Disconnect the extra inputs, or switch provider."
-      }
+      },
+      "unavailableLine": "Fixture Image can't run on OpenRouter: it takes at most 4 wired images. Disconnect the extra inputs, or switch provider."
     },
     {
       "name": "routes: explicit OpenRouter takes four wired images",
@@ -4224,7 +4246,8 @@
         "block": null,
         "missing": []
       },
-      "unavailable": null
+      "unavailable": null,
+      "unavailableLine": null
     },
     {
       "name": "routes: fal takes wired images (no port limit)",
@@ -4246,7 +4269,8 @@
         "block": null,
         "missing": []
       },
-      "unavailable": null
+      "unavailable": null,
+      "unavailableLine": null
     },
     {
       "name": "routes: _kreaAuth mcp under Auto on a BFL-maker node runs on BFL, not the plan",
@@ -4266,7 +4290,8 @@
         "block": null,
         "missing": []
       },
-      "unavailable": null
+      "unavailable": null,
+      "unavailableLine": null
     },
     {
       "name": "routes: _kreaAuth mcp under Auto with only a Krea token uses the token",
@@ -4285,7 +4310,8 @@
         "block": null,
         "missing": []
       },
-      "unavailable": null
+      "unavailable": null,
+      "unavailableLine": null
     },
     {
       "name": "routes: explicit Krea with the plan bills the plan",
@@ -4304,6 +4330,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "resolution",
@@ -4348,7 +4375,8 @@
         ],
         "fixes": [],
         "message": "Fixture Image can't run on Krea: it doesn't take resolution 4k. Change that setting, or switch provider. Black Forest Labs or fal.ai can take it."
-      }
+      },
+      "unavailableLine": "Fixture Image can't run on Krea: it doesn't take Resolution 4k. Change that setting, or switch provider. Black Forest Labs or fal.ai can take it."
     },
     {
       "name": "routes: an unknown _provider is unset",
@@ -4386,7 +4414,8 @@
         ],
         "fixes": [],
         "message": "Fixture Image is set to provider 'midjourney', which it doesn't have. Choose auto, bfl, fal, replicate, openrouter or krea."
-      }
+      },
+      "unavailableLine": "Fixture Image is set to a provider it doesn't have. Choose one in the node's provider switcher."
     },
     {
       "name": "routes: Krea-maker Auto with the plan picked bills the plan",
@@ -4406,6 +4435,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "resolution",
         "thinking_mode"
@@ -4427,7 +4457,8 @@
         "block": null,
         "missing": []
       },
-      "unavailable": null
+      "unavailable": null,
+      "unavailableLine": null
     },
     {
       "name": "routes: Krea-maker Auto with only fal runs on fal",
@@ -4445,6 +4476,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "fal_seed",
         "resolution"
@@ -4468,7 +4500,8 @@
         "block": null,
         "missing": []
       },
-      "unavailable": null
+      "unavailable": null,
+      "unavailableLine": null
     },
     {
       "name": "routes: Krea-maker plan at a value its route refuses is unset, never fal",
@@ -4506,7 +4539,8 @@
         ],
         "fixes": [],
         "message": "Fixture Krea can't run on Krea: it doesn't take resolution 4K. Change that setting, or switch provider. fal.ai can take it."
-      }
+      },
+      "unavailableLine": "Fixture Krea can't run on Krea: it doesn't take Resolution 4K. Change that setting, or switch provider. fal.ai can take it."
     },
     {
       "name": "routes: Krea-maker plan its route refuses unless a port is wired is unset",
@@ -4543,7 +4577,8 @@
         ],
         "fixes": [],
         "message": "Fixture Krea can't run on Krea: it doesn't take 2K without a style image. Change that setting, or switch provider. fal.ai can take it."
-      }
+      },
+      "unavailableLine": "Fixture Krea can't run on Krea: it doesn't take 2K without a style image. Change that setting, or switch provider. fal.ai can take it."
     },
     {
       "name": "routes: Krea-maker plan unblocked by a wired port bills the plan",
@@ -4566,7 +4601,8 @@
         "block": null,
         "missing": []
       },
-      "unavailable": null
+      "unavailable": null,
+      "unavailableLine": null
     },
     {
       "name": "routes: plan-only routes are skipped under Auto",
@@ -4583,7 +4619,8 @@
         "block": null,
         "missing": []
       },
-      "unavailable": null
+      "unavailable": null,
+      "unavailableLine": null
     },
     {
       "name": "routes: Auto with no key names only the keyed routes' keys",
@@ -4611,7 +4648,8 @@
         "alternatives": [],
         "fixes": [],
         "message": "Fixture Video needs BFL_API_KEY or OPENROUTER_API_KEY in Settings > Providers."
-      }
+      },
+      "unavailableLine": "Add your Black Forest Labs or OpenRouter API key in Settings, then run the node again."
     },
     {
       "name": "routes: an explicit plan-only route bills the plan",
@@ -4628,7 +4666,8 @@
         "block": null,
         "missing": []
       },
-      "unavailable": null
+      "unavailable": null,
+      "unavailableLine": null
     },
     {
       "name": "routes: OpenRouter refuses any wired keyframe",
@@ -4665,7 +4704,8 @@
         "alternatives": [],
         "fixes": [],
         "message": "Fixture Video can't run on OpenRouter: it doesn't take wired keyframes. Disconnect the extra inputs, or switch provider."
-      }
+      },
+      "unavailableLine": "Fixture Video can't run on OpenRouter: it doesn't take wired keyframes. Disconnect the extra inputs, or switch provider."
     },
     {
       "name": "routes: OpenRouter refuses a draft",
@@ -4700,7 +4740,8 @@
         "alternatives": [],
         "fixes": [],
         "message": "Fixture Video can't run on OpenRouter: it doesn't take draft true. Change that setting, or switch provider."
-      }
+      },
+      "unavailableLine": "Fixture Video can't run on OpenRouter: it doesn't take Draft true. Change that setting, or switch provider."
     },
     {
       "name": "routes: Auto on BFL takes a draft",
@@ -4720,7 +4761,8 @@
         "block": null,
         "missing": []
       },
-      "unavailable": null
+      "unavailable": null,
+      "unavailableLine": null
     },
     {
       "name": "routes: Auto with only OpenRouter and wired keyframes stops, never the plan",
@@ -4755,7 +4797,8 @@
         "alternatives": [],
         "fixes": [],
         "message": "Fixture Video can't run on OpenRouter: it doesn't take wired keyframes. Disconnect the extra inputs, or switch provider."
-      }
+      },
+      "unavailableLine": "Fixture Video can't run on OpenRouter: it doesn't take wired keyframes. Disconnect the extra inputs, or switch provider."
     },
     {
       "name": "routes: a plan-only route with wired keyframes is unset",
@@ -4790,7 +4833,8 @@
         "alternatives": [],
         "fixes": [],
         "message": "Fixture Video can't run on Krea: it doesn't take wired keyframes. Disconnect the extra inputs, or switch provider."
-      }
+      },
+      "unavailableLine": "Fixture Video can't run on Krea: it doesn't take wired keyframes. Disconnect the extra inputs, or switch provider."
     },
     {
       "name": "routes: explicit fal shows only fal's options (no 1.5k, no 9:21)",
@@ -4811,6 +4855,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "shownRoute": "fal",
       "routeParams": [
         {
@@ -4859,6 +4904,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "shownRoute": "bfl",
       "routeParams": [
         {
@@ -4912,6 +4958,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "shownRoute": "krea",
       "routeParams": [
         {
@@ -4977,6 +5024,7 @@
         "fixes": [],
         "message": "Fixture Image needs BFL_API_KEY, FAL_KEY, REPLICATE_API_TOKEN, OPENROUTER_API_KEY or KREA_API_TOKEN in Settings > Providers."
       },
+      "unavailableLine": "Add your Black Forest Labs API key, fal.ai API key, Replicate API token, OpenRouter API key or Krea API token in Settings, then run the node again.",
       "shownRoute": "bfl",
       "routeParams": [
         {
@@ -5045,6 +5093,7 @@
         "fixes": [],
         "message": "Fixture Image is set to Replicate, which needs REPLICATE_API_TOKEN. Add it in Settings > Providers or choose another provider. fal.ai can take it."
       },
+      "unavailableLine": "Fixture Image is set to Replicate, which needs your Replicate API token. Add it in Settings, or choose another provider. fal.ai can take it.",
       "shownRoute": "replicate",
       "routeParams": [
         {
@@ -5118,6 +5167,7 @@
         "fixes": [],
         "message": "Fixture Image can't run on fal.ai: it doesn't take resolution 1.5k. Pick 768sq, 1k, 2k or 4k, or switch provider. Replicate can take it."
       },
+      "unavailableLine": "Fixture Image can't run on fal.ai: it doesn't take Resolution 1.5k. Pick 768sq, 1k, 2k or 4k, or switch provider. Replicate can take it.",
       "shownRoute": "fal",
       "routeParams": [
         {
@@ -5184,6 +5234,7 @@
         "fixes": [],
         "message": "Fixture Image is set to provider 'nope', which it doesn't have. Choose auto, bfl, fal, replicate, openrouter or krea."
       },
+      "unavailableLine": "Fixture Image is set to a provider it doesn't have. Choose one in the node's provider switcher.",
       "shownRoute": "bfl",
       "routeParams": [
         {
@@ -5239,6 +5290,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "shownRoute": "krea",
       "routeParams": [
         {
@@ -5279,6 +5331,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "shownRoute": "fal",
       "routeParams": [
         {
@@ -5314,6 +5367,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "shownRoute": "krea-plan",
       "routeParams": [
         {
@@ -5380,6 +5434,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "grounding",
@@ -5451,6 +5506,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "grounding",
@@ -5477,6 +5533,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "enable_prompt_expansion",
@@ -5546,6 +5603,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "enable_prompt_expansion",
@@ -5572,6 +5630,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "grounding",
@@ -5643,6 +5702,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "grounding",
@@ -5669,6 +5729,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "resolution",
@@ -5735,6 +5796,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "resolution",
@@ -5771,7 +5833,8 @@
         "alternatives": [],
         "fixes": [],
         "message": "FLUX 3 Image needs BFL_API_KEY, FAL_KEY, REPLICATE_API_TOKEN or OPENROUTER_API_KEY in Settings > Providers."
-      }
+      },
+      "unavailableLine": "Add your Black Forest Labs API key, fal.ai API key, Replicate API token or OpenRouter API key in Settings, then run the node again."
     },
     {
       "name": "flux-3-image-klein: bfl chosen runs there with its key",
@@ -5792,6 +5855,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "output_format",
@@ -5881,6 +5945,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "output_format",
@@ -5909,6 +5974,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "resolution",
@@ -5975,6 +6041,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "resolution",
@@ -6007,7 +6074,8 @@
         "alternatives": [],
         "fixes": [],
         "message": "FLUX 3 Image Klein needs BFL_API_KEY or OPENROUTER_API_KEY in Settings > Providers."
-      }
+      },
+      "unavailableLine": "Add your Black Forest Labs or OpenRouter API key in Settings, then run the node again."
     },
     {
       "name": "flux-3-image-klein-base: fal chosen runs there with its key",
@@ -6027,6 +6095,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "enable_prompt_expansion",
         "enable_safety_checker",
@@ -6089,6 +6158,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "enable_prompt_expansion",
         "enable_safety_checker",
@@ -6121,7 +6191,8 @@
         "alternatives": [],
         "fixes": [],
         "message": "FLUX 3 Image Klein Base needs FAL_KEY in Settings > Providers."
-      }
+      },
+      "unavailableLine": "Add your fal.ai API key in Settings, then run the node again."
     },
     {
       "name": "flux-3-video: bfl chosen runs there with its key",
@@ -6142,6 +6213,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "draft",
@@ -6215,6 +6287,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "draft",
@@ -6242,6 +6315,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "draft",
@@ -6314,6 +6388,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "draft",
@@ -6341,6 +6416,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "draft",
@@ -6411,6 +6487,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "draft",
@@ -6438,6 +6515,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "duration",
@@ -6498,6 +6576,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "duration",
@@ -6524,6 +6603,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "duration",
@@ -6583,6 +6663,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "duration",
@@ -6622,7 +6703,8 @@
         "alternatives": [],
         "fixes": [],
         "message": "FLUX 3 Video needs BFL_API_KEY, FAL_KEY, REPLICATE_API_TOKEN, OPENROUTER_API_KEY or KREA_API_TOKEN in Settings > Providers."
-      }
+      },
+      "unavailableLine": "Add your Black Forest Labs API key, fal.ai API key, Replicate API token, OpenRouter API key or Krea API token in Settings, then run the node again."
     },
     {
       "name": "flux-video-edit: bfl chosen runs there with its key",
@@ -6643,6 +6725,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [],
       "shownRoute": "bfl",
       "routeParams": [],
@@ -6664,6 +6747,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": []
     },
     {
@@ -6685,6 +6769,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [],
       "shownRoute": "fal",
       "routeParams": [],
@@ -6706,6 +6791,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": []
     },
     {
@@ -6727,6 +6813,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [],
       "shownRoute": "krea",
       "routeParams": [],
@@ -6748,6 +6835,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": []
     },
     {
@@ -6778,7 +6866,8 @@
         "alternatives": [],
         "fixes": [],
         "message": "FLUX Video Edit [fast] needs BFL_API_KEY, FAL_KEY or KREA_API_TOKEN in Settings > Providers."
-      }
+      },
+      "unavailableLine": "Add your Black Forest Labs API key, fal.ai API key or Krea API token in Settings, then run the node again."
     },
     {
       "name": "flux-video-upscale: bfl chosen runs there with its key",
@@ -6799,6 +6888,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "creativity",
         "upscale_factor"
@@ -6839,6 +6929,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "creativity",
         "upscale_factor"
@@ -6863,6 +6954,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "creativity",
         "upscale_factor"
@@ -6903,6 +6995,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "creativity",
         "upscale_factor"
@@ -6927,6 +7020,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "creativity",
         "upscale_factor"
@@ -6967,6 +7061,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "creativity",
         "upscale_factor"
@@ -6991,6 +7086,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "creativity",
         "upscale_factor"
@@ -7031,6 +7127,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "creativity",
         "upscale_factor"
@@ -7066,7 +7163,8 @@
         "alternatives": [],
         "fixes": [],
         "message": "FLUX Video Upscale needs BFL_API_KEY, FAL_KEY, REPLICATE_API_TOKEN or KREA_API_TOKEN in Settings > Providers."
-      }
+      },
+      "unavailableLine": "Add your Black Forest Labs API key, fal.ai API key, Replicate API token or Krea API token in Settings, then run the node again."
     },
     {
       "name": "krea-3: krea chosen runs there with its key",
@@ -7087,6 +7185,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "regional_edit",
@@ -7156,6 +7255,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "regional_edit",
@@ -7183,6 +7283,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "image_size",
         "model",
@@ -7264,6 +7365,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "image_size",
         "model",
@@ -7299,7 +7401,8 @@
         "alternatives": [],
         "fixes": [],
         "message": "Krea 3 needs KREA_API_TOKEN or FAL_KEY in Settings > Providers."
-      }
+      },
+      "unavailableLine": "Add your Krea API token or fal.ai API key in Settings, then run the node again."
     },
     {
       "name": "flux-3-image: Auto on fal can't take 1.5k, so it stops and offers the routes that can",
@@ -7337,6 +7440,7 @@
         "fixes": [],
         "message": "FLUX 3 Image can't run on fal.ai: it doesn't take resolution 1.5k. Pick 768sq, 1k, 2k or 4k, or switch provider. Replicate can take it."
       },
+      "unavailableLine": "FLUX 3 Image can't run on fal.ai: it doesn't take Resolution 1.5k. Pick 768sq, 1k, 2k or 4k, or switch provider. Replicate can take it.",
       "paramKeys": [
         "aspect_ratio",
         "enable_prompt_expansion",
@@ -7381,6 +7485,7 @@
         "fixes": [],
         "message": "FLUX 3 Image can't run on fal.ai: it doesn't take aspect_ratio 9:21. Pick auto, 21:9, 2:1, 16:9, 3:2, 7:5, 4:3, 5:4, 1:1, 4:5, 3:4, 5:7, 2:3, 9:16 or 1:2, or switch provider. Black Forest Labs can take it."
       },
+      "unavailableLine": "FLUX 3 Image can't run on fal.ai: it doesn't take Aspect ratio 9:21. Pick auto, 21:9, 2:1, 16:9, 3:2, 7:5, 4:3, 5:4, 1:1, 4:5, 3:4, 5:7, 2:3, 9:16 or 1:2, or switch provider. Black Forest Labs can take it.",
       "paramKeys": [
         "aspect_ratio",
         "enable_prompt_expansion",
@@ -7407,6 +7512,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "output_format",
@@ -7456,6 +7562,7 @@
         ],
         "message": "FLUX 3 Image Klein can't run on OpenRouter: it doesn't offer Seed 7. Clear Seed, or switch provider. Black Forest Labs can take it (add its key in Settings > Providers)."
       },
+      "unavailableLine": "FLUX 3 Image Klein can't run on OpenRouter: it doesn't offer Seed 7. Clear Seed, or switch provider. Black Forest Labs can take it. Add its key in Settings.",
       "paramKeys": [
         "aspect_ratio",
         "resolution",
@@ -7506,6 +7613,7 @@
         ],
         "message": "FLUX 3 Video can't run on OpenRouter: it doesn't offer Draft (fast preview). Turn Draft (fast preview) off, or switch provider. fal.ai can take it."
       },
+      "unavailableLine": "FLUX 3 Video can't run on OpenRouter: it doesn't offer Draft (fast preview). Turn Draft (fast preview) off, or switch provider. fal.ai can take it.",
       "paramKeys": [
         "aspect_ratio",
         "duration",
@@ -7552,6 +7660,7 @@
         "fixes": [],
         "message": "FLUX 3 Video can't run on OpenRouter: it doesn't take wired keyframes. Disconnect the extra inputs, or switch provider. Black Forest Labs can take it."
       },
+      "unavailableLine": "FLUX 3 Video can't run on OpenRouter: it doesn't take wired keyframes. Disconnect the extra inputs, or switch provider. Black Forest Labs can take it.",
       "paramKeys": [
         "aspect_ratio",
         "duration",
@@ -7598,6 +7707,7 @@
         "fixes": [],
         "message": "FLUX 3 Video can't run on Black Forest Labs: it doesn't take a video continuation longer than 15 s. Change that setting, or switch provider. fal.ai can take it."
       },
+      "unavailableLine": "FLUX 3 Video can't run on Black Forest Labs: it doesn't take a video continuation longer than 15 s. Change that setting, or switch provider. fal.ai can take it.",
       "paramKeys": [
         "aspect_ratio",
         "draft",
@@ -7643,6 +7753,7 @@
         "fixes": [],
         "message": "FLUX 3 Video can't run on Krea: it doesn't take resolution uhd. Pick hd or fhd, or switch provider. Black Forest Labs can take it."
       },
+      "unavailableLine": "FLUX 3 Video can't run on Krea: it doesn't take Resolution uhd. Pick hd or fhd, or switch provider. Black Forest Labs can take it.",
       "paramKeys": [
         "aspect_ratio",
         "duration",
@@ -7684,7 +7795,8 @@
         "alternatives": [],
         "fixes": [],
         "message": "FLUX 3 Video needs BFL_API_KEY, FAL_KEY, REPLICATE_API_TOKEN, OPENROUTER_API_KEY or KREA_API_TOKEN in Settings > Providers."
-      }
+      },
+      "unavailableLine": "Add your Black Forest Labs API key, fal.ai API key, Replicate API token, OpenRouter API key or Krea API token in Settings, then run the node again."
     },
     {
       "name": "flux-3-video: under Auto a BFL key runs on BFL with the plan connected",
@@ -7704,6 +7816,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "draft",
@@ -7729,6 +7842,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "duration",
@@ -7771,6 +7885,7 @@
         "fixes": [],
         "message": "FLUX 3 Video can't run on Black Forest Labs: it doesn't take an end image without a start image or keyframes. Change that setting, or switch provider."
       },
+      "unavailableLine": "FLUX 3 Video can't run on Black Forest Labs: it doesn't take an end image without a start image or keyframes. Change that setting, or switch provider.",
       "paramKeys": [
         "aspect_ratio",
         "draft",
@@ -7818,7 +7933,8 @@
         "alternatives": [],
         "fixes": [],
         "message": "FLUX 3 Video can't run on Black Forest Labs: it takes at most 10 wired images (start + keyframes + end). Disconnect the extra inputs, or switch provider."
-      }
+      },
+      "unavailableLine": "FLUX 3 Video can't run on Black Forest Labs: it takes at most 10 wired images (start + keyframes + end). Disconnect the extra inputs, or switch provider."
     },
     {
       "name": "flux-3-video: a start image, eight keyframes and an end image are ten, which BFL takes",
@@ -7842,7 +7958,8 @@
         "block": null,
         "missing": []
       },
-      "unavailable": null
+      "unavailable": null,
+      "unavailableLine": null
     },
     {
       "name": "flux-3-video: under Auto, eleven images in all stop on fal too",
@@ -7879,7 +7996,8 @@
         "alternatives": [],
         "fixes": [],
         "message": "FLUX 3 Video can't run on fal.ai: it takes at most 10 wired images (start + keyframes + end). Disconnect the extra inputs, or switch provider."
-      }
+      },
+      "unavailableLine": "FLUX 3 Video can't run on fal.ai: it takes at most 10 wired images (start + keyframes + end). Disconnect the extra inputs, or switch provider."
     },
     {
       "name": "flux-3-video: Replicate takes at most ten images in all",
@@ -7917,7 +8035,8 @@
         "alternatives": [],
         "fixes": [],
         "message": "FLUX 3 Video can't run on Replicate: it takes at most 10 wired images (start + keyframes + end). Disconnect the extra inputs, or switch provider."
-      }
+      },
+      "unavailableLine": "FLUX 3 Video can't run on Replicate: it takes at most 10 wired images (start + keyframes + end). Disconnect the extra inputs, or switch provider."
     },
     {
       "name": "krea-3: Auto with the Krea plan bills the plan",
@@ -7935,6 +8054,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "aspect_ratio",
         "regional_edit",
@@ -7980,6 +8100,7 @@
         "fixes": [],
         "message": "Krea 3 can't run on fal.ai: it doesn't take high reasoning without a reference image (fal.ai takes it on krea/v3/edit only). Change that setting, or switch provider. Krea can take it."
       },
+      "unavailableLine": "Krea 3 can't run on fal.ai: it doesn't take high reasoning without a reference image (fal.ai takes it on krea/v3/edit only). Change that setting, or switch provider. Krea can take it.",
       "paramKeys": [
         "image_size",
         "model",
@@ -8011,6 +8132,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "image_size",
         "model",
@@ -8056,6 +8178,7 @@
         "fixes": [],
         "message": "Krea 3 can't run on Krea: it doesn't take a regional edit without a reference image. Change that setting, or switch provider. fal.ai can take it."
       },
+      "unavailableLine": "Krea 3 can't run on Krea: it doesn't take a regional edit without a reference image. Change that setting, or switch provider. fal.ai can take it.",
       "paramKeys": [
         "aspect_ratio",
         "regional_edit",
@@ -8081,6 +8204,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "creativity",
         "upscale_factor"
@@ -8108,6 +8232,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "enable_safety_checker",
         "guidance_scale",
@@ -8225,6 +8350,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "guidance_scale",
         "image_size",
@@ -8339,6 +8465,7 @@
         "fixes": [],
         "message": "FLUX.2 needs BFL_API_KEY or FAL_KEY in Settings > Providers."
       },
+      "unavailableLine": "Add your Black Forest Labs or fal.ai API key in Settings, then run the node again.",
       "paramKeys": [
         "guidance_scale",
         "image_size",
@@ -8460,6 +8587,7 @@
         "fixes": [],
         "message": "FLUX.2 can't run on Black Forest Labs: it doesn't take model flash. Pick pro, max, flex, klein-9b or klein-4b, or switch provider. fal.ai can take it."
       },
+      "unavailableLine": "FLUX.2 can't run on Black Forest Labs: it doesn't take Model flash. Pick pro, max, flex, klein-9b or klein-4b, or switch provider. fal.ai can take it.",
       "paramKeys": [
         "guidance_scale",
         "image_size",
@@ -8492,6 +8620,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "enable_safety_checker",
         "guidance_scale",
@@ -8550,6 +8679,7 @@
         ],
         "message": "FLUX.2 can't run on Black Forest Labs: it doesn't offer Safety Checker off. Turn Safety Checker on, or switch provider. fal.ai can take it."
       },
+      "unavailableLine": "FLUX.2 can't run on Black Forest Labs: it doesn't offer Safety Checker off. Turn Safety Checker on, or switch provider. fal.ai can take it.",
       "paramKeys": [
         "guidance_scale",
         "image_size",
@@ -8610,6 +8740,7 @@
         ],
         "message": "FLUX.2 can't run on fal.ai: it doesn't offer Safety 3 with Model FLUX.2 [klein] 4B. Set Safety back to 2, or switch provider. Black Forest Labs can take it."
       },
+      "unavailableLine": "FLUX.2 can't run on fal.ai: it doesn't offer Safety 3 with Model FLUX.2 [klein] 4B. Set Safety back to 2, or switch provider. Black Forest Labs can take it.",
       "paramKeys": [
         "enable_safety_checker",
         "guidance_scale",
@@ -8646,6 +8777,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "guidance_scale",
         "image_size",
@@ -8680,6 +8812,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "guidance_scale",
         "image_size",
@@ -8728,6 +8861,7 @@
         "fixes": [],
         "message": "FLUX.2 can't run on Black Forest Labs: it doesn't take model MAX. Pick pro, max, flex, klein-9b or klein-4b, or switch provider."
       },
+      "unavailableLine": "FLUX.2 can't run on Black Forest Labs: it doesn't take Model MAX. Pick pro, max, flex, klein-9b or klein-4b, or switch provider.",
       "paramKeys": [
         "guidance_scale",
         "image_size",
@@ -8775,6 +8909,7 @@
         "fixes": [],
         "message": "FLUX.2 can't run on fal.ai: it doesn't take model Flash. Pick pro, max, flash, flex, klein-9b or klein-4b, or switch provider."
       },
+      "unavailableLine": "FLUX.2 can't run on fal.ai: it doesn't take Model Flash. Pick pro, max, flash, flex, klein-9b or klein-4b, or switch provider.",
       "paramKeys": [
         "enable_safety_checker",
         "guidance_scale",
@@ -8811,6 +8946,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "guidance_scale",
         "image_size",
@@ -8843,6 +8979,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "shownRoute": "b",
       "routeParams": [
         {
@@ -8940,6 +9077,7 @@
         ],
         "message": "Fixture Hide can't run on fal.ai: it doesn't offer Quality High with Mode Fast. Set Quality back to Low, or switch provider. Black Forest Labs can take it."
       },
+      "unavailableLine": "Fixture Hide can't run on fal.ai: it doesn't offer Quality High with Mode Fast. Set Quality back to Low, or switch provider. Black Forest Labs can take it.",
       "shownRoute": "b",
       "routeParams": [
         {
@@ -9033,6 +9171,7 @@
         ],
         "message": "Fixture Hide can't run on fal.ai: it doesn't offer Quality High with Mode Fast. Set Quality back to Low, or switch provider. Black Forest Labs can take it (add its key in Settings > Providers)."
       },
+      "unavailableLine": "Fixture Hide can't run on fal.ai: it doesn't offer Quality High with Mode Fast. Set Quality back to Low, or switch provider. Black Forest Labs can take it. Add its key in Settings.",
       "shownRoute": "b",
       "routeParams": [
         {
@@ -9104,6 +9243,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "shownRoute": "b",
       "routeParams": [
         {
@@ -9177,6 +9317,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "shownRoute": "b",
       "routeParams": [
         {
@@ -9272,6 +9413,7 @@
         ],
         "message": "Fixture Hide can't run on OpenRouter: it doesn't offer Seed 42. Clear Seed, or switch provider. Black Forest Labs or fal.ai can take it."
       },
+      "unavailableLine": "Fixture Hide can't run on OpenRouter: it doesn't offer Seed 42. Clear Seed, or switch provider. Black Forest Labs or fal.ai can take it.",
       "shownRoute": "c",
       "routeParams": [
         {
@@ -9324,6 +9466,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "shownRoute": "a",
       "routeParams": [
         {
@@ -9405,6 +9548,7 @@
         ],
         "message": "Fixture Hide can't run on Black Forest Labs: it doesn't offer Sharpen. Turn Sharpen off, or switch provider. fal.ai can take it."
       },
+      "unavailableLine": "Fixture Hide can't run on Black Forest Labs: it doesn't offer Sharpen. Turn Sharpen off, or switch provider. fal.ai can take it.",
       "shownRoute": "a",
       "routeParams": [
         {
@@ -9484,6 +9628,7 @@
         ],
         "message": "Fixture Hide can't run on fal.ai: it doesn't offer Quality High with Mode Fast. Set Quality back to Low, or switch provider. Black Forest Labs can take it (add its key in Settings > Providers)."
       },
+      "unavailableLine": "Fixture Hide can't run on fal.ai: it doesn't offer Quality High with Mode Fast. Set Quality back to Low, or switch provider. Black Forest Labs can take it. Add its key in Settings.",
       "shownRoute": "b",
       "routeParams": [
         {
@@ -9554,6 +9699,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "shownRoute": "fal",
       "routeParams": [
         {
@@ -9681,6 +9827,7 @@
         ],
         "message": "FLUX.2 can't run on fal.ai: it doesn't offer Safety 5 (Permissive) with Model FLUX.2 [klein] 9B. Set Safety back to 2, or switch provider. Black Forest Labs can take it (add its key in Settings > Providers)."
       },
+      "unavailableLine": "FLUX.2 can't run on fal.ai: it doesn't offer Safety 5 (Permissive) with Model FLUX.2 [klein] 9B. Set Safety back to 2, or switch provider. Black Forest Labs can take it. Add its key in Settings.",
       "shownRoute": "fal",
       "routeParams": [
         {
@@ -9784,6 +9931,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "shownRoute": "fal",
       "routeParams": [
         {
@@ -9887,6 +10035,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "shownRoute": "fal",
       "routeParams": [
         {
@@ -9989,6 +10138,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "shownRoute": "openrouter",
       "routeParams": [
         {
@@ -10058,6 +10208,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "shownRoute": "fal",
       "routeParams": [
         {
@@ -10130,6 +10281,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "shownRoute": "bfl",
       "routeParams": [
         {
@@ -10203,6 +10355,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "shownRoute": "replicate",
       "routeParams": [
         {
@@ -10298,6 +10451,7 @@
         ],
         "message": "FLUX 3 Video can't run on Krea: it doesn't offer Draft (fast preview). Turn Draft (fast preview) off, or switch provider. Black Forest Labs, fal.ai or Replicate can take it."
       },
+      "unavailableLine": "FLUX 3 Video can't run on Krea: it doesn't offer Draft (fast preview). Turn Draft (fast preview) off, or switch provider. Black Forest Labs, fal.ai or Replicate can take it.",
       "shownRoute": "krea",
       "routeParams": [
         {
@@ -10359,6 +10513,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "shownRoute": "fal",
       "routeParams": [
         {
@@ -10462,6 +10617,7 @@
         ],
         "message": "Krea 3 can't run on Krea: it doesn't offer Model Jam (speed). Set Model back to Berry (quality), or switch provider. fal.ai can take it."
       },
+      "unavailableLine": "Krea 3 can't run on Krea: it doesn't offer Model Jam (speed). Set Model back to Berry (quality), or switch provider. fal.ai can take it.",
       "shownRoute": "krea",
       "routeParams": [
         {
@@ -10556,6 +10712,7 @@
         ],
         "message": "FLUX 3 Image can't run on fal.ai: it doesn't offer Grounding (web + image search) off. Turn Grounding (web + image search) on, or switch provider. Black Forest Labs or Replicate can take it."
       },
+      "unavailableLine": "FLUX 3 Image can't run on fal.ai: it doesn't offer Grounding (web + image search) off. Turn Grounding (web + image search) on, or switch provider. Black Forest Labs or Replicate can take it.",
       "shownRoute": "fal",
       "routeParams": [
         {
@@ -10627,6 +10784,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "shownRoute": "replicate",
       "routeParams": [
         {
@@ -10723,6 +10881,7 @@
         ],
         "message": "FLUX 3 Video can't run on OpenRouter: it doesn't offer Draft (fast preview). Turn Draft (fast preview) off, or switch provider. Black Forest Labs, fal.ai or Replicate can take it."
       },
+      "unavailableLine": "FLUX 3 Video can't run on OpenRouter: it doesn't offer Draft (fast preview). Turn Draft (fast preview) off, or switch provider. Black Forest Labs, fal.ai or Replicate can take it.",
       "shownRoute": "openrouter",
       "routeParams": [
         {
@@ -10807,6 +10966,7 @@
         ],
         "message": "FLUX.2 can't run on fal.ai: it doesn't offer Safety 5 (Permissive) with Model FLUX.2 [klein] 9B. Set Safety back to 2, or switch provider."
       },
+      "unavailableLine": "FLUX.2 can't run on fal.ai: it doesn't offer Safety 5 (Permissive) with Model FLUX.2 [klein] 9B. Set Safety back to 2, or switch provider.",
       "shownRoute": "fal",
       "routeParams": [
         {
@@ -10934,6 +11094,7 @@
         ],
         "message": "FLUX.2 can't run on Black Forest Labs: it doesn't offer Safety Checker off. Turn Safety Checker on, or switch provider."
       },
+      "unavailableLine": "FLUX.2 can't run on Black Forest Labs: it doesn't offer Safety Checker off. Turn Safety Checker on, or switch provider.",
       "shownRoute": "bfl",
       "routeParams": [
         {
@@ -11049,6 +11210,7 @@
         ],
         "message": "Krea 3 can't run on fal.ai: it doesn't offer Thinking mode High. Set Thinking mode back to Fast, or switch provider."
       },
+      "unavailableLine": "Krea 3 can't run on fal.ai: it doesn't offer Thinking mode High. Set Thinking mode back to Fast, or switch provider.",
       "shownRoute": "fal",
       "routeParams": [
         {
@@ -11148,6 +11310,7 @@
         ],
         "message": "FLUX 3 Image can't run on fal.ai: it doesn't offer Grounding (web + image search) off. Turn Grounding (web + image search) on, or switch provider."
       },
+      "unavailableLine": "FLUX 3 Image can't run on fal.ai: it doesn't offer Grounding (web + image search) off. Turn Grounding (web + image search) on, or switch provider.",
       "shownRoute": "fal",
       "routeParams": [
         {
@@ -11238,6 +11401,7 @@
         ],
         "message": "FLUX 3 Image can't run on Black Forest Labs: it doesn't offer Prompt expansion. Turn Prompt expansion off, or switch provider."
       },
+      "unavailableLine": "FLUX 3 Image can't run on Black Forest Labs: it doesn't offer Prompt expansion. Turn Prompt expansion off, or switch provider.",
       "shownRoute": "bfl",
       "routeParams": [
         {
@@ -11311,6 +11475,7 @@
         "missing": []
       },
       "unavailable": null,
+      "unavailableLine": null,
       "shownRoute": "fal",
       "routeParams": [
         {
