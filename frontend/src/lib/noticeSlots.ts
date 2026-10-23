@@ -4,8 +4,10 @@ import { useSyncExternalStore } from 'react';
  * The app's one notice region holds one stack (GM - Design, 2026-10-23: "One
  * region, one stack, and nothing else draws toasts."). Each kind of item has
  * a slot in it, listed here top to bottom as the column draws them, so the
- * order never depends on which item mounted first. Bottom up: the canvas
- * notice (its Undo or Redo, an error) right above the bar; then the toasts
+ * order never depends on which item mounted first. Bottom up: a restore's
+ * late count right above the bar, under the newer notice it arrived after
+ * (GM - Design, round 3: "a plain notice with no button ... under the newer
+ * notice"); then the canvas notice (its Undo or Redo, an error); then the toasts
  * about the person's own last action (an asset moved to the trash, a board
  * step, a pin that couldn't save, a project moved to the trash); then the
  * lines about the app and the agents (the project an agent switched to, the
@@ -26,6 +28,7 @@ export const NOTICE_SLOTS = [
   'board',
   'asset-trash',
   'notice',
+  'late',
 ] as const;
 
 export type NoticeSlot = (typeof NOTICE_SLOTS)[number];

@@ -12,6 +12,18 @@ const POPOVER_GAP = 10;
 const POPOVER_WIDTH = 260;
 const POPOVER_MIN_WIDTH = 228;
 const POPOVER_MAX_HEIGHT = 300;
+/**
+ * One more line of the body (GM - Design, 2026-10-23, round 3: "give the
+ * body room for one more line before it scrolls"): when the body's content is
+ * at most this much longer than a 300 px panel leaves room for, the panel
+ * takes it, inside the top line and the band, so the body doesn't scroll and
+ * no line sits under the fade. One body line (the State value: 16 px text,
+ * 21 px tall) plus what follows the last line, the last section's 10 px margin
+ * and the body's 12 px bottom padding (43 px, measured live in GM's cover
+ * setup, where the body lacked 34). More than that scrolls under the fade, as
+ * before.
+ */
+const POPOVER_SPARE_LINE = 44;
 const PINNED_WIDTH = 300;
 const PINNED_MIN_WIDTH = 260;
 const PINNED_MAX_HEIGHT = 440;
@@ -65,7 +77,23 @@ function frameEquals(a: PopoverFrame | null, b: PopoverFrame) {
  * shorter and its body scrolls. Runs every frame while open, so a resize, a
  * pan, the toolbar coming or going, or the bar growing moves it at once.
  */
-function measurePopoverFrame(nodeId: string, anchor: HTMLElement): PopoverFrame {
+/**
+ * How much taller the body's content is than the body's viewport (scrollHeight
+ * against clientHeight: exact, layout sizes only), 0 while it fits, or null
+ * before the body is in the page.
+ */
+function bodyOverflow(popover: HTMLElement | null): number | null {
+  const body = popover?.querySelector<HTMLElement>('.node-inspector-popover__body');
+  if (!body) return null;
+  return Math.max(0, body.scrollHeight - body.clientHeight);
+}
+
+/**
+ * `panelNeed`: the height the panel would need to show its whole body, or
+ * null when not yet known. Within one spare line over 300 px, the panel takes
+ * it (POPOVER_SPARE_LINE).
+ */
+function measurePopoverFrame(nodeId: string, anchor: HTMLElement, panelNeed: number | null = null): PopoverFrame {
   const rect = anchor.getBoundingClientRect();
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
@@ -92,8 +120,11 @@ function measurePopoverFrame(nodeId: string, anchor: HTMLElement): PopoverFrame 
   // Above the bar across the whole width, and above the Canvas actions panel
   // only where it is over that panel (lib/bottomBar.ts).
   const bottomLimit = floatingBottomLimit(VIEWPORT_GUTTER, viewportHeight, { left, right: left + width });
-  // Its own height, or all the room there is: the body scrolls, the foot stays.
-  const height = Math.max(0, Math.min(POPOVER_MAX_HEIGHT, bottomLimit - topLimit));
+  // Its own height (one spare line more when that is all the body lacks), or
+  // all the room there is: the body scrolls, the foot stays.
+  const own = panelNeed !== null && panelNeed > POPOVER_MAX_HEIGHT && panelNeed <= POPOVER_MAX_HEIGHT + POPOVER_SPARE_LINE
+    ? Math.ceil(panelNeed) : POPOVER_MAX_HEIGHT;
+  const height = Math.max(0, Math.min(own, bottomLimit - topLimit));
   // Beside the node, level with its top, shifted up when that would cross the bottom.
   let top = rect.top - 8;
   if (placement === 'bottom') {
@@ -193,7 +224,11 @@ export function NodeInspectorPopover() {
 
   useLayoutEffect(() => {
     if (!pinned) pinnedPreferenceRef.current = null;
-    if (!visible || !selectedNodeId) return;
+    // Closed: the next open measures afresh (at 300 px, before any spare line).
+    if (!visible || !selectedNodeId) {
+      frameRef.current = null;
+      return;
+    }
 
     let raf = 0;
     let stopped = false;
@@ -220,7 +255,16 @@ export function NodeInspectorPopover() {
       } else {
         const anchor = getInspectorAnchor(selectedNodeId);
         if (anchor) {
-          const nextFrame = measurePopoverFrame(selectedNodeId, anchor);
+          // What the body lacks at the height it has now. While the body fits,
+          // the panel keeps the height it has (the spare line too, once taken),
+          // so it settles in one frame and never goes back and forth; a new
+          // node, or the Inspector opened again, starts from 300 px.
+          const shown = frameRef.current;
+          const overflow = bodyOverflow(popoverRef.current);
+          const shownHeight = shown?.nodeId === selectedNodeId && shown.placement !== 'pinned-left'
+            ? Number(shown.style.height) : null;
+          const panelNeed = shownHeight !== null && overflow !== null ? shownHeight + overflow : null;
+          const nextFrame = measurePopoverFrame(selectedNodeId, anchor, panelNeed);
           if (!frameEquals(frameRef.current, nextFrame)) {
             frameRef.current = nextFrame;
             setFrame(nextFrame);

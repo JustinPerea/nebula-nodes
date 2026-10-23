@@ -8,7 +8,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  max-width: min(640px, calc(100vw - 32px));
+  max-width: min(var(--notice-max-w, 560px), calc(100vw - 32px));
   padding: 6px 6px 6px 16px;
   border: 1px solid var(--sr-edge-strong, rgb(255 255 255 / 0.16));
   border-radius: var(--sr-node-media-radius, 14px);
@@ -65,5 +65,5 @@
  * so its centered width leaves that room on both sides. The leave popover
  * sits above it (commons.css). */
 body:has(.commons-view) .project-switch-toast {
-  max-width: min(640px, calc(100vw - 2 * (418px + 8px)));
+  max-width: min(var(--notice-max-w, 560px), calc(100vw - 2 * (418px + 8px)));
 }

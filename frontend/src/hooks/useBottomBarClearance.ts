@@ -4,9 +4,11 @@ import { clearBottomBarClearance, publishBottomBarClearance } from '../lib/botto
 /**
  * A screen's bottom bar publishes where it starts (lib/bottomBar.ts), for the
  * notices that sit 8 px above it and the floating panels that end above it:
- * the canvas's bar with its open Canvas actions panel, and Creator Studio's
+ * the canvas's bar with its open Canvas actions panel, Creator Studio's
  * composer (GM - Design, 2026-10-23: "the composer publishes its top edge the
- * way the canvas bar does"). Each part carries `data-bottom-bar`. Measured
+ * way the canvas bar does") and the Remotion editor's timeline tray (round 3:
+ * "Yes, the Remotion tray publishes its top edge, the same as the canvas bar
+ * and the composer."). Each part carries `data-bottom-bar`. Measured
  * again whenever a part or the window changes size, and whenever `key`
  * changes (a part mounting, such as the actions panel opening); cleared when
  * the bar leaves the screen.

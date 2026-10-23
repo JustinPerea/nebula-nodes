@@ -5,8 +5,9 @@
    draws toasts."). Mounted by App on every screen, outside .react-flow and
    every screen's stacking context, on its own layer (slava-restraint.css
    --sr-layer-notice). It sits the notice gap above the bottom bar's measured
-   top (--bottom-bar-clearance, written by the canvas bar and by Creator
-   Studio's composer: lib/bottomBar.ts); with no bar, at the bar's own
+   top (--bottom-bar-clearance, written by the canvas bar, Creator Studio's
+   composer and the Remotion editor's timeline tray: lib/bottomBar.ts); with
+   no bar, at the bar's own
    distance from the bottom edge. Only its items take clicks; the canvas,
    nodes and panels around them get the rest. In the startup entry, so a toast
    that shows at once is already placed. */
@@ -17,6 +18,12 @@
      item's height and the band read it, so floating panels stop exactly one
      notice and its gap above the bar (lib/bottomBar.ts). */
   --notice-h: 46px;
+  /* Every row's widest (GM - Design, round 3: "keep notices to one line in
+     the copy. Cap their width at 560 px, and let a rare second line overlap a
+     panel's edge while it shows. Don't grow the band."). Each item's own
+     width rule reads it too, so a narrower rule (a Studio's room) still wins
+     and none is wider. */
+  --notice-max-w: 560px;
   position: fixed;
   left: var(--page-gutter, 16px);
   right: var(--page-gutter, 16px);
@@ -66,6 +73,12 @@
   box-sizing: border-box;
   min-height: var(--notice-h);
   pointer-events: auto;
+}
+
+/* The cap for any row whose own CSS sets none (zero specificity, so an
+   item's own, narrower width always wins). */
+:where(.notice-region__slot) > * {
+  max-width: min(var(--notice-max-w), 100%);
 }
 
 @media (prefers-reduced-motion: reduce) {

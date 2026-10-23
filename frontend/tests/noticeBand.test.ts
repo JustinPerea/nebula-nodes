@@ -95,6 +95,15 @@ describe('the measured top line', () => {
     expect(bottomBar.floatingTopLimit(16)).toBe(72);
   });
 
+  // Round 3 (GM, answer 5): "While it's open, use the lower of the two top
+  // lines (the toolbar's) whether or not the toolbar is showing." The
+  // toolbar's empty Panel keeps its height and has no width.
+  it("the toolbar's empty Panel (no width, the toolbar's height) still sets the line", () => {
+    header();
+    box({ 'data-top-bar': '' }, new DOMRect(640, 92, 0, 50));
+    expect(bottomBar.floatingTopLimit(16)).toBe(150);
+  });
+
   it('a hidden toolbar (no box) doesn\'t count', () => {
     header();
     box({ 'data-top-bar': '' }, new DOMRect(0, 0, 0, 0));
