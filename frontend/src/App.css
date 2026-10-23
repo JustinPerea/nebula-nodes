@@ -58,7 +58,7 @@ a {
   align-items: center;
   gap: 10px;
   width: max-content;
-  max-width: min(92vw, 620px);
+  max-width: min(92vw, var(--notice-max-w, 560px));
   padding: 8px 8px 8px 14px;
   border: 1px solid rgb(255 255 255 / 14%);
   border-radius: 12px;

@@ -782,7 +782,9 @@ export function Canvas() {
             floatingTopLimit; GM - Design, 2026-10-23). The marker is on the
             panel, the toolbar's layout box: the toolbar's entry animation
             transforms it, and a measured line would ease down with it. With
-            nothing selected the panel is empty (0 px) and sets no line. */}
+            nothing selected the panel is empty, 0 px wide but still one
+            toolbar tall (canvas.css), so an open Inspector holds its place
+            (GM, round 3: "A panel shouldn't move unless someone moves it"). */}
         <Panel position="top-center" className="selection-toolbar-panel" data-top-bar="">
           <SelectionToolbar />
         </Panel>

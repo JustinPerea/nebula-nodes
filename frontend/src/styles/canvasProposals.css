@@ -221,7 +221,7 @@
   display: flex;
   align-items: center;
   gap: 14px;
-  width: min(620px, calc(100vw - 32px));
+  width: min(var(--notice-max-w, 560px), calc(100vw - 32px));
   box-sizing: border-box;
   padding: 10px 10px 10px 14px;
   border: 1px solid rgb(255 255 255 / 0.14);
@@ -522,7 +522,7 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   display: flex;
   align-items: center;
   gap: 8px;
-  max-width: min(520px, calc(100vw - 32px));
+  max-width: min(var(--notice-max-w, 560px), calc(100vw - 32px));
   box-sizing: border-box;
   padding: 6px 6px 6px 12px;
   border: 1px solid rgb(255 255 255 / 0.14);

@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
 import { useGraphStore } from '../../store/graphStore';
-import { NOTICE_HOLD_MS, noticeHoldMs } from '../../lib/canvasNoticeHold';
+import { NOTICE_HOLD_MS } from '../../lib/canvasNoticeHold';
 import { isForeignEdit } from '../../lib/canvasUndo';
+import { useNoticeHold } from '../../hooks/useNoticeHold';
 
 /** How long a notice with Undo or Redo stays up. Long enough to reach the button. */
 export const UNDO_NOTICE_MS = NOTICE_HOLD_MS;
+
+const isShownNotice = (id: number) => useGraphStore.getState().undoNotice?.id === id;
 
 /**
  * A short line when someone else's edit changes this canvas: "Claude changed
@@ -38,22 +40,9 @@ export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: bool
     return stack[stack.length - 1] === entry;
   });
 
-  // The notice the pointer or focus is holding up, by id: a new notice starts its own hold.
-  const [heldId, setHeldId] = useState<number | null>(null);
-  const pointerIn = useRef(false);
-  const focusIn = useRef(false);
-  const held = heldId !== null && heldId === notice?.id;
-
-  useEffect(() => {
-    if (!notice || held) return;
-    const timer = window.setTimeout(() => {
-      if (useGraphStore.getState().undoNotice?.id === notice.id) dismiss();
-    }, noticeHoldMs(notice.text, notice.offer));
-    return () => window.clearTimeout(timer);
-  }, [notice, dismiss, held]);
+  const holdHandlers = useNoticeHold(notice, isShownNotice, dismiss);
 
   if (!notice) return null;
-  const hold = () => setHeldId(pointerIn.current || focusIn.current ? notice.id : null);
   const act = () => {
     const state = useGraphStore.getState();
     if (notice.offer === 'undo') state.undo();
@@ -67,13 +56,7 @@ export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: bool
       role={notice.tone === 'error' ? 'alert' : 'status'}
       aria-live={notice.tone === 'error' ? 'assertive' : 'polite'}
       style={notice.agentColor ? { ['--agent-color' as string]: notice.agentColor } : undefined}
-      onMouseEnter={() => { pointerIn.current = true; hold(); }}
-      onMouseLeave={() => { pointerIn.current = false; hold(); }}
-      onFocus={() => { focusIn.current = true; hold(); }}
-      onBlur={(event) => {
-        focusIn.current = event.currentTarget.contains(event.relatedTarget as globalThis.Node | null);
-        hold();
-      }}
+      {...holdHandlers}
     >
       {notice.agentColor && <span className="canvas-undo-notice__dot" aria-hidden="true" />}
       <span className="canvas-undo-notice__text">{notice.text}</span>
