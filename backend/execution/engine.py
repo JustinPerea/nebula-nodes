@@ -65,8 +65,8 @@ from models.events import (
 from execution import gating, provider_calls
 from services.moodboard_brief import apply_to_generator as apply_board_to_generator
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import (as_person_line, carries_provider_text, missing_file_line, person_line,
-                                   with_person_line)
+from execution.person_line import (as_person_line, carries_provider_text, is_job_failure, missing_file_line,
+                                   person_line, with_person_line)
 from execution.provider_status import card_line
 
 CycleError = _GraphlibCycleError
@@ -1606,7 +1606,7 @@ async def _execute_graph(
             return nid, True, 1
 
         except Exception as exc:
-            category, friendly, retryable = classify_error(str(exc))
+            category, friendly, retryable = classify_error(str(exc), job_failure=is_job_failure(exc))
             # The handler's own line, else GM's for a provider's answer from
             # the shared table, naming the provider this run called (error
             # copy round 3d, execution/provider_status.py).
@@ -1676,7 +1676,7 @@ async def _execute_graph(
                     await record_outputs(nid, context, {out_key: {"type": out_type, "value": item}}, node.params)
                 return nid, True, len(contexts)
             except Exception as exc:
-                category, friendly, retryable = classify_error(str(exc))
+                category, friendly, retryable = classify_error(str(exc), job_failure=is_job_failure(exc))
                 await emit(ErrorEvent(node_id=nid, error=str(exc), category=category,
                                       friendly=friendly, retryable=retryable,
                                       person=person_line(exc), provider_text=carries_provider_text(exc)))

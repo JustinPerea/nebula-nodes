@@ -20,7 +20,7 @@ from typing import Any
 import httpx
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
-from execution.person_line import with_person_line
+from execution.person_line import with_api_status, with_person_line
 
 VERTEX_REGION = "us-central1"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -113,9 +113,9 @@ async def access_token(raw: str) -> tuple[str, str]:
                 "assertion": assertion,
             })
         if resp.status_code != 200:
-            raise RuntimeError(
+            raise with_api_status(RuntimeError(
                 f"Google refused the Vertex service-account key ({resp.status_code}): {resp.text[:300]}"
-            )
+            ), resp.status_code)
         body = resp.json()
         token = body.get("access_token")
         if not isinstance(token, str) or not token:

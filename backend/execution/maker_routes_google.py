@@ -304,7 +304,10 @@ async def vertex_krea_veo(
         if resolution == "4k":
             raise as_person_line(ValueError("Google documents 4K with reference images only on the Veo previews; pick 720p or 1080p"))
         if image or last:
-            raise as_person_line(ValueError("Vertex documents reference images as their own mode; remove the start/end image"))
+            raise with_person_line(
+                ValueError("Vertex documents reference images as their own mode; remove the start/end image"),
+                "On Vertex, reference images are their own mode. Disconnect the start and end images, then run the "
+                "node again.")
 
     instance: dict[str, Any] = {}
     if prompt and prompt.value:

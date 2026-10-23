@@ -30,7 +30,7 @@ from services.file_access import require_allowed_path
 from services.output import get_run_dir, resolve_output_ref
 from services.provider_start_guard import AMBIGUITY_MESSAGE
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import with_person_line
+from execution.person_line import as_job_failure, with_api_status, with_call_facts, with_person_line
 
 logger = logging.getLogger(__name__)
 
@@ -316,7 +316,7 @@ def _raise_api_error(
             detail += f"; retry after {retry_after} seconds"
     else:
         detail = excerpt if excerpt is not None else _response_excerpt(response)
-    error = RuntimeError(f"World Labs {action} failed ({status}): {detail}")
+    error = with_api_status(RuntimeError(f"World Labs {action} failed ({status}): {detail}"), status)
     person = {401: "key_rejected", 402: "no_credits", 429: "busy"}.get(status)
     raise with_person_line(error, PERSON_LINES[person]) if person else error
 
@@ -787,7 +787,7 @@ def _operation_error(operation: dict[str, Any]) -> RuntimeError | None:
         message = error.get("message") or error.get("detail") or json.dumps(error, default=str)
     else:
         message = str(error)
-    return WorldLabsOperationError(f"World Labs operation failed: {message}")
+    return as_job_failure(WorldLabsOperationError(f"World Labs operation failed: {message}"))
 
 
 def _operation_progress(operation: dict[str, Any], fallback: float) -> float:
@@ -1509,7 +1509,10 @@ def _post_accept_failure(
     else:
         person = ("World Labs may have accepted this run, and it may be billed, but Nebula couldn't "
                   "finish it here. Check the job in Marble before you run the node again.")
-    return with_person_line(failure, person)
+    # The wrapper rewrites the cause's text for agents: it keeps what the call
+    # said (World Labs' status, the job-failure mark), so a failed job is
+    # never classified "auth"; its own person line replaces the cause's.
+    return with_person_line(with_call_facts(failure, error), person)
 
 
 def _validated_world_input(inputs: dict[str, PortValueDict]) -> tuple[dict[str, Any], str]:

@@ -32,7 +32,7 @@ import json
 from typing import Any, Awaitable, Callable
 
 from models.graph import GraphNode, PortValueDict
-from execution.person_line import as_person_line, it_was, model_name, with_person_line
+from execution.person_line import as_person_line, it_was, model_name, with_call_facts, with_person_line
 
 Handler = Callable[..., Awaitable[dict[str, Any]]]
 Translate = Callable[
@@ -276,9 +276,10 @@ async def krea_meshy(node: GraphNode, inputs: dict[str, PortValueDict], api_keys
         result = await handler(call, inputs, api_keys, emit=emit)
     except RuntimeError as exc:
         if any(f"submit failed ({code})" in str(exc) for code in (401, 402, 403)):
-            raise RuntimeError(f"{exc}. Meshy documents that {params.get('ai_model')} \"require[s] account "
-                               f"entitlement\" (https://docs.meshy.ai/openapi.yaml), and API access comes with "
-                               f"Pro and above (https://www.meshy.ai/pricing). {MESHY_KREA_HINT}") from exc
+            raise with_call_facts(RuntimeError(
+                f"{exc}. Meshy documents that {params.get('ai_model')} \"require[s] account "
+                f"entitlement\" (https://docs.meshy.ai/openapi.yaml), and API access comes with "
+                f"Pro and above (https://www.meshy.ai/pricing). {MESHY_KREA_HINT}"), exc) from exc
         raise
     return _krea_ports("Mesh", result)
 

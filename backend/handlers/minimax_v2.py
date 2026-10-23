@@ -38,7 +38,7 @@ from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
 from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir, save_video_from_url
-from execution.person_line import as_person_line, slow_job_line, with_person_line
+from execution.person_line import as_job_failure, as_person_line, slow_job_line, with_api_status, with_person_line
 
 MAX_REFERENCE_IMAGES = 9
 MAX_REFERENCE_VIDEOS = 3
@@ -174,7 +174,9 @@ async def handle_minimax_video_v2(
         if response.status_code not in (200, 201, 202):
             detail = _error_text(response)
             hint = f" {PLAN_HINT}" if response.status_code in (401, 402, 403) else ""
-            raise RuntimeError(f"MiniMax H3 submit failed ({response.status_code}): {detail}.{hint}")
+            raise with_api_status(
+                RuntimeError(f"MiniMax H3 submit failed ({response.status_code}): {detail}.{hint}"),
+                response.status_code)
         task_id = str((response.json() or {}).get("task_id") or "")
         if not task_id:
             raise RuntimeError(f"MiniMax H3 returned no task_id: {response.text}")
@@ -189,7 +191,9 @@ async def handle_minimax_video_v2(
                 await asyncio.sleep(POLL_INTERVAL)
                 polled = await poll_request(lambda: client.get(query, headers=poll_headers))
                 if polled.status_code != 200:
-                    raise RuntimeError(f"MiniMax H3 poll failed ({polled.status_code}): {_error_text(polled)}")
+                    raise with_api_status(
+                        RuntimeError(f"MiniMax H3 poll failed ({polled.status_code}): {_error_text(polled)}"),
+                        polled.status_code)
                 task = (polled.json() or {}).get("task") or {}
                 status = task.get("status")
                 await _emit(ProgressEvent(node_id=node.id, value=min(poll / MAX_POLLS, 0.99)))
@@ -204,5 +208,6 @@ async def handle_minimax_video_v2(
                     upstream.finished = True
                     error = task.get("error") or {}
                     code = f" ({error['code']})" if error.get("code") else ""
-                    raise RuntimeError(f"MiniMax H3 task {status}: {error.get('message') or 'no reason given'}{code}")
+                    raise as_job_failure(
+                        RuntimeError(f"MiniMax H3 task {status}: {error.get('message') or 'no reason given'}{code}"))
             raise with_person_line(RuntimeError(f"MiniMax H3 task timed out after {MAX_POLLS} polls"), slow_job_line("MiniMax"))

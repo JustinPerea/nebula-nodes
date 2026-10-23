@@ -37,7 +37,7 @@ from models.graph import GraphNode, PortValueDict
 from services.image_input import is_remote_or_data_uri, load_local_image
 from services.media_input import owned_output_value
 from services.output import get_run_dir, save_base64_image
-from execution.person_line import as_person_line, it_was, model_name, or_list, with_person_line
+from execution.person_line import as_person_line, it_was, model_name, or_list, with_api_status, with_person_line
 
 XAI_API_BASE = "https://api.x.ai/v1"
 GENERATIONS_URL = f"{XAI_API_BASE}/images/generations"
@@ -176,7 +176,9 @@ async def handle_xai_image(
             json=body,
         )
     if response.status_code != 200:
-        raise RuntimeError(f"xAI image request failed ({response.status_code}): {_error_text(response)}")
+        raise with_api_status(
+            RuntimeError(f"xAI image request failed ({response.status_code}): {_error_text(response)}"),
+            response.status_code)
     items = (response.json() or {}).get("data") or []
     run_dir = get_run_dir()
     saved: list[str] = []

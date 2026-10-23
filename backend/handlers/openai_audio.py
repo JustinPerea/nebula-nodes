@@ -10,7 +10,7 @@ from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.output import get_run_dir
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import as_person_line, missing_file_line, with_person_line
+from execution.person_line import as_person_line, missing_file_line, with_api_status, with_person_line
 
 OPENAI_AUDIO_BASE = "https://api.openai.com/v1/audio"
 
@@ -67,7 +67,8 @@ async def handle_openai_stt(
             data=data,
         )
         if response.status_code != 200:
-            raise RuntimeError(f"OpenAI STT error {response.status_code}: {response.text}")
+            raise with_api_status(
+                RuntimeError(f"OpenAI STT error {response.status_code}: {response.text}"), response.status_code)
 
     # Response structure depends on format
     if response_format in ("json", "verbose_json"):
@@ -121,7 +122,8 @@ async def handle_openai_translate(
             data=data,
         )
         if response.status_code != 200:
-            raise RuntimeError(f"OpenAI Translate error {response.status_code}: {response.text}")
+            raise with_api_status(
+                RuntimeError(f"OpenAI Translate error {response.status_code}: {response.text}"), response.status_code)
 
     if response_format in ("json", "verbose_json"):
         result_data = response.json()
@@ -173,7 +175,8 @@ async def handle_openai_tts(
             json=body,
         )
         if response.status_code != 200:
-            raise RuntimeError(f"OpenAI TTS error {response.status_code}: {response.text}")
+            raise with_api_status(
+                RuntimeError(f"OpenAI TTS error {response.status_code}: {response.text}"), response.status_code)
 
     run_dir = get_run_dir()
     # Use the selected format as the file extension. Defensively fall back to

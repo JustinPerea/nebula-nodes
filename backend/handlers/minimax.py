@@ -12,8 +12,8 @@ from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent, ProgressEvent
 from services.output import get_run_dir, image_to_data_uri, resolve_output_ref, save_video_from_url
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import (as_person_line, missing_file_line, slow_job_line, status_line, with_person_line,
-                                   with_provider_line)
+from execution.person_line import (as_job_failure, as_person_line, missing_file_line, slow_job_line, status_line,
+                                   with_api_status, with_person_line, with_provider_line)
 
 MINIMAX_API_BASE = "https://api.minimaxi.com"
 # MiniMax keys belong to one region: "The API host and key vary by region and
@@ -186,7 +186,8 @@ async def handle_minimax_video(
         api_base, resp = await submit_task(client, "/v1/video_generation", headers, body)
         _log(f"submit response: {resp.status_code}")
         if resp.status_code not in (200, 201, 202):
-            raise RuntimeError(f"MiniMax submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"MiniMax submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         submit_data = resp.json()
         _log(f"submit_data: {submit_data}")
@@ -221,7 +222,9 @@ async def handle_minimax_video(
             )
             if poll_resp.status_code != 200:
                 _log(f"poll FAILED: {poll_resp.status_code} {poll_resp.text}")
-                raise RuntimeError(f"MiniMax poll failed ({poll_resp.status_code}): {poll_resp.text}")
+                raise with_api_status(
+                    RuntimeError(f"MiniMax poll failed ({poll_resp.status_code}): {poll_resp.text}"),
+                    poll_resp.status_code)
 
             poll_data = poll_resp.json()
             status = poll_data.get("status", "")
@@ -243,9 +246,9 @@ async def handle_minimax_video(
                     headers={"Authorization": f"Bearer {api_key}"},
                 )
                 if retrieve_resp.status_code != 200:
-                    raise RuntimeError(
+                    raise with_api_status(RuntimeError(
                         f"MiniMax file retrieve failed ({retrieve_resp.status_code}): {retrieve_resp.text}"
-                    )
+                    ), retrieve_resp.status_code)
 
                 retrieve_data = retrieve_resp.json()
                 download_url = retrieve_data.get("file", {}).get("download_url", "")
@@ -262,7 +265,7 @@ async def handle_minimax_video(
             elif status == "Fail":
                 error = poll_data.get("message") or poll_data.get("err_msg") or "Unknown error"
                 _log(f"Fail: {error}")
-                raise RuntimeError(f"MiniMax task failed: {error}")
+                raise as_job_failure(RuntimeError(f"MiniMax task failed: {error}"))
 
             # Queueing / Processing — keep polling
 

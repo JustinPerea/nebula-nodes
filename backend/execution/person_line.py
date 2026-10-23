@@ -102,6 +102,64 @@ def carries_provider_text(exc: BaseException) -> bool:
     return getattr(exc, _PROVIDER_TEXT, False) is True
 
 
+# The provider's answer, as facts the raise knows (round 3d, part 2). GM's
+# status table (execution/provider_status.py) reads these, never the text: a
+# number in a provider's body or in Nebula's own words ("Prompt is too long:
+# 500 characters over") is not a status, and a storage upload's 403 is not the
+# provider refusing the key.
+_API_STATUS = "nebula_api_status"
+_JOB_FAILURE = "nebula_job_failure"
+
+
+def with_api_status(exc: E, status: object) -> E:
+    """The provider's own API, called with the person's key, answered this
+    run with HTTP ``status``, and `exc` is raised for that answer. Attach it
+    and return `exc` (``raise with_api_status(RuntimeError(...), resp.status_code)``).
+
+    Not for a presigned or storage upload, a download of a result or an input,
+    or any call that isn't the provider's API with the person's key: those
+    raises say why with a ``# no API status:`` comment and keep today's line
+    (tests/test_error_copy_round3d2.py's guard). A value that isn't an HTTP
+    status attaches nothing."""
+    if isinstance(status, int) and not isinstance(status, bool) and 100 <= status <= 599:
+        setattr(exc, _API_STATUS, status)
+    return exc
+
+
+def api_status(exc: BaseException) -> int | None:
+    """The HTTP status `exc` was raised with (with_api_status), or None."""
+    value = getattr(exc, _API_STATUS, None)
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def as_job_failure(exc: E) -> E:
+    """`exc` is a terminal job failure: the provider took the job (submit and
+    polling answered), then reported it failed, cancelled or expired. Its
+    error is about the job (an input URL it couldn't fetch, a model crash),
+    so the card never says the key, busy or trouble line for it, and the
+    classifier never calls it ``auth``. Mark it where it is raised."""
+    setattr(exc, _JOB_FAILURE, True)
+    return exc
+
+
+def is_job_failure(exc: BaseException) -> bool:
+    """`exc` was raised as a terminal job failure (as_job_failure)."""
+    return getattr(exc, _JOB_FAILURE, False) is True
+
+
+def with_call_facts(exc: E, cause: BaseException) -> E:
+    """`exc` rewrites `cause`'s text (a hint added for agents): it keeps what
+    the call said, the provider's status and the job-failure mark, so the
+    card reads the same. A person line never carries over (round 3c: a
+    wrapper writes its own)."""
+    status = api_status(cause)
+    if status is not None:
+        with_api_status(exc, status)
+    if is_job_failure(cause):
+        as_job_failure(exc)
+    return exc
+
+
 # A connected file's kind, in words (GM: "A connected {image|audio|video} file
 # can't be found."), from what the input is called or the file's extension.
 _KIND_WORDS = (

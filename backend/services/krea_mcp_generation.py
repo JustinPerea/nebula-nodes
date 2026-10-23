@@ -16,7 +16,7 @@ from jsonschema import Draft202012Validator
 
 from services.cancellation import schedule_detached_cancel
 from models.events import ProgressEvent
-from execution.person_line import as_person_line, slow_job_line, with_person_line
+from execution.person_line import as_job_failure, as_person_line, slow_job_line, with_person_line
 
 
 def _balance_reason(value) -> str | None:
@@ -272,7 +272,7 @@ async def poll_job(tools, job, node_id, emit, *, max_polls, poll_interval, on_co
         if status in ('failed', 'cancelled', 'canceled'):
             if on_completed:
                 on_completed()
-            raise RuntimeError(f'Krea job {status}; inspect the saved run before retrying')
+            raise as_job_failure(RuntimeError(f'Krea job {status}; inspect the saved run before retrying'))
         if status not in KREA_STATUS_PENDING:
             raise RuntimeError(f'Krea job returned unknown status: {status}')
         if index == max_polls:

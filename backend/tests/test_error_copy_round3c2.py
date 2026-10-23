@@ -253,6 +253,20 @@ RUN_TIME_SERVICES = ("media_input", "qc_common", "qc_jev", "typesafe_client", "v
                      "google_vertex", "quiver_client", "krea_mcp_generation", "edit_masks", "ffmpeg", "krea_account",
                      "nous_auth")
 WRAPPERS = {"with_person_line", "as_person_line", "with_provider_line"}
+# Facts a raise attaches beside its text (round 3d, part 2): the guard reads
+# the exception inside them.
+MARKERS = {"with_api_status", "as_job_failure", "with_call_facts"}
+
+
+def _peel(exc: ast.AST | None) -> tuple[ast.AST | None, ast.Call | None]:
+    """(the exception call, its person-line wrapper) with the markers peeled off."""
+    wrapper = None
+    while isinstance(exc, ast.Call) and isinstance(exc.func, ast.Name) and exc.args and (
+            exc.func.id in MARKERS or (exc.func.id in WRAPPERS and wrapper is None)):
+        if exc.func.id in WRAPPERS:
+            wrapper = exc
+        exc = exc.args[0]
+    return exc, wrapper
 
 
 def _run_time_files() -> list[Path]:
@@ -281,9 +295,7 @@ def _raises(path: Path) -> list[tuple[bool, str, ast.Call, ast.Call | None]]:
             exc = node.value  # a helper that builds the exception it raises
         else:
             continue
-        wrapper = None
-        if isinstance(exc, ast.Call) and isinstance(exc.func, ast.Name) and exc.func.id in WRAPPERS and exc.args:
-            wrapper, exc = exc, exc.args[0]
+        exc, wrapper = _peel(exc)
         if not isinstance(exc, ast.Call) or not exc.args:
             continue
         name = exc.func.id if isinstance(exc.func, ast.Name) else getattr(exc.func, "attr", "")
@@ -322,7 +334,7 @@ UNLINED_BASELINE: dict[str, int] = {
     "execution/maker_routes_google.py": 2, "execution/maker_routes_ideogram_runway.py": 3,
     "execution/maker_routes_minimax_meshy.py": 5, "execution/maker_routes_openai.py": 3,
     "execution/maker_routes_xai.py": 1, "execution/poll_retry.py": 1, "execution/route_clients.py": 4,
-    "execution/stream_runner.py": 6, "execution/sync_runner.py": 4, "services/media_input.py": 3,
+    "execution/stream_runner.py": 5, "execution/sync_runner.py": 4, "services/media_input.py": 3,
     "services/qc_common.py": 6, "services/qc_jev.py": 3, "services/typesafe_client.py": 23,
     "services/vision_llm.py": 8, "services/google_vertex.py": 2, "services/quiver_client.py": 9,
     # The 3c-2 review raised two by one: handlers/replicate_model.py's
@@ -344,6 +356,10 @@ UNLINED_BASELINE: dict[str, int] = {
     # MiniMax's own code (a refused key or no balance gets the table's line),
     # and the exception is built before the raise, so the guard can't read
     # its text; tests/test_error_copy_round3d.py pins it.
+    # Round 3d, part 2 lowered stream_runner.py by one: the image stream's
+    # "ended without a final image event" is built before its raise, so the
+    # card can give a fal.ai job still running GM's slow-job line;
+    # tests/test_error_copy_round3d2.py pins its text.
 }
 
 
@@ -367,7 +383,8 @@ def test_no_run_time_raise_in_nebulas_own_words_goes_without_a_person_line() -> 
 
 
 FORBIDDEN_IN_A_LINE = re.compile(
-    r"(?<![{\w])[a-z]+_[a-z0-9_]+(?![}\w])|[A-Z]{2,}_[A-Z_]+|/api/|nebula trash|\bGET\b|"
+    # snake_case ids and keys, a digit before the underscore too ("gen4_turbo").
+    r"(?<![{\w])[a-z][a-z0-9]*_[a-z0-9_]+(?![}\w])|[A-Z]{2,}_[A-Z_]+|/api/|nebula trash|\bGET\b|"
     r"\{(?:path|file_path|image_value|img_str|audio_path|value|ref|raw|task_id|job_id|character_id|moodboard_id)\b|"
     # Round 3d (GM's rules: no ids, no parentheses in error copy): a provider's
     # kebab-case model id with a digit in it ("gpt-image-2", "k2-large"), a
@@ -377,8 +394,21 @@ FORBIDDEN_IN_A_LINE = re.compile(
     r"\b[a-z][a-z0-9.]*(?:-[a-z0-9.]+)*-[a-z]*\d[a-z0-9.]*(?:-[a-z0-9.]+)*(?![\w-])|"
     r"\b[a-z]+\d[a-z0-9.]*(?:-[a-z0-9.]+)+(?![\w-])|\b[a-z0-9]+(?:-[a-z0-9]+)*-\d{6}\b|"
     r"\b(?:grok|fal|dreamina|seedance|seedream|kling|hailuo|imagen|flux|gpt|dall|krea|ltx|hunyuan|stability|"
-    r"black|bytedance|minimax|veo|gemini|ideogram|recraft|luma|qwen|wan)-[a-z]|[()]"
+    r"black|bytedance|minimax|veo|gemini|ideogram|recraft|luma|qwen|wan)-[a-z]|[()]|"
+    # Round 3d, part 2: a capitalised id with a numbered segment
+    # ("MiniMax-Hailuo-02", "MiniMax-Hailuo-2.3-Fast"; a maker's name and a
+    # hyphen, "Gen-4 Turbo", is a model's own spelling and passes), a digitless
+    # kebab id of three parts or more ("nano-banana-pro"; English compounds
+    # joined by -to-, -and-, -of- pass: "speech-to-speech",
+    # "first-and-last-frame"), and an owner/name id ("stability-ai/sdxl",
+    # "owner/name"). A URL is the one fact some lines need, so the guard
+    # reads a line with its URLs taken out (forbidden_in_a_line).
+    r"\b[A-Z][A-Za-z0-9]*-[A-Za-z0-9.]+-\d[\d.]*(?:-[A-Za-z0-9.]+)*\b|"
+    r"(?<![\w-])(?![a-z]+(?:-[a-z]+)*-(?:to|and|or|of|in|on|by|for|the)-)[a-z]+(?:-[a-z]+){2,}\b(?!-)|"
+    r"\b[\w.-]+/[\w.-]+"
 )
+
+_URL = re.compile(r"https?://\S+")
 
 
 def _labels_with_parentheses() -> list[str]:
@@ -409,7 +439,7 @@ def forbidden_in_a_line(line: str) -> re.Match[str] | None:
     label left aside."""
     for label in _FIELD_LABELS:
         line = line.replace(label, "")
-    return FORBIDDEN_IN_A_LINE.search(line)
+    return FORBIDDEN_IN_A_LINE.search(_URL.sub("", line))
 
 
 def test_no_person_line_names_an_id_a_path_a_parameter_key_or_an_env_var() -> None:
@@ -549,8 +579,10 @@ def test_the_recovery_warnings_say_world_labs_not_paid_provider() -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("make, person, category", [
     # Round 3d: a provider's 5xx reads the status table's line, naming the
-    # provider the shot's base called (tests/test_error_copy_round3d.py).
-    (lambda: ValueError("FAL submit failed (500): upstream exploded"),
+    # provider the shot's base called (tests/test_error_copy_round3d.py); the
+    # status is the one the raise attached (round 3d, part 2).
+    (lambda: __import__("execution.person_line", fromlist=["with_api_status"]).with_api_status(
+        ValueError("FAL submit failed (500): upstream exploded"), 500),
      "fal.ai is having trouble right now. Try again in a few minutes.", "unknown"),
     (lambda: __import__("execution.person_line", fromlist=["as_person_line"]).as_person_line(
         ValueError("The prompt is empty. Write one, then run the node again.")),

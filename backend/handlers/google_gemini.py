@@ -16,7 +16,8 @@ from services.retired_nodes import GEMINI_TTS_PREVIEWS_SHUTDOWN, default_until
 from services.output import get_run_dir, save_base64_image
 from execution.missing_credential import MissingCredentialError
 from services.param_defaults import param_default
-from execution.person_line import as_person_line, model_name, option_label, option_labels, with_person_line
+from execution.person_line import (as_person_line, model_name, option_label, option_labels, with_api_status,
+                                   with_person_line)
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
@@ -292,7 +293,8 @@ async def _nano_banana_interaction(
             headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
         )
         if response.status_code != 200:
-            raise RuntimeError(f"Gemini API error {response.status_code}: {response.text}")
+            raise with_api_status(
+                RuntimeError(f"Gemini API error {response.status_code}: {response.text}"), response.status_code)
 
     image, mime, text = _image_from_interaction(response.json())
     if not image:
@@ -391,7 +393,8 @@ async def handle_nano_banana(
     async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(url, json=body, headers={"x-goog-api-key": api_key})
         if response.status_code != 200:
-            raise RuntimeError(f"Gemini API error {response.status_code}: {response.text}")
+            raise with_api_status(
+                RuntimeError(f"Gemini API error {response.status_code}: {response.text}"), response.status_code)
 
     data = response.json()
     parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
@@ -474,7 +477,8 @@ async def handle_lyria3(
             json=body,
         )
         if response.status_code != 200:
-            raise RuntimeError(f"Lyria 3 API error {response.status_code}: {response.text}")
+            raise with_api_status(
+                RuntimeError(f"Lyria 3 API error {response.status_code}: {response.text}"), response.status_code)
 
     data = response.json()
     resp_parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
@@ -572,7 +576,8 @@ async def handle_gemini_tts(
             json=body,
         )
         if response.status_code != 200:
-            raise RuntimeError(f"Gemini TTS API error {response.status_code}: {response.text}")
+            raise with_api_status(
+                RuntimeError(f"Gemini TTS API error {response.status_code}: {response.text}"), response.status_code)
 
     data = response.json()
     resp_parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
@@ -636,7 +641,9 @@ async def handle_gemini_embeddings(
             json=body,
         )
         if response.status_code != 200:
-            raise RuntimeError(f"Gemini Embeddings API error {response.status_code}: {response.text}")
+            raise with_api_status(
+                RuntimeError(f"Gemini Embeddings API error {response.status_code}: {response.text}"),
+                response.status_code)
 
     data = response.json()
     embedding = data.get("embedding", {})

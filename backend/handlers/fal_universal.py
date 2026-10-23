@@ -15,7 +15,8 @@ from services.file_access import require_allowed_path
 from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir, save_base64_image
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import as_person_line, field_label, slow_job_line, with_person_line
+from execution.person_line import (as_job_failure, as_person_line, field_label, slow_job_line, with_api_status,
+                                   with_person_line)
 
 FAL_QUEUE_BASE = "https://queue.fal.run"
 STREAMING_FAL_ENDPOINTS = {"openai/gpt-image-2", "openai/gpt-image-2/edit"}
@@ -297,7 +298,9 @@ async def handle_fal_universal(
             json=fal_input,
         )
         if submit_resp.status_code not in (200, 201):
-            raise RuntimeError(f"FAL submit failed ({submit_resp.status_code}): {submit_resp.text}")
+            raise with_api_status(
+                RuntimeError(f"FAL submit failed ({submit_resp.status_code}): {submit_resp.text}"),
+                submit_resp.status_code)
 
         submit_data = submit_resp.json()
         request_id = submit_data.get("request_id")
@@ -320,7 +323,9 @@ async def handle_fal_universal(
                 raise
 
             if status_resp.status_code not in (200, 202):
-                raise RuntimeError(f"FAL status poll failed ({status_resp.status_code}): {status_resp.text}")
+                raise with_api_status(
+                    RuntimeError(f"FAL status poll failed ({status_resp.status_code}): {status_resp.text}"),
+                    status_resp.status_code)
 
             status_data = status_resp.json()
             status = status_data.get("status", "")
@@ -332,7 +337,7 @@ async def handle_fal_universal(
                 break
             elif status in ("FAILED", "CANCELLED"):
                 error_msg = status_data.get("error", f"FAL job failed with status: {status}")
-                raise RuntimeError(f"FAL job failed: {error_msg}")
+                raise as_job_failure(RuntimeError(f"FAL job failed: {error_msg}"))
             # IN_QUEUE or IN_PROGRESS — keep polling
         else:
             # Out of polls: stop the job upstream so it doesn't finish and
@@ -343,7 +348,9 @@ async def handle_fal_universal(
         # Step 3: Fetch result
         result_resp = await client.get(result_url, headers=headers)
         if result_resp.status_code != 200:
-            raise RuntimeError(f"FAL result fetch failed ({result_resp.status_code}): {result_resp.text}")
+            raise with_api_status(
+                RuntimeError(f"FAL result fetch failed ({result_resp.status_code}): {result_resp.text}"),
+                result_resp.status_code)
 
         result_data = result_resp.json()
 
@@ -475,7 +482,9 @@ async def _fal_queue_run(
     async with httpx.AsyncClient(timeout=30.0) as client:
         submit_resp = await client.post(f"{FAL_QUEUE_BASE}/{endpoint_id}", headers=headers, json=fal_input)
         if submit_resp.status_code not in (200, 201):
-            raise RuntimeError(f"FAL submit failed ({submit_resp.status_code}): {submit_resp.text}")
+            raise with_api_status(
+                RuntimeError(f"FAL submit failed ({submit_resp.status_code}): {submit_resp.text}"),
+                submit_resp.status_code)
 
         submit_data = submit_resp.json()
         request_id = submit_data.get("request_id")
@@ -495,21 +504,25 @@ async def _fal_queue_run(
                 _schedule_fal_cancel(_fal_cancel_url(submit_data, endpoint_id, request_id), api_key)
                 raise
             if status_resp.status_code not in (200, 202):
-                raise RuntimeError(f"FAL status poll failed ({status_resp.status_code}): {status_resp.text}")
+                raise with_api_status(
+                    RuntimeError(f"FAL status poll failed ({status_resp.status_code}): {status_resp.text}"),
+                    status_resp.status_code)
             status_data = status_resp.json()
             status = status_data.get("status", "")
             await _emit(ProgressEvent(node_id=node_id, value=min(poll_num / max_polls, 0.99)))
             if status == "COMPLETED":
                 break
             if status in ("FAILED", "CANCELLED"):
-                raise RuntimeError(f"FAL job failed: {status_data.get('error', status)}")
+                raise as_job_failure(RuntimeError(f"FAL job failed: {status_data.get('error', status)}"))
         else:
             _schedule_fal_cancel(_fal_cancel_url(submit_data, endpoint_id, request_id), api_key)
             raise with_person_line(RuntimeError(f"FAL job timed out after {max_polls} polls"), slow_job_line("fal.ai"))
 
         result_resp = await client.get(result_url, headers=headers)
         if result_resp.status_code != 200:
-            raise RuntimeError(f"FAL result fetch failed ({result_resp.status_code}): {result_resp.text}")
+            raise with_api_status(
+                RuntimeError(f"FAL result fetch failed ({result_resp.status_code}): {result_resp.text}"),
+                result_resp.status_code)
         return result_resp.json()
 
 

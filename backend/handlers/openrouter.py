@@ -10,7 +10,7 @@ from execution.stream_runner import StreamConfig, stream_execute
 from services.image_input import load_local_image
 from services.output import get_run_dir, save_base64_image
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import as_person_line
+from execution.person_line import as_person_line, with_api_status
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -151,7 +151,8 @@ async def _handle_image_generation(
             json=request_body,
         )
         if resp.status_code != 200:
-            raise RuntimeError(f"OpenRouter API error {resp.status_code}: {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"OpenRouter API error {resp.status_code}: {resp.text}"), resp.status_code)
 
     data = resp.json()
 

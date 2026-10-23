@@ -14,7 +14,8 @@ import base64
 import math
 import httpx
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import as_person_line, missing_file_line, option_label, or_list, with_person_line
+from execution.person_line import (as_person_line, missing_file_line, option_label, or_list, with_api_status,
+                                   with_person_line)
 
 RUNWAY_API_BASE = "https://api.dev.runwayml.com/v1"
 RUNWAY_HEADERS_BASE = {
@@ -199,7 +200,9 @@ async def _upload_ephemeral(path: Path, api_key: str, mime: str) -> str:
             json={"filename": path.name, "type": "ephemeral"},
         )
         if start.status_code >= 400:
-            raise RuntimeError(f"Runway upload could not start ({start.status_code}): {start.text[:300]}")
+            raise with_api_status(
+                RuntimeError(f"Runway upload could not start ({start.status_code}): {start.text[:300]}"),
+                start.status_code)
         ticket = start.json()
         upload_url, fields, runway_uri = ticket.get("uploadUrl"), ticket.get("fields") or {}, ticket.get("runwayUri")
         if not upload_url or not isinstance(runway_uri, str) or not runway_uri.startswith("runway://"):
@@ -207,6 +210,7 @@ async def _upload_ephemeral(path: Path, api_key: str, mime: str) -> str:
         with path.open("rb") as handle:
             sent = await client.post(upload_url, data=fields, files={"file": (path.name, handle, mime)})
         if sent.status_code >= 400:
+            # no API status: the presigned storage upload, not Runway's API: its 403 isn't a refused key.
             raise RuntimeError(f"Runway upload failed ({sent.status_code}): {sent.text[:300]}")
     return runway_uri
 

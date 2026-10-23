@@ -62,7 +62,7 @@ from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.output import OUTPUT_ROOT, get_run_dir
 from execution.error_classifier import classify_error
-from execution.person_line import with_person_line
+from execution.person_line import is_job_failure, with_person_line
 from execution.provider_status import card_line
 
 
@@ -544,7 +544,7 @@ async def handle_cinema_scene(
             # `error` is the text agents read, word for word. The other fields
             # are how the Cinema panel reads the failure, the way a node card
             # reads its run error (error copy round 3c-2, lib/nodeErrorCopy.ts).
-            category, friendly, _retryable = classify_error(str(exc))
+            category, friendly, _retryable = classify_error(str(exc), job_failure=is_job_failure(exc))
             # The base node's own line, else GM's line for the provider's
             # answer, naming the provider the base called (round 3d).
             card = card_line(exc, base_model, base_node.params if base_node is not None else {}, api_keys)

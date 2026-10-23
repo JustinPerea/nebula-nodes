@@ -23,20 +23,28 @@ params and the keys, so it can name the provider the run actually called:
 
 1. A handler's own person line always wins (execution/person_line.py).
 2. Moderation keeps its own card: no line for a blocked run.
-3. The status: a typed provider error's ``status_code`` (BFLError,
-   BytePlusError, QuiverError), else the shapes handlers write it in, "...
-   failed (429): ...", "... API error 401: ...", "(HTTP 503)", "(402: ...)".
-   A bare number elsewhere in the text (a seed range, "after 300 polls") is
-   not a status. httpx's own HTTPStatusError is a download of a result or an
-   input URL (every raise_for_status() call is one), not the provider's API,
-   so it names no provider and keeps today's line.
-4. Credits or a key a provider signals without the status: the classifier's
-   quota words win the status (OpenAI answers an exhausted quota with a 429
-   "insufficient_quota"), and its auth words read as a rejected key.
-   A job the provider ran and then reported failed ("Async job failed: ...",
-   "Meshy task failed: ...") takes only the credits line: the key and the
-   service already answered, so a status inside the job's error is about the
-   job, and the card keeps today's line (the 3d review).
+3. The status, from the call, never from the text (round 3d, part 2): the
+   status a handler attached where the provider's own API answered
+   (person_line.with_api_status), else a typed provider error's own
+   ``status_code`` or ``status`` (BFLError, BytePlusError, QuiverError,
+   TypeSafeError). A number in the text, the provider's body included, is
+   never read as one: "Prompt is too long: 500 characters over" is not a 500,
+   and a presigned storage upload's 403 (which attaches none) is not the
+   provider refusing the key. httpx's own HTTPStatusError is a download of a
+   result or an input URL (every raise_for_status() call is one), not the
+   provider's API, so it names no provider and keeps today's line.
+4. Credits a provider signals without the status: the classifier's quota
+   words win the status (OpenAI answers an exhausted quota with a 429
+   "insufficient_quota"), and its rate-limit words read as busy. Its auth
+   words read as a rejected key only for an API refusal: a 401/403 the API
+   answered, or a typed auth error (an exception class named for one, like
+   an SDK's AuthenticationError). Words alone, a re-raised message or a
+   job's own error, keep today's line.
+   A terminal job failure (the provider took the job, then reported it
+   failed, cancelled or expired) is marked where it is raised
+   (person_line.as_job_failure). It takes only the credits line: the key and
+   the service already answered, so a status or an auth word inside the
+   job's error is about the job, and the card keeps today's line.
 5. Who answered: the provider the text names first ("Meshy submit failed",
    "Veo (Vertex) ...", "Grok ..."), else the route the run took
    (services/node_route.select_route: a provider switcher's choice, or
@@ -53,8 +61,9 @@ import re
 from collections.abc import Mapping
 from typing import Any, NamedTuple
 
-from execution.error_classifier import _QUOTA_MARKERS, classify_error
-from execution.person_line import (KEY_NAMES, carries_provider_text, key_name, person_line, status_line)
+from execution.error_classifier import _QUOTA_MARKERS, _RATE_MARKERS, classify_error
+from execution.person_line import (KEY_NAMES, api_status, carries_provider_text, is_job_failure, key_name, person_line,
+                                   status_line)
 
 
 class CardLine(NamedTuple):
@@ -65,14 +74,6 @@ class CardLine(NamedTuple):
     provider_text: bool
 
 
-# The shapes handlers write a provider's HTTP status in.
-_STATUS_SHAPES = re.compile(
-    r"\((?:HTTP\s*)?([1-5]\d\d)(?:\)|:)"          # "failed (429): ...", "(HTTP 503)", "(402: said)"
-    r"|\b(?:error|HTTP|status)\s+([1-5]\d\d)\b"   # "API error 401: ...", "HTTP 401", "status 503"
-    r"|^([1-5]\d\d):\s"                           # "403: forbidden"
-    r"|:\s([1-5]\d\d)\s"                          # "Failed to fetch Replicate model a/b: 401 {...}"
-)
-
 # An answer with no result in it, or one Nebula couldn't read.
 _NO_RESULT = re.compile(
     r"\breturned no\b|\bdid not return\b|\bdidn't return\b|\bwithout returning\b|\bcompleted but (?:no|returned no)\b"
@@ -80,22 +81,6 @@ _NO_RESULT = re.compile(
     r"|\bresult missing\b|\bcompleted without\b|\b(?:ended|closed) without a\b|\breturned an empty\b"
     r"|\bwith no data\b|\bSuccess but no\b|\bReady but returned no\b",
     re.I,
-)
-
-# A job the provider took and ran, then reported failed, cancelled or expired
-# (every poll's terminal failure: "Async job failed: ...", "Meshy task
-# failed: ...", "Krea job <id> cancelled: ...", "Grok failed: ..."). Submit and
-# polling already answered, so the key and the service worked: a status or an
-# auth word in the job's own error is about the job (an input URL it couldn't
-# fetch, a model crash), never the person's key. An API answer that says
-# "failed" carries its status right after it ("OpenRouter video failed (402)")
-# and still reads the table.
-_JOB_FAILED = re.compile(
-    r"^(?:Async job failed:"
-    r"|[A-Z][\w.() -]*? (?:task|job|generation|prediction|operation|interaction|training|video|Dubbing)"
-    r"(?: [\w-]+)? (?:failed|expired|canceled|cancelled|errored)\b(?!\s*\()"
-    r"|(?:Grok|Higgsfield|Veo|Veo \(Vertex\)) failed:"
-    r"|Replicate stream error:)"
 )
 
 # A key the provider says is missing (not refused).
@@ -117,17 +102,28 @@ _TEXT_PROVIDERS: tuple[tuple[str, str], ...] = (
 
 
 def http_status(exc: BaseException) -> int | None:
-    """The provider's HTTP status in `exc`, or None when it carries none."""
+    """The provider API's HTTP status `exc` was raised with, or None: the one
+    the raise attached (person_line.with_api_status), else a typed provider
+    error's own. Never read from the text (module docstring, 3)."""
     import httpx
 
+    if isinstance(exc, httpx.HTTPStatusError):
+        return None  # a download, not the provider's API (module docstring, 3)
+    attached = api_status(exc)
+    if attached is not None:
+        return attached
     for attribute in ("status_code", "status"):
         value = getattr(exc, attribute, None)
         if isinstance(value, int) and not isinstance(value, bool) and 100 <= value <= 599:
             return value
-    if isinstance(exc, httpx.HTTPStatusError):
-        return None  # a download, not the provider's API (module docstring, 3)
-    match = _STATUS_SHAPES.search(str(exc))
-    return int(next(group for group in match.groups() if group)) if match else None
+    return None
+
+
+def _auth_error_type(exc: BaseException) -> bool:
+    """A typed auth error: an SDK's AuthenticationError or PermissionDeniedError,
+    or a provider client's own (QuiverAuthError)."""
+    return any(re.search(r"Auth(?:entication)?Error$|PermissionDeniedError$", cls.__name__)
+               for cls in type(exc).__mro__)
 
 
 def failure_kind(exc: BaseException) -> str | None:
@@ -137,16 +133,17 @@ def failure_kind(exc: BaseException) -> str | None:
     if isinstance(exc, httpx.HTTPStatusError):
         return None
     text = str(exc)
-    category = classify_error(text)[0]
-    if category == "blocked":
+    job = is_job_failure(exc)
+    if classify_error(text, job_failure=job)[0] == "blocked":
         return None
     lowered = text.lower()
-    if (category == "quota" or any(marker in lowered for marker in _QUOTA_MARKERS)
-            or "Overdue" in str(getattr(exc, "code", "") or "")):
+    # Words, never a status code in the text: the classifier's own category
+    # also reads a bare "402" or "429", which is the text search this round removed.
+    if any(marker in lowered for marker in _QUOTA_MARKERS) or "Overdue" in str(getattr(exc, "code", "") or ""):
         # BytePlus says an unpaid balance with a code, not a 402
         # (AccountOverdueError, OperationDenied.ServiceOverdue).
         return "credits"
-    if _JOB_FAILED.match(text):
+    if job:
         return None  # the job ran: its error is about the job, not the key or the service
     status = http_status(exc)
     if status in (401, 403):
@@ -157,9 +154,9 @@ def failure_kind(exc: BaseException) -> str | None:
         return "busy"
     if status is not None and 500 <= status <= 599:
         return "trouble"
-    if category == "auth":
+    if _auth_error_type(exc):
         return "missing" if any(marker in lowered for marker in _MISSING_KEY) else "key"
-    if category == "rate_limit":
+    if any(marker in lowered for marker in _RATE_MARKERS):
         return "busy"
     if _NO_RESULT.search(text):
         return "no_result"

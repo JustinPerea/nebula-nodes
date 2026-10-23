@@ -464,11 +464,13 @@ async def _send_file(client: httpx.AsyncClient, grant: dict[str, Any], path: Pat
     headers.setdefault("content-type", mime)
     response = await client.request(method, upload_url, content=path.read_bytes(), headers=headers)
     if response.status_code >= 300:
+        # no API status: the upload grant's storage URL, sent without the key, not Krea's API.
         raise RuntimeError(f"Krea Files upload failed ({response.status_code})")
     commit = grant.get("commitUrl") or grant.get("commit_url")
     if commit:
         response = await client.post(_checked_upload_target(commit), json={})
         if response.status_code >= 300:
+            # no API status: the upload grant's commit URL, sent without the key.
             raise RuntimeError(f"Krea Files upload commit failed ({response.status_code})")
 
 

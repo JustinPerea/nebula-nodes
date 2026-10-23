@@ -50,7 +50,7 @@ import httpx
 
 from execution.missing_credential import MissingCredentialError
 from models.events import ExecutionEvent, ProgressEvent
-from execution.person_line import slow_job_line, with_person_line
+from execution.person_line import as_job_failure, slow_job_line, with_api_status, with_person_line
 
 OPENROUTER_KEY = "OPENROUTER_API_KEY"
 OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
@@ -115,15 +115,21 @@ def _error(response: httpx.Response, what: str) -> RuntimeError:
     said = str((error.get("message") if isinstance(error, dict) else error) or response.text.strip())[:400]
     status = response.status_code
     if status == 401:
-        return RuntimeError(f"OpenRouter rejected the API key ({status}): check {OPENROUTER_KEY} in Settings.")
+        return with_api_status(
+            RuntimeError(f"OpenRouter rejected the API key ({status}): check {OPENROUTER_KEY} in Settings."), status)
     if status == 402:
-        return RuntimeError(f"OpenRouter credits ran out ({status}: {said}). Add credits at openrouter.ai/settings/credits, "
-                            "then run again.")
+        return with_api_status(
+            RuntimeError(f"OpenRouter credits ran out ({status}: {said}). Add credits at openrouter.ai/settings/credits, "
+                         "then run again."), status)
     if status == 429:
-        return RuntimeError(f"OpenRouter is rate-limiting this key ({status}: {said}). Wait a moment, then run again.")
+        return with_api_status(
+            RuntimeError(f"OpenRouter is rate-limiting this key ({status}: {said}). Wait a moment, then run again."),
+            status)
     if status == 502:
-        return RuntimeError(f"OpenRouter's provider didn't finish the {what} ({status}: {said}). It wasn't billed; run again.")
-    return RuntimeError(f"OpenRouter {what} failed ({status}): {said or 'no detail'}")
+        return with_api_status(
+            RuntimeError(f"OpenRouter's provider didn't finish the {what} ({status}: {said}). It wasn't billed; run again."),
+            status)
+    return with_api_status(RuntimeError(f"OpenRouter {what} failed ({status}): {said or 'no detail'}"), status)
 
 
 async def _post(client: httpx.AsyncClient, url: str, key: str, body: dict[str, Any], what: str) -> dict[str, Any]:
@@ -136,7 +142,9 @@ async def _post(client: httpx.AsyncClient, url: str, key: str, body: dict[str, A
     try:
         data = response.json()
     except ValueError as exc:
-        raise RuntimeError(f"OpenRouter returned non-JSON for the {what} ({response.status_code})") from exc
+        raise with_api_status(
+            RuntimeError(f"OpenRouter returned non-JSON for the {what} ({response.status_code})"),
+            response.status_code) from exc
     if not isinstance(data, dict):
         raise RuntimeError(f"OpenRouter returned an unexpected {what} answer")
     return data
@@ -176,6 +184,7 @@ async def _download(client: httpx.AsyncClient, key: str, url: Any) -> str:
     except httpx.TransportError as exc:
         raise RuntimeError(f"Couldn't download OpenRouter's video: {type(exc).__name__}: {exc}") from exc
     if response.status_code >= 400:
+        # no API status: a download of the finished video.
         raise with_person_line(
             RuntimeError(f"OpenRouter's video download failed (HTTP {response.status_code}). Run again."),
             "OpenRouter's video couldn't be downloaded. Run the node again.")
@@ -223,7 +232,8 @@ async def generate_video(
                                                  job_id, (job.get("usage") or {}).get("cost"))
                 return saved
             if status in _VIDEO_FAILED:
-                raise RuntimeError(f"OpenRouter video {status}: {job.get('error') or 'no reason given'}")
+                raise as_job_failure(
+                    RuntimeError(f"OpenRouter video {status}: {job.get('error') or 'no reason given'}"))
             if status not in _VIDEO_PENDING:
                 logging.getLogger(__name__).warning("OpenRouter video %s: unknown status %r, still polling", job_id, status)
             if emit is not None:

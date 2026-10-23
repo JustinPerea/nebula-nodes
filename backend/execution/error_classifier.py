@@ -132,11 +132,18 @@ _FRIENDLY = {
 _RETRYABLE = frozenset({"rate_limit", "timeout", "network"})
 
 
-def classify_error(raw: str | None) -> tuple[str, str, bool]:
+def classify_error(raw: str | None, *, job_failure: bool = False) -> tuple[str, str, bool]:
     """Return ``(category, friendly_message, retryable)``. Never raises.
 
     For ``unknown`` the friendly message is a truncated copy of the raw error so
     nothing is lost; for known categories it is a stable, calm sentence.
+
+    ``job_failure``: the error is a terminal job failure (the provider took
+    the job, then reported it failed; execution/person_line.as_job_failure).
+    The key already worked, so it is never ``auth``, whatever its text says
+    ("unauthorized to fetch input" is about the job's input); its other
+    categories stay (round 3d, part 2). Callers pass
+    ``is_job_failure(exc)``.
     """
     try:
         if not raw:
@@ -155,7 +162,7 @@ def classify_error(raw: str | None) -> tuple[str, str, bool]:
             category = "blocked"
         elif has(_RATE_MARKERS, "rate_limit"):
             category = "rate_limit"
-        elif has(_AUTH_MARKERS, "auth"):
+        elif not job_failure and has(_AUTH_MARKERS, "auth"):
             category = "auth"
         elif has(_QUOTA_MARKERS, "quota"):
             category = "quota"

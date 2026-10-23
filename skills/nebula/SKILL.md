@@ -280,7 +280,10 @@ graph's `errorPerson`, when the node's handler wrote one, or a line for the
 provider's answer such as "Meshy is busy. ..." with `errorProviderText`) that
 you shouldn't parse. A failed Cinema shot's `output` works the same: read its
 `error`; its `errorCategory`, `errorFriendly`, `errorPerson`,
-`errorProviderText` and `errorRaw` are for the Cinema panel.
+`errorProviderText` and `errorRaw` are for the Cinema panel. A job the
+provider ran and then reported failed is never `category: "auth"`, even when
+its text says "unauthorized" (the job's input, not the key): check the job at
+the provider rather than the key.
 
 ## Moodboards
 

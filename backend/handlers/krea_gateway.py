@@ -37,7 +37,7 @@ from models.graph import GraphNode, PortValueDict
 from services.cancellation import schedule_detached_cancel
 from services.file_access import require_allowed_path
 from services.output import _MEDIA_EXTENSIONS, get_run_dir, materialize_media_value, portable_output_ref
-from execution.person_line import as_person_line, missing_file_line, slow_job_line, with_person_line
+from execution.person_line import as_job_failure, as_person_line, missing_file_line, slow_job_line, with_person_line
 
 
 CATALOG_PATH = Path(__file__).resolve().parents[1] / "data" / "krea_gateway_models.json"
@@ -264,7 +264,8 @@ async def _poll_job(client, api_key, job_id, node_id, emit) -> dict:
             if status == "completed":
                 return job
             if status in {"failed", "cancelled"}:
-                raise RuntimeError(f"Krea job {status}: {job.get('error') or job.get('message') or status}")
+                raise as_job_failure(
+                    RuntimeError(f"Krea job {status}: {job.get('error') or job.get('message') or status}"))
             if status not in KREA_STATUS_PENDING:
                 schedule_detached_cancel(lambda: _cancel_krea_job(job_id, api_key))
                 raise RuntimeError(f"Krea job returned unknown status: {status}")

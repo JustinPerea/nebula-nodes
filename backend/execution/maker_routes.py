@@ -35,7 +35,7 @@ from execution import maker_routes_elevenlabs
 from execution.missing_credential import MissingCredentialError
 from models.graph import GraphNode, PortValueDict
 from services import node_route
-from execution.person_line import as_person_line, key_line, key_phrase, with_person_line
+from execution.person_line import as_person_line, key_line, key_phrase, with_call_facts, with_person_line
 
 Handler = Callable[[GraphNode, dict[str, PortValueDict], dict[str, str]], Awaitable[dict[str, Any]]]
 Translate = Callable[
@@ -285,10 +285,10 @@ async def google_nano_banana(node: GraphNode, inputs: dict[str, PortValueDict], 
             result = await handle_nano_banana(call, inputs, api_keys)
         except RuntimeError as exc:
             if call.params.get("model") == GEMINI_25_FLASH_IMAGE and "404" in str(exc):
-                raise RuntimeError(
+                raise with_call_facts(RuntimeError(
                     f"{exc}. Google lists gemini-2.5-flash-image as deprecated; its named replacement is "
                     "gemini-3.1-flash-lite-image (https://ai.google.dev/gemini-api/docs/deprecations)."
-                ) from exc
+                ), exc) from exc
             raise
         if "image" not in result:
             raise RuntimeError("Gemini returned no image")

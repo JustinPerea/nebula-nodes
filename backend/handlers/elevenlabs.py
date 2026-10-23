@@ -17,7 +17,8 @@ from services.media_input import checked_local_file, read_local_media
 from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import (and_list, as_person_line, missing_file_line, slow_job_line, with_person_line, with_provider_line)
+from execution.person_line import (and_list, as_job_failure, as_person_line, missing_file_line, slow_job_line,
+                                   with_api_status, with_call_facts, with_person_line, with_provider_line)
 
 ELEVENLABS_API_BASE = "https://api.elevenlabs.io/v1/text-to-speech"
 DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"  # Rachel
@@ -127,7 +128,8 @@ async def handle_elevenlabs_tts(
         )
         if response.status_code != 200:
             error_detail = response.text
-            raise RuntimeError(f"ElevenLabs API error {response.status_code}: {error_detail}")
+            raise with_api_status(
+                RuntimeError(f"ElevenLabs API error {response.status_code}: {error_detail}"), response.status_code)
 
     run_dir = get_run_dir()
     ext = _audio_extension(output_format)
@@ -342,18 +344,20 @@ async def _get_voices_page(client: Any, api_key: str, params: dict[str, Any]) ->
         timeout=VOICES_TIMEOUT,
     )
     if response.status_code == 401 and _is_missing_permission(response):
-        raise VoicesPermissionError(f"{response.status_code}: {_error_detail(response)}")
+        raise with_api_status(
+            VoicesPermissionError(f"{response.status_code}: {_error_detail(response)}"), response.status_code)
     if response.status_code == 401:
-        raise RuntimeError(
+        raise with_api_status(RuntimeError(
             f"ElevenLabs rejected the API key while listing voices (error 401: {_error_detail(response)}). "
-            "Check ELEVENLABS_API_KEY in Settings.")
+            "Check ELEVENLABS_API_KEY in Settings."), 401)
     if response.status_code == 403:
-        raise VoicesPermissionError(f"{response.status_code}: {_error_detail(response)}")
+        raise with_api_status(
+            VoicesPermissionError(f"{response.status_code}: {_error_detail(response)}"), response.status_code)
     if response.status_code != 200:
-        raise RuntimeError(
+        raise with_api_status(RuntimeError(
             f"ElevenLabs couldn't list your voices to look up the speaker names "
             f"(error {response.status_code}: {_error_detail(response)})."
-        )
+        ), response.status_code)
     return response.json()
 
 
@@ -424,13 +428,13 @@ async def resolve_dialogue_voices(client: Any, api_key: str, speakers: list[str]
         # dialogue call rejects a bad one); any other label stops here.
         names = [s for s in speakers if not _VOICE_ID_SHAPE.fullmatch(s.strip())]
         if names:
-            raise with_provider_line(ValueError(
+            raise with_provider_line(with_call_facts(ValueError(
                 f"Your ElevenLabs API key can't list your voices ({exc}), so Nebula can't look up "
                 f"{', '.join(repr(n) for n in names)}. Give the key Voices read access (voices_read) under "
                 "Developers > API Keys in ElevenLabs, or write each voice's ID in place of its name, "
                 "e.g. '21m00Tcm4TlvDq8ikWAM: Hello.' A label of exactly 20 letters and digits is used as a "
                 "voice ID."
-            ),
+            ), exc),
                 "Your ElevenLabs API key can't list your voices, so Nebula can't look up the speaker names. Give the key Voices read access under Developers > API Keys in ElevenLabs, or write each voice's ID in place of its name.") from None
         return {_speaker_key(s): s.strip() for s in speakers}
 
@@ -501,7 +505,9 @@ async def handle_elevenlabs_dialogue(
             json=body,
         )
         if response.status_code != 200:
-            raise RuntimeError(f"ElevenLabs Text to Dialogue error {response.status_code}: {response.text}")
+            raise with_api_status(
+                RuntimeError(f"ElevenLabs Text to Dialogue error {response.status_code}: {response.text}"),
+                response.status_code)
 
     return {"audio": {"type": "Audio", "value": _save_audio(response.content, output_format)}}
 
@@ -562,10 +568,10 @@ async def _poll_dubbing(
         if status_resp.status_code != 200:
             poll_errors += 1
             if poll_errors >= 5:
-                raise RuntimeError(
+                raise with_api_status(RuntimeError(
                     f"ElevenLabs Dubbing poll failed {poll_errors} times: "
                     f"{status_resp.status_code} {status_resp.text}"
-                )
+                ), status_resp.status_code)
             continue
         # Reset on successful response; threshold of 5 requires CONSECUTIVE failures.
         poll_errors = 0
@@ -593,13 +599,14 @@ async def _poll_dubbing(
             if dl_resp.status_code == 200:
                 file_path = _save_audio(dl_resp.content, "mp3_44100_128")
                 return {"audio": {"type": "Audio", "value": file_path}}
+            # no API status: a download of the dubbed audio, after the job finished.
             raise RuntimeError(
                 f"ElevenLabs Dubbing download failed: {dl_resp.status_code}"
             )
         if status_data.get("status") == "failed":
-            raise RuntimeError(
+            raise as_job_failure(RuntimeError(
                 f"ElevenLabs Dubbing failed: {status_data.get('error', 'Unknown')}"
-            )
+            ))
 
     raise with_person_line(RuntimeError("ElevenLabs Dubbing timed out"), slow_job_line("ElevenLabs"))
 
@@ -645,7 +652,8 @@ async def handle_elevenlabs_sfx(
             json=body,
         )
         if response.status_code != 200:
-            raise RuntimeError(f"ElevenLabs SFX error {response.status_code}: {response.text}")
+            raise with_api_status(
+                RuntimeError(f"ElevenLabs SFX error {response.status_code}: {response.text}"), response.status_code)
 
     file_path = _save_audio(response.content, output_format)
     return {"audio": {"type": "Audio", "value": file_path}}
@@ -714,7 +722,8 @@ async def handle_elevenlabs_sts(
             data=data,
         )
         if response.status_code != 200:
-            raise RuntimeError(f"ElevenLabs STS error {response.status_code}: {response.text}")
+            raise with_api_status(
+                RuntimeError(f"ElevenLabs STS error {response.status_code}: {response.text}"), response.status_code)
 
     file_path = _save_audio(response.content, output_format)
     return {"audio": {"type": "Audio", "value": file_path}}
@@ -747,7 +756,9 @@ async def handle_elevenlabs_isolation(
             files=files,
         )
         if response.status_code != 200:
-            raise RuntimeError(f"ElevenLabs Isolation error {response.status_code}: {response.text}")
+            raise with_api_status(
+                RuntimeError(f"ElevenLabs Isolation error {response.status_code}: {response.text}"),
+                response.status_code)
 
     file_path = _save_audio(response.content, "mp3_44100_128")
     return {"audio": {"type": "Audio", "value": file_path}}
@@ -804,7 +815,8 @@ async def handle_elevenlabs_dubbing(
                 data=data,
             )
         if resp.status_code != 200:
-            raise RuntimeError(f"ElevenLabs Dubbing submit error {resp.status_code}: {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"ElevenLabs Dubbing submit error {resp.status_code}: {resp.text}"), resp.status_code)
 
         dub_data = resp.json()
         dubbing_id = dub_data.get("dubbing_id")
@@ -878,7 +890,8 @@ async def handle_elevenlabs_stt(
             data=data,
         )
         if response.status_code != 200:
-            raise RuntimeError(f"ElevenLabs STT error {response.status_code}: {response.text}")
+            raise with_api_status(
+                RuntimeError(f"ElevenLabs STT error {response.status_code}: {response.text}"), response.status_code)
 
     result_data = response.json()
     text = result_data.get("text", "")
@@ -959,7 +972,8 @@ async def handle_elevenlabs_music(
             json=body,
         )
         if response.status_code != 200:
-            raise RuntimeError(f"ElevenLabs Music error {response.status_code}: {response.text}")
+            raise with_api_status(
+                RuntimeError(f"ElevenLabs Music error {response.status_code}: {response.text}"), response.status_code)
 
     file_path = _save_audio(response.content, "mp3_44100_128")
     return {"audio": {"type": "Audio", "value": file_path}}

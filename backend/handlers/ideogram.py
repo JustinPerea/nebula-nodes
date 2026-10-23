@@ -39,7 +39,8 @@ from services.maker_sizes import IDEOGRAM_V3_RESOLUTIONS as _V3_RESOLUTIONS
 from services.media_input import load_media
 from services.output import get_run_dir, save_base64_image
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import as_person_line, field_label, it_was, slow_job_line, with_person_line
+from execution.person_line import (as_job_failure, as_person_line, field_label, it_was, slow_job_line, with_api_status,
+                                   with_person_line)
 
 IDEOGRAM_API_BASE = "https://api.ideogram.ai"
 
@@ -135,7 +136,7 @@ async def _post_multipart(
             files=multipart or None,
         )
     if resp.status_code != 200:
-        raise RuntimeError(f"Ideogram API error {resp.status_code}: {resp.text}")
+        raise with_api_status(RuntimeError(f"Ideogram API error {resp.status_code}: {resp.text}"), resp.status_code)
     return resp.json()
 
 
@@ -463,7 +464,7 @@ async def _post_json(path: str, api_key: str, body: dict[str, Any]) -> dict[str,
             json=body,
         )
     if resp.status_code != 200:
-        raise RuntimeError(f"Ideogram API error {resp.status_code}: {resp.text}")
+        raise with_api_status(RuntimeError(f"Ideogram API error {resp.status_code}: {resp.text}"), resp.status_code)
     return resp.json()
 
 
@@ -661,7 +662,8 @@ async def handle_ideogram_train_model(
                 f"{IDEOGRAM_API_BASE}/models/{quote(str(model_id), safe='')}", headers={"Api-Key": api_key}
             )
             if resp.status_code != 200:
-                raise RuntimeError(f"Ideogram model poll failed ({resp.status_code}): {resp.text}")
+                raise with_api_status(
+                    RuntimeError(f"Ideogram model poll failed ({resp.status_code}): {resp.text}"), resp.status_code)
             model = (resp.json() or {}).get("model") or {}
             status = model.get("status", "")
             await _emit(ProgressEvent(node_id=node.id, value=min(poll_num / max_polls, 0.99)))
@@ -671,6 +673,6 @@ async def handle_ideogram_train_model(
                     "custom_model_uri": {"type": "Text", "value": str(model.get("custom_model_uri") or "")},
                 }
             if status in ("ERRORED", "ARCHIVED"):
-                raise RuntimeError(f"Ideogram training failed: status={status}")
+                raise as_job_failure(RuntimeError(f"Ideogram training failed: status={status}"))
 
     raise with_person_line(RuntimeError(f"Ideogram training timed out after {max_polls} polls"), slow_job_line("Ideogram"))

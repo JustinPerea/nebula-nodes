@@ -26,7 +26,7 @@ from handlers.jev_decide import handle_jev_decide
 from handlers.jev_pick_best import handle_jev_pick_best
 from handlers.moodboard import handle_moodboard_node
 from handlers.paper_source import handle_paper_source
-from execution.person_line import as_person_line, with_person_line
+from execution.person_line import as_person_line, with_call_facts, with_person_line
 
 
 SYNC_HANDLERS: dict[
@@ -516,7 +516,7 @@ def get_handler_registry(
             try:
                 return await handle_fal_universal(routed_node, routed_inputs, api_keys, emit=emit)
             except RuntimeError as exc:
-                raise RuntimeError(with_vertex_hint(str(exc))) from exc
+                raise with_call_facts(RuntimeError(with_vertex_hint(str(exc))), exc) from exc
 
         async def _gemini_omni_flash_handler(
             node: GraphNode,
@@ -996,7 +996,7 @@ def get_handler_registry(
             try:
                 return await handle_fal_universal(routed_node, modified_inputs, api_keys, emit=emit)
             except RuntimeError as exc:
-                raise RuntimeError(with_vertex_hint(str(exc))) from exc
+                raise with_call_facts(RuntimeError(with_vertex_hint(str(exc))), exc) from exc
 
         async def _ltx_23_handler(
             node: GraphNode,

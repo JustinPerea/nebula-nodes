@@ -703,6 +703,17 @@ the provider's own words, your `error`, behind "Details". A failure Nebula
 can't tell keeps today's line. `error` and every text you read are unchanged,
 word for word.
 
+The status is the one the provider's API answered, attached where Nebula
+raised the error, never a number read out of the text (round 3d, part 2): a
+storage upload's 403 or "Prompt is too long: 500 characters over" keeps
+today's line. A job the provider took and then reported failed, cancelled or
+expired never reads the key, busy or trouble line, and its `category`
+(`errorCategory` on a shot) is never `auth`, even when its text says
+"unauthorized" or "401" (an input the job couldn't fetch, not your key). Such
+a job used to read `auth` and "The API key was rejected. ..." as `friendly`;
+that was wrong, and is the one change you can see. Its other categories
+(`rate_limit`, `timeout`, `quota`, ...) stay.
+
 ### Numbers in request bodies
 
 Every JSON request body (`application/json`, `application/*+json`, any

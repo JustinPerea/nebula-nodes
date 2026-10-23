@@ -31,7 +31,7 @@ from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.output import OUTPUT_ROOT
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import with_person_line
+from execution.person_line import with_api_status, with_person_line
 
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
@@ -127,7 +127,9 @@ async def _describe_style(api_key: str, image_path: Path, system_prompt: str) ->
             json=body,
         )
         if response.status_code != 200:
-            raise RuntimeError(f"Gemini style extraction failed ({response.status_code}): {response.text[:300]}")
+            raise with_api_status(
+                RuntimeError(f"Gemini style extraction failed ({response.status_code}): {response.text[:300]}"),
+                response.status_code)
         payload = response.json()
     candidates = payload.get("candidates") or []
     if not candidates:

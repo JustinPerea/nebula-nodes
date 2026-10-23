@@ -47,7 +47,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import as_person_line, slow_job_line, with_person_line
+from execution.person_line import as_job_failure, as_person_line, slow_job_line, with_api_status, with_person_line
 
 BFL_KEY = "BFL_API_KEY"
 BFL_BASE_URL = "https://api.bfl.ai/v1"
@@ -202,7 +202,9 @@ async def submit(
     try:
         data = response.json()
     except ValueError as exc:
-        raise RuntimeError(f"Black Forest Labs returned non-JSON ({response.status_code})") from exc
+        raise with_api_status(
+            RuntimeError(f"Black Forest Labs returned non-JSON ({response.status_code})"),
+            response.status_code) from exc
     if not isinstance(data, dict) or not isinstance(data.get("id"), str) or not data["id"]:
         raise RuntimeError("Black Forest Labs accepted the task but returned no task id")
     return data
@@ -265,6 +267,7 @@ async def _download(url: Any, media_type: str, *, client: httpx.AsyncClient) -> 
     except httpx.TransportError as exc:
         raise _transport_error("download the result", exc) from exc
     if response.status_code >= 400:
+        # no API status: a download of the result from its signed URL, not BFL's API.
         raise with_person_line(RuntimeError(f"Black Forest Labs' result download failed (HTTP {response.status_code}); "
                            "the signed URL may have expired. Run again."),
             "Black Forest Labs' result couldn't be downloaded; its link may have expired. Run the node again.")
@@ -334,7 +337,7 @@ async def run_task(
             if status in STATUS_MODERATED:
                 raise RuntimeError(_moderation_message(task))
             if status in STATUS_FAILED:
-                raise RuntimeError(_failure_message(task))
+                raise as_job_failure(RuntimeError(_failure_message(task)))
             if status not in STATUS_PENDING:
                 logging.getLogger(__name__).warning("BFL task %s: unknown status %r, still polling", task_id, status)
             if emit is not None:

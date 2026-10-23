@@ -335,6 +335,7 @@ async def _download(job_: Job, rel: Release, archive: Path, client_factory: Call
     async with client_factory() as client:
         async with client.stream("GET", rel.url) as response:
             if response.status_code != 200:
+                # no API status: a download, not a provider API call with the person's key.
                 raise AntigravityError("download_failed", f"Google's download answered {response.status_code}.")
             fd = os.open(archive, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
             with os.fdopen(fd, "wb") as out:

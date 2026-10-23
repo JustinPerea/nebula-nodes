@@ -21,7 +21,8 @@ from services.media_input import read_local_media
 from services.public_url import fetch_public_media
 from execution.missing_credential import MissingCredentialError
 from execution.poll_retry import UpstreamTask, poll_request
-from execution.person_line import as_person_line, key_line, missing_file_line, slow_job_line, with_person_line
+from execution.person_line import (as_job_failure, as_person_line, key_line, missing_file_line, slow_job_line,
+                                   with_api_status, with_person_line)
 
 VEO_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
@@ -252,7 +253,9 @@ async def handle_veo(
         resp = await client.post(url, json=request_body, headers=auth_headers)
         _log(f"submit response: {resp.status_code}")
         if resp.status_code != 200:
-            raise RuntimeError(with_vertex_hint(f"Veo submit failed ({resp.status_code}): {resp.text}"))
+            raise with_api_status(
+                RuntimeError(with_vertex_hint(f"Veo submit failed ({resp.status_code}): {resp.text}")),
+                resp.status_code)
 
         op_data = resp.json()
         op_name = op_data.get("name")
@@ -292,7 +295,9 @@ async def _poll_veo_operation(
         poll_resp = await poll_request(lambda: client.get(poll_url, headers={"x-goog-api-key": api_key}))
         if poll_resp.status_code != 200:
             _log(f"poll FAILED: {poll_resp.status_code}")
-            raise RuntimeError(with_vertex_hint(f"Veo poll failed ({poll_resp.status_code}): {poll_resp.text}"))
+            raise with_api_status(
+                RuntimeError(with_vertex_hint(f"Veo poll failed ({poll_resp.status_code}): {poll_resp.text}")),
+                poll_resp.status_code)
 
         poll_data = poll_resp.json()
         done = poll_data.get("done", False)
@@ -342,7 +347,7 @@ async def _poll_veo_operation(
             # Fallback: check for error
             error = poll_data.get("error")
             if error:
-                raise RuntimeError(f"Veo failed: {error}")
+                raise as_job_failure(RuntimeError(f"Veo failed: {error}"))
 
             raise RuntimeError(f"Veo completed but no video found: {list(poll_data.keys())}")
 
@@ -431,7 +436,8 @@ async def run_vertex_veo(
     async with httpx.AsyncClient(timeout=120.0) as client:
         resp = await client.post(model_url(project_id, model, "predictLongRunning"), json=body, headers=headers)
         if resp.status_code != 200:
-            raise RuntimeError(f"Veo (Vertex) submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Veo (Vertex) submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
         op_name = resp.json().get("name")
         if not op_name:
             raise RuntimeError(f"Veo (Vertex) did not return an operation name: {resp.text[:300]}")
@@ -459,7 +465,9 @@ async def _poll_vertex_operation(
         poll_resp = await poll_request(
             lambda: client.post(poll_url, json={"operationName": op_name}, headers=headers))
         if poll_resp.status_code != 200:
-            raise RuntimeError(f"Veo (Vertex) poll failed ({poll_resp.status_code}): {poll_resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Veo (Vertex) poll failed ({poll_resp.status_code}): {poll_resp.text}"),
+                poll_resp.status_code)
         data = poll_resp.json()
         await _emit(ProgressEvent(node_id=node.id, value=min(poll_num / max_polls, 0.99)))
         if not data.get("done"):
@@ -467,7 +475,7 @@ async def _poll_vertex_operation(
         if upstream is not None:
             upstream.finished = True
         if data.get("error"):
-            raise RuntimeError(f"Veo (Vertex) failed: {data['error']}")
+            raise as_job_failure(RuntimeError(f"Veo (Vertex) failed: {data['error']}"))
         response = data.get("response") or {}
         videos = response.get("videos") or []
         if not videos:

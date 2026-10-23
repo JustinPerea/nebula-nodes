@@ -20,7 +20,8 @@ from services.moodboard_weights import native_strengths
 from services.cancellation import schedule_detached_cancel
 from services.output import OUTPUT_ROOT, get_run_dir
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import as_person_line, field_label, option_label, slow_job_line, with_person_line
+from execution.person_line import (as_job_failure, as_person_line, field_label, option_label, slow_job_line,
+                                   with_api_status, with_person_line)
 
 KREA_BASE_URL = "https://api.krea.ai"
 KREA_STATUS_PENDING = {
@@ -208,7 +209,8 @@ def _raise_for_krea_response(response: httpx.Response, action: str) -> None:
         detail = response.text
     if response.status_code == 402:
         detail = detail or "Krea API balance is depleted"
-    raise RuntimeError(f"Krea {action} failed ({response.status_code}): {detail}")
+    raise with_api_status(
+        RuntimeError(f"Krea {action} failed ({response.status_code}): {detail}"), response.status_code)
 
 
 async def _upload_asset(
@@ -338,7 +340,7 @@ async def _poll_krea_job(
             return job
         if status in {"failed", "cancelled"}:
             message = job.get("error") or job.get("message") or status
-            raise RuntimeError(f"Krea job {job_id} {status}: {message}")
+            raise as_job_failure(RuntimeError(f"Krea job {job_id} {status}: {message}"))
         if status and status not in KREA_STATUS_PENDING | KREA_STATUS_TERMINAL:
             raise RuntimeError(f"Krea job {job_id} returned unknown status: {status}")
     raise with_person_line(RuntimeError(f"Krea job {job_id} timed out after {max_polls} polls"), slow_job_line("Krea"))

@@ -25,7 +25,7 @@ import httpx
 import pytest
 
 from execution.engine import execute_graph
-from execution.person_line import person_line
+from execution.person_line import person_line, with_api_status
 from models.events import ErrorEvent
 from models.graph import GraphEdge, GraphNode, PortValueDict
 
@@ -72,7 +72,10 @@ TROUBLE = "Meshy is having trouble right now. Try again in a few minutes."
     (401, KEY), (403, KEY), (402, CREDITS), (429, BUSY), (500, TROUBLE), (502, TROUBLE), (503, TROUBLE),
 ])
 def test_one_table_maps_a_providers_status_to_gms_line(status: int, line: str) -> None:
-    exc = RuntimeError(f'Meshy submit failed ({status}): {{"message": "the provider\'s own words"}}')
+    # The status the provider's API answered, attached where it is raised
+    # (round 3d, part 2: never read from the text).
+    exc = with_api_status(RuntimeError(f'Meshy submit failed ({status}): {{"message": "the provider\'s own words"}}'),
+                          status)
     card = _card(exc, "meshy-text-to-3d", {}, {"MESHY_API_KEY": "fixture"})
     assert card.person == line
     # The provider's own words stay behind Details (GM), and agents' text is untouched.
@@ -80,19 +83,20 @@ def test_one_table_maps_a_providers_status_to_gms_line(status: int, line: str) -
     assert str(exc).startswith(f"Meshy submit failed ({status})")
 
 
-@pytest.mark.parametrize("text", [
-    "OpenAI API error 401: {\"error\": {\"message\": \"Incorrect API key provided\"}}",
-    "OpenAI TTS error 403: forbidden",
+@pytest.mark.parametrize("text, status", [
+    ("OpenAI API error 401: {\"error\": {\"message\": \"Incorrect API key provided\"}}", 401),
+    ("OpenAI TTS error 403: forbidden", 403),
 ])
-def test_the_table_reads_every_shape_handlers_write_a_status_in(text: str) -> None:
-    card = _card(RuntimeError(text), "gpt-image-1-generate", {}, {"OPENAI_API_KEY": "fixture"})
+def test_the_table_reads_every_shape_handlers_write_a_status_in(text: str, status: int) -> None:
+    # Round 3d, part 2: whatever the shape, the status comes from the call.
+    card = _card(with_api_status(RuntimeError(text), status), "gpt-image-1-generate", {}, {"OPENAI_API_KEY": "fixture"})
     assert card.person == "OpenAI didn't accept your API key. Check it in Settings, then run the node again."
 
 
 def test_auto_routing_names_the_provider_the_run_went_to_not_the_nodes_default() -> None:
     # FLUX 3 Video's maker is Black Forest Labs; on Auto with only a fal key
     # the run goes to fal, and a generic runner's text names no one.
-    exc = RuntimeError("Async submit failed (429): slow down")
+    exc = with_api_status(RuntimeError("Async submit failed (429): slow down"), 429)
     assert _card(exc, "flux-3-video", {}, {"FAL_KEY": "fixture"}).person == (
         "fal.ai is busy. Wait a moment, then run the node again.")
     # The provider switcher set to Replicate, with both keys saved.
@@ -100,7 +104,8 @@ def test_auto_routing_names_the_provider_the_run_went_to_not_the_nodes_default()
     keys = {"FAL_KEY": "fixture", "REPLICATE_API_TOKEN": "fixture"}
     assert _card(exc, "flux-3-video", chosen, keys).person == (
         "Replicate is busy. Wait a moment, then run the node again.")
-    assert _card(RuntimeError("Async submit failed (401): no"), "flux-3-video", chosen, keys).person == (
+    assert _card(with_api_status(RuntimeError("Async submit failed (401): no"), 401), "flux-3-video", chosen,
+                 keys).person == (
         "Replicate didn't accept your API token. Check it in Settings, then run the node again.")
 
 
@@ -130,7 +135,8 @@ def test_credits_a_provider_signals_without_a_402(text: str) -> None:
 def test_a_handlers_own_line_wins_over_the_table() -> None:
     from execution.person_line import with_person_line
 
-    exc = with_person_line(RuntimeError("Meshy submit failed (401): no"), "A line the handler wrote.")
+    exc = with_person_line(with_api_status(RuntimeError("Meshy submit failed (401): no"), 401),
+                           "A line the handler wrote.")
     card = _card(exc, "meshy-text-to-3d", {}, {"MESHY_API_KEY": "fixture"})
     assert card.person == "A line the handler wrote."
     assert card.provider_text is False
@@ -138,7 +144,8 @@ def test_a_handlers_own_line_wins_over_the_table() -> None:
 
 @pytest.mark.parametrize("make, definition_id, keys", [
     # A status the table has no line for.
-    (lambda: RuntimeError("Meshy submit failed (418): teapot"), "meshy-text-to-3d", {"MESHY_API_KEY": "x"}),
+    (lambda: with_api_status(RuntimeError("Meshy submit failed (418): teapot"), 418), "meshy-text-to-3d",
+     {"MESHY_API_KEY": "x"}),
     # A download of a result or an input URL: who answered isn't the provider's API.
     (lambda: httpx.HTTPStatusError("Client error '403 Forbidden' for url 'https://cdn.example/a.png'",
                                    request=httpx.Request("GET", "https://cdn.example/a.png"),
@@ -151,7 +158,7 @@ def test_a_handlers_own_line_wins_over_the_table() -> None:
     (lambda: ValueError("World Labs seed must be an integer from 0 to 4294967295"), "meshy-text-to-3d",
      {"MESHY_API_KEY": "x"}),
     # A local node: no provider to name.
-    (lambda: RuntimeError("Stream request failed (503): down"), "text-input", {}),
+    (lambda: with_api_status(RuntimeError("Stream request failed (503): down"), 503), "text-input", {}),
 ])
 def test_a_failure_nebula_cant_tell_keeps_todays_line(make, definition_id, keys) -> None:
     card = _card(make(), definition_id, {}, keys)
@@ -161,9 +168,11 @@ def test_a_failure_nebula_cant_tell_keeps_todays_line(make, definition_id, keys)
 
 def test_the_krea_plan_never_asks_for_an_api_key() -> None:
     plan = {"_kreaAuth": "mcp"}
-    assert _card(RuntimeError("Krea generate failed (401): no"), "krea-2-generate", plan, {}).person is None
-    assert _card(RuntimeError("Krea generate failed (402): Krea API balance is depleted"), "krea-2-generate",
-                 plan, {}).person == "Your Krea account is out of credits. Add credits, then run the node again."
+    assert _card(with_api_status(RuntimeError("Krea generate failed (401): no"), 401), "krea-2-generate", plan,
+                 {}).person is None
+    assert _card(with_api_status(RuntimeError("Krea generate failed (402): Krea API balance is depleted"), 402),
+                 "krea-2-generate", plan, {}).person == (
+        "Your Krea account is out of credits. Add credits, then run the node again.")
 
 
 @pytest.mark.asyncio
@@ -210,7 +219,7 @@ async def test_a_scene_runs_failed_shot_names_the_provider_its_base_called(monke
     import handlers.cinema_scene as cinema_scene
 
     async def boom(node, inputs, api_keys):
-        raise RuntimeError("FAL submit failed (503): upstream exploded")
+        raise with_api_status(RuntimeError("FAL submit failed (503): upstream exploded"), 503)
 
     class _AnyKey(dict):
         def get(self, _key, _default=None):
@@ -945,22 +954,24 @@ def test_a_job_that_ran_and_failed_never_blames_the_key_or_the_service(text, def
     assert card.provider_text is False
 
 
-@pytest.mark.parametrize("text, line", [
+@pytest.mark.parametrize("make, line", [
     # The same providers' API answers before a job runs still read the table.
-    ("Meshy submit failed (401): no", KEY),
-    ("Meshy task failed: insufficient credits", CREDITS),
+    (lambda: with_api_status(RuntimeError("Meshy submit failed (401): no"), 401), KEY),
+    (lambda: RuntimeError("Meshy task failed: insufficient credits"), CREDITS),
 ])
-def test_a_submit_failure_and_a_jobs_out_of_credits_still_read_the_table(text, line) -> None:
-    assert _card(RuntimeError(text), "meshy-text-to-3d", {}, {"MESHY_API_KEY": "x"}).person == line
+def test_a_submit_failure_and_a_jobs_out_of_credits_still_read_the_table(make, line) -> None:
+    assert _card(make(), "meshy-text-to-3d", {}, {"MESHY_API_KEY": "x"}).person == line
 
 
-@pytest.mark.parametrize("text", [
-    "OpenRouter video failed (402): out of credits. Add credits",
-    "World Labs world generation failed (401): no",
-    "MiniMax H3 submit failed (401): bad key.",
-    "Replicate prediction failed (429): slow down",
+@pytest.mark.parametrize("text, status", [
+    ("OpenRouter video failed (402): out of credits. Add credits", 402),
+    ("World Labs world generation failed (401): no", 401),
+    ("MiniMax H3 submit failed (401): bad key.", 401),
+    ("Replicate prediction failed (429): slow down", 429),
 ])
-def test_an_api_answer_that_says_failed_is_not_a_job_failure(text) -> None:
+def test_an_api_answer_that_says_failed_is_not_a_job_failure(text, status) -> None:
+    # Round 3d, part 2: an API answer carries its status; only a raise marked
+    # as a job failure is one, whatever its words.
     from execution.provider_status import failure_kind
 
-    assert failure_kind(RuntimeError(text)) in {"key", "credits", "busy"}
+    assert failure_kind(with_api_status(RuntimeError(text), status)) in {"key", "credits", "busy"}
