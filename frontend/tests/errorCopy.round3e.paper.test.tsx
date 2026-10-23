@@ -65,7 +65,7 @@ describe("a Paper route's refusal", () => {
   it("an answer with no line reads GM's line for its status, never its body", async () => {
     vi.mocked(apiFetch).mockResolvedValue(answer(400, { detail: 'Paper tool failed' }));
     const error = await refreshPaperSource('source-a').catch((e: unknown) => e) as Error;
-    expect(error.message).toBe("Couldn't refresh the source. That didn't work. Try again, or reload if it keeps happening.");
+    expect(error.message).toBe("Couldn't refresh the source. Try again, or reload if it keeps happening.");
   });
 
   it('an answer the browser cannot read names the action', async () => {
@@ -100,7 +100,7 @@ describe('the Paper source card', () => {
     seed({ ...source, state: 'unavailable', lastError: RAW });
     render(<Harness />);
     const alert = screen.getByRole('alert');
-    expect(alert).toHaveTextContent("Couldn't refresh the source. That didn't work. Try again, or reload if it keeps happening.");
+    expect(alert).toHaveTextContent("Couldn't refresh the source. Try again, or reload if it keeps happening.");
     const details = document.querySelector('details') as HTMLDetailsElement;
     expect(details.open).toBe(false);
     expect(details.textContent).toContain('NEBULA_PAPER_CLI');

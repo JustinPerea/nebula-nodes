@@ -36,7 +36,7 @@ from models.events import ExecutionEvent, add_run_note
 from models.graph import GraphNode, PortValueDict
 from services.character_store import CharacterStore
 from services.stored_image_refs import is_outside_link
-from execution.person_line import as_person_line, with_person_line
+from execution.person_line import with_person_line
 
 
 def _in_trash(character_id: str) -> bool:
@@ -62,7 +62,7 @@ async def handle_character_node(
     if not isinstance(raw, str) or not raw.strip():
         raise with_person_line(
             ValueError("No character chosen: set character to a character id (GET /api/characters lists them)"),
-            "Choose a character in the node's Character field, then run it again.")
+            "Choose a character in “Character”, then run it again.")
     character_id = raw.strip()
     try:
         character = CharacterStore().get(character_id)
@@ -75,7 +75,7 @@ async def handle_character_node(
                 "This node's character is in Recently deleted. Restore it in Character Studio, then run the node again.")
         raise with_person_line(ValueError(f"Character {character_id!r} not found; it may have been deleted for good. "
                          "Pick another character for this node."),
-            "This node's character can't be found; it may have been deleted for good. Pick another character for this node.")
+            "This node's character can't be found. It may have been deleted for good. Pick another character for this node.")
 
     # Build the lightweight bundle. referenceViews + frozenTraitString are
     # passed through verbatim — no copy-with-sort, no string normalization —
@@ -89,8 +89,9 @@ async def handle_character_node(
     if len(kept) < len(views):
         name = character.get("name") or character_id
         if not kept:
-            raise as_person_line(ValueError(f"Every reference view of Character {name!r} is an image link from outside Nebula, "
-                             "so none can be used. Replace them with uploads in Character Studio and run again."))
+            raise with_person_line(ValueError(f"Every reference view of Character {name!r} is an image link from outside Nebula, "
+                             "so none can be used. Replace them with uploads in Character Studio and run again."), "Every reference view of this node's character is an image link from outside Nebula, so none can be used. "
+                             "Replace them with uploads in Character Studio, then run the node again.")
         left_out = len(views) - len(kept)
         add_run_note(f"{left_out} reference view{'s' if left_out != 1 else ''} of Character {name!r} "
                      f"{'are image links' if left_out != 1 else 'is an image link'} from outside Nebula, so "

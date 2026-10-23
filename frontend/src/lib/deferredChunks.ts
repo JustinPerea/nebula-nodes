@@ -142,6 +142,13 @@ export const DeferredAgentCursorLayer = lazyWithPreload(
   (module) => module.AgentCursorLayer,
 );
 
+// The canvas notice on the other screens (round 3f): a line arrives only
+// after something fails, never at the first paint.
+export const DeferredStudioNotice = lazyWithPreload(
+  () => import('../components/canvas/StudioNotice'),
+  (module) => module.StudioNotice,
+);
+
 // Graph save / open (lib/graphFile.ts): used only inside those two actions,
 // so GraphFileActions.tsx awaits it at the moment of use.
 export const graphFileModule = deferredModule(() => import('./graphFile'));
@@ -166,6 +173,7 @@ export const DEFERRED_PRELOADS: readonly (() => Promise<unknown>)[] = [
   DeferredProposalLayer.preload,
   DeferredPinLayer.preload,
   DeferredAgentCursorLayer.preload,
+  DeferredStudioNotice.preload,
   graphFileModule.preload,
 ];
 
@@ -229,6 +237,7 @@ export const DEFERRED_MODULES: readonly string[] = [
   'components/canvas/ProposalBar.tsx',
   'components/canvas/ProposalLayer.tsx',
   'components/canvas/CanvasUndoNotice.tsx',
+  'components/canvas/StudioNotice.tsx',
   'hooks/useProposalReadiness.ts',
   'components/canvas/PinLayer.tsx',
   'components/canvas/AgentCursorLayer.tsx',

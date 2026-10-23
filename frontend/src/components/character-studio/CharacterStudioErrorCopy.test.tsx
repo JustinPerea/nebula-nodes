@@ -62,8 +62,8 @@ const lines = (shown: Element) => [shown.querySelector('.failure-lines__heading'
 
 describe('a Character save that fails', () => {
   it.each([
-    ['a lost connection', 'network', "Couldn't reach Nebula. Check your connection.",
-      "Couldn't save the character. Couldn't reach Nebula. Check your connection and try again."],
+    ['a lost connection', 'network', "Nebula's server isn't answering. Make sure it's running.",
+      "Couldn't save the character. Nebula's server isn't answering. Make sure it's running, then try again."],
     ['a 503', 503, "Nebula didn't respond.", "Couldn't save the character. Nebula didn't respond. Try again."],
   ] as const)('after %s: the notice says the heading over GM\'s short line; the toolbar Retry\'s tooltip the one line', async (_name, failure, short, oneLine) => {
     state.put = failure;

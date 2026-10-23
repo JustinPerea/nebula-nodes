@@ -57,11 +57,11 @@ describe('chat cancellation truth state', () => {
   });
 
   it('a failed stop names the action and a written reason (error-copy round 2)', () => {
-    expect(chatCancellationNotice('failed', "Couldn't reach Nebula. Check your connection and try again.")).toEqual({
-      text: "Couldn't stop the reply. Couldn't reach Nebula. Check your connection and try again.",
+    expect(chatCancellationNotice('failed', "Nebula's server isn't answering. Make sure it's running, then try again.")).toEqual({
+      text: "Couldn't stop the reply. Nebula's server isn't answering. Make sure it's running, then try again.",
       tone: 'error',
     });
     expect(chatCancellationNotice('failed').text)
-      .toBe("Couldn't stop the reply. That didn't work. Try again, or reload if it keeps happening.");
+      .toBe("Couldn't stop the reply. Try again, or reload if it keeps happening.");
   });
 });

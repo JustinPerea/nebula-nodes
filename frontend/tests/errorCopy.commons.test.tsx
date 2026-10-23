@@ -7,19 +7,19 @@ import type { EvaluationBatch } from '../src/lib/commonsEvaluationTypes';
  * connection the leave popover's second line and the red banner above Blind
  * labeling both read the browser's "Failed to fetch". "That is a TypeError
  * message, not copy." A failed Commons request now says GM's line:
- *   lost connection          -> "Couldn't reach Nebula. Check your connection and try again."
+ *   lost connection          -> "Nebula's server isn't answering. Make sure it's running, then try again."
  *   408, 429 or any 5xx      -> "Nebula didn't respond. Try again."
  *   any other 4xx            -> the backend's detail (written copy), as before.
  * These run the real Commons API and apiFetch; only the browser's fetch is
  * stubbed, so the words are made where the requests are, not per screen.
  */
 
-const LOST = "Couldn't reach Nebula. Check your connection and try again.";
+const LOST = "Nebula's server isn't answering. Make sure it's running, then try again.";
 const NO_ANSWER = "Nebula didn't respond. Try again.";
 // Round 2 (GM's WRAP rule): "when the surface already has a retry button, the
 // reason line drops its 'try again'. The button is the retry." The leave
 // popover offers Save and leave, so it says these.
-const LOST_SHORT = "Couldn't reach Nebula. Check your connection.";
+const LOST_SHORT = "Nebula's server isn't answering. Make sure it's running.";
 const NO_ANSWER_SHORT = "Nebula didn't respond.";
 // Round 2: the banner is a one-line surface: "Couldn't {verb} {object}. {reason}".
 const LABELS = "Couldn't save your labels.";

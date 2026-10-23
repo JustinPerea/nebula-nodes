@@ -29,7 +29,10 @@ import { ModelNode } from '../src/components/nodes/ModelNode';
 import { BatchNode } from '../src/components/nodes/BatchNode';
 
 const HEADING = "Couldn't run the node.";
-const GENERAL = "That didn't work. Try again, or reload if it keeps happening.";
+// Round 3f (GM): a card's general line, with no provider named. "Run the node
+// again. If it keeps failing, Details shows what {Provider} said." when the run
+// names one (tests/errorCopy.round3f.test.tsx).
+const GENERAL = "Run the node again. If it keeps failing, open Details.";
 const KEY = 'Missing API key: OPENAI_API_KEY';
 const KEY_LINE = 'Add your OpenAI API key in Settings, then run the node again.';
 const PORT = "Required input port 'prompt' is not connected";
@@ -99,7 +102,7 @@ describe("the run call's own validation answer", () => {
   it('says a written line when the answer names no node', async () => {
     vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'validation_error' } as never);
     await useGraphStore.getState().executeNode('n1');
-    expect(data('n1').errorPerson).toBe('Nothing ran. Check the inputs and API keys, then run again.');
+    expect(data('n1').errorPerson).toBe('Nothing ran. Check the inputs and API keys, then run the node again.');
     expect(String(data('n1').error)).not.toMatch(/Validation failed|execution/i);
   });
 });

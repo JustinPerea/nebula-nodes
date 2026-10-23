@@ -642,8 +642,8 @@ async def test_a_fal_stream_still_running_when_polling_stops_says_check_fal(monk
                                "fal_request_id=req-1). Retrieval by request ID failed: job still IN_PROGRESS "
                                "after 2 status polls. Last 1 raw events: ")
     assert person_line(exc) == slow_job_line("fal.ai")
-    assert person_line(exc) == ("fal.ai is taking longer than usual. The job may still finish there and be billed, "
-                                "so check fal.ai before you run the node again.")
+    assert person_line(exc) == ("fal.ai took too long, so Nebula stopped waiting. The job may still finish there and "
+                                "be billed, so check fal.ai before you run the node again.")
 
 
 @pytest.mark.asyncio
@@ -702,7 +702,7 @@ async def test_a_replicate_model_with_no_version_says_so_without_its_id(monkeypa
     exc = await _araised(replicate_universal._resolve_version, "acme", "painter", "fixture")
     assert str(exc) == "No version found for acme/painter"
     line = person_line(exc)
-    assert line == ("Replicate has no version of the model in the node's Model ID field to run. "
+    assert line == ("Replicate has no version of the model in “Model ID” to run. "
                     "Check the model on Replicate, then run the node again.")
     assert not forbidden_in_a_line(line)
     _mock_clients(monkeypatch, replicate_universal, lambda request: httpx.Response(404, text="not found"))
@@ -719,7 +719,7 @@ async def test_a_replicate_model_id_missing_says_where_to_find_it_without_owner_
     exc = await _araised(handle_replicate_universal, _node("replicate-universal"), {}, {"REPLICATE_API_TOKEN": "x"})
     assert str(exc) == "Model ID is required (format: owner/name, e.g. stability-ai/sdxl)"
     line = person_line(exc)
-    assert line == ("Enter a Replicate model in the node's Model ID field, as its page on Replicate writes it, "
+    assert line == ("Enter a Replicate model in “Model ID”, as its page on Replicate writes it, "
                     "then run the node again.")
     assert not forbidden_in_a_line(line)
 

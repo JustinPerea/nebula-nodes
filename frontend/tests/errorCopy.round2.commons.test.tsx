@@ -81,7 +81,7 @@ describe('Commons upload, per file', () => {
       ["Couldn't upload notes.txt.", "Nebula can't read that file type. Use JPG, PNG, WebP, GIF, HEIC, MP4 or MOV."],
       ["Couldn't upload broken.png.", "That file couldn't be read. It may be damaged."],
       ["Couldn't upload new.png.", 'Nebula is still checking that file.'],
-      ["Couldn't upload odd.png.", "That didn't work. Try again, or reload if it keeps happening."],
+      ["Couldn't upload odd.png.", "Try again, or reload if it keeps happening."],
     ]);
     for (const raw of RAW) expect(alert).not.toHaveTextContent(raw);
     // On 1fc3d846 the refresh after an upload cleared the error at once (a

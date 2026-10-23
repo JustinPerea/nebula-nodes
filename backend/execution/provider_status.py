@@ -72,6 +72,11 @@ class CardLine(NamedTuple):
     provider's own words."""
     person: str | None
     provider_text: bool
+    # Who the run called, from the route it took (round 3f): GM's general
+    # line names them ("Details shows what {Provider} said."). Never read
+    # from the error's text. None for a node that calls no provider, or a
+    # failure that provider never answered (card_line, review of round 3f).
+    provider: str | None = None
 
 
 # An answer with no result in it, or one Nebula couldn't read.
@@ -206,18 +211,58 @@ def provider_line(exc: BaseException, definition_id: str, params: Mapping[str, A
     return status_line(kind, provider)
 
 
+def called_provider(definition_id: str, params: Mapping[str, Any] | None,
+                    api_keys: Mapping[str, Any] | None) -> str | None:
+    """The provider a node's run called, by the route it took with these
+    params and keys (the key Settings stores for it, or the signed-in Krea
+    plan): "Runway", "fal.ai". None when the node calls no provider or no
+    route could start. Structural only: never read from an error's text."""
+    try:
+        from services import node_route
+
+        route = _route(definition_id, params or {}, api_keys or {})
+    except Exception:
+        return None
+    if route.kind == node_route.PLAN:
+        return "Krea"
+    named = key_name(route.key) if route.key else None
+    return named[0] if named else None
+
+
+def provider_answered(exc: BaseException) -> bool:
+    """`exc` is about an answer the provider gave this run, by the facts the
+    raise attached, never its text: an API status (with_api_status, or a
+    typed provider error's own), a terminal job failure (as_job_failure), the
+    provider's own words (with_provider_line), or one of GM's status-table
+    kinds. A plain exception Nebula raised before sending (a saved model the
+    node doesn't list, a local file, a handler bug) carries none of these,
+    and neither does a download's own HTTPStatusError (module docstring, 3)."""
+    return (http_status(exc) is not None or is_job_failure(exc) or carries_provider_text(exc)
+            or failure_kind(exc) is not None)
+
+
 def card_line(exc: BaseException, definition_id: str, params: Mapping[str, Any] | None,
               api_keys: Mapping[str, Any] | None) -> CardLine:
     """The card's line for a run error: the handler's own, else the table's
-    for a provider's answer (with its text behind Details), else none."""
+    for a provider's answer (with its text behind Details), else none; and
+    who the run called, for GM's general line. GM: "Details shows what
+    {Provider} said" is for a failure that names a provider, so the route's
+    provider goes on the card only when that provider answered
+    (provider_answered); a failure before sending reads "open Details"."""
+    try:
+        answered = provider_answered(exc)
+    except Exception:  # the card's line must never break a run's error
+        answered = False
+    provider = called_provider(definition_id, params, api_keys) if answered else None
     own = person_line(exc)
     if own:
-        return CardLine(own, carries_provider_text(exc))
+        return CardLine(own, carries_provider_text(exc), provider)
     try:
         line = provider_line(exc, definition_id, params or {}, api_keys or {})
     except Exception:  # the card's line must never break a run's error
         line = None
-    return CardLine(line, True) if line else CardLine(None, False)
+    return CardLine(line, True, provider) if line else CardLine(None, False, provider)
 
 
-__all__ = ["CardLine", "KEY_NAMES", "card_line", "failure_kind", "http_status", "provider_line"]
+__all__ = ["CardLine", "KEY_NAMES", "called_provider", "card_line", "failure_kind", "http_status", "provider_answered",
+           "provider_line"]

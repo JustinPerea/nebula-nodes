@@ -37,7 +37,7 @@ from models.graph import GraphNode, PortValueDict
 from services.cancellation import schedule_detached_cancel
 from services.file_access import require_allowed_path
 from services.output import _MEDIA_EXTENSIONS, get_run_dir, materialize_media_value, portable_output_ref
-from execution.person_line import as_job_failure, as_person_line, missing_file_line, slow_job_line, with_person_line
+from execution.person_line import as_job_failure, missing_file_line, slow_job_line, with_person_line
 
 
 CATALOG_PATH = Path(__file__).resolve().parents[1] / "data" / "krea_gateway_models.json"
@@ -136,7 +136,7 @@ def _asset_data(value: str) -> tuple[str, bytes, str] | None:
         if not loopback:
             return None
         if not parsed.path.startswith("/api/outputs/") or parsed.query or parsed.fragment:
-            raise as_person_line(ValueError("Krea cannot access a local URL; upload the media or use an owned output reference"))
+            raise with_person_line(ValueError("Krea cannot access a local URL; upload the media or use an owned output reference"), "Krea can't open a link to this computer. Connect the file or the output itself instead.")
         value = unquote(parsed.path)
         parsed = urlsplit(value)
     if value.startswith("data:"):
@@ -164,12 +164,12 @@ def _asset_data(value: str) -> tuple[str, bytes, str] | None:
             raise with_person_line(ValueError("Krea media input is not a readable local file"),
                                    missing_file_line("file", value))
         if path.stat().st_size > MAX_ASSET_BYTES:
-            raise as_person_line(ValueError("Krea media input exceeds the 75 MB asset limit"))
+            raise with_person_line(ValueError("Krea media input exceeds the 75 MB asset limit"), "A connected file is over Krea's 75 MB limit. Connect a smaller one.")
         raw = path.read_bytes()
         mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         filename = path.name
     if not raw or len(raw) > MAX_ASSET_BYTES:
-        raise as_person_line(ValueError("Krea media input is empty or exceeds the 75 MB asset limit"))
+        raise with_person_line(ValueError("Krea media input is empty or exceeds the 75 MB asset limit"), "A connected file is empty or over Krea's 75 MB limit. Connect another one.")
     return filename, raw, mime
 
 

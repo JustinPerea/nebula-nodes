@@ -123,7 +123,7 @@ async def handle_cinema_color(
             if source_path is None:
                 raise with_person_line(
                     ValueError(f"Source image not found: {source_ref}"),
-                    "The node's Palette Source image can't be found. Choose it again, or clear it.")
+                    "The node's palette source image can't be found. Choose it again, or clear it.")
             with Image.open(require_allowed_path(source_path)) as src_img:
                 swatches = extract_palette(src_img.convert("RGB"))
 

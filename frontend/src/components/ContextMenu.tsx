@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useUIStore } from '../store/uiStore';
 import { useGraphStore } from '../store/graphStore';
+import { confirmNodeDelete } from '../lib/deleteConfirm';
 import { useCanvasPinsStore } from '../store/canvasPinsStore';
 import { isBackendNodeId } from '../lib/canvasPins';
 import '../styles/panels.css';
@@ -102,7 +103,8 @@ export function ContextMenu() {
       shortcut: 'Del',
       danger: true,
       action: () => {
-        deleteNode(nodeId);
+        // A World Labs hold refuses first, with its notice; then GM's confirm (round 3f).
+        if (useGraphStore.getState().allowCanvasDelete([nodeId]) && confirmNodeDelete(1)) deleteNode(nodeId);
         hideContextMenu();
       },
     },

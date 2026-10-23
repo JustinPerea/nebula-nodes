@@ -45,7 +45,7 @@ from typing import Any
 
 from models.graph import GraphNode, PortValueDict
 from services import node_route
-from execution.person_line import as_person_line, with_person_line
+from execution.person_line import as_person_line, field_label, with_person_line
 
 # The fal node's model choice -> ModelArk model id (image-generation-api and
 # model-list, 2026-10-14). 5.0 lite: the model list names "seedream-5-0-260128
@@ -161,7 +161,8 @@ def seedream_fal_to_byteplus(
         raise with_person_line(ValueError(
             f"BytePlus takes at most {MAX_IMAGES_PER_REQUEST} images per request, references plus outputs "
             f"({len(refs)} references + max_images {max_images})"),
-            f"BytePlus makes at most {MAX_IMAGES_PER_REQUEST} images per request, counting references and results. Use fewer references or fewer Images per Generation.")
+            f"BytePlus makes at most {MAX_IMAGES_PER_REQUEST} images per request, counting references and results. "
+            f"Use fewer references, or lower “{field_label(node.definition_id, 'max_images', 'Images per Generation')}”.")
     out = {"model": model, "size": size, "num_images": _count(params.get("num_images"), "num_images", 6),
            "max_images": max_images}
     routed: dict[str, PortValueDict] = {}
@@ -191,7 +192,7 @@ def krea_seedream_to_byteplus(model: str):
                 "remove the BytePlus key to run this on Krea.")
         width, height = params.get("width"), params.get("height")
         if width in (None, "") or height in (None, ""):
-            raise as_person_line(ValueError("Seedream needs a width and a height"))
+            raise with_person_line(ValueError("Seedream needs a width and a height"), "Seedream needs a width and a height. Fill in “Width” and “Height”, then run the node again.")
         size = _wxh(width, height, _limits(node.definition_id), "width x height")
         routed: dict[str, PortValueDict] = {}
         prompt = inputs.get("prompt")
@@ -229,7 +230,7 @@ def request_body(node: GraphNode, inputs: dict[str, PortValueDict]) -> dict[str,
     prompt = inputs.get("prompt")
     text = str(prompt.value).strip() if prompt is not None and prompt.value not in (None, "") else ""
     if not text:
-        raise as_person_line(ValueError("Seedream needs a prompt"))
+        raise with_person_line(ValueError("Seedream needs a prompt"), "Seedream needs a prompt. Connect one, then run the node again.")
     params = node.params
     body: dict[str, Any] = {"model": params["model"], "prompt": text, "size": params["size"],
                             "response_format": "b64_json", "watermark": False}

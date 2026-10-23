@@ -77,6 +77,8 @@ import {
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, waitingOnWorldLabs } from '../lib/worldLabsWaiting';
 import { FailureNotice, REFUSED_FALLBACK_COPY, copyForStatus, failureCopy, failureMessage, readDetail, requestError, warnFailure } from '../lib/errorCopy';
+import { CANVAS_NOTICE_EVENT, type CanvasNoticeDetail } from '../lib/canvasNotice';
+import { confirmNodeDelete } from '../lib/deleteConfirm';
 import { NOTHING_RAN_LINE, OTHER_NODE_LINE, SHOT_NOT_STARTED_LINE, validationReadings, writtenReading, type ValidationReading } from '../lib/validationCopy';
 import {
   RUNTIME_FIELDS, applySlice, diffCanvas, edgeKey, editArrivedText, foldArrange, foreignSource, isForeignEdit, isOwnEcho,
@@ -288,8 +290,10 @@ function pendingCinemaUploadIssue(nodes: Node<NodeData>[], selected?: { nodeId: 
   return null;
 }
 
+// A canvas notice, not a window.alert (round 3f, GM: "A native alert stops
+// the whole canvas over something that needs no answer.").
 function warnPendingCinemaUpload(issue: string): void {
-  if (typeof window !== 'undefined') window.alert(issue);
+  useGraphStore.getState().notify(issue);
 }
 
 function clearReplacedCanvasFocus(): void {
@@ -343,6 +347,7 @@ function markNodesErrored(
         errorFriendly: undefined,
         errorPerson: undefined,
         errorProviderText: undefined,
+        errorProvider: undefined,
         progress: undefined,
         streamingText: undefined,
         streamingPartials: undefined,
@@ -377,6 +382,7 @@ function markNodesWithValidationErrors(
         errorFriendly: undefined,
         errorPerson: reading.errorPerson,
         errorProviderText: undefined,
+        errorProvider: undefined,
         progress: undefined,
         streamingText: undefined,
         streamingPartials: undefined,
@@ -424,6 +430,9 @@ export interface UndoNotice {
   offer: 'undo' | 'redo' | null;
   /** The step the button acts on; it acts only while that step is next in line. */
   entry?: ForeignEdit;
+  /** 'error': a failure that used to be a window.alert (round 3f, GM: "Every
+   * error alert becomes a canvas notice"), announced as role="alert". */
+  tone?: 'error' | 'info';
 }
 
 let undoNoticeSeq = 0;
@@ -702,6 +711,10 @@ interface GraphState {
   /** The notice for someone else's edit: it landed, or was undone or redone. */
   undoNotice: UndoNotice | null;
   dismissUndoNotice: () => void;
+  /** Show a written line as the canvas notice, non-blocking and dismissable,
+   * where a native alert used to stop the canvas (round 3f). 'error' by
+   * default; 'info' for a note such as an import's warnings. */
+  notify: (text: string, tone?: 'error' | 'info') => void;
 
   // Clipboard
   clipboard: CanvasClipboard | null;
@@ -812,7 +825,7 @@ interface GraphState {
   /** The Delete key's guard (Canvas onBeforeDelete): false, with the canvas
    * notice saying why, when one of `nodeIds` holds World Labs state, so React
    * Flow removes neither the nodes nor their wires (round 3b). */
-  allowCanvasDelete: (nodeIds: string[]) => boolean;
+  allowCanvasDelete: (nodeIds: string[], options?: { confirm?: boolean }) => boolean;
   hydrateProviderStartAmbiguities: (ambiguities: ProviderStartAmbiguity[]) => void;
   hydrateExecutionStatuses: (statuses: ExecutionStatusResult[]) => void;
   acknowledgeProviderStartAmbiguity: (
@@ -1129,7 +1142,7 @@ function shotOutputPorts(scene: CinemaSceneSpec): DynamicPortDefinition[] {
  *  show an earlier failure's person line or Details. */
 function withoutShotError(output: CinemaShot['output']): Omit<NonNullable<CinemaShot['output']>, 'status'> {
   const rest: Partial<NonNullable<CinemaShot['output']>> = { ...(output ?? {}) };
-  for (const key of ['status', 'error', 'errorCategory', 'errorFriendly', 'errorPerson', 'errorProviderText', 'errorRaw'] as const) delete rest[key];
+  for (const key of ['status', 'error', 'errorCategory', 'errorFriendly', 'errorPerson', 'errorProviderText', 'errorProvider', 'errorRaw'] as const) delete rest[key];
   return rest;
 }
 
@@ -1739,9 +1752,7 @@ function reportNodeDeletionFailure(reasons: string[], count: number): void {
   const heading = deletionHeading(count);
   const message = `${heading} ${[...new Set(reasons)].join(' ')}`;
   console.warn(`[nebula] ${message}`);
-  if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-    window.alert(message);
-  }
+  useGraphStore.getState().notify(message);
 }
 
 
@@ -2173,9 +2184,7 @@ const WORLD_LABS_UNSAFE_CLONE_MESSAGE =
 
 function warnUnsafeProviderClone(): void {
   console.warn(`[nebula] ${WORLD_LABS_UNSAFE_CLONE_MESSAGE}`);
-  if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-    window.alert(WORLD_LABS_UNSAFE_CLONE_MESSAGE);
-  }
+  useGraphStore.getState().notify(WORLD_LABS_UNSAFE_CLONE_MESSAGE);
 }
 
 function sameProviderRecoveryIdentity(
@@ -2508,9 +2517,7 @@ function observePendingConnectedNodeCreation(nodes: Node<NodeData>[], edges: Edg
 function reportNodeCreationFailure(displayName: string, reason: string): null {
   const message = `Couldn't add ${displayName}. ${reason}`;
   console.warn(`[nebula] ${message}`);
-  if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-    window.alert(message);
-  }
+  useGraphStore.getState().notify(message);
   return null;
 }
 
@@ -2964,6 +2971,7 @@ wsClient.subscribe((event) => {
             ...(cliNode.data.state === 'error' ? {
               errorFriendly: cliNode.data.errorFriendly, errorCategory: cliNode.data.errorCategory,
               errorPerson: cliNode.data.errorPerson, errorProviderText: cliNode.data.errorProviderText,
+              errorProvider: cliNode.data.errorProvider,
             } : {}),
             keyStatus,
             ...(changedOutput ? clearBatchPreview() : {}),
@@ -3166,6 +3174,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   undoNotice: null,
   dismissUndoNotice: () => set({ undoNotice: null }),
+  notify: (text, tone = 'error') => set({ undoNotice: { id: ++undoNoticeSeq, text, offer: null, tone } }),
 
   // ---------------------------------------------------------------------------
   // Clipboard: copy/paste with UUID regeneration
@@ -3733,7 +3742,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     return tempId;
   },
 
-  allowCanvasDelete: (nodeIds) => !refuseHeldNodeDelete(get(), nodeIds, set),
+  // `confirm`: GM's confirm after the hold's refusal (round 3f, lib/deleteConfirm.ts).
+  allowCanvasDelete: (nodeIds, options) => !refuseHeldNodeDelete(get(), nodeIds, set)
+    && (!options?.confirm || confirmNodeDelete(nodeIds.length)),
 
   onNodesChange: (changes) => {
     if (get().isExecuting && changes.some((change) => change.type === 'remove')) return;
@@ -5036,7 +5047,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   authorGenerationCluster: async (request) => {
-    if (get().isImportingGraph) throw new FailureNotice("Couldn't generate.", 'Wait for the graph import to finish.');
+    if (get().isImportingGraph) throw new FailureNotice("Couldn't start the generation.", 'Wait for the graph import to finish.');
     const def = NODE_DEFINITIONS[request.definitionId];
     if (!def) return { modelNodeIds: [], allNodeIds: [] };
 
@@ -5705,7 +5716,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     if (!source) return;
     const snapshot = snapshotWithLatestPaperSources(source, captureRunSnapshot(state.nodes, state.edges));
     if (!snapshot) {
-      window.alert('Refresh or reconnect the Paper sources in this saved recipe before rerunning with the latest snapshot. Their last successful snapshots remain in source history.');
+      get().notify('Refresh or reconnect the Paper sources in this saved recipe before rerunning with the latest snapshot. Their last successful snapshots remain in source history.');
       return;
     }
     await executeHistoricalRun({ ...source, snapshot }, 'latest-paper-source', set, get);
@@ -6036,6 +6047,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           errorFriendly: event.friendly,
           errorPerson: event.person ?? undefined,
           errorProviderText: event.providerText || undefined,
+          errorProvider: event.provider || undefined,
           progress: undefined,
           streamingText: undefined,
           streamingPartials: undefined,
@@ -6051,7 +6063,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           if ((runId && ownsRun(runId)) || !scopeOverlaps([nodeId])) {
             get().updateNodeData(nodeId, {
               state: 'error', error: reading.error, errorCategory: reading.errorCategory, errorFriendly: undefined,
-              errorPerson: reading.errorPerson, errorProviderText: undefined,
+              errorPerson: reading.errorPerson, errorProviderText: undefined, errorProvider: undefined,
             });
           }
         }
@@ -6248,6 +6260,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   dismissProviderRecoveryWarning: () => set({ providerRecoveryWarning: null }),
 }));
+
+// A line from a module that doesn't import this store (lib/canvasNotice.ts,
+// round 3f) becomes the canvas notice.
+if (typeof window !== 'undefined') {
+  window.addEventListener(CANVAS_NOTICE_EVENT, (event) => {
+    const detail = (event as CustomEvent<CanvasNoticeDetail>).detail;
+    if (detail?.text) useGraphStore.getState().notify(detail.text, detail.tone);
+  });
+}
 
 // Hold navigation through response parsing and local authoring callbacks too.
 const projectMutationMethods = useGraphStore.getState();

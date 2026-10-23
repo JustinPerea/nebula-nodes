@@ -7,6 +7,7 @@ import { graphFileModule } from '../lib/deferredChunks';
 import { canLoadGraph, canSaveGraph, GRAPH_LOAD_EVENT, GRAPH_SAVE_EVENT } from '../lib/graphFileActions';
 import { apiRequest } from '../lib/apiRequest';
 import { failureMessage } from '../lib/errorCopy';
+import { showNotice } from '../lib/canvasNotice';
 import { computeCanvasFitPadding } from '../lib/canvasFit';
 import { providerKeyWarnings } from '../lib/providerSwitch';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
@@ -34,7 +35,7 @@ export function GraphFileActions() {
       await saveToFile(state.nodes, state.edges, viewport);
     } catch (error) {
       console.error('Graph save failed:', error);
-      alert(failureMessage(error, "Couldn't save the graph."));
+      showNotice(failureMessage(error, "Couldn't save the graph."));
     } finally {
       actionInFlight.current = false;
     }
@@ -112,10 +113,10 @@ export function GraphFileActions() {
         notes.push(`Set to a provider you have no key for:\n${providerWarnings.map((line) => `• ${line}`).join('\n')}`
           + '\nAdd the key in Settings > Providers, or pick another provider on the node.');
       }
-      if (notes.length > 0) alert(`Imported.\n${notes.join('\n')}`);
+      if (notes.length > 0) showNotice(`Imported.\n${notes.join('\n')}`, 'info');
     } catch (error) {
       console.error('Graph import failed; existing graph preserved:', error);
-      alert(failureMessage(error, LOAD_GRAPH));
+      showNotice(failureMessage(error, LOAD_GRAPH));
     } finally {
       if (importReserved) useGraphStore.getState().releaseGraphImport();
       actionInFlight.current = false;

@@ -209,10 +209,19 @@ export function stillNotReady(
   });
 }
 
-/** "GPT Image 2 (n3) needs OPENAI_API_KEY in Settings > Providers", in find_nodes' words. */
+/** The person's line ("GPT Image 2 needs your OpenAI API key. Add it in
+ * Settings.", round 3f); from a backend older than 3f, find_nodes' words:
+ * "GPT Image 2 (n3) needs OPENAI_API_KEY in Settings > Providers". */
 export function notReadyLine(row: ProposalNotReady): string {
+  if (row.person?.trim()) return row.person.trim();
   // Route messages already start with the node's name.
   return row.missing.startsWith(row.name) ? `${row.ref}: ${row.missing}` : `${row.name} (${row.ref}) ${row.missing}`;
+}
+
+/** A ghost card's warning for its not-ready row: the person's line (round 3f), else find_nodes' words. */
+export function notReadyWarning(row: ProposalNotReady | undefined): string | null {
+  if (!row) return null;
+  return row.person?.trim() || row.missing;
 }
 
 /** "Adds 1 node · 1 wire · changes n4 · runs up to 1 paid model (fal)". */

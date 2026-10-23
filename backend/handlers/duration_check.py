@@ -101,7 +101,7 @@ async def handle_duration_check(
         raise with_person_line(ValueError(
             "requested_duration is required: connect the input port or set the param"
         ),
-            "Connect a duration, or set the node's Requested Duration (s), then run it again.")
+            "Connect a duration, or set “Requested Duration (s)”, then run it again.")
 
     probe = await ffprobe_video(source)
 

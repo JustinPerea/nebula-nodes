@@ -30,7 +30,8 @@ import { FailureNotice, failureMessage } from '../../lib/errorCopy';
 
 const MAX_CONCURRENT = 2;
 /** A Generate that didn't start, named by its button (error copy round 3e). */
-const GENERATE_HEADING = "Couldn't generate.";
+// GM, round 3f: "Couldn't generate." → "Couldn't start the generation."
+const GENERATE_HEADING = "Couldn't start the generation.";
 
 export function CreateView() {
   const exitCreateView = useUIStore((s) => s.exitCreateView);

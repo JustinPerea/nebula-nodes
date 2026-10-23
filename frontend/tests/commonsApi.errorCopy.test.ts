@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * other 4xx can't. The raw answer stays on the error for debugging.
  */
 
-const LOST = "Couldn't reach Nebula. Check your connection and try again.";
+const LOST = "Nebula's server isn't answering. Make sure it's running, then try again.";
 const NO_ANSWER = "Nebula didn't respond. Try again.";
 
 sessionStorage.setItem('nebula.person', JSON.stringify({ token: crypto.randomUUID(), backend: 'http://localhost:8000' }));
@@ -39,7 +39,7 @@ describe('Commons request failures carry copy and keep their status', () => {
     expect(error.status).toBe(0);
     expect((error.cause as Error).cause).toBe(original);
     // Round 2: the popover's short line (Save and leave is the retry), the banner's one line.
-    expect(saveFailure(error)).toEqual({ ok: false, reason: "Couldn't reach Nebula. Check your connection.",
+    expect(saveFailure(error)).toEqual({ ok: false, reason: "Nebula's server isn't answering. Make sure it's running.",
       message: `Couldn't save your labels. ${LOST}`, retry: true });
     expect(error.heading).toBe("Couldn't save your labels.");
   });
@@ -77,7 +77,7 @@ describe('Commons request failures carry copy and keep their status', () => {
   ])('a 4xx with %s says a written line, never the status or the raw detail', async (_name, make) => {
     answer = make;
     const error = await failure(() => commonsApi.status());
-    expect(error.reason).toBe("That didn't work. Try again, or reload if it keeps happening.");
+    expect(error.reason).toBe("Try again, or reload if it keeps happening.");
     expect(error.message).not.toMatch(/\d{3}|field required|loc/);
   });
 
@@ -93,8 +93,8 @@ describe('Commons request failures carry copy and keep their status', () => {
 
   it('a failure that isn\'t a request\'s says GM\'s general line, never its own message', () => {
     expect(saveFailure(new SyntaxError('Unexpected token < in JSON at position 0'))).toEqual({
-      ok: false, reason: "That didn't work. Try again, or reload if it keeps happening.",
-      message: "Couldn't save your labels. That didn't work. Try again, or reload if it keeps happening.", retry: true,
+      ok: false, reason: "Try again, or reload if it keeps happening.",
+      message: "Couldn't save your labels. Try again, or reload if it keeps happening.", retry: true,
     });
   });
 

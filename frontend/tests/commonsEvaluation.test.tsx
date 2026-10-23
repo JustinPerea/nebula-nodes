@@ -75,12 +75,12 @@ it('says only the rule while unsaved, and tells a leave whether saving again cou
   // the leave popover offers Save and leave, so its line is GM's short one.
   api.labels.mockRejectedValueOnce(new CommonsRequestError("Nebula didn't respond. Try again.", 503));
   expect(await work!.save()).toMatchObject({ ok: false, reason: "Nebula didn't respond.", retry: true });
-  api.labels.mockRejectedValueOnce(new CommonsRequestError("Couldn't reach Nebula. Check your connection and try again.", 0));
-  expect(await work!.save()).toMatchObject({ ok: false, reason: "Couldn't reach Nebula. Check your connection.", retry: true });
+  api.labels.mockRejectedValueOnce(new CommonsRequestError("Nebula's server isn't answering. Make sure it's running, then try again.", 0));
+  expect(await work!.save()).toMatchObject({ ok: false, reason: "Nebula's server isn't answering. Make sure it's running.", retry: true });
   // A fetch error that didn't come through the API never shows its own message (GM).
   api.labels.mockRejectedValueOnce(new TypeError('Failed to fetch'));
-  expect(await work!.save()).toMatchObject({ ok: false, reason: "Couldn't reach Nebula. Check your connection.",
-    message: "Couldn't save your labels. Couldn't reach Nebula. Check your connection and try again.", retry: true });
+  expect(await work!.save()).toMatchObject({ ok: false, reason: "Nebula's server isn't answering. Make sure it's running.",
+    message: "Couldn't save your labels. Nebula's server isn't answering. Make sure it's running, then try again.", retry: true });
   // GM: a timeout or a rate limit is a 4xx that works on a second try.
   for (const status of [408, 429]) {
     api.labels.mockRejectedValueOnce(new CommonsRequestError('Try again', status));

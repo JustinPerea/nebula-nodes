@@ -33,7 +33,12 @@ import { useUIStore } from '../src/store/uiStore';
 import { useCinemaMotionStore } from '../src/store/cinemaMotionStore';
 
 const HEADING = "Couldn't run the node.";
-const GENERAL = "That didn't work. Try again, or reload if it keeps happening.";
+// Round 3f (GM): "The Cinema shot panel heading: yes, "Couldn't generate the shot."".
+const SHOT_HEADING = "Couldn't generate the shot.";
+// Round 3f (GM): a card's general line, with no provider named. "Run the node
+// again. If it keeps failing, Details shows what {Provider} said." when the run
+// names one (tests/errorCopy.round3f.test.tsx).
+const GENERAL = "Run the node again. If it keeps failing, open Details.";
 const MASK = 'No mask painted yet — open the Mask Painter node and paint one';
 const RAW = 'FAL submit failed (500): {"detail":"upstream exploded","request_id":"req_123"}';
 
@@ -105,7 +110,7 @@ describe('the Cinema shot panel reads a failed shot like the node card', () => {
   it("shows the handler's line under the heading, with no Details", () => {
     const { container } = shotPanel({ status: 'error', error: MASK, errorCategory: 'unknown', errorPerson: MASK });
     const error = container.querySelector('.cinema-shot-panel__error')!;
-    expect(heading(error)).toBe(HEADING);
+    expect(heading(error)).toBe(SHOT_HEADING);
     expect(reason(error)).toBe(MASK);
     expect(error.querySelector('details')).toBeNull();
   });
@@ -114,7 +119,7 @@ describe('the Cinema shot panel reads a failed shot like the node card', () => {
     const { container } = shotPanel({ status: 'error', error: RAW.slice(0, 40), errorCategory: 'unknown',
       errorFriendly: RAW.slice(0, 40), errorRaw: RAW });
     const error = container.querySelector('.cinema-shot-panel__error')!;
-    expect(heading(error)).toBe(HEADING);
+    expect(heading(error)).toBe(SHOT_HEADING);
     expect(reason(error)).toBe(GENERAL);
     const details = error.querySelector('details')!;
     expect(details.open).toBe(false);
@@ -163,7 +168,8 @@ describe('the motion handoff says "Couldn\'t …" and leaves the retry to its bu
 
   it('a request with no answer', async () => {
     const alert = await send(async () => { throw new TypeError('Failed to fetch'); });
-    expect(alert.textContent).toBe("Couldn't confirm the video connection. Couldn't reach Nebula. Check your connection.");
+    // Round 3f (GM): "don't stack two "Couldn't"s, and Nebula is local".
+    expect(alert.textContent).toBe("Couldn't confirm the video connection. Nebula didn't respond.");
   });
 
   it('a refused request', async () => {

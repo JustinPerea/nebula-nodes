@@ -18,8 +18,8 @@ from services.public_url import fetch_public_media
 from services.provider_capabilities import enforce_gemini_omni_capabilities
 from execution.missing_credential import MissingCredentialError
 from execution.poll_retry import UpstreamTask, poll_request
-from execution.person_line import (as_job_failure, as_person_line, it_was, missing_file_line, slow_job_line,
-                                   with_api_status, with_person_line)
+from execution.person_line import (as_job_failure, it_was, missing_file_line, slow_job_line, with_api_status,
+                                   with_person_line)
 
 INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
 FILES_URL = "https://generativelanguage.googleapis.com/v1beta/files"
@@ -113,7 +113,7 @@ async def _build_input_parts(
         parts.append({"type": "text", "text": prompt})
 
     if not parts:
-        raise as_person_line(ValueError("Prompt, images, or video input is required"))
+        raise with_person_line(ValueError("Prompt, images, or video input is required"), "Connect a prompt, images or a video to this node, then run it again.")
 
     if len(parts) == 1 and parts[0]["type"] == "text":
         return str(parts[0]["text"])
@@ -261,7 +261,7 @@ async def handle_gemini_omni(
     if duration not in (None, ""):
         seconds = int(str(duration).rstrip("s"))
         if not 3 <= seconds <= 10:
-            raise with_person_line(ValueError(f"Gemini Omni makes 3-10 second videos (got {seconds})"), f"Gemini Omni makes videos of 3 to 10 seconds. Set Duration in that range. {it_was(seconds)}")
+            raise with_person_line(ValueError(f"Gemini Omni makes 3-10 second videos (got {seconds})"), f"Gemini Omni makes videos of 3 to 10 seconds. Set “Duration” in that range. {it_was(seconds)}")
         request_body["response_format"]["duration"] = f"{seconds}s"
 
     if task:

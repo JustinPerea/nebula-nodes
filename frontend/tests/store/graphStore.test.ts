@@ -25,11 +25,13 @@ vi.mock('../../src/lib/backend', async (importOriginal) => {
 const fetchMock = vi.fn();
 globalThis.fetch = fetchMock as unknown as typeof fetch;
 vi.spyOn(console, 'warn').mockImplementation(() => {});
-const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
+// Round 3f: the alerts are canvas notices (tests/helpers/noticeSpy.ts).
+const alertMock = noticeSpy();
 
 import { useGraphStore } from '../../src/store/graphStore';
 import { wsClient, type ExecutionEvent } from '../../src/lib/wsClient';
 import { GRAPH_PARAMS_VERSION } from '../../src/lib/savedParamsUpgrades';
+import { noticeSpy } from '../helpers/noticeSpy';
 
 function mockResponse(body: unknown, ok = true, status = 200) {
   return {
@@ -827,7 +829,7 @@ describe('graphStore', () => {
   });
 
   it('keeps a CLI node visible when the backend rejects its deletion', async () => {
-    const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const alert = noticeSpy();
     const cliNode: Node<NodeData> = {
       id: 'n1',
       type: 'model-node',

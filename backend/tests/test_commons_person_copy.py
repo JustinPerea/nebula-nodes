@@ -20,7 +20,7 @@ from PIL import Image
 from commons import media, net, person_copy, runtime
 from services import person_session
 
-FALLBACK = "That didn't work. Try again, or reload if it keeps happening."
+FALLBACK = "Try again, or reload if it keeps happening."
 
 
 @pytest.fixture()

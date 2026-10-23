@@ -106,7 +106,7 @@ describe('MeshPreview', () => {
     fireEvent.click(screen.getByRole('button', { name: /open ply splat export preview/i }));
     fireEvent.click(await screen.findByRole('button', { name: /download/i }));
     expect((await screen.findByRole('alert')).textContent)
-      .toBe("Couldn't download the 3D model. Couldn't reach Nebula. Check your connection and try again.");
+      .toBe("Couldn't download the 3D model. Nebula's server isn't answering. Make sure it's running, then try again.");
   });
 
   it('presents PLY output as a valid download-only splat instead of a broken model viewer', async () => {

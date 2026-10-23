@@ -36,7 +36,7 @@ from services.typesafe_client import (
     split_lines,
     system_one,
 )
-from execution.person_line import as_person_line, with_person_line
+from execution.person_line import field_label, with_person_line
 
 ANSWER_TYPES = {"yes_no": "yes/no", "choice": "choice", "score": "score"}
 QUESTION_ID = "decide"
@@ -49,7 +49,9 @@ _FIELD_LABELS = {"threshold": "Pass Threshold", "min_confidence": "Minimum Confi
 
 
 def _fraction_line(name: str, high: str) -> str:
-    return f"Set the node's {_FIELD_LABELS.get(name, 'setting')} to a number from 0 to {high}."
+    label = _FIELD_LABELS.get(name)
+    field = f"“{label}”" if label else "the node's setting"  # GM's rule 5: the label in quotes
+    return f"Set {field} to a number from 0 to {high}."
 
 
 def _fraction(raw: Any, default: float, name: str) -> float:
@@ -140,7 +142,7 @@ async def handle_jev_decide(
     params = node.params
     question_text = str(params.get("question") or "").strip()
     if not question_text:
-        raise as_person_line(ValueError("Jev Decide needs a question"))
+        raise with_person_line(ValueError("Jev Decide needs a question"), "Fill in “Question”, then run the node again.")
     answer_type = str(params.get("answer_type") or "yes_no")
     if answer_type not in ANSWER_TYPES:
         raise ValueError(f"answer_type must be one of {', '.join(ANSWER_TYPES)}, got {answer_type!r}")
@@ -170,7 +172,8 @@ async def handle_jev_decide(
         if unknown:
             raise with_person_line(
                 ValueError(f"pass_when names {unknown[0]!r}, which isn't one of the options"),
-                f"The node's Passing Options name {unknown[0]!r}, which isn't one of its Options.")
+                f"“{field_label('jev-decide', 'pass_when', 'Passing Options')}” lists {unknown[0]}, which isn't one of the node's "
+                f"options. Pick from “{field_label('jev-decide', 'options', 'Options')}”.")
         question.update(type="choice", criteria=choice.criteria())
     else:
         levels = score_criteria(split_lines(params.get("levels")))
@@ -179,7 +182,7 @@ async def handle_jev_decide(
     context = _context_text(inputs)
     images = await prepare_images(_image_values(inputs), label="Image")
     if not context and not images:
-        raise as_person_line(ValueError("Jev Decide needs something to judge: connect Context text, Images, or both"))
+        raise with_person_line(ValueError("Jev Decide needs something to judge: connect Context text, Images, or both"), "Jev Decide needs something to judge. Connect context text, images or both, then run the node again.")
 
     result = await system_one(
         api_key, model=model, state=build_state(context, images),

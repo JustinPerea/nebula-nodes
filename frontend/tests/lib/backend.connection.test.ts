@@ -11,7 +11,7 @@ import { ConnectionLostError } from '../../src/lib/errorCopy';
  * back exactly as fetch threw it.
  */
 
-const LOST = "Couldn't reach Nebula. Check your connection and try again.";
+const LOST = "Nebula's server isn't answering. Make sure it's running, then try again.";
 
 beforeAll(async () => { await getBackendBaseUrl(); });
 afterEach(() => { vi.unstubAllGlobals(); });

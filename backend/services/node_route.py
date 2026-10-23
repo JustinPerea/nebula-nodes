@@ -31,6 +31,7 @@ Stdlib only, so the engine and the scripts can import it cheaply.
 from __future__ import annotations
 
 import math
+import re
 from datetime import date
 from typing import Any, Iterable, Mapping, NamedTuple, TypedDict
 
@@ -1515,19 +1516,107 @@ def route_unavailable(
     }
 
 
-def _why_person(definition: Mapping[str, Any], route: Mapping[str, Any], block: DirectBlock) -> str:
-    """_why for the card: a setting by its label, never its key."""
+# The card's words for a route stop (error copy round 3f, GM: "A switch reads
+# "{Node} can't run on {Provider} with “{Label}” on." Never "Draft true".
+# Listed values use the option's label as the field shows it, never its
+# value."): a setting by its label in quotes, a value by its option's label
+# less any note in parentheses, no parentheses, "seconds" for "s".
+# directRoute.ts routeUnavailableMessage is the same, word for word.
+
+
+def _plain(text: str) -> str:
+    return re.sub(r"\s*\([^)]*\)", "", str(text)).strip()
+
+
+def _person_words(text: str) -> str:
+    """A rule's own label ("a video continuation longer than 15 s") in GM's rules."""
+    words = _plain(text)
+    words = re.sub(r"\b(\d+(?:\.\d+)?) ?s\b", r"\1 seconds", words)
+    return re.sub(r"\bwired\b", "connected", words)
+
+
+def _person_setting(param: Mapping[str, Any] | None, key: str, value: Any) -> str:
+    """“Draft (fast preview)” on, “Safety” set to 5, “Resolution” set to 1.5K."""
+    label = f"“{_param_label(param, key)}”"
+    if isinstance((param or {}).get("options"), list) and (param or {}).get("options") and _has_value(value):
+        return f"{label} set to {_plain(_option_label(param, value))}"
+    if isinstance(value, bool) or (param or {}).get("type") == "boolean":
+        on = value if isinstance(value, bool) else match_value(value) in {"true", WIRED}
+        return f"{label} {'on' if on else 'off'}"
+    if isinstance(value, (int, float)):
+        return f"{label} set to {match_value(value)}"
+    return f"{label} set"
+
+
+def _hidden_fix_person(definition: Mapping[str, Any], param: str) -> str:
+    """_hidden_fix_sentence in GM's rules: the label in quotes, the default by its option's label."""
+    spec = param_definition(definition, param)
+    label = f"“{_param_label(spec, param)}”"
+    default = (spec or {}).get("default")
+    if default is None:
+        return f"Clear {label}, or switch provider."
+    if isinstance(default, bool):
+        return f"Turn {label} {'on' if default else 'off'}, or switch provider."
+    return f"Set {label} back to {_plain(_option_label(spec, default))}, or switch provider."
+
+
+def _why_person(definition: Mapping[str, Any], route: Mapping[str, Any], block: DirectBlock,
+                params: Mapping[str, Any] | None = None) -> str:
+    """Why a route stops, as the clause after "{Node} can't run on {Provider}"."""
+    values = params or {}
     param = str(block.param or "")
-    label = _param_label(param_definition(definition, param), param) if param else ""
-    if block.reason == UNSUPPORTED and block.detail and param and block.detail.startswith(f"{param} "):
-        return f"it doesn't take {label} {block.detail[len(param) + 1:]}"
+    spec = param_definition(definition, param) if param else None
+    label = f"“{_param_label(spec, param)}”" if param else ""
+    if block.reason == HIDDEN:
+        setting = _person_setting(spec, param, values.get(param))
+        stops = [stop for stop in hidden_stops(definition, route, values) if stop.param == param]
+        if stops and stops[0].controllers:
+            effective = effective_values(definition, values)
+            setting += "".join(f" and {_person_setting(param_definition(definition, ctrl), ctrl, effective.get(ctrl))}"
+                               for ctrl, _ in stops[0].controllers)
+        return f" with {setting}"
+    if block.reason == UNSUPPORTED:
+        if param and block.detail and block.detail.startswith(f"{param} "):
+            value = values.get(param) if _has_value(values.get(param)) else block.detail[len(param) + 1:]
+            return f" with {_person_setting(spec, param, value)}"
+        return f" with {_person_words(block.detail or '')}"
     if block.reason == BLOCKED:
-        return f"it doesn't take {label}"
+        return f" with {_person_setting(spec, param, values.get(param))}"
     if block.reason == REQUIRES:
-        return f"it needs {label} set"
+        return f" without {label}"
     if block.reason == SIZE:
-        return f"it can't render that {label} exactly"
-    return _why(route, block)
+        return f", because it can't render this {label} exactly"
+    if block.reason == RETIRED:
+        return f", because the maker retired this model on {block.on}"
+    if block.reason == PORTS:
+        limit = ((route.get("rules") or {}).get("ports") or {}).get(block.param) or {}
+        name = _person_words(port_limit_name(block.param, limit))
+        if not limit.get("max"):
+            return f" with {name} connected"
+        return f" with more than {limit.get('max')} {name} connected"
+    return f", because {_person_words(_why(route, block))}"
+
+
+def _fix_person(definition: Mapping[str, Any], route: Mapping[str, Any], block: DirectBlock,
+                params: Mapping[str, Any] | None = None) -> str:
+    param = str(block.param or "")
+    spec = param_definition(definition, param) if param else None
+    if block.reason == HIDDEN:
+        return _hidden_fix_person(definition, param)
+    values = _accepted_values(route, block)
+    label = f"“{_param_label(spec, param)}”"
+    if (spec or {}).get("type") == "boolean" and block.reason in (UNSUPPORTED, BLOCKED):
+        on = match_value((params or {}).get(param)) in {"true", WIRED}
+        return f"Turn {label} {'off' if on or block.reason == BLOCKED else 'on'}, or switch provider."
+    if block.reason == BLOCKED:
+        return f"Clear {label}, or switch provider."
+    if values:
+        return f"Pick {_or_list([_plain(_option_label(spec, value)) for value in values])}, or switch provider."
+    if block.reason == PORTS:
+        return "Disconnect the extra inputs, or switch provider."
+    if block.reason == REQUIRES:
+        return f"Set “{_param_label(spec, param)}”, or switch provider."
+    return "Change that setting, or switch provider."
 
 
 def route_unavailable_line(
@@ -1535,8 +1624,9 @@ def route_unavailable_line(
 ) -> str | None:
     """route_unavailable's message as the canvas card says it (error copy
     round 3e, GM: no keys, ids or env-var names in what the person reads; a
-    key by its provider, a setting by its label). The message itself stays
-    the agents' text. None when the run can start."""
+    key by its provider, a setting by its label; round 3f: GM's rules for
+    every card line). The message itself stays the agents' text. None when
+    the run can start."""
     from execution.person_line import key_phrase, missing_key_line
 
     found = _unavailable_route(definition, params, api_keys)
@@ -1554,12 +1644,9 @@ def route_unavailable_line(
     if block is not None and block.reason == UNKNOWN_PROVIDER:
         return f"{name} is set to a provider it doesn't have. Choose one in the node's provider switcher."
     if block is not None and spec is not None:
-        values = _accepted_values(spec, block)
-        fix = (_hidden_fix_sentence(definition, str(block.param)) if block.reason == HIDDEN
-               else f"Pick {_or_list(values)}, or switch provider." if values
-               else "Disconnect the extra inputs, or switch provider." if block.reason == PORTS
-               else "Change that setting, or switch provider.")
-        return f"{name} can't run on {provider_label(spec.get('provider'))}: {_why_person(definition, spec, block)}. {fix}{also}"
+        why = _why_person(definition, spec, block, params)
+        fix = _fix_person(definition, spec, block, params)
+        return f"{name} can't run on {provider_label(spec.get('provider'))}{why}. {fix}{also}"
     phrase = key_phrase(route.missing) if route.missing else None
     if spec is not None:
         needed = f"your {phrase}" if phrase else "a provider key"

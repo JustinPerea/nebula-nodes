@@ -216,6 +216,20 @@ describe('Settings shell', () => {
     expect(screen.getByRole('tab', { name: 'Storage' })).toHaveAttribute('tabindex', '-1');
   });
 
+  // Round 3f (GM): ""Check your connection" sends people to their Wi-Fi, but
+  // the backend is on this computer." No answer reads GM's server line; an
+  // answer reads its own reason, never "the backend isn't running".
+  it.each([
+    [new ConnectionLostError(new TypeError('Failed to fetch')),
+      "Couldn't check Krea. Nebula's server isn't answering. Make sure it's running, then try again."],
+    [new RequestFailedError("Couldn't check the Krea connection.", 503), "Couldn't check Krea. Nebula didn't respond. Try again."],
+  ])("Krea's first check says why it failed (%#)", async (error, line) => {
+    getKreaConnectionMock.mockReset().mockRejectedValue(error);
+    await renderSettings();
+    expect(await screen.findByText(line)).toBeInTheDocument();
+    expect(screen.queryByText(/backend is running/)).toBeNull();
+  });
+
   it('counts connected providers on the Providers tab', async () => {
     getKreaConnectionMock.mockResolvedValue({ status: 'connected' });
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa', FAL_KEY: '***bbbb', GOOGLE_API_KEY: '' } });
@@ -227,9 +241,9 @@ describe('Settings shell', () => {
   // "Settings couldn't load. Check that the Nebula backend is running."
   it.each([
     [new ConnectionLostError(new TypeError('Failed to fetch'), { heading: "Couldn't load your API keys." }),
-      "Couldn't reach Nebula. Check your connection."],
+      "Nebula's server isn't answering. Make sure it's running."],
     [new RequestFailedError("Couldn't load your API keys.", 503), "Nebula didn't respond."],
-    [new RequestFailedError("Couldn't load your API keys.", 400), "That didn't work. Try again, or reload if it keeps happening."],
+    [new RequestFailedError("Couldn't load your API keys.", 400), "Try again, or reload if it keeps happening."],
   ])('a failed first load says the heading and the short reason (%#)', async (error, reason) => {
     getSettingsMock.mockRejectedValueOnce(error);
     render(<Settings />);

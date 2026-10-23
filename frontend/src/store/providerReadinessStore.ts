@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { apiFetch } from '../lib/backend';
+import { RequestFailedError, failureMessage } from '../lib/errorCopy';
 import { PROVIDER_HEALTH_TTL_MS, type ProviderHealthEntry, type ProviderHealthState, type ProviderHealthStatus } from '../lib/providerReadiness';
 
 interface ProviderReadinessState extends ProviderHealthState {
@@ -11,6 +12,11 @@ interface ProviderReadinessState extends ProviderHealthState {
 const statuses = new Set<ProviderHealthStatus>(['not_configured', 'configured_unverified', 'valid',
   'invalid', 'unauthorized', 'insufficient_credits', 'rate_limited', 'error']);
 let requestVersion = 0;
+/** GM, round 3f: "Couldn't check the connections. Nebula's server isn't
+ * answering. Make sure it's running, then try again." That is the request
+ * with no answer (CONNECTION_LOST_COPY); an answered failure says its own
+ * status line under the same heading, a malformed answer GM's general line. */
+const CHECK_HEADING = "Couldn't check the connections.";
 let expiryTimer: ReturnType<typeof setTimeout> | undefined;
 
 function clearExpiry() {
@@ -47,7 +53,7 @@ export const useProviderReadinessStore = create<ProviderReadinessState>((set, ge
     set({ providers: {}, checkedAt: null, loading: true, error: null });
     try {
       const response = await apiFetch('/api/health/providers?refresh=true');
-      if (!response.ok) throw new Error('Connection check unavailable');
+      if (!response.ok) throw new RequestFailedError(CHECK_HEADING, response.status);
       const data = await response.json();
       const providers = readProviders(data?.providers);
       if (request !== requestVersion || get().revision !== revision) return;
@@ -56,10 +62,10 @@ export const useProviderReadinessStore = create<ProviderReadinessState>((set, ge
       const timestamps = Object.values(providers).map((entry) => Date.parse(entry.last_checked));
       const earliest = Math.min(checkedAt, ...timestamps);
       expiryTimer = setTimeout(() => get().invalidate(), Math.max(0, earliest + PROVIDER_HEALTH_TTL_MS - checkedAt));
-    } catch {
+    } catch (error) {
       if (request !== requestVersion || get().revision !== revision) return;
-      set({ providers: {}, checkedAt: null, loading: false,
-        error: "Couldn't check the connections. Make sure Nebula's backend is running, then try again." });
+      // Never the error's own text (it may carry a URL): the request's line.
+      set({ providers: {}, checkedAt: null, loading: false, error: failureMessage(error, CHECK_HEADING) });
     }
   },
 }));

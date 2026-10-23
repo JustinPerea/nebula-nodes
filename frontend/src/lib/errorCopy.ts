@@ -23,14 +23,20 @@
  * site (warnFailure), lost connections aren't.
  */
 
-/** No answer at all: the connection dropped, or the backend isn't there. */
-export const CONNECTION_LOST_COPY = "Couldn't reach Nebula. Check your connection and try again.";
+/** No answer at all: the connection dropped, or the backend isn't there.
+ * Round 3f (GM): ""Check your connection" sends people to their Wi-Fi, but
+ * the backend is on this computer." apiFetch only ever calls Nebula's own
+ * server, so this is never a provider the backend couldn't reach (those come
+ * back as the backend's answer, with the classifier's "network" line). */
+export const CONNECTION_LOST_COPY = "Nebula's server isn't answering. Make sure it's running, then try again.";
 /** An answer that says "not now": 408, 429 or any 5xx. */
 export const NO_RESPONSE_COPY = "Nebula didn't respond. Try again.";
 /** A refusal (any other 4xx) that came with no reason the person can read:
  * no `detail`, or FastAPI's list of field errors (GM, error-copy fallbacks).
- * Also what a failure that isn't a request's says (copyForError). */
-export const REFUSED_FALLBACK_COPY = "That didn't work. Try again, or reload if it keeps happening.";
+ * Also what a failure that isn't a request's says (copyForError). Round 3f
+ * (GM): "Under any other heading (Projects, graph file, Commons…), drop
+ * "That didn't work."". A node card says its own (lib/nodeErrorCopy.ts). */
+export const REFUSED_FALLBACK_COPY = "Try again, or reload if it keeps happening.";
 /** 401 or 403 with no reason (GM). */
 export const ACCESS_LOST_COPY = "You don't have access to this anymore. Reload to sign in again.";
 /** 413 with no reason (GM). */
@@ -39,7 +45,7 @@ export const TOO_LARGE_COPY = "That's too large to save.";
 /** GM's WRAP rule (round 2): "when the surface already has a retry button,
  * the reason line drops its 'try again'. The button is the retry." Only
  * failureCopy({ short: true }) picks these. */
-export const CONNECTION_LOST_SHORT_COPY = "Couldn't reach Nebula. Check your connection.";
+export const CONNECTION_LOST_SHORT_COPY = "Nebula's server isn't answering. Make sure it's running.";
 export const NO_RESPONSE_SHORT_COPY = "Nebula didn't respond.";
 /** A plain browser tab that found no backend on its ports (GM, round 2).
  * The ports it tried stay on the error for the console. */
@@ -128,8 +134,13 @@ export class RequestFailedError extends Error {
   readonly detail: unknown;
   readonly heading: string;
   readonly reason: string;
+  /** The backend said its storage refusal was a full disk (round 3f): an
+   * additive `storage: "full"` beside `detail`, read from the answer, never
+   * from its words. The one cause a person can fix (GM). */
+  readonly storageFull: boolean;
 
-  constructor(heading: string, status: number, options: { detail?: unknown; reason?: string; cause?: unknown } = {}) {
+  constructor(heading: string, status: number,
+    options: { detail?: unknown; reason?: string; cause?: unknown; storageFull?: boolean } = {}) {
     const reason = options.reason ?? copyForStatus(status, options.detail);
     super(oneLine({ heading, reason }), 'cause' in options ? { cause: options.cause } : undefined);
     this.name = 'RequestFailedError';
@@ -137,6 +148,7 @@ export class RequestFailedError extends Error {
     this.detail = options.detail;
     this.heading = heading;
     this.reason = reason;
+    this.storageFull = options.storageFull === true;
   }
 
   get kind(): FailureKind {
@@ -219,11 +231,17 @@ export function copyForError(error: unknown, signal?: AbortSignal | null): strin
 
 /** An answer's `detail`, read from a JSON body; undefined when there is none. */
 export async function readDetail(response: Response): Promise<unknown> {
+  return (await readFailureBody(response)).detail;
+}
+
+/** An answer's `detail`, and whether it says the disk is full (the backend's
+ * storage refusal, main._storage_error_body), from one read of its body. */
+async function readFailureBody(response: Response): Promise<{ detail: unknown; storageFull: boolean }> {
   try {
-    const body = await response.json() as { detail?: unknown } | null;
-    return body?.detail;
+    const body = await response.json() as { detail?: unknown; storage?: unknown } | null;
+    return { detail: body?.detail, storageFull: body?.storage === 'full' };
   } catch {
-    return undefined;
+    return { detail: undefined, storageFull: false };
   }
 }
 
@@ -319,7 +337,8 @@ export function resetFailureWarningsForTests(): void {
  * deleted). */
 export async function requestError(heading: string, response: Response,
   options: { detail?: unknown; reason?: string } = {}): Promise<RequestFailedError> {
-  const detail = 'detail' in options ? options.detail : await readDetail(response);
-  warnFailure(heading, response.status, detail);
-  return new RequestFailedError(heading, response.status, { detail, reason: options.reason });
+  const body = 'detail' in options ? { detail: options.detail, storageFull: false } : await readFailureBody(response);
+  warnFailure(heading, response.status, body.detail);
+  return new RequestFailedError(heading, response.status,
+    { detail: body.detail, reason: options.reason, storageFull: body.storageFull });
 }

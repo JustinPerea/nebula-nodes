@@ -21,7 +21,7 @@ from execution.stream_runner import StreamConfig, stream_execute
 from services.file_access import require_allowed_path
 from services.nous_auth import (NousCredentialExpiredError, NousCredentialInvalidError,
                                  NousNotAuthenticatedError, load_nous_credential)
-from execution.person_line import as_person_line, with_person_line
+from execution.person_line import with_person_line
 
 
 def _image_to_content_block(value: Any) -> dict[str, Any] | None:
@@ -80,11 +80,11 @@ async def handle_nous_portal_universal(
 
     model = node.params.get("model", "")
     if not model:
-        raise as_person_line(ValueError("No model selected — choose one from the Inspector panel"))
+        raise with_person_line(ValueError("No model selected — choose one from the Inspector panel"), "Pick a model in “Model”, then run the node again.")
 
     messages_input = inputs.get("messages")
     if not messages_input or not messages_input.value:
-        raise as_person_line(ValueError("Messages input is required"))
+        raise with_person_line(ValueError("Messages input is required"), "Connect messages to this node, then run it again.")
 
     text_part = str(messages_input.value)
     content: list[dict[str, Any]] = [{"type": "text", "text": text_part}]

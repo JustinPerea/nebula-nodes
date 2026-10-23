@@ -16,6 +16,7 @@ import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useCreateDraftStore } from '../src/store/createDraftStore';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
+import { noticeSpy } from './helpers/noticeSpy';
 
 function node(value = 'Current', id = 'n1'): Node<NodeData> {
   return { id, type: 'model-node', position: { x: 0, y: 100 },
@@ -238,7 +239,7 @@ describe('copy in one project, paste in another (Justin, P2: "copy the node mood
   });
 
   it('a node with a provider-start ambiguity when copied still refuses after the switch, with the same warning', () => {
-    const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const alert = noticeSpy();
     openProject('A', [worldNode('n1', { existing_world_id: 'world-A' })]);
     useGraphStore.setState({ providerStartAmbiguities: [{ runId: 'paid-A', nodeId: 'n1', kind: 'worldlabs-environment',
       message: 'The paid start may have been accepted.', durable: true }] });
@@ -278,7 +279,7 @@ describe('copy in one project, paste in another (Justin, P2: "copy the node mood
   });
 
   it('a blank paid World Labs node is never cloned into a new paid start, here or after a switch', () => {
-    const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const alert = noticeSpy();
     openProject('A', [worldNode('n1', {})]);
     useGraphStore.getState().copySelected();
     useGraphStore.getState().pasteClipboard();

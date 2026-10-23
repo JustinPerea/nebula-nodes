@@ -95,7 +95,7 @@ def one_value(inputs: Mapping[str, Any], port: str, where: str) -> Any:
     values = port_values(inputs, port)
     if len(values) > 1:
         raise refuse(where, f"takes one {port}, but {len(values)} are wired",
-                     f"takes one {port.replace('_', ' ')}, but {len(values)} are wired. Disconnect the extra ones.")
+                     f"takes one {port.replace('_', ' ')}, but {len(values)} are connected. Disconnect the extra ones.")
     return values[0] if values else None
 
 
@@ -114,7 +114,7 @@ def refuse_unwired(inputs: Mapping[str, Any], takes: set[str], where: str) -> No
     extra = sorted(wired(inputs) - takes)
     if extra:
         raise refuse(where, f"can't take the wired {', '.join(extra)}. Disconnect it or choose another provider.",
-                     f"can't take the wired {', '.join(port.replace('_', ' ') for port in extra)}. "
+                     f"can't take the connected {', '.join(port.replace('_', ' ') for port in extra)}. "
                      "Disconnect it or choose another provider.")
 
 
@@ -287,7 +287,7 @@ def bfl_body(path: str, params: Mapping[str, Any], inputs: Mapping[str, Any],
         if size is not None:
             if not isinstance(size, Mapping) or set(size) != {"width", "height"}:
                 raise refuse(where, f"takes a size as width and height, not {size!r}",
-                             "can't use the saved size. Pick one in the node's Size field, then run it again.")
+                             "can't use the saved size. Pick one in “Size”, then run it again.")
             body.update(width=size["width"], height=size["height"])
     elif path == BFL_VIDEO_PATH:
         refuse_unwired(inputs, {"prompt", "start_image", "keyframes", "end_image", "start_video"}, where)
@@ -305,20 +305,20 @@ def bfl_body(path: str, params: Mapping[str, Any], inputs: Mapping[str, Any],
         refuse_unwired(inputs, {"prompt", "start_video", "video"}, where)
         source = one_value(inputs, "start_video", where) or one_value(inputs, "video", where)
         if source is None:
-            raise refuse(where, "needs a video to edit")
+            raise refuse(where, "needs a video to edit", "needs a video to edit. Connect one, then run the node again.")
         body["video"] = media_url(source)
     elif path == BFL_VIDEO_UPSCALE_PATH:
         refuse_unwired(inputs, {"prompt", "video", "start_video"}, where)
         source = one_value(inputs, "video", where) or one_value(inputs, "start_video", where)
         if source is None:
-            raise refuse(where, "needs a video to upscale")
+            raise refuse(where, "needs a video to upscale", "needs a video to upscale. Connect one, then run the node again.")
         body["input_video"] = media_url(source)
     else:
         raise ValueError(f"Nebula has no request shape for Black Forest Labs' {path or '(no path)'} yet")
     if prompt is not None:
         body["prompt"] = prompt
     elif path != BFL_VIDEO_UPSCALE_PATH:
-        raise refuse(where, "needs a prompt")
+        raise refuse(where, "needs a prompt", "needs a prompt. Connect one, then run the node again.")
     return body
 
 
@@ -443,11 +443,11 @@ def fal_fields(endpoint: str, params: Mapping[str, Any], inputs: Mapping[str, An
         refuse_unwired(inputs, {"prompt", "start_image", "keyframes", "end_image"}, where)
         frames = video_frames(inputs, where)
         if not frames:
-            raise refuse(where, "needs at least one keyframe image")
+            raise refuse(where, "needs at least one keyframe image", "needs at least one keyframe image. Connect one, then run the node again.")
         duration = params.get("duration", FAL_DEFAULT_KEYFRAME_DURATION)
         if isinstance(duration, bool) or not isinstance(duration, int):
             raise refuse(where, f"needs a set duration in seconds to place its keyframes (got {duration!r})",
-                         "needs a number of seconds to place its keyframes. Set the node's Duration field, "
+                         "needs a number of seconds to place its keyframes. Set “Duration”, "
                          "then run it again.")
         return {"keyframes": [{"image_url": media_url(value), "frame_index": index}
                               for value, index in zip(frames, keyframe_indexes(len(frames), duration))]}
@@ -526,7 +526,7 @@ def replicate_input(params: Mapping[str, Any], inputs: Mapping[str, Any], where:
         refuse_unwired(inputs, {"prompt", "video"}, where)
         source = one_value(inputs, "video", where)
         if source is None:
-            raise refuse(where, "needs a video")
+            raise refuse(where, "needs a video", "needs a video. Connect one, then run the node again.")
         body = _set(params)
         prompt = prompt_of(inputs)
         if prompt is not None:
@@ -537,7 +537,7 @@ def replicate_input(params: Mapping[str, Any], inputs: Mapping[str, Any], where:
     body = _set(params)
     prompt = prompt_of(inputs)
     if prompt is None:
-        raise refuse(where, "needs a prompt")
+        raise refuse(where, "needs a prompt", "needs a prompt. Connect one, then run the node again.")
     body["prompt"] = prompt
     images = [*port_values(inputs, "images"), *video_frames(inputs, where)]
     start_video = one_value(inputs, "start_video", where)
@@ -595,7 +595,7 @@ async def run_openrouter_images(node: GraphNode, inputs: dict[str, PortValueDict
     refuse_unwired(inputs, {"prompt", "images"}, where)
     prompt = prompt_of(inputs)
     if prompt is None:
-        raise refuse(where, "needs a prompt")
+        raise refuse(where, "needs a prompt", "needs a prompt. Connect one, then run the node again.")
     body = media.request_body(model, prompt, dict(node.params), media.IMAGE_FIELDS)
     references = [media.image_url(media_url(v)) for v in port_values(inputs, "images")]
     if references:
@@ -617,7 +617,7 @@ async def run_openrouter_videos(node: GraphNode, inputs: dict[str, PortValueDict
     refuse_end_alone(inputs, where)
     prompt = prompt_of(inputs)
     if prompt is None:
-        raise refuse(where, "needs a prompt")
+        raise refuse(where, "needs a prompt", "needs a prompt. Connect one, then run the node again.")
     body = media.request_body(model, prompt, dict(node.params), media.VIDEO_FIELDS)
     frames = []
     for port, frame_type in (("start_image", "first_frame"), ("end_image", "last_frame")):

@@ -110,7 +110,7 @@ function ResultCardOutput({ node, prompt, url, onOpenInCanvas, onUseAsInput, onD
         }, 2000);
       }
     } catch (error) {
-      if (ownsRequest()) setSaveError(failureMessage(error, "Couldn't save the file."));
+      if (ownsRequest()) setSaveError(failureMessage(error, "Couldn't save the output."));
     } finally {
       if (ownsRequest()) {
         savePending.current = false;
@@ -138,6 +138,7 @@ function ResultCardOutput({ node, prompt, url, onOpenInCanvas, onUseAsInput, onD
           errorFriendly={node.data.errorFriendly}
           errorPerson={node.data.errorPerson}
           errorProviderText={node.data.errorProviderText}
+          errorProvider={node.data.errorProvider}
         />
         {canZoom && (
           <button

@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { StatusLine } from '../src/components/commons/CommonsView';
+import { clockTime } from '../src/lib/clockTime';
 import type { CommonsStatus } from '../src/lib/commonsTypes';
 
 vi.mock('../src/lib/commonsApi', () => ({ commonsApi: {}, commonsEvaluationApi: {}, commonsReviewApi: {}, filtersToRequest: vi.fn() }));
@@ -14,8 +15,8 @@ const status = (patch: Partial<CommonsStatus>): CommonsStatus => ({
 });
 const stopped = { state: 'stopped', running: false, budget_used: 0, budget: null };
 const queue = (queued: number, held: number) => ({ queued, analyzing: 0, analysis_failed: 0, held, ready: 0 });
-// The cap's reset time, in the person's locale (as the status line formats it).
-const resetTime = new Date(RESETS_AT).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+// The cap's reset time, local time written like "12:00 AM" (GM, round 3f).
+const resetTime = clockTime(new Date(RESETS_AT));
 
 function rendered(value: CommonsStatus | null) {
   const { container } = render(<StatusLine status={value} onStart={vi.fn()} onStop={vi.fn()} />);
@@ -84,7 +85,7 @@ const cases: Array<[string, Partial<CommonsStatus>, string, string | null, RegEx
     [/^Library analysis is stopped\./, /12 references are waiting to be read/, /3 references added by agents are held until you accept them in the Inbox/, /Start runs it/]],
   ['a busy machine', { worker: { state: 'paused_load', running: true, budget_used: 0, budget: null }, load: 41.5, load_threshold: 32 },
     'Paused · computer busy (41.5/32)', 'Stop',
-    [/^Library analysis is paused while this computer is busy/, /load average is 41\.5/, /Settings has “Pause above load” at 32\./, /resumes on its own/]],
+    [/^Library analysis is paused while this computer is busy/, /Its load is 41\.5, above the 32 set in “Pause above load” in Settings\./, /resumes on its own/]],
   ['the daily cap', { worker: { state: 'cap_reached', running: true, budget_used: 0, budget: null },
     meter: { calls: 20, cap: 20, remaining: 0, resets_at: RESETS_AT } },
     `Paused until ${resetTime} · daily cap`, 'Stop',

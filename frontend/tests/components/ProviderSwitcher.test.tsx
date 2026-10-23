@@ -93,7 +93,8 @@ describe('ProviderSwitcher rows', () => {
     expect(screen.getByRole('menuitem', { name: 'Sign in to Krea in Settings' })).toHaveTextContent('Sign in');
     // fal can't take 9:21: a block note, and no price.
     const fal = row(/^fal\.ai/);
-    expect(fal).toHaveTextContent("Doesn't take 9:21");
+    // Round 3f (GM): the setting by its label, in quotes, with the option's label.
+    expect(fal).toHaveTextContent("Doesn't take “Aspect ratio” set to 9:21.");
     expect(fal.querySelector('.provider-switcher__price')).toHaveTextContent('-');
   });
 
@@ -145,7 +146,7 @@ describe('ProviderSwitcher picks', () => {
     withKeys({ FAL_KEY: KEY, REPLICATE_API_TOKEN: KEY });
     const onPick = vi.fn();
     render(<Controlled initial={{ resolution: '1.5k' }} onPick={onPick} />);
-    expect(row(/^Auto/)).toHaveTextContent("Auto · can't run: 1.5k isn't on fal.ai");
+    expect(row(/^Auto/)).toHaveTextContent("Auto · can't run: fal.ai doesn't take “Resolution” set to 1.5k");
     expect(screen.getByRole('status')).toHaveTextContent("Fixture Route Table can't run on fal.ai");
     fireEvent.click(screen.getByRole('menuitem', { name: 'Switch to Replicate' }));
     expect(onPick).toHaveBeenCalledWith({ resolution: '1.5k', _provider: 'replicate', _kreaAuth: 'api-token' }, []);
@@ -373,11 +374,11 @@ describe('hidden settings: a provider shows only what it offers (PR 5)', () => {
     selectNode('krea-3', { reasoning_level: 'medium' });
     render(<Inspector embedded />);
     const menu = within(document.querySelector('[data-inspector-provider]') as HTMLElement).getByRole('menu');
-    expect(within(menu).getAllByRole('menuitemradio')[0]).toHaveTextContent("Auto · can't run: Krea doesn't offer Reasoning level Medium");
-    expect(row(/^Krea · API balance/)).toHaveTextContent("Doesn't take Reasoning level Medium");
+    expect(within(menu).getAllByRole('menuitemradio')[0]).toHaveTextContent("Auto · can't run: Krea doesn't take “Reasoning level”");
+    expect(row(/^Krea · API balance/)).toHaveTextContent("Doesn't take “Reasoning level”.");
     const reset = within(menu).getByRole('menuitem', { name: 'Set Reasoning level back to Low' });
     expect(within(menu).getByRole('menuitem', { name: 'Switch to fal.ai' })).toBeVisible();
-    expect(screen.getByRole('status')).toHaveTextContent("Krea 3 can't run on Krea: it doesn't offer Reasoning level Medium. Set Reasoning level back to Low, or switch provider.");
+    expect(screen.getByRole('status')).toHaveTextContent("Krea 3 can't run on Krea with “Reasoning level” set to Medium. Set “Reasoning level” back to Low, or switch provider.");
     fireEvent.click(reset);
     expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ reasoning_level: 'low' });
     expect(document.querySelector('.provider-switcher__stop')).toBeNull();

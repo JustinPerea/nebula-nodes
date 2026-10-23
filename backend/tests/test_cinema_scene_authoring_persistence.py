@@ -335,6 +335,8 @@ async def test_cancelled_whole_scene_sync_only_installs_shots_that_actually_sett
         assert saved[0]["output"]["imageUrl"] == "https://fixture.example/completed-a.png"
     else:
         # `error` is the agents' text; the error* fields are for the Cinema panel (error copy 3c-2).
+        # No errorProvider: Gemini never answered this plain error (round 3f review), so the
+        # panel reads "open Details", not "Details shows what Gemini said".
         assert saved[0]["output"] == {"status": "error", "error": "Synthetic first-shot error",
                                       "errorCategory": "unknown", "errorFriendly": "Synthetic first-shot error",
                                       "errorRaw": "Synthetic first-shot error"}

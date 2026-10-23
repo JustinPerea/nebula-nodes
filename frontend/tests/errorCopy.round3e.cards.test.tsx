@@ -33,7 +33,10 @@ import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 
 const HEADING = "Couldn't run the node.";
-const GENERAL = "That didn't work. Try again, or reload if it keeps happening.";
+// Round 3f (GM): a card's general line, with no provider named. "Run the node
+// again. If it keeps failing, Details shows what {Provider} said." when the run
+// names one (tests/errorCopy.round3f.test.tsx).
+const GENERAL = "Run the node again. If it keeps failing, open Details.";
 const RAW = 'FAL submit failed (500): {"detail":"upstream exploded","request_id":"req_123"}';
 const PERSON = 'Add your fal.ai API key in Settings, then run the node again.';
 const TABLE_LINE = 'fal.ai is having trouble right now. Try again in a few minutes.';

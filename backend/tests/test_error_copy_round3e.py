@@ -36,8 +36,8 @@ from services.port_contracts import ContractEdge, ContractNode, validate_edge_co
 CLAUDE = {"X-Nebula-Agent": "Claude Code"}
 
 KEY_LINE = "Add your OpenAI API key in Settings, then run the node again."
-PROMPT_LINE = "Connect a prompt, then run the node again."
-OVER_CAP = ("This Batch has 3 items, more than its Item cap of 2. Remove items or raise the cap, then run it "
+PROMPT_LINE = "Connect a prompt to this node, then run it again."
+OVER_CAP = ("This Batch has 3 items, more than its “Item cap” of 2. Remove items or raise the cap, then run it "
             "again. Nothing was generated.")
 
 # What no person line may say (GM): env-var names, parameter or port keys,
@@ -111,10 +111,10 @@ def test_an_unwired_required_input_names_it_in_words():
 
 
 @pytest.mark.parametrize(("definition_id", "line"), [
-    ("elevenlabs-sts", "Connect audio, then run the node again."),
-    ("kling-v2-1", "Connect an image, then run the node again."),
-    ("claude-chat", "Connect the node's Messages input, then run the node again."),
-    ("runway-act-two", "Connect the node's Performance Video input, then run the node again."),
+    ("elevenlabs-sts", "Connect audio to this node, then run it again."),
+    ("kling-v2-1", "Connect an image to this node, then run it again."),
+    ("claude-chat", "Connect messages to this node, then run it again."),
+    ("runway-act-two", "Connect a performance video to this node, then run it again."),
 ])
 def test_other_inputs_read_by_their_label(definition_id: str, line: str):
     keys = {key: "set" for key in ("ELEVENLABS_API_KEY", "FAL_KEY", "ANTHROPIC_API_KEY", "RUNWAY_API_KEY")}
@@ -126,8 +126,8 @@ def test_other_inputs_read_by_their_label(definition_id: str, line: str):
 def test_a_label_with_a_note_in_parentheses_reads_without_it():
     from execution.person_line import port_line
 
-    assert port_line("Mask (white = edit)") == "Connect the node's Mask input, then run the node again."
-    assert port_line("Images (1-4)") == "Connect the node's Images input, then run the node again."
+    assert port_line("Mask (white = edit)") == "Connect a mask to this node, then run it again."
+    assert port_line("Images (1-4)") == "Connect images to this node, then run it again."
 
 
 def _batch_graph(cap: object = 2) -> tuple[list[GraphNode], list[GraphEdge]]:
@@ -148,14 +148,14 @@ def test_a_batch_cap_out_of_range_names_the_field():
     nodes, edges = _batch_graph(cap=40)
     [error] = _for(validate_graph(nodes, edges, {"OPENAI_API_KEY": "set"}), "n1")
     assert error.message == "Batch batch_size_cap must be an integer from 1 to 25"
-    assert _clean(error.person) == "Set the node's Item cap to a whole number from 1 to 25."
+    assert _clean(error.person) == "Set “Item cap” to a whole number from 1 to 25."
 
 
 def test_an_iterator_cap_out_of_range_names_its_field():
     nodes = [_node("n1", "iterator-text", {"batch_size_cap": 0})]
     [error] = [e for e in _for(validate_graph(nodes, [], {}), "n1") if "batch_size_cap" in e.message]
     assert error.message == "Iterator batch_size_cap must be an integer from 1 to 25"
-    assert _clean(error.person) == "Set the node's Batch Size Cap to a whole number from 1 to 25."
+    assert _clean(error.person) == "Set “Batch Size Cap” to a whole number from 1 to 25."
 
 
 def test_two_batches_into_one_node_read_without_internal_words():
@@ -210,7 +210,8 @@ def test_a_route_stopped_by_a_setting_names_the_setting_by_its_label(monkeypatch
     [error] = _for(validate_graph(nodes, [_edge("t", "text", "n1", "prompt")], keys), "n1")
     assert "can't run on Black Forest Labs" in error.message
     line = _clean(error.person)
-    assert line.startswith("Fixture Image can't run on Black Forest Labs: ")
+    # Round 3f: GM's words, the setting by its label in quotes.
+    assert line.startswith("Fixture Image can't run on Black Forest Labs with “Safety tolerance” set to 6.")
     assert line.endswith("fal.ai can take it.")
 
 
@@ -231,7 +232,9 @@ def test_the_gemini_guardrail_shows_as_it_is():
              _node("n1", "gemini-omni-flash", {"task": "edit"})]
     errors = _for(validate_graph(nodes, [_edge("t", "text", "n1", "prompt")], {"GOOGLE_API_KEY": "set"}), "n1")
     [error] = [e for e in errors if e.message == GEMINI_OMNI_EXTENSION_ERROR]
-    assert error.person == error.message
+    # Round 3f: the card's line follows GM's rules; agents keep the text.
+    from services.provider_capabilities import GEMINI_OMNI_EXTENSION_LINE
+    assert error.person == GEMINI_OMNI_EXTENSION_LINE
 
 
 # -- wiring checks (services/port_contracts.py) -----------------------------

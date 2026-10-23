@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { noticeSpy } from '../helpers/noticeSpy';
 
 /**
  * error-copy round 2, item 6 (GM - Design), the canvas store: "Never
@@ -17,12 +18,13 @@ vi.mock('../../src/lib/wsClient', () => ({
 const fetchMock = vi.fn();
 globalThis.fetch = fetchMock as unknown as typeof fetch;
 const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
+// Round 3f: the alerts are canvas notices (tests/helpers/noticeSpy.ts).
+const alertMock = noticeSpy();
 
 const { useGraphStore } = await import('../../src/store/graphStore');
 
 const NO_ANSWER = "Nebula didn't respond. Try again.";
-const REFUSED = "That didn't work. Try again, or reload if it keeps happening.";
+const REFUSED = "Try again, or reload if it keeps happening.";
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status, headers: { 'content-type': 'application/json' } });
 

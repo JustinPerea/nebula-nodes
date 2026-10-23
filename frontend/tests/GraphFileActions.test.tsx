@@ -152,7 +152,9 @@ describe('workspace-independent graph file actions', () => {
   });
 
   it('preserves graph and workspace on picker cancellation or backend rejection', async () => {
+    // Error copy round 3f (GM): a canvas notice, never a window.alert.
     const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const notice = () => useGraphStore.getState().undoNotice;
     useUIStore.setState({ viewMode: 'create' });
     mocks.loadFromFile.mockResolvedValueOnce(null);
     render(<GraphFileActions />);
@@ -161,11 +163,12 @@ describe('workspace-independent graph file actions', () => {
     mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Fixture import rejected' }), { status: 400 }));
     await act(async () => { requestGraphLoad(); });
     // error-copy round 2 (GM): "Couldn't load the graph." then the reason.
-    expect(alert).toHaveBeenCalledWith("Couldn't load the graph. Fixture import rejected");
+    expect(notice()).toMatchObject({ text: "Couldn't load the graph. Fixture import rejected", tone: 'error', offer: null });
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     mocks.apiFetch.mockResolvedValueOnce(new Response('', { status: 503 }));
     await act(async () => { requestGraphLoad(); });
-    expect(alert).toHaveBeenLastCalledWith("Couldn't load the graph. Nebula didn't respond. Try again.");
+    expect(notice()?.text).toBe("Couldn't load the graph. Nebula didn't respond. Try again.");
+    expect(alert).not.toHaveBeenCalled();
     expect(useGraphStore.getState().nodes[0].id).toBe('existing');
     expect(useUIStore.getState().viewMode).toBe('create');
     expect(useGraphStore.getState().isImportingGraph).toBe(false);
@@ -178,7 +181,8 @@ describe('workspace-independent graph file actions', () => {
     render(<GraphFileActions />);
     await act(async () => { requestGraphLoad(); });
     expect(useGraphStore.getState().nodes[0].id).toBe('n8');
-    expect(alert).toHaveBeenCalledWith(`Imported.\n• ${warning}`);
+    expect(useGraphStore.getState().undoNotice).toMatchObject({ text: `Imported.\n• ${warning}`, tone: 'info' });
+    expect(alert).not.toHaveBeenCalled();
   });
 
   it.each(['navigation', 'return', 'focus', 'replacement'] as const)('a delayed import fit yields to later %s', async (action) => {

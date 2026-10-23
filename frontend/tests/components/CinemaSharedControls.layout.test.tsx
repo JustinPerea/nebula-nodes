@@ -138,13 +138,13 @@ describe('Cinema collapsed shared scene settings', () => {
   it('error-copy round 2 (GM\'s WRAP rule): a retryable upload\'s reason drops its own "try again"', () => {
     metadata.uploads = [
       { id: 'failed', nodeId: 'scene', name: 'failed.png', status: 'error', canRetry: true,
-        error: "Couldn't upload failed.png. Couldn't reach Nebula. Check your connection and try again." },
+        error: "Couldn't upload failed.png. Nebula's server isn't answering. Make sure it's running, then try again." },
       { id: 'kept', nodeId: 'scene', name: 'kept.png', status: 'error', canRetry: false,
         error: "Couldn't upload kept.png. Nebula didn't respond. Try again." },
     ];
     render(<CinemaSharedControls cinemaNodeId="scene" scene={scene()} onChange={vi.fn()} />);
     expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual([
-      "Couldn't upload failed.png. Couldn't reach Nebula. Check your connection.",
+      "Couldn't upload failed.png. Nebula's server isn't answering. Make sure it's running.",
       // No Retry button here (an upload from before a reload): the line keeps its "try again".
       "Couldn't upload kept.png. Nebula didn't respond. Try again.",
     ]);

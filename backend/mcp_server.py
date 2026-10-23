@@ -644,7 +644,8 @@ def propose_change(
     list prices in USD where Nebula has them (null when none do; `open` when
     some paid node has none). `cost.notReady` lists the run's nodes that
     can't run here as set up (no key, no Krea sign-in), each with `missing`
-    in find_nodes' words, and `warning` says so in a sentence: if the person
+    in find_nodes' words (`person` beside it is the canvas's line; read
+    `missing`), and `warning` says so in a sentence: if the person
     accepts, that run fails. Tell them what to set up, or propose a node that
     runs here. Such a proposal is kept, with the warning; if you then propose
     something else instead, withdraw the first (`withdrawWith` is the exact

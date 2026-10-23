@@ -13,7 +13,7 @@ from services.cancellation import schedule_detached_cancel
 from execution.missing_credential import MissingCredentialError
 from services import universal_ports
 from services.media_types import MEDIA_PORT_IDS, media_of_value
-from execution.person_line import as_person_line, field_label, with_api_status, with_person_line
+from execution.person_line import field_label, with_api_status, with_person_line
 
 REPLICATE_API_BASE = "https://api.replicate.com/v1"
 
@@ -93,7 +93,7 @@ async def _resolve_version(owner: str, name: str, api_key: str) -> str:
         if not version_id:
             # The text names the model for agents; the card names the field (GM: no ids).
             raise with_person_line(RuntimeError(f"No version found for {owner}/{name}"),
-                                   "Replicate has no version of the model in the node's Model ID field to run. "
+                                   "Replicate has no version of the model in “Model ID” to run. "
                                    "Check the model on Replicate, then run the node again.")
         return str(version_id)
 
@@ -201,7 +201,7 @@ def _fill_declared_port(node: GraphNode, output: Any, task_id: str | None) -> di
     # card says it in words and names the field to set again.
     got = f"{'an' if returned[0] in 'AEIOU' else 'a'} {returned.lower()} file" if returned else "text"
     line = (f"The model returned {got}, but this node's output is set to {port_type.lower()}, so nothing was "
-            "passed on. Pick the model again in the node's Model ID field to re-read its outputs, then run the "
+            "passed on. Pick the model again in “Model ID” to re-read its outputs, then run the "
             "node again.")
     raise with_person_line(RuntimeError(
         f"{model} returned {what}, but this node's output `{port_id}` is {port_type} ({why}), so nothing was "
@@ -220,7 +220,7 @@ async def handle_replicate_universal(
 
     model_id = node.params.get("model_id", "")
     if not model_id or "/" not in str(model_id):
-        raise with_person_line(ValueError("Model ID is required (format: owner/name, e.g. stability-ai/sdxl)"), f"Enter a Replicate model in the node's {field_label(node.definition_id, 'model_id', 'Model ID')} field, "
+        raise with_person_line(ValueError("Model ID is required (format: owner/name, e.g. stability-ai/sdxl)"), f"Enter a Replicate model in “{field_label(node.definition_id, 'model_id', 'Model ID')}”, "
             "as its page on Replicate writes it, then run the node again.")
 
     owner, name = str(model_id).split("/", 1)

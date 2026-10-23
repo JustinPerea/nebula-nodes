@@ -16,6 +16,12 @@ GEMINI_OMNI_EXTENSION_ERROR = (
     "edit (for example, 'Change the lighting and keep everything else the same') "
     "or use Veo 3.1 for video extension."
 )
+# The card's line for the guardrail (error copy round 3f, GM's rules: no
+# parentheses, a whole sentence). Agents keep the text above word for word.
+GEMINI_OMNI_EXTENSION_LINE = (
+    "Gemini Omni can edit a video but can't make it longer. Describe the change as an edit, like "
+    "“Change the lighting and keep everything else the same.”, or use Veo 3.1 to extend the video."
+)
 
 
 _VIDEO_EXTENSION_PATTERNS = tuple(
@@ -80,4 +86,6 @@ def enforce_gemini_omni_capabilities(
         task=task,
     )
     if error:
-        raise ValueError(error)
+        from execution.person_line import with_person_line
+
+        raise with_person_line(ValueError(error), GEMINI_OMNI_EXTENSION_LINE)

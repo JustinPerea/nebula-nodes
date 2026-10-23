@@ -41,7 +41,9 @@ logger = logging.getLogger(__name__)
 # keeps its specific text, word for word, for agents, the run record and MCP;
 # the line rides beside it (execution/person_line.py), and the card shows it
 # under "Couldn't run the node.". GM: "People never see the word "start";
-# they ran a World Labs job."
+# they ran a World Labs job." Round 3f (GM's rule 5, "whatever round wrote
+# it"): a field is named as the node shows it, in quotes, “Resume Operation
+# ID”, not "the node's Resume Operation ID field".
 #
 # The node's recovery fields, by the labels the person sees on the node
 # (node_definitions.json; pinned equal by tests/test_error_copy_round3c.py).
@@ -63,7 +65,7 @@ PERSON_LINES = {
     "no_credits": "Your World Labs account is out of API credits. Add credits, then run the node again.",
     "busy": "World Labs is busy. Wait a moment, then run the node again.",
     "missing_key": "Add your World Labs API key in Settings, then run the node again.",
-    "both_recovery_ids": "Fill in the node's Resume Operation ID or its Existing World ID, not both.",
+    "both_recovery_ids": "Fill in “Resume Operation ID” or “Existing World ID”, not both.",
     "images_or_video": "Connect images or a video to this node, not both.",
     "nothing_connected": "Connect a prompt, one or more images, or a video, then run the node again.",
     "export_needs_world": (
@@ -73,15 +75,15 @@ PERSON_LINES = {
     # of round 3c: each check a person can reach from the Inspector or the
     # wiring has a line; enum checks only an agent or an old graph can reach
     # keep the general line with the text behind Details).
-    "bad_seed": "Set the node's Seed to a whole number from 0 to 4294967295, or clear it for a random seed.",
-    "long_name": "The node's World Name is too long. Keep it to 64 characters or fewer.",
-    "bad_tags": "The node's Tags field takes up to 10 tags of 32 characters each, separated by commas.",
+    "bad_seed": "Set “Seed” to a whole number from 0 to 4294967295, or clear it for a random seed.",
+    "long_name": "“World Name” is too long. Keep it to 64 characters or fewer.",
+    "bad_tags": "“Tags” takes up to 10 tags of 32 characters each, separated by commas.",
     "bad_azimuths": (
-        "Write the node's Image Azimuths as numbers separated by commas, one for each connected "
+        "Write “Image Azimuths” as numbers separated by commas, one for each connected "
         "image, or clear the field."
     ),
     "too_many_images": (
-        "This node takes up to 4 images. Turn on the node's Reconstruct Image Set for up to 8, "
+        "This node takes up to 4 images. Turn on “Reconstruct Image Set” for up to 8, "
         "or disconnect some."
     ),
     "too_many_reconstruct_images": "This node takes up to 8 images. Disconnect some, then run the node again.",
@@ -101,18 +103,18 @@ def _recovery_field(definition_id: str, key: str) -> str:
 def _job_kept_line(field: str) -> str:
     """World Labs took the paid request and the node's field holds the job."""
     return ("World Labs accepted this run, and it may be billed, but Nebula couldn't finish it here. "
-            f"Check the job in Marble. The node's {field} field keeps the job, so running the node "
+            f"Check the job in Marble. “{field}” keeps the job, so running the node "
             "again picks it up without paying twice.")
 
 
 def _job_failed_line(field: str) -> str:
     """World Labs itself failed the job: running again would read the same failure."""
     return ("World Labs couldn't finish this run. Check the job in Marble to see why. To run it "
-            f"from scratch, clear the node's {field} field first.")
+            f"from scratch, clear “{field}” first.")
 
 
 def _bad_recovery_id_line(field: str) -> str:
-    return (f"The node's {field} field doesn't hold a World Labs job. "
+    return (f"“{field}” doesn't hold a World Labs job. "
             "Copy the job's ID from Marble, or clear the field.")
 
 

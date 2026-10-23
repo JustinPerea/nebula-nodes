@@ -91,6 +91,21 @@ def with_provider_line(exc: E, line: str) -> E:
     return with_person_line(exc, line)
 
 
+def with_details_line(exc: E, line: str) -> E:
+    """The person's line for a failure whose exception text carries a fact
+    that belongs behind the card's Details, not in prose (a settings link,
+    round 3f: GM "The URL goes behind Details or becomes a link, not prose"):
+    the card shows ``line`` and keeps the text behind Details."""
+    setattr(exc, _PROVIDER_TEXT, True)
+    return with_person_line(exc, line)
+
+
+def shows_details(exc: BaseException) -> bool:
+    """The card keeps `exc`'s text behind Details beside its line
+    (with_provider_line, with_details_line)."""
+    return carries_provider_text(exc)
+
+
 def person_line(exc: BaseException) -> str | None:
     """The person's line `exc` was raised with, or None (the card's fallback)."""
     line = getattr(exc, _ATTRIBUTE, None)
@@ -275,9 +290,21 @@ def status_line(kind: str, provider: str, credential: str = "API key") -> str:
 
 
 def slow_job_line(provider: str) -> str:
-    """A paid provider accepted the job and Nebula stopped waiting on it (GM)."""
-    return (f"{provider} is taking longer than usual. The job may still finish there and be billed, so check "
-            f"{provider} before you run the node again.")
+    """A paid provider accepted the job and Nebula stopped waiting on it.
+    GM (round 3f): ""Is taking longer than usual" suggests Nebula is still
+    waiting, but it has stopped and the result won't come back to the canvas."""
+    return (f"{provider} took too long, so Nebula stopped waiting. The job may still finish there and be billed, "
+            f"so check {provider} before you run the node again.")
+
+
+def download_line(provider: str) -> str:
+    """A provider's result Nebula couldn't download (GM's rule 11, round 3f)."""
+    return f"Couldn't download the result from {provider}. Its download link may have expired. Run the node again."
+
+
+def unknown_model_line(provider: str, field: str = "Model") -> str:
+    """The node's model isn't one the provider lists (GM's rule 10, round 3f)."""
+    return f"This node's model isn't one {provider} offers. Pick one in “{field}”, then run the node again."
 
 
 def no_result_line(provider: str) -> str:
@@ -315,6 +342,14 @@ def field_label(definition_id: str, key: str, default: str | None = None) -> str
     """A field's label as the node shows it (node_definitions.json)."""
     param = _param(definition_id, key) or {}
     return str(param.get("label") or default or key)
+
+
+def count_field(definition_id: str, key: str = "num_images") -> str:
+    """The image-count field as the node shows it, in quotes (GM's rule 5:
+    “Count”, “Images”, “Generations”), or "the number of images" in words
+    for a node that doesn't show the field (Nano Banana's copies)."""
+    label = str((_param(definition_id, key) or {}).get("label") or "").strip() if definition_id else ""
+    return f"“{label}”" if label else "the number of images"
 
 
 def option_label(definition_id: str, key: str, value: object) -> str | None:
@@ -378,8 +413,59 @@ def missing_key_line(keys: Iterable[str]) -> str:
     return key_line(keys) or "Add this node's API key in Settings, then run the node again."
 
 
-# Common inputs said in words, as 3c's lines do ("Connect a prompt, ...").
-_PORT_WORDS = {"prompt": "a prompt", "image": "an image", "video": "a video", "audio": "audio"}
+# An input said in words (GM's rule 6, round 3f: "Connect {a/an X in words} to
+# this node, then run it again."). A label is lowercased word by word, except
+# an acronym or a name ("SVG", "3D", "Krea"); a plural or a mass noun takes no
+# article. A few labels read better as what they bring.
+_INPUT_WORDS = {
+    "prompt / guidance": "a prompt", "image(s)": "images", "model url": "a 3D model", "reference uri": "a reference",
+    "krea 3d job": "a Krea 3D job", "krea job": "a Krea job", "extend video": "a video to extend",
+    "edit video": "a video to edit", "continue session": "a session to continue",
+}
+_MASS_NOUNS = {"audio", "text", "context", "lighting", "media", "messages", "guidance"}
+_NAMES = {"krea"}
+
+
+def _words(name: str) -> str:
+    words = []
+    for word in name.split():
+        keep = word.lower() in _NAMES or any(ch.isdigit() for ch in word) or word[1:] != word[1:].lower()
+        words.append(word if keep else word.lower())
+    return " ".join(words)
+
+
+def _article(phrase: str) -> str:
+    first = phrase.split()[0]
+    if first.isupper() and len(first) > 1:  # an acronym is read letter by letter: "an SVG"
+        return "an" if first[0] in "AEFHILMNORSX" else "a"
+    return "an" if first[0].lower() in "aeiou" else "a"
+
+
+def input_words(label: object) -> str:
+    """An input's label in words for a line: "a prompt", "an image",
+    "audio", "camera poses", "an SVG"."""
+    raw = str(label or "").strip()
+    known = _INPUT_WORDS.get(raw.lower())
+    if known:
+        return known
+    name = re.sub(r"\s+(URL|URLs|uri)$", lambda m: "s" if m.group(1) == "URLs" else "", port_name(raw)).strip()
+    if not name:
+        return "the node's inputs"
+    phrase = re.sub(r"\bRefs\b", "references", _words(name), flags=re.IGNORECASE)
+    last = phrase.split()[-1].lower()
+    if last in _MASS_NOUNS or (last.endswith("s") and not last.endswith("ss")):
+        return phrase
+    return f"{_article(phrase)} {phrase}"
+
+
+def connect_line(label: object) -> str:
+    """GM's rule 6 line for an input with no wire, from its label."""
+    name = port_name(label)
+    # A numbered or lettered input ("Item 1", "Image A") and a pass-through
+    # are named by their label: "an item" wouldn't say which one.
+    if re.search(r"\s(\d+|[A-Z])$", name) or name.lower() == "through":
+        return f"Connect an output to “{name}”, then run the node again."
+    return f"Connect {input_words(label)} to this node, then run it again."
 
 
 def port_name(label: object) -> str:
@@ -389,15 +475,9 @@ def port_name(label: object) -> str:
 
 
 def port_line(label: str) -> str:
-    """A required input with no wire, before the run (error copy round 3e):
-    in words for the common ones, else by the input's label on the card."""
-    name = port_name(label)
-    words = _PORT_WORDS.get(name.lower())
-    if words:
-        return f"Connect {words}, then run the node again."
-    if not name:
-        return "Connect the node's inputs, then run the node again."
-    return f"Connect the node's {name} input, then run the node again."
+    """A required input with no wire, before the run (error copy round 3e,
+    in GM's rule 6 words since round 3f)."""
+    return connect_line(label)
 
 
 def joined_lines(lines: Iterable[str | None]) -> str | None:

@@ -363,7 +363,7 @@ describe('round 3c: the older Projects lines', () => {
     vi.mocked(projects.createProject).mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch'),
       { heading: "Couldn't create the project." }));
     await useProjectStore.getState().createProject('Fresh');
-    expect(useProjectStore.getState().error).toBe("Couldn't confirm the project change. Couldn't reach Nebula. Check your connection. Try again checks your saved projects; it won't make the change twice.");
+    expect(useProjectStore.getState().error).toBe("Couldn't confirm the project change. Nebula's server isn't answering. Make sure it's running. Try again checks your saved projects; it won't make the change twice.");
     expect(offer()).toBe('reload');
   });
 
@@ -413,7 +413,7 @@ describe('round 3c-2: the startup load never shows an error\'s own message', () 
     vi.mocked(projects.getProject).mockRejectedValueOnce(new Error('internal: snapshot.nodes is not iterable'));
     await useProjectStore.getState().initialize();
     expect(useProjectStore.getState().error)
-      .toBe("Couldn't load your projects. That didn't work. Try again, or reload if it keeps happening.");
+      .toBe("Couldn't load your projects. Try again, or reload the page if it keeps happening.");
     expect(offer()).not.toBe('none');
   });
 
@@ -433,7 +433,7 @@ describe('round 3c-2: the startup load never shows an error\'s own message', () 
 });
 
 describe("round 3e: every Projects action reads a plain Error through GM's mapping", () => {
-  const GENERAL = "That didn't work. Try again, or reload if it keeps happening.";
+  const GENERAL = "Try again, or reload if it keeps happening.";
   const RAW = 'internal: snapshot.nodes is not iterable at /Users/someone/state.json';
 
   it.each([

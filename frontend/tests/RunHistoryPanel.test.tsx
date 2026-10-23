@@ -10,6 +10,7 @@ import {
   WORLD_LABS_RECOVERY_READY_NOTE,
   type RunRecord,
 } from '../src/lib/runHistory';
+import { noticeSpy } from './helpers/noticeSpy';
 
 const INITIAL_GRAPH_STATE = { ...useGraphStore.getState() };
 const INITIAL_UI_STATE = { ...useUIStore.getState() };
@@ -290,7 +291,7 @@ describe('RunHistoryPanel replay actions', () => {
 
   it('keeps a recovery visible and reports the failure when exact deletion fails', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
-    const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const alert = noticeSpy();
     const deleteProviderRecovery = vi.fn().mockRejectedValue(
       new Error('Backend still has an active provider task.'),
     );
@@ -313,7 +314,7 @@ describe('RunHistoryPanel replay actions', () => {
     // Error copy round 3b: an error that isn't a request's never shows its
     // own message; it says GM's general line under the button's heading.
     await waitFor(() => expect(alert).toHaveBeenCalledWith(
-      "Couldn't forget the recovery safeguard. That didn't work. Try again, or reload if it keeps happening.",
+      "Couldn't forget the recovery safeguard. Try again, or reload if it keeps happening.",
     ));
     expect(screen.getByTitle('world-node · operation-saved')).toBeInTheDocument();
     expect(screen.getByRole('button', {

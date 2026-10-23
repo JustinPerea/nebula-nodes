@@ -20,7 +20,7 @@ describe('browser provider key removal API', () => {
   it('escapes provider path segments and rejects an unsuccessful deletion', async () => {
     apiFetchMock.mockResolvedValue({ ok: false, status: 400 });
     await expect(deleteSettingsApiKey('unknown/provider')).rejects.toThrow(
-      "Couldn't remove the API key. That didn't work. Try again, or reload if it keeps happening.");
+      "Couldn't remove the API key. Try again, or reload if it keeps happening.");
     expect(apiFetchMock).toHaveBeenCalledExactlyOnceWith('/api/settings/api-keys/unknown%2Fprovider', { method: 'DELETE' });
   });
 });

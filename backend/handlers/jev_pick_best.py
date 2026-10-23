@@ -50,7 +50,9 @@ _FIELD_LABELS = {"min_confidence": "Minimum Confidence"}
 
 
 def _fraction_line(name: str, high: str) -> str:
-    return f"Set the node's {_FIELD_LABELS.get(name, 'setting')} to a number from 0 to {high}."
+    label = _FIELD_LABELS.get(name)
+    field = f"“{label}”" if label else "the node's setting"  # GM's rule 5: the label in quotes
+    return f"Set {field} to a number from 0 to {high}."
 
 
 def _fraction(raw: Any, default: float, name: str) -> float:
@@ -110,7 +112,7 @@ async def handle_jev_pick_best(
 
     values = candidate_values(inputs)
     if len(values) < 2:
-        raise as_person_line(ValueError(f"Jev Pick Best needs at least two candidate images, got {len(values)}"))
+        raise with_person_line(ValueError(f"Jev Pick Best needs at least two candidate images, got {len(values)}"), "Jev Pick Best needs at least two candidate images. Connect another, then run the node again.")
     if len(values) > MAX_CANDIDATES:
         raise as_person_line(ValueError(
             f"Jev Pick Best takes at most {MAX_CANDIDATES} candidates, got {len(values)}. Each 1024 px "

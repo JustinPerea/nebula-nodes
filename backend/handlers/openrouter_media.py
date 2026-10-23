@@ -187,7 +187,7 @@ async def _download(client: httpx.AsyncClient, key: str, url: Any) -> str:
         # no API status: a download of the finished video.
         raise with_person_line(
             RuntimeError(f"OpenRouter's video download failed (HTTP {response.status_code}). Run again."),
-            "OpenRouter's video couldn't be downloaded. Run the node again.")
+            "Couldn't download the result from OpenRouter. Its download link may have expired. Run the node again.")
     path = await write_media_bytes(response.content, response.headers.get("content-type", ""), "Video",
                                    get_run_dir(), url)
     return str(path)

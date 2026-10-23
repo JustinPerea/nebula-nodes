@@ -10,6 +10,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useGraphStore } from '../store/graphStore';
+import { confirmNodeDelete } from '../lib/deleteConfirm';
 import { useUIStore } from '../store/uiStore';
 import { useCanvasPinsStore } from '../store/canvasPinsStore';
 import { isBackendNodeId } from '../lib/canvasPins';
@@ -91,8 +92,8 @@ export function SelectionToolbar() {
   }
 
   function removeSelection() {
-    const noun = ids.length === 1 ? 'node' : 'nodes';
-    if (window.confirm(`Delete ${ids.length} selected ${noun}?`)) deleteSelected();
+    // A World Labs hold refuses first, with its notice; then GM's confirm (round 3f).
+    if (useGraphStore.getState().allowCanvasDelete(ids) && confirmNodeDelete(ids.length)) deleteSelected();
   }
 
   function runSelection() {

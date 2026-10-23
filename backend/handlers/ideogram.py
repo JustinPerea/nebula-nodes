@@ -39,7 +39,7 @@ from services.maker_sizes import IDEOGRAM_V3_RESOLUTIONS as _V3_RESOLUTIONS
 from services.media_input import load_media
 from services.output import get_run_dir, save_base64_image
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import (as_job_failure, as_person_line, field_label, it_was, slow_job_line, with_api_status,
+from execution.person_line import (as_job_failure, field_label, input_words, it_was, slow_job_line, with_api_status,
                                    with_person_line)
 
 IDEOGRAM_API_BASE = "https://api.ideogram.ai"
@@ -163,14 +163,14 @@ async def _save_first_image(result: dict[str, Any]) -> dict[str, Any]:
 def _required_text(inputs: dict[str, PortValueDict], port: str, label: str) -> str:
     value = inputs.get(port)
     if not value or not value.value:
-        raise as_person_line(ValueError(f"{label} input is required"))
+        raise with_person_line(ValueError(f"{label} input is required"), f"Connect {input_words(label)} to this node, then run it again.")
     return str(value.value)
 
 
 def _required_image_ref(inputs: dict[str, PortValueDict], port: str, label: str) -> str:
     value = inputs.get(port)
     if not value or not value.value:
-        raise as_person_line(ValueError(f"{label} input is required"))
+        raise with_person_line(ValueError(f"{label} input is required"), f"Connect {input_words(label)} to this node, then run it again.")
     return str(value.value)
 
 
@@ -187,7 +187,7 @@ def _boolean_field(node: GraphNode, fields: dict[str, Any], key: str, label: str
     if value is None or value == "":
         return
     if not isinstance(value, bool):
-        raise with_person_line(ValueError(f"{label} must be true or false (received {value!r})"), f"Set {field_label(node.definition_id, key, key.replace('_', ' ').capitalize())} to on or off, "
+        raise with_person_line(ValueError(f"{label} must be true or false (received {value!r})"), f"Set “{field_label(node.definition_id, key, key.replace('_', ' ').capitalize())}” to on or off, "
                          "then run the node again.")
     fields[key] = "true" if value else "false"
 
@@ -196,7 +196,7 @@ def _validate_enum(node: GraphNode, key: str, allowed: frozenset[str], label: st
     value = node.params.get(key)
     if value is not None and value != "" and str(value) not in allowed:
         choices = ", ".join(sorted(allowed))
-        raise with_person_line(ValueError(f"{label} must be one of: {choices} (received {value!r})"), f"Pick one of the node's {field_label(node.definition_id, key, key.replace('_', ' ').capitalize())} "
+        raise with_person_line(ValueError(f"{label} must be one of: {choices} (received {value!r})"), f"Pick one of the node's “{field_label(node.definition_id, key, key.replace('_', ' ').capitalize())}” "
                          "options, then run the node again.")
 
 
@@ -205,7 +205,7 @@ def _validate_int_range(node: GraphNode, key: str, minimum: int, maximum: int, l
     if value is None or value == "":
         return
     if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
-        raise with_person_line(ValueError(f"{label} must be an integer from {minimum} to {maximum} (received {value!r})"), f"Set {field_label(node.definition_id, key, key.replace('_', ' ').capitalize())} to a whole number "
+        raise with_person_line(ValueError(f"{label} must be an integer from {minimum} to {maximum} (received {value!r})"), f"Set “{field_label(node.definition_id, key, key.replace('_', ' ').capitalize())}” to a whole number "
                          f"from {minimum} to {maximum}. {it_was(value)}")
 
 
@@ -303,7 +303,7 @@ async def handle_ideogram_reframe(
     if not resolution:
         raise with_person_line(
             ValueError("resolution is required for Ideogram Reframe (direct route)"),
-            "Set the node's Resolution to run Ideogram Reframe on your Ideogram key.")
+            "Set “Resolution” to run Ideogram Reframe on your Ideogram key.")
     _validate_enum(node, "resolution", IDEOGRAM_V3_RESOLUTIONS, "Ideogram V3 resolution")
     fields: dict[str, Any] = {"resolution": resolution}
     _field(node, fields, "rendering_speed", "num_images", "seed")
@@ -352,7 +352,7 @@ async def handle_ideogram_character(
     )
     files = await _multi_file_parts("character_reference_images", inputs.get("reference_images"))
     if not files:
-        raise with_person_line(ValueError("Character Refs input is required (connect images or a Character node)"), "Ideogram Character needs a character reference. Connect an image to Character Refs or attach a "
+        raise with_person_line(ValueError("Character Refs input is required (connect images or a Character node)"), "Ideogram Character needs a character reference. Connect an image to “Character Refs” or attach a "
                          "Character node, then run the node again.")
     if len(files) > 1:
         raise with_person_line(ValueError(
@@ -590,7 +590,7 @@ async def handle_ideogram_edit_prompt(
     if single and single.value:
         files = [await _file_part("images", str(single.value))] + files
     if not files:
-        raise with_person_line(ValueError("Image input is required (connect Image or Images)"), "Ideogram needs an image to edit. Connect one to Image or Images, then run the node again.")
+        raise with_person_line(ValueError("Image input is required (connect Image or Images)"), "Ideogram needs an image to edit. Connect one to “Image” or “Images”, then run the node again.")
     result = await _post_multipart("/v1/edit", api_key, fields, files)
     return await _save_first_image(result)
 
@@ -616,15 +616,15 @@ async def handle_ideogram_train_model(
     if not model_name:
         raise with_person_line(
             ValueError("model_name is required for Ideogram model training"),
-            "Give the model a name in the node's Model Name field, then run it again.")
+            "Give the model a name in “Model Name”, then run it again.")
 
     images_input = inputs.get("images")
     if not images_input or not images_input.value:
-        raise as_person_line(ValueError("Training images are required"))
+        raise with_person_line(ValueError("Training images are required"), "Connect training images to this node, then run it again.")
     raw = images_input.value if isinstance(images_input.value, list) else [images_input.value]
     refs = [str(v) for v in raw if v]
     if not refs:
-        raise as_person_line(ValueError("Training images are required"))
+        raise with_person_line(ValueError("Training images are required"), "Connect training images to this node, then run it again.")
 
     async def noop_emit(event: ExecutionEvent) -> None:
         pass

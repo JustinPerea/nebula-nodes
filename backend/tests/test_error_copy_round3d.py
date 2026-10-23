@@ -251,7 +251,7 @@ def test_a_single_shots_failure_carries_the_details_flag() -> None:
 
 
 def _slow(provider: str) -> str:
-    return (f"{provider} is taking longer than usual. The job may still finish there and be billed, so check "
+    return (f"{provider} took too long, so Nebula stopped waiting. The job may still finish there and be billed, so check "
             f"{provider} before you run the node again.")
 
 
@@ -650,11 +650,11 @@ def test_seedances_dated_ids_leave_the_card() -> None:
 
     exc = _raised(_resolution, "4k", SEEDANCE_2_5)
     assert str(exc) == "BytePlus's dreamina-seedance-2-5-260628 renders 480p, 720p, 1080p, not '4k'"
-    assert person_line(exc) == "Seedance 2.5 on BytePlus renders 480p, 720p or 1080p. Pick one in the node's Resolution field."
+    assert person_line(exc) == "Seedance 2.5 on BytePlus renders 480p, 720p or 1080p. Pick one in “Resolution”."
     exc = _raised(_whole_seconds, 3.5, SEEDANCE_2_5)
     assert str(exc).startswith("BytePlus takes whole seconds from 4 to 30 for this model (received 3.5).")
-    # GM's own example of the rule.
-    assert person_line(exc) == "Set Duration to whole seconds from 4 to 30. It was 3.5."
+    # GM's own example of the rule, the label in quotes since round 3f (rule 5).
+    assert person_line(exc) == "Set “Duration” to whole seconds from 4 to 30. It was 3.5."
     exc = _raised(_frames, SEEDANCE_1_0_PRO_FAST, ["https://e.com/a.png"], ["https://e.com/end.png"])
     assert str(exc) == f"BytePlus's {SEEDANCE_1_0_PRO_FAST} takes a start image only, not an end image"
     assert person_line(exc) == ("Seedance 1.0 Pro Fast on BytePlus takes a start image only. Disconnect the end "
@@ -752,7 +752,8 @@ def test_a_range_line_names_the_field_by_its_label_not_its_key() -> None:
     exc = _raised(_validate_int_range, _node("ideogram-transparent", {"num_images": 9}), "num_images", 1, 8,
                   "Ideogram num_images")
     assert str(exc) == "Ideogram num_images must be an integer from 1 to 8 (received 9)"
-    assert person_line(exc) == "Set Images to a whole number from 1 to 8. It was 9."
+    # Round 3f review (GM's rule 5): the label in quotes.
+    assert person_line(exc) == "Set “Images” to a whole number from 1 to 8. It was 9."
 
 
 def test_a_reasoning_effort_line_names_the_model_and_levels_as_the_node_shows_them() -> None:
@@ -760,7 +761,8 @@ def test_a_reasoning_effort_line_names_the_model_and_levels_as_the_node_shows_th
 
     exc = _raised(_listed_effort, "gpt-6-astra", "none")
     assert str(exc) == "Reasoning effort 'none' isn't available for gpt-6-astra. Pick one of: low, medium, high, xhigh, max."
-    assert person_line(exc) == ("GPT-6 Astra doesn't offer Reasoning Effort None. "
+    # Round 3f review (GM's rule 5): the field's label in quotes.
+    assert person_line(exc) == ("GPT-6 Astra doesn't offer None for “Reasoning Effort”. "
                                 "Pick Low, Medium, High, X-High or Max, then run the node again.")
 
 
@@ -894,7 +896,7 @@ def test_save_to_krea_files_missing_file_uses_gms_line(tmp_path, monkeypatch) ->
     assert person_line(exc) == "A connected file can't be found. Connect it again, then run the node again."
     # A remote URL keeps its own line.
     exc = _raised(_local_path, "https://example.com/a.png")
-    assert person_line(exc) == "Save to Krea Files takes Nebula media from this machine, not remote URLs"
+    assert person_line(exc) == "Save to Krea Files takes media made or uploaded in Nebula, not links. Connect one of those."
 
 
 def test_krea_media_input_missing_file_uses_gms_line(tmp_path) -> None:

@@ -10,7 +10,7 @@ from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.output import get_run_dir
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import as_person_line, missing_file_line, with_api_status, with_person_line
+from execution.person_line import missing_file_line, with_api_status, with_person_line
 
 OPENAI_AUDIO_BASE = "https://api.openai.com/v1/audio"
 
@@ -26,7 +26,7 @@ async def handle_openai_stt(
 ) -> dict[str, Any]:
     audio_input = inputs.get("audio")
     if not audio_input or not audio_input.value:
-        raise as_person_line(ValueError("Audio input is required for transcription"))
+        raise with_person_line(ValueError("Audio input is required for transcription"), "Connect audio to this node, then run it again.")
 
     api_key = api_keys.get("OPENAI_API_KEY")
     if not api_key:
@@ -87,7 +87,7 @@ async def handle_openai_translate(
 ) -> dict[str, Any]:
     audio_input = inputs.get("audio")
     if not audio_input or not audio_input.value:
-        raise as_person_line(ValueError("Audio input is required for translation"))
+        raise with_person_line(ValueError("Audio input is required for translation"), "Connect audio to this node, then run it again.")
 
     api_key = api_keys.get("OPENAI_API_KEY")
     if not api_key:
@@ -141,7 +141,7 @@ async def handle_openai_tts(
 ) -> dict[str, Any]:
     text_input = inputs.get("text")
     if not text_input or not text_input.value:
-        raise as_person_line(ValueError("Text input is required for TTS"))
+        raise with_person_line(ValueError("Text input is required for TTS"), "Connect text to this node, then run it again.")
 
     api_key = api_keys.get("OPENAI_API_KEY")
     if not api_key:

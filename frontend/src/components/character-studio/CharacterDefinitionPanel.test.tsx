@@ -43,7 +43,7 @@ describe('Character Studio reference upload failures', () => {
 
   it.each([
     [async () => new Response('', { status: 503 }), "Couldn't upload side.png. Nebula didn't respond. Try again."],
-    [async () => { throw new TypeError('Failed to fetch'); }, "Couldn't upload side.png. Couldn't reach Nebula. Check your connection and try again."],
+    [async () => { throw new TypeError('Failed to fetch'); }, "Couldn't upload side.png. Nebula's server isn't answering. Make sure it's running, then try again."],
   ])('names the file and the reason (%#)', async (answer, line) => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});

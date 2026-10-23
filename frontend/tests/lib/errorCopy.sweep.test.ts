@@ -15,9 +15,9 @@ import { getBackendBaseUrl } from '../../src/lib/backend';
  * 503" or "(503)". Only the browser's fetch is stubbed.
  */
 
-const LOST = "Couldn't reach Nebula. Check your connection and try again.";
+const LOST = "Nebula's server isn't answering. Make sure it's running, then try again.";
 const NO_ANSWER = "Nebula didn't respond. Try again.";
-const REFUSED = "That didn't work. Try again, or reload if it keeps happening.";
+const REFUSED = "Try again, or reload if it keeps happening.";
 
 const api = await import('../../src/lib/api');
 const renderJobs = await import('../../src/lib/renderJobs');
@@ -92,7 +92,7 @@ const calls: Array<[string, () => Promise<unknown>]> = [
   ["Couldn't accept the proposal.", () => canvasProposals.acceptProposal('p1', 'k', {})],
   ["Couldn't reject the proposal.", () => canvasProposals.rejectProposal('p1', 'k')],
   ["Couldn't show the file in Finder.", () => createFiles.revealInFinder('/api/outputs/a.png')],
-  ["Couldn't save the file.", () => createFiles.saveToFolder('/api/outputs/a.png')],
+  ["Couldn't save the output.", () => createFiles.saveToFolder('/api/outputs/a.png')],
   ["Couldn't load the styles.", () => presets.fetchPresets('global')],
   ["Couldn't save the style.", () => presets.createPreset({} as never)],
   ["Couldn't delete the style.", () => presets.deletePreset('s1')],

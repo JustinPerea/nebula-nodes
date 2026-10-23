@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { getBackendBaseUrl, backendAssetUrlSync, rewriteExecutionAssetUrls } from '../../src/lib/backend';
 
-const LOST_CONNECTION = "Couldn't reach Nebula. Check your connection and try again.";
+const LOST_CONNECTION = "Nebula's server isn't answering. Make sure it's running, then try again.";
 
 // In test mode discovery resolves to http://localhost:8000 and caches it, so
 // backendAssetUrlSync can rewrite server-relative asset paths to an absolute

@@ -15,8 +15,7 @@ from services.file_access import require_allowed_path
 from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir, save_base64_image
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import (as_job_failure, as_person_line, field_label, slow_job_line, with_api_status,
-                                   with_person_line)
+from execution.person_line import as_job_failure, field_label, slow_job_line, with_api_status, with_person_line
 
 FAL_QUEUE_BASE = "https://queue.fal.run"
 STREAMING_FAL_ENDPOINTS = {"openai/gpt-image-2", "openai/gpt-image-2/edit"}
@@ -155,7 +154,7 @@ async def handle_fal_universal(
 
     endpoint_id = node.params.get("endpoint_id", "")
     if not endpoint_id:
-        raise with_person_line(ValueError("FAL endpoint ID is required (e.g. fal-ai/flux-pro/v1.1-ultra)"), f"Enter a fal.ai endpoint in the node's {field_label(node.definition_id, 'endpoint_id', 'Endpoint')} field, "
+        raise with_person_line(ValueError("FAL endpoint ID is required (e.g. fal-ai/flux-pro/v1.1-ultra)"), f"Enter a fal.ai endpoint in “{field_label(node.definition_id, 'endpoint_id', 'Endpoint')}”, "
             "then run the node again.")
 
     endpoint_id = str(endpoint_id).strip("/")
@@ -214,7 +213,7 @@ async def handle_fal_universal(
         raise with_person_line(ValueError("gpt-image-1.5 edit requires at least one reference image"), "GPT Image 1.5 Edit needs at least one reference image. Connect one, then run the node again.")
 
     if endpoint_id.endswith("/edit") and "nano-banana" in endpoint_id and not fal_input.get("image_urls"):
-        raise as_person_line(ValueError("Nano Banana edit requires at least one reference image"))
+        raise with_person_line(ValueError("Nano Banana edit requires at least one reference image"), "Connect at least one reference image to this node, then run it again.")
 
     # Video input (luma-ray2-flash-modify) → video_url
     video_input = inputs.get("video")
@@ -543,7 +542,7 @@ async def handle_demucs(
 
     audio_input = inputs.get("audio")
     if not audio_input or not audio_input.value:
-        raise as_person_line(ValueError("Audio input is required for stem separation"))
+        raise with_person_line(ValueError("Audio input is required for stem separation"), "Connect audio to this node, then run it again.")
 
     fal_input: dict[str, Any] = {"audio_url": _to_fal_url(str(audio_input.value))}
     for key, val in node.params.items():

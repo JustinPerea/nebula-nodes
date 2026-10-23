@@ -703,6 +703,22 @@ the provider's own words, your `error`, behind "Details". A failure Nebula
 can't tell keeps today's line. `error` and every text you read are unchanged,
 word for word.
 
+Round 3f puts GM's rules on every card line (a final period, no dashes or
+parentheses, "connected" for "wired", field labels as the node shows them,
+"Nothing was sent to {Provider}.", one spelling per name and unit). Only the
+person's lines changed: `error`, `errorHint`, `detail`, `missing` and every
+text you read stay word for word. The slow-job line now reads "{Provider} took
+too long, so Nebula stopped waiting. ...". Three fields are additive and for
+the canvas only: the execution event's `provider` (`errorProvider` in the
+graph and on a shot's `output`) is the provider the run called, from the
+route it took, set only when that provider answered (a status, a job failure,
+its own words), so a card with no line of its own says "Run the node again. If
+it keeps failing, Details shows what {Provider} said."; a failure before
+anything was sent leaves it empty and the card says "open Details"; each `cost.notReady`
+row has a `person` line beside `missing`; and a project storage refusal
+(507) adds `storage: "full"` beside `detail` when the disk is full. Don't
+parse any of them.
+
 The status is the one the provider's API answered, attached where Nebula
 raised the error, never a number read out of the text (round 3d, part 2): a
 storage upload's 403 or "Prompt is too long: 500 characters over" keeps
@@ -971,7 +987,7 @@ already exists); while that file doesn't exist yet it is in `unpriced` and
 
 **Nodes that can't run here.** `cost.notReady` lists every node the run
 reads, upstream nodes with outputs included, that can't run here as set up,
-as `[{ref, nodeId, name, missing}]`. `missing` is in the words `find_nodes`
+as `[{ref, nodeId, name, missing, person}]`. `missing` is in the words `find_nodes`
 and `describe_node` use (`node_readiness.instance_missing`, read at the
 values Accept would write: "needs OPENAI_API_KEY in Settings > Providers",
 a Krea sign-in, or why the chosen route can't take it), and the cost entry
@@ -981,7 +997,8 @@ pointing at its own way to find a node that runs here: `find_nodes` for MCP,
 `nebula nodes` for the CLI (its twin), and `GET /api/agent/nodes` in the HTTP reply. On
 the canvas the ghost shows the ⚠ a real node shows, with the same title, and
 the bar lists the nodes under its summary (three, then the rest in its
-details). Both re-check keys as the person adds them, so a line goes away
+details), each in its `person` line ("GPT Image 2 needs your OpenAI API key.
+Add it in Settings.", round 3f; read `missing`, not that). Both re-check keys as the person adds them, so a line goes away
 once its key is set. Accept stays enabled, as the canvas's Run button does
 for a node without its key: the run is refused at that node before any
 provider is called, and the node shows why.
@@ -2050,7 +2067,7 @@ whoever ran it (the canvas Run button too). It is kept per project, in
 `node-errors.json` in the state dir, so it survives a page reload, a switch to
 another project and back, and a backend restart; every graph the canvas loads
 (graphSync, `GET /api/projects/{id}`) gives such a node `state: "error"` with
-the card's `error`, `errorFriendly`, `errorCategory`, `errorPerson` and `errorProviderText`. Loading a graph over
+the card's `error`, `errorFriendly`, `errorCategory`, `errorPerson`, `errorProviderText` and `errorProvider` (round 3f). Loading a graph over
 the project or clearing it forgets its errors, as does deleting the project
 for good. Deleting a node keeps its error, so undoing the delete
 (`POST /api/graph/restore`) puts the node back failed, as the canvas's undo

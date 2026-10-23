@@ -106,7 +106,7 @@ describe('saved project coordinator', () => {
     expect(useProjectStore.getState().activeProject?.id).toBe('alpha');
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('alpha');
     // Error copy round 3e: a plain Error's own words never show; the action's heading and GM's general line do.
-    expect(useProjectStore.getState().error).toBe("Couldn't open the project. That didn't work. Try again, or reload if it keeps happening.");
+    expect(useProjectStore.getState().error).toBe("Couldn't open the project. Try again, or reload if it keeps happening.");
   });
   it('creates a blank canvas without replaying a recipe or clearing the outgoing saved project', async () => {
     await useProjectStore.getState().initialize();

@@ -37,11 +37,14 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
 }));
 
 const HEADING = "Couldn't run the node.";
-const GENERAL = "That didn't work. Try again, or reload if it keeps happening.";
+// Round 3f (GM): a card's general line, with no provider named. "Run the node
+// again. If it keeps failing, Details shows what {Provider} said." when the run
+// names one (tests/errorCopy.round3f.test.tsx).
+const GENERAL = "Run the node again. If it keeps failing, open Details.";
 const SPECIFIC = 'World Labs generation/recovery was already accepted or is being recovered (operationId=op-77), '
   + 'but Nebula could not finish locally. Recover with resume_operation_id=op-77; cause: boom';
 const PERSON = 'World Labs accepted this run, and it may be billed, but Nebula couldn\'t finish it here. Check the job '
-  + 'in Marble. The node\'s Resume Operation ID field keeps the job, so running the node again picks it up without paying twice.';
+  + 'in Marble. “Resume Operation ID” keeps the job, so running the node again picks it up without paying twice.';
 const RAW = 'fal.ai: {"detail":[{"msg":"image too small","type":"value_error"}]} request_id=req_123';
 
 const heading = (root: ParentNode) => root.querySelector('.failure-lines__heading')?.textContent ?? null;

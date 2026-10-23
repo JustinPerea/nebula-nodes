@@ -21,8 +21,8 @@ from services.media_input import read_local_media
 from services.public_url import fetch_public_media
 from execution.missing_credential import MissingCredentialError
 from execution.poll_retry import UpstreamTask, poll_request
-from execution.person_line import (as_job_failure, as_person_line, key_line, missing_file_line, slow_job_line,
-                                   with_api_status, with_person_line)
+from execution.person_line import (as_job_failure, key_line, missing_file_line, slow_job_line, with_api_status,
+                                   with_person_line)
 
 VEO_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
@@ -165,7 +165,7 @@ async def handle_veo(
     if model not in VEO_MODELS:
         # The model id is for agents; the card names the field.
         raise with_person_line(ValueError(f"'{model}' isn't a Veo 3.1 model"),
-                               "Pick a Veo 3.1 model in the node's Model field, then run it again.")
+                               "Pick a Veo 3.1 model in “Model”, then run it again.")
 
     has_image = bool(inputs.get("image") and inputs["image"].value)
     has_last = bool(inputs.get("last_frame") and inputs["last_frame"].value)
@@ -175,15 +175,15 @@ async def handle_veo(
     # misconfigured node fails fast and cheaply (no generation spend).
     if has_video:
         if has_image or has_last:
-            raise as_person_line(ValueError(
+            raise with_person_line(ValueError(
                 "Veo video extension cannot be combined with a first or last frame"
-            ))
+            ), "Veo can't extend a video and use a first or last frame at once. Disconnect one, then run the node again.")
         allowed = VERTEX_EXTEND_MODELS if vertex_credentials else VEO_EXTEND_MODELS
         if model not in allowed:
             raise with_person_line(
                 ValueError(f"Video extension requires Veo 3.1 or 3.1 Fast (got '{model}')"),
-                "Extending a video takes Veo 3.1 or Veo 3.1 Fast. Pick one in the node's Model field, "
-                "or disconnect Extend Video.")
+                "Extending a video takes Veo 3.1 or Veo 3.1 Fast. Pick one in “Model”, "
+                "or disconnect “Extend Video”.")
 
     if vertex_credentials:
         return await _handle_veo_vertex(
@@ -222,7 +222,7 @@ async def handle_veo(
                 "Veo extension needs a Veo-generated clip's source URI (a Gemini files/... URI). "
                 "Wire the upstream Veo node's 'Source URI' output into 'Extend Video' — Veo "
                 "rejects re-uploaded or external video files."
-            ), "Veo extends only a clip Veo made, by its source URI. Wire the upstream Veo node's “Source URI” output "
+            ), "Veo extends only a clip Veo made, by its source URI. Connect the upstream Veo node's “Source URI” output "
                 "into “Extend Video”. Veo rejects re-uploaded or external video files.")
 
     parameters = _veo_parameters(node.params)
@@ -402,12 +402,12 @@ async def _vertex_video_payload(value: str) -> dict[str, Any]:
         raise with_person_line(ValueError(
             "Vertex can't read a Gemini API file URI. Wire the upstream node's 'Video' output "
             "(the saved clip) into 'Extend Video' instead."
-        ), "Vertex can't read a Gemini API file URI. Wire the upstream node's “Video” output, the saved clip, "
-            "into “Extend Video” instead.")
+        ), "Vertex AI can't extend a clip made through the Gemini API. Connect the upstream node's “Video” output to "
+            "“Extend Video” instead.")
     if value.startswith(("http://", "https://")):
         data, _type = await fetch_public_media(value, label="Veo clip", max_bytes=MAX_CLIP_BYTES)
     elif value.startswith("data:"):
-        raise as_person_line(ValueError("Extend Video needs a file, a gs:// URI or an https URL"))
+        raise with_person_line(ValueError("Extend Video needs a file, a gs:// URI or an https URL"), "“Extend Video” needs a video file, a Google Cloud Storage link or a web link. Connect one, then run the node again.")
     else:
         path = Path(value)
         if not path.exists():
@@ -541,7 +541,7 @@ async def _handle_veo_vertex(
     # Lite's model card is contradictory about frames (modalities say no image
     # input, capabilities list image-to-video), so they're sent and Google decides.
     if str(node.params.get("resolution")) == "4k" and model not in VERTEX_4K_MODELS:
-        raise with_person_line(ValueError("On Vertex only Veo 3.1 (Standard) renders 4K; pick 1080p or Veo 3.1"), "On Vertex only Veo 3.1 Standard renders 4K. Pick 1080p, or pick Veo 3.1.")
+        raise with_person_line(ValueError("On Vertex only Veo 3.1 (Standard) renders 4K; pick 1080p or Veo 3.1"), "On Vertex AI, only Veo 3.1 Standard renders 4K. Pick 1080p, or pick Veo 3.1.")
     instance: dict[str, Any] = {}
     if prompt_text:
         instance["prompt"] = prompt_text
@@ -569,7 +569,7 @@ async def handle_veo_flf_vertex(
         raise MissingCredentialError("GOOGLE_VERTEX_CREDENTIALS is required")
     first, last = inputs.get("image"), inputs.get("end_image")
     if not (first and first.value and last and last.value):
-        raise as_person_line(ValueError("Veo First-Last Frame needs both a first and a last frame"))
+        raise with_person_line(ValueError("Veo First-Last Frame needs both a first and a last frame"), "Veo First-Last Frame needs a first and a last frame. Connect both, then run the node again.")
     prompt = inputs.get("prompt")
     instance: dict[str, Any] = {
         "image": _vertex_frame(await _image_to_veo_payload(str(first.value))),
@@ -604,7 +604,7 @@ def fal_veo_route(
     splits Veo 3.1 into text-, image- and first-last-frame endpoints. Lite
     isn't on fal, so it runs as Fast, the nearest price."""
     if inputs.get("video") and inputs["video"].value:
-        raise as_person_line(ValueError("Extending a clip needs the Google route: add a Vertex or Gemini API key in Settings"))
+        raise with_person_line(ValueError("Extending a clip needs the Google route: add a Vertex or Gemini API key in Settings"), "Extending a clip runs on Google. Add your Vertex AI credentials or Gemini API key in Settings, then run the node again.")
     params = node.params
     fast = canonical_model(params.get("model")) in (FAST_MODEL, LITE_MODEL)
     base = "fal-ai/veo3.1/fast" if fast else "fal-ai/veo3.1"
@@ -625,7 +625,7 @@ def fal_veo_route(
         fal_params["first_frame_url"] = _to_fal_url(str(image.value))
         fal_params["last_frame_url"] = _to_fal_url(str(last.value))
     elif last and last.value:
-        raise as_person_line(ValueError("A last frame needs a first frame too"))
+        raise with_person_line(ValueError("A last frame needs a first frame too"), "A last frame needs a first frame too. Connect one, then run the node again.")
     elif image and image.value:
         endpoint = f"{base}/image-to-video"
         fal_params["image_url"] = _to_fal_url(str(image.value))

@@ -47,7 +47,8 @@ export function ProviderRecoveryStatus() {
           : uncertainRunId ? WORLD_LABS_RUN_STATUS_UNKNOWN : 'Recovery ID not saved.'}</strong>
         {' '}{ambiguity?.message ?? warning}
         {ambiguity && !ambiguity.durable && (
-          <> Nebula couldn't save the hold, so don't restart the backend.</>
+          // GM, round 3f.
+          <> Nebula couldn't save the hold, so keep Nebula running until this run finishes.</>
         )}
         {ambiguities.length > 1 && (
           <> {moreNodesNeedCheck(ambiguities.length - 1)}</>
