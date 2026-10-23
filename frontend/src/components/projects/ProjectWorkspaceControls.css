@@ -89,6 +89,14 @@ body.app-slava-restraint .project-workspace-controls__retry {
   font: 11px/1.4 var(--sr-ui);
   cursor: pointer;
 }
+/* "Saving paused · {size} MB" (Q118): the same warning colour, never cut off. */
+body.app-slava-restraint .project-workspace-controls__paused {
+  padding: 3px 5px;
+  margin: 0 -5px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+body.app-slava-restraint .project-workspace-controls__paused:hover { background: var(--sr-surface-control-hover); }
 body.app-slava-restraint .project-workspace-controls button:focus-visible {
   outline: var(--sr-focus-outline);
   outline-offset: var(--sr-focus-offset);

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useReactFlow, type Edge, type Node } from '@xyflow/react';
 import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
+import { useProjectStore } from '../store/projectStore';
 // Save and open load lib/graphFile.ts at the moment of use (preloaded on idle).
 import { graphFileModule } from '../lib/deferredChunks';
 import { canLoadGraph, canSaveGraph, GRAPH_LOAD_EVENT, GRAPH_SAVE_EVENT } from '../lib/graphFileActions';
@@ -88,6 +89,9 @@ export function GraphFileActions() {
       const state = useGraphStore.getState();
       if (state.isExecuting || state.createLaunchingIds.length > 0) return;
       useGraphStore.getState().loadGraph(imported.nodes, imported.edges);
+      // A file over the save limit opens (Q118): the project store says so
+      // with GM's Load graph line and pauses saving until it is trimmed.
+      useProjectStore.getState().noteLoadedGraph(result.fileName ?? 'the graph');
       // The old focused target may no longer exist after replacement. Clear
       // its UI state without running exit cleanup against the newly loaded IDs.
       useUIStore.setState({

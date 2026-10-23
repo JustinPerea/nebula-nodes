@@ -1,8 +1,8 @@
 """Projects, Recently deleted, settings and provider health, as agents read
-them: MCP's list_projects / rename_project / get_project / list_trash /
-get_settings / provider_status and their `nebula` twins (`nebula projects
---json`, `nebula project rename|show`, `nebula trash list`, `nebula keys`,
-`nebula providers`).
+them: MCP's list_projects / rename_project / get_project / project_size /
+list_trash / get_settings / provider_status and their `nebula` twins
+(`nebula projects --json`, `nebula project rename|show|size`, `nebula trash
+list`, `nebula keys`, `nebula providers`).
 
 Every call goes through the route the canvas uses (/api/projects,
 /api/trash, /api/settings, /api/health/providers, /api/krea/connection), so
@@ -117,6 +117,15 @@ def get_project(api: NebulaAPI, project_id: str, *, headers: dict[str, str] | No
     view = _call(api, "GET", f"/api/projects/{quote(target, safe='')}", headers, params={"view": "agent"})
     view["cover"] = cover_for_agents(api, view.get("cover"))
     return view
+
+
+def project_size(api: NebulaAPI, project_id: str = "current", *, headers: dict[str, str] | None = None,
+                 via: str = "mcp") -> dict[str, Any]:
+    """GET /api/projects/{id}/size (Q118): the project's size as a save
+    measures it, the save limit, whether the person's canvas has paused
+    saving it, and what is large, largest first, with node ids. Read-only."""
+    target = project_ref(api, project_id, headers=headers, via=via)
+    return _call(api, "GET", f"/api/projects/{quote(target, safe='')}/size", headers)
 
 
 def list_trash(api: NebulaAPI, *, kind: str | None = None, scope: str | None = None,

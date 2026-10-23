@@ -33,6 +33,7 @@ import { GraphFileActions } from '../src/components/GraphFileActions';
 import { CommandPalette } from '../src/components/CommandPalette';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
+import { useProjectStore } from '../src/store/projectStore';
 import { requestGraphLoad, requestGraphSave } from '../src/lib/graphFileActions';
 import * as api from '../src/lib/api';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
@@ -183,6 +184,26 @@ describe('workspace-independent graph file actions', () => {
     expect(useGraphStore.getState().nodes[0].id).toBe('n8');
     expect(useGraphStore.getState().undoNotice).toMatchObject({ text: `Imported.\n• ${warning}`, tone: 'info' });
     expect(alert).not.toHaveBeenCalled();
+  });
+
+  it('tells the project store which file it opened, so an over-limit file pauses saving with its name (Q118)', async () => {
+    const noteLoadedGraph = vi.fn();
+    const before = useProjectStore.getState();
+    useProjectStore.setState({ noteLoadedGraph } as never);
+    try {
+      mocks.loadFromFile.mockResolvedValueOnce({ ...pickedGraph(), fileName: 'Big campaign.nebula' });
+      render(<GraphFileActions />);
+      await act(async () => { requestGraphLoad(); });
+      expect(useGraphStore.getState().nodes[0].id).toBe('n8');
+      expect(noteLoadedGraph).toHaveBeenCalledWith('Big campaign.nebula');
+      // A refused import opens nothing, so there is nothing to note.
+      noteLoadedGraph.mockClear();
+      mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Fixture import rejected' }), { status: 400 }));
+      await act(async () => { requestGraphLoad(); });
+      expect(noteLoadedGraph).not.toHaveBeenCalled();
+    } finally {
+      useProjectStore.setState(before, true);
+    }
   });
 
   it.each(['navigation', 'return', 'focus', 'replacement'] as const)('a delayed import fit yields to later %s', async (action) => {

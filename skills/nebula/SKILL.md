@@ -65,6 +65,12 @@ open it can't be undone yet. `nebula selection` is what they have selected.
 old name and the command that puts it back. `nebula project show <id>` reads
 a saved project without opening it: nodes as `nebula look` shows them, wires,
 cover and the newest 20 runs (what each ran and made, never the values).
+`nebula project size` (or `<id>`) says how big a project is against the 16
+MB save limit and what takes the space, largest first, with node ids. Over
+the limit the person's canvas pauses saving it until it is smaller, and an
+edit of yours that would make it over, or larger while over, is refused: trim
+with `nebula apply` (shorter params, removals), asking the person before
+deleting their work. Run history is theirs to clear.
 Recently deleted: `nebula trash list` (`--kind`; `nebula trash list --scope
 global` or `--project current` narrows boards, characters and Styles) and
 `nebula trash restore [kind] <id>`.

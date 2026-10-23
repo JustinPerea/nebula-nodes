@@ -1,0 +1,133 @@
+/* The "what's large" panel (Q118): a floating panel on the Inspector's
+ * surface and lines. It springs in on the region's tuned spring (the same
+ * curve as the canvas notice, --canvas-undo-spring). */
+.project-size-panel {
+  --project-size-spring: linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1);
+  position: fixed;
+  z-index: calc(var(--sr-layer-panel, 10) + 3);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: var(--sr-space-3, 12px);
+  overflow: hidden auto;
+  border: 1px solid var(--sr-edge, rgb(255 255 255 / 0.06));
+  border-radius: var(--sr-radius-panel, 14px);
+  background: var(--sr-glass, rgb(22 22 24 / 0.66));
+  backdrop-filter: var(--sr-blur-panel, blur(24px));
+  -webkit-backdrop-filter: var(--sr-blur-panel, blur(24px));
+  box-shadow: var(--sr-shadow-panel, 0 12px 32px rgb(0 0 0 / 0.35));
+  color: var(--sr-ink, rgb(255 255 255 / 0.92));
+  font: 12px/1.45 var(--sr-ui, sans-serif);
+  transform-origin: right top;
+  animation: project-size-panel-in 420ms var(--project-size-spring) both;
+}
+.project-size-panel:focus { outline: none; }
+.project-size-panel:focus-visible { outline: var(--sr-focus-outline, 2px solid #fff); outline-offset: 0; }
+
+@keyframes project-size-panel-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+  30% { opacity: 1; }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .project-size-panel { animation: none; }
+}
+
+.project-size-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sr-space-2, 8px);
+}
+.project-size-panel__heading {
+  margin: 0;
+  color: #e6a395;
+  font: 600 13px/1.4 var(--sr-ui, sans-serif);
+}
+.project-size-panel__close {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--sr-radius-control, 8px);
+  background: transparent;
+  color: var(--sr-ink-light, rgb(255 255 255 / 0.55));
+  cursor: pointer;
+}
+.project-size-panel__close:hover { background: var(--sr-surface-control-hover, rgb(255 255 255 / 0.05)); color: var(--sr-ink); }
+.project-size-panel__line {
+  margin: var(--sr-space-2, 8px) 0 var(--sr-space-3, 12px);
+  color: var(--sr-ink-light, rgb(255 255 255 / 0.55));
+}
+.project-size-panel__download {
+  align-self: flex-start;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  border-radius: var(--sr-radius-control, 8px);
+  background: rgb(255 255 255 / 0.05);
+  color: var(--sr-ink, rgb(255 255 255 / 0.92));
+  font: 500 12px/1 var(--sr-ui, sans-serif);
+  cursor: pointer;
+}
+.project-size-panel__download:hover { background: rgb(255 255 255 / 0.1); }
+.project-size-panel__label {
+  margin: var(--sr-space-4, 16px) 0 var(--sr-space-1, 4px);
+  color: var(--sr-ink-meta, rgb(255 255 255 / 0.4));
+  font: 500 11px/1.4 var(--sr-ui, sans-serif);
+}
+.project-size-panel__rows {
+  margin: 0 calc(-1 * var(--sr-space-2, 8px));
+  padding: 0;
+  list-style: none;
+}
+.project-size-panel__row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sr-space-2, 8px);
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 6px var(--sr-space-2, 8px);
+  border: 0;
+  border-radius: var(--sr-radius-control, 8px);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+button.project-size-panel__row { cursor: pointer; }
+button.project-size-panel__row:hover { background: var(--sr-surface-control-hover, rgb(255 255 255 / 0.05)); }
+.project-size-panel button:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #fff);
+  outline-offset: var(--sr-focus-offset, 2px);
+}
+.project-size-panel__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-size-panel__dim {
+  flex: 0 0 auto;
+  color: var(--sr-ink-meta, rgb(255 255 255 / 0.4));
+  white-space: nowrap;
+}
+/* A type label beside the part: a dot between, so the two dim words read apart. */
+[data-size-type] + .project-size-panel__part::before {
+  content: '·';
+  margin-right: var(--sr-space-2, 8px);
+}
+.project-size-panel__size {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--sr-ink-light, rgb(255 255 255 / 0.55));
+  font: 11px/1.45 var(--sr-mono, monospace);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.project-size-panel__rest {
+  margin: var(--sr-space-2, 8px) 0 0;
+  color: var(--sr-ink-meta, rgb(255 255 255 / 0.4));
+}

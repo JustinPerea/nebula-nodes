@@ -90,6 +90,7 @@ from services import output_thumbnail
 from services import refusal_copy
 from services.node_errors import NodeErrors
 from services import project_cover
+from services import project_size
 from services.cli_graph import SHORT_ID_RE, CLIGraph
 from services.retired_nodes import folded_entry, migrate_graph, migrate_node, migrate_param_update, migrate_params, retired_message
 from services.saved_graph_upgrades import PARAMS_VERSION, request_version, upgrade_flat_nodes, upgrade_project
@@ -659,6 +660,25 @@ def _storage_error_body(exc: ProjectStoreError) -> dict[str, Any]:
 @app.exception_handler(ProjectStoreError)
 async def project_storage_error(request, exc: ProjectStoreError):
     return JSONResponse(status_code=413 if isinstance(exc, ProjectLimitError) else 507, content=_storage_error_body(exc))
+
+
+class ProjectSizeRefusal(HTTPException):
+    """A 413 because a project would be over the save limit (Q118): the
+    snapshot a tab sent, or what an agent's edit would leave the open project
+    at. Its answer carries ``limit: "size"`` (beside the store's "projects"
+    and "storage"), ``sizeBytes`` and ``limitBytes`` beside ``detail``, so the
+    canvas can pause saving from the answer, never its words. A tab's save
+    keeps its old detail word for word; an agent's refusal has its own text."""
+
+    def __init__(self, size: int, detail: str = "Project snapshot exceeds the 16 MiB limit") -> None:
+        super().__init__(status_code=413, detail=detail)
+        self.size = size
+
+
+@app.exception_handler(ProjectSizeRefusal)
+async def project_size_refusal(request, exc: ProjectSizeRefusal):
+    return JSONResponse(status_code=413, content={"detail": exc.detail, "limit": "size", "sizeBytes": exc.size,
+                                                  "limitBytes": MAX_PROJECT_BYTES})
 
 
 def _workspace_context() -> dict[str, Any]:
@@ -2254,6 +2274,20 @@ def _guard_approved_runs(change: Callable[[CLIGraph], Any]) -> None:
     except Exception:  # noqa: BLE001 - the real edit reports its own error
         return
     _refuse_agent_change_to_approved_runs(probe)
+
+
+def _guard_agent_growth_past_save_limit(change: Callable[[CLIGraph], Any]) -> None:
+    """_refuse_agent_growth_past_save_limit for a direct edit (the CLI's
+    connect and rename), tried on a copy of the graph first. A copy that
+    refuses the edit means the real edit reports its own error."""
+    if _is_person_request():
+        return
+    probe = cli_graph.clone()
+    try:
+        change(probe)
+    except Exception:  # noqa: BLE001 - the real edit reports its own error
+        return
+    _refuse_agent_growth_past_save_limit(probe)
 
 
 async def _measure_run_inputs(nodes: list[GraphNode], edges: list[GraphEdge]) -> input_sizes.Measured | None:
@@ -9767,6 +9801,7 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
     with mutation:
         candidate = cli_graph.clone()
         short_id = candidate.add_node(definition_id, params, position=position)
+        _refuse_agent_growth_past_save_limit(candidate)
         _commit_graph_candidate_with_recoveries(
             candidate,
             [candidate.nodes[short_id]],
@@ -9789,6 +9824,9 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
         body.get("targetHandle", ""),
     )
     _guard_approved_runs(lambda probe: probe.connect(
+        body["source"], body["sourceHandle"], body["target"], body["targetHandle"],
+    ))
+    _guard_agent_growth_past_save_limit(lambda probe: probe.connect(
         body["source"], body["sourceHandle"], body["target"], body["targetHandle"],
     ))
     try:
@@ -9899,6 +9937,7 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
                 raise HTTPException(status_code=400, detail=f"Cannot connect this node: {exc}") from exc
 
         _refuse_agent_change_to_approved_runs(candidate)
+        _refuse_agent_growth_past_save_limit(candidate)
         _commit_graph_candidate_with_recoveries(
             candidate,
             [candidate.nodes[short_id]],
@@ -10197,11 +10236,16 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
             probe = cli_graph.clone()
             probe.set_params(node_id, full)
             _refuse_orphaned_wires(probe, node_id, reason=reason or "")
+            _refuse_agent_growth_past_save_limit(probe)
             _guard_approved_runs(lambda probe: probe.set_params(node_id, copy.deepcopy(full)))
             _drop_outputs_off_ports(cli_graph, node_id, full)
             cli_graph.set_params(node_id, full)
         else:
             _guard_approved_runs(lambda probe: probe.update_params(node_id, copy.deepcopy(params)))
+            if not _is_person_request():
+                grown = cli_graph.clone()
+                grown.update_params(node_id, copy.deepcopy(params))
+                _refuse_agent_growth_past_save_limit(grown)
             _author_cinema_scene(cli_graph, node_id, node, params)
             recovery_update = _keep_recovery_checkpoint(node, params)
             if recovery_update:
@@ -10347,7 +10391,9 @@ async def rename_graph_node(node_id: str, body: dict[str, Any]) -> dict:
     if not isinstance(raw, str):
         raise HTTPException(status_code=400, detail="label must be a string")
     previous = _node_label(node_id)
-    cli_graph.set_label(node_id, _custom_node_label(raw, str(node.get("definitionId", ""))))
+    label = _custom_node_label(raw, str(node.get("definitionId", "")))
+    _guard_agent_growth_past_save_limit(lambda probe: probe.set_label(node_id, label))
+    cli_graph.set_label(node_id, label)
     current = _node_label(node_id)
     await _broadcast_graph_sync(edit=True)
     if current != previous:
@@ -11013,6 +11059,7 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         if moves:
             candidate.update_positions(moves)
         _refuse_oversized_graph(candidate)
+        _refuse_agent_growth_past_save_limit(candidate)
         touched = sorted(set(id_map.values()) | set(params_before))
         _refuse_agent_change_to_approved_runs(candidate)
         _commit_graph_candidate_with_recoveries(
@@ -11365,6 +11412,10 @@ async def _restore_graph(
         except CycleError as exc:
             raise HTTPException(status_code=400, detail=f"graph contains a cycle: {exc}") from exc
         _refuse_agent_change_to_approved_runs(candidate)
+        # An agent's undo or restore is an edit like any other (Q118 review):
+        # it can't put the open project back over the save limit. The
+        # person's Cmd+Z never is refused (the check skips the person).
+        _refuse_agent_growth_past_save_limit(candidate)
         touched = sorted(set(added) | set(changed))
         _commit_graph_candidate_with_recoveries(
             candidate,
@@ -12263,6 +12314,9 @@ async def import_graph(body: dict[str, Any]) -> dict:
         (node_id, str(candidate.nodes[node_id].get("definitionId") or ""), _folded_billing_baseline(ref, folded),
          candidate.nodes[node_id].get("params") or {}) for ref, node_id in id_map.items())
     _stage_graph_edges(candidate, raw_edges, id_map, saved=True)
+    # The person's Load graph opens a file of any size (Q118); anyone else's
+    # import can't leave the project over the save limit.
+    _refuse_agent_growth_past_save_limit(candidate)
     with _paid_graph_mutation("replace the graph"):
         _reject_graph_replacement_during_paid_start("replace the graph")
         if execution_runs.has_active() or _synchronous_workspace_runs:
@@ -12375,6 +12429,7 @@ async def add_graph_cluster(body: dict[str, Any]) -> dict:
              candidate.nodes[node_id].get("params") or {}) for ref, node_id in id_map.items())
         created_edge_ids = _stage_graph_edges(candidate, raw_edges, id_map)
         _refuse_agent_change_to_approved_runs(candidate)
+        _refuse_agent_growth_past_save_limit(candidate)
         _commit_graph_candidate_with_recoveries(
             candidate,
             [candidate.nodes[node_id] for node_id in id_map.values()],
@@ -12590,7 +12645,8 @@ def _migrate_rf_graph(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) 
 
 def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None = None,
                             warnings: list[str] | None = None,
-                            ingress: _IngressVerdict | None = None) -> tuple[dict[str, Any], CLIGraph]:
+                            ingress: _IngressVerdict | None = None,
+                            size_checked: bool = True) -> tuple[dict[str, Any], CLIGraph]:
     """Validate a saved RF graph with canonical definitions, retaining its IDs.
 
     A removed definition can still be viewed when it was already in this
@@ -12599,6 +12655,11 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
     its new node (_migrate_rf_graph); what that dropped goes in ``warnings``.
     ``ingress``: the check already ran on this snapshot in a worker thread
     (the project routes do); without it, it runs here.
+    ``size_checked``: refuse a snapshot over the save limit (every save).
+    Opening a stored project doesn't: one can be stored over it (a switch
+    keeps the live canvas in the project it leaves), and it opens, so the
+    canvas can pause saving it until the person trims it (Q118), instead of
+    the project never opening again.
     """
     if not isinstance(snapshot, dict):
         raise HTTPException(status_code=400, detail="Project snapshot must be an object")
@@ -12606,8 +12667,8 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
         _validate_graph_ingress_complexity(snapshot)
     else:
         ingress.require(snapshot)
-    if len(json.dumps(snapshot, allow_nan=False, ensure_ascii=False).encode("utf-8")) > MAX_PROJECT_BYTES:
-        raise HTTPException(status_code=413, detail="Project snapshot exceeds the 16 MiB limit")
+    if size_checked and (size := project_size.snapshot_bytes(snapshot)) > MAX_PROJECT_BYTES:
+        raise ProjectSizeRefusal(size)
     nodes = _graph_ingress_items(snapshot, "nodes")
     edges = _graph_ingress_items(snapshot, "edges")
     if len(nodes) > RESTORE_MAX_GRAPH_NODES or len(edges) > RESTORE_MAX_GRAPH_EDGES:
@@ -12764,6 +12825,23 @@ def _refuse_agent_billing_in_project(candidate: CLIGraph, *before: Mapping[str, 
 def _overlay_live_project(project: dict[str, Any], exported: dict[str, Any]) -> bool:
     """Overlay CLI changes while retaining frontend-only data and run recipes."""
     previous = project["snapshot"]
+    updated = _overlaid_snapshot(project, exported)
+    changed = updated != previous
+    project["snapshot"] = updated
+    project["_backendNodeIds"] = sorted({node["id"] for node in exported["nodes"]})
+    project["_backendEdgeIds"] = sorted({edge["id"] for edge in exported["edges"]})
+    project["_nodeCounter"] = cli_graph._counter
+    if changed:
+        refresh_metadata(project)
+    return changed
+
+
+def _overlaid_snapshot(project: dict[str, Any], exported: dict[str, Any]) -> dict[str, Any]:
+    """The project's snapshot with the live canvas (``exported``, as the
+    canvas gets it) overlaid, as a switch or a listing stores it
+    (_overlay_live_project); nothing is changed. The project's size for
+    agents (project_size) and their edits' size check read this."""
+    previous = project["snapshot"]
     old_nodes = {node["id"]: node for node in previous["nodes"]}
     live_ids = {node["id"] for node in exported["nodes"]}
     backend_ids = set(project.get("_backendNodeIds", old_nodes))
@@ -12778,15 +12856,94 @@ def _overlay_live_project(project: dict[str, Any], exported: dict[str, Any]) -> 
     backend_edge_ids = set(project.get("_backendEdgeIds", old_edges))
     merged_edges = [{**old_edges.get(edge["id"], {}), **edge, "data": {**old_edges.get(edge["id"], {}).get("data", {}), **edge.get("data", {})}} for edge in exported["edges"]]
     merged_edges.extend(edge for edge in previous["edges"] if edge["id"] not in live_edge_ids and edge["id"] not in backend_edge_ids and edge["source"] in retained_ids and edge["target"] in retained_ids)
-    updated = {**previous, "nodes": merged_nodes, "edges": merged_edges}
-    changed = updated != previous
-    project["snapshot"] = updated
-    project["_backendNodeIds"] = sorted(live_ids)
-    project["_backendEdgeIds"] = sorted(live_edge_ids)
-    project["_nodeCounter"] = cli_graph._counter
-    if changed:
-        refresh_metadata(project)
-    return changed
+    return {**previous, "nodes": merged_nodes, "edges": merged_edges}
+
+
+def _graph_canvas_export(graph: CLIGraph) -> dict[str, list[dict[str, Any]]]:
+    """``graph``'s nodes and wires as the canvas gets them
+    (export_graph_for_frontend's shape), without its side effects: for
+    measuring what a project would hold with this graph on its canvas."""
+    all_defs = node_registry.get_all()
+    state = graph.get_state()
+    positions = _display_positions(state["nodes"], y_offset=100.0)
+    nodes = [_cli_node_to_rf(node, positions[node["id"]], all_defs) for node in state["nodes"]]
+    edges = []
+    for edge in state["edges"]:
+        source = graph.nodes.get(edge["source"], {})
+        ports = node_ports(str(source.get("definitionId") or ""), source.get("params"),
+                           all_defs.get(source.get("definitionId", ""), {}), "outputPorts")
+        data_type = next((port["dataType"] for port in ports if port["id"] == edge["sourceHandle"]), "Any")
+        edges.append({"id": edge["id"], "source": edge["source"], "sourceHandle": edge["sourceHandle"],
+                      "target": edge["target"], "targetHandle": edge["targetHandle"], "type": "typed-edge",
+                      "data": {"dataType": data_type}})
+    return {"nodes": nodes, "edges": edges}
+
+
+def _open_project_with(graph: CLIGraph) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    """(the open project, its snapshot with ``graph`` on its canvas), or None
+    with no project open."""
+    active = project_store.workspace().get("activeProjectId")
+    project = _open_project_record(active) if active else None
+    if project is None:
+        return None
+    return project, _overlaid_snapshot(project, _graph_canvas_export(graph))
+
+
+def _refuse_agent_growth_past_save_limit(candidate: CLIGraph) -> None:
+    """Refuse an edit from anyone but the person (an agent, the CLI) that
+    would leave the open project over the save limit and larger than it is
+    (Q118). The person's canvas can't save such a project, so its saving
+    would stop, unseen by the agent. An edit that makes a project already
+    over the limit smaller (a removal, a shorter param) goes through: that is
+    how agents help trim it, with their existing tools. The person's own
+    edits and Load graph are never refused: their canvas pauses saving and
+    shows what's large. Measured as project_size measures it: the stored
+    project with the canvas overlaid (run history from its last save)."""
+    if _is_person_request():
+        return
+    after_export = _graph_canvas_export(candidate)
+    try:
+        catalog_bytes = project_store.path.stat().st_size if project_store.path.exists() else 0
+    except OSError:
+        catalog_bytes = 0
+    # The stored project is within the catalog file, so a catalog and canvas
+    # this small can't make a project over the limit: no catalog read. The
+    # catalog is written compact (",", ":") and the save check measures with
+    # ", " and ": ", one byte more per separator, and compact JSON has at most
+    # one separator per two bytes ("0,0,0"): 1.5x the catalog bounds it.
+    if (catalog_bytes * 3 + 1) // 2 + project_size.json_bytes(after_export) <= MAX_PROJECT_BYTES:
+        return
+    try:
+        found = _open_project_with(candidate)
+    except ProjectStoreError:
+        return
+    if found is None:
+        return
+    project, after_snapshot = found
+    after = project_size.snapshot_bytes(after_snapshot)
+    if after <= MAX_PROJECT_BYTES:
+        return
+    before = project_size.snapshot_bytes(_overlaid_snapshot(project, _graph_canvas_export(cli_graph)))
+    if after <= before:
+        return
+    limit = f"{MAX_PROJECT_BYTES / (1024 * 1024):g} MiB ({MAX_PROJECT_BYTES:,} bytes)"
+    if before > MAX_PROJECT_BYTES:
+        detail = (f"The open project is already over Nebula's save limit of {limit} at {before:,} bytes, so the "
+                  "person's canvas has paused saving it, and this edit would make it larger. Nothing changed. "
+                  "Call project_size (`nebula project size`) to see what's large. Edits that make it smaller "
+                  "go through (remove_from_canvas, shorter params); ask the person before deleting their work.")
+    else:
+        detail = (f"This edit would leave the open project at {after:,} bytes, over Nebula's save limit of {limit}, "
+                  "and the person's canvas can't save a project that large. Nothing changed. Call project_size "
+                  "(`nebula project size`) to see what takes the space, and make the edit smaller.")
+    # No agent marker: most likely the person's canvas tab with a token from
+    # before Nebula restarted, whose Load graph is never refused for size once
+    # it reconnects. The person gate's refusal tells it so (GM's reconnect line,
+    # this text behind Details), not a pause or the agents' text as its reason.
+    refusal = _person_only_refusal(detail)
+    if isinstance(refusal, PersonGateError):
+        raise refusal
+    raise ProjectSizeRefusal(after, detail)
 
 
 async def _projects_live_export() -> dict[str, Any]:
@@ -12882,6 +13039,62 @@ async def get_saved_project(project_id: str, view: str | None = None) -> dict[st
             return agent_project(project, node_registry.get_all(), open_id=catalog["activeProjectId"],
                                  secrets=_agent_key_secrets())
         return public_project(project)
+
+
+@app.get("/api/projects/{project_id}/size")
+async def get_project_size(project_id: str) -> dict[str, Any]:
+    """A project's size and what is large, for agents (MCP project_size,
+    `nebula project size`; Q118). Read-only. The size is what a save measures
+    (services/project_size.py); for the open project, its stored snapshot
+    with the live canvas overlaid, as a switch would store it (the person's
+    tab may hold newer run history it hasn't saved). `savingPaused`: the
+    open project is over the limit, so the person's canvas can't save it.
+    `largest` holds the ten largest rows with node ids (the person's panel
+    shows the same rows without them), `smaller` the rest."""
+    exported = _graph_canvas_export(cli_graph)
+    catalog = project_store.read()
+    project = _project_id_or_404(project_id, catalog)
+    is_open = catalog["activeProjectId"] == project_id
+    snapshot = _overlaid_snapshot(project, exported) if is_open else project["snapshot"]
+    found = project_size.breakdown(snapshot)
+    size, limit = found["bytes"], MAX_PROJECT_BYTES
+    all_defs = node_registry.get_all()
+
+    def shown(row: dict[str, Any]) -> dict[str, Any]:
+        if row["kind"] != "node":
+            return {"kind": row["kind"], "name": project_size.ROW_NAMES[row["kind"]],
+                    **({"count": row["count"]} if "count" in row else {}),
+                    "bytes": row["bytes"], "size": project_size.row_size(row["bytes"])}
+        definition_id = str(row.get("definitionId") or "")
+        model = (all_defs.get(definition_id) or {}).get("displayName") or definition_id
+        label = row.get("label") if isinstance(row.get("label"), str) and row["label"].strip() else model
+        return {"kind": "node", "nodeId": row["nodeId"], "name": label, "definitionId": definition_id,
+                "part": project_size.PART_LABELS[row["part"]], "bytes": row["bytes"],
+                "size": project_size.row_size(row["bytes"])}
+
+    rows = found["rows"]
+    rest = rows[project_size.TOP_ROWS:]
+    over = size > limit
+    if over and is_open:
+        note = (f"Saving is paused: the person's canvas can't save this project until it is "
+                f"{project_size.limit_text(limit)} or less. Make it {project_size.over_by(size, limit)} smaller "
+                "with edit_canvas or remove_from_canvas (`nebula apply`), asking the person before deleting their "
+                "work; it saves again by itself. Run history clears only from the Run History panel, the person's.")
+    elif over:
+        note = (f"This project is over the {project_size.limit_text(limit)} save limit. It opens, but the canvas "
+                "can't save it until it is made smaller.")
+    else:
+        note = f"Under the {project_size.limit_text(limit)} save limit: it saves as usual."
+    return {
+        "project": {"id": project["id"], "name": project["name"], "open": is_open},
+        "sizeBytes": size, "limitBytes": limit,
+        "size": project_size.megabytes(size, limit), "limit": project_size.limit_text(limit),
+        "overLimit": over, "savingPaused": over and is_open, "overByBytes": max(0, size - limit),
+        "largest": [shown(row) for row in rows[:project_size.TOP_ROWS]],
+        "smaller": {"count": len(rest), "bytes": sum(row["bytes"] for row in rest),
+                    "size": project_size.row_size(sum(row["bytes"] for row in rest))},
+        "note": note,
+    }
 
 
 @app.post("/api/projects/recover")
@@ -13141,7 +13354,7 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
         historical = {node["id"]: node.get("data", {}).get("definitionId") for node in project["snapshot"]["nodes"]}
         warnings: list[str] = []
         project["snapshot"], candidate = _stage_project_snapshot(project["snapshot"], historical=historical, warnings=warnings,
-                                                                 ingress=verdict)
+                                                                 ingress=verdict, size_checked=False)
         candidate._counter = max(candidate._counter, project.get("_nodeCounter", 0))
         project["lastOpenedAt"] = project_now()
         start = _begin_switch(catalog, actor)

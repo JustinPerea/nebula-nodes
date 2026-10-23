@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import '../../styles/prompt-dialog.css';
-import { CONFIRM_LINE, EDITS_NOT_WRITTEN, UNSAVED_EDITS_HEADING } from './unsavedEditsCopy';
+import { CONFIRM_LINE, EDITS_NOT_WRITTEN, UNSAVED_EDITS_HEADING, keptConfirmLine } from './unsavedEditsCopy';
 
 /**
  * Q116 a) (Justin, 2026-10-23): "a): "Download your edits" plus "Continue
@@ -14,9 +14,11 @@ import { CONFIRM_LINE, EDITS_NOT_WRITTEN, UNSAVED_EDITS_HEADING } from './unsave
  * The held edits' screen: announced as the screen's errors are (an alert),
  * "Download your edits" first and primary, "Continue without them" asks first.
  * After a download that couldn't be written (`downloadFailed`), GM's line 2
- * is the body in place of the reason; the heading and both choices stay. */
-export function UnsavedEditsNotice({ reason, downloadFailed = false, busy, onDownload, onContinue }: {
-  reason: string; downloadFailed?: boolean; busy: boolean; onDownload: () => void; onContinue: () => void;
+ * is the body in place of the reason; the heading and both choices stay.
+ * `keptIn`: the edits are the open project's own canvas, kept in that
+ * project by the backend's switch, and the confirm says so (Q118 review). */
+export function UnsavedEditsNotice({ reason, downloadFailed = false, keptIn, busy, onDownload, onContinue }: {
+  reason: string; downloadFailed?: boolean; keptIn?: string; busy: boolean; onDownload: () => void; onContinue: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
   const continueButton = useRef<HTMLButtonElement>(null);
@@ -42,7 +44,7 @@ export function UnsavedEditsNotice({ reason, downloadFailed = false, busy, onDow
         <button type="button" ref={downloadButton} className="project-home__edits-primary" disabled={busy} onClick={onDownload}>Download your edits</button>
         <button type="button" ref={continueButton} disabled={busy} onClick={() => setConfirming(true)}>Continue without them</button>
       </span>
-      {confirming && <ContinueWithoutEditsConfirm
+      {confirming && <ContinueWithoutEditsConfirm line={keptIn ? keptConfirmLine(keptIn) : CONFIRM_LINE}
         onCancel={() => { setConfirming(false); continueButton.current?.focus(); }}
         onConfirm={() => { setConfirming(false); onContinue(); }} />}
     </div>
@@ -51,7 +53,9 @@ export function UnsavedEditsNotice({ reason, downloadFailed = false, busy, onDow
 
 /** GM's confirm, in the app's own dialog (never window.confirm): focus on
  * Cancel, Escape is Cancel, Tab stays inside. */
-function ContinueWithoutEditsConfirm({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
+function ContinueWithoutEditsConfirm({ line, onCancel, onConfirm }: {
+  line: string; onCancel: () => void; onConfirm: () => void;
+}) {
   const lineId = useId();
   const card = useRef<HTMLDivElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
@@ -79,7 +83,7 @@ function ContinueWithoutEditsConfirm({ onCancel, onConfirm }: { onCancel: () => 
     <div className="prompt-dialog">
       <div ref={card} className="prompt-dialog__card" role="alertdialog" aria-modal="true" aria-labelledby={lineId}
         onKeyDown={onKeyDown}>
-        <p id={lineId} className="prompt-dialog__line">{CONFIRM_LINE}</p>
+        <p id={lineId} className="prompt-dialog__line">{line}</p>
         <div className="prompt-dialog__actions">
           <button type="button" className="prompt-dialog__danger" onClick={onConfirm}>Continue without them</button>
           <button type="button" ref={cancel} onClick={onCancel}>Cancel</button>

@@ -56,10 +56,10 @@ Off the canvas, ask with propose_asset_change: a cover the person pinned, a boar
 Pins are the person's requests: act on one, then answer it with resolve_pin. wait_for_canvas_change waits for the next change instead of polling.
 When you start on a request, call point_at with a short say naming your own next step (under 8 words). What you noticed, a report or a suggestion goes in post_note: the person reads those in Updates, top right, not at your cursor.
 Moodboards: see moodboard_get; moodboard_update(cover=...) picks the image a board opens on, and moodboard_edit moves, resizes and groups its cards in one checked edit its `undo` takes back. New work goes in a new project (new_project), not over theirs.
-get_project reads a saved project unopened; rename_project renames one. Which keys work: get_settings, provider_status.
+get_project reads a saved project unopened, project_size its size; rename_project renames one. Working keys: get_settings, provider_status.
 Styles (saved looks in Create): style_list, style_get, style_create, style_update (`previous` undoes it), style_delete.
-A run the person started is theirs: cancel_run stops only agents' runs, so ask them to press Stop.
-If you also use the `nebula` CLI, set NEBULA_AGENT_NAME so both share one name.
+A run the person started is theirs: cancel_run stops only agents' runs; ask them to press Stop.
+With the `nebula` CLI too, set NEBULA_AGENT_NAME to share one name.
 """
 
 # -- argument errors in one line ------------------------------------------------------
@@ -2392,6 +2392,27 @@ def get_project(project_id: str, ctx: Context | None = None) -> dict[str, Any]:
     import project_client
 
     return project_client.get_project(_api(), project_id, headers=_agent_headers(ctx))
+
+
+@_tool(annotations=_READ)
+def project_size(project_id: str = "current", ctx: Context | None = None) -> dict[str, Any]:
+    """A project's size and what makes it large ("current", the default, is
+    the open one; or an id from list_projects).
+
+    Nebula saves a project only while it is 16 MB or less. Over that, the
+    person's canvas pauses saving it (`savingPaused`) until it is made
+    smaller, and an edit of yours that would make the open project over the
+    limit, or larger while it is over, is refused. Returns `sizeBytes`,
+    `limitBytes`, `overLimit`, `savingPaused`, `overByBytes`, `largest` (the
+    ten largest parts, largest first: a node's `nodeId`, `name` and which
+    `part` takes the space, "Text" (its params), "Stored outputs" or
+    "Embedded files"; or the project's own "Run history", "Wires", "Create
+    draft"), `smaller` (the rest) and a `note`. To trim, use edit_canvas
+    (shorter params) or remove_from_canvas, and ask the person before deleting
+    their work; run history is cleared only by the person. Read-only."""
+    import project_client
+
+    return project_client.project_size(_api(), project_id, headers=_agent_headers(ctx))
 
 
 @_tool(annotations=_READ)

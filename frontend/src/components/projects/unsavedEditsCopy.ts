@@ -4,20 +4,23 @@
 export const UNSAVED_EDITS_HEADING = "Couldn't save your edits.";
 export const CONFIRM_LINE = "Continue without your edits? They can't be recovered after this.";
 
-/** GM's line after a download, with the real way back in: Load graph, under
- * Canvas actions on a project's canvas. It replaces that canvas, so the line
- * says to use a new project. */
-export function editsSavedLine(filename: string): string {
-  return `Your edits are saved as ${filename}. Open it with “Load graph” under “Canvas actions” in a new project to bring them back.`;
+/** The confirm when the held edits are the open project's own canvas (Q118
+ * review): the backend's switch keeps its nodes, wires and settings in that
+ * project, so only what only this tab had is lost. DRAFT, not GM's yet: GM -
+ * Design to replace it word for word. */
+export function keptConfirmLine(projectName: string): string {
+  return `Continue without them? The nodes, wires and settings stay in “${projectName}”. `
+    + "Run history and anything else only this tab has since the last save can't be recovered after this.";
 }
 
-/** GM's line 1 (2026-10-23), verbatim, after a download whose file is past
- * Load graph's limits (over 16 MiB, 10,000 nodes, 50,000 wires or 1,000,000
- * values): the file keeps the edits, but Load graph won't open it. GM: "If
- * Q118 raises the limit, this line goes and the Load graph line covers every
- * case." Q118 is still open, so the branch that picks this line stays. */
-export function editsSavedTooLargeLine(filename: string): string {
-  return `Your edits are saved as ${filename}. Keep it somewhere safe. It's too large for “Load graph” to open right now, so Nebula can't bring the edits back yet.`;
+/** GM's line after a download, with the real way back in: Load graph, under
+ * Canvas actions on a project's canvas. It replaces that canvas, so the line
+ * says to use a new project. Every download reads it since Q118: Load graph
+ * opens a file over the save limit (the canvas pauses saving until it is
+ * trimmed), and GM's line 1 for a file too large to reopen is gone (GM: "The
+ * Load graph line covers every case now"). */
+export function editsSavedLine(filename: string): string {
+  return `Your edits are saved as ${filename}. Open it with “Load graph” under “Canvas actions” in a new project to bring them back.`;
 }
 
 /** GM's line 2 (2026-10-23), verbatim: the body of the held edits' screen

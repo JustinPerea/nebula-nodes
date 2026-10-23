@@ -10,7 +10,7 @@ import { InNoticeRegion } from '../InNoticeRegion';
 import { failureMessage, shortLine } from '../../lib/errorCopy';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import { UnsavedEditsNotice } from './UnsavedEditsNotice';
-import { editsSavedLine, editsSavedTooLargeLine } from './unsavedEditsCopy';
+import { editsSavedLine } from './unsavedEditsCopy';
 import type { SavedEditsFile } from '../../lib/graphFileShared';
 import '../../styles/project-home.css';
 
@@ -66,7 +66,7 @@ export interface ProjectHomeProps {
   /** A stale tab's unsaved edits Nebula refused for good (Q116 a): GM's
    * "Couldn't save your edits." with this reason, in place of the error line
    * and its Try again, until the person downloads them or continues without. */
-  unsavedEdits?: { reason: string; downloadFailed?: boolean } | null;
+  unsavedEdits?: { reason: string; downloadFailed?: boolean; keptIn?: string } | null;
   /** The file the held edits were downloaded as, for GM's line after it, and
    * whether Load graph can open it. */
   editsSavedAs?: SavedEditsFile | null;
@@ -410,10 +410,11 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
 
         {/* GM's WRAP rule: where "Try again" redoes the failure it is the retry, so the
             reason drops its own; where it only reloads, or can't help, the line stays whole. */}
-        {unsavedEdits ? <UnsavedEditsNotice reason={unsavedEdits.reason} downloadFailed={unsavedEdits.downloadFailed} busy={busy}
+        {unsavedEdits ? <UnsavedEditsNotice reason={unsavedEdits.reason} downloadFailed={unsavedEdits.downloadFailed}
+          keptIn={unsavedEdits.keptIn} busy={busy}
           onDownload={onDownloadEdits} onContinue={onContinueWithoutEdits} />
           : editsSavedAs && <div ref={savedLine} tabIndex={-1} className="project-home__notice" role="status">
-            {editsSavedAs.reopens ? editsSavedLine(editsSavedAs.name) : editsSavedTooLargeLine(editsSavedAs.name)}</div>}
+            {editsSavedLine(editsSavedAs.name)}</div>}
         {!unsavedEdits && error && <div className="project-home__error" role="alert">
           {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? shortLine(error) : error}</span>
             <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>

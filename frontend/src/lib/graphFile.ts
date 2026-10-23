@@ -139,21 +139,25 @@ export class GraphFileInvalidError extends FailureNotice {
 export interface GraphFileSelection {
   file: Blob;
   isZip: boolean;
+  /** The picked file's name, for the canvas's line after it opens (Q118). */
+  name?: string;
 }
 
 /** Inspect only four signature bytes, retaining ZIPs as Blobs so fetch can
  * stream them to the backend without first duplicating the whole selection in
- * JavaScript memory. Plain JSON gets a much smaller parse-memory ceiling. */
+ * JavaScript memory. A plain JSON file is read up to the same ceiling as a
+ * bundle (Q118, Justin: "Let Load graph open bigger .nebula files (up to the
+ * 512 MiB it already allows for a bundle)"); one over the 16 MiB save limit
+ * opens, and the canvas pauses saving until it is trimmed. The shape walk's
+ * limits still apply once it is parsed. */
 export async function inspectGraphFileWithinLimit(file: Blob): Promise<GraphFileSelection> {
   if (file.size > GRAPH_BUNDLE_MAX_IMPORT_BYTES) {
     throw new GraphBundleImportTooLargeError(graphSizeLine(file.size, GRAPH_BUNDLE_MAX_IMPORT_BYTES));
   }
   const signature = await file.slice(0, 4).arrayBuffer();
   const isZip = isZipBuffer(signature);
-  if (!isZip && file.size > GRAPH_JSON_MAX_IMPORT_BYTES) {
-    throw new GraphBundleImportTooLargeError(graphSizeLine(file.size, GRAPH_JSON_MAX_IMPORT_BYTES));
-  }
-  return { file, isZip };
+  const name = typeof File !== 'undefined' && file instanceof File && file.name ? file.name : undefined;
+  return name === undefined ? { file, isZip } : { file, isZip, name };
 }
 
 
@@ -934,6 +938,8 @@ export interface LoadedGraph {
   /** Forwarded to POST /api/graph/import, which upgrades older files once. */
   paramsVersion: number;
   warnings: string[];
+  /** The file's name, when the picker gave one. */
+  fileName?: string;
 }
 
 /** A graph file as Load graph reads it (the reader loadFromFile uses, after
@@ -975,6 +981,7 @@ export async function readGraphSelection(selection: GraphFileSelection): Promise
   return {
     ...result,
     warnings: [...restoreWarnings, ...worldWarnings, ...result.warnings],
+    ...(selection.name ? { fileName: selection.name } : {}),
   };
 }
 

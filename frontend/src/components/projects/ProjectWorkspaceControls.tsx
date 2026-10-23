@@ -3,6 +3,7 @@ import { Home } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
 import { useGraphStore } from '../../store/graphStore';
 import { shortLine } from '../../lib/errorCopy';
+import { HEADER_TOOLTIP, headerLine } from '../../lib/savePausedCopy';
 import './ProjectWorkspaceControls.css';
 
 /** `onHome`: the screen's own way to Projects (the Commons asks first); `homeBusy`: it waits on a save. */
@@ -12,6 +13,8 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
   const status = useProjectStore((state) => state.saveStatus);
   const busy = useProjectStore((state) => state.busy);
   const saveError = useProjectStore((state) => state.saveError);
+  const pausedBytes = useProjectStore((state) => state.savePaused?.bytes ?? null);
+  const panelOpen = useProjectStore((state) => state.sizePanelOpen);
   const nodeCount = useGraphStore((state) => state.nodes.length);
   const [draft, setDraft] = useState<string | null>(null);
   if (!project || screen !== 'workspace') return null;
@@ -43,7 +46,13 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === 'F2') { event.preventDefault(); setDraft(project.name); }
             }}>{project.name}</button>}
-      {status === 'error'
+      {status === 'paused' && pausedBytes !== null
+        // Q118 (GM): the persistent state, where "Saved" usually is, in Save
+        // failed's warning colour; it opens the "what's large" panel.
+        ? <button type="button" className="project-workspace-controls__retry project-workspace-controls__paused"
+            data-size-status="" title={HEADER_TOOLTIP} aria-haspopup="dialog" aria-expanded={panelOpen}
+            onClick={() => useProjectStore.getState().openSizePanel()}>{headerLine(pausedBytes)}</button>
+        : status === 'error'
         // Round 3b: this Retry saves, so its tooltip is the save's own failure
         // (short: the button is the retry), never another action's.
         ? <button type="button" className="project-workspace-controls__retry" title={saveError ? shortLine(saveError) : 'Retry saving'}

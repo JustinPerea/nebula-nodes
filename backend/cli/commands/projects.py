@@ -1,4 +1,4 @@
-"""`nebula projects` and `nebula project new|open|rename|show`.
+"""`nebula projects` and `nebula project new|open|rename|show|size`.
 
 `rename` and `show` are MCP rename_project and get_project, and `projects
 --json` is list_projects: each goes through project_client.py, which the tools
@@ -92,3 +92,29 @@ def run_show(client: NebulaClient, project_id: str, *, as_json: bool = False) ->
         _print_json(view)
         return
     print(format_project(view))
+
+
+def run_size(client: NebulaClient, project_id: str = "current", *, as_json: bool = False) -> None:
+    """A project's size against the save limit and what takes the space: MCP
+    project_size (Q118)."""
+    result = client.shared(project_client.project_size, project_id, via="cli")
+    if as_json:
+        _print_json(result)
+        return
+    project = result.get("project") or {}
+    state = ("saving paused" if result.get("savingPaused")
+             else "over the limit" if result.get("overLimit") else "under the limit")
+    print(f"PROJECT {project.get('name')} ({project.get('id')}): {result.get('size')} of {result.get('limit')}, "
+          f"{state} ({result.get('sizeBytes'):,} of {result.get('limitBytes'):,} bytes)")
+    print("LARGEST FIRST:")
+    for row in result.get("largest") or []:
+        if row.get("kind") == "node":
+            what = f"{row.get('nodeId'):<6}{row.get('name')} ({row.get('definitionId')}), {row.get('part')}"
+        else:
+            count = f", {row['count']}" if "count" in row else ""
+            what = f"{row.get('name')}{count}"
+        print(f"  {row.get('size'):>9}  {what}")
+    smaller = result.get("smaller") or {}
+    if smaller.get("count"):
+        print(f"  {smaller.get('size'):>9}  {smaller.get('count')} smaller items")
+    print(result.get("note", ""))

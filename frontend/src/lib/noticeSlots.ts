@@ -10,8 +10,9 @@ import { useSyncExternalStore } from 'react';
  * notice"); then the canvas notice (its Undo or Redo, an error); then the toasts
  * about the person's own last action (an asset moved to the trash, a board
  * step, a pin that couldn't save, a project moved to the trash); then the
- * lines about the app and the agents (the project an agent switched to, the
- * tab that isn't the person's); then the proposal's run-later notice; and on
+ * lines about the app and the agents (the project an agent switched to, a
+ * project over the save limit pausing or resuming its saves (Q118), the tab
+ * that isn't the person's); then the proposal's run-later notice; and on
  * top the proposal bar ("The order from the bottom up is notices, then the
  * proposal bar.").
  *
@@ -23,6 +24,7 @@ export const NOTICE_SLOTS = [
   'run-later',
   'person-required',
   'project-switch',
+  'save-paused',
   'project-home',
   'pin',
   'board',
