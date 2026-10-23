@@ -59,8 +59,13 @@ export interface ProviderRow {
 export interface SwitchState {
   /** The Auto row plus one row per route. */
   rows: ProviderRow[];
-  /** The card chip: "Auto · BFL", "fal", "Rep", "OR", "Krea", "Krea plan". */
+  /** The card chip as it shows: each provider's full name where it fits
+   * ("Auto · fal.ai", "Replicate"), its short name where it can't ("Auto ·
+   * BFL"), round 3g (chipText). */
   chip: string;
+  /** The chip with every provider named in full ("Auto · Black Forest Labs"),
+   * for its title and aria-label (GM, round 3g). */
+  chipName: string;
   /** The run can't start as saved: the chip turns accent with a warning glyph. */
   blocked: boolean;
   /** Why, in the router's words (routeUnavailable), or the Krea sign-in. */
@@ -74,11 +79,29 @@ export interface SwitchState {
   fixes: (RouteFix & { label: string })[];
 }
 
-/** Short names for the 10px card chip; anything else uses its full label. */
+/** Short names for the 10px card chip, used only where the full name can't
+ * fit (chipText); anything else has only its full label. */
 const SHORT: Readonly<Record<string, string>> = { bfl: 'BFL', fal: 'fal', replicate: 'Rep', openrouter: 'OR', krea: 'Krea' };
 
 export function shortProvider(provider: string | null | undefined): string {
   return provider && Object.hasOwn(SHORT, provider) ? SHORT[provider] : providerLabel(provider);
+}
+
+/**
+ * The chip's room, in characters of its 10px JetBrains Mono (6px each): its
+ * 96px max-width less padding and border leaves 84px, and 75px beside the
+ * warning glyph and its gap when the run can't start (measured in Chrome at
+ * 1280x800 and 1440x900, round 3g; the chip never shrinks below its text,
+ * provider-switcher.css). GM: "Provider chip: "Auto · Black Forest Labs". If
+ * the chip can't fit it at its narrowest, keep "BFL" in the chip only, with
+ * the full name in its title and aria-label."
+ */
+export const CHIP_ROOM = 14;
+export const CHIP_ROOM_BLOCKED = 12;
+
+/** What the chip shows: `full` when it fits the chip's room, else `short`. */
+export function chipText(full: string, short: string, blocked: boolean): string {
+  return [...full].length <= (blocked ? CHIP_ROOM_BLOCKED : CHIP_ROOM) ? full : short;
 }
 
 function isSet(apiKeys: SwitchContext['apiKeys'], key: string): boolean {
@@ -217,13 +240,17 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
   const planRun = usesRoutePlan(definition, routed);
   const signInNeeded = planRun && !context.kreaSignedIn;
   const shownSpec = route.routeId ? routeById(definition, route.routeId) : undefined;
-  const short = route.kind === 'plan' ? 'Krea plan' : shortProvider(shownSpec?.provider ?? route.provider);
-  const chip = choice === AUTO ? (autoRoute.routeId ? `Auto · ${autoRoute.kind === 'plan' ? 'Krea plan' : shortProvider(autoSpec?.provider)}` : 'Auto')
-    : routeById(definition, choice) ? short : 'Unknown';
+  const shownProvider = shownSpec?.provider ?? route.provider;
+  const named = (name: (provider: string | null | undefined) => string) => (choice === AUTO
+    ? (autoRoute.routeId ? `Auto · ${autoRoute.kind === 'plan' ? 'Krea plan' : name(autoSpec?.provider)}` : 'Auto')
+    : routeById(definition, choice) ? (route.kind === 'plan' ? 'Krea plan' : name(shownProvider)) : 'Unknown');
+  const blocked = Boolean(unavailable) || signInNeeded;
+  const chipName = named(providerLabel);
   return {
     rows,
-    chip,
-    blocked: Boolean(unavailable) || signInNeeded,
+    chip: chipText(chipName, named(shortProvider), blocked),
+    chipName,
+    blocked,
     message: unavailable?.message
       ?? (signInNeeded ? `${definition.displayName} bills your Krea plan. Sign in to Krea in Settings, or choose another provider.` : null),
     alternatives: (unavailable?.alternatives ?? []).map((routeId) => ({

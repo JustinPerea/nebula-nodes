@@ -81,8 +81,8 @@ PORT_TYPE_HINTS: dict[tuple[str, str], str] = {
 # wrong-kind line.
 PORT_TYPE_PERSON_HINTS: dict[tuple[str, str], str] = {
     ("krea-2-generate", "moodboard"): (
-        "Krea 2's Moodboard input takes a Nebula moodboard now. To use a Krea moodboard, put its ID in "
-        "“Moodboard ID” and remove the wire."),
+        "“Moodboard” takes a Nebula moodboard now. To use a Krea moodboard, put its ID in “Moodboard ID” and "
+        "remove the wire."),
 }
 
 # The card's lines for a wire the run can't use (error copy round 3e).
@@ -91,21 +91,22 @@ STALE_OUTPUT_LINE = "A wire from this node no longer matches its outputs. Remove
 
 
 def _input_name(port: Mapping[str, Any] | None, port_id: str) -> str:
-    from execution.person_line import port_name
-
-    return port_name((port or {}).get("label")) or "this"
+    """The input's label exactly as the node shows it, for a line that names it
+    in quotes (error copy round 3g, GM: "anything a person reads as a label on
+    the node goes in quotes, field or port"). An unlabeled port reads "Input"."""
+    return str((port or {}).get("label") or "").strip() or "Input"
 
 
 def _wrong_kind_line(port: Mapping[str, Any] | None, port_id: str) -> str:
-    return (f"The wire into the node's {_input_name(port, port_id)} input brings something it can't take. "
+    # GM's example, round 3g: "The wire into “Prompt” brings something it can't take."
+    return (f"The wire into “{_input_name(port, port_id)}” brings something it can't take. "
             "Remove that wire, then connect a matching output.")
 
 
 def _too_many_line(port: Mapping[str, Any] | None, port_id: str, limit: int) -> str:
     takes = "one wire" if limit == 1 else f"up to {limit} wires"
     extra = "the extra one" if limit == 1 else "the extra ones"
-    return (f"The node's {_input_name(port, port_id)} input takes {takes}. Remove {extra}, then run the "
-            "node again.")
+    return f"“{_input_name(port, port_id)}” takes {takes}. Remove {extra}, then run the node again."
 
 
 # A configured Replicate node's ports are its model's file inputs; its other

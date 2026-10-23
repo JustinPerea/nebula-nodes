@@ -17,7 +17,7 @@ import '../../styles/provider-switcher.css';
  * them. Three ways in, one menu:
  *
  * - `inspector`: the Inspector's "Provider" section, the list in place;
- * - `chip`: the card header chip ("Auto · BFL", "fal", "Krea plan"), which
+ * - `chip`: the card header chip ("Auto · BFL", "fal.ai", "Krea plan"), which
  *   turns accent with a warning glyph when the run can't start;
  * - `pill`: Create Studio's pill.
  *
@@ -231,8 +231,8 @@ function ProviderPopoverTrigger({ state, variant, displayName, onPick, onFix }: 
     <>
       <button ref={triggerRef} type="button" className={className}
         aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}
-        aria-label={`Provider for ${displayName}: ${state.chip}${state.blocked ? `. Can't run: ${state.message ?? ''}` : ''}`}
-        title={state.blocked ? state.message ?? undefined : `Runs on ${state.chip}. Change provider`}
+        aria-label={`Provider for ${displayName}: ${state.chipName}${state.blocked ? `. Can't run: ${state.message ?? ''}` : ''}`}
+        title={state.blocked ? state.message ?? undefined : `Runs on ${state.chipName}. Change provider`}
         onMouseDown={(event) => event.stopPropagation()}
         onClick={(event) => { event.stopPropagation(); setOpen((value) => !value); }}
         onKeyDown={(event) => {
@@ -240,7 +240,9 @@ function ProviderPopoverTrigger({ state, variant, displayName, onPick, onFix }: 
         }}>
         {state.blocked && <span className="provider-switcher__warning" aria-hidden="true">&#x26A0;</span>}
         {variant === 'pill' && <span className="param-pill__label">Provider</span>}
-        <span className="provider-switcher__chip-text">{state.chip}</span>
+        {/* The card chip has room for a short name only where the full one
+            can't fit (chipText); Create Studio's pill wraps, so it names it in full. */}
+        <span className="provider-switcher__chip-text">{variant === 'pill' ? state.chipName : state.chip}</span>
         {variant === 'pill' && <ChevronDown size={12} strokeWidth={1.75} aria-hidden="true" />}
       </button>
       {open && (

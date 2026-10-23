@@ -167,14 +167,14 @@ describe('ProviderSwitcher picks', () => {
     const onPick = vi.fn();
     const params = { resolution: '1.5k' };
     const { rerender } = render(<ProviderSwitcher definition={TABLE} params={params} variant="chip" onPick={onPick} />);
-    const chip = screen.getByRole('button', { name: /^Provider for Fixture Route Table: Auto · BFL$/ });
+    const chip = screen.getByRole('button', { name: /^Provider for Fixture Route Table: Auto · Black Forest Labs$/ });
     expect(chip).not.toHaveClass('model-node__provider-chip--blocked');
     // The BFL key goes away: Auto now lands on fal, which lacks 1.5k.
     act(() => withKeys({ FAL_KEY: KEY }));
     rerender(<ProviderSwitcher definition={TABLE} params={params} variant="chip" onPick={onPick} />);
     expect(onPick).not.toHaveBeenCalled();
     expect(params).toEqual({ resolution: '1.5k' });
-    const blocked = screen.getByRole('button', { name: /^Provider for Fixture Route Table: Auto · fal\. Can't run/ });
+    const blocked = screen.getByRole('button', { name: /^Provider for Fixture Route Table: Auto · fal\.ai\. Can't run/ });
     expect(blocked).toHaveClass('model-node__provider-chip--blocked');
     expect(blocked).toHaveTextContent('⚠');
   });
@@ -226,7 +226,8 @@ describe('ProviderSwitcher keyboard', () => {
     fireEvent.click(row(/^Black Forest Labs/));
     expect(screen.queryByRole('menu')).toBeNull();
     expect(document.activeElement).toBe(pill);
-    expect(pill).toHaveTextContent('BFL');
+    // Round 3g: the pill wraps, so it names the provider in full.
+    expect(pill).toHaveTextContent('Black Forest Labs');
   });
 
   it('keeps one row in the tab order when the menu is in place', () => {
@@ -290,7 +291,7 @@ describe('Inspector and pills show only the route options', () => {
     }
     render(<Pills />);
     const pills = document.querySelector('.param-pills')!;
-    expect(pills.firstElementChild).toHaveAccessibleName(/^Provider for Fixture Route Table: Auto · fal\. Can't run/);
+    expect(pills.firstElementChild).toHaveAccessibleName(/^Provider for Fixture Route Table: Auto · fal\.ai\. Can't run/);
     const resolution = screen.getByTitle('Resolution').querySelector('select')!;
     expect(optionValues(resolution)).toEqual(['768sq', '1k', '2k', '4k']);
     expect(screen.getByRole('option', { name: '1.5k (not on fal.ai)' })).toBeDisabled();
@@ -390,7 +391,7 @@ describe('hidden settings: a provider shows only what it offers (PR 5)', () => {
       data: { definitionId: 'flux-2-pro', label: 'FLUX.2', params: { model: 'klein-9b', safety_tolerance: '5' }, state: 'idle', outputs: {} } };
     useGraphStore.setState({ nodes: [node], edges: [] });
     render(<ModelNode {...({ id: 'n1', data: node.data, selected: false } as NodeProps)} />);
-    fireEvent.click(screen.getByRole('button', { name: /^Provider for FLUX\.2: Auto · fal\. Can't run/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Provider for FLUX\.2: Auto · fal\.ai\. Can't run/ }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Set Safety back to 2' }));
     expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ model: 'klein-9b', safety_tolerance: '2' });
     expect(screen.queryByRole('menu')).toBeNull();
@@ -423,7 +424,7 @@ describe('the card', () => {
   it('shows the provider chip in place of the missing-key badge, and the switch note until dismissed', () => {
     withKeys({ FAL_KEY: KEY });
     renderCard({ _provider: 'replicate' });
-    const chip = screen.getByRole('button', { name: /^Provider for Fixture Route Table: Rep\. Can't run/ });
+    const chip = screen.getByRole('button', { name: /^Provider for Fixture Route Table: Replicate\. Can't run/ });
     expect(chip).toHaveClass('model-node__provider-chip--blocked');
     expect(document.querySelector('.model-node__badge--warning')).toBeNull();
     act(() => useProviderNoteStore.getState().show('n1', ["1.5k isn't on fal.ai: set to 2k"]));
@@ -435,7 +436,7 @@ describe('the card', () => {
   it('a pick from the chip writes the node and leaves the note on the card', () => {
     withKeys({ FAL_KEY: KEY, BFL_API_KEY: KEY });
     renderCard({ resolution: '1.5k' });
-    fireEvent.click(screen.getByRole('button', { name: /^Provider for Fixture Route Table: Auto · BFL$/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Provider for Fixture Route Table: Auto · Black Forest Labs$/ }));
     fireEvent.click(row(/^fal\.ai/));
     expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ _provider: 'fal', resolution: '2k' });
     expect(useProviderNoteStore.getState().notes.n1).toBe("1.5k isn't on fal.ai: set to 2k");

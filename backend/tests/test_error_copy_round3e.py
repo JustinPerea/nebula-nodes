@@ -254,7 +254,8 @@ def _contracts(nodes: list[tuple[str, str]], edges: list[tuple[str, str, str, st
 def test_a_wire_of_the_wrong_kind_names_the_input_by_its_label():
     [issue] = _contracts([("a", "image-input"), ("b", "gpt-image-1-generate")], [("a", "image", "b", "prompt")])
     assert issue.message.startswith("Incompatible port types: source 'image' on node 'a'")
-    assert _clean(issue.person) == ("The wire into the node's Prompt input brings something it can't take. "
+    # Round 3g (GM): the port's label in quotes.
+    assert _clean(issue.person) == ("The wire into “Prompt” brings something it can't take. "
                                     "Remove that wire, then connect a matching output.")
 
 
@@ -263,8 +264,8 @@ def test_too_many_wires_into_one_input_has_a_line():
                         [("a", "text", "b", "prompt"), ("c", "text", "b", "prompt")])
     [issue] = [i for i in issues if "multiple connections" in i.message]
     assert issue.message == "Input port 'prompt' on node 'b' does not allow multiple connections"
-    assert _clean(issue.person) == ("The node's Prompt input takes one wire. Remove the extra one, then run the "
-                                    "node again.")
+    # Round 3g (GM): the port's label in quotes.
+    assert _clean(issue.person) == "“Prompt” takes one wire. Remove the extra one, then run the node again."
 
 
 def test_a_wire_into_an_input_the_node_no_longer_has_has_a_line():

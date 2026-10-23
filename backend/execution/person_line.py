@@ -464,7 +464,8 @@ def connect_line(label: object) -> str:
     # A numbered or lettered input ("Item 1", "Image A") and a pass-through
     # are named by their label: "an item" wouldn't say which one.
     if re.search(r"\s(\d+|[A-Z])$", name) or name.lower() == "through":
-        return f"Connect an output to “{name}”, then run the node again."
+        # The label exactly as the node shows it (round 3g, GM: ports in quotes).
+        return f"Connect an output to “{str(label or '').strip()}”, then run the node again."
     return f"Connect {input_words(label)} to this node, then run it again."
 
 
