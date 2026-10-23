@@ -683,7 +683,9 @@ def get_proposal(proposal_id: str, wait_seconds: float = 0, ctx: Context | None 
 
     `proposal.status` is open, accepted, rejected, withdrawn, expired (15
     minutes without a decision) or invalidated (a node it needed was deleted,
-    or the canvas changed; `reason` says why). When accepted, `idMap` maps
+    or the canvas changed; `reason` says why). An invalidated one can be open
+    again: when the person (or you) undoes the delete and it still fits, it
+    reopens with the same id and expiry (event proposal.reopened). When accepted, `idMap` maps
     your refs to the new node ids and `runNodeIds` lists the nodes the canvas
     will run; don't start those runs yourself. `timedOut` is true when the
     person hasn't decided yet. It reads propose_asset_change's proposals
@@ -1082,7 +1084,10 @@ def remove_from_canvas(node_ids: list[str] | None = None, wires: list[dict] | No
 
     `wires` are [{"source", "sourceHandle", "target", "targetHandle"}] as
     look_at_canvas lists them. Their outputs stay in Nebula's output folder.
-    Ask first before deleting the person's own work.
+    Ask first before deleting the person's own work. Deleting a node detaches
+    the person's pins on it and closes the proposals that read it; `removals`
+    lists them per node, and undo_canvas_edit (or the person's Cmd+Z) puts
+    them back.
     """
     body: dict[str, Any] = {}
     if node_ids:
@@ -1109,8 +1114,12 @@ def undo_canvas_edit(token: str | list[str], ctx: Context | None = None) -> dict
     reason "ran since", with `ranBy` and a message such as "n3 ran since (run
     by the person), so it stays". Your own runs don't count, so you can still
     undo your own experiments.
+    Nodes you removed get back the pins that were on them (`reattached`), and
+    proposals your delete closed reopen when they still fit (`reopened`; the
+    ones that can't, say because they expired, are in `notReopened` with the
+    reason).
     Returns `{status, added, removed, changed, renamed, moved, skipped,
-    message}` (`message` says what went back and what was left, and why);
+    reattached, reopened, notReopened, message}` (`message` says what went back and what was left, and why);
     `status` is "undone", "skipped" (nothing could go back; the token still
     works if a changed part is put back, but a node someone ran since stays
     for good) or "already-undone" (by you, or by the person with Cmd+Z, in

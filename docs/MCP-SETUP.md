@@ -163,7 +163,9 @@ The server exposes these tools for building and running (see
   only its own workspace, and the read follows no links.
 - `remove_from_canvas`: deletes nodes or single wires, all or nothing. Its
   result has `undo` too, which puts the nodes back with their params,
-  outputs, names and wires.
+  outputs, names and wires, the person's pins on them, and the proposals
+  the delete closed when they still fit. `removals` lists, per node it
+  deleted, the pins it detached and the proposals it closed.
 - `undo_canvas_edit`: takes one of your own edits back with its `undo.token`
   (or a steps plan's `undo.tokens`, newest first). A part someone changed
   since stays as it is and is listed in `skipped`; so does a node someone
@@ -490,10 +492,12 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `pin.added` / `pin.removed` | the person left or deleted a note | `pinId`, `text`, `anchor` |
 | `pin.resolved` | an agent answered a note | `pinId`, `text`, `reply` |
 | `pin.detached` | a pinned node was deleted, or an import/clear removed it | `pinId`, `anchor` (where the node was) |
+| `pin.reattached` | the undo of that delete (the person's Cmd+Z or Undo, or an agent's `undo_canvas_edit`) put the node back, and the note is on it again as before | `pinId`, `text`, `anchor` (`{nodeId}`) |
 | `proposal.created` | an agent proposed a change | `proposalId`, `note`, `adds`, `wires`, `sets`, `runs`, `paidRuns`; for a [proposal outside the canvas](#proposals-outside-the-canvas) `kind`, `targetId`, `targetName`, `change` instead of the graph counts (the decisions after it carry `kind` and `targetId` too) |
 | `proposal.accepted` | the person accepted; the added nodes and wires follow as `node.added` / `edge.added` by the person (for a project cover, `project.cover` by the person) | `proposalId`, `idMap`, `runNodeIds`; outside the canvas `kind`, `targetId`, `targetName`, `applied` (what was set) |
 | `proposal.rejected` | the person rejected | `proposalId`, `reason` |
 | `proposal.withdrawn` / `proposal.expired` / `proposal.invalidated` | the agent took it back, 15 minutes passed, or the canvas changed under it | `proposalId`, `reason` |
+| `proposal.reopened` | a proposal a node delete invalidated is open again: the undo of that delete put the node back and the proposal still passes Accept's checks (same id, same expiry; it's in the open list and the person's bar again) | `proposalId`, `agentId`, `note`; outside the canvas (a cover whose image went with the node) `kind`, `targetId`, `targetName` |
 | `board.added` / `board.removed` / `board.frame` / `board.grouped` / `board.setAside` / `board.resized` / `board.noted` / `board.moved` / `board.cover` | a moodboard edit or save changed the board's images, cards or frames: one event per write, its kind the first of these that applies (`noted` an image's notes, `grouped` is a card into or out of a frame, `moved` 8 px or more, `cover` the image the board opens on) | `kinds` (every kind in the write), `refs` (`{number, id}` per image), `boardId`, `boardName`, `scope`; never any note text ("private note changed") |
 | `board.fields` | a moodboard edit, save or undo changed the board's own fields, by the person (Moodboard Studio, an accepted proposal) or an agent (`moodboard_update`, `moodboard_edit`'s `restore`, `nebula moodboard set`, `--restore`): one event per write, after the `board.*` event above when the same write changed images too; a write that changes no field writes none | `fields` (the names that changed, in this order: `name`, `notes`, `mode`, `strength`, `direction`, `avoid`, `pinnedColors`, `clashMode`, `colorChoices`, `sendNotes`, `briefOverride`), `boardId`, `boardName`, `scope`; never a value: no Direction, Avoid, notes or brief text, no colour, no strength, not which way Send notes went. The cover is `board.cover` |
 | `project.created` / `project.deleted` / `project.restored` | anyone made a project (new, or a stale tab's recovered copy), moved one to Recently deleted, or brought one back | `projectId`, `name`; `wasOpen` on a delete; `createdBy` when an agent made it |
@@ -1914,7 +1918,12 @@ TOKEN`, `POST /api/graph/apply/undo {token}`) takes the edit back:
 - A node it removed comes back under its own id with its params (an
   uploaded image's preview, a painted mask and a Paper source included),
   outputs, name, position and wires. A wire whose other end is gone, or
-  whose input has taken another wire since, stays out.
+  whose input has taken another wire since, stays out. The person's pins
+  that were on it go back on it (`reattached`; one the person deleted
+  since stays gone, in `pinsLeft`), and the proposals the delete closed
+  reopen when they still pass Accept's checks (`reopened`); one that
+  expired, no longer fits, or that Nebula no longer has after a restart is
+  in `notReopened` with the reason.
 - A wire it added is unwired; one it took away is wired back.
 
 A run counts as a change. A node the edit touched that someone ran after
@@ -2047,6 +2056,37 @@ it. The restore is journaled as whoever
 the canvas is (`Person` when the tab is connected as you), with "(undo)" or
 "(redo)" on each line. Agents never need to call it; they undo their own
 edits with `undo_canvas_edit`.
+
+Undo puts back everything a delete removed (GM - Design, 2026-10-23). Every
+node delete (`DELETE /api/graph/node/{id}`, an apply's `remove`, a restore
+that removes nodes) detaches the pins on the node and closes the proposals
+that read it, under a removal record `{id: "rm_…", nodeId, pins,
+proposals}`: the delete's answer has it (`removal`; an apply's and a
+restore's `removals`), and so does the edit's graphSync (`edit.removals`),
+for a canvas that didn't send it. The canvas keeps the records in its undo
+step and names them in the restore that brings the nodes back
+(`removals`). The backend checks each one again rather than trusting the
+list: a pin goes back on the node only if that very removal detached it
+(the pin keeps the removal id with the project, so this survives a
+restart), and a proposal reopens only if that removal closed it and it still
+passes Accept's checks (the params it sets unchanged, the proposal staged on
+the live graph, what its runs would start unchanged), hasn't expired, and
+the open caps allow it. The restore's answer says what happened:
+`reattached`, `pinsLeft` (`{id, reason}`: `deleted since` or `changed
+since`), `reopened` and `notReopened` (`{id, reason}`). Proposals live in
+memory, so after a restart the ones the delete closed can't reopen and are
+counted in `notReopened`. A proposal that also needs another deleted node
+waits, closed and uncounted, until that delete is undone too. Redo deletes
+again, with new records.
+
+A record's `proposals` also names the project cover proposals the delete
+closed (an asset proposal whose image was on the node), so after a restart
+those are counted in `notReopened` too; without a restart a cover proposal
+reopens when Accept's check passes against the restored live canvas. A node
+has one live removal, its latest delete's: when the person redoes your
+delete, or undoes your undo, the nodes are deleted again under new records,
+and your `undo_canvas_edit` token names those from then on, so it still
+puts the pins back and reopens the proposals.
 
 A run from `run_nodes` is a CLI run (`POST /api/graph/run` with `wait`), so
 it gets the same spending check and the same long-run handling. It also gets

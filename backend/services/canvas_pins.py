@@ -250,27 +250,90 @@ class CanvasPins:
         return self._write(mutate)[1]
 
     def _detach(self, pins: list[dict[str, Any]], node_ids: Callable[[str], bool],
-                positions: Mapping[str, Any]) -> list[dict[str, Any]]:
+                positions: Mapping[str, Any], removals: Mapping[str, str] | None = None) -> list[dict[str, Any]]:
+        """Keep each pin of a gone node where the node stood, marked detached.
+
+        ``removals`` maps a deleted node to its removal id (``rm_...``): the
+        pin then keeps that id (``detachedBy``) and the position it had
+        (``attachedPosition``), so the undo of that very delete can put it
+        back as it was (``reattach``). A pin an import or a clear detached
+        gets neither: no undo of a delete brings it back."""
         changed = []
         for pin in pins:
             anchored = (pin.get("anchor") or {}).get("nodeId")
             if not isinstance(anchored, str) or not node_ids(anchored):
                 continue
+            was = copy.deepcopy(pin.get("position"))
             spot = _stored_position({"position": positions.get(anchored)}) or _stored_position(pin)
             spot = spot or {"x": 0.0, "y": 0.0}
             pin["anchor"] = dict(spot)
             pin["position"] = dict(spot)
             pin["detached"] = True
             pin["detachedFrom"] = anchored
+            removal = (removals or {}).get(anchored)
+            if removal:
+                pin["detachedBy"] = removal
+                pin["attachedPosition"] = was
+            else:
+                pin.pop("detachedBy", None)
+                pin.pop("attachedPosition", None)
             changed.append(copy.deepcopy(pin))
         return changed
 
-    def detach_node(self, node_id: str, position: Any = None) -> list[dict[str, Any]]:
-        """The node is gone: keep its pins where it stood, marked detached."""
+    def detach_node(self, node_id: str, position: Any = None, removal: str | None = None) -> list[dict[str, Any]]:
+        """The node is gone: keep its pins where it stood, marked detached.
+        ``removal`` is the delete's removal id, for its undo (``reattach``)."""
         if not any((pin.get("anchor") or {}).get("nodeId") == node_id for pin in self._active()[1]):
             return []
         return self._write(lambda pins: self._detach(pins, lambda nid: nid == node_id,
-                                                     {node_id: position}))[1]
+                                                     {node_id: position},
+                                                     {node_id: removal} if removal else None))[1]
+
+    def reattach(self, removals: list[Mapping[str, Any]], back: set[str]) -> dict[str, list[dict[str, Any]]]:
+        """The undo of a delete brought nodes back: put each pin that delete
+        detached on its node again, as if the delete never happened.
+
+        ``removals`` are the removal records the restore names ({id, nodeId,
+        pins?}); only those whose node is in ``back`` (this restore brought it
+        back) count. A pin goes back only if it is still detached from that
+        node by that very removal (``detachedBy``), so a stale or forged list
+        attaches nothing: a pin someone deleted since, or one another delete,
+        an import or a clear detached, is left as it is and reported in
+        ``left`` ({id, reason}). Pins the record doesn't name but the removal
+        detached go back too (the record may come from a canvas that never
+        saw the delete's answer)."""
+        wanted = {str(r["id"]): str(r["nodeId"]) for r in removals if r.get("nodeId") in back}
+        if not wanted:
+            return {"reattached": [], "left": []}
+        named = {str(pin_id): str(r["id"]) for r in removals if r.get("nodeId") in back
+                 for pin_id in r.get("pins") or []}
+
+        def mutate(pins: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+            back_on: list[dict[str, Any]] = []
+            left: list[dict[str, Any]] = []
+            seen: set[str] = set()
+            for pin in pins:
+                pin_id = str(pin.get("id") or "")
+                removal = pin.get("detachedBy")
+                if not (pin.get("detached") and isinstance(removal, str) and removal in wanted
+                        and pin.get("detachedFrom") == wanted[removal]):
+                    if pin_id in named:
+                        seen.add(pin_id)
+                        left.append({"id": pin_id, "reason": "changed since"})
+                    continue
+                seen.add(pin_id)
+                node_id = wanted[removal]
+                spot = _stored_position({"position": pin.get("attachedPosition")})
+                pin["anchor"] = {"nodeId": node_id}
+                pin["position"] = spot
+                pin["detached"] = False
+                for key in ("detachedFrom", "detachedBy", "attachedPosition"):
+                    pin.pop(key, None)
+                back_on.append(copy.deepcopy(pin))
+            left.extend({"id": pin_id, "reason": "deleted since"} for pin_id in named if pin_id not in seen)
+            return {"reattached": back_on, "left": left}
+
+        return self._write(mutate)[1]
 
     def reanchor_missing(self, live_node_ids: set[str], positions: Mapping[str, Any] | None = None) -> list[dict[str, Any]]:
         """Detach every pin whose node is no longer on the canvas (after an import or a clear)."""

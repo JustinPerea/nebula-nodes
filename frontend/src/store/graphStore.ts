@@ -78,11 +78,11 @@ import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, waitingOnWorldLabs } from '../lib/worldLabsWaiting';
 import { FailureNotice, REFUSED_FALLBACK_COPY, copyForStatus, failureCopy, failureMessage, readDetail, requestError, warnFailure } from '../lib/errorCopy';
 import { CANVAS_NOTICE_EVENT, type CanvasNoticeDetail } from '../lib/canvasNotice';
-import { confirmNodeDelete } from '../lib/deleteConfirm';
+import { cleanRemovals, deletedNoticeText, mergeRemovals, notReopenedText, restoredNoticeText, type RemovalRecord } from '../lib/deleteNotice';
 import { NOTHING_RAN_LINE, OTHER_NODE_LINE, SHOT_NOT_STARTED_LINE, validationReadings, writtenReading, type ValidationReading } from '../lib/validationCopy';
 import {
   RUNTIME_FIELDS, applySlice, diffCanvas, edgeKey, editArrivedText, foldArrange, foreignSource, isForeignEdit, isOwnEcho,
-  restoreRequest, undoNoticeText, type EditOrigin, type ForeignEdit,
+  restoreRequest, undoNoticeText, type EditOrigin, type ForeignEdit, type RestoreBody,
 } from '../lib/canvasUndo';
 import { TAB_ID } from '../lib/tabId';
 import { notifyJobComplete } from '../lib/jobNotifications';
@@ -415,9 +415,32 @@ function markNodesWithValidationErrors(
 interface UndoSnapshot {
   nodes: Node<NodeData>[];
   edges: Edge[];
+  /** What the deletes this step undoes removed (lib/deleteNotice.ts): the
+   * delete's answers, or the redo's restore that deleted again. Undoing the
+   * step names them, so the pins and proposals come back with the nodes. */
+  removals?: RemovalRecord[];
 }
 
 type UndoEntry = UndoSnapshot | ForeignEdit;
+
+/**
+ * A node has one live removal, its latest delete's: only that one's undo can
+ * put its pins back and reopen its proposals. When a delete answers with new
+ * records (a redo, an undo of an agent's undo, this tab's delete, another
+ * tab's or an agent's edit), every stacked step that names the same node
+ * takes them, not just the step that deleted again, or an older step that
+ * brings the node back would name a spent removal (review, 2026-10-23). The
+ * backend still re-checks every id. Steps are kept by identity, so this
+ * renews them in place.
+ */
+function renewStackedRemovals(stacks: { undoStack: UndoEntry[]; redoStack: UndoEntry[] }, fresh: RemovalRecord[]): void {
+  if (fresh.length === 0) return;
+  const byNode = new Map(fresh.map((record) => [record.nodeId, record]));
+  for (const step of [...stacks.undoStack, ...stacks.redoStack]) {
+    if (!step.removals?.some((record) => byNode.has(record.nodeId))) continue;
+    step.removals = step.removals.map((record) => byNode.get(record.nodeId) ?? record);
+  }
+}
 
 const UNDO_CAP = 50;
 
@@ -428,8 +451,9 @@ export interface UndoNotice {
   agentColor?: string;
   /** The button the notice offers: Undo when an agent's edit just landed, Redo after it was undone. */
   offer: 'undo' | 'redo' | null;
-  /** The step the button acts on; it acts only while that step is next in line. */
-  entry?: ForeignEdit;
+  /** The step the button acts on; it acts only while that step is next in
+   * line. A person's own step for "Deleted the node." and "Restored the node." */
+  entry?: UndoEntry;
   /** 'error': a failure that used to be a window.alert (round 3f, GM: "Every
    * error alert becomes a canvas notice"), announced as role="alert". */
   tone?: 'error' | 'info';
@@ -825,7 +849,7 @@ interface GraphState {
   /** The Delete key's guard (Canvas onBeforeDelete): false, with the canvas
    * notice saying why, when one of `nodeIds` holds World Labs state, so React
    * Flow removes neither the nodes nor their wires (round 3b). */
-  allowCanvasDelete: (nodeIds: string[], options?: { confirm?: boolean }) => boolean;
+  allowCanvasDelete: (nodeIds: string[]) => boolean;
   hydrateProviderStartAmbiguities: (ambiguities: ProviderStartAmbiguity[]) => void;
   hydrateExecutionStatuses: (statuses: ExecutionStatusResult[]) => void;
   acknowledgeProviderStartAmbiguity: (
@@ -1736,10 +1760,20 @@ function applyCanvasNodeChanges(
  * wanted it gone, as restore treats an already-gone node); else rejects
  * with the reason the person reads (GM's line for the status, or the
  * backend's written reason). */
-async function deleteCLIOriginNode(nodeId: string): Promise<void> {
+async function deleteCLIOriginNode(nodeId: string): Promise<RemovalRecord | null> {
   const response = await graphMutationFetch(`/api/graph/node/${nodeId}`, { method: 'DELETE' });
-  if (response.ok || response.status === 404) return;
-  throw await requestError("Couldn't delete the node.", response);
+  if (response.status === 404) return null;
+  if (!response.ok) throw await requestError("Couldn't delete the node.", response);
+  // What the delete removed (the pins it detached, the proposals it closed),
+  // kept in the undo step so undo puts them back.
+  const body = await response.json().catch(() => ({})) as { removal?: unknown };
+  return cleanRemovals([body.removal])[0] ?? null;
+}
+
+/** GM's notice after a delete: "Deleted the node." / "Deleted {n} nodes.",
+ * with Undo for the step that holds it (round 3f's confirm is gone). */
+function deletedNotice(count: number, step: UndoEntry): Partial<GraphState> {
+  return { undoNotice: { id: ++undoNoticeSeq, text: deletedNoticeText(count), offer: 'undo', entry: step } };
 }
 
 /** The nodes stay on the canvas (their delete wasn't confirmed). GM's
@@ -2608,6 +2642,8 @@ function foreignEditStep(
 ): Partial<GraphState> {
   if (origin && isOwnEcho(origin, TAB_ID)) return {};
   if (!origin) return graphReplaced ? { undoStack: [], redoStack: [] } : {};
+  // Its deletes are now the live removals of those nodes, for every step here.
+  if (!graphReplaced) renewStackedRemovals(state, cleanRemovals(origin.removals));
   // A replacement puts every node where the new graph has it.
   const movedIds = graphReplaced
     ? new Set([...state.nodes, ...nextNodes].map((node) => node.id))
@@ -2622,6 +2658,8 @@ function foreignEditStep(
     source,
     ...(origin.id ? { editId: origin.id } : {}),
     ...(origin.undoes ? { undoes: origin.undoes } : {}),
+    // What its deletes removed, so undoing it here puts those back too.
+    ...(cleanRemovals(origin.removals).length > 0 ? { removals: cleanRemovals(origin.removals) } : {}),
     at: Date.now(),
     ...change,
   };
@@ -2695,6 +2733,19 @@ function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): voi
   }
   const nextNodes = withFreshKeyStatus(next.nodes, nodes);
   breakUndoDebounce();
+  // The person's own step that brings nodes back says "Restored the node.",
+  // one that deletes them again "Deleted the node." (GM, 2026-10-23). The
+  // restored line waits for the backend's answer when it has backend nodes,
+  // since it counts the proposals that couldn't be reopened.
+  const before = new Set(nodes.map((node) => node.id));
+  const after = new Set(nextNodes.map((node) => node.id));
+  const back = nextNodes.filter((node) => !before.has(node.id));
+  const gone = nodes.filter((node) => !after.has(node.id)).length;
+  const ownLine: OwnStepLine | null = isForeignEdit(entry) ? null
+    : back.length > 0 ? { kind: 'restored', count: back.length }
+      : gone > 0 ? { kind: 'deleted', count: gone } : null;
+  const waitsForBackend = back.some((node) => CLI_ID_RE.test(node.id));
+  const noticeId = ++undoNoticeSeq;
   set({
     nodes: nextNodes,
     edges: next.edges,
@@ -2702,11 +2753,33 @@ function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): voi
       ? { undoStack: from.slice(0, -1), redoStack: [...state.redoStack, inverse] }
       : { redoStack: from.slice(0, -1), undoStack: [...state.undoStack, inverse] }),
     ...(isForeignEdit(entry) ? { undoNotice: {
-      id: ++undoNoticeSeq, text: undoNoticeText(action, entry), agentColor: entry.agentColor,
+      id: noticeId, text: undoNoticeText(action, entry), agentColor: entry.agentColor,
       offer: action === 'undo' ? 'redo' as const : 'undo' as const, entry,
-    } } : {}),
+    } } : ownLine && !(ownLine.kind === 'restored' && waitsForBackend)
+      ? { undoNotice: ownStepNotice(noticeId, ownLine, 0, action, inverse) } : {}),
   });
-  void sendRestore(action, nodes, edges, nextNodes, next.edges, entry, inverse, set);
+  void sendRestore(action, nodes, edges, nextNodes, next.edges, entry, inverse, set,
+    { noticeId, ownLine: ownLine?.kind === 'restored' && waitsForBackend ? ownLine : null });
+}
+
+/** What a person's own undo or redo says: the nodes it brought back or deleted again. */
+interface OwnStepLine { kind: 'restored' | 'deleted'; count: number }
+
+function ownStepNotice(id: number, line: OwnStepLine, notReopened: number, action: 'undo' | 'redo',
+  inverse: UndoEntry): UndoNotice {
+  return {
+    id,
+    text: line.kind === 'restored' ? restoredNoticeText(line.count, notReopened) : deletedNoticeText(line.count),
+    // The button acts on the step this one just put on the other stack.
+    offer: action === 'undo' ? 'redo' : 'undo',
+    entry: inverse,
+  };
+}
+
+/** The removal records a step's restore names: those of the nodes it brings back. */
+function removalsFor(entry: UndoEntry, body: RestoreBody): RemovalRecord[] {
+  const back = new Set(body.nodes.filter((node) => node.outputs !== undefined).map((node) => node.id));
+  return (entry.removals ?? []).filter((record) => back.has(record.nodeId));
 }
 
 // Undo and redo reach the backend one at a time, in the order the person
@@ -2730,13 +2803,28 @@ function sendRestore(
   entry: UndoEntry,
   inverse: UndoEntry,
   set: GraphSet,
+  notice: { noticeId: number; ownLine: OwnStepLine | null },
 ): Promise<void> {
   const body = restoreRequest(action, prevNodes, prevEdges, nextNodes, nextEdges);
   if (!body) return restoreQueue;
   if (isForeignEdit(entry) && entry.editId) body.edit = entry.editId;
   // The wires it puts back or takes off stay so until it lands (heldWires).
   const holds = [...body.wire.map((w) => holdWire(w, true)), ...body.unwire.map((w) => holdWire(w, false))];
+  // Shown once the backend answers, unless another notice came since.
+  const answerNotice = (notReopened: number) => set((state) => {
+    if (notice.ownLine) {
+      if (undoNoticeSeq !== notice.noticeId) return {};
+      return { undoNotice: ownStepNotice(notice.noticeId, notice.ownLine, notReopened, action, inverse) };
+    }
+    const shown = state.undoNotice;
+    if (notReopened === 0 || !shown || shown.id !== notice.noticeId) return {};
+    return { undoNotice: { ...shown, text: `${shown.text}. ${notReopenedText(notReopened)}` } };
+  });
   const task = restoreQueue.then(async () => {
+    // Read now, not when the step was taken: the answer to the delete (or to
+    // the redo before this undo) may have landed since.
+    const removals = removalsFor(entry, body);
+    if (removals.length > 0) body.removals = removals;
     let response: Response | null = null;
     try {
       response = await graphMutationFetch('/api/graph/restore', {
@@ -2749,7 +2837,26 @@ function sendRestore(
       console.warn(`[nebula] ${action} didn't reach the backend:`, err);
     }
     for (const done of holds) done(Boolean(response?.ok));
-    if (!response || response.ok) return;
+    if (!response) {
+      answerNotice(0);
+      return;
+    }
+    if (response.ok) {
+      const answer = await response.json().catch(() => ({})) as { removals?: unknown; notReopened?: unknown };
+      // This restore deleted nodes (a redo of a delete): the step that
+      // brings them back names these records.
+      const fresh = cleanRemovals(answer.removals);
+      if (fresh.length > 0) {
+        inverse.removals = mergeRemovals(inverse.removals, fresh);
+        // And every other step naming those nodes (an older one that brings them back).
+        set((state) => {
+          renewStackedRemovals(state, fresh);
+          return {};
+        });
+      }
+      answerNotice(Array.isArray(answer.notReopened) ? answer.notReopened.length : 0);
+      return;
+    }
     const reason = await backendRejectionReason(response, `Couldn't ${action} that.`);
     console.warn(`[nebula] ${action} refused: ${reason}`);
     set((state) => {
@@ -3742,9 +3849,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     return tempId;
   },
 
-  // `confirm`: GM's confirm after the hold's refusal (round 3f, lib/deleteConfirm.ts).
-  allowCanvasDelete: (nodeIds, options) => !refuseHeldNodeDelete(get(), nodeIds, set)
-    && (!options?.confirm || confirmNodeDelete(nodeIds.length)),
+  // No confirm (GM, 2026-10-23): undo puts back everything a delete removed,
+  // so the delete says "Deleted the node." with Undo instead (lib/deleteNotice.ts).
+  allowCanvasDelete: (nodeIds) => !refuseHeldNodeDelete(get(), nodeIds, set),
 
   onNodesChange: (changes) => {
     if (get().isExecuting && changes.some((change) => change.type === 'remove')) return;
@@ -3752,7 +3859,16 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     if (refuseHeldNodeDelete(get(), removedIds, set)) return;
     const cliRemovedIds = removedIds.filter((nodeId) => CLI_ID_RE.test(nodeId));
     if (cliRemovedIds.length === 0) {
-      applyCanvasNodeChanges(changes, set, get);
+      if (removedIds.length === 0) {
+        applyCanvasNodeChanges(changes, set, get);
+        return;
+      }
+      breakUndoDebounce();
+      const step = pushUndo(set, get);
+      const present = new Set(get().nodes.map((node) => node.id));
+      applyCanvasNodeChanges(changes, set, get, step);
+      const gone = removedIds.filter((nodeId) => present.has(nodeId) && !get().nodes.some((node) => node.id === nodeId));
+      if (gone.length > 0) set(deletedNotice(gone.length, step));
       return;
     }
 
@@ -3762,23 +3878,41 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     // node here before its reply arrives.
     breakUndoDebounce();
     const undoStep = pushUndo(set, get);
-    void Promise.allSettled(cliRemovedIds.map(deleteCLIOriginNode)).then((results) => {
+    const shownBefore = new Set(get().nodes.map((node) => node.id));
+    const deleting = Promise.allSettled(cliRemovedIds.map(deleteCLIOriginNode)).then((results) => {
       const confirmed = new Set<string>();
       const failures: string[] = [];
+      const removals: RemovalRecord[] = [];
       results.forEach((result, index) => {
-        if (result.status === 'fulfilled') confirmed.add(cliRemovedIds[index]);
-        else failures.push(failureCopy(result.reason).reason);
+        if (result.status === 'fulfilled') {
+          confirmed.add(cliRemovedIds[index]);
+          if (result.value) removals.push(result.value);
+        } else failures.push(failureCopy(result.reason).reason);
       });
+      // Undoing this step names what each delete removed (GM, 2026-10-23).
+      if (removals.length > 0) {
+        undoStep.removals = mergeRemovals(undoStep.removals, removals);
+        set((state) => {
+          renewStackedRemovals(state, removals);
+          return {};
+        });
+      }
       const safeChanges = changes.filter((change) => (
         change.type !== 'remove'
         || !CLI_ID_RE.test(change.id)
         || confirmed.has(change.id)
       ));
+      const removing = safeChanges.filter((change) => change.type === 'remove').map((change) => change.id);
       // Nothing was deleted after all: the step taken above would undo nothing.
-      if (!safeChanges.some((change) => change.type === 'remove')) get().cancelUndoStep(undoStep);
+      if (removing.length === 0) get().cancelUndoStep(undoStep);
       if (safeChanges.length > 0) applyCanvasNodeChanges(safeChanges, set, get, undoStep);
+      const deleted = removing.filter((nodeId) => shownBefore.has(nodeId)).length;
+      if (deleted > 0 && get().undoStack.includes(undoStep)) set(deletedNotice(deleted, undoStep));
       if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length);
     });
+    // An undo pressed while the deletes are on their way waits for their
+    // answers, so its restore can name what they removed.
+    restoreQueue = restoreQueue.then(() => deleting);
   },
 
   onEdgesChange: (changes) => {

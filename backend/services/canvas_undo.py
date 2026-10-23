@@ -538,6 +538,10 @@ class EditRecord:
     # The book's clock when the edit committed: runs that started after it
     # count as "ran since" (CanvasUndoBook.ran_since).
     mark: int = 0
+    # The removal records of the nodes the edit deleted ({id, nodeId, pins,
+    # proposals}; main._remove_side_effects): the undo names them to the
+    # restore, which puts those pins back and reopens those proposals.
+    removals: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -658,7 +662,7 @@ class CanvasUndoBook:
 
     def keep(self, *, edit_id: str, actor: Mapping[str, Any], agent_id: str, project_id: str | None,
              project_name: str, inverse: dict[str, Any], epoch: int | None = None,
-             mark: int | None = None) -> dict[str, Any]:
+             mark: int | None = None, removals: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         """Keep an edit's inverse; the reply's ``undo``. ``mark`` is the
         book's clock when the edit committed (now when not given)."""
         self._expire()
@@ -674,7 +678,8 @@ class CanvasUndoBook:
         record = EditRecord(edit_id=edit_id, token=token, agent_id=agent_id, actor=actor_brief(actor),
                             project_id=project_id, project_name=project_name,
                             expires=self._clock() + UNDO_TTL_SECONDS, inverse=inverse, size=size,
-                            mark=self.mark() if mark is None else mark)
+                            mark=self.mark() if mark is None else mark,
+                            removals=copy.deepcopy(list(removals or [])))
         self._records[token] = record
         self._by_edit[edit_id] = token
         self._bytes += size
@@ -707,6 +712,21 @@ class CanvasUndoBook:
             raise UndoError(409, f"This edit was made in the project “{record.project_name}”, which isn't open. "
                                  "Open it again (open_project) to undo it.", "other_project")
         return record
+
+    def renew_removals(self, project_id: str | None, removals: list[dict[str, Any]]) -> None:
+        """New deletes of nodes that kept edits in ``project_id`` also deleted
+        (a redo of the edit, an undo of its undo): only a node's latest
+        removal can bring its pins and proposals back, so each record naming
+        one of those nodes takes the new removal in place of its old one.
+        Never adds a node a record didn't name. main re-checks every id."""
+        fresh = {str(item["nodeId"]): item for item in removals if isinstance(item, dict) and item.get("nodeId")}
+        if not fresh:
+            return
+        for record in self._records.values():
+            if record.project_id != project_id or not record.removals:
+                continue
+            if any(str(item.get("nodeId")) in fresh for item in record.removals):
+                record.removals = [copy.deepcopy(fresh.get(str(item.get("nodeId")), item)) for item in record.removals]
 
     def by_edit(self, edit_id: str | None) -> EditRecord | None:
         token = self._by_edit.get(edit_id or "")

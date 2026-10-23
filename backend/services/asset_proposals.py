@@ -191,6 +191,9 @@ class AssetProposal:
     auto_cover: str | None = None
     # The Update it posted (Q92 a): {"id": note id, "projectId": ...}, or None.
     update: dict[str, Any] | None = None
+    # kind project: the removal ids (rm_...) of the node deletes whose sync
+    # closed it (its image went with the node), so their undo may reopen it.
+    closed_by: dict[str, str] = field(default_factory=dict)
 
     @property
     def is_open(self) -> bool:

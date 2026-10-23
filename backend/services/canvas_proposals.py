@@ -763,6 +763,10 @@ class Proposal:
     # Its Update on the project's list ({id, projectId}; Justin's Q112 a), or
     # None when no project was open. main posts it and settles it.
     update: dict[str, str] | None = None
+    # The node deletes that closed it, or deleted another node it needs while
+    # it was closed that way: removal id (rm_...) -> node id. The undo of
+    # those deletes may reopen it (ProposalBook.reopen).
+    closed_by: dict[str, str] = field(default_factory=dict)
 
     @property
     def references(self) -> set[str]:
@@ -894,7 +898,38 @@ class ProposalBook:
         proposal.id_map = dict(id_map) if id_map else None
         proposal.run_node_ids = list(run_node_ids) if run_node_ids else None
         proposal.closed_at = self._clock()
+        proposal.closed_by = {}
         self._prune()
+        return proposal
+
+    def closed_by_removals(self, removal_ids: Iterable[str]) -> list[Any]:
+        """Proposals a node delete closed that are still closed that way:
+        invalidated, and one of these removals (rm_...) among their deletes."""
+        wanted = set(removal_ids)
+        return [p for p in self._items.values()
+                if p.status == "invalidated" and p.closed_by and wanted & set(p.closed_by)]
+
+    def reopen(self, proposal_id: str) -> Any:
+        """Open again an invalidated proposal a node delete closed (main finds
+        it by its removal, closed_by_removals) once main checked it still fits
+        the restored graph. Its expiry stays the one it had: a proposal past
+        it doesn't reopen. The open caps apply, as to a new proposal (429)."""
+        proposal = self._items.get(proposal_id)
+        if proposal is None:
+            raise ProposalError(404, f"No proposal {proposal_id[:20]}")
+        if proposal.status != "invalidated":
+            raise ProposalError(409, f"Proposal {proposal_id} is {proposal.status}")
+        if proposal.expires_at <= self._clock():
+            raise ProposalError(409, "it expired")
+        open_now = self.open_list()
+        if len([p for p in open_now if p.agent.id == proposal.agent.id]) >= MAX_OPEN_PER_AGENT:
+            raise ProposalError(429, "its agent already has the most open proposals it may have")
+        if len(open_now) >= MAX_OPEN_TOTAL:
+            raise ProposalError(429, "too many proposals are waiting for the person")
+        proposal.status = OPEN
+        proposal.reason = None
+        proposal.closed_at = None
+        proposal.closed_by = {}
         return proposal
 
     def sweep(self) -> list[Proposal]:
@@ -910,10 +945,21 @@ class ProposalBook:
         self._prune()
         return expired
 
-    def invalidate_referencing(self, node_id: str, reason: str) -> list[Proposal]:
+    def invalidate_referencing(self, node_id: str, reason: str, removal: str | None = None) -> list[Proposal]:
+        """Close the open proposals that read ``node_id`` (it was deleted).
+        ``removal`` is that delete's removal id, so its undo may reopen them."""
         hit = [p for p in self.open_list() if node_id in p.references]
         for proposal in hit:
             self.close(proposal.id, "invalidated", reason=reason)
+            if removal:
+                proposal.closed_by = {removal: node_id}
+        if removal:
+            # Closed by an earlier delete and needing this node too: undoing
+            # only that earlier delete won't bring it back, undoing both may.
+            for proposal in self._items.values():
+                if (proposal.status == "invalidated" and proposal.closed_by and proposal not in hit
+                        and node_id in proposal.references):
+                    proposal.closed_by[removal] = node_id
         return hit
 
     def invalidate_all(self, reason: str) -> list[Proposal]:
