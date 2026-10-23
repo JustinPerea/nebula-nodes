@@ -2027,6 +2027,22 @@ def _is_person_request() -> bool:
     return is_person(current_request_headers())
 
 
+def _person_only_refusal(detail: str) -> HTTPException | PersonGateError:
+    """The 403 for a request refused only because it isn't the person's (who
+    bills a node, a run the person approved, the agents' spending limits the
+    person isn't held to). One with an agent marker gets the plain refusal it
+    always got, ``{detail}``. One without (a canvas tab with no person token,
+    or a token from before Nebula restarted; also curl, or the CLI without
+    NEBULA_AGENT_NAME) gets the person gate's ``code: person_required`` beside
+    the same detail, as require_person answers: reconnecting fixes it, and
+    the canvas reads the code, never the words (GM - Design, Q116 a: "Use it
+    for every person-only refusal, not just Krea billing."). Nothing more is
+    allowed either way: only the answer says why."""
+    if has_agent_marker(current_request_headers()):
+        return HTTPException(status_code=403, detail=detail)
+    return PersonGateError(403, detail, PERSON_REQUIRED)
+
+
 agent_spend_ledger = agent_spend.SpendLedger(_STATE_DIR / "agent-spend.json")
 # Tokens the person made for outside apps (Settings > Agent spending), each
 # also in its own private file (services/app_token_file.py).
@@ -2161,7 +2177,7 @@ async def _require_run_spend_approval(
         measured = await _measure_run_inputs(nodes, edges)
         _check_run_approval(approval_id, nodes, edges)
         _require_spend_approval(nodes, edges, run_id=run_id, measured=measured, **kwargs)
-    except HTTPException:
+    except (HTTPException, PersonGateError):
         canvas_events.forget_run(run_id)
         raise
 
@@ -2182,9 +2198,9 @@ def _check_run_approval(approval_id: str | None, nodes: list[GraphNode], edges: 
     if approval_id is None:
         return
     if not _is_person_request():
-        raise HTTPException(status_code=403, detail=(
+        raise _person_only_refusal(
             "Only the person's canvas starts a run they approved. Agents run through "
-            "/api/graph/run, inside the spending limits."))
+            "/api/graph/run, inside the spending limits.")
     approval = run_approvals.take(approval_id)
     if approval is None:
         raise HTTPException(status_code=409, detail=(
@@ -2315,7 +2331,7 @@ def _require_spend_approval(
         size_reasons=measured.reasons,
     )
     if decision.refusal:
-        raise HTTPException(status_code=403, detail=decision.refusal)
+        raise _person_only_refusal(decision.refusal)
     at = agent_spend_ledger.record(key, label, decision.charge, decision.plan_charge)
     if run_id is not None and (decision.per_node or decision.plan_per_node):
         _place_hold(run_id, key, dict(decision.per_node), dict(decision.plan_per_node), at=at)
@@ -10769,7 +10785,9 @@ def _refuse_agent_billing_change(changes: Iterable[tuple[str, str, Mapping[str, 
     mode (_billing_choice). ``changes`` are (label, definitionId, params
     before or None for a new node, params after). A new node counts as
     changed unless it starts on Auto and the default mode (the API token).
-    The person's own edits and accepted proposals always pass.
+    The person's own edits and accepted proposals always pass. The refusal
+    is _person_only_refusal's: plain for an agent, ``person_required`` for a
+    request with no agent marker (a canvas tab not connected as the person).
 
     The same gate keeps a Moodboard node's ``send_notes`` (gap 18, P4): an
     agent may close it (toward "no"), never open it (a new node may start on
@@ -10793,11 +10811,11 @@ def _refuse_agent_billing_change(changes: Iterable[tuple[str, str, Mapping[str, 
         elif choice[1] != was[1]:
             mode_switched.append(label)
     if provider_switched:
-        raise HTTPException(status_code=403, detail=f"{_listed(provider_switched, 4)}: {PROVIDER_CHOICE_REFUSAL}")
+        raise _person_only_refusal(f"{_listed(provider_switched, 4)}: {PROVIDER_CHOICE_REFUSAL}")
     if mode_switched:
-        raise HTTPException(status_code=403, detail=f"{_listed(mode_switched, 4)}: {KREA_BILLING_REFUSAL}")
+        raise _person_only_refusal(f"{_listed(mode_switched, 4)}: {KREA_BILLING_REFUSAL}")
     if notes_opened:
-        raise HTTPException(status_code=403, detail=f"{_listed(notes_opened, 4)}: {NOTES_TO_GENERATORS_REFUSAL}")
+        raise _person_only_refusal(f"{_listed(notes_opened, 4)}: {NOTES_TO_GENERATORS_REFUSAL}")
 
 
 def _check_krea_auth(definition_id: str, params: dict[str, Any], label: str) -> None:
@@ -11493,7 +11511,7 @@ def _forget_canvas_undo(why: str) -> None:
 def _undo_refused_change(node_id: str, definition_id: str, before: dict[str, Any], after: dict[str, Any]) -> str | None:
     try:
         _refuse_agent_billing_change([(node_id, definition_id, before, after)])
-    except HTTPException as exc:
+    except (HTTPException, PersonGateError) as exc:
         return str(exc.detail)
     return None
 
@@ -12733,20 +12751,14 @@ def _refuse_agent_billing_in_project(candidate: CLIGraph, *before: Mapping[str, 
         prior = next((known.get("params") or {} for graph in before
                       if (known := graph.get(node_id)) and known.get("definitionId") == definition_id), None)
         changes.append((node_id, definition_id, prior, node.get("params") or {}))
-    try:
-        _refuse_agent_billing_change(changes)
-    except HTTPException as exc:
-        # A canvas tab sends these snapshots (autosave, the handoff save, a
-        # stale tab's recovered copy). One that carries no agent marker was
-        # refused only because it isn't connected as the person (no person
-        # token, or one from an earlier launch): reconnecting fixes it. Say
-        # person_required, as require_person does, so the canvas shows its
-        # reconnect banner and keeps Try again instead of treating the copy
-        # as refused for good (Q116 a review). The detail stays word for word
-        # for the CLI and scripts; an agent's refusal is unchanged.
-        if exc.status_code == 403 and not has_agent_marker(current_request_headers()):
-            raise PersonGateError(403, str(exc.detail), PERSON_REQUIRED) from exc
-        raise
+    # A canvas tab sends these snapshots (autosave, the handoff save, a stale
+    # tab's recovered copy). One that carries no agent marker is refused only
+    # because it isn't connected as the person (no person token, or one from
+    # an earlier launch): the refusal says person_required
+    # (_person_only_refusal), so the canvas shows its reconnect banner and
+    # keeps Try again instead of treating the copy as refused for good (Q116 a
+    # review). The detail stays word for word; an agent's refusal is unchanged.
+    _refuse_agent_billing_change(changes)
 
 
 def _overlay_live_project(project: dict[str, Any], exported: dict[str, Any]) -> bool:
@@ -15212,7 +15224,7 @@ def _reader_spend_hold(source: Any, estimate: dict, settings: Mapping[str, Any],
     decision = agent_spend.decide(items, [], settings=settings, pricing=pricing, definitions=node_registry.get_all(),
                                   budgets=_spend_budgets(key, settings), how_to_ask=ask)
     if decision.refusal:
-        raise HTTPException(status_code=403, detail=decision.refusal)
+        raise _person_only_refusal(decision.refusal)
     at = agent_spend_ledger.record(key, label, decision.charge, decision.plan_charge)
     node = str(items[0]["definitionId"])
     shares = {part: (node, amount) for part, amount in (estimate.get("shares") or {}).items()}
@@ -15824,10 +15836,11 @@ def _check_style_write(name: Any, model_id: str | None, params: Mapping[str, Any
     if model_id:
         try:
             _refuse_agent_billing_change([(label, model_id, (before or {}).get("params") if before else None, params)])
-        except HTTPException as exc:
+        except (HTTPException, PersonGateError) as exc:
             # The node sentences end "propose the change instead with
             # propose_change"; a Style change can't be proposed.
-            if exc.status_code == 403 and isinstance(exc.detail, str):
+            status = exc.status_code if isinstance(exc, HTTPException) else exc.status
+            if status == 403 and isinstance(exc.detail, str):
                 exc.detail = _STYLE_PROPOSE_RE.sub(_STYLE_BILLING_INSTEAD, exc.detail)
             raise
 

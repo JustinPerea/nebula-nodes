@@ -1,5 +1,5 @@
 import { apiFetch } from './backend';
-import { copyForError, copyForStatus, FailureNotice, REFUSED_FALLBACK_COPY } from './errorCopy';
+import { copyForAnswer, copyForError, FailureNotice, readRefusal, REFUSED_FALLBACK_COPY } from './errorCopy';
 import { hasRoutes, routeUnavailable, usesRoutePlan } from './directRoute';
 import { keysNeeded } from './nodeKeys';
 import type { ModelNodeDefinition } from '../types';
@@ -117,7 +117,9 @@ export function isKreaAuthorizationUrl(value: string): boolean {
  * {verb} {object}." then the reason). The reason comes from what kind of
  * failure it was, never from the error or the answer's body: network and
  * parsing exceptions, and Krea's own answers, can contain credential-bearing
- * URLs, so nothing of theirs is kept, shown or logged.
+ * URLs, so nothing of theirs is kept, shown or logged. The one thing read
+ * from a refusal is Nebula's own person gate `code`: a person-only refusal
+ * says GM's line for it (Q116 a).
  */
 async function kreaJson<T>(heading: string, path: string, init?: RequestInit): Promise<T> {
   let response: Response;
@@ -126,7 +128,10 @@ async function kreaJson<T>(heading: string, path: string, init?: RequestInit): P
   } catch (error) {
     throw new FailureNotice(heading, copyForError(error));
   }
-  if (!response.ok) throw new FailureNotice(heading, copyForStatus(response.status, undefined));
+  if (!response.ok) {
+    const { code } = await readRefusal(response);
+    throw new FailureNotice(heading, copyForAnswer(response.status, undefined, code));
+  }
   try {
     return await response.json() as T;
   } catch {

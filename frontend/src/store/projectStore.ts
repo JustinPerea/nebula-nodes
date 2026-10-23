@@ -19,7 +19,10 @@ import { isOwnEcho, type EditOrigin } from '../lib/canvasUndo';
 import { TAB_ID } from '../lib/tabId';
 import { holdCommonsExits, holdProjects, refuseWhileCommonsUnsaved } from '../lib/commonsUnsaved';
 import { showNotice } from '../lib/canvasNotice';
-import { FailureNotice, REFUSED_FALLBACK_COPY, RequestFailedError, canTryAgain, failureCopy, failureMessage, oneLine, shortReason } from '../lib/errorCopy';
+import {
+  FailureNotice, PERSON_REQUIRED_CODE, REFUSED_FALLBACK_COPY, RequestFailedError, canTryAgain, failureCopy, failureDetails,
+  failureMessage, oneLine, shortReason,
+} from '../lib/errorCopy';
 import { SOME_NODE_WAITING_UNLOCK } from '../lib/worldLabsWaiting';
 import type { ProjectSnapshot, ProjectSummary, SavedProject, TrashedProject } from '../lib/projects';
 
@@ -71,6 +74,22 @@ export function projectRetryOffer(state: { error: string | null; errorRetry: Pro
   return state.errorRetry.action === 'load' && state.errorRetry.full ? 'reload' : 'redo';
 }
 
+/** The text behind the Projects error line's collapsed Details toggle: a
+ * person-only refusal's own words, written for agents (GM - Design, Q116 a:
+ * "The agents' text stays behind Details."), only while the line it was
+ * written for is still the one showing. */
+export function projectErrorDetails(state: { error: string | null; errorDetails: ProjectErrorDetails | null }): string | null {
+  return state.error !== null && state.errorDetails?.line === state.error ? state.errorDetails.raw : null;
+}
+
+/** Details for one error line: the line it belongs to, so a later line
+ * (set anywhere, by any action) never shows them. */
+export interface ProjectErrorDetails { line: string; raw: string }
+function detailsFor(line: string, error: unknown): ProjectErrorDetails | null {
+  const raw = failureDetails(error);
+  return raw ? { line, raw } : null;
+}
+
 interface ProjectState {
   screen: 'home' | 'workspace';
   initialized: boolean; loading: boolean; busy: boolean;
@@ -80,6 +99,8 @@ interface ProjectState {
   /** The project the Undo toast offers to bring back. */
   lastDeleted: { id: string; name: string } | null;
   workspaceRevision: string; error: string | null;
+  /** What `error`'s Details toggle holds, for that line (projectErrorDetails). */
+  errorDetails: ProjectErrorDetails | null;
   /** What Try again does for `error`; null hides it (projectRetryOffer). */
   errorRetry: ProjectRetry | null;
   /** The last failed save's own line, for the canvas's "Save failed · Retry". */
@@ -90,8 +111,10 @@ interface ProjectState {
   /** A stale tab's unsaved edits that Nebula refused for good as a recovered
    * project (too large, say): the Projects screen shows GM's "Couldn't save
    * your edits." with this reason, and offers to download them or continue
-   * without them (Q116 a). Null otherwise. */
-  unsavedEdits: { reason: string } | null;
+   * without them (Q116 a). Null otherwise. `downloadFailed`: the last
+   * download couldn't be written, so the screen says GM's line 2 instead of
+   * the reason, with the same two choices. */
+  unsavedEdits: { reason: string; downloadFailed?: true } | null;
   /** The file those edits were downloaded as, for GM's line after it, and
    * whether Load graph can open it (a copy past its limits can't). */
   editsSavedAs: SavedEditsFile | null;
@@ -368,7 +391,6 @@ function refusedForGood(error: unknown): boolean {
   return error instanceof WorldLabsHold || (error instanceof RequestFailedError && !canTryAgain(error.status)
     && error.code !== PERSON_REQUIRED_CODE);
 }
-const PERSON_REQUIRED_CODE = 'person_required';
 /** The canvas holds World Labs state that only the person can clear (a start
  * Nebula couldn't confirm, or a run it couldn't confirm): switching or
  * deleting the open project is refused in the browser until they press
@@ -398,7 +420,8 @@ const RETRY_HEADINGS: Record<ProjectRetry['action'], string> = {
  * round 3e): a written failure keeps its heading and reason, anything else
  * reads the action's heading over GM's general line, never its own message. */
 function showError(error: unknown, retry: ProjectRetry | null = null): void {
-  useProjectStore.setState({ error: failureMessage(error, RETRY_HEADINGS[retry?.action ?? 'save']),
+  const line = failureMessage(error, RETRY_HEADINGS[retry?.action ?? 'save']);
+  useProjectStore.setState({ error: line, errorDetails: detailsFor(line, error),
     errorRetry: refusedForGood(error) ? null : retry });
 }
 /** What counts as unsaved work when the tab stops for a params version: run
@@ -605,10 +628,10 @@ function handleParamsVersionChange(backendVersion: number | null): Promise<void>
       // Refused for good: the held edits' screen says it (holdRefusedEdits).
       if (error instanceof EditsRefused) return;
       // Try again sends the same recovered copy again (initialize does it first).
-      useProjectStore.setState({ error: sentences(
+      const line = sentences(
         "Nebula was updated while this tab was open, and your unsaved edits haven't been saved yet.",
-        reasonSentence(error, true), "Try again before you reload, or they'll be lost."),
-      errorRetry: { action: 'load' } });
+        reasonSentence(error, true), "Try again before you reload, or they'll be lost.");
+      useProjectStore.setState({ error: line, errorDetails: detailsFor(line, error), errorRetry: { action: 'load' } });
       return;
     }
     if (superseded()) return;
@@ -1003,10 +1026,10 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     if (error instanceof EditsRefused) return;
     const who = notice.actor?.name ?? 'Another app';
     // Try again loads what is open now (initialize), as the line says.
+    const line = sentences(`${who} opened “${notice.projectName}”, but this window couldn't follow it.`,
+      reasonSentence(error, true));
     useProjectStore.setState({ screen: 'home', initialized: false, dirty: Boolean(pendingRecovery),
-      error: sentences(`${who} opened “${notice.projectName}”, but this window couldn't follow it.`,
-        reasonSentence(error, true)),
-      errorRetry: { action: 'load' } });
+      error: line, errorDetails: detailsFor(line, error), errorRetry: { action: 'load' } });
   } finally {
     useProjectStore.setState({ busy: false });
   }
@@ -1038,7 +1061,7 @@ async function emptyTrashOf(ids: string[]): Promise<void> {
 // Projects waits while the Commons holds unsaved labels (lib/commonsUnsaved).
 export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectState>(holdProjects, (set, get) => ({
   screen: 'home', initialized: false, loading: true, busy: false,
-  projects: [], activeProject: null, trash: [], lastDeleted: null, workspaceRevision: '', error: null,
+  projects: [], activeProject: null, trash: [], lastDeleted: null, workspaceRevision: '', error: null, errorDetails: null,
   errorRetry: null, saveError: null, saveStatus: 'saved', dirty: false, switchNotice: null,
   unsavedEdits: null, editsSavedAs: null,
   dismissSwitchNotice: () => set({ switchNotice: null }),
@@ -1088,7 +1111,8 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
         const reason = error instanceof RequestFailedError && error.storageFull ? LOAD_DISK_FULL
           : general ? LOAD_GENERAL : copy.reason;
         const line = oneLine({ heading: copy.heading, reason });
-        set({ error: pendingRecovery && general ? LOAD_HEADING : line,
+        const shown = pendingRecovery && general ? LOAD_HEADING : line;
+        set({ error: shown, errorDetails: detailsFor(shown, error),
           errorRetry: refusedForGood(error) ? { action: 'load', full: true } : { action: 'load' } });
       }
       finally { set({ loading: false }); initializing = null; }
@@ -1321,16 +1345,27 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
     if (!recovery?.held || get().busy) return;
     set({ busy: true });
     let savedAs: SavedEditsFile | null = null;
+    let failed = false;
     try {
       savedAs = await saveEditsToFile(recovery.snapshot, recovery.projectName);
     } catch (error) {
-      // The writer falls back to a plain download when the picker fails, so
-      // this is only a file that couldn't be written at all: the two choices
-      // stay, with the copy still held.
+      // A file that couldn't be written at all (a full disk, a write the
+      // browser refused; the writer only falls back to a plain download when
+      // the picker itself fails, before a file was chosen). GM's line 2 says
+      // so; the two choices stay, with the copy still held (Q116 a).
+      failed = true;
       console.error('[nebula] unsaved edits download', error);
     } finally { set({ busy: false }); }
-    // A cancelled save picker: back to the two choices, nothing lost.
-    if (savedAs === null || pendingRecovery !== recovery) return;
+    if (savedAs === null) {
+      // A failed write says GM's line 2; a cancelled save picker goes back to
+      // the two choices with no line. Nothing is lost either way.
+      const held = get().unsavedEdits;
+      if (pendingRecovery === recovery && held) {
+        set({ unsavedEdits: failed ? { reason: held.reason, downloadFailed: true } : { reason: held.reason } });
+      }
+      return;
+    }
+    if (pendingRecovery !== recovery) return;
     editsDownloaded = true;
     letGoOfHeldEdits(recovery, savedAs);
     await loadAfterHeldEdits();

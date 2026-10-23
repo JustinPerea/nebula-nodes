@@ -137,6 +137,19 @@ describe('Commons chat integration', () => {
     expect(seen).toHaveBeenCalled();
     window.removeEventListener('nebula:person-required', seen);
   });
+  it("a person_required refusal says GM's line, with the backend's words behind a closed Details (Q116 a)", async () => {
+    const socket = await connected();
+    await sendText('Make a simple graph');
+    await waitFor(() => expect(socket.sent).toHaveLength(1));
+    const backendWords = 'Only the person can start a chat, from a Nebula canvas connected as them.';
+    await act(async () => { socket.receive({ type: 'error', code: 'person_required', message: backendWords }); socket.receive({ type: 'done' }); });
+    const line = await screen.findByText("This change needs your OK, and this tab isn't connected as you. Reconnect it with the link in the notice below, then try again.");
+    const details = line.parentElement?.querySelector('details') ?? null;
+    expect(details).not.toBeNull();
+    expect(details!.open).toBe(false);
+    expect(details!.textContent).toContain(backendWords);
+    expect(screen.queryByText(`Warning: ${backendWords}`)).toBeNull();
+  });
   it('includes human session and brand, retains opaque conversation continuation, then starts fresh for a new brand', async () => {
     useUIStore.getState().setCommonsEnabled(true);
     const token = crypto.randomUUID(); connectAsPerson(token);

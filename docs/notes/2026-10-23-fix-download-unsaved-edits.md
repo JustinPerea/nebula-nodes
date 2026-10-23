@@ -94,9 +94,9 @@ Isolated backend on 8782 through `iso.sh` (temp HOME, every NEBULA_* root in `un
 ## Open items
 
 - A canvas past Load graph's limits (16 MiB of JSON, 10,000 nodes, 50,000 wires or 1,000,000 values) downloads fine, and the line now says Load graph can't open it, but nothing in the app can open it either. It's rare (run history is the usual bulk). Raising the reader's limits, or a reader for big files, would close it.
-- A tab that isn't connected as the person sees the backend's billing refusal on Projects, beside Try again and the reconnect banner. That text is written for agents ("propose the change instead with propose_change (`nebula propose`)"). HEAD showed the same text there. A person's line for it is GM's call (see For GM).
+- A tab that isn't connected as the person sees the backend's billing refusal on Projects, beside Try again and the reconnect banner. That text is written for agents ("propose the change instead with propose_change (`nebula propose`)"). HEAD showed the same text there. A person's line for it is GM's call (see For GM). Answered: GM's line 3 (see "GM's lines" below).
 - Load graph replaces the open canvas without asking. The line steers people to a new project, but an "Open in a new project" action on Projects would be the natural reopen path. For GM and Justin.
-- A failure writing the file at all (not a cancel) keeps the two choices with no line. The writer falls back to a plain download, so this is near unreachable. GM's copy doesn't cover it.
+- A failure writing the file at all (not a cancel) keeps the two choices with no line. The writer falls back to a plain download, so this is near unreachable. GM's copy doesn't cover it. Answered: GM's line 2 (see "GM's lines" below).
 
 ## Review (2026-10-23)
 
@@ -118,6 +118,99 @@ Four confirmed findings, each with a test that failed first, then the fix. Red: 
   - `npx tsc -b`: clean. `npm run -s lint`: clean.
   - `npx vite build && node scripts/check-build-budget.mjs`: passed, **368,399 bytes raw** (110,565 gzip) against 512,000. `dist/` deleted afterwards.
 
+## GM's lines (2026-10-23)
+
+GM - Design answered Q116 with five lines; all five are built verbatim, curly quotes included. The lines themselves are listed under "For GM" below.
+
+### What changed
+
+- **Line 1, a download Load graph can't open.** `editsSavedTooLargeLine` in `unsavedEditsCopy.ts` is now GM's line. The branch that picks it (`reopens: false` from `editsFileReopens`) stays as it is, because Q118 is still open.
+- **Line 2, a download that couldn't be written.** This needed a real failure path first. Before, `saveBlobWithPicker` fell back to a plain download whenever anything in the picker path threw. A failure after the person had picked a file (`createWritable`, `write`, `close`, for example `QuotaExceededError`) now aborts the partial file and throws `SaveFileWriteError`, but only for `saveEditsToFile` (`{ reportWriteFailure: true }`). Save graph keeps its old fallback. A picker that fails before a file is chosen still falls back to a plain download.
+  - The store marks `unsavedEdits` with `downloadFailed: true`. `UnsavedEditsNotice` keeps the "Couldn't save your edits." heading and both buttons, with GM's line as the body, and the copy stays held.
+  - A cancelled picker goes back to the two choices with no line, as before.
+  - A retry after a failure works: the next download clears the flag and writes the same copy.
+- **Line 3, a person-only refusal, classified by `code` only.** `RequestFailedError` (and everything built on it) now takes its reason from `copyForAnswer(status, detail, code, reason?)`: a 4xx with `code: "person_required"` always reads GM's line, whatever words the backend or the caller wrote. `failureDetails(error)` hands back the agents' text for Details. Answers read by hand use `readRefusal(response)` plus `copyForAnswer`.
+- **Line 3's Details.** Projects, a node's card and the chat panel put the agents' text behind the existing `ErrorDetails` "Details" toggle, which starts closed.
+  - Projects: the error line sits in `.project-home__error-text`, with `projectErrorDetails(state)` keyed to the line it belongs to, so the text can't stay behind under a different error.
+  - Node card: `errorPerson` holds GM's line, `error` holds the agents' text, and `errorProviderText` is set.
+  - Chat: a `SystemLine` with `details`.
+- **The banner.** `personRequiredMessage()`'s default case (`not-connected`) is now GM's line. `PersonRequiredBanner.tsx` was not edited. The desktop shell's own lines are unchanged.
+- **Backend.** A new `_person_only_refusal(detail)` in `main.py` returns the old `HTTPException(403, detail)` when the request carries an agent marker (`X-Nebula-Agent`, `X-Nebula-Client` or `Authorization: Agent`), and `PersonGateError(403, detail, PERSON_REQUIRED)` when it doesn't. The `detail` is the same string either way.
+  - Three catch sites rethrew or inspected `HTTPException` only, so each now also catches `PersonGateError`: `_require_run_spend_approval` (so it still forgets the run), `_undo_refused_change` and `_check_style_write` (which still rewrites its propose wording and keeps the status).
+  - `_refuse_agent_billing_in_project` no longer needs its own try/except: the shared helper now does the marker check.
+
+### person_required places
+
+Backend callers, read one by one. Changed (each one is now `raise _person_only_refusal(...)`):
+
+| Refusal | Routes that reach it | Test |
+|---|---|---|
+| `_refuse_agent_billing_change`: provider switch, Krea billing mode, notes to generators | PUT `/api/graph/node/{id}`; POST `/api/graph/node`, `/node-and-connect`, `/cluster`, `/import`, `/restore`; POST/PUT `/api/presets` (through `_check_style_write`); the run gate `_refuse_agent_billing_in_run` (POST `/api/execute`, `/execute-node`, `/quick`, `/cinema/generate-shot`); the project snapshot paths (`/api/projects/recover`, PUT `/api/projects/{id}`, the handoff save), which already had the code since the review | one test per route, two cases each (forged origin, stale person token) in `test_person_required_routes.py`; snapshot paths by the guard test there and `test_unsaved_edits_refusals.py` |
+| `_check_run_approval`: "Only the person's canvas starts a run they approved…" | POST `/api/execute` / `/execute-node` with an `approvalId` | `test_a_run_the_person_approved_started_from_a_tab_not_connected_as_them` |
+| `_require_spend_approval`: over the agent spending limits | POST `/api/execute`, `/execute-node`, `/api/graph/run`, `/quick` | `test_a_run_over_the_agent_spending_limit` (three routes) |
+| `_reader_spend_hold`: a Moodboard read over the limits | POST `/api/moodboards/{id}/read` | new test in `test_moodboard_reader_routes.py` (two cases) |
+
+Each test asserts two things. An agent with a marker gets exactly `{"detail": …}`, as before. An unmarked request gets exactly `{"detail": same, "code": "person_required"}`. Nothing changed and nothing ran.
+
+Read and left alone, with the reason:
+- `/api/graph/apply` (`apply_graph_edit` calls the billing check): it is agents only, so a marker is always there.
+- 403s on proposal accept and reject keys: the caller already passed `require_person`, which carries the code.
+- "The person doesn't need to propose" and the 403s on agent-only routes: the caller is the person, so this line doesn't fit.
+- Commons `human_dep`: Bearer auth. A tab without the token never sends, and a stale token gets a 401, not a 403.
+- Krea connector `local_origin`, zoom telemetry, output restore: origin checks, not person checks.
+- `require_person` routes and Stop: they already carried the code.
+
+Frontend places that now show line 3 for a `person_required` code:
+- Projects, under "Couldn't recover the project." (recover, autosave, handoff save, a params-version stop, an agent switch), with Details.
+- A node's card, for every refused start (`markNodesErrored` at all five refused-start catch sites: run, run node, quick, the cinema shot, an approved run), with Details. The heading is "Couldn't run the node.".
+- The chat panel, for a WebSocket error with that code: a system line with Details, without the "Warning:" prefix. The banner is still reported.
+- One-line surfaces get line 3 with no Details. The agents' text goes to the console (`warnFailure`). They are:
+  - Every `apiRequest` / `requestError` caller: Settings, toasts, notices, Enhance prompt, assets.
+  - The proposal bar. For a `person_required` 403 it now reads line 3 instead of "Only the canvas can accept/reject this. Reload the page.", which still shows for a 403 without the code.
+  - The Krea connection (`kreaJson` reads only `code`).
+  - Cinema motion (`refusalReason`).
+  - The graph store's backend rejections (`backendRejectionReason`).
+- `code` now travels through `ExecutionStartRejectedError`, the canvas proposal errors and the asset proposal errors.
+- Not changed:
+  - Param-edit PUTs: console only, plus the banner, as before.
+  - The chat's own local authority check: there is no request and no code.
+  - Uploads and the Paper source: not person-gated.
+  - Commons: see above.
+
+### Tests (written first)
+
+- Backend, red on the base source: **32 failed, 1 passed** (`unsaved-edits-gm/red-backend.log`). Every failure was the missing `{'code': 'person_required'}`; the agent half of each test already passed. The one that passed is the guard that the snapshot paths still say person_required. Green: 67 passed (the new file, the moodboard reader routes, the unsaved-edits refusals).
+- Frontend, red: **22 failed, 72 passed** across 10 files (94 tests). The 28 new or changed tests split into 22 red and 6 guards that passed on HEAD: no code means no Details, a cancelled picker shows no line, Save graph keeps its fallback, and similar (`unsaved-edits-gm/red-frontend.log`). Green: 94 passed.
+  - New: `tests/personRequiredLines.test.ts` (10) and `tests/personRequiredCards.test.tsx` (2).
+  - Added to: `ChatPanel.commons` (1), `graphStore.errorCopy` (1), `canvasProposalsStore` (2), `ProjectHome.unsavedEdits` (4), `unsavedEdits.store` (4), `graphFile.unsavedEdits` (2).
+- Old tests that pinned the old text, now updated: `tests/lib/enhancePrompt.test.ts` (a person-gate refusal now reads line 3) and `tests/components/PersonRequiredBanner.test.tsx` (GM's banner text, exact).
+- Fixture changes:
+  - `test_billing_choice.py`, `test_moodboard_brief_precedence.py` and `test_moodboard_reader_source.py` call the refusal internals with no request, which now reads as "no agent marker". They now set `main.current_request_headers` to an agent marker, so they keep pinning the agent's answer.
+  - The new internal `SaveFileWriteError` message reads "Couldn't write the file." so the error-copy sweep (`errorCopy.round3e`) stays clean.
+
+### Live check
+
+Isolated backend on 8782 through `iso.sh` (temp HOME, every NEBULA_* root in a temp state dir, no keys, the person token over stdin) and Vite on 5782 with `VITE_NEBULA_BACKEND_PORT=8782`, checked through Vite's proxy first. 8000-8010 and 5173 were blocked with CDP `Network.setBlockedURLs` plus the dead proxy, and the canary 8799 was unreachable. **0 blocked attempts.** No page errors, no dialogs, nothing paid. **22 PASS, 0 FAIL** (`unsaved-edits-gm/live/gm-live.mjs`, `live/results.json`, `live/run.log`).
+
+1. **Line 1.** A held copy with 1,000,001 values was refused 413. The download wrote it, and the line read GM's line 1 verbatim with the real filename. The file holds the edit.
+2. **Line 2.** A save picker whose write throws `QuotaExceededError` gave the same heading with line 2 as the body, both buttons enabled and Download primary, still an alert. The partial file was aborted, nothing was downloaded in its place, and no recover was sent. A retry with a plain download then wrote the same edits and loaded the projects.
+3. **Line 3 on Projects.** A stale person token made the recover of a Krea billing switch come back 403 `person_required`. Projects read "Couldn't recover the project." plus line 3, with Try again (not the held screen). Details was closed and holds the agents' billing text; once opened it shows that text. The banner read GM's line exactly. After the fresh link opened in the same tab, Try again saved the recovered copy.
+4. **Line 3 on a node card** (the other place). A second tab with no token started a text node with an `approvalId` and got 403 `person_required`. The card read "Couldn't run the node." plus line 3, with Details closed holding "Only the person's canvas starts a run they approved…", and Details opened. The banner showed there too. No run started.
+- Screenshots in `unsaved-edits-gm/live/shots/`:
+  - `line1-too-large-1280.png` / `-1440.png`
+  - `line2-not-written-1280.png` / `-1440.png`
+  - `line3-details-closed-1280.png`, `line3-details-open-1280.png`
+  - `banner-1280.png`
+  - `node-card-person-required-1280.png`, `node-card-details-open-1280.png`
+- Servers stopped by port (8782 and 5782 are free), and the state and downloads dirs deleted.
+
+### Gates (focused; CI runs the whole suites)
+
+- Backend, 74 files: every file that touches billing, spend, approvals, presets, moodboard reads, the graph routes, proposals, MCP and CLI surfaces, the error copy or the unsaved-edits refusals, plus the readers of MCP-SETUP (`iso.sh … pytest -q`). **3316 passed, 32 skipped**, 0 failed.
+- Vitest `--maxWorkers=3`, 70 files (every file that touches errorCopy, the stores, ProjectHome, graphFile, ChatPanel, proposals, kreaConnection, cinemaMotion, enhancePrompt, personSession and the banner, plus the error-copy sweeps): **70 files, 1066 passed**, 0 failed.
+- `npx tsc -b`: clean. `npm run -s lint`: clean.
+- `npx vite build && node scripts/check-build-budget.mjs`: passed, **370,967 bytes raw** (111,292 gzip) against 512,000 (+2,568 bytes over the review build). `dist/` deleted afterwards.
+
 ## For GM
 
 The lines as built, verbatim:
@@ -126,13 +219,19 @@ The lines as built, verbatim:
 - Reason, any other refusal for good: the backend's reason as a full sentence, then "Download them so nothing is lost, or continue without them." For example "Project limit reached. Download them so nothing is lost, or continue without them." When the refusal gave no reason, just the second sentence.
 - Buttons: "Download your edits" (primary, first), "Continue without them".
 - Confirm: "Continue without your edits? They can't be recovered after this." Buttons "Continue without them" (red, first), "Cancel" (focused).
-- After a download: "Your edits are saved as {filename}. Open it with “Load graph” under “Canvas actions” in a new project to bring them back."
+- After a download: "Your edits are saved as {filename}. Open it with “Load graph” under “Canvas actions” in a new project to bring them back." (approved by GM, 2026-10-23)
+- After a download Load graph can't open (GM's line 1, until Q118 is settled): "Your edits are saved as {filename}. Keep it somewhere safe. It's too large for “Load graph” to open right now, so Nebula can't bring the edits back yet."
+- A download that couldn't be written (GM's line 2), the body under the same heading, both buttons kept: "The download didn't save, so your edits are still only in this tab. Check that your disk has free space, then download them again, or continue without them."
+- A person-only refusal (GM's line 3), under "Couldn't recover the project." and wherever else one shows: "This change needs your OK, and this tab isn't connected as you. Reconnect it with the link in the notice below, then try again." The agents' text is behind Details where the surface has room for it.
+- The banner: "This tab isn't connected as you, so Settings, proposals and chats are locked. Open the link Nebula printed when it started, or restart Nebula with --open."
 - File name: "{project name} - unsaved edits.nebula".
+- During an update stop, after a download, the tab doesn't reload by itself; the existing line "Nebula was updated while this tab was open. Reload the tab to use the update. Your saved work is kept." shows under the saved-as line (GM: right as it is).
 
-The reopen path I used is "Load graph", under "Canvas actions" on a project's canvas. Projects has no open-file action, and Load graph replaces the canvas it's used on, hence "in a new project". If you'd rather keep "from Projects", the app would need an open-file action there (open item above).
+Still yours to decide (new since your lines):
+- **The banner in the desktop app.** It can show there: when the app's backend refuses the token the shell handed over (or answers before the shell's lookup finished), the banner falls to the browser line above, so the app reads "Open the link Nebula printed when it started, or restart Nebula with --open.", which doesn't apply to the app. The app's own cases (a debug port, the dev renderer, a window Nebula couldn't confirm) keep their lines, one of which ends "Restart the app." Line 3's "Reconnect it with the link in the notice below" then points at a notice that may not mention a link. An app line for both is yours.
+- **One-line surfaces have no Details.** Line 3 replaces the agents' text everywhere it showed. Projects, a node's card and the chat panel keep that text behind the collapsed Details toggle. Toasts, notices and the proposal bar are one line, so there it goes to the console only. Whether any of those should grow a Details toggle is yours.
+- **Line 3 on a node card** reads under the card's "Couldn't run the node." heading (the card's own heading for a person line), not "Couldn't start the run.".
 
-Not covered by your copy:
-- (Review) After a download whose file Load graph can't open (past 16 MiB, 10,000 nodes, 50,000 wires or 1,000,000 values), your line would be wrong, so it reads: "Your edits are saved as {filename}. The file keeps them, but it's too large for “Load graph” to open." It's my wording in your style. Please replace it.
-- (Review) A tab that isn't connected as the person (Nebula restarted, so its token is stale) keeps Try again on Projects, beside the existing reconnect banner. The line under "Couldn't recover the project." is the backend's billing refusal, written for agents ("…propose the change instead with propose_change (`nebula propose`)…"). It was the same before this branch. A person's line for it is yours to write.
-- During an update stop, after a download, the tab doesn't reload by itself. It shows the existing line "Nebula was updated while this tab was open. Reload the tab to use the update. Your saved work is kept." under your saved-as line.
-- A file that can't be written at all leaves the two choices with no line.
+## CI's focus-ring sweep (2026-10-23)
+
+The first CI run failed `tests/focusRingCss.test.ts`: four new `:focus:not(:focus-visible) { outline: none }` rules (the Details summaries on Projects and in chat, the saved line, the heading) cleared the outline without a token ring the sweep could pair. They were redundant: the browser draws its own ring on `:focus-visible` only, so a click or a programmatic focus after a click shows none anyway. Removed; the `:focus-visible` token rings stay. The same run's `DeferredSecondPass` failure (a ⌘K racing the palette chunk) didn't reproduce: it passes alone and in the focused run.

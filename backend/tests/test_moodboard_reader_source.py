@@ -525,6 +525,9 @@ def test_the_route_s_spend_hold_skips_an_unpriced_source(monkeypatch):
     unpriced = reader.model_source({**ARGON, "prices": None})
     est = reader.read_estimate(unpriced, b, targets_of(b), today=TODAY)
     monkeypatch.setattr(main, "agent_spend_ledger", agent_spend.SpendLedger(None))
+    # An agent's read: the plain 403 (with no agent marker it says
+    # person_required; tests/test_moodboard_reader_routes.py).
+    monkeypatch.setattr(main, "current_request_headers", lambda: {"X-Nebula-Agent": "Codex"})
     with pytest.raises(HTTPException) as refused:
         main._reader_spend_hold(unpriced, est, {"runCostConfirmUsd": 50.0}, "board1")
     assert refused.value.status_code == 403 and "no list price" in refused.value.detail

@@ -375,3 +375,68 @@ describe("review: refusals reconnecting can fix, and files Load graph can't open
     expect(state()).toMatchObject({ unsavedEdits: null, initialized: true });
   });
 });
+
+/** GM - Design, 2026-10-23, verbatim (Q116 a). */
+describe("GM's lines in the store", () => {
+  const GM3 = "This change needs your OK, and this tab isn't connected as you. Reconnect it with the link in the notice below, then try again.";
+  const BILLING = "zz1: Changing how a Krea node is billed (_kreaAuth) is the person's call, so it needs their OK.";
+  const errorDetails = () => (projectStore as unknown as {
+    projectErrorDetails?: (state: unknown) => string | null }).projectErrorDetails?.(state()) ?? null;
+
+  it("a person-only refusal under \"Couldn't recover the project.\": GM's line 3, the backend's words behind Details", async () => {
+    falleBehind();
+    vi.mocked(projects.recoverProject).mockRejectedValueOnce(
+      new projects.ProjectRequestError(BILLING, 403, { heading: RECOVER, detail: BILLING, code: 'person_required' }));
+    await useProjectStore.getState().retry();
+    expect(state().error).toBe(`${RECOVER} ${GM3}`);
+    expect(errorDetails()).toBe(BILLING);
+    expect(projectRetryOffer(state())).toBe('redo');
+    // Another line later doesn't carry these Details.
+    useProjectStore.setState({ error: "Couldn't load your projects." });
+    expect(errorDetails()).toBeNull();
+  });
+
+  it('a refusal without the code has no Details', async () => {
+    falleBehind();
+    vi.mocked(projects.recoverProject).mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch')));
+    await useProjectStore.getState().retry();
+    expect(state().error).not.toBeNull();
+    expect(errorDetails()).toBeNull();
+  });
+
+  it("a download that couldn't be written: GM's line 2, the copy still held, and a retry writes it", async () => {
+    falleBehind();
+    vi.mocked(projects.recoverProject).mockRejectedValue(tooLarge());
+    await useProjectStore.getState().retry();
+    vi.mocked(saveEditsToFile).mockRejectedValueOnce(new DOMException('The disk is full.', 'QuotaExceededError'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    await state().downloadUnsavedEdits!();
+    expect(state().unsavedEdits).toEqual({ reason: TOO_LARGE, downloadFailed: true });
+    expect(state().editsSavedAs ?? null).toBeNull();
+    expect(state().busy).toBe(false);
+    expect(unloadPrompts()).toBe(true);
+    expect(projects.recoverProject).toHaveBeenCalledTimes(1);
+    // The retry writes the same copy and lets go of it.
+    await state().downloadUnsavedEdits!();
+    expect(vi.mocked(saveEditsToFile).mock.calls[1][0]).toEqual(vi.mocked(saveEditsToFile).mock.calls[0][0]);
+    expect(state().unsavedEdits).toBeNull();
+    expect(state().editsSavedAs).toEqual({ name: 'Glass campaign - unsaved edits.nebula', reopens: true });
+    expect(projects.recoverProject).toHaveBeenCalledTimes(1);
+  });
+
+  it('a cancelled picker after a failed write goes back to the two choices, with no line', async () => {
+    falleBehind();
+    vi.mocked(projects.recoverProject).mockRejectedValue(tooLarge());
+    await useProjectStore.getState().retry();
+    vi.mocked(saveEditsToFile).mockRejectedValueOnce(new Error('write failed'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    await state().downloadUnsavedEdits!();
+    expect(state().unsavedEdits).toEqual({ reason: TOO_LARGE, downloadFailed: true });
+    vi.mocked(saveEditsToFile).mockResolvedValueOnce(null);
+    await state().downloadUnsavedEdits!();
+    expect(state().unsavedEdits).toEqual({ reason: TOO_LARGE });
+    // Continue without them still works from here.
+    await state().continueWithoutEdits!();
+    expect(state().unsavedEdits).toBeNull();
+  });
+});

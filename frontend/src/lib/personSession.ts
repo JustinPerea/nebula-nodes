@@ -250,8 +250,11 @@ export function personRequiredMessage(reason: PersonUnavailableReason = personUn
     case 'desktop-unavailable':
       return "Nebula couldn't confirm this window is yours, so Settings, proposals and chats are off. Restart the app.";
     default:
+      // GM - Design, 2026-10-23, verbatim. `--open` is backend/devserver.py's
+      // flag. The desktop app gets here too when its sidecar refuses the
+      // token the shell handed over (desktopReason stays null then).
       return "This tab isn't connected as you, so Settings, proposals and chats are locked. "
-        + 'Open the link the backend printed at launch (or restart it with --open).';
+        + 'Open the link Nebula printed when it started, or restart Nebula with --open.';
   }
 }
 

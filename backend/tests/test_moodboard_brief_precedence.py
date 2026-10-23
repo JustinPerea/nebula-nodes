@@ -423,6 +423,9 @@ def test_a_node_sending_notes_is_the_persons_call(monkeypatch):
     import main
 
     monkeypatch.setattr(main, "_is_person_request", lambda: False)
+    # An agent's edit: the plain 403 (with no agent marker the refusal says
+    # person_required instead; tests/test_person_required_routes.py).
+    monkeypatch.setattr(main, "current_request_headers", lambda: {"X-Nebula-Agent": "Codex"})
 
     def refusal(before, after):
         try:

@@ -10,8 +10,9 @@ describe('PersonRequiredBanner', () => {
     render(<PersonRequiredBanner />);
     expect(screen.queryByRole('status')).toBeNull();
     act(() => reportPersonRequired());
-    expect(screen.getByRole('status').textContent).toMatch(/isn't connected as you/);
-    expect(screen.getByRole('status').textContent).toMatch(/link the backend printed/);
+    // GM - Design, 2026-10-23, verbatim.
+    expect(screen.getByRole('status').textContent).toBe("This tab isn't connected as you, so Settings, proposals and "
+      + 'chats are locked. Open the link Nebula printed when it started, or restart Nebula with --open.×');
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
     expect(screen.queryByRole('status')).toBeNull();
     act(() => reportPersonRequired());

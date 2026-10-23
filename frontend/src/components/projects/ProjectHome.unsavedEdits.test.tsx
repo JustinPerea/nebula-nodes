@@ -165,3 +165,45 @@ describe('review: the line after a download, and where focus goes', () => {
     expect(document.activeElement).toBe(elsewhere);
   });
 });
+
+/** GM - Design, 2026-10-23, verbatim (Q116 a, the three lines). */
+describe("GM's lines", () => {
+  const BILLING = "zz1: Changing how a Krea node is billed (_kreaAuth) is the person's call. Propose the change instead with propose_change (`nebula propose`).";
+  const PERSON_LINE = "Couldn't recover the project. This change needs your OK, and this tab isn't connected as you. Reconnect it with the link in the notice below, then try again.";
+  const NOT_WRITTEN = "The download didn't save, so your edits are still only in this tab. Check that your disk has free space, then download them again, or continue without them.";
+
+  it("too large for Load graph: GM's line 1", () => {
+    render(<Home {...props({ unsavedEdits: null, editsSavedAs: { name: SAVED, reopens: false } })} />);
+    expect(screen.getByRole('status').textContent).toBe(`Your edits are saved as ${SAVED}. Keep it somewhere safe. It's too large for “Load graph” to open right now, so Nebula can't bring the edits back yet.`);
+  });
+
+  it("a download that couldn't be written: the heading and both buttons stay, GM's line 2 is the body", () => {
+    render(<Home {...props({ unsavedEdits: { reason: TOO_LARGE, downloadFailed: true } as never })} />);
+    const alert = screen.getByRole('alert');
+    expect(within(alert).getByText("Couldn't save your edits.")).toBeTruthy();
+    expect(within(alert).getByText(NOT_WRITTEN)).toBeTruthy();
+    expect(within(alert).queryByText(TOO_LARGE)).toBeNull();
+    expect(within(alert).getByRole('button', { name: 'Download your edits' })).toBeTruthy();
+    expect(within(alert).getByRole('button', { name: 'Continue without them' })).toBeTruthy();
+  });
+
+  it("a person-only refusal: GM's line 3 under the heading, the agents' text behind a closed Details, Try again kept", () => {
+    const { container } = render(<Home {...props({ unsavedEdits: null, error: PERSON_LINE, retry: 'redo',
+      errorDetails: BILLING } as never)} />);
+    const alert = screen.getByRole('alert');
+    expect(within(alert).getByText(PERSON_LINE)).toBeTruthy();
+    expect(within(alert).getByRole('button', { name: 'Try again' })).toBeTruthy();
+    const details = container.querySelector('.project-home__error details') as HTMLDetailsElement | null;
+    expect(details).not.toBeNull();
+    expect(details!.open).toBe(false);
+    expect(details!.querySelector('summary')?.textContent).toBe('Details');
+    expect(details!.textContent).toContain(BILLING);
+    // The line itself is GM's alone.
+    expect(alert.querySelector('span')?.textContent).toBe(PERSON_LINE);
+  });
+
+  it('an error with nothing behind it has no Details', () => {
+    const { container } = render(<Home {...props({ unsavedEdits: null, error: "Couldn't load your projects.", retry: 'redo' })} />);
+    expect(container.querySelector('details')).toBeNull();
+  });
+});

@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import '../../styles/prompt-dialog.css';
-import { CONFIRM_LINE, UNSAVED_EDITS_HEADING } from './unsavedEditsCopy';
+import { CONFIRM_LINE, EDITS_NOT_WRITTEN, UNSAVED_EDITS_HEADING } from './unsavedEditsCopy';
 
 /**
  * Q116 a) (Justin, 2026-10-23): "a): "Download your edits" plus "Continue
@@ -12,9 +12,11 @@ import { CONFIRM_LINE, UNSAVED_EDITS_HEADING } from './unsavedEditsCopy';
  * build's deferred chunk may be gone.
  *
  * The held edits' screen: announced as the screen's errors are (an alert),
- * "Download your edits" first and primary, "Continue without them" asks first. */
-export function UnsavedEditsNotice({ reason, busy, onDownload, onContinue }: {
-  reason: string; busy: boolean; onDownload: () => void; onContinue: () => void;
+ * "Download your edits" first and primary, "Continue without them" asks first.
+ * After a download that couldn't be written (`downloadFailed`), GM's line 2
+ * is the body in place of the reason; the heading and both choices stay. */
+export function UnsavedEditsNotice({ reason, downloadFailed = false, busy, onDownload, onContinue }: {
+  reason: string; downloadFailed?: boolean; busy: boolean; onDownload: () => void; onContinue: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
   const continueButton = useRef<HTMLButtonElement>(null);
@@ -34,7 +36,7 @@ export function UnsavedEditsNotice({ reason, busy, onDownload, onContinue }: {
     <div className="project-home__error project-home__edits" role="alert">
       <span className="project-home__edits-text">
         <strong className="project-home__edits-heading">{UNSAVED_EDITS_HEADING}</strong>
-        <span>{reason}</span>
+        <span>{downloadFailed ? EDITS_NOT_WRITTEN : reason}</span>
       </span>
       <span className="project-home__edits-actions">
         <button type="button" ref={downloadButton} className="project-home__edits-primary" disabled={busy} onClick={onDownload}>Download your edits</button>

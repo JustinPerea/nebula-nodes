@@ -8,7 +8,14 @@ import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { cinemaMotionSource, cinemaMotionTarget, useCinemaMotionStore, type CinemaMotionHandoff } from '../store/cinemaMotionStore';
 import type { NodeData } from '../types';
-import { NO_RESPONSE_SHORT_COPY, copyForStatus, isConnectionFailure, readDetail, shortReason } from './errorCopy';
+import { NO_RESPONSE_SHORT_COPY, copyForAnswer, isConnectionFailure, readRefusal, shortReason } from './errorCopy';
+
+/** A refused handoff's reason: a person-only refusal says GM's line, by its
+ * code (Q116 a); else the backend's reason or GM's line for the status. */
+async function refusalReason(response: Response): Promise<string> {
+  const { detail, code } = await readRefusal(response);
+  return copyForAnswer(response.status, detail, code);
+}
 
 // The handoff's lines sit beside its "Retry connection" button, so they name
 // what failed and why and leave the retry to the button (GM's WRAP rule, error
@@ -77,7 +84,7 @@ export async function sendCinemaShotToMotion(nodeId: string, shotId: string): Pr
       if (!response.ok) {
         throw new HandoffError(response.status === 409
           ? 'The shot changed before it could be connected. Retry with the current result.'
-          : `Couldn't connect the video node. ${shortReason(copyForStatus(response.status, await readDetail(response)))}`);
+          : `Couldn't connect the video node. ${shortReason(await refusalReason(response))}`);
       }
       const result = validatedResponse(await response.json(), handoff);
       if (!owns(handoff)) return;

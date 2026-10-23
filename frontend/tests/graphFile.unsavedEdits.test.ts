@@ -157,3 +157,39 @@ describe('an edits file Load graph cannot open', () => {
     expect(downloads).toEqual(['Glass campaign - unsaved edits.nebula']);
   });
 });
+
+/** GM - Design, 2026-10-23 (Q116 a, line 2): a download that couldn't be
+ * written says so. A write that fails after the person picked where the file
+ * goes (a full disk, say) is that: it rejects, and isn't swapped for a plain
+ * download that could fail just as silently and still be reported as saved. */
+describe("an edits file that couldn't be written", () => {
+  it('a write that fails after the picker rejects, discards the partial file and downloads nothing else', async () => {
+    const abort = vi.fn(async () => {});
+    (window as unknown as { showSaveFilePicker: unknown }).showSaveFilePicker = vi.fn(async () => ({
+      name: 'Glass campaign - unsaved edits.nebula',
+      createWritable: async () => ({
+        write: async () => { throw new DOMException('The disk is full.', 'QuotaExceededError'); },
+        close: async () => {}, abort,
+      }),
+    }));
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    await expect(saveEditsToFile(snapshot, 'Glass campaign')).rejects.toThrow('The disk is full.');
+    expect(click).not.toHaveBeenCalled();
+    expect(abort).toHaveBeenCalled();
+  });
+
+  it('a picker that fails before anything was chosen still falls back to a plain download', async () => {
+    (window as unknown as { showSaveFilePicker: unknown }).showSaveFilePicker = vi.fn(async () => {
+      throw new DOMException('Not allowed here.', 'SecurityError');
+    });
+    const downloads: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      downloads.push(this.download);
+    });
+    Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:edits'), revokeObjectURL: vi.fn() });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await expect(saveEditsToFile(snapshot, 'Glass campaign')).resolves
+      .toEqual({ name: 'Glass campaign - unsaved edits.nebula', reopens: true });
+    expect(downloads).toEqual(['Glass campaign - unsaved edits.nebula']);
+  });
+});

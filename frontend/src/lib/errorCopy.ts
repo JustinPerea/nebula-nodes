@@ -42,6 +42,17 @@ export const ACCESS_LOST_COPY = "You don't have access to this anymore. Reload t
 /** 413 with no reason (GM). */
 export const TOO_LARGE_COPY = "That's too large to save.";
 
+/** The person gate's code for a refusal only the person may get past: this
+ * tab isn't connected as the person (no person token, or one from before
+ * Nebula restarted), which reconnecting fixes (backend services/person_gate.py). */
+export const PERSON_REQUIRED_CODE = 'person_required';
+/** GM - Design, 2026-10-23 (Q116 a), verbatim, for every refusal that says
+ * PERSON_REQUIRED_CODE: "Use it for every person-only refusal, not just Krea
+ * billing. The agents' text stays behind Details." The notice below it is
+ * PersonRequiredBanner. Classified by the answer's `code`, never its words. */
+export const PERSON_REQUIRED_COPY = "This change needs your OK, and this tab isn't connected as you. "
+  + 'Reconnect it with the link in the notice below, then try again.';
+
 /** GM's WRAP rule (round 2): "when the surface already has a retry button,
  * the reason line drops its 'try again'. The button is the retry." Only
  * failureCopy({ short: true }) picks these. */
@@ -128,7 +139,10 @@ export class ConnectionLostError extends TypeError {
 /** A request that was answered with a failure. The heading is the caller's
  * (every request names its action); the reason is copy for the status
  * (copyForStatus) unless the caller wrote one; `status`, the raw `detail`
- * and `cause` stay for debugging and the console. */
+ * and `cause` stay for debugging and the console. A person-only refusal
+ * (`code` PERSON_REQUIRED_CODE) always reads GM's PERSON_REQUIRED_COPY,
+ * whatever reason the caller passed: its `detail` is written for agents, and
+ * failureDetails hands it to a Details toggle. */
 export class RequestFailedError extends Error {
   readonly status: number;
   readonly detail: unknown;
@@ -151,7 +165,7 @@ export class RequestFailedError extends Error {
   constructor(heading: string, status: number,
     options: { detail?: unknown; reason?: string; cause?: unknown; storageFull?: boolean;
       storageLimit?: StorageLimit | null; code?: string | null } = {}) {
-    const reason = options.reason ?? copyForStatus(status, options.detail);
+    const reason = copyForAnswer(status, options.detail, options.code ?? null, options.reason);
     super(oneLine({ heading, reason }), 'cause' in options ? { cause: options.cause } : undefined);
     this.name = 'RequestFailedError';
     this.status = status;
@@ -237,6 +251,28 @@ export function copyForStatus(status: number, detail: unknown): string {
   return detailText(detail) || refusedCopy(status);
 }
 
+/** The line for an answer read by hand (a caller with no RequestFailedError):
+ * classified by the answer's `code` first, so a person-only refusal says GM's
+ * PERSON_REQUIRED_COPY whatever its words (Q116 a), and otherwise as
+ * copyForStatus says, or the caller's own `reason`. A person-only refusal
+ * is a 4xx: a 5xx or no answer keeps GM's line for those. */
+export function copyForAnswer(status: number, detail: unknown, code: string | null, reason?: string): string {
+  if (code === PERSON_REQUIRED_CODE && failureKind(status) === 'refused') return PERSON_REQUIRED_COPY;
+  return reason ?? copyForStatus(status, detail);
+}
+
+/** The text a surface keeps behind its collapsed Details toggle
+ * (components/failure/ErrorDetails) under a line that replaced it: a
+ * person-only refusal's own words, written for agents (GM, Q116 a: "The
+ * agents' text stays behind Details."). Null for anything else, and for a
+ * refusal with no words of its own. */
+export function failureDetails(error: unknown): string | null {
+  if (!(error instanceof RequestFailedError) || error.reason !== PERSON_REQUIRED_COPY) return null;
+  if (error.code !== PERSON_REQUIRED_CODE) return null;
+  const text = detailText(error.detail);
+  return text && text !== error.reason ? text : null;
+}
+
 /** The line for a thrown error that isn't a request's answer: the
  * connection line when fetch got no answer, else GM's general line, never
  * the error's own message. */
@@ -247,6 +283,14 @@ export function copyForError(error: unknown, signal?: AbortSignal | null): strin
 /** An answer's `detail`, read from a JSON body; undefined when there is none. */
 export async function readDetail(response: Response): Promise<unknown> {
   return (await readFailureBody(response)).detail;
+}
+
+/** An answer's `detail` and `code` (the person gate's, when it has one), from
+ * one read of its body, for a caller that words the failure itself
+ * (copyForAnswer). */
+export async function readRefusal(response: Response): Promise<{ detail: unknown; code: string | null }> {
+  const { detail, code } = await readFailureBody(response);
+  return { detail, code };
 }
 
 /** An answer's `detail`, and whether it says the disk is full (the backend's

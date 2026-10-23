@@ -86,6 +86,16 @@ describe('adding a node', () => {
   });
 });
 
+describe("a person-only refusal (code person_required, GM Q116 a)", () => {
+  it("adding a node says GM's line, never the agents' text", async () => {
+    useGraphStore.setState({ nodes: [textNode('n7')] as never });
+    fetchMock.mockResolvedValueOnce(json({ detail: 'krea-2-generate: propose the change instead with propose_change',
+      code: 'person_required' }, 403));
+    expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
+    expect(alerted()).toBe("Couldn't add Text Input. This change needs your OK, and this tab isn't connected as you. Reconnect it with the link in the notice below, then try again.");
+  });
+});
+
 describe('deleting a node', () => {
   it('a refused delete: "Couldn\'t delete the node." and the reason, never its id or status', async () => {
     useGraphStore.setState({ nodes: [textNode('n1')] as never });

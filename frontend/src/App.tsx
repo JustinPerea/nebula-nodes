@@ -42,7 +42,7 @@ import { ProjectHome } from './components/projects/ProjectHome';
 // Asset proposals (a pinned cover, a board's Send notes) reach this tab on any screen.
 import './store/assetProposalsSocket';
 import { useHomeSettingsDock } from './components/projects/useHomeSettingsDock';
-import { projectRetryOffer, useProjectStore } from './store/projectStore';
+import { projectErrorDetails, projectRetryOffer, useProjectStore } from './store/projectStore';
 import { listCoverChoices } from './lib/projects';
 import './App.css';
 import './styles/layouts.css';
@@ -255,7 +255,7 @@ export default function App() {
   let mainView;
   if (isHome) {
     mainView = <ProjectHome projects={projects.projects} loading={projects.loading} busy={projects.busy}
-      error={projects.error} onCreate={(name) => void projects.createProject(name)}
+      error={projects.error} errorDetails={projectErrorDetails(projects)} onCreate={(name) => void projects.createProject(name)}
       onOpen={(id) => void projects.open(id)} onRename={(id, name) => void projects.rename(id, name)}
       onDelete={(id) => void projects.remove(id)} trash={projects.trash} lastDeleted={projects.lastDeleted}
       onRestore={(id) => void projects.restore(id)} onPurge={(id) => void projects.purge(id)}

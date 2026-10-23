@@ -7,6 +7,7 @@ import { CrabMark } from '../brand/CrabMark';
 import { ProposalsFor } from '../proposals/ProposalsFor';
 import { UpdatesSlot } from '../agent-notes/UpdatesSlot';
 import { failureMessage, shortLine } from '../../lib/errorCopy';
+import { ErrorDetails } from '../failure/ErrorDetails';
 import { UnsavedEditsNotice } from './UnsavedEditsNotice';
 import { editsSavedLine, editsSavedTooLargeLine } from './unsavedEditsCopy';
 import type { SavedEditsFile } from '../../lib/graphFileShared';
@@ -42,6 +43,9 @@ export interface ProjectHomeProps {
   loading: boolean;
   busy: boolean;
   error: string | null;
+  /** The text behind `error`'s collapsed Details toggle: a person-only
+   * refusal's own words, written for agents (GM, Q116 a). */
+  errorDetails?: string | null;
   onCreate: (name?: string) => void;
   onOpen: (id: string) => void;
   onRename: (id: string, name: string) => void;
@@ -61,7 +65,7 @@ export interface ProjectHomeProps {
   /** A stale tab's unsaved edits Nebula refused for good (Q116 a): GM's
    * "Couldn't save your edits." with this reason, in place of the error line
    * and its Try again, until the person downloads them or continues without. */
-  unsavedEdits?: { reason: string } | null;
+  unsavedEdits?: { reason: string; downloadFailed?: boolean } | null;
   /** The file the held edits were downloaded as, for GM's line after it, and
    * whether Load graph can open it. */
   editsSavedAs?: SavedEditsFile | null;
@@ -370,7 +374,7 @@ function useFocusAfterHeldEdits(held: boolean, savedLine: RefObject<HTMLElement 
   }, [held, savedLine, heading]);
 }
 
-export function ProjectHome({ projects, loading, busy, error, onCreate, onOpen, onRename, onDelete, onRetry, retry = 'redo',
+export function ProjectHome({ projects, loading, busy, error, errorDetails = null, onCreate, onOpen, onRename, onDelete, onRetry, retry = 'redo',
   trash = [], lastDeleted = null, onRestore = noop, onPurge = noop, onEmptyTrash = noop, onDismissUndo = noop,
   settingsOpen = false, onToggleSettings, loadCoverChoices, onPinCover,
   unsavedEdits = null, editsSavedAs = null, onDownloadEdits = noop, onContinueWithoutEdits = noop }: ProjectHomeProps) {
@@ -402,11 +406,14 @@ export function ProjectHome({ projects, loading, busy, error, onCreate, onOpen, 
 
         {/* GM's WRAP rule: where "Try again" redoes the failure it is the retry, so the
             reason drops its own; where it only reloads, or can't help, the line stays whole. */}
-        {unsavedEdits ? <UnsavedEditsNotice reason={unsavedEdits.reason} busy={busy}
+        {unsavedEdits ? <UnsavedEditsNotice reason={unsavedEdits.reason} downloadFailed={unsavedEdits.downloadFailed} busy={busy}
           onDownload={onDownloadEdits} onContinue={onContinueWithoutEdits} />
           : editsSavedAs && <div ref={savedLine} tabIndex={-1} className="project-home__notice" role="status">
             {editsSavedAs.reopens ? editsSavedLine(editsSavedAs.name) : editsSavedTooLargeLine(editsSavedAs.name)}</div>}
-        {!unsavedEdits && error && <div className="project-home__error" role="alert"><span>{retry === 'redo' ? shortLine(error) : error}</span>
+        {!unsavedEdits && error && <div className="project-home__error" role="alert">
+          {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? shortLine(error) : error}</span>
+            <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>
+            : <span>{retry === 'redo' ? shortLine(error) : error}</span>}
           {retry !== 'none' && <button type="button" disabled={loading || busy} onClick={onRetry}>Try again</button>}</div>}
 
         <section className="project-home__projects" aria-labelledby="recent-projects-title">

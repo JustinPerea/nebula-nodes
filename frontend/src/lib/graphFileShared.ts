@@ -255,18 +255,34 @@ export interface SaveFileType {
  * download. Resolves to the file's name (the one the person chose in the
  * picker) or null when they cancelled. A plain download can't report a
  * cancel or where the file went: it resolves to `suggestedName`.
+ *
+ * A picker that fails before a file was chosen falls back to the plain
+ * download. With `reportWriteFailure`, a write that fails after the person
+ * chose the file (a full disk, say) rejects instead, after discarding the
+ * partial file: the unsaved edits' download (Q116 a, GM's line 2) must say
+ * the file wasn't written, and a plain download in its place could fail just
+ * as silently while the screen said the edits were saved.
  */
-export async function saveBlobWithPicker(blob: Blob, suggestedName: string, type: SaveFileType): Promise<string | null> {
+export async function saveBlobWithPicker(blob: Blob, suggestedName: string, type: SaveFileType,
+  options: { reportWriteFailure?: boolean } = {}): Promise<string | null> {
   if ('showSaveFilePicker' in window) {
+    let writable: FileSystemWritableFileStream | null = null;
     try {
       const handle = await (window as unknown as {
         showSaveFilePicker: (opts: { suggestedName: string; types: SaveFileType[] }) => Promise<FileSystemFileHandle>;
       }).showSaveFilePicker({ suggestedName, types: [type] });
-      const writable = await handle.createWritable();
-      await writable.write(blob);
-      await writable.close();
+      try {
+        writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+      } catch (err) {
+        if (!options.reportWriteFailure) throw err;
+        await writable?.abort().catch(() => {});
+        throw new SaveFileWriteError(err);
+      }
       return handle.name || suggestedName;
     } catch (err) {
+      if (err instanceof SaveFileWriteError) throw err.cause;
       if ((err as DOMException).name === 'AbortError') return null;
       console.warn('File System Access API failed, falling back to download:', err);
     }
@@ -286,6 +302,12 @@ export async function saveBlobWithPicker(blob: Blob, suggestedName: string, type
     window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
   }
   return suggestedName;
+}
+
+/** A write that failed after the person chose the file (saveBlobWithPicker's
+ * `reportWriteFailure`); `cause` is the browser's own error. */
+class SaveFileWriteError extends Error {
+  constructor(cause: unknown) { super("Couldn't write the file.", { cause }); this.name = 'SaveFileWriteError'; }
 }
 
 /** Characters no file name may hold on macOS, Windows or Linux. */
@@ -339,7 +361,7 @@ export interface SavedEditsFile { name: string; reopens: boolean }
 /** Download a held recovered copy (Q116 a "Download your edits"). The file is
  * written whatever its size, so nothing is lost; `reopens` says whether Load
  * graph can open it. Resolves to null when the person cancelled the save
- * picker. */
+ * picker; rejects when the file couldn't be written. */
 export async function saveEditsToFile(snapshot: Pick<ProjectSnapshot, 'nodes' | 'edges' | 'viewport'>,
   projectName: string): Promise<SavedEditsFile | null> {
   const text = JSON.stringify(editsFile(snapshot, projectName));
@@ -348,6 +370,6 @@ export async function saveEditsToFile(snapshot: Pick<ProjectSnapshot, 'nodes' | 
   const reopens = new Blob([text]).size <= GRAPH_JSON_MAX_IMPORT_BYTES && editsFileReopens(text, JSON.parse(text));
   const blob = new Blob([text], { type: 'application/json' });
   const name = await saveBlobWithPicker(blob, editsFileName(projectName),
-    { description: 'Nebula Node Graph', accept: { 'application/json': ['.nebula'] } });
+    { description: 'Nebula Node Graph', accept: { 'application/json': ['.nebula'] } }, { reportWriteFailure: true });
   return name === null ? null : { name, reopens };
 }
