@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from services.provider_start_guard import (
+    NONDURABLE_RECOVERY_MESSAGE,
     ProviderStartCancellationCapacityError,
     ProviderStartCancelledError,
     ProviderStartConflictError,
@@ -35,8 +36,9 @@ def test_pending_paid_intent_becomes_ambiguity_after_restart(tmp_path: Path) -> 
             "kind": ENVIRONMENT,
             "message": (
                 # Error copy round 3c (GM): "World Labs run", not "paid start".
-                "World Labs may have accepted a World Labs run without returning a "
-                "recovery ID. Check Marble before unlocking; do not rerun blindly."
+                "World Labs may have started this run without sending back its ID, so Nebula "
+                "can't tell if it was billed. Check the job in Marble before you unlock the node, "
+                "and don't run it again until you have."
             ),
             "durable": True,
         }
@@ -274,7 +276,8 @@ def test_nondurable_recovery_converts_pending_intent_to_hold(tmp_path: Path) -> 
 
     assert record is not None
     assert record["durable"] is True
-    assert "recovery ID" in record["message"]
+    # The nondurable hold's own words (error copy round 3c, GM - Design).
+    assert record["message"] == NONDURABLE_RECOVERY_MESSAGE
     assert guard.release_run("paid") == []
     with pytest.raises(ProviderStartConflictError, match="safety-locked"):
         guard.claim(run_id="stale", claims=[(ENVIRONMENT, "world")])

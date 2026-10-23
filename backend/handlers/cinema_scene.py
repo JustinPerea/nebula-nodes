@@ -61,6 +61,8 @@ from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.output import OUTPUT_ROOT, get_run_dir
+from execution.error_classifier import classify_error
+from execution.person_line import person_line, with_person_line
 
 
 _OUTPUTS_URL_PREFIX = "/api/outputs/"
@@ -246,9 +248,13 @@ def _seedream_image_size(aspect_ratio: str, extra_params: dict[str, Any]) -> Any
         else:
             width, height = round(4096 * ratio), 4096
     except (ValueError, ZeroDivisionError):
-        raise ValueError("Cinema Seedream aspectRatio must be a positive width:height ratio") from None
+        raise with_person_line(
+            ValueError("Cinema Seedream aspectRatio must be a positive width:height ratio"),
+            "Write the aspect ratio as width:height with positive numbers, like 16:9.") from None
     if not (0 < width <= 14142 and 0 < height <= 14142 and 2560 * 1440 <= width * height <= 4096 * 4096):
-        raise ValueError("Cinema Seedream aspectRatio cannot fit supported image dimensions; use a less extreme ratio")
+        raise with_person_line(
+            ValueError("Cinema Seedream aspectRatio cannot fit supported image dimensions; use a less extreme ratio"),
+            "This aspect ratio is too extreme for Cinema Seedream. Use a less extreme ratio.")
     return {"width": width, "height": height}
 
 
@@ -533,7 +539,14 @@ async def handle_cinema_scene(
             outputs[port_id] = {"type": "Image", "value": url}
 
         except Exception as exc:  # per-shot isolation — never abort the scene
-            shot["output"] = {"status": "error", "error": str(exc)}
+            # `error` is the text agents read, word for word. The other fields
+            # are how the Cinema panel reads the failure, the way a node card
+            # reads its run error (error copy round 3c-2, lib/nodeErrorCopy.ts).
+            category, friendly, _retryable = classify_error(str(exc))
+            fields = {"errorCategory": category, "errorFriendly": friendly,
+                      "errorPerson": person_line(exc), "errorRaw": str(exc)}
+            shot["output"] = {"status": "error", "error": str(exc),
+                              **{key: value for key, value in fields.items() if value}}
             outputs[port_id] = {"type": "Image", "value": None}
 
         # Mark each settled shot immediately: cancellation during a later

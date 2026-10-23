@@ -16,9 +16,41 @@ another writes its own line, so a cause's line never leaks into a different
 failure. A node error with no person line shows "Couldn't run the node." and
 GM's general line on the card, the raw text behind "Details" (the frontend's
 lib/nodeErrorCopy.ts).
+
+The rule for every raise during a node's run (round 3c-2). GM's guard:
+"provider run errors often carry the one fact the person needs ... Don't let
+the general fallback hide them." A line Nebula wrote for the person is a
+written line, so it never goes without a person line:
+
+- The text is Nebula's own words for the person and names no id, file path,
+  record name, env-var name, parameter key (snake_case) or provider text:
+  ``raise as_person_line(ValueError("..."))``. The card shows the text itself.
+- It names one of those: ``raise with_person_line(ValueError("..."), line)``
+  with an id-free line that names the node's field by its label in
+  node_definitions.json, or the input in words ("A connected image file
+  can't be found."). ``missing_file_line`` and ``key_line`` are the shared
+  ones; a plain "<KEY> is required" MissingCredentialError gets ``key_line``
+  by itself (execution/missing_credential.py).
+- A shared check that names its caller (route_clients' ``where``, which is
+  the provider's model or endpoint id) puts the node's name on its provider
+  on the card ("FLUX 3 Video on Replicate"), never the id:
+  ``raise refuse(where, text, person_tail)`` with a ``Where``
+  (execution/route_clients.py). No value the run was given (``{size!r}``)
+  goes in a line.
+- Provider text (a provider's body or message), malformed provider answers,
+  timeouts the classifier names, moderation blocks (their own card) and
+  developer-only states keep no line: the card says the classifier's line or
+  GM's general line, with the raw text behind Details.
+
+Either way the exception text stays word for word. A guard counts the raises
+with no line (tests/test_error_copy_round3c2.py) in handlers/, execution/ and
+the services a run raises from (its RUN_TIME_SERVICES; add a new one there): a
+new raise in Nebula's own words without one fails it. A raise the guard can't
+read (a re-raise of another exception's text) needs its own test.
 """
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import TypeVar
 
 _ATTRIBUTE = "nebula_person_line"
@@ -32,7 +64,67 @@ def with_person_line(exc: E, line: str) -> E:
     return exc
 
 
+def as_person_line(exc: E) -> E:
+    """`exc`'s own text is already the person's line: the card shows it as it is."""
+    return with_person_line(exc, str(exc))
+
+
 def person_line(exc: BaseException) -> str | None:
     """The person's line `exc` was raised with, or None (the card's fallback)."""
     line = getattr(exc, _ATTRIBUTE, None)
     return line.strip() if isinstance(line, str) and line.strip() else None
+
+
+def missing_file_line(what: str = "file") -> str:
+    """A connected file that isn't there, named in words ("image file",
+    "reference video"), never by its path."""
+    return f"A connected {what.strip().lower() or 'file'} can't be found. Connect it again, then run the node again."
+
+
+# How a person knows each key Settings stores: the provider's own spelling
+# (frontend/src/lib/providerCatalog.ts labels), and what the key is called.
+KEY_NAMES: dict[str, tuple[str, str]] = {
+    "ANTHROPIC_API_KEY": ("Anthropic", "API key"),
+    "BFL_API_KEY": ("Black Forest Labs", "API key"),
+    "BYTEPLUS_API_KEY": ("BytePlus", "API key"),
+    "ELEVENLABS_API_KEY": ("ElevenLabs", "API key"),
+    "FAL_KEY": ("fal.ai", "API key"),
+    "GOOGLE_API_KEY": ("Gemini", "API key"),
+    "GOOGLE_VERTEX_CREDENTIALS": ("Google Vertex AI", "credentials"),
+    "HIGGSFIELD_API_KEY": ("Higgsfield", "API key"),
+    "IDEOGRAM_API_KEY": ("Ideogram", "API key"),
+    "KREA_API_TOKEN": ("Krea", "API token"),
+    "KREA_USAGE_KEY": ("Krea", "usage key"),
+    "MESHY_API_KEY": ("Meshy", "API key"),
+    "MINIMAX_API_KEY": ("MiniMax", "API key"),
+    "OPENAI_API_KEY": ("OpenAI", "API key"),
+    "OPENROUTER_API_KEY": ("OpenRouter", "API key"),
+    "QUIVER_API_KEY": ("QuiverAI", "API key"),
+    "REPLICATE_API_TOKEN": ("Replicate", "API token"),
+    "RUNWAY_API_KEY": ("Runway", "API key"),
+    "TYPESAFE_API_KEY": ("TypeSafe", "API key"),
+    "WORLDLABS_API_KEY": ("World Labs", "API key"),
+    "XAI_API_KEY": ("xAI", "API key"),
+}
+
+
+def _or_list(items: list[str]) -> str:
+    return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} or {items[-1]}"
+
+
+def key_phrase(keys: Iterable[str]) -> str | None:
+    """"OpenAI API key", "ElevenLabs or Runway API key", "Google Vertex AI
+    credentials or Gemini API key"; None when a name isn't a key Settings stores."""
+    names = [KEY_NAMES.get(key) for key in keys]
+    if not names or any(name is None for name in names):
+        return None
+    kinds = {kind for _provider, kind in names}  # type: ignore[misc]
+    if len(kinds) == 1:
+        return f"{_or_list([provider for provider, _kind in names])} {kinds.pop()}"  # type: ignore[misc]
+    return _or_list([f"{provider} {kind}" for provider, kind in names])  # type: ignore[misc]
+
+
+def key_line(keys: Iterable[str]) -> str | None:
+    """The line for a run that stopped at its own key check."""
+    phrase = key_phrase(keys)
+    return f"Add your {phrase} in Settings, then run the node again." if phrase else None

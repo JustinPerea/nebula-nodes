@@ -277,7 +277,9 @@ waiting keep their exact text for you. A node's run error works the same way:
 `error` (in `nebula result`, `nebula look` and the run record) is the specific
 text, ids and parameter names included; the card shows a written line (the
 graph's `errorPerson`, when the node's handler wrote one) that you shouldn't
-parse.
+parse. A failed Cinema shot's `output` works the same: read its `error`; its
+`errorCategory`, `errorFriendly`, `errorPerson` and `errorRaw` are for the
+Cinema panel.
 
 ## Moodboards
 

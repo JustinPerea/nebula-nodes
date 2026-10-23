@@ -36,11 +36,20 @@ from services.typesafe_client import (
     split_lines,
     system_one,
 )
+from execution.person_line import as_person_line, with_person_line
 
 ANSWER_TYPES = {"yes_no": "yes/no", "choice": "choice", "score": "score"}
 QUESTION_ID = "decide"
 WHEN_UNSURE = ("fail", "pass", "neither")
 NAME = "Jev Decide"
+
+
+# The node's own field labels (node_definitions.json), for the person's line.
+_FIELD_LABELS = {"threshold": "Pass Threshold", "min_confidence": "Minimum Confidence"}
+
+
+def _fraction_line(name: str, high: str) -> str:
+    return f"Set the node's {_FIELD_LABELS.get(name, 'setting')} to a number from 0 to {high}."
 
 
 def _fraction(raw: Any, default: float, name: str) -> float:
@@ -49,9 +58,9 @@ def _fraction(raw: Any, default: float, name: str) -> float:
     try:
         value = float(raw)
     except (TypeError, ValueError):
-        raise ValueError(f"{name} must be a number from 0 to 1, got {raw!r}") from None
+        raise with_person_line(ValueError(f"{name} must be a number from 0 to 1, got {raw!r}"), _fraction_line(name, "1")) from None
     if not 0.0 <= value <= 1.0:
-        raise ValueError(f"{name} must be from 0 to 1, got {value}")
+        raise with_person_line(ValueError(f"{name} must be from 0 to 1, got {value}"), _fraction_line(name, "1"))
     return value
 
 
@@ -131,7 +140,7 @@ async def handle_jev_decide(
     params = node.params
     question_text = str(params.get("question") or "").strip()
     if not question_text:
-        raise ValueError("Jev Decide needs a question")
+        raise as_person_line(ValueError("Jev Decide needs a question"))
     answer_type = str(params.get("answer_type") or "yes_no")
     if answer_type not in ANSWER_TYPES:
         raise ValueError(f"answer_type must be one of {', '.join(ANSWER_TYPES)}, got {answer_type!r}")
@@ -159,7 +168,9 @@ async def handle_jev_decide(
         passing = split_lines(params.get("pass_when"))
         unknown = [label for label in passing if label not in choice.labels]
         if unknown:
-            raise ValueError(f"pass_when names {unknown[0]!r}, which isn't one of the options")
+            raise with_person_line(
+                ValueError(f"pass_when names {unknown[0]!r}, which isn't one of the options"),
+                f"The node's Passing Options name {unknown[0]!r}, which isn't one of its Options.")
         question.update(type="choice", criteria=choice.criteria())
     else:
         levels = score_criteria(split_lines(params.get("levels")))
@@ -168,7 +179,7 @@ async def handle_jev_decide(
     context = _context_text(inputs)
     images = await prepare_images(_image_values(inputs), label="Image")
     if not context and not images:
-        raise ValueError("Jev Decide needs something to judge: connect Context text, Images, or both")
+        raise as_person_line(ValueError("Jev Decide needs something to judge: connect Context text, Images, or both"))
 
     result = await system_one(
         api_key, model=model, state=build_state(context, images),

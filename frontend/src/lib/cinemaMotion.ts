@@ -8,6 +8,15 @@ import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { cinemaMotionSource, cinemaMotionTarget, useCinemaMotionStore, type CinemaMotionHandoff } from '../store/cinemaMotionStore';
 import type { NodeData } from '../types';
+import { CONNECTION_LOST_SHORT_COPY, copyForStatus, isConnectionFailure, readDetail, shortReason } from './errorCopy';
+
+// The handoff's lines sit beside its "Retry connection" button, so they name
+// what failed and why and leave the retry to the button (GM's WRAP rule, error
+// copy round 3c-2; round 2: every failure starts "Couldn't").
+const UNCONFIRMED = "Couldn't confirm the video connection.";
+
+/** A handoff failure whose message is already the person's line. */
+class HandoffError extends Error {}
 
 const controllers = new Map<string, AbortController>();
 const CLI_ID_RE = /^n\d+$/;
@@ -25,7 +34,7 @@ function replace(handoff: CinemaMotionHandoff) {
 }
 
 function validatedResponse(value: unknown, handoff: CinemaMotionHandoff): { node: Node<NodeData>; edge: Edge } {
-  if (!value || typeof value !== 'object') throw new Error('Could not confirm the video connection. Retry to check it.');
+  if (!value || typeof value !== 'object') throw new HandoffError(UNCONFIRMED);
   const result = value as { node?: Node<NodeData>; edge?: Edge };
   const { node, edge } = result;
   if (!node || typeof node.id !== 'string' || !CLI_ID_RE.test(node.id) || node.id === handoff.nodeId
@@ -34,7 +43,7 @@ function validatedResponse(value: unknown, handoff: CinemaMotionHandoff): { node
     || !edge || typeof edge.id !== 'string' || !edge.id
     || edge.source !== handoff.nodeId || edge.sourceHandle !== shotPortId(handoff.shotId)
     || edge.target !== node.id || edge.targetHandle !== 'image' || edge.data?.dataType !== 'Image') {
-    throw new Error('Could not confirm the video connection. Retry to check it.');
+    throw new HandoffError(UNCONFIRMED);
   }
   return rewriteBackendAssetUrls({ node, edge });
 }
@@ -66,9 +75,9 @@ export async function sendCinemaShotToMotion(nodeId: string, shotId: string): Pr
       });
       if (!owns(handoff)) return;
       if (!response.ok) {
-        throw new Error(response.status === 409
+        throw new HandoffError(response.status === 409
           ? 'The shot changed before it could be connected. Retry with the current result.'
-          : 'Could not connect the video node. Retry to check the connection.');
+          : `Couldn't connect the video node. ${shortReason(copyForStatus(response.status, await readDetail(response)))}`);
       }
       const result = validatedResponse(await response.json(), handoff);
       if (!owns(handoff)) return;
@@ -80,7 +89,7 @@ export async function sendCinemaShotToMotion(nodeId: string, shotId: string): Pr
         // A newer authoritative graph can omit a pair deleted after the POST
         // committed. Its older HTTP reply cannot put that pair back. Retry
         // asks the idempotent endpoint to confirm today's connection.
-        throw new Error('Could not confirm the current video connection. Retry to check it.');
+        throw new HandoffError("Couldn't confirm the current video connection.");
       }
       // Adopt only the confirmed pair when its socket event is delayed. Never
       // replace current source authoring or an already hydrated target's edits.
@@ -98,14 +107,13 @@ export async function sendCinemaShotToMotion(nodeId: string, shotId: string): Pr
     if (!owns(handoff)) return;
     const current = useGraphStore.getState();
     if (!targetId || !cinemaMotionTarget(current.nodes, current.edges, nodeId, shotId, targetId)) {
-      throw new Error('Could not confirm the video connection. Retry to check it.');
+      throw new HandoffError(UNCONFIRMED);
     }
     replace({ ...handoff, status: 'ready', targetId });
   } catch (error) {
     if (!owns(handoff)) return;
-    replace({ ...handoff, status: 'error', error: error instanceof Error
-      && (error.message.startsWith('Could not') || error.message.startsWith('The shot changed')) ? error.message
-      : 'Could not confirm the video connection. Retry to check it.' });
+    replace({ ...handoff, status: 'error', error: error instanceof HandoffError ? error.message
+      : isConnectionFailure(error, controller.signal) ? `${UNCONFIRMED} ${CONNECTION_LOST_SHORT_COPY}` : UNCONFIRMED });
   } finally { controllers.delete(handoff.attempt); }
 }
 

@@ -216,14 +216,14 @@ export function ConnectionPopup() {
           : edge.source === newId && edge.target === nodeId && edge.sourceHandle === node.matchingPortId)) newId = null;
       }
       if (useUIStore.getState().connectionPopup !== popup) return;
-      if (!newId) { setError('Could not confirm the connected step. Check the canvas before trying again.'); return; }
+      if (!newId) { setError("Couldn't confirm the connected step. Check the canvas before trying again."); return; }
       hideConnectionPopup();
       if (nextStep) {
         const ui = useUIStore.getState();
         ui.requestCanvasNodeFocus(newId); ui.setLeftDock(null); ui.setInspectorVisible(true);
       }
     } catch {
-      if (useUIStore.getState().connectionPopup === popup) setError('Could not add the step. Check the canvas before trying again.');
+      if (useUIStore.getState().connectionPopup === popup) setError("Couldn't add the step. Check the canvas before trying again.");
     } finally { busy.current = false; setPending(false); }
   };
 

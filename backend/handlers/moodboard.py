@@ -11,6 +11,7 @@ from services.moodboard_analysis import analysis_is_current, analyze_moodboard, 
 from services.moodboard_brief import NODE_NOTES_CHOICES, compose, generator_analysis
 from services.moodboard_store import MoodboardStore, output_image
 from services.stored_image_refs import is_outside_link
+from execution.person_line import with_person_line
 
 
 def _in_trash(moodboard_id: str) -> bool:
@@ -33,7 +34,9 @@ async def handle_moodboard_node(
     engine's ``migrate_params`` has moved it to ``moodboard`` by now."""
     raw = (node.params or {}).get("moodboard")
     if not isinstance(raw, str) or not raw.strip():
-        raise ValueError("No moodboard chosen: set moodboard to a board id (GET /api/moodboards lists them)")
+        raise with_person_line(
+            ValueError("No moodboard chosen: set moodboard to a board id (GET /api/moodboards lists them)"),
+            "Choose a board for this node, then run it again.")
     moodboard_id = raw.strip()
     try:
         # The node never reads the layout, so the board isn't laid out.
@@ -42,10 +45,12 @@ async def handle_moodboard_node(
         moodboard = None
     if moodboard is None:
         if _in_trash(moodboard_id):
-            raise ValueError(f"Moodboard {moodboard_id!r} is in Recently deleted. Restore it (Moodboard Studio, "
-                             f"or nebula trash restore moodboard {moodboard_id}) and run again.")
-        raise ValueError(f"Moodboard {moodboard_id!r} not found; it may have been deleted for good. "
-                         "Pick another board for this node.")
+            raise with_person_line(ValueError(f"Moodboard {moodboard_id!r} is in Recently deleted. Restore it (Moodboard Studio, "
+                             f"or nebula trash restore moodboard {moodboard_id}) and run again."),
+                "This node's board is in Recently deleted. Restore it in Moodboard Studio, then run the node again.")
+        raise with_person_line(ValueError(f"Moodboard {moodboard_id!r} not found; it may have been deleted for good. "
+                         "Pick another board for this node."),
+            "This node's board can't be found; it may have been deleted for good. Pick another board for this node.")
 
     analysis = moodboard.get("analysis")
     if not analysis_is_current(moodboard, analysis):

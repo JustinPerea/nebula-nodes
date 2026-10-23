@@ -8,6 +8,7 @@ from execution.stream_runner import StreamConfig, stream_execute
 from services.image_input import load_local_image
 from execution.missing_credential import MissingCredentialError
 from services.param_defaults import param_default
+from execution.person_line import as_person_line, with_person_line
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
@@ -71,7 +72,7 @@ async def handle_claude_chat(
 ) -> dict[str, Any]:
     messages_input = inputs.get("messages")
     if not messages_input or not messages_input.value:
-        raise ValueError("Messages input is required for Claude chat")
+        raise as_person_line(ValueError("Messages input is required for Claude chat"))
 
     messages_text = str(messages_input.value)
 
@@ -184,7 +185,7 @@ async def handle_claude_chat(
         if effort:
             levels = MODEL_EFFORT_LEVELS[model]
             if effort not in levels:
-                raise ValueError(f"Effort must be one of {', '.join(levels)} for {model}, got {effort!r}")
+                raise as_person_line(ValueError(f"Effort must be one of {', '.join(levels)} for {model}, got {effort!r}"))
             request_body["output_config"] = {"effort": effort}
 
     stop: dict[str, str] = {}
@@ -205,10 +206,11 @@ async def handle_claude_chat(
     if stop.get("reason") == "max_tokens" and not full_text.strip():
         # Thinking used the whole Max Tokens and no answer came back. Before
         # 2026-10-16 this returned an empty "success".
-        raise RuntimeError(
+        raise with_person_line(RuntimeError(
             f"Claude ran out of Max Tokens ({max_tokens:,}) before it wrote an answer "
             "(stop_reason max_tokens). Raise Max Tokens or lower Effort."
-        )
+        ),
+            "Claude ran out of Max Tokens before it wrote an answer. Raise Max Tokens or lower Effort.")
 
     return {"text": {"type": "Text", "value": full_text}}
 

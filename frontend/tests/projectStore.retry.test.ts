@@ -137,7 +137,7 @@ describe('Projects: Try again redoes the failed action', () => {
     vi.mocked(projects.createProject).mockRejectedValueOnce(unavailable("Couldn't create the project."));
     await useProjectStore.getState().createProject('Fresh');
     // Round 3c (GM): "Couldn't confirm…" with the same object, then the mapped reason line.
-    expect(useProjectStore.getState().error).toBe("Couldn't confirm the project change. Nebula didn't respond. Try again.");
+    expect(useProjectStore.getState().error).toBe("Couldn't confirm the project change. Nebula didn't respond. Try again checks your saved projects; it won't make the change twice.");
     expect(offer()).toBe('reload');
     await useProjectStore.getState().retry();
     expect(projects.createProject).toHaveBeenCalledTimes(1);
@@ -199,7 +199,7 @@ describe('Projects: Try again redoes the failed action', () => {
   it('deleting the open project with no reply: Try again reloads the saved projects (the full line), never a second delete', async () => {
     vi.mocked(projects.deleteProject).mockRejectedValueOnce(unavailable("Couldn't delete the project."));
     await useProjectStore.getState().remove('alpha');
-    expect(useProjectStore.getState().error).toBe("Couldn't confirm the project was deleted. Nebula didn't respond. Try again.");
+    expect(useProjectStore.getState().error).toBe("Couldn't confirm the project was deleted. Nebula didn't respond. Try again checks your saved projects; it won't make the change twice.");
     expect(offer()).toBe('reload');
     await useProjectStore.getState().retry();
     expect(projects.deleteProject).toHaveBeenCalledTimes(1);
@@ -344,7 +344,7 @@ describe('Projects: review fixes', () => {
     useGraphStore.setState({ isExecuting: true });
     await useProjectStore.getState().open('beta');
     // Round 3c (GM): "A run is still going. Let it finish or stop it, then try again."
-    expect(useProjectStore.getState().error).toBe("Couldn't open the project. A run is still going. Let it finish or stop it, then try again.");
+    expect(useProjectStore.getState().error).toBe("Couldn't open the project. A run is still going. Let it finish or stop it.");
     expect(offer()).toBe('redo');
     useGraphStore.setState({ isExecuting: false });
     await useProjectStore.getState().retry();
@@ -357,13 +357,13 @@ describe('Projects: review fixes', () => {
 // mapped reason line." and ""Finish or stop the current run…" → "A run is
 // still going. Let it finish or stop it, then try again."" Every variant.
 describe('round 3c: the older Projects lines', () => {
-  const STILL_GOING = 'A run is still going. Let it finish or stop it, then try again.';
+  const STILL_GOING = 'A run is still going. Let it finish or stop it.';
 
   it('a lost create reply with no connection: the connection line after the heading', async () => {
     vi.mocked(projects.createProject).mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch'),
       { heading: "Couldn't create the project." }));
     await useProjectStore.getState().createProject('Fresh');
-    expect(useProjectStore.getState().error).toBe("Couldn't confirm the project change. Couldn't reach Nebula. Check your connection and try again.");
+    expect(useProjectStore.getState().error).toBe("Couldn't confirm the project change. Couldn't reach Nebula. Check your connection. Try again checks your saved projects; it won't make the change twice.");
     expect(offer()).toBe('reload');
   });
 
@@ -405,3 +405,29 @@ describe('round 3c: the older Projects lines', () => {
   });
 });
 
+
+describe('round 3c-2: the startup load never shows an error\'s own message', () => {
+  beforeEach(() => { useProjectStore.setState(initial, true); resetProjectStoreForTests(); });
+
+  it('a plain Error reads the heading and GM\'s general line', async () => {
+    vi.mocked(projects.getProject).mockRejectedValueOnce(new Error('internal: snapshot.nodes is not iterable'));
+    await useProjectStore.getState().initialize();
+    expect(useProjectStore.getState().error)
+      .toBe("Couldn't load your projects. That didn't work. Try again, or reload if it keeps happening.");
+    expect(offer()).not.toBe('none');
+  });
+
+  it('a project that changed while loading says so under the heading', async () => {
+    vi.spyOn(execution, 'fetchCLIGraph').mockResolvedValueOnce({ nodes: [], edges: [], empty: true,
+      workspaceRevision: 'rev-other' });
+    await useProjectStore.getState().initialize();
+    expect(useProjectStore.getState().error)
+      .toBe("Couldn't load your projects. The active project changed while loading.");
+  });
+
+  it("a request's own written line still reads as it did", async () => {
+    vi.mocked(projects.getProject).mockRejectedValueOnce(unavailable("Couldn't load the project."));
+    await useProjectStore.getState().initialize();
+    expect(useProjectStore.getState().error).toBe("Couldn't load the project. Nebula didn't respond. Try again.");
+  });
+});

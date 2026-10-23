@@ -7,6 +7,7 @@ from models.events import ExecutionEvent
 from execution.stream_runner import StreamConfig, stream_execute
 from services.image_input import load_local_image
 from execution.missing_credential import MissingCredentialError
+from execution.person_line import as_person_line
 
 OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
 
@@ -37,7 +38,7 @@ async def handle_openai_chat(
 ) -> dict[str, Any]:
     messages_input = inputs.get("messages")
     if not messages_input or not messages_input.value:
-        raise ValueError("Messages input is required for OpenAI chat")
+        raise as_person_line(ValueError("Messages input is required for OpenAI chat"))
 
     messages_text = str(messages_input.value)
 
@@ -93,7 +94,7 @@ async def handle_openai_chat(
             # "max" is offered only for GPT-6, but a node switched over from a
             # GPT-6 model can still hold it. OpenAI's gpt-5.5 page lists none,
             # low, medium, high and xhigh, so refuse it before a paid HTTP 400.
-            raise ValueError(f"Reasoning effort 'max' isn't available for {model}.")
+            raise as_person_line(ValueError(f"Reasoning effort 'max' isn't available for {model}."))
         if reasoning_effort:
             request_body["reasoning_effort"] = reasoning_effort
     else:
@@ -154,6 +155,6 @@ def _listed_effort(model: str, effort: str) -> str:
     allowed = REASONING_EFFORTS[model]
     if effort in allowed:
         return effort
-    raise ValueError(
+    raise as_person_line(ValueError(
         f"Reasoning effort '{effort}' isn't available for {model}. Pick one of: {', '.join(allowed)}."
-    )
+    ))

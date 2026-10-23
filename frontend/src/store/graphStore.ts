@@ -1123,6 +1123,15 @@ function shotOutputPorts(scene: CinemaSceneSpec): DynamicPortDefinition[] {
   }));
 }
 
+/** A shot's output without its status or the last failure's fields (error
+ *  copy round 3c-2): a new run, or a failure Nebula wrote itself, must not
+ *  show an earlier failure's person line or Details. */
+function withoutShotError(output: CinemaShot['output']): Omit<NonNullable<CinemaShot['output']>, 'status'> {
+  const rest: Partial<NonNullable<CinemaShot['output']>> = { ...(output ?? {}) };
+  for (const key of ['status', 'error', 'errorCategory', 'errorFriendly', 'errorPerson', 'errorRaw'] as const) delete rest[key];
+  return rest;
+}
+
 /** Optimistically write the scene + rebuilt dynamic output ports onto the node,
  *  and prune any source edge whose handle no longer exists. Mirrors the
  *  set(...) body of configureOpenRouterModel. */
@@ -4771,7 +4780,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const shotSnapshot = captureRunSnapshot(nodes, edges);
     if (runIncludesFreshPaidWorldLabsStart(shotSnapshot, nodeId)) {
       applySceneToNode(set, nodeId, patchShot(scene, {
-        ...(shot.output ?? {}),
+        ...withoutShotError(shot.output),
         status: 'error',
         error: 'Run the World Labs Environment on Canvas first, then generate this shot from its recovered output.',
       }));
@@ -4780,7 +4789,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
     // Optimistically mark this shot running (local only — the backend streams the
     // terminal scene back via graphSync).
-    applySceneToNode(set, nodeId, patchShot(scene, { ...(shot.output ?? {}), status: 'running' }));
+    applySceneToNode(set, nodeId, patchShot(scene, { ...withoutShotError(shot.output), status: 'running' }));
 
     const graphNodes = shotSnapshot.nodes;
     const graphEdges = shotSnapshot.edges.map((edge) => ({
@@ -4796,7 +4805,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const curScene = (cur?.data.params as { scene?: CinemaSceneSpec } | undefined)?.scene;
       if (!curScene) return;
       const curShot = curScene.shots.find((s) => s.id === shotId);
-      applySceneToNode(set, nodeId, patchShot(curScene, { ...(curShot?.output ?? {}), status: 'error', error: message }));
+      applySceneToNode(set, nodeId, patchShot(curScene, { ...withoutShotError(curShot?.output), status: 'error', error: message }));
     };
 
     const runId = uuidv4();

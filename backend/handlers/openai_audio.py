@@ -10,6 +10,7 @@ from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.output import get_run_dir
 from execution.missing_credential import MissingCredentialError
+from execution.person_line import as_person_line, missing_file_line, with_person_line
 
 OPENAI_AUDIO_BASE = "https://api.openai.com/v1/audio"
 
@@ -25,7 +26,7 @@ async def handle_openai_stt(
 ) -> dict[str, Any]:
     audio_input = inputs.get("audio")
     if not audio_input or not audio_input.value:
-        raise ValueError("Audio input is required for transcription")
+        raise as_person_line(ValueError("Audio input is required for transcription"))
 
     api_key = api_keys.get("OPENAI_API_KEY")
     if not api_key:
@@ -33,7 +34,7 @@ async def handle_openai_stt(
 
     audio_path = Path(str(audio_input.value))
     if not audio_path.exists():
-        raise ValueError(f"Audio file not found: {audio_path}")
+        raise with_person_line(ValueError(f"Audio file not found: {audio_path}"), missing_file_line("audio file"))
 
     model = node.params.get("model", "whisper-1")
     response_format = node.params.get("response_format", "text")
@@ -85,7 +86,7 @@ async def handle_openai_translate(
 ) -> dict[str, Any]:
     audio_input = inputs.get("audio")
     if not audio_input or not audio_input.value:
-        raise ValueError("Audio input is required for translation")
+        raise as_person_line(ValueError("Audio input is required for translation"))
 
     api_key = api_keys.get("OPENAI_API_KEY")
     if not api_key:
@@ -93,7 +94,7 @@ async def handle_openai_translate(
 
     audio_path = Path(str(audio_input.value))
     if not audio_path.exists():
-        raise ValueError(f"Audio file not found: {audio_path}")
+        raise with_person_line(ValueError(f"Audio file not found: {audio_path}"), missing_file_line("audio file"))
 
     files = {"file": (audio_path.name, require_allowed_path(audio_path).read_bytes(), "audio/mpeg")}
     # Only whisper-1 supports the translation endpoint; model is fixed.
@@ -138,7 +139,7 @@ async def handle_openai_tts(
 ) -> dict[str, Any]:
     text_input = inputs.get("text")
     if not text_input or not text_input.value:
-        raise ValueError("Text input is required for TTS")
+        raise as_person_line(ValueError("Text input is required for TTS"))
 
     api_key = api_keys.get("OPENAI_API_KEY")
     if not api_key:

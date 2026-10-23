@@ -20,6 +20,7 @@ from services.moodboard_weights import native_strengths
 from services.cancellation import schedule_detached_cancel
 from services.output import OUTPUT_ROOT, get_run_dir
 from execution.missing_credential import MissingCredentialError
+from execution.person_line import as_person_line, with_person_line
 
 KREA_BASE_URL = "https://api.krea.ai"
 KREA_STATUS_PENDING = {
@@ -80,7 +81,7 @@ def _auth_mode(node: GraphNode) -> str:
     """Saved billing choice; nodes saved before the choice existed keep the API token."""
     mode = node.params.get("_kreaAuth", "api-token")
     if mode not in {"api-token", "mcp"}:
-        raise ValueError("Unknown Krea connection; choose API token or Krea account")
+        raise as_person_line(ValueError("Unknown Krea connection; choose API token or Krea account"))
     return mode
 
 
@@ -90,7 +91,7 @@ async def _account_reference(value: Any, description: str | None = None) -> str:
         value = value.get("url") or value.get("image_url") or value.get("image") or value.get("value")
     raw = _clean_str(value)
     if not raw:
-        raise ValueError("Krea image reference is empty")
+        raise as_person_line(ValueError("Krea image reference is empty"))
     return raw
 
 
@@ -197,7 +198,7 @@ async def _upload_asset(
         image_value = image_value.get("url") or image_value.get("image_url") or image_value.get("value")
     raw = _clean_str(image_value)
     if not raw:
-        raise ValueError("Krea asset upload needs an image value")
+        raise as_person_line(ValueError("Krea asset upload needs an image value"))
 
     data_uri = _DATA_URI_RE.match(raw)
     if data_uri:
@@ -207,7 +208,9 @@ async def _upload_asset(
     else:
         path = _resolve_local_path(raw)
         if path is None:
-            raise ValueError(f"Krea image reference is not a URL or local file: {raw}")
+            raise with_person_line(
+                ValueError(f"Krea image reference is not a URL or local file: {raw}"),
+                "A connected image isn't a link or a file Nebula can read. Connect another image.")
         mime = _mime_for_path(path)
         payload = require_allowed_path(path).read_bytes()
         filename = path.name
@@ -355,7 +358,7 @@ async def _collect_image_style_references(
             })
 
     if len(refs) > 10:
-        raise ValueError(f"Krea 2 accepts at most 10 image style references; got {len(refs)}")
+        raise as_person_line(ValueError(f"Krea 2 accepts at most 10 image style references; got {len(refs)}"))
     return refs
 
 
@@ -537,7 +540,7 @@ def _collect_moodboards(node: GraphNode, inputs: dict[str, PortValueDict]) -> li
     if manual_id:
         moodboards.append({"id": manual_id, "strength": default_strength})
     if len(moodboards) > 1:
-        raise ValueError("Krea 2 currently accepts at most one moodboard")
+        raise as_person_line(ValueError("Krea 2 currently accepts at most one moodboard"))
     return moodboards
 
 
@@ -549,7 +552,7 @@ async def handle_krea_generate(
 ) -> dict[str, Any]:
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
-        raise ValueError("Prompt input is required")
+        raise as_person_line(ValueError("Prompt input is required"))
 
     mode = _auth_mode(node)
     api_key = _api_key(api_keys) if mode == "api-token" else None
@@ -650,7 +653,7 @@ async def handle_krea_image_style_reference(
 ) -> dict[str, Any]:
     image = inputs.get("image")
     if not image or not image.value:
-        raise ValueError("Image input is required for Krea image style reference")
+        raise as_person_line(ValueError("Image input is required for Krea image style reference"))
     strength = _float_value(node.params.get("strength"), 0.5, 0.0, 1.0)
     return {
         "image_style_reference": {
@@ -672,7 +675,9 @@ async def handle_krea_style(
 ) -> dict[str, Any]:
     style_id = _clean_str(node.params.get("style_id"))
     if not style_id:
-        raise ValueError("Krea style_id is required")
+        raise with_person_line(
+            ValueError("Krea style_id is required"),
+            "Fill in the node's Style ID, then run it again.")
     strength = _float_value(node.params.get("strength"), 1.0, -2.0, 2.0)
     return {
         "style": {
@@ -691,7 +696,9 @@ async def handle_krea_moodboard(
 ) -> dict[str, Any]:
     moodboard_id = _clean_str(node.params.get("moodboard_id"))
     if not moodboard_id:
-        raise ValueError("Krea moodboard_id is required")
+        raise with_person_line(
+            ValueError("Krea moodboard_id is required"),
+            "Fill in the node's Moodboard ID, then run it again.")
     strength = _float_value(node.params.get("strength"), 0.23, 0.0, 1.0)
     return {
         "moodboard": {
@@ -762,11 +769,11 @@ async def handle_krea_style_train(
 ) -> dict[str, Any]:
     image_values = _port_values(inputs.get("images"))
     if not image_values:
-        raise ValueError("Krea style training requires at least one training image")
+        raise as_person_line(ValueError("Krea style training requires at least one training image"))
 
     name = _clean_str(node.params.get("name"))
     if not name:
-        raise ValueError("Krea style training requires a name")
+        raise as_person_line(ValueError("Krea style training requires a name"))
 
     model = _clean_str(node.params.get("model")) or "flux_dev"
     if model not in (KREA_STYLE_TRAINING_MODELS_WITH_FULL_KNOBS | KREA_STYLE_TRAINING_MODELS_SIMPLE
@@ -775,7 +782,7 @@ async def handle_krea_style_train(
     if _auth_mode(node) == "mcp":
         return await _account_style_train(node, name, model, image_values, emit)
     if model in KREA_STYLE_TRAINING_MODELS_ACCOUNT_ONLY:
-        raise ValueError(f"Krea trains {model} styles only on a connected Krea account; nothing was sent")
+        raise as_person_line(ValueError(f"Krea trains {model} styles only on a connected Krea account; nothing was sent"))
 
     api_key = _api_key(api_keys)
     async with httpx.AsyncClient(timeout=120.0) as client:
@@ -876,7 +883,7 @@ async def _account_style_search(node: GraphNode) -> dict[str, Any]:
     if _clean_str(node.params.get("filter")) not in {"", "all"}:
         unsupported.append("Filter")
     if unsupported:
-        raise ValueError(f"{', '.join(unsupported)} needs a Krea API token; the Krea account lists the styles available to you. Nothing was sent")
+        raise as_person_line(ValueError(f"{', '.join(unsupported)} needs a Krea API token; the Krea account lists the styles available to you. Nothing was sent"))
     ids = {part.strip() for part in _clean_str(node.params.get("ids")).split(",") if part.strip()}
     model = _clean_str(node.params.get("model"))
     limit = _int_value(node.params.get("limit"), 25, 1, 1000)
@@ -906,7 +913,7 @@ async def _account_style_train(node, name, model, image_values, emit) -> dict[st
     if training_type == "Default":
         unsupported.append("Type: Default")
     if unsupported:
-        raise ValueError(f"{', '.join(unsupported)} needs a Krea API token; the Krea account trains with Krea's defaults. Nothing was sent")
+        raise as_person_line(ValueError(f"{', '.join(unsupported)} needs a Krea API token; the Krea account trains with Krea's defaults. Nothing was sent"))
     arguments: dict[str, Any] = {"name": name, "model": model, "train_type": training_type, "images": []}
     trigger_word = _clean_str(node.params.get("trigger_word"))
     if trigger_word:
@@ -963,7 +970,7 @@ async def handle_krea_moodboard_create(
     from services.krea_account import account_tools, run_job
     image_values = _port_values(inputs.get("images"))
     if not image_values:
-        raise ValueError("A Krea moodboard needs at least one image")
+        raise as_person_line(ValueError("A Krea moodboard needs at least one image"))
     arguments: dict[str, Any] = {"images": []}
     name = _clean_str(node.params.get("name"))
     if name:
@@ -1010,23 +1017,23 @@ async def handle_krea_library_manage(
     wired = inputs["id"].value if inputs.get("id") else None
     item_id = _clean_str(wired.get("id") if isinstance(wired, dict) else wired or node.params.get("item_id"))
     if not _LIBRARY_ID.fullmatch(item_id):
-        raise ValueError("Choose a valid Krea style or moodboard ID to change")
+        raise as_person_line(ValueError("Choose a valid Krea style or moodboard ID to change"))
     tool, name_key = KREA_LIBRARY_ACTIONS[action]
     arguments: dict[str, Any] = {"id": item_id}
     if name_key:
         new_name = _clean_str(node.params.get("new_name"))
         if not new_name:
-            raise ValueError("Enter the new name")
+            raise as_person_line(ValueError("Enter the new name"))
         arguments[name_key] = new_name
     else:
         if wired is not None:
-            raise ValueError("Deletes need the ID typed into the node, not wired in; nothing was deleted")
+            raise as_person_line(ValueError("Deletes need the ID typed into the node, not wired in; nothing was deleted"))
         if _clean_str(node.params.get("confirm_delete")) != item_id:
-            raise ValueError("Type the same ID into Confirm delete to remove this Krea item; nothing was deleted")
+            raise as_person_line(ValueError("Type the same ID into Confirm delete to remove this Krea item; nothing was deleted"))
 
     if _auth_mode(node) == "api-token":
         if action != "rename-style":
-            raise ValueError("Only renaming a style works with a Krea API token; use the Krea account for moodboards and deletes. Nothing was sent")
+            raise as_person_line(ValueError("Only renaming a style works with a Krea API token; use the Krea account for moodboards and deletes. Nothing was sent"))
         api_key = _api_key(api_keys)
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.patch(f"{KREA_BASE_URL}/styles/{item_id}", headers=_json_headers(api_key),

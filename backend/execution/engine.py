@@ -65,7 +65,7 @@ from models.events import (
 from execution import gating, provider_calls
 from services.moodboard_brief import apply_to_generator as apply_board_to_generator
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import person_line
+from execution.person_line import as_person_line, person_line, with_person_line
 
 CycleError = _GraphlibCycleError
 
@@ -312,10 +312,11 @@ def _image_input_output(params: dict) -> dict:
     # zero references. An empty path (unconfigured node) and remote/data values
     # pass through untouched.
     if file_path and not is_remote_or_data_uri(file_path) and not Path(file_path).exists():
-        raise ValueError(
+        raise with_person_line(ValueError(
             f"Image Input file not found: {file_path!r}. Set a valid path — "
             "downstream nodes would otherwise receive a reference no model can load."
-        )
+        ),
+            "The node's File can't be found. Choose the file again, then run the node again.")
     return {"image": {"type": "Image", "value": file_path}}
 
 
@@ -669,6 +670,19 @@ def get_subgraph(
 
 _ITERATOR_NODE_IDS = {"iterator-image", "iterator-text"}
 _FANOUT_NODE_IDS = _ITERATOR_NODE_IDS | {"batch"}
+
+
+def _fanout_over_cap(definition_id: str, planned: int, cap: Any) -> ValueError:
+    """A fan-out downstream of another one went over its cap across all its
+    contexts. The card names the cap by the node's own field label: a Batch's
+    "Item cap", an iterator's "Batch Size Cap"."""
+    noun, label = ("Batch", "Item cap") if definition_id == "batch" else ("iterator", "Batch Size Cap")
+    return with_person_line(ValueError(
+        f"Nested iterator expands to {planned} items, exceeding "
+        f"this iterator's batch_size_cap of {cap}. Reduce the batch "
+        "before running; no downstream generation was started."
+    ), f"This {noun} would make {planned} items, more than its {label} of {cap}. Make the batch smaller, "
+       "then run it again. Nothing after it was generated.")
 InvocationContext = tuple[tuple[str, int], ...]
 
 # ECMAScript TrimString: WhiteSpace union LineTerminator. Python's default
@@ -700,7 +714,9 @@ def _batch_items(params: dict[str, Any]) -> list[str]:
         raise ValueError("Batch split_mode must be 'by_line' or 'none'")
     cap = params.get("batch_size_cap", 10)
     if isinstance(cap, bool) or not isinstance(cap, int) or not 1 <= cap <= 25:
-        raise ValueError("Batch batch_size_cap must be an integer from 1 to 25")
+        raise with_person_line(
+            ValueError("Batch batch_size_cap must be an integer from 1 to 25"),
+            "Set the node's Item cap to a whole number from 1 to 25.")
     text = params.get("items_text", "")
     if mode == "none":
         items = [text] if text else []
@@ -708,10 +724,11 @@ def _batch_items(params: dict[str, Any]) -> list[str]:
         items = [trimmed for line in text.split("\n")
                  if (trimmed := line.strip(_JS_TRIM_WHITESPACE))]
     if len(items) > cap:
-        raise ValueError(
+        raise with_person_line(ValueError(
             f"Batch has {len(items)} items, exceeding its batch_size_cap of {cap}. "
             "Reduce the list or raise the cap before running; no generation was started."
-        )
+        ),
+            f"This Batch has {len(items)} items, more than its Item cap of {cap}. Remove items or raise the cap, then run it again. Nothing was generated.")
     return items
 
 
@@ -1351,7 +1368,7 @@ async def _execute_graph(
                 elif node.definition_id == "frame-extractor":
                     video_input = resolved_inputs.get("video")
                     if not video_input or not video_input.value:
-                        raise ValueError("Video input is required for frame extraction")
+                        raise as_person_line(ValueError("Video input is required for frame extraction"))
                     try:
                         from services.ffmpeg import ffprobe_video, run_ffmpeg
                         from services.output import get_run_dir
@@ -1360,7 +1377,7 @@ async def _execute_graph(
                         video_path = resolve_output_ref(str(video_input.value))
                         is_remote = video_path.startswith(("http://", "https://"))
                         if not is_remote and not Path(video_path).is_file():
-                            raise ValueError("Video source file not found; restore or upload the source video before extracting frames")
+                            raise as_person_line(ValueError("Video source file not found; restore or upload the source video before extracting frames"))
                         mode = node.params.get("mode", "first_frame")
                         timestamp = float(node.params.get("timestamp", 0))
 
@@ -1386,7 +1403,7 @@ async def _execute_graph(
                         )
                         node_outputs = {"image": {"type": "Image", "value": str(out_path)}}
                     except FileNotFoundError:
-                        raise ValueError("ffmpeg not found — install ffmpeg to use Frame Extractor")
+                        raise as_person_line(ValueError("ffmpeg not found — install ffmpeg to use Frame Extractor"))
                 elif node.definition_id == "array-builder":
                     items = []
                     for port_id in ("item1", "item2", "item3", "item4", "item5", "item6", "item7", "item8"):
@@ -1420,7 +1437,7 @@ async def _execute_graph(
                 elif node.definition_id == "svg-rasterize":
                     svg_input = resolved_inputs.get("svg")
                     if not svg_input or not svg_input.value:
-                        raise ValueError("SVG input is required")
+                        raise as_person_line(ValueError("SVG input is required"))
                     svg_value = str(svg_input.value)
                     width = int(node.params.get("width", 1024))
                     height = int(node.params.get("height", 1024))
@@ -1462,10 +1479,10 @@ async def _execute_graph(
                     #   black-edit (Ideogram)   -> inverted, painted becomes black
                     mask_data = node.params.get("_maskData")
                     if not mask_data or not str(mask_data).startswith("data:image"):
-                        raise ValueError("No mask painted yet — open the Mask Painter node and paint one")
+                        raise as_person_line(ValueError("No mask painted yet — open the Mask Painter node and paint one"))
                     image_input = resolved_inputs.get("image")
                     if not image_input or not image_input.value:
-                        raise ValueError("Image input is required (the mask must match its dimensions)")
+                        raise as_person_line(ValueError("Image input is required (the mask must match its dimensions)"))
 
                     import base64 as _b64
                     import io as _io
@@ -1632,16 +1649,12 @@ async def _execute_graph(
                     else:
                         source = resolve_inputs(nid, context).get("array")
                         if source is None or not isinstance(source.value, list):
-                            raise ValueError("Iterator requires an Array input")
+                            raise as_person_line(ValueError("Iterator requires an Array input"))
                         items = source.value[:cap]
                     planned.extend((context + ((nid, index),), item)
                                    for index, item in enumerate(items))
                 if len(planned) > cap:
-                    raise ValueError(
-                        f"Nested iterator expands to {len(planned)} items, exceeding "
-                        f"this iterator's batch_size_cap of {cap}. Reduce the batch "
-                        "before running; no downstream generation was started."
-                    )
+                    raise _fanout_over_cap(node.definition_id, len(planned), cap)
                 out_type, out_key = (
                     ("Text", "set") if node.definition_id == "batch" else
                     ("Image", "image") if node.definition_id == "iterator-image" else ("Text", "text")

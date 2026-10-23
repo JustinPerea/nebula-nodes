@@ -123,9 +123,9 @@ async def test_review_api_requires_human_and_records_only_explicit_acceptance(st
     (0, 0, 'Agent review needs at least 1 analysis call a day, and Settings has it at 0. '
            'Raise \u201cAnalysis calls per day\u201d, then try again.'),
     (5, 12, 'Commons has made 12 analysis calls today, and the daily cap is 5. '
-            'Try again tomorrow, or raise Analysis calls per day in Settings.'),
+            'Try again tomorrow, or raise \u201cAnalysis calls per day\u201d in Settings.'),
     (3, 3, 'Commons has made 3 analysis calls today, and the daily cap is 3. '
-           'Try again tomorrow, or raise Analysis calls per day in Settings.'),
+           'Try again tomorrow, or raise \u201cAnalysis calls per day\u201d in Settings.'),
 ])
 async def test_the_daily_cap_refusal_says_the_real_count_and_a_step_that_works(store, source, monkeypatch, cap, calls,
                                                                               line):

@@ -678,10 +678,17 @@ journal. A handler may also write a line for the person (no ids, no
 parameter names: "World Labs accepted this run, ... The node's Resume
 Operation ID field keeps the job ..."); it rides beside `error` as the
 additive `person` on the execution event and `errorPerson` in the graph the
-canvas loads, and the card shows it. The World Labs nodes write one for each
-failure they know; any other node's card says "Couldn't run the node." with
-the classifier's line or the general one, and the raw text behind
-"Details". Read `error`; don't parse `person`.
+canvas loads, and the card shows it. Since round 3c-2 every failure a
+handler words itself carries one (often the same text, when it names no id,
+path, parameter key or env var), and a plain "<KEY> is required" key check
+reads "Add your OpenAI API key in Settings, then run the node again." on the
+card. A provider's own text keeps no line: the card says "Couldn't run the
+node." with the classifier's line or the general one, and the raw text behind
+"Details". None of the texts you read changed. A Cinema shot that fails
+keeps `error` on the shot's `output` as before and adds `errorCategory`,
+`errorFriendly`, `errorPerson` and `errorRaw` (the full text when `error` was
+cut) for the Cinema panel. Read `error`; don't parse `person` or the shot's
+error* fields.
 
 ### Numbers in request bodies
 

@@ -29,7 +29,7 @@ export function waitingOnWorldLabs(count: number, unlock: boolean): string {
  * "paid start". Keep the rest of each line.").
  */
 export const WORLD_LABS_RUN_NEEDS_CHECK = 'A World Labs run needs your check.';
-export const WORLD_LABS_RUN_STATUS_UNKNOWN = 'World Labs run status unknown.';
+export const WORLD_LABS_RUN_STATUS_UNKNOWN = "Nebula can't tell if this World Labs run started.";
 /** "N more node(s) also need your check.", after the first hold's line. */
 export function moreNodesNeedCheck(more: number): string {
   return more === 1 ? '1 more node also needs your check.' : `${more} more nodes also need your check.`;
@@ -37,4 +37,4 @@ export function moreNodesNeedCheck(more: number): string {
 /** The warning under WORLD_LABS_RUN_STATUS_UNKNOWN: Nebula lost track of a
  * World Labs run it started, so Run stays locked until someone checks Marble. */
 export const WORLD_LABS_STATUS_UNCERTAIN_WARNING =
-  'Nebula could not confirm whether this World Labs run was accepted. Run remains locked to prevent duplicate paid work. Check Marble before clearing or retrying.';
+  "Nebula couldn't confirm whether World Labs accepted this run, so the node stays locked to avoid paying twice. Check the job in Marble before you unlock it or run it again.";

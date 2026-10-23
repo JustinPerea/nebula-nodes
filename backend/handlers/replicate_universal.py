@@ -13,6 +13,7 @@ from services.cancellation import schedule_detached_cancel
 from execution.missing_credential import MissingCredentialError
 from services import universal_ports
 from services.media_types import MEDIA_PORT_IDS, media_of_value
+from execution.person_line import as_person_line, with_person_line
 
 REPLICATE_API_BASE = "https://api.replicate.com/v1"
 
@@ -88,7 +89,7 @@ async def _resolve_version(owner: str, name: str, api_key: str) -> str:
         data = resp.json()
         version_id = data.get("latest_version", {}).get("id")
         if not version_id:
-            raise RuntimeError(f"No version found for {owner}/{name}")
+            raise as_person_line(RuntimeError(f"No version found for {owner}/{name}"))
         return str(version_id)
 
 
@@ -191,9 +192,15 @@ def _fill_declared_port(node: GraphNode, output: Any, task_id: str | None) -> di
         why = ("typed from the model's data before the run; if the model changed, pick it again (or set its "
                "model_id again) to re-read its ports")
     where = f" The result is still on Replicate (prediction {task_id})." if task_id else ""
-    raise RuntimeError(
+    # The text names the model, the port and the prediction for agents; the
+    # card says it in words and names the field to set again.
+    got = f"{'an' if returned[0] in 'AEIOU' else 'a'} {returned.lower()} file" if returned else "text"
+    line = (f"The model returned {got}, but this node's output is set to {port_type.lower()}, so nothing was "
+            "passed on. Pick the model again in the node's Model ID field to re-read its outputs, then run the "
+            "node again.")
+    raise with_person_line(RuntimeError(
         f"{model} returned {what}, but this node's output `{port_id}` is {port_type} ({why}), so nothing was "
-        f"passed on.{where}")
+        f"passed on.{where}"), line)
 
 
 async def handle_replicate_universal(
@@ -208,7 +215,7 @@ async def handle_replicate_universal(
 
     model_id = node.params.get("model_id", "")
     if not model_id or "/" not in str(model_id):
-        raise ValueError("Model ID is required (format: owner/name, e.g. stability-ai/sdxl)")
+        raise as_person_line(ValueError("Model ID is required (format: owner/name, e.g. stability-ai/sdxl)"))
 
     owner, name = str(model_id).split("/", 1)
 

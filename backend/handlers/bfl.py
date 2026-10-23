@@ -47,6 +47,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from execution.missing_credential import MissingCredentialError
+from execution.person_line import as_person_line, with_person_line
 
 BFL_KEY = "BFL_API_KEY"
 BFL_BASE_URL = "https://api.bfl.ai/v1"
@@ -212,9 +213,9 @@ async def get_result(key: str, polling_url: str, *, client: httpx.AsyncClient) -
     the HTTP code (BFL sends a failed task as a 503 with a normal body, and an
     unknown id as a 404 "Task not found"); any other error raises BFLError."""
     if not polling_url_allowed(polling_url):
-        raise RuntimeError(
+        raise as_person_line(RuntimeError(
             "Black Forest Labs returned a polling URL outside https://*.bfl.ai; Nebula didn't send the key "
-            "to it and stopped the run.")
+            "to it and stopped the run."))
     response = await client.get(polling_url, headers={"x-key": key, "accept": "application/json"})
     try:
         data = response.json()
@@ -264,8 +265,9 @@ async def _download(url: Any, media_type: str, *, client: httpx.AsyncClient) -> 
     except httpx.TransportError as exc:
         raise _transport_error("download the result", exc) from exc
     if response.status_code >= 400:
-        raise RuntimeError(f"Black Forest Labs' result download failed (HTTP {response.status_code}); "
-                           "the signed URL may have expired. Run again.")
+        raise with_person_line(RuntimeError(f"Black Forest Labs' result download failed (HTTP {response.status_code}); "
+                           "the signed URL may have expired. Run again."),
+            "Black Forest Labs' result couldn't be downloaded; its link may have expired. Run the node again.")
     path = await write_media_bytes(response.content, response.headers.get("content-type", ""),
                                    media_type, get_run_dir(), url)
     return str(path)
@@ -299,9 +301,10 @@ async def run_task(
         task_id = submitted["id"]
         polling_url = submitted.get("polling_url")
         if not polling_url_allowed(polling_url):
-            raise RuntimeError(
+            raise with_person_line(RuntimeError(
                 f"Black Forest Labs accepted task {task_id} but returned a polling URL outside https://*.bfl.ai; "
-                "Nebula didn't send the key to it. The task may still run and bill on BFL.")
+                "Nebula didn't send the key to it. The task may still run and bill on BFL."),
+                "Black Forest Labs sent a status link from outside its own site, so Nebula didn't send your key there and stopped. The job may still run and be billed on Black Forest Labs.")
         loop = asyncio.get_running_loop()
         started = loop.time()
         polls = 0
@@ -340,7 +343,8 @@ async def run_task(
                 # BFL's ``progress`` field has no documented scale; creep toward done.
                 await emit(ProgressEvent(node_id=node_id, value=min(0.95, polls / (polls + 20))))
             if loop.time() - started > timeout:
-                raise RuntimeError(
+                raise with_person_line(RuntimeError(
                     f"Black Forest Labs task {task_id} was still {status or 'pending'} after "
                     f"{int(timeout // 60)} minutes; Nebula stopped waiting. BFL has no cancel endpoint, so the "
-                    "task may still finish and bill on BFL.")
+                    "task may still finish and bill on BFL."),
+                    f"Black Forest Labs didn't finish this job in {int(timeout // 60)} minutes, so Nebula stopped waiting. Black Forest Labs can't cancel it, so it may still finish and be billed there.")

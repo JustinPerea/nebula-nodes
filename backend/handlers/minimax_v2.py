@@ -38,6 +38,7 @@ from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
 from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir, save_video_from_url
+from execution.person_line import as_person_line
 
 MAX_REFERENCE_IMAGES = 9
 MAX_REFERENCE_VIDEOS = 3
@@ -89,7 +90,7 @@ def build_content(inputs: dict[str, PortValueDict]) -> tuple[list[dict[str, Any]
     """The V2 ``content`` array from the inputs, and the scenario (t2v, i2v, r2v)."""
     prompt = " ".join(_values(inputs.get("prompt"))).strip()
     if not prompt:
-        raise ValueError("MiniMax H3 needs a prompt")
+        raise as_person_line(ValueError("MiniMax H3 needs a prompt"))
     content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
     frames = [(role, _values(inputs.get(role))) for role in ("first_frame", "last_frame")]
     refs = [("reference_image", "image", _values(inputs.get("reference_images")), MAX_REFERENCE_IMAGES),
@@ -98,24 +99,24 @@ def build_content(inputs: dict[str, PortValueDict]) -> tuple[list[dict[str, Any]
     has_frames = any(values for _, values in frames)
     has_refs = any(values for _, _, values, _ in refs)
     if has_frames and has_refs:
-        raise ValueError("MiniMax H3 takes either a start/end image or references (images, videos, audio), "
-                         "not both in one run.")
+        raise as_person_line(ValueError("MiniMax H3 takes either a start/end image or references (images, videos, audio), "
+                         "not both in one run."))
     for role, values in frames:
         if len(values) > 1:
-            raise ValueError(f"MiniMax H3 takes one {role.replace('_', ' ')} image")
+            raise as_person_line(ValueError(f"MiniMax H3 takes one {role.replace('_', ' ')} image"))
         for value in values:
             content.append({"type": "image_url", "image_url": {"url": media_url(value, "image")}, "role": role})
     for role, kind, values, limit in refs:
         if len(values) > limit:
-            raise ValueError(f"MiniMax H3 takes at most {limit} reference {kind}s (got {len(values)})")
+            raise as_person_line(ValueError(f"MiniMax H3 takes at most {limit} reference {kind}s (got {len(values)})"))
         for value in values:
             field = _MEDIA_KINDS[kind]
             content.append({"type": field, field: {"url": media_url(value, kind)}, "role": role})
     inline = sum(len(item[item["type"]]["url"]) for item in content[1:] if item[item["type"]]["url"].startswith("data:"))
     if inline > MAX_BODY_BYTES:
-        raise ValueError(f"MiniMax H3 takes a request of up to {MAX_BODY_BYTES // 1_000_000} MB, and these local "
+        raise as_person_line(ValueError(f"MiniMax H3 takes a request of up to {MAX_BODY_BYTES // 1_000_000} MB, and these local "
                          f"files make it about {inline // 1_000_000} MB once encoded. Use public URLs for the "
-                         "larger files.")
+                         "larger files."))
     return content, "i2v" if has_frames else "r2v" if has_refs else "t2v"
 
 
@@ -153,8 +154,8 @@ async def handle_minimax_video_v2(
     content, scenario = build_content(inputs)
     ratio = str(params.get("ratio") or "")
     if scenario == "t2v" and ratio not in RATIOS:
-        raise ValueError("MiniMax H3 text-to-video needs a set aspect ratio (not adaptive). Pick one, or connect "
-                         "a start image.")
+        raise as_person_line(ValueError("MiniMax H3 text-to-video needs a set aspect ratio (not adaptive). Pick one, or connect "
+                         "a start image."))
     body: dict[str, Any] = {"model": model, "content": content,
                             "resolution": str(params.get("resolution") or "2K"),
                             "duration": int(params.get("duration") or 5)}

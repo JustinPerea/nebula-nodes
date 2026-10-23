@@ -371,7 +371,12 @@ export interface CinemaShot {
   refImageUrls?: string[];
   /** Lets one shot deviate from the shared palette/look without breaking the rest. */
   overrides?: { palette?: Partial<CinemaSceneSpec['palette']>; look?: Partial<CinemaSceneSpec['look']> };
-  output?: { imageUrl?: string; status: 'idle' | 'running' | 'done' | 'error'; error?: string; hash?: string };
+  /** `error` is the text agents read. The error* fields are how the Cinema
+   *  panel reads a failure, as a node card reads its run error (error copy
+   *  round 3c-2): the classifier's category and line, the handler's person
+   *  line, and the full raw text for Details when `error` was cut. */
+  output?: { imageUrl?: string; status: 'idle' | 'running' | 'done' | 'error'; error?: string; hash?: string;
+    errorCategory?: string; errorFriendly?: string; errorPerson?: string; errorRaw?: string };
   /** Candidate variations of this shot (one base-model run per distinct seed).
    *  The canonical image (output.imageUrl, the dynamic port, Send-to-motion) is
    *  the `selectedVariation`. Persists on the scene spec so save/load keeps them. */

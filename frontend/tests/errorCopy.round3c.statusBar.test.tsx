@@ -13,7 +13,7 @@ import * as waiting from '../src/lib/worldLabsWaiting';
 
 const ambiguity = (nodeId: string) => ({
   runId: 'run-1', nodeId, kind: 'worldlabs-environment' as const,
-  message: 'World Labs may have accepted a World Labs run without returning a recovery ID. Check Marble before unlocking; do not rerun blindly.',
+  message: "World Labs may have started this run without sending back its ID, so Nebula can't tell if it was billed. Check the job in Marble before you unlock the node, and don't run it again until you have.",
   durable: true,
 });
 
@@ -42,13 +42,13 @@ describe('the status bar', () => {
     expect(screen.getByRole('alert').textContent).toContain('2 more nodes also need your check.');
   });
 
-  it('a run Nebula couldn\'t confirm reads "World Labs run status unknown." over its warning', () => {
+  it('a run Nebula couldn\'t confirm reads "Nebula can\'t tell if this World Labs run started." over its warning', () => {
     useGraphStore.setState({ uncertainWorldLabsRunId: 'run-u', providerRecoveryWarning: waiting.WORLD_LABS_STATUS_UNCERTAIN_WARNING });
     render(<ProviderRecoveryStatus />);
     const bar = screen.getByRole('alert');
-    expect(bar.querySelector('strong')?.textContent).toBe('World Labs run status unknown.');
+    expect(bar.querySelector('strong')?.textContent).toBe("Nebula can't tell if this World Labs run started.");
     expect(bar.textContent).toContain(
-      'Nebula could not confirm whether this World Labs run was accepted. Run remains locked to prevent duplicate paid work. Check Marble before clearing or retrying.');
+      "Nebula couldn't confirm whether World Labs accepted this run, so the node stays locked to avoid paying twice. Check the job in Marble before you unlock it or run it again.");
     expect(bar.textContent).not.toMatch(/\bstart\b/i);
   });
 });

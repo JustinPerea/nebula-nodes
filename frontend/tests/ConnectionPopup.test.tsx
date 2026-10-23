@@ -281,7 +281,7 @@ describe('ConnectionPopup next-step preparation', () => {
     openPopup();
     const before = useGraphStore.getState();
     await act(async () => { fireEvent.click(searchFor('veo-3')); });
-    expect(screen.getByRole('alert')).toHaveTextContent('Could not confirm the connected step');
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't confirm the connected step. Check the canvas before trying again.");
     expect(screen.getByRole('dialog', { name: 'Add next step' })).toBeVisible();
     expect(useGraphStore.getState().nodes).toBe(before.nodes);
     expect(useGraphStore.getState().edges).toBe(before.edges);
@@ -297,7 +297,7 @@ describe('ConnectionPopup next-step preparation', () => {
     openPopup();
     const item = searchFor('veo-3');
     await act(async () => { fireEvent.click(item); });
-    expect(screen.getByRole('alert')).toHaveTextContent('Could not add the step');
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't add the step. Check the canvas before trying again.");
     expect(item).toBeEnabled();
     expect(screen.getByRole('dialog')).toHaveAttribute('aria-busy', 'false');
     expect(useUIStore.getState().connectionPopup.visible).toBe(true);

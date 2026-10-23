@@ -33,6 +33,7 @@ from services.cancellation import schedule_detached_cancel
 from services.output import _MEDIA_EXTENSIONS, get_run_dir, portable_output_ref, write_media_bytes
 from services.public_url import fetch_public_media
 from execution.missing_credential import MissingCredentialError
+from execution.person_line import as_person_line, with_person_line
 
 Emit = Callable[[ExecutionEvent], Awaitable[None]] | None
 _ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
@@ -53,7 +54,7 @@ _FRAME_EXTENSIONS = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".
 def _typed_id(node: GraphNode, key: str, label: str) -> str:
     value = _clean_str(node.params.get(key))
     if not _ID.fullmatch(value):
-        raise ValueError(f"Enter a valid {label}")
+        raise as_person_line(ValueError(f"Enter a valid {label}"))
     return value
 
 
@@ -64,9 +65,9 @@ def _json_object(value: Any, label: str) -> dict[str, Any]:
         try:
             value = json.loads(value)
         except ValueError as exc:
-            raise ValueError(f"{label} must be a JSON object") from exc
+            raise as_person_line(ValueError(f"{label} must be a JSON object")) from exc
     if not isinstance(value, dict):
-        raise ValueError(f"{label} must be a JSON object")
+        raise as_person_line(ValueError(f"{label} must be a JSON object"))
     return value
 
 
@@ -159,9 +160,9 @@ async def handle_krea_job_history(node: GraphNode, inputs: dict[str, PortValueDi
     job_id = _clean_str((wired.get("job_id") or wired.get("id")) if isinstance(wired, dict) else wired
                         or node.params.get("job_id"))
     if job_id and not _JOB_ID.fullmatch(job_id):
-        raise ValueError("Enter a valid Krea job ID")
+        raise as_person_line(ValueError("Enter a valid Krea job ID"))
     if not job_id and mode == "mcp":
-        raise ValueError("Listing job history needs a Krea API token; the Krea account can fetch one job by ID. Nothing was sent")
+        raise as_person_line(ValueError("Listing job history needs a Krea API token; the Krea account can fetch one job by ID. Nothing was sent"))
 
     if mode == "mcp":
         from services.krea_account import account_tools
@@ -218,16 +219,16 @@ def node_app_input(schema: dict, explicit: dict[str, Any], images: list[Any], te
     properties = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
     unknown = set(explicit) - set(properties)
     if unknown:
-        raise ValueError(f"This node app has no input named {', '.join(sorted(unknown))}")
+        raise as_person_line(ValueError(f"This node app has no input named {', '.join(sorted(unknown))}"))
     body = dict(explicit)
     open_images = [key for key, field in properties.items() if _wire_type(field) == "image" and key not in body]
     if len(images) > len(open_images):
-        raise ValueError(f"This node app takes {len(open_images)} more image(s); {len(images)} are wired")
+        raise as_person_line(ValueError(f"This node app takes {len(open_images)} more image(s); {len(images)} are wired"))
     body.update(zip(open_images, images))
     if text not in (None, ""):
         field = next((key for key, value in properties.items() if _wire_type(value) == "text" and key not in body), None)
         if field is None:
-            raise ValueError("This node app has no free text input for the wired text")
+            raise as_person_line(ValueError("This node app has no free text input for the wired text"))
         body[field] = text
     return body
 
@@ -260,7 +261,7 @@ async def _account_node_app(account, version_id: str) -> dict[str, Any]:
         cursor = payload.get("next_cursor")
         if not cursor:
             break
-    raise ValueError("This node app version is not runnable from your Krea account (only public and workspace-shared apps are)")
+    raise as_person_line(ValueError("This node app version is not runnable from your Krea account (only public and workspace-shared apps are)"))
 
 
 async def _node_app_outputs(jobs: list[dict[str, Any]]) -> dict[str, Any]:
@@ -355,7 +356,7 @@ async def handle_krea_files(node: GraphNode, inputs: dict[str, PortValueDict], a
         if value:
             arguments[key] = value
     if arguments.get("root_uri") and not _FILE_URI.fullmatch(arguments["root_uri"]):
-        raise ValueError("Folder must be a Krea Files URI like folder:<uuid>")
+        raise as_person_line(ValueError("Folder must be a Krea Files URI like folder:<uuid>"))
     run_dir = get_run_dir()
     saved: list[dict[str, Any]] = []
     texts: list[str] = []
@@ -401,10 +402,10 @@ def _local_path(value: Any) -> Path:
         value = value.get("value") or value.get("url") or value.get("path")
     path = _resolve_local_path(_clean_str(value))
     if path is None:
-        raise ValueError("Save to Krea Files takes Nebula media from this machine, not remote URLs")
+        raise as_person_line(ValueError("Save to Krea Files takes Nebula media from this machine, not remote URLs"))
     path = require_allowed_path(path)
     if not path.is_file():
-        raise ValueError("Save to Krea Files input is not a readable file")
+        raise as_person_line(ValueError("Save to Krea Files input is not a readable file"))
     return path
 
 
@@ -421,7 +422,7 @@ def _checked_upload_target(url: Any) -> str:
 async def _send_file(client: httpx.AsyncClient, grant: dict[str, Any], path: Path, mime: str) -> None:
     """Send raw bytes the way Krea's write_files_upload grant asks; never multipart."""
     if grant.get("multipart"):
-        raise RuntimeError("Krea asked for a multipart upload, which Nebula does not send yet; nothing was saved")
+        raise as_person_line(RuntimeError("Krea asked for a multipart upload, which Nebula does not send yet; nothing was saved"))
     upload_url = _checked_upload_target(grant.get("uploadUrl") or grant.get("upload_url"))
     method = str(grant.get("method") or "POST").upper()
     if method not in {"POST", "PUT"}:
@@ -445,10 +446,12 @@ async def handle_krea_files_save(node: GraphNode, inputs: dict[str, PortValueDic
     paths = [_local_path(value) for value in _port_values(inputs.get("media"))]
     text = _clean_str(inputs["text"].value if inputs.get("text") else "")
     if not paths and not text:
-        raise ValueError("Wire media or text to save to Krea Files")
+        raise as_person_line(ValueError("Wire media or text to save to Krea Files"))
     for path in paths:
         if path.stat().st_size > MAX_SAVE_BYTES:
-            raise ValueError(f"{path.name} is larger than 2 GB")
+            raise with_person_line(
+                ValueError(f"{path.name} is larger than 2 GB"),
+                "A connected file is larger than 2 GB. Connect a smaller one.")
     scope = _clean_str(node.params.get("scope")) or "user"
     folder = _clean_str(node.params.get("folder"))
     tags = _csv(node.params.get("tags"))
@@ -529,7 +532,7 @@ async def handle_krea_nodes_workflow(node: GraphNode, inputs: dict[str, PortValu
         # typed, never wired, so a shared recipe cannot target the user's work.
         workflow = _clean_str(node.params.get("workflow_id"))
         if not workflow or len(workflow) > 300:
-            raise ValueError("Enter the Krea Nodes workflow ID or link")
+            raise as_person_line(ValueError("Enter the Krea Nodes workflow ID or link"))
         if action == "read":
             arguments = {"workflow": workflow, "mode": _clean_str(node.params.get("read_mode")) or "list"}
             tool = "read_node_workflow"
@@ -537,7 +540,7 @@ async def handle_krea_nodes_workflow(node: GraphNode, inputs: dict[str, PortValu
             operations = node.params.get("operations")
             operations = json.loads(operations) if isinstance(operations, str) and operations.strip() else operations
             if not isinstance(operations, list) or not operations:
-                raise ValueError("Operations must be a JSON list of Krea Nodes edits")
+                raise as_person_line(ValueError("Operations must be a JSON list of Krea Nodes edits"))
             arguments = {"workflow": workflow, "operations": operations}
             tool = "update_node_workflow"
         else:
@@ -587,7 +590,7 @@ async def handle_krea_agent(node: GraphNode, inputs: dict[str, PortValueDict], a
     from services.krea_account import account_tools
     prompt = _clean_str(inputs["prompt"].value if inputs.get("prompt") else node.params.get("prompt"))
     if not prompt:
-        raise ValueError("The Krea Agent needs a prompt")
+        raise as_person_line(ValueError("The Krea Agent needs a prompt"))
     session = inputs["session"].value if inputs.get("session") else None
     session_id = _clean_str(session.get("sessionId") if isinstance(session, dict) else node.params.get("session_id"))
     arguments: dict[str, Any] = {"prompt": prompt}
@@ -624,7 +627,9 @@ async def handle_krea_agent(node: GraphNode, inputs: dict[str, PortValueDict], a
     if not isinstance(view, dict):
         raise RuntimeError("Krea Agent returned no session view")
     if not view.get("finished") and view.get("timedOut"):
-        raise RuntimeError(f"The Krea Agent is still working after {wait_total}s; it keeps running in Krea: {started.get('url', '')}")
+        raise with_person_line(
+            RuntimeError(f"The Krea Agent is still working after {wait_total}s; it keeps running in Krea: {started.get('url', '')}"),
+            f"The Krea Agent is still working after {wait_total} seconds. It keeps running in Krea; open Krea to see it.")
     found: list[tuple[str, str, str | None]] = []
     _deliverable_urls(view.get("deliverables") or [], found)
     saved = await save_media(found)
@@ -659,7 +664,7 @@ async def handle_krea_desktop(node: GraphNode, inputs: dict[str, PortValueDict],
                     "text": {"type": "Text", "value": json.dumps(apps, indent=1)[:4000]}}
         app_id = _clean_str(node.params.get("app_id"))
         if not re.fullmatch(r"[0-9a-fA-F-]{36}", app_id):
-            raise ValueError("Enter the app ID from Krea Desktop Apps (list apps first)")
+            raise as_person_line(ValueError("Enter the app ID from Krea Desktop Apps (list apps first)"))
         tools_answer = await account.call("get_desktop_tools", {"appId": app_id})
         if action == "list-tools":
             return {"result": {"type": "Any", "value": tools_answer}, "image": {"type": "Image", "value": None},
@@ -709,7 +714,9 @@ async def handle_krea_usage(node: GraphNode, inputs: dict[str, PortValueDict], a
     """Completed metered jobs and their compute units for a date window."""
     api_key = _clean_str(api_keys.get("KREA_USAGE_KEY"))
     if not api_key:
-        raise MissingCredentialError("Krea usage needs a workspace service key (KREA_USAGE_KEY); personal API tokens are refused by Krea")
+        raise with_person_line(
+            MissingCredentialError("Krea usage needs a workspace service key (KREA_USAGE_KEY); personal API tokens are refused by Krea"),
+            "Add a Krea usage key in Settings, then run the node again. Krea refuses personal API tokens for usage.")
     params = {key: _clean_str(node.params.get(key)) for key in ("start_date", "end_date") if _clean_str(node.params.get(key))}
     async with httpx.AsyncClient(timeout=60.0, follow_redirects=False) as client:
         response = await client.get(f"{KREA_BASE_URL}/usage", headers=_auth_headers(api_key), params=params)

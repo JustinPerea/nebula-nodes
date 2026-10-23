@@ -384,11 +384,11 @@ def test_the_ambiguity_warning_says_world_labs_run():
     from services import provider_start_guard
 
     assert provider_start_guard.AMBIGUITY_MESSAGE == (
-        "World Labs may have accepted a World Labs run without returning a recovery ID. "
-        "Check Marble before unlocking; do not rerun blindly.")
+        "World Labs may have started this run without sending back its ID, so Nebula can't tell if it was "
+        "billed. Check the job in Marble before you unlock the node, and don't run it again until you have.")
     assert provider_start_guard.NONDURABLE_RECOVERY_MESSAGE == (
-        "World Labs returned a recovery ID, but Nebula could not save that ID durably. Use the live ID; "
-        "do not submit a fresh World Labs run from a stale tab.")
+        "World Labs sent back the job's ID, but Nebula couldn't save it. Keep this tab open and use the ID "
+        "shown here. Don't start the run again from another tab.")
 
 
 def test_a_hold_saved_with_the_old_words_reads_the_new_ones(tmp_path: Path):

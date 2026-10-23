@@ -31,6 +31,7 @@ from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.output import OUTPUT_ROOT
 from execution.missing_credential import MissingCredentialError
+from execution.person_line import with_person_line
 
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
@@ -155,11 +156,15 @@ async def handle_style_reference(
     params = node.params or {}
     file_path_value = params.get("filePath")
     if not file_path_value:
-        raise ValueError("Style Reference needs a reference image (filePath param)")
+        raise with_person_line(
+            ValueError("Style Reference needs a reference image (filePath param)"),
+            "Choose an image in the node's Reference Image field, then run it again.")
 
     abs_path = _resolve_local_path(str(file_path_value))
     if abs_path is None:
-        raise ValueError(f"Reference image not found: {file_path_value}")
+        raise with_person_line(
+            ValueError(f"Reference image not found: {file_path_value}"),
+            "The node's Reference Image can't be found. Choose it again, then run the node again.")
 
     image_value: dict[str, Any] = {"type": "Image", "value": str(abs_path)}
 
@@ -188,10 +193,11 @@ async def handle_style_reference(
     system_prompt = _STYLE_PROMPTS.get(focus, _STYLE_PROMPTS["all"])
     api_key = api_keys.get("GOOGLE_API_KEY")
     if not api_key:
-        raise MissingCredentialError(
+        raise with_person_line(MissingCredentialError(
             "GOOGLE_API_KEY required for Auto mode. Switch the Mode param to Manual or "
             "Image only to use this node without a Gemini call."
-        )
+        ),
+            "Add your Gemini API key in Settings, or set the node's Description Mode to Manual or Image only.")
 
     description = await _describe_style(api_key, abs_path, system_prompt)
     description = _apply_strength_suffix(description, strength)

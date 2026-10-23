@@ -93,7 +93,7 @@ describe('ProviderRecoveryStatus', () => {
     });
 
     render(<ProviderRecoveryStatus />);
-    expect(screen.getByRole('alert')).toHaveTextContent('World Labs run status unknown.');
+    expect(screen.getByRole('alert')).toHaveTextContent("Nebula can't tell if this World Labs run started.");
     expect(screen.queryByRole('button', { name: 'Dismiss recovery warning' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', {

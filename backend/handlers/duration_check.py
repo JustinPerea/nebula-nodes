@@ -26,6 +26,7 @@ from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
 from services.ffmpeg import ffprobe_video
 from services.output import resolve_output_ref
+from execution.person_line import missing_file_line, with_person_line
 
 MATCH_TOLERANCE_SECONDS = 0.5
 
@@ -42,13 +43,14 @@ def _resolve_video_source(value: str) -> str:
     """
     resolved = resolve_output_ref(value)
     if resolved.startswith(("http://", "https://")):
-        raise ValueError(
+        raise with_person_line(ValueError(
             "Remote URLs are not supported for video probing. "
             "Use a local file or /api/outputs/ reference."
-        )
+        ),
+            "This node checks videos made or uploaded in Nebula, not links. Connect one of those.")
     path = Path(resolved).expanduser()
     if not path.exists():
-        raise FileNotFoundError(f"Source video not found: {value}")
+        raise with_person_line(FileNotFoundError(f"Source video not found: {value}"), missing_file_line("video file"))
     return str(path)
 
 
@@ -76,7 +78,9 @@ async def handle_duration_check(
     """Probe the video and compare landed vs requested duration."""
     video_input = inputs.get("video")
     if video_input is None or not video_input.value:
-        raise ValueError("video port is required for video-duration-check")
+        raise with_person_line(
+            ValueError("video port is required for video-duration-check"),
+            "Connect a video to this node, then run it again.")
     source = _resolve_video_source(str(video_input.value))
 
     # Input port wins over the param when connected with a non-empty value.
@@ -86,16 +90,18 @@ async def handle_duration_check(
         try:
             requested = float(req_input.value)
         except (TypeError, ValueError):
-            raise ValueError(
+            raise with_person_line(ValueError(
                 f"requested_duration must be a number, got: {req_input.value!r}"
-            ) from None
+            ),
+                "The connected duration isn't a number. Connect a number of seconds.") from None
     else:
         requested = _parse_param_duration(node.params.get("requested_duration"))
 
     if requested is None:
-        raise ValueError(
+        raise with_person_line(ValueError(
             "requested_duration is required: connect the input port or set the param"
-        )
+        ),
+            "Connect a duration, or set the node's Requested Duration (s), then run it again.")
 
     probe = await ffprobe_video(source)
 

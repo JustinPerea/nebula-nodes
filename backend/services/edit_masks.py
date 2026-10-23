@@ -25,6 +25,7 @@ from pathlib import Path
 
 from PIL import Image
 
+from execution.person_line import as_person_line
 from services.file_access import require_allowed_path
 
 # Formats Pillow may parse here. Masks and edit inputs are images Nebula or
@@ -37,7 +38,7 @@ def _open(data: bytes, label: str) -> Image.Image:
         image = Image.open(io.BytesIO(data), formats=_FORMATS)
         image.load()
     except Exception as exc:  # Pillow raises several types for bad data
-        raise ValueError(f"{label} isn't a PNG, JPEG, WebP or GIF image Nebula can read") from exc
+        raise as_person_line(ValueError(f"{label} isn't a PNG, JPEG, WebP or GIF image Nebula can read")) from exc
     return image
 
 
@@ -48,8 +49,8 @@ def image_size(path: str | Path) -> tuple[int, int]:
         with Image.open(checked, formats=_FORMATS) as image:
             return image.size
     except OSError as exc:  # missing file, or a format Pillow may not parse here
-        raise ValueError("The image to edit isn't a PNG, JPEG, WebP or GIF file Nebula can read, "
-                         "so its mask can't be sized to it") from exc
+        raise as_person_line(ValueError("The image to edit isn't a PNG, JPEG, WebP or GIF file Nebula can read, "
+                                        "so its mask can't be sized to it")) from exc
 
 
 def has_transparency(image: Image.Image) -> bool:

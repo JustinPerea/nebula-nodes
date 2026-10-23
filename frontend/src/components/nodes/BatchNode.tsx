@@ -5,6 +5,7 @@ import { batchAuthoringError, batchSizeCap, parseBatchItems } from '../../lib/ba
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import { useUIStore } from '../../store/uiStore';
 import { useSlavaNodeEntranceClass } from '../../hooks/useSlavaNodeEntrance';
+import { NodeError } from './NodeError';
 import '../../styles/batch-node.css';
 
 function BatchNodeComponent({ id, data, selected }: NodeProps) {
@@ -48,7 +49,13 @@ function BatchNodeComponent({ id, data, selected }: NodeProps) {
       {items.length > cap && <p className="batch-node__warning" role="alert">
         {items.length} items exceed the cap of {cap}. Reduce items or raise the cap in settings (maximum 25).
       </p>}
-      {nodeData.state === 'error' && nodeData.error && <p className="batch-node__warning" role="alert">{nodeData.error}</p>}
+      {/* The run error reads like every node card's (error copy round 3c-2):
+          the person's line, the classifier's, or GM's general line over a
+          closed Details. Agents read nodeData.error itself, unchanged. */}
+      {nodeData.state === 'error' && nodeData.error && <div role="alert">
+        <NodeError className="batch-node__warning" raw={nodeData.error} category={nodeData.errorCategory}
+          friendly={nodeData.errorFriendly} person={nodeData.errorPerson} />
+      </div>}
       <div className="batch-node__output">
         <span>Items</span>
         <Handle type="source" position={Position.Right} id="set" aria-label="Batch items output"

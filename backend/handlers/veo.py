@@ -21,6 +21,7 @@ from services.media_input import read_local_media
 from services.public_url import fetch_public_media
 from execution.missing_credential import MissingCredentialError
 from execution.poll_retry import UpstreamTask, poll_request
+from execution.person_line import as_person_line, missing_file_line, with_person_line
 
 VEO_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
@@ -120,7 +121,7 @@ async def _image_to_veo_payload(img_str: str) -> dict[str, Any]:
             suffix = img_path.suffix.lstrip(".").lower()
             mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}
             return {"bytesBase64Encoded": b64_data, "mimeType": mime_map.get(suffix, "image/png")}
-    raise ValueError(f"Image not found: {img_str}")
+    raise with_person_line(ValueError(f"Image not found: {img_str}"), missing_file_line("image file"))
 
 
 # Veo video extension (https://ai.google.dev/gemini-api/docs/video) continues an existing
@@ -152,14 +153,18 @@ async def handle_veo(
     vertex_credentials = api_keys.get("GOOGLE_VERTEX_CREDENTIALS")
     api_key = api_keys.get("GOOGLE_API_KEY")
     if not vertex_credentials and not api_key:
-        raise MissingCredentialError("Veo needs GOOGLE_VERTEX_CREDENTIALS (Vertex AI) or GOOGLE_API_KEY")
+        raise with_person_line(
+            MissingCredentialError("Veo needs GOOGLE_VERTEX_CREDENTIALS (Vertex AI) or GOOGLE_API_KEY"),
+            "Add your Google Vertex AI credentials or Gemini API key in Settings, then run the node again.")
 
     prompt_input = inputs.get("prompt")
     prompt_text = str(prompt_input.value) if prompt_input and prompt_input.value else ""
 
     model = canonical_model(node.params.get("model"))
     if model not in VEO_MODELS:
-        raise ValueError(f"'{model}' isn't a Veo 3.1 model")
+        # The model id is for agents; the card names the field.
+        raise with_person_line(ValueError(f"'{model}' isn't a Veo 3.1 model"),
+                               "Pick a Veo 3.1 model in the node's Model field, then run it again.")
 
     has_image = bool(inputs.get("image") and inputs["image"].value)
     has_last = bool(inputs.get("last_frame") and inputs["last_frame"].value)
@@ -169,12 +174,15 @@ async def handle_veo(
     # misconfigured node fails fast and cheaply (no generation spend).
     if has_video:
         if has_image or has_last:
-            raise ValueError(
+            raise as_person_line(ValueError(
                 "Veo video extension cannot be combined with a first or last frame"
-            )
+            ))
         allowed = VERTEX_EXTEND_MODELS if vertex_credentials else VEO_EXTEND_MODELS
         if model not in allowed:
-            raise ValueError(f"Video extension requires Veo 3.1 or 3.1 Fast (got '{model}')")
+            raise with_person_line(
+                ValueError(f"Video extension requires Veo 3.1 or 3.1 Fast (got '{model}')"),
+                "Extending a video takes Veo 3.1 or Veo 3.1 Fast. Pick one in the node's Model field, "
+                "or disconnect Extend Video.")
 
     if vertex_credentials:
         return await _handle_veo_vertex(
@@ -209,11 +217,11 @@ async def handle_veo(
         if "generativelanguage.googleapis.com" in video_ref and "/files/" in video_ref:
             instance["video"] = {"uri": video_ref}
         else:
-            raise ValueError(
+            raise as_person_line(ValueError(
                 "Veo extension needs a Veo-generated clip's source URI (a Gemini files/... URI). "
                 "Wire the upstream Veo node's 'Source URI' output into 'Extend Video' — Veo "
                 "rejects re-uploaded or external video files."
-            )
+            ))
 
     parameters = _veo_parameters(node.params)
 
@@ -372,7 +380,9 @@ def _vertex_frame(payload: dict[str, Any]) -> dict[str, Any]:
             out = io.BytesIO()
             image.convert("RGBA" if image.mode in ("RGBA", "LA", "P") else "RGB").save(out, format="PNG")
     except (UnidentifiedImageError, ValueError, OSError):
-        raise ValueError(f"Vertex needs a JPEG or PNG frame and couldn't convert a {payload.get('mimeType')} image") from None
+        raise with_person_line(
+            ValueError(f"Vertex needs a JPEG or PNG frame and couldn't convert a {payload.get('mimeType')} image"),
+            "Vertex AI takes JPEG or PNG frames, and Nebula couldn't convert this one. Connect a JPEG or PNG image.") from None
     return {"bytesBase64Encoded": base64.b64encode(out.getvalue()).decode("ascii"), "mimeType": "image/png"}
 
 
@@ -383,18 +393,18 @@ async def _vertex_video_payload(value: str) -> dict[str, Any]:
     if value.startswith("gs://"):
         return {"gcsUri": value, "mimeType": "video/mp4"}
     if "generativelanguage.googleapis.com" in value:
-        raise ValueError(
+        raise as_person_line(ValueError(
             "Vertex can't read a Gemini API file URI. Wire the upstream node's 'Video' output "
             "(the saved clip) into 'Extend Video' instead."
-        )
+        ))
     if value.startswith(("http://", "https://")):
         data, _type = await fetch_public_media(value, label="Veo clip", max_bytes=MAX_CLIP_BYTES)
     elif value.startswith("data:"):
-        raise ValueError("Extend Video needs a file, a gs:// URI or an https URL")
+        raise as_person_line(ValueError("Extend Video needs a file, a gs:// URI or an https URL"))
     else:
         path = Path(value)
         if not path.exists():
-            raise ValueError(f"Video not found: {value}")
+            raise with_person_line(ValueError(f"Video not found: {value}"), missing_file_line("video file"))
         data = read_local_media(path, label="Veo clip", max_bytes=MAX_CLIP_BYTES)[1]
     return {"bytesBase64Encoded": base64.b64encode(data).decode("ascii"), "mimeType": "video/mp4"}
 
@@ -521,7 +531,7 @@ async def _handle_veo_vertex(
     # Lite's model card is contradictory about frames (modalities say no image
     # input, capabilities list image-to-video), so they're sent and Google decides.
     if str(node.params.get("resolution")) == "4k" and model not in VERTEX_4K_MODELS:
-        raise ValueError("On Vertex only Veo 3.1 (Standard) renders 4K; pick 1080p or Veo 3.1")
+        raise as_person_line(ValueError("On Vertex only Veo 3.1 (Standard) renders 4K; pick 1080p or Veo 3.1"))
     instance: dict[str, Any] = {}
     if prompt_text:
         instance["prompt"] = prompt_text
@@ -549,7 +559,7 @@ async def handle_veo_flf_vertex(
         raise MissingCredentialError("GOOGLE_VERTEX_CREDENTIALS is required")
     first, last = inputs.get("image"), inputs.get("end_image")
     if not (first and first.value and last and last.value):
-        raise ValueError("Veo First-Last Frame needs both a first and a last frame")
+        raise as_person_line(ValueError("Veo First-Last Frame needs both a first and a last frame"))
     prompt = inputs.get("prompt")
     instance: dict[str, Any] = {
         "image": _vertex_frame(await _image_to_veo_payload(str(first.value))),
@@ -584,7 +594,7 @@ def fal_veo_route(
     splits Veo 3.1 into text-, image- and first-last-frame endpoints. Lite
     isn't on fal, so it runs as Fast, the nearest price."""
     if inputs.get("video") and inputs["video"].value:
-        raise ValueError("Extending a clip needs the Google route: add a Vertex or Gemini API key in Settings")
+        raise as_person_line(ValueError("Extending a clip needs the Google route: add a Vertex or Gemini API key in Settings"))
     params = node.params
     fast = canonical_model(params.get("model")) in (FAST_MODEL, LITE_MODEL)
     base = "fal-ai/veo3.1/fast" if fast else "fal-ai/veo3.1"
@@ -605,7 +615,7 @@ def fal_veo_route(
         fal_params["first_frame_url"] = _to_fal_url(str(image.value))
         fal_params["last_frame_url"] = _to_fal_url(str(last.value))
     elif last and last.value:
-        raise ValueError("A last frame needs a first frame too")
+        raise as_person_line(ValueError("A last frame needs a first frame too"))
     elif image and image.value:
         endpoint = f"{base}/image-to-video"
         fal_params["image_url"] = _to_fal_url(str(image.value))

@@ -361,16 +361,17 @@ FORGET_BUTTON = "\u201cChecked Marble \u2014 forget\u201d"
 CANVAS_JOB_CHANGED_PERSON = "A node's World Labs job changed while Nebula saved the canvas. Reload, then try again."
 
 
-def _paid_capacity_person(limit: int | None, *, what: str) -> str:
-    """A full World Labs journal, in GM's pattern (round 3b): what's needed,
-    the count, then what to do. `what` is "this run" or "this change"."""
-    if limit:
-        jobs = "job that is" if limit == 1 else "jobs that are"
-        head = f"Nebula can track up to {limit} World Labs {jobs} still waiting, and {what} would go over that."
-    else:
-        head = f"Nebula can't track more World Labs jobs that are still waiting, and {what} would go over that."
-    return (f"{head} Check them in Marble, clear some with {UNLOCK_BUTTON} or {FORGET_BUTTON} in Run History, "
-            "then try again.")
+def _paid_capacity_person(limit: int | None) -> str:
+    """A full World Labs journal (GM - Design, after 3b: "Nebula is already
+    waiting on {n} World Labs jobs, the most it can track. Check them in
+    Marble and clear some in Run History, then try again." Used for a run and
+    a canvas edit alike)."""
+    if limit == 1:
+        return ("Nebula is already waiting on 1 World Labs job, the most it can track. "
+                "Check it in Marble and clear it in Run History, then try again.")
+    head = (f"Nebula is already waiting on {limit} World Labs jobs, the most it can track." if limit else
+            "Nebula is already waiting on as many World Labs jobs as it can track.")
+    return f"{head} Check them in Marble and clear some in Run History, then try again."
 
 
 def _paid_job_changed_person(button: str) -> str:
@@ -379,7 +380,7 @@ def _paid_job_changed_person(button: str) -> str:
     return f"This node is waiting on a newer World Labs job. Reload to see it, check it in Marble, then use {button}."
 
 
-def _start_refusal(exc: ProviderStartConflictError, *, own_node: bool = False, what: str = "this run") -> HTTPException:
+def _start_refusal(exc: ProviderStartConflictError, *, own_node: bool = False) -> HTTPException:
     """409 for a paid start the guard refused, worded by the code it was
     raised with (ProviderStartConflictError.reason, never its text): the
     person reads _paid_state_person's line for the state that holds the
@@ -391,7 +392,7 @@ def _start_refusal(exc: ProviderStartConflictError, *, own_node: bool = False, w
         # (listed for GM, round 3b).
         return HTTPException(status_code=409, detail=str(exc))
     if reason == "capacity":
-        person = _paid_capacity_person(getattr(exc, "limit", None), what=what)
+        person = _paid_capacity_person(getattr(exc, "limit", None))
     elif reason == "changed":
         person = _paid_job_changed_person(UNLOCK_BUTTON)
     else:
@@ -537,7 +538,7 @@ def _seed_shared_graph_recoveries_for_api(
     try:
         return _ensure_shared_graph_recoveries(nodes, source=source)
     except ProviderRecoveryCapacityError as exc:
-        raise refusal_copy.refusal(409, str(exc), _paid_capacity_person(exc.limit, what="this change"),
+        raise refusal_copy.refusal(409, str(exc), _paid_capacity_person(exc.limit),
                                    route="canvas") from exc
     except ProviderRecoveryConflictError as exc:
         raise refusal_copy.refusal(409, str(exc), CANVAS_JOB_CHANGED_PERSON, route="canvas") from exc
@@ -7311,7 +7312,7 @@ def _claim_fresh_paid_worldlabs_starts(
         )
     except ProviderRecoveryCapacityError as exc:
         provider_recovery_store.release_reservations(run_id)
-        raise refusal_copy.refusal(409, str(exc), _paid_capacity_person(exc.limit, what="this run"),
+        raise refusal_copy.refusal(409, str(exc), _paid_capacity_person(exc.limit),
                                    route="run") from exc
     except ProviderRecoveryPersistenceError as exc:
         provider_recovery_store.release_reservations(run_id)
@@ -7814,6 +7815,7 @@ async def _merge_shot_result(
     captured_outputs: dict[str, Any],
     *,
     terminal_error: str | None = None,
+    terminal_fields: dict[str, str] | None = None,
 ) -> dict[str, Any] | None:
     """Merge a single-shot regeneration into the canonical cli_graph node WITHOUT
     clobbering sibling shots.
@@ -7830,6 +7832,11 @@ async def _merge_shot_result(
     only the live target shot as failed while retaining its last good image and
     output port. This prevents the request snapshot from restoring stale success
     after an upstream failure. Returns the merged shot output dict, or None.
+
+    ``terminal_fields`` are what the Cinema panel reads the failure with, as
+    a node card does (error copy round 3c-2): ``errorCategory``,
+    ``errorFriendly``, ``errorPerson`` and ``errorRaw`` (_shot_failure_fields).
+    ``error`` stays the text agents read, word for word.
     """
     new_output: dict[str, Any] | None = None
     if terminal_error is None and executed_node is not None:
@@ -7838,11 +7845,8 @@ async def _merge_shot_result(
         if sub_shots and isinstance(sub_shots[0], dict):
             new_output = sub_shots[0].get("output")
 
-    result_output = (
-        {"status": "error", "error": terminal_error}
-        if terminal_error is not None
-        else new_output
-    )
+    failure = {"status": "error", "error": terminal_error, **(terminal_fields or {})}
+    result_output = failure if terminal_error is not None else new_output
 
     async with _shot_merge_lock(node_id):
         node = cli_graph.nodes.get(node_id)
@@ -7860,8 +7864,9 @@ async def _merge_shot_result(
                         # Keep the last successful image/hash available for
                         # preview and downstream reuse, but make the terminal
                         # status truthful and durable.
-                        failed_output = dict(shot.get("output") or {})
-                        failed_output.update({"status": "error", "error": terminal_error})
+                        failed_output = {key: value for key, value in (shot.get("output") or {}).items()
+                                         if key not in _SHOT_FAILURE_FIELDS}
+                        failed_output.update(failure)
                         shot["output"] = failed_output
                         result_output = failed_output
                     elif new_output is not None:
@@ -7886,7 +7891,18 @@ async def _merge_shot_result(
 
 
 class _ShotPassError(RuntimeError):
-    """Expected per-shot pass failure already expressed as user-facing text."""
+    """Expected per-shot pass failure already expressed as user-facing text.
+
+    ``failure`` is the node run error behind it, as the card reads one:
+    category, friendly, person and the raw text (round 3c-2)."""
+
+    def __init__(self, message: str, failure: dict[str, str] | None = None) -> None:
+        super().__init__(message)
+        self.failure = failure
+
+
+# What a failed shot's output carries beside ``error`` for the Cinema panel.
+_SHOT_FAILURE_FIELDS = ("errorCategory", "errorFriendly", "errorPerson", "errorRaw")
 
 
 def _shot_task_error_message(exc: Exception) -> str:
@@ -7894,6 +7910,20 @@ def _shot_task_error_message(exc: Exception) -> str:
         return str(exc)
     detail = str(exc).strip() or type(exc).__name__
     return f"Shot generation failed: {detail}"
+
+
+def _shot_failure_fields(exc: Exception) -> dict[str, str]:
+    """How the Cinema panel reads a failed shot, the way a node card reads its
+    run error (lib/nodeErrorCopy.ts): the handler's person line, the
+    classifier's category and line, and the full raw text for Details. A
+    shot that ended for a reason Nebula wrote itself carries none and shows
+    as it is; an unexpected exception reads GM's general line."""
+    if isinstance(exc, _ShotPassError):
+        failure = exc.failure or {}
+        fields = {"errorCategory": failure.get("category"), "errorFriendly": failure.get("friendly"),
+                  "errorPerson": failure.get("person"), "errorRaw": failure.get("raw")}
+        return {key: value for key, value in fields.items() if value}
+    return {"errorCategory": "unknown"}
 
 
 async def _execute_single_shot_pass(
@@ -7932,6 +7962,9 @@ async def _execute_single_shot_pass(
             return
         if isinstance(event, ErrorEvent) and "error" not in captured:
             captured["error"] = event.friendly or event.error
+            if event.category:
+                captured["failure"] = {"category": event.category, "friendly": event.friendly,
+                                       "person": event.person, "raw": event.error}
         await _emit_and_sync(event)
 
     await execute_graph(
@@ -7946,7 +7979,8 @@ async def _execute_single_shot_pass(
 
     if not captured["target_executed"]:
         raise _ShotPassError(
-            str(captured.get("error") or "Shot generation ended before the Cinema node completed.")
+            str(captured.get("error") or "Shot generation ended before the Cinema node completed."),
+            captured.get("failure"),
         )
 
     return executed_node, captured.get("outputs") or {}
@@ -7978,6 +8012,7 @@ async def _run_single_shot_task(
             None,
             {},
             terminal_error=_shot_task_error_message(exc),
+            terminal_fields=_shot_failure_fields(exc),
         )
     except Exception as exc:
         traceback.print_exc()
@@ -7987,6 +8022,7 @@ async def _run_single_shot_task(
             None,
             {},
             terminal_error=_shot_task_error_message(exc),
+            terminal_fields=_shot_failure_fields(exc),
         )
     else:
         await _merge_shot_result(node_id, shot_id, executed_node, outputs)
@@ -8217,12 +8253,14 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
         import traceback
 
         terminal_error: str | None = None
+        terminal_fields: dict[str, str] | None = None
         try:
             if count > 1:
                 # Variation batch: N passes at distinct seeds (cache OFF so each
                 # truly regenerates), collected into the shot's variations strip.
                 variations: list[dict[str, Any]] = []
                 failures: list[str] = []
+                last_fields: dict[str, str] = {}
                 for i in range(count):
                     seed_i = (request.seed + i) if request.seed is not None else random.randint(1, 2_147_483_647)
                     try:
@@ -8237,21 +8275,25 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
                         )
                     except _ShotPassError as exc:
                         failures.append(_shot_task_error_message(exc))
+                        last_fields = _shot_failure_fields(exc)
                         continue
                     except Exception as exc:
                         traceback.print_exc()
                         failures.append(_shot_task_error_message(exc))
+                        last_fields = _shot_failure_fields(exc)
                         continue
                     url = (outputs.get(shot_port) or {}).get("value")
                     if url:
                         variations.append({"url": url, "seed": seed_i})
                     else:
                         failures.append(f"Variation seed {seed_i} returned no image.")
+                        last_fields = {}
                 if variations:
                     await _merge_shot_variations(request.node_id, request.shot_id, variations)
                 else:
                     last_failure = failures[-1] if failures else "No variation returned an image."
                     terminal_error = f"All {count} variation passes failed. {last_failure}"
+                    terminal_fields = last_fields
             else:
                 executed_node, outputs = await _execute_single_shot_pass(
                     node_id=request.node_id,
@@ -8267,9 +8309,11 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
                 )
         except _ShotPassError as exc:
             terminal_error = _shot_task_error_message(exc)
+            terminal_fields = _shot_failure_fields(exc)
         except Exception as exc:
             traceback.print_exc()
             terminal_error = _shot_task_error_message(exc)
+            terminal_fields = _shot_failure_fields(exc)
         finally:
             try:
                 if terminal_error is not None:
@@ -8279,6 +8323,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
                         None,
                         {},
                         terminal_error=terminal_error,
+                        terminal_fields=terminal_fields,
                     )
                 await _broadcast_graph_sync()
             finally:
@@ -8767,7 +8812,7 @@ def _sync_provider_recovery_to_cli_graph(
             # terminal in-memory param sync remain available as fallbacks.
             print(f"[provider-recovery] journal rejected checkpoint: {exc}", flush=True)
             durability_warning = (
-                "Nebula captured this paid-provider recovery ID but could not "
+                "Nebula captured this World Labs recovery ID but could not "
                 "save it durably. Keep this tab open and copy the ID before "
                 "reloading."
             )
@@ -8786,7 +8831,7 @@ def _sync_provider_recovery_to_cli_graph(
                 safety_hold_changed = False
     else:
         durability_warning = (
-            "Nebula captured this paid-provider recovery ID without a run ID, "
+            "Nebula captured this World Labs recovery ID without a run ID, "
             "so it could not save it durably. Keep this tab open and copy the "
             "ID before reloading."
         )
