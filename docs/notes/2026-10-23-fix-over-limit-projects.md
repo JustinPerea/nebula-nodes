@@ -152,7 +152,7 @@ Screenshots for GM: `gm-panel-1280.png`, `gm-header-1280.png`, `gm-loadgraph-not
 - **The Load graph notice** (moved up from the next light round, since #182 was still open): "Opened {filename}. It's {size} MB, over the save limit." The limit is in the panel.
 - **A save that fails some other way while paused**: no change. A new test pins GM's check that Save failed's Retry on a project over the limit again goes back to paused by itself and sends nothing. It passed on the code as built.
 - Every other panel choice was approved as built. MiB stays labelled "MB".
-- Open for GM: when every small row is tiny, the folded line can read "14 smaller items, 0.0 MB in all".
+- When the folded rows' total rounds to 0.0, the line drops its size: "14 smaller items" (GM's (b)). `project_size` keeps its `smaller.size` for agents.
 
 ## For GM
 

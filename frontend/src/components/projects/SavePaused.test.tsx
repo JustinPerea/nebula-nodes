@@ -128,7 +128,8 @@ describe('the panel', () => {
     expect(panel.textContent).not.toMatch(/\bn1\b|\bm0\b/);
     // The rest, counted.
     // Thirteen small nodes and the project's settings.
-    expect(within(panel).getByText(/^14 smaller items, \d+\.\d MB in all$/)).toBeTruthy();
+    // Their total rounds to 0.0, so the line has no size (GM, #182: (b)).
+    expect(within(panel).getByText('14 smaller items')).toBeTruthy();
     opener.remove();
   });
 

@@ -24,8 +24,10 @@ export const panelLine = (bytes: number) =>
 /** Once it saves again. */
 export const savingAgainNotice = (bytes: number) => `Saving again. This project is ${displaySize(bytes)} MB.`;
 /** Past the top ten rows. GM wrote the plural; one item reads singular. */
+/** With no size when it rounds to 0.0 (GM - Design, #182: "14 smaller
+ * items", since "0.0 MB" tells nobody anything). */
 export const smallerLine = (count: number, size: string) =>
-  `${count} smaller ${count === 1 ? 'item' : 'items'}, ${size} MB in all`;
+  `${count} smaller ${count === 1 ? 'item' : 'items'}${size === '0.0' ? '' : `, ${size} MB in all`}`;
 
 /** The dimmer part label on a node's row (lib/projectSize SizePart). GM
  * named "Text" and "Stored outputs"; "Embedded files" (data: URLs pasted

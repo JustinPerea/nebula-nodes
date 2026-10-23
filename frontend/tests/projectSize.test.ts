@@ -21,6 +21,7 @@ import {
   PROJECT_SAVE_LIMIT_BYTES, TOP_ROWS, displaySize, jsonBytes, listedRowCount, overBy, projectSizeBreakdown, projectSizeBytes,
   rowSize,
 } from '../src/lib/projectSize';
+import { smallerLine } from '../src/lib/savePausedCopy';
 
 const MIB = 1024 * 1024;
 
@@ -113,5 +114,13 @@ describe('which rows the panel lists', () => {
     const cases = (shared as unknown as { listedRows: Array<{ bytes: number[]; listed: number }> }).listedRows;
     expect(cases.length).toBeGreaterThan(2);
     for (const { bytes, listed } of cases) expect(listedRowCount(rows(...bytes))).toBe(listed);
+  });
+});
+
+describe('the smaller line', () => {
+  it('says its size, unless that rounds to 0.0 (GM, #182)', () => {
+    expect(smallerLine(5, '1.3')).toBe('5 smaller items, 1.3 MB in all');
+    expect(smallerLine(1, '0.2')).toBe('1 smaller item, 0.2 MB in all');
+    expect(smallerLine(14, '0.0')).toBe('14 smaller items');
   });
 });
