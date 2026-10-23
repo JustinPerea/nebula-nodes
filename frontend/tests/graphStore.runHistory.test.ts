@@ -1287,7 +1287,9 @@ describe('graphStore run-history lifecycle', () => {
 
     expect(useGraphStore.getState().nodes).toEqual([source]);
     expect(alert).toHaveBeenCalledTimes(3);
-    expect(alert.mock.calls[0][0]).toContain('separate paid operation');
+    // GM - Design, round 4: one line at 560 px.
+    expect(alert.mock.calls.map(([text]) => text)).toEqual(Array(3).fill(
+      "Couldn't duplicate a paid World Labs node. Add a new one from the Nodes rail instead."));
   });
 
   it('does not clear a checkpoint that advances while exact deletion is in flight', async () => {

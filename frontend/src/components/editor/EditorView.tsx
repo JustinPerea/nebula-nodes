@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { WorkspaceHeader } from '../WorkspaceHeader';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
@@ -6,6 +6,7 @@ import { EditorBreadcrumb } from './EditorBreadcrumb';
 import { VideoPreview } from './VideoPreview';
 import { EditorTransport } from './EditorTransport';
 import { Timeline } from './Timeline';
+import { useBottomBarClearance } from '../../hooks/useBottomBarClearance';
 import './EditorView.css';
 
 export function EditorView() {
@@ -33,6 +34,16 @@ export function EditorView() {
     const videoOut = Object.values(outputs).find((o) => o.type === 'Video');
     return videoOut?.value ?? null;
   })();
+
+  // The timeline is this screen's bottom bar: it publishes its top edge, so
+  // the app's notices sit 8 px above it, even though it shares its column
+  // with the preview (GM - Design, 2026-10-23, round 4: "TRIM EDITOR
+  // TIMELINE: yes, it publishes its top edge. A notice should never sit over
+  // a timeline being edited, even one that shares its column."). Measured
+  // again when the timeline comes or goes; the empty editor has none.
+  const timelineRef = useRef<HTMLDivElement>(null);
+  const hasTimeline = Boolean(editNode && sourceNode && sourceUrl);
+  useBottomBarClearance([timelineRef], hasTimeline);
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -171,7 +182,7 @@ export function EditorView() {
       <EditorBreadcrumb sourceNode={sourceNode} editNode={editNode} />
       <VideoPreview sourceUrl={sourceUrl} editNode={editNode} />
       <EditorTransport editNode={editNode} sourceUrl={sourceUrl} />
-      <Timeline editNode={editNode} sourceUrl={sourceUrl} />
+      <Timeline ref={timelineRef} editNode={editNode} sourceUrl={sourceUrl} />
     </div>
   );
 }

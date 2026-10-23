@@ -119,7 +119,27 @@ describe('following an agent’s project switch', () => {
     await vi.waitFor(() => expect(useProjectStore.getState().switchNotice).not.toBeNull());
     expect(api.recoverProject).toHaveBeenCalledTimes(1);
     expect(useProjectStore.getState().switchNotice?.keptCopy).toBe(true);
-    expect(switchMessage(useProjectStore.getState().switchNotice!)).toContain('kept as a copy in Projects');
+    // GM - Design, round 4: "Claude Code made “{name}” and opened it. A copy of your unsaved changes is in Projects."
+    expect(switchMessage(useProjectStore.getState().switchNotice!))
+      .toBe('Claude Code made “Agent sketches” and opened it. A copy of your unsaved changes is in Projects.');
+  });
+
+  // GM - Design, round 4 (one line at 560 px): the kept-copy forms, verbatim. The
+  // forms without a kept copy and the agent's name are unchanged.
+  it.each([
+    [false, true, 'Claude Code opened “Agent sketches”. A copy of your unsaved changes is in Projects.'],
+    [true, true, 'Claude Code made “Agent sketches” and opened it. A copy of your unsaved changes is in Projects.'],
+    [false, false, 'Claude Code opened “Agent sketches”.'],
+    [true, false, 'Claude Code made a new project, “Agent sketches”, and opened it.'],
+  ])('the toast for created=%s, keptCopy=%s reads GM\'s line', (created, keptCopy, line) => {
+    expect(switchMessage({ actorName: 'Claude Code', created, projectName: 'Agent sketches',
+      previousProjectId: 'p1', previousProjectName: 'Loop', keptCopy })).toBe(line);
+  });
+
+  it('an unnamed script keeps its own name in the kept-copy line', () => {
+    expect(switchMessage({ actorName: null, created: false, projectName: 'Agent sketches',
+      previousProjectId: 'p1', previousProjectName: 'Loop', keptCopy: true }))
+      .toBe('An outside app opened “Agent sketches”. A copy of your unsaved changes is in Projects.');
   });
 
   it('an agent reopening this project saves the last edit into it and offers no way "back" to itself', async () => {

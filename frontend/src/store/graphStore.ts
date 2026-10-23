@@ -75,7 +75,7 @@ import {
   rewriteExecutionAssetUrls,
 } from '../lib/backend';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
-import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, waitingOnWorldLabs } from '../lib/worldLabsWaiting';
+import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, deleteRefusalText, heldDeleteText } from '../lib/worldLabsWaiting';
 import { FailureNotice, REFUSED_FALLBACK_COPY, copyForStatus, failureCopy, failureMessage, readDetail, requestError, warnFailure } from '../lib/errorCopy';
 import { CANVAS_NOTICE_EVENT, type CanvasNoticeDetail } from '../lib/canvasNotice';
 import { cleanRemovals, deletedNoticeText, lateRestoreText, mergeRemovals, notRestoredText, pinsOnAnotherModel, restoredNoticeText, supersededBy, type RemovalRecord } from '../lib/deleteNotice';
@@ -467,8 +467,9 @@ let undoNoticeSeq = 0;
 /**
  * A restore's count that arrived after the person moved on (GM - Design,
  * 2026-10-23, round 3: "show it as a plain notice with no button, using the
- * standard timeout, under the newer notice"). Its own line in its own slot
- * under the canvas notice (lib/noticeSlots.ts 'late'), never the canvas
+ * standard timeout"). Its own line in its own slot right above the canvas
+ * notice (lib/noticeSlots.ts 'late'; round 4: "put the late line above the
+ * newer one, so the notice with a button stays nearest the bar"), never the canvas
  * notice itself, so it never replaces the newer notice, and it has no Undo or
  * Redo: the store's rule for offers (withLiveNotice) never reads it. Two late
  * counts while one shows add up on the one line.
@@ -798,7 +799,7 @@ interface GraphState {
   /** The notice for someone else's edit: it landed, or was undone or redone. */
   undoNotice: UndoNotice | null;
   dismissUndoNotice: () => void;
-  /** A restore's late count, shown under the canvas notice (LateNotice). */
+  /** A restore's late count, shown above the canvas notice (LateNotice). */
   lateNotice: LateNotice | null;
   dismissLateNotice: () => void;
   /** Show a written line as the canvas notice, non-blocking and dismissable,
@@ -1848,9 +1849,10 @@ function deletionHeading(count: number): string {
   return count === 1 ? "Couldn't delete the node." : `Couldn't delete ${count} nodes.`;
 }
 
+/** The backend's World Labs lines read as GM's trimmed ones (round 4,
+ * lib/worldLabsWaiting.ts deleteRefusalText); every other reason as given. */
 function reportNodeDeletionFailure(reasons: string[], count: number): void {
-  const heading = deletionHeading(count);
-  const message = `${heading} ${[...new Set(reasons)].join(' ')}`;
+  const message = deleteRefusalText(deletionHeading(count), count, reasons);
   console.warn(`[nebula] ${message}`);
   useGraphStore.getState().notify(message);
 }
@@ -2148,8 +2150,9 @@ function nodeHasProviderSafety(state: GraphState, nodeId: string): boolean {
  * The person asked to delete `ids` and the canvas keeps them, because one
  * holds World Labs state (error copy round 3b: a refusal that says nothing
  * is the worst kind). True when it refused: it says why once, in the
- * canvas's short notice ("Couldn't delete the node." and the backend's
- * per-state line, lib/worldLabsWaiting), and sends nothing. An agent's delete
+ * canvas's short notice (GM's one line, round 4: "Couldn't delete the node.
+ * It's waiting on World Labs. Check Marble, then unlock it.", and its forms,
+ * lib/worldLabsWaiting heldDeleteText), and sends nothing. An agent's delete
  * goes through the backend, which refuses it with its own text.
  */
 function refuseHeldNodeDelete(state: GraphState, ids: string[], set: GraphSet): boolean {
@@ -2157,7 +2160,7 @@ function refuseHeldNodeDelete(state: GraphState, ids: string[], set: GraphSet): 
   if (held.length === 0) return false;
   // The backend's order: an unconfirmed start before a recovery record.
   const unlock = held.some((nodeId) => state.providerStartAmbiguities.some((ambiguity) => ambiguity.nodeId === nodeId));
-  set({ undoNotice: { id: ++undoNoticeSeq, text: `${deletionHeading(ids.length)} ${waitingOnWorldLabs(ids.length, unlock)}`, offer: null } });
+  set({ undoNotice: { id: ++undoNoticeSeq, text: heldDeleteText(ids.length, unlock, held.length), offer: null } });
   return true;
 }
 
@@ -2279,8 +2282,10 @@ function providerSafeCloneParams(
   );
 }
 
+/** GM - Design, round 4 (one line at 560 px). Only the person reads it: the
+ * canvas refuses the copy itself, and agents add nodes, never duplicate. */
 const WORLD_LABS_UNSAFE_CLONE_MESSAGE =
-  'Nebula did not duplicate this fresh paid World Labs node. Add a new node from the Nodes rail when you intentionally want a separate paid operation.';
+  "Couldn't duplicate a paid World Labs node. Add a new one from the Nodes rail instead.";
 
 function warnUnsafeProviderClone(): void {
   console.warn(`[nebula] ${WORLD_LABS_UNSAFE_CLONE_MESSAGE}`);
@@ -2829,7 +2834,7 @@ function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): voi
 }
 
 /** A restore's count that arrived too late for its own line: the plain line
- * under the canvas notice, added to one already showing (LateNotice). */
+ * above the canvas notice, added to one already showing (LateNotice). */
 function lateCount(state: GraphState, missed: Missed): Partial<GraphState> {
   const shown = state.lateNotice;
   const notReopened = missed.notReopened + (shown?.notReopened ?? 0);
@@ -2899,7 +2904,7 @@ function sendRestore(
   // new step has landed since: its Redo (or Undo) would no longer apply, so
   // the line stays away (withLiveNotice; GM - Design, 2026-10-23). What it
   // couldn't put back is never lost with it: that count shows on its own
-  // plain line under the newer notice (lateCount; GM, round 3).
+  // plain line above the newer notice (lateCount; GM, rounds 3 and 4).
   const answerNotice = (missed: Missed) => set((state) => {
     if (notice.ownLine) {
       const shown = ownStepNotice(notice.noticeId, notice.ownLine, missed, action, inverse);
@@ -5969,7 +5974,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     if (!source) return;
     const snapshot = snapshotWithLatestPaperSources(source, captureRunSnapshot(state.nodes, state.edges));
     if (!snapshot) {
-      get().notify('Refresh or reconnect the Paper sources in this saved recipe before rerunning with the latest snapshot. Their last successful snapshots remain in source history.');
+      // GM - Design, round 4 (one line at 560 px).
+      get().notify("Refresh this recipe's Paper sources, then run it again. Their last snapshots are kept.");
       return;
     }
     await executeHistoricalRun({ ...source, snapshot }, 'latest-paper-source', set, get);

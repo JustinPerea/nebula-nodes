@@ -186,7 +186,8 @@ describe('Paper source execution contract', () => {
     expect(node('paper').data.outputs.image.value).toBe('/api/outputs/paper/B.png');
     await useGraphStore.getState().rerunHistoryWithLatestPaperSource(id);
     expect(api.executeNode).toHaveBeenCalledTimes(1);
-    expect(notices).toHaveBeenCalledWith(expect.stringContaining('Refresh or reconnect'));
+    // GM - Design, round 4: one line at 560 px.
+    expect(notices).toHaveBeenCalledWith("Refresh this recipe's Paper sources, then run it again. Their last snapshots are kept.");
     useGraphStore.getState().applyPaperSource('paper', source('B', 5, 'replacement-logo'));
     expect(useGraphStore.getState().runHistory[0].outOfDateReasons).toEqual([
       'Paper source paper was reconnected to another object.',
