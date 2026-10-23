@@ -133,7 +133,7 @@ describe("GM's banner line", () => {
 
   it('keeps the desktop shell\'s own lines', () => {
     expect(personRequiredMessage('desktop-unavailable')).toBe(
-      "Nebula couldn't confirm this window is yours, so Settings, proposals and chats are off. Restart the app.");
+      "Nebula couldn't confirm this window is yours, so Settings, proposals and chats are off. Quit Nebula and open it again.");
   });
 });
 
@@ -190,12 +190,33 @@ describe("GM's app lines (round 2), chosen by the desktop flag", () => {
     expect(personRequiredMessage('not-connected')).toBe(APP_BANNER);
   });
 
+  // GM, round 3 (2026-10-23), verbatim: in the two developer setups line 3
+  // points to the banner, which already gives the real fix.
+  it('line 3 points to the banner with a debug port open or the dev renderer', async () => {
+    const DEV_LINE = "This change needs your OK, and this window isn't connected as you. The notice below says why.";
+    for (const error of ['DEBUG_PORT', 'DEV_RENDERER']) {
+      resetPersonSessionForTests();
+      inTheApp({ token: vi.fn().mockResolvedValue({ ok: false, error }) });
+      expect(await personCredential()).toBeNull();
+      expect(errorCopy.copyForAnswer(403, BILLING, 'person_required')).toBe(DEV_LINE);
+      const written = new RequestFailedError("Couldn't start the run.", 403,
+        { detail: BILLING, reason: BILLING, code: 'person_required' });
+      expect(written.reason).toBe(DEV_LINE);
+      expect(details(written)).toBe(BILLING);
+    }
+    // A normal launch keeps "Quit Nebula and open it again, then try again."
+    resetPersonSessionForTests();
+    inTheApp({ token: vi.fn().mockResolvedValue({ ok: true, token: 'p'.repeat(43) }) });
+    expect(await personCredential()).not.toBeNull();
+    expect(errorCopy.copyForAnswer(403, BILLING, 'person_required')).toBe(APP_LINE);
+  });
+
   it("the shell's own reasons keep their lines in the app, and the browser banner stays", async () => {
     inTheApp({ token: vi.fn().mockResolvedValue({ ok: false, error: 'DEBUG_PORT' }) });
     expect(await personCredential()).toBeNull();
     expect(personRequiredMessage()).toMatch(/remote-debugging port/);
     expect(personRequiredMessage('desktop-unavailable')).toBe(
-      "Nebula couldn't confirm this window is yours, so Settings, proposals and chats are off. Restart the app.");
+      "Nebula couldn't confirm this window is yours, so Settings, proposals and chats are off. Quit Nebula and open it again.");
     delete (window as unknown as Record<string, unknown>).nebulaDesktop;
     expect(personRequiredMessage('not-connected')).toBe(BANNER);
   });

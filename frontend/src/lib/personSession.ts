@@ -248,7 +248,9 @@ export function personRequiredMessage(reason: PersonUnavailableReason = personUn
         + 'Set NEBULA_DESKTOP_DEV_PERSON=1 to opt in.';
     case 'untrusted-sender':
     case 'desktop-unavailable':
-      return "Nebula couldn't confirm this window is yours, so Settings, proposals and chats are off. Restart the app.";
+      // GM, round 3 (2026-10-23): it ends like the app banner, since the
+      // window can close while Nebula keeps running in the Dock.
+      return "Nebula couldn't confirm this window is yours, so Settings, proposals and chats are off. Quit Nebula and open it again.";
     default:
       // The desktop app gets here when its backend refuses the token the
       // shell handed over (desktopReason stays null then): GM's app banner

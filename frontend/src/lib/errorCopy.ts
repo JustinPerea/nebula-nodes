@@ -23,7 +23,7 @@
  * site (warnFailure), lost connections aren't.
  */
 
-import { inDesktopShell } from './personSession';
+import { inDesktopShell, personUnavailableReason } from './personSession';
 
 /** No answer at all: the connection dropped, or the backend isn't there.
  * Round 3f (GM): ""Check your connection" sends people to their Wi-Fi, but
@@ -61,14 +61,23 @@ export const PERSON_REQUIRED_COPY = "This change needs your OK, and this tab isn
 export const PERSON_REQUIRED_APP_COPY = "This change needs your OK, and this window isn't connected as you. "
   + 'Quit Nebula and open it again, then try again.';
 
+/** GM - Design, 2026-10-23 (round 3), verbatim: line 3 in the app's two
+ * developer setups (a debug port, the dev renderer), where the banner already
+ * gives the real fix. */
+export const PERSON_REQUIRED_DEV_COPY = "This change needs your OK, and this window isn't connected as you. "
+  + 'The notice below says why.';
+
 /** Line 3 for where this page runs: `desktop` is personSession's
  * inDesktopShell() (the preload bridge), the flag the rest of the error copy
- * reads (commonsSessionCopy). */
-export function personRequiredCopy(desktop: boolean = inDesktopShell()): string {
-  return desktop ? PERSON_REQUIRED_APP_COPY : PERSON_REQUIRED_COPY;
+ * reads (commonsSessionCopy); `reason` is the shell's own, when it gave one. */
+export function personRequiredCopy(desktop: boolean = inDesktopShell(),
+  reason: string = personUnavailableReason()): string {
+  if (!desktop) return PERSON_REQUIRED_COPY;
+  return reason === 'debug-port' || reason === 'dev-renderer' ? PERSON_REQUIRED_DEV_COPY : PERSON_REQUIRED_APP_COPY;
 }
 
-const isPersonRequiredCopy = (line: string) => line === PERSON_REQUIRED_COPY || line === PERSON_REQUIRED_APP_COPY;
+const isPersonRequiredCopy = (line: string) =>
+  line === PERSON_REQUIRED_COPY || line === PERSON_REQUIRED_APP_COPY || line === PERSON_REQUIRED_DEV_COPY;
 
 /** GM's WRAP rule (round 2): "when the surface already has a retry button,
  * the reason line drops its 'try again'. The button is the retry." Only

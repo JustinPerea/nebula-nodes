@@ -273,7 +273,7 @@ The lines as built, verbatim:
 - After a download Load graph can't open (GM's line 1, until Q118 is settled): "Your edits are saved as {filename}. Keep it somewhere safe. It's too large for “Load graph” to open right now, so Nebula can't bring the edits back yet."
 - A download that couldn't be written (GM's line 2), the body under the same heading, both buttons kept: "The download didn't save, so your edits are still only in this tab. Check that your disk has free space, then download them again, or continue without them."
 - A person-only refusal (GM's line 3, round 2), under "Couldn't recover the project." and wherever else one shows. In a browser tab: "This change needs your OK, and this tab isn't connected as you. Open the link Nebula printed when it started, then try again." In the desktop app: "This change needs your OK, and this window isn't connected as you. Quit Nebula and open it again, then try again." The agents' text is behind Details where the surface has room for it; one-line surfaces have none (your answer, round 2).
-- The banner. In a browser tab, as you sent it: "This tab isn't connected as you, so Settings, proposals and chats are locked. Open the link Nebula printed when it started, or restart Nebula with --open." In the desktop app, when its backend refuses the window's token: "This window isn't connected as you, so Settings, proposals and chats are locked. Quit Nebula and open it again." The app's own cases keep their lines (a debug port, the dev renderer, "Nebula couldn't confirm this window is yours, so Settings, proposals and chats are off. Restart the app.").
+- The banner. In a browser tab, as you sent it: "This tab isn't connected as you, so Settings, proposals and chats are locked. Open the link Nebula printed when it started, or restart Nebula with --open." In the desktop app, when its backend refuses the window's token: "This window isn't connected as you, so Settings, proposals and chats are locked. Quit Nebula and open it again." The app's own cases keep their lines (a debug port, the dev renderer, "Nebula couldn't confirm this window is yours, so Settings, proposals and chats are off. Quit Nebula and open it again." since round 3).
 - Which one shows is decided by the app's existing desktop flag (the bridge its preload exposes), not by the words of the refusal.
 - File name: "{project name} - unsaved edits.nebula".
 - During an update stop, after a download, the tab doesn't reload by itself; the existing line "Nebula was updated while this tab was open. Reload the tab to use the update. Your saved work is kept." shows under the saved-as line (GM: right as it is).
@@ -289,7 +289,7 @@ Your question (round 2): does quitting and reopening the app fix both cases wher
 
 Still yours to decide:
 - **Line 3 with a debug port open or the dev renderer.** In the app, line 3 always says "Quit Nebula and open it again". In those two cases the banner gives the real reason ("Debug mode: …", "Desktop dev mode: …"). Reopening normally, without the debug port, does fix the first. The second is a developer setup. Say if line 3 should differ there.
-- **"Restart the app." vs "Quit Nebula and open it again."** The app's own line for a window Nebula couldn't confirm still ends "Restart the app.". Your new app banner says "Quit Nebula and open it again.". Say if you want them to match.
+- **"Restart the app." vs "Quit Nebula and open it again."** Answered in round 3: they match now (see below).
 - **Line 3 on a node card** reads under the card's "Couldn't run the node." heading, as you confirmed (round 2: "It's true, and the line under it says why.").
 
 ## CI's focus-ring sweep (2026-10-23)
@@ -299,3 +299,11 @@ The first CI run failed `tests/focusRingCss.test.ts`: four new `:focus:not(:focu
 ## The palette's ⌘K race (CI, 2026-10-23)
 
 CI failed `DeferredSecondPass` twice on this branch ("a ⌘K that beats the chunk opens the palette once it lands": the second ⌘K left the palette open); it passed locally. The cause is in `CommandPalette.tsx`, not the test: `openPalette()` set `open`, but `openRef`, which the once-subscribed hotkey handler reads, only caught up in a later effect. A ⌘K landing between the palette's render and that effect read it as closed and opened it again. Now the handlers that open and close set the ref at once (the effect still keeps it in step). A new test fires the open and a ⌘K in one `act()`, before React commits: it failed on the old code and passes now. That file: 12 of 12.
+
+## GM's lines, round 3 (2026-10-23)
+
+GM, verbatim: "Line 3 points to the banner's reason in the two dev cases instead of repeating "Quit Nebula…": "This change needs your OK, and this window isn't connected as you. The notice below says why." … For a normal launch, keep "Quit Nebula and open it again, then try again."" and "Change the app's own line to end "Quit Nebula and open it again." "Restart the app" is vaguer, because the window can close while Nebula keeps running in the Dock."
+
+- `personRequiredCopy(desktop, reason)` in errorCopy.ts: in the app, the shell's own reasons `debug-port` and `dev-renderer` (personSession's `personUnavailableReason()`) get `PERSON_REQUIRED_DEV_COPY`; every other app case keeps the app line 3; a browser tab keeps its line. Still picked only for a `person_required` code; Details keeps the agents' text.
+- personSession's line for a window the shell couldn't confirm now ends "Quit Nebula and open it again.".
+- Tests first in `tests/personRequiredLines.test.ts`: 3 failed on 11d2b0bf (the dev-case line, and the old ending in two places), then pass. The 10 related files: 146 of 146. `npx tsc -b` clean.
