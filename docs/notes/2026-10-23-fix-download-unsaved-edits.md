@@ -316,6 +316,6 @@ GM, after #180's copy check: "Person-required banners. These stay up, so a two-l
 - Debug: "Debug mode: a debugging port is open, so Settings, proposals and chats are off."
 - Dev renderer: "Dev mode: the Vite renderer can't use your token. Set NEBULA_DESKTOP_DEV_PERSON=1 to allow it." (developer-only; GM: may wrap)
 
-Not trimmed by GM: the shell's line for a window it couldn't confirm ("Nebula couldn't confirm this window is yours, so Settings, proposals and chats are off. Quit Nebula and open it again.") is still two lines at 560 px. Asked GM.
+The shell's line for a window it couldn't confirm, which GM's first list missed, is GM's too (asked and answered): "Nebula couldn't confirm this window is yours. Quit Nebula and open it again." (2 tests red first, then 19 of 19.)
 
 Tests first: `personRequiredLines` and `PersonRequiredBanner` pinned the old banners; with GM's lines expected, 4 failed in `personRequiredLines` (then the component test's 2 once its expectations moved too), then all pass. The 6 related files: 52 of 52.

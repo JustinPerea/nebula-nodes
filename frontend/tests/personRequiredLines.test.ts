@@ -134,7 +134,7 @@ describe("GM's banner line", () => {
 
   it('keeps the desktop shell\'s own lines', () => {
     expect(personRequiredMessage('desktop-unavailable')).toBe(
-      "Nebula couldn't confirm this window is yours, so Settings, proposals and chats are off. Quit Nebula and open it again.");
+      "Nebula couldn't confirm this window is yours. Quit Nebula and open it again.");
   });
 });
 
@@ -224,7 +224,7 @@ describe("GM's app lines (round 2), chosen by the desktop flag", () => {
     expect(await personCredential()).toBeNull();
     expect(personRequiredMessage()).toMatch(/^Debug mode: a debugging port is open/);
     expect(personRequiredMessage('desktop-unavailable')).toBe(
-      "Nebula couldn't confirm this window is yours, so Settings, proposals and chats are off. Quit Nebula and open it again.");
+      "Nebula couldn't confirm this window is yours. Quit Nebula and open it again.");
     delete (window as unknown as Record<string, unknown>).nebulaDesktop;
     expect(personRequiredMessage('not-connected')).toBe(BANNER);
   });
