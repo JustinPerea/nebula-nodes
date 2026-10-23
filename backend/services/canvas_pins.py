@@ -99,6 +99,37 @@ def _stored_position(node: Mapping[str, Any] | None) -> dict[str, float] | None:
         return None
 
 
+# What a delete's undo needs to put a pin back (canvas_pins._detach): kept
+# with the pin, never shown to anyone (agents could otherwise name the
+# person's removal ids in a restore of their own).
+_UNDO_KEYS = ("detachedBy", "detachedDefinition", "attachedPosition")
+_ANY_PROJECT = object()
+ANOTHER_PROJECT = "another project is open now"
+CHANGED_SINCE = "changed since"
+ANOTHER_MODEL = "its node came back as another model"
+DELETED_SINCE = "deleted since"
+# A pin an undo left as it is says why twice: ``reason`` for agents to read,
+# ``code`` for the canvas to count by. Only "another-model" is said in the
+# person's notice (GM, 2026-10-23: "1 pin couldn't be re-attached."); a pin
+# they deleted or changed since is their own doing and stays quiet.
+PIN_LEFT_CODES = {
+    CHANGED_SINCE: "changed",
+    ANOTHER_MODEL: "another-model",
+    DELETED_SINCE: "deleted",
+    ANOTHER_PROJECT: "another-project",
+}
+
+
+def pin_left(pin_id: str, reason: str) -> dict[str, str]:
+    """A pin an undo left as it is: ``{id, reason, code}``."""
+    return {"id": pin_id, "reason": reason, "code": PIN_LEFT_CODES[reason]}
+
+
+def public_pin(pin: Mapping[str, Any]) -> dict[str, Any]:
+    """A pin as the person's tabs and agents read it."""
+    return {key: copy.deepcopy(value) for key, value in pin.items() if key not in _UNDO_KEYS}
+
+
 class CanvasPins:
     """Pins of the active project, stored on its catalog record."""
 
@@ -141,7 +172,7 @@ class CanvasPins:
 
     def list(self) -> dict[str, Any]:
         project_id, pins = self._active()
-        return {"projectId": project_id, "pins": self._ordered(pins)}
+        return {"projectId": project_id, "pins": [public_pin(pin) for pin in self._ordered(pins)]}
 
     def get(self, pin_id: str) -> dict[str, Any] | None:
         return next((pin for pin in self._active()[1] if pin.get("id") == pin_id), None)
@@ -159,15 +190,19 @@ class CanvasPins:
             if resolved_at is not None and now - resolved_at <= RECENT_RESOLVED_SECONDS:
                 shown.append(pin)
         open_count = sum(1 for pin in pins if pin.get("status") == "open")
-        return {"projectId": project_id, "pins": shown[:limit], "openCount": open_count}
+        return {"projectId": project_id, "pins": [public_pin(pin) for pin in shown[:limit]], "openCount": open_count}
 
     # -- writing ---------------------------------------------------------
-    def _write(self, mutate: Callable[[list[dict[str, Any]]], Any]) -> tuple[str, Any]:
-        """Run ``mutate(pins)`` on the active project's list inside one catalog transaction."""
+    def _write(self, mutate: Callable[[list[dict[str, Any]]], Any], *,
+               project: str | None | object = _ANY_PROJECT) -> tuple[str, Any]:
+        """Run ``mutate(pins)`` on the active project's list inside one catalog
+        transaction. With ``project``, only while that project is the open one."""
         self._cache = None
         store = self.store
         with store.transaction() as catalog:
             project_id = catalog.get("activeProjectId")
+            if project is not _ANY_PROJECT and project_id != project:
+                raise PinError(409, ANOTHER_PROJECT)
             if not project_id or project_id not in catalog["projects"]:
                 raise PinError(409, "Open or create a project before leaving notes")
             project = catalog["projects"][project_id]
@@ -222,7 +257,7 @@ class CanvasPins:
                     break
                 oldest = min(resolved, key=lambda p: str(p.get("createdAt") or ""))
                 pins.remove(oldest)
-            return copy.deepcopy(pin)
+            return public_pin(pin)
 
         return self._write(mutate)[1]
 
@@ -230,7 +265,7 @@ class CanvasPins:
         def mutate(pins: list[dict[str, Any]]) -> dict[str, Any]:
             for index, pin in enumerate(pins):
                 if pin.get("id") == pin_id:
-                    return pins.pop(index)
+                    return public_pin(pins.pop(index))
             raise PinError(404, "That note isn't there anymore. Reload to get the latest notes.")
 
         return self._write(mutate)[1]
@@ -244,33 +279,115 @@ class CanvasPins:
                     # Resolving again replaces the reply: the latest answer wins.
                     pin["status"] = "resolved"
                     pin["reply"] = {"agent": identity.as_dict(), "text": text, "at": _iso(self._clock())}
-                    return copy.deepcopy(pin)
+                    return public_pin(pin)
             raise PinError(404, f"No note {pin_id[:40]} on this canvas")
 
         return self._write(mutate)[1]
 
     def _detach(self, pins: list[dict[str, Any]], node_ids: Callable[[str], bool],
-                positions: Mapping[str, Any]) -> list[dict[str, Any]]:
+                positions: Mapping[str, Any], removals: Mapping[str, Mapping[str, Any]] | None = None,
+                ) -> list[dict[str, Any]]:
+        """Keep each pin of a gone node where the node stood, marked detached.
+
+        ``removals`` maps a deleted node to its removal ({id, definitionId}):
+        the pin then keeps that id (``detachedBy``), the model it was on
+        (``detachedDefinition``) and the position it had (``attachedPosition``),
+        so the undo of that very delete, and only that, can put it back as it
+        was (``reattach``). A pin an import or a clear detached gets none of
+        them: no undo of a delete brings it back. None of the three is ever
+        shown (``public_pin``)."""
         changed = []
         for pin in pins:
             anchored = (pin.get("anchor") or {}).get("nodeId")
             if not isinstance(anchored, str) or not node_ids(anchored):
                 continue
+            was = copy.deepcopy(pin.get("position"))
             spot = _stored_position({"position": positions.get(anchored)}) or _stored_position(pin)
             spot = spot or {"x": 0.0, "y": 0.0}
             pin["anchor"] = dict(spot)
             pin["position"] = dict(spot)
             pin["detached"] = True
             pin["detachedFrom"] = anchored
+            removal = (removals or {}).get(anchored) or {}
+            if removal.get("id"):
+                pin["detachedBy"] = str(removal["id"])
+                pin["detachedDefinition"] = str(removal.get("definitionId") or "")
+                pin["attachedPosition"] = was
+            else:
+                for key in _UNDO_KEYS:
+                    pin.pop(key, None)
             changed.append(copy.deepcopy(pin))
         return changed
 
-    def detach_node(self, node_id: str, position: Any = None) -> list[dict[str, Any]]:
-        """The node is gone: keep its pins where it stood, marked detached."""
+    def detach_node(self, node_id: str, position: Any = None, removal: str | None = None,
+                    definition_id: str = "") -> list[dict[str, Any]]:
+        """The node is gone: keep its pins where it stood, marked detached.
+        ``removal`` is the delete's removal id and ``definition_id`` the
+        node's model, for its undo (``reattach``)."""
         if not any((pin.get("anchor") or {}).get("nodeId") == node_id for pin in self._active()[1]):
             return []
+        removals = {node_id: {"id": removal, "definitionId": definition_id}} if removal else None
         return self._write(lambda pins: self._detach(pins, lambda nid: nid == node_id,
-                                                     {node_id: position}))[1]
+                                                     {node_id: position}, removals))[1]
+
+    def reattach(self, removals: list[Mapping[str, Any]], back: Mapping[str, str],
+                 project_id: str | None) -> dict[str, list[dict[str, Any]]]:
+        """The undo of a delete brought nodes back: put each pin that delete
+        detached on its node again, as if the delete never happened.
+
+        ``removals`` are the removal records the restore names ({id, nodeId,
+        pins?}); ``back`` maps each node this restore brought back to its
+        model, in ``project_id``. A pin goes back only if it is still
+        detached by that very removal (``detachedBy``) from that node
+        (``detachedFrom``), and the node came back as the model it was on
+        (``detachedDefinition``), in the project it is in. So a stale or
+        forged list attaches nothing: a pin someone deleted since, one another
+        delete, an import or a clear detached, or one whose node came back as
+        another model is left as it is and reported in ``left`` ({id,
+        reason, code}, see ``pin_left``). Pins the record doesn't name but the removal detached go
+        back too (the record may come from a canvas that never saw the
+        delete's answer)."""
+        wanted = {str(r["id"]): str(r["nodeId"]) for r in removals if r.get("nodeId") in back}
+        if not wanted:
+            return {"reattached": [], "left": []}
+        named = {str(pin_id): str(r["id"]) for r in removals if r.get("nodeId") in back
+                 for pin_id in r.get("pins") or []}
+
+        def mutate(pins: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+            back_on: list[dict[str, Any]] = []
+            left: list[dict[str, Any]] = []
+            seen: set[str] = set()
+            for pin in pins:
+                pin_id = str(pin.get("id") or "")
+                removal = pin.get("detachedBy")
+                if not (pin.get("detached") and isinstance(removal, str) and removal in wanted
+                        and pin.get("detachedFrom") == wanted[removal]):
+                    if pin_id in named:
+                        seen.add(pin_id)
+                        left.append(pin_left(pin_id, CHANGED_SINCE))
+                    continue
+                seen.add(pin_id)
+                node_id = wanted[removal]
+                if pin.get("detachedDefinition") != back[node_id]:
+                    # The node under that id now is another model: not the one it was on.
+                    left.append(pin_left(pin_id, ANOTHER_MODEL))
+                    continue
+                spot = _stored_position({"position": pin.get("attachedPosition")})
+                pin["anchor"] = {"nodeId": node_id}
+                pin["position"] = spot
+                pin["detached"] = False
+                for key in ("detachedFrom", *_UNDO_KEYS):
+                    pin.pop(key, None)
+                back_on.append(copy.deepcopy(pin))
+            left.extend(pin_left(pin_id, DELETED_SINCE) for pin_id in named if pin_id not in seen)
+            return {"reattached": back_on, "left": left}
+
+        try:
+            return self._write(mutate, project=project_id)[1]
+        except PinError as exc:
+            if exc.detail != ANOTHER_PROJECT:
+                raise
+            return {"reattached": [], "left": [pin_left(pin_id, ANOTHER_PROJECT) for pin_id in named]}
 
     def reanchor_missing(self, live_node_ids: set[str], positions: Mapping[str, Any] | None = None) -> list[dict[str, Any]]:
         """Detach every pin whose node is no longer on the canvas (after an import or a clear)."""

@@ -4,7 +4,6 @@ import { useUIStore } from '../../store/uiStore';
 import { storedAssetId } from '../../store/storedAssetsStore';
 import { StoredAssetPicker } from './StoredAssetPicker';
 import { useGraphStore } from '../../store/graphStore';
-import { confirmNodeDelete } from '../../lib/deleteConfirm';
 import { usesKreaAccount } from '../../lib/kreaConnection';
 import { keysNeeded } from '../../lib/nodeKeys';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
@@ -1285,8 +1284,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
             type="button"
             className="inspector__action-button inspector__action-button--danger"
             onClick={() => {
-              // A World Labs hold refuses first, with its notice; then GM's confirm (round 3f).
-              if (useGraphStore.getState().allowCanvasDelete([renderNode.id]) && confirmNodeDelete(1)) deleteNode(renderNode.id);
+              // A World Labs hold refuses, with its notice; otherwise it deletes at
+              // once and says "Deleted the node." with Undo (GM, 2026-10-23).
+              if (useGraphStore.getState().allowCanvasDelete([renderNode.id])) deleteNode(renderNode.id);
             }}
             title="Delete this node"
           >

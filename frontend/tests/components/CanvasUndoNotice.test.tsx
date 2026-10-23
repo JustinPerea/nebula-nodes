@@ -63,6 +63,28 @@ describe('CanvasUndoNotice', () => {
     expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
   });
 
+  // Review (WCAG 2.2.1): the delete confirm is gone, so the notice's Undo is
+  // the on-screen way back. It stays while the pointer is on it or focus is
+  // inside it, then holds a full time again once both leave.
+  it('waits while focus or the pointer is on it, then goes after a full hold', () => {
+    vi.useFakeTimers();
+    render(<CanvasUndoNotice />);
+    act(() => agentAdds('n2'));
+    const undo = screen.getByRole('button', { name: 'Undo' });
+    act(() => { undo.focus(); });
+    act(() => { vi.advanceTimersByTime(UNDO_NOTICE_MS * 2); });
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    act(() => { undo.blur(); });
+    act(() => { vi.advanceTimersByTime(UNDO_NOTICE_MS - 100); });
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    fireEvent.mouseEnter(screen.getByRole('status'));
+    act(() => { vi.advanceTimersByTime(UNDO_NOTICE_MS * 2); });
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    fireEvent.mouseLeave(screen.getByRole('status'));
+    act(() => { vi.advanceTimersByTime(UNDO_NOTICE_MS + 10); });
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
   it('goes away on its own', () => {
     vi.useFakeTimers();
     render(<CanvasUndoNotice />);

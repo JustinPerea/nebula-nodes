@@ -814,6 +814,9 @@ def format_event(event: dict[str, Any]) -> str:
     elif kind == "proposal.rejected" and data.get("proposalId"):
         reason = f': "{_brief(data["reason"], 100)}"' if data.get("reason") else ""
         summary = f"rejected proposal {data['proposalId']}{reason}"
+    elif kind == "proposal.reopened" and data.get("proposalId"):
+        summary = (f"{summary} — waiting for the person again "
+                   f"(nebula proposal {data['proposalId']} --wait)")
     return f"[{event.get('seq', '?')}] {clock}  {_actor_label(event.get('actor'))}  {summary}"
 
 
@@ -966,6 +969,17 @@ def format_undone(result: dict[str, Any]) -> str:
         lines = [f"Undone: {done}." if done else (
             "Undone: no change." if result.get("skipped") or result.get("undoId") else
             result.get("message") or "Undone: no change.")]
+    # What the edit's deletes removed, put back with the nodes (GM, 2026-10-23).
+    pins = result.get("reattached") or []
+    if pins:
+        lines.append(f"  Back on {'its node' if len(pins) == 1 else 'their nodes'}: {', '.join(pins)}")
+    for row in result.get("pinsLeft") or []:
+        lines.append(f"  Couldn't re-attach {row.get('id')}: {row.get('reason')}")
+    reopened = result.get("reopened") or []
+    if reopened:
+        lines.append(f"  Reopened: {', '.join(reopened)}")
+    for row in result.get("notReopened") or []:
+        lines.append(f"  Couldn't reopen {row.get('id')}: {row.get('reason')}")
     for item in result.get("skipped") or []:
         lines.append(f"  Left as is: {item.get('message') or item.get('reason')}")
     return "\n".join(lines)

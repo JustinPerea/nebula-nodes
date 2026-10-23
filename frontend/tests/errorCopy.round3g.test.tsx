@@ -2,9 +2,9 @@
  * Error copy round 3g: GM - Design's answers to round 3f's questions, and two
  * fixes (GM, verbatim, 2026-10-23).
  *
- * 1. "While a) builds, ship c) so the Delete key doesn't start asking on every
- *    delete. It asks only when a node has pins or open proposals; the
- *    toolbar, menu and Inspector paths keep the confirm until a) lands."
+ * 1. The Delete key's interim confirm (GM's option c) is gone: undo puts
+ *    back everything a delete removed, so every delete shows GM's Undo
+ *    notice instead (tests/undoRestoresDeletes.test.tsx).
  * 4. "Cinema shot panel: yes, use shot wording. "Generate the shot again. If
  *    it keeps failing, Details shows what {Provider} said." With no provider:
  *    "Generate the shot again. If it keeps failing, open Details." With
@@ -15,15 +15,11 @@
  * - "Readiness, answered failure: "Nebula didn't respond" is wrong when
  *   something did answer. → "Couldn't check the connections. Try again, or
  *   reload if it keeps happening.""
- *
- * The Delete key's rule reads the canvas's own pins and proposals; the same
- * cases (backend/tests/fixtures/delete_confirm_cases.json) are pinned against
- * the backend's real delete in backend/tests/test_error_copy_round3g.py.
+
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import type { Node } from '@xyflow/react';
-import deleteCases from '../../backend/tests/fixtures/delete_confirm_cases.json';
 import pricingCases from '../../backend/tests/fixtures/pricing_cases.json';
 import type { CinemaSceneSpec, ModelNodeDefinition, NodeData } from '../src/types';
 
@@ -37,11 +33,9 @@ vi.mock('../src/lib/api', async (importOriginal) => ({
 }));
 vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-import { deleteLosesAttachments, type DeleteAttachments } from '../src/lib/deleteConfirm';
 import { nodeErrorCopy } from '../src/lib/nodeErrorCopy';
 import { NodeError } from '../src/components/nodes/NodeError';
 import { CinemaShotPanel } from '../src/components/cinema-studio/CinemaShotPanel';
-import { SelectionToolbar } from '../src/components/SelectionToolbar';
 import { ProviderSwitcher } from '../src/components/nodes/ProviderSwitcher';
 import { CHIP_ROOM, CHIP_ROOM_BLOCKED, chipText, providerSwitchState, type SwitchContext } from '../src/lib/providerSwitch';
 import { NODE_DEFINITIONS } from '../src/constants/nodeDefinitions';
@@ -60,84 +54,6 @@ afterEach(() => {
   useGraphStore.setState(initialGraph, true);
   useUIStore.setState(initialUi, true);
   mocks.fetch.mockReset();
-});
-
-// -- GM item 1: the Delete key asks only when a delete takes something ----------
-
-interface Case {
-  name: string;
-  nodes: Array<{ id: string; image?: string }>;
-  pins?: Array<{ on: string | null; status: string }>;
-  proposals?: Array<{ reads: string; as: string; status: string }>;
-  coverPin?: string;
-  covers?: Array<{ to: string | null }>;
-  delete: string[];
-  asks: boolean;
-}
-
-const PROJECT = 'p-open';
-
-/** A fixture case as the canvas's stores hold it (the views the backend test
- * checks: a proposal's `references`, a cover proposal's change.cover). */
-function attachmentsOf(c: Case): DeleteAttachments {
-  return {
-    pins: (c.pins ?? []).map((pin) => ({ anchor: pin.on ? { nodeId: pin.on } : { x: 5, y: 5 } })),
-    proposals: (c.proposals ?? []).map((proposal) => ({ view: { status: proposal.status, references: [proposal.reads] } })),
-    covers: (c.covers ?? []).map((cover) => ({ view: { kind: 'project', status: 'open', target: { id: PROJECT },
-      change: { cover: { from: c.coverPin ?? null, to: cover.to } } } })),
-    projectId: PROJECT,
-    nodes: c.nodes.map((spec) => ({ id: spec.id, data: spec.image
-      ? { definitionId: 'nano-banana', params: {}, outputs: { image: { type: 'Image', value: spec.image } } }
-      : { definitionId: 'text-input', params: { value: 'a cat' }, outputs: {} } })),
-  };
-}
-
-describe('the Delete key\'s rule agrees with the backend\'s delete', () => {
-  const cases = (deleteCases as { cases: Case[] }).cases;
-
-  it('covers pins, proposals and cover proposals', () => {
-    expect(cases.length).toBeGreaterThanOrEqual(15);
-    expect(cases.some((c) => c.asks) && cases.some((c) => !c.asks)).toBe(true);
-  });
-
-  it.each(cases.map((c) => [c.name, c] as const))('%s', (_name, c) => {
-    expect(deleteLosesAttachments(c.delete, attachmentsOf(c))).toBe(c.asks);
-  });
-
-  it('reads an image the canvas holds at its full backend address as the same image', () => {
-    const c = cases.find((item) => item.name === "a cover proposal for the node's image")!;
-    const attached = attachmentsOf(c);
-    const nodes = attached.nodes.map((node) => node.id === 'n1'
-      ? { ...node, data: { ...node.data, outputs: { image: { type: 'Image', value: 'http://127.0.0.1:8791/api/outputs/a.png' } } } }
-      : node);
-    expect(deleteLosesAttachments(['n1'], { ...attached, nodes })).toBe(true);
-  });
-
-  it('a cover proposal for another project, or one closing, takes nothing from this canvas', () => {
-    const c = cases.find((item) => item.name === "a cover proposal for the node's image")!;
-    const attached = attachmentsOf(c);
-    expect(deleteLosesAttachments(['n1'], { ...attached, projectId: 'p-other' })).toBe(false);
-    expect(deleteLosesAttachments(['n1'], { ...attached, covers: attached.covers.map((entry) => ({ ...entry, closing: 'rejected' })) }))
-      .toBe(false);
-    expect(deleteLosesAttachments(['n1'], { ...attached, proposals: [{ view: { status: 'open', references: ['n1'] }, closing: 'accepted' }],
-      covers: [] })).toBe(false);
-  });
-});
-
-function textNode(id: string, selected = false): Node<NodeData> {
-  return { id, type: 'model-node', position: { x: 0, y: 0 }, selected,
-    data: { label: 'Text Input', definitionId: 'text-input', params: { value: 'hello' }, outputs: {}, state: 'idle' } };
-}
-
-describe('the toolbar keeps the confirm', () => {
-  it('asks on a plain node, with GM\'s plural', () => {
-    useGraphStore.setState({ nodes: [textNode('n1', true)], edges: [], isExecuting: false });
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
-    render(<SelectionToolbar />);
-    fireEvent.click(screen.getByLabelText('Delete selected nodes'));
-    expect(confirm).toHaveBeenCalledWith('Delete this node?');
-    expect(useGraphStore.getState().nodes).toHaveLength(1);
-  });
 });
 
 // -- GM item 4: the shot panel's own wording ---------------------------------------

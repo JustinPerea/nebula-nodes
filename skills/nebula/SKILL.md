@@ -120,7 +120,13 @@ changed or removed comes back, and anything the person changed since stays
 as it is (the output lists it). A run counts as a change: a node the person
 (or another agent) ran since your edit stays with its params, name and
 input wires ("n3 ran since (run by the person), so it stays"). Nodes only
-you ran still go, so you can undo your own experiments. A plan of steps prints one line with every
+you ran still go, so you can undo your own experiments. A node you deleted
+comes back with the person's pins on it ("Back on its node: pin_…"; one the
+person deleted since prints "Couldn't re-attach …" with why) and the
+proposals the delete closed reopen when they still fit ("Reopened: p_…";
+one that expired or no longer fits prints "Couldn't reopen …" with why).
+The person's Cmd+Z of your delete does the same, and so does your undo
+after the person redid your delete or undid your undo. A plan of steps prints one line with every
 step's token, newest first. Only your own `nebula apply` edits have tokens.
 
 Single edits also exist: `nebula create`, `connect`, `set`, `rename`, `move`,
@@ -254,7 +260,13 @@ it (`stillOpen` in `--json`); nothing is withdrawn for you. `nebula context`
 marks such a proposal "N node(s) can't run here".
 
 `nebula proposals` lists open ones; `nebula proposal withdraw <id>` takes one
-back.
+back. A proposal invalidated because a node it needs was deleted opens again,
+with the same id and expiry, if the delete is undone and it still fits
+(`nebula watch` prints `proposal.reopened`; `pin.reattached` when a pin goes
+back on its node). That holds only for the very node that was deleted: after
+a clear, an import or a project switch, undoing an earlier delete prints
+"Couldn't reopen …" (the canvas was cleared or replaced since), and a pin goes
+back only onto the model it was on.
 
 Curating the Commons (when it is on) is the person's too: correcting a
 reference's reading, its regions, or its role, why or inbox place in a

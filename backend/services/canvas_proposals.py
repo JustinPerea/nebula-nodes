@@ -763,6 +763,19 @@ class Proposal:
     # Its Update on the project's list ({id, projectId}; Justin's Q112 a), or
     # None when no project was open. main posts it and settles it.
     update: dict[str, str] | None = None
+    # The node deletes that closed it, or deleted another node it needs while
+    # it was closed that way: removal id (rm_...) -> node id. Only deletes in
+    # its own project tag it, and only the undo of a matching (removal, node)
+    # pair may reopen it (ProposalBook.closed_by_pairs, reopen).
+    closed_by: dict[str, str] = field(default_factory=dict)
+    # Tags a clear, an import or a project switch dropped (node ids started
+    # again, so a later delete of "n1" may be another node): the undo of
+    # those deletes can't reopen it, and says so (``dropped_reason``).
+    dropped_by: dict[str, str] = field(default_factory=dict)
+    dropped_reason: str | None = None
+    # Which node it read under each id (main.node_removals.lineage, set when
+    # it was made): a delete tags it only when it took that very node.
+    lineage: dict[str, str] = field(default_factory=dict)
 
     @property
     def references(self) -> set[str]:
@@ -894,7 +907,55 @@ class ProposalBook:
         proposal.id_map = dict(id_map) if id_map else None
         proposal.run_node_ids = list(run_node_ids) if run_node_ids else None
         proposal.closed_at = self._clock()
+        proposal.closed_by = {}
+        proposal.dropped_by = {}
+        proposal.dropped_reason = None
         self._prune()
+        return proposal
+
+    def closed_by_pairs(self, pairs: Iterable[tuple[str, str]], project_id: str | None) -> list[Any]:
+        """Proposals in ``project_id`` a node delete closed that are still
+        closed that way: invalidated, and tagged by one of these (removal id,
+        node id) pairs. Never by a removal id or a node id alone."""
+        wanted = set(pairs)
+        return [p for p in self._items.values()
+                if p.status == "invalidated" and p.project_id == project_id
+                and any(pair in wanted for pair in p.closed_by.items())]
+
+    def drop_removal_tags(self, reason: str) -> None:
+        """Node ids start again (a clear, an import) or another project's
+        ids are live now (a project switch): no earlier delete's undo may
+        reopen a proposal by its node id any more. The dropped tags are kept
+        to say why (``dropped_by``)."""
+        for proposal in self._items.values():
+            if proposal.closed_by:
+                proposal.dropped_by.update(proposal.closed_by)
+                proposal.dropped_reason = reason
+                proposal.closed_by = {}
+
+    def reopen(self, proposal_id: str) -> Any:
+        """Open again an invalidated proposal a node delete closed (main finds
+        it by its removal, closed_by_pairs) once main checked it still fits
+        the restored graph. Its expiry stays the one it had: a proposal past
+        it doesn't reopen. The open caps apply, as to a new proposal (429)."""
+        proposal = self._items.get(proposal_id)
+        if proposal is None:
+            raise ProposalError(404, f"No proposal {proposal_id[:20]}")
+        if proposal.status != "invalidated":
+            raise ProposalError(409, f"Proposal {proposal_id} is {proposal.status}")
+        if proposal.expires_at <= self._clock():
+            raise ProposalError(409, "it expired")
+        open_now = self.open_list()
+        if len([p for p in open_now if p.agent.id == proposal.agent.id]) >= MAX_OPEN_PER_AGENT:
+            raise ProposalError(429, "its agent already has the most open proposals it may have")
+        if len(open_now) >= MAX_OPEN_TOTAL:
+            raise ProposalError(429, "too many proposals are waiting for the person")
+        proposal.status = OPEN
+        proposal.reason = None
+        proposal.closed_at = None
+        proposal.closed_by = {}
+        proposal.dropped_by = {}
+        proposal.dropped_reason = None
         return proposal
 
     def sweep(self) -> list[Proposal]:
@@ -910,16 +971,37 @@ class ProposalBook:
         self._prune()
         return expired
 
-    def invalidate_referencing(self, node_id: str, reason: str) -> list[Proposal]:
+    def invalidate_referencing(self, node_id: str, reason: str, removal: str | None = None,
+                               project_id: str | None = None, lineage: str | None = None) -> list[Proposal]:
+        """Close the open proposals that read ``node_id`` (it was deleted).
+        ``removal`` is that delete's removal id, so its undo may reopen them;
+        it tags only proposals of ``project_id``, the project the delete was
+        in, that read this very node (``lineage``), not another node that had
+        the same id."""
+        def read_it(proposal: Proposal) -> bool:
+            return (proposal.project_id == project_id
+                    and proposal.lineage.get(node_id, lineage) == lineage)
+
         hit = [p for p in self.open_list() if node_id in p.references]
         for proposal in hit:
             self.close(proposal.id, "invalidated", reason=reason)
+            if removal and read_it(proposal):
+                proposal.closed_by = {removal: node_id}
+        if removal:
+            # Closed by an earlier delete in this project and needing this
+            # node too: undoing only that earlier delete won't bring it back,
+            # undoing both may.
+            for proposal in self._items.values():
+                if (proposal.status == "invalidated" and proposal.closed_by and proposal not in hit
+                        and node_id in proposal.references and read_it(proposal)):
+                    proposal.closed_by[removal] = node_id
         return hit
 
     def invalidate_all(self, reason: str) -> list[Proposal]:
         hit = self.open_list()
         for proposal in hit:
             self.close(proposal.id, "invalidated", reason=reason)
+        self.drop_removal_tags(reason)
         return hit
 
     def _prune(self) -> None:

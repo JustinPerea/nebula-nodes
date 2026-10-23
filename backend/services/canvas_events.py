@@ -70,12 +70,18 @@ EVENT_KINDS = frozenset({
     "pin.resolved",
     "pin.removed",
     "pin.detached",
+    # The undo of a node's delete put the note back on it (GM, 2026-10-23):
+    # data {pinId, text, anchor}.
+    "pin.reattached",
     "proposal.created",
     "proposal.accepted",
     "proposal.rejected",
     "proposal.withdrawn",
     "proposal.expired",
     "proposal.invalidated",
+    # The undo of a node's delete put back what an invalidated proposal needs,
+    # and it still fits, so it is open again (same id, same expiry).
+    "proposal.reopened",
     # Moodboards (services/moodboard_edits.py): one event per board edit
     # batch or PUT that changed its images, cards or frames, with data
     # {boardId, boardName, scope, refs, kinds}, and one board.fields event

@@ -42,11 +42,6 @@ import { visibleFlowRect } from '../lib/visibleFlowRect';
 import type { NodeData } from '../types';
 import { NODE_RENAME_EVENT } from '../lib/keyboardShortcuts';
 import { publishCanvasSelection, selectedNodeIds } from '../lib/canvasSelection';
-import { deleteLosesAttachments } from '../lib/deleteConfirm';
-import { currentProject } from '../lib/currentProject';
-import { useCanvasPinsStore } from '../store/canvasPinsStore';
-import { useCanvasProposalsStore } from '../store/canvasProposalsStore';
-import { useAssetProposalsStore } from '../store/assetProposalsStore';
 import '../styles/canvas.css';
 
 const nodeTypes = CANVAS_NODE_TYPES;
@@ -453,23 +448,12 @@ export function Canvas() {
 
   // The Delete key: a node holding World Labs state stays, and the canvas
   // says why (error copy round 3b). Refused here, before React Flow removes
-  // anything, so its wires stay too; one notice per press.
-  // Then GM's confirm (round 3f, lib/deleteConfirm.ts), only when the delete
-  // takes something undo doesn't put back (round 3g, GM's option c): a pin on
-  // a doomed node, or an open proposal that needs one. A press that removes
-  // only wires asks nothing.
-  const onBeforeDelete = useCallback(async ({ nodes: doomed }: { nodes: { id: string }[] }) => {
-    if (doomed.length === 0) return true;
-    const ids = doomed.map((node) => node.id);
-    const graph = useGraphStore.getState();
-    return graph.allowCanvasDelete(ids, { confirm: deleteLosesAttachments(ids, {
-      pins: useCanvasPinsStore.getState().pins,
-      proposals: Object.values(useCanvasProposalsStore.getState().proposals),
-      covers: Object.values(useAssetProposalsStore.getState().proposals),
-      projectId: currentProject()?.id ?? null,
-      nodes: graph.nodes,
-    }) });
-  }, []);
+  // anything, so its wires stay too; one notice per press. Otherwise it
+  // deletes at once, and the store says "Deleted the node." with Undo: undo
+  // puts back everything a delete removed (GM, 2026-10-23, lib/deleteNotice.ts).
+  const onBeforeDelete = useCallback(async ({ nodes: doomed }: { nodes: { id: string }[] }) => (
+    doomed.length === 0 || useGraphStore.getState().allowCanvasDelete(doomed.map((node) => node.id))
+  ), []);
 
   const onConnectStart: OnConnectStart = useCallback((_event, params) => {
     connectionSucceededRef.current = false;

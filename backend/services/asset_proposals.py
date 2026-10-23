@@ -191,6 +191,13 @@ class AssetProposal:
     auto_cover: str | None = None
     # The Update it posted (Q92 a): {"id": note id, "projectId": ...}, or None.
     update: dict[str, Any] | None = None
+    # kind project: the node deletes whose sync closed it (its image went
+    # with the node), removal id (rm_...) -> node id, from deletes in this
+    # project only; the undo of a matching pair may reopen it.
+    closed_by: dict[str, str] = field(default_factory=dict)
+    # Tags a clear, an import or a project switch dropped (canvas_proposals.Proposal).
+    dropped_by: dict[str, str] = field(default_factory=dict)
+    dropped_reason: str | None = None
 
     @property
     def is_open(self) -> bool:

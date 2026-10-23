@@ -3,9 +3,8 @@
  * "Every error alert becomes a canvas notice (non-blocking, dismissable),
  * using the words you listed. A native alert stops the whole canvas over
  * something that needs no answer." The size and "saved without" alerts become
- * notices with GM's words, and the delete confirm keeps GM's plural ("Delete
- * {n} nodes?" / "Delete this node?") on every path that deletes, since undo
- * doesn't put back everything a delete removes (the notes say what it misses).
+ * notices with GM's words. (The delete confirm this round kept is gone since
+ * undo puts back everything a delete removed: tests/undoRestoresDeletes.test.tsx.)
  *
  * The notice is the canvas's own (CanvasUndoNotice, the graph store's
  * undoNotice): an error reads as role="alert", its Dismiss is a button, and
@@ -13,8 +12,6 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import type { Node } from '@xyflow/react';
-import type { NodeData } from '../src/types';
 
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn(() => () => {}), disconnect: vi.fn(), send: vi.fn() } }));
 vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -23,9 +20,6 @@ import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { CanvasUndoNotice } from '../src/components/canvas/CanvasUndoNotice';
 import { StudioNotice } from '../src/components/canvas/StudioNotice';
-import { SelectionToolbar } from '../src/components/SelectionToolbar';
-import { ContextMenu } from '../src/components/ContextMenu';
-import { deleteConfirmLine } from '../src/lib/deleteConfirm';
 import { graphSizeLine, skippedFilesLine } from '../src/lib/graphFile';
 
 const initialGraph = { ...useGraphStore.getState() };
@@ -38,11 +32,6 @@ afterEach(() => {
   useGraphStore.setState(initialGraph, true);
   useUIStore.setState(initialUi, true);
 });
-
-function node(id: string, selected = false): Node<NodeData> {
-  return { id, type: 'model-node', position: { x: 0, y: 0 }, selected,
-    data: { label: 'Text Input', definitionId: 'text-input', params: { value: 'hello' }, outputs: {}, state: 'idle' } };
-}
 
 describe('a canvas notice for an error', () => {
   it('is announced as an alert and dismissed with a button', () => {
@@ -82,35 +71,6 @@ describe('GM\'s size and "saved without" lines', () => {
   });
 });
 
-describe('the delete confirm', () => {
-  it('gets the plural right', () => {
-    expect(deleteConfirmLine(1)).toBe('Delete this node?');
-    expect(deleteConfirmLine(3)).toBe('Delete 3 nodes?');
-  });
-
-  it('the selection toolbar asks it', () => {
-    useGraphStore.setState({ nodes: [node('n1', true), node('n2', true)], edges: [], isExecuting: false });
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
-    render(<SelectionToolbar />);
-    fireEvent.click(screen.getByLabelText('Delete selected nodes'));
-    expect(confirm).toHaveBeenCalledWith('Delete 2 nodes?');
-    expect(useGraphStore.getState().nodes).toHaveLength(2);
-  });
-
-  it('the context menu asks it', () => {
-    useGraphStore.setState({ nodes: [node('n1')], edges: [], isExecuting: false });
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
-    useUIStore.getState().showContextMenu({ x: 20, y: 30 }, 'n1', null);
-    render(<ContextMenu />);
-    fireEvent.click(screen.getByRole('button', { name: /Delete/ }));
-    expect(confirm).toHaveBeenCalledWith('Delete this node?');
-    expect(useGraphStore.getState().nodes).toHaveLength(1);
-  });
-
-  it('the Delete key asks it, after the World Labs refusal', () => {
-    useGraphStore.setState({ nodes: [node('n1'), node('n2')], edges: [], isExecuting: false });
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
-    expect(useGraphStore.getState().allowCanvasDelete(['n1', 'n2'], { confirm: true })).toBe(false);
-    expect(confirm).toHaveBeenCalledWith('Delete 2 nodes?');
-  });
-});
+// The delete confirm round 3f kept is gone: undo now puts back everything a
+// delete removed, and every delete path says "Deleted the node." with Undo
+// (GM, 2026-10-23; tests/undoRestoresDeletes.test.tsx).
