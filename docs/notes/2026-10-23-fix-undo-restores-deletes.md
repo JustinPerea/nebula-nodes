@@ -158,6 +158,11 @@ Five findings from the adversarial review, each confirmed by a refuter. Each one
   - After a reload, the node and its pin were there. There was no proposal bar, since the restart drops canvas proposals; the first live run's check expected one, and that check was wrong.
 - **Seen in the live check, not caused by this branch:** at 1280x800 the floating Inspector, open beside a node low on the screen, covers the right end of the bottom notice ("Restored the node. 1 proposal couldn't …"). It is fine at 1440x900. See the open items.
 
+## Merging main after round 3g (#174)
+
+- 3g shipped GM's interim option c): the Delete key asked only when a node had a pin or an open proposal (`lib/deleteConfirm.ts`'s `deleteLosesAttachments`, pinned against the backend's delete through `backend/tests/fixtures/delete_confirm_cases.json`). This branch makes undo complete, so GM's condition for dropping the confirm holds, and the merge takes this branch's side: no confirm on any path. Removed with it: `deleteConfirm.ts`, the fixture and its backend test, `frontend/tests/errorCopy.round3g.deleteKey.test.tsx`, the toolbar-confirm and Delete-key-rule cases in `errorCopy.round3g.test.tsx`, and Canvas.tsx's imports of the three stores that rule read. 3g's other work (ports in quotes, shot wording, the chip, readiness, Gemini Omni) is untouched.
+- After the merge: tsc and lint clean; the 3g, 3f, undo, Canvas, SelectionToolbar and notice test files 67 of 67 (frontend) and 92 of 92 (backend).
+
 ## For GM
 
 The notice lines as built:

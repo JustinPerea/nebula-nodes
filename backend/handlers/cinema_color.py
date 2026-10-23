@@ -27,7 +27,7 @@ from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.output import OUTPUT_ROOT, get_run_dir
-from execution.person_line import missing_file_line, with_person_line
+from execution.person_line import field_label, missing_file_line, with_person_line
 
 
 _OUTPUTS_URL_PREFIX = "/api/outputs/"
@@ -136,7 +136,9 @@ async def handle_cinema_color(
             "Cinema Color needs a target palette. Add hex swatches in the Palette "
             "field (or click 'Extract from reference'), or set a Source Image to "
             "pull a palette from. With no palette the image passes through unchanged."
-        ), "Cinema Color needs a target palette. Add hex swatches in the Palette field, or click “Extract from reference”, or set a Source Image to pull a palette from. With no palette the image passes through unchanged.")
+        ), f"Cinema Color needs a target palette. Add hex swatches to “{field_label('cinema-color', 'palette')}”, click "
+           f"“Extract from reference”, or set “{field_label('cinema-color', 'source_image')}” to pull a palette from an "
+           "image. With no palette the image passes through unchanged.")
 
     try:
         strength = float(params.get("strength", 0.7))

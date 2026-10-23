@@ -114,7 +114,7 @@ def identity_edit_request(
     if not base_image:
         raise with_person_line(
             ValueError("identity-edit requires a base image on the 'image' port"),
-            "Connect a base image to this node's Image input, then run it again.")
+            "Connect a base image to “Image”, then run the node again.")
 
     mask_input = inputs.get("mask")
     if mask_input and mask_input.value:
@@ -123,7 +123,8 @@ def identity_edit_request(
         raise with_person_line(ValueError(
             "Identity Edit does not support masks on the Nano Banana 2 endpoint; "
             "disconnect Mask before running this node"
-        ), "Identity Edit can't take a mask on the Nano Banana 2 endpoint. Disconnect “Mask”, then run the node again.")
+        ), "Identity Edit can't take a mask on the Nano Banana 2 endpoint. Disconnect “Mask (unavailable)”, "
+           "then run the node again.")
 
     prompt_input = inputs.get("prompt")
     base_prompt = str(prompt_input.value) if prompt_input and prompt_input.value else ""

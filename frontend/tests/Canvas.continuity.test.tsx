@@ -52,6 +52,10 @@ vi.mock('../src/components/canvas/PinComposer', () => ({ PinComposer: () => null
 vi.mock('../src/components/canvas/ProposalLayer', () => ({ ProposalLayer: () => null }));
 vi.mock('../src/components/canvas/ProposalBar', () => ({ ProposalBar: () => null }));
 vi.mock('../src/components/ContextMenu', () => ({ ContextMenu: () => null }));
+// The Delete key reads the canvas's pins (round 3g); in the app the selection
+// toolbar loads this store too. Mocked like the toolbar, so its socket handler
+// doesn't fetch pins on this test's graph replacements.
+vi.mock('../src/store/canvasPinsStore', () => ({ useCanvasPinsStore: { getState: () => ({ pins: [] }) } }));
 vi.mock('../src/components/ConnectionPopup', () => ({ ConnectionPopup: () => null }));
 vi.mock('../src/lib/canvasSelection', () => ({
   selectedNodeIds: (nodes: Node<NodeData>[]) => nodes.filter((node) => node.selected).map((node) => node.id),

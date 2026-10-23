@@ -179,7 +179,8 @@ describe('the Cinema shot panel', () => {
       errorRaw: RAW, errorProvider: 'BytePlus' });
     const error = container.querySelector('.cinema-shot-panel__error')!;
     expect(heading(error)).toBe(SHOT_HEADING);
-    expect(reason(error)).toBe('Run the node again. If it keeps failing, Details shows what BytePlus said.');
+    // Round 3g (GM): the shot panel's own wording.
+    expect(reason(error)).toBe('Generate the shot again. If it keeps failing, Details shows what BytePlus said.');
     expect(error.querySelector('details')!.textContent).toContain('req_123');
   });
 

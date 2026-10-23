@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { apiFetch } from '../lib/backend';
-import { RequestFailedError, failureMessage } from '../lib/errorCopy';
+import { REFUSED_FALLBACK_COPY, RequestFailedError, failureMessage, isConnectionFailure } from '../lib/errorCopy';
 import { PROVIDER_HEALTH_TTL_MS, type ProviderHealthEntry, type ProviderHealthState, type ProviderHealthStatus } from '../lib/providerReadiness';
 
 interface ProviderReadinessState extends ProviderHealthState {
@@ -14,8 +14,10 @@ const statuses = new Set<ProviderHealthStatus>(['not_configured', 'configured_un
 let requestVersion = 0;
 /** GM, round 3f: "Couldn't check the connections. Nebula's server isn't
  * answering. Make sure it's running, then try again." That is the request
- * with no answer (CONNECTION_LOST_COPY); an answered failure says its own
- * status line under the same heading, a malformed answer GM's general line. */
+ * with no answer (CONNECTION_LOST_COPY). Round 3g, GM: ""Nebula didn't
+ * respond" is wrong when something did answer. → "Couldn't check the
+ * connections. Try again, or reload if it keeps happening."", for any
+ * answered failure, a malformed answer included. */
 const CHECK_HEADING = "Couldn't check the connections.";
 let expiryTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -65,7 +67,8 @@ export const useProviderReadinessStore = create<ProviderReadinessState>((set, ge
     } catch (error) {
       if (request !== requestVersion || get().revision !== revision) return;
       // Never the error's own text (it may carry a URL): the request's line.
-      set({ providers: {}, checkedAt: null, loading: false, error: failureMessage(error, CHECK_HEADING) });
+      set({ providers: {}, checkedAt: null, loading: false, error: isConnectionFailure(error)
+        ? failureMessage(error, CHECK_HEADING) : `${CHECK_HEADING} ${REFUSED_FALLBACK_COPY}` });
     }
   },
 }));

@@ -37,13 +37,20 @@ export const RUN_NODE_HEADING = "Couldn't run the node.";
 /** The Cinema shot panel's heading (GM, round 3f); the scene's card keeps RUN_NODE_HEADING. */
 export const GENERATE_SHOT_HEADING = "Couldn't generate the shot.";
 
-/** GM's general line on a card, by what is behind Details. */
-export function cardGeneralLine(provider: string | undefined, hasDetails: boolean): string {
-  if (!hasDetails) return 'Run the node again.';
+/** Where a run error shows: a node's card, or the Cinema shot panel. */
+export type NodeErrorSurface = 'node' | 'shot';
+
+/** GM's general line on a card, by what is behind Details. Round 3g (GM):
+ * the shot panel says "Generate the shot again." where a card says "Run the
+ * node again.", with the same provider (the shot output's errorProvider,
+ * only when that provider answered). */
+export function cardGeneralLine(provider: string | undefined, hasDetails: boolean, surface: NodeErrorSurface = 'node'): string {
+  const again = surface === 'shot' ? 'Generate the shot again.' : 'Run the node again.';
+  if (!hasDetails) return again;
   const name = provider?.trim();
   return name
-    ? `Run the node again. If it keeps failing, Details shows what ${name} said.`
-    : 'Run the node again. If it keeps failing, open Details.';
+    ? `${again} If it keeps failing, Details shows what ${name} said.`
+    : `${again} If it keeps failing, open Details.`;
 }
 
 export interface NodeErrorFields {
@@ -56,7 +63,10 @@ export interface NodeErrorFields {
   providerText?: boolean;
   /** The provider the run called (round 3f): GM's general line names it. */
   provider?: string;
-  /** The surface's heading: RUN_NODE_HEADING on a card, GENERATE_SHOT_HEADING on the shot panel. */
+  /** Where it shows (round 3g): the shot panel's heading is GENERATE_SHOT_HEADING
+   * and its general line says "Generate the shot again." */
+  surface?: NodeErrorSurface;
+  /** A heading other than the surface's own. */
   heading?: string;
 }
 
@@ -67,17 +77,17 @@ export interface NodeErrorCopy {
   details: string | null;
 }
 
-export function nodeErrorCopy({ raw, category, friendly, person, providerText, provider, heading = RUN_NODE_HEADING }: NodeErrorFields): NodeErrorCopy {
+export function nodeErrorCopy({ raw, category, friendly, person, providerText, provider, surface = 'node', heading = surface === 'shot' ? GENERATE_SHOT_HEADING : RUN_NODE_HEADING }: NodeErrorFields): NodeErrorCopy {
   const text = raw?.trim() ?? '';
   const line = person?.trim();
   if (line) {
     return { heading, reason: line, details: providerText && text && text !== line ? text : null };
   }
-  if (!category) return { heading: '', reason: text || cardGeneralLine(provider, false), details: null };
+  if (!category) return { heading: '', reason: text || cardGeneralLine(provider, false, surface), details: null };
   // A named failure whose stored line was dropped (node_errors keeps no
   // hint equal to the error, e.g. a capability guardrail) reads its own text
   // after a reload, as the live event's line said.
   const named = category !== 'unknown' ? (friendly?.trim() || text) : '';
   if (named) return { heading, reason: named, details: text && text !== named ? text : null };
-  return { heading, reason: cardGeneralLine(provider, Boolean(text)), details: text || null };
+  return { heading, reason: cardGeneralLine(provider, Boolean(text), surface), details: text || null };
 }
