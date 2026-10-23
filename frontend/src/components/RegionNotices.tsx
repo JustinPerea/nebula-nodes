@@ -1,6 +1,7 @@
 import { CanvasUndoNotice } from './canvas/CanvasUndoNotice';
 import { DeferredRunNotice } from './canvas/DeferredRunNotice';
 import { StudioNotice } from './canvas/StudioNotice';
+import { CanvasLateNotice } from './canvas/CanvasLateNotice';
 import { InNoticeRegion } from './InNoticeRegion';
 import '../styles/canvasProposals.css';
 
@@ -9,13 +10,16 @@ import '../styles/canvasProposals.css';
  * edit, an undo or a failure, never at the first paint). On the canvas, the
  * proposal's run-later notice (an accepted proposal waiting for the run to
  * finish) and the canvas notice with its Undo or Redo; on the other screens
- * the canvas notice's written lines (StudioNotice).
+ * the canvas notice's written lines (StudioNotice). On every screen, under
+ * the canvas notice, a restore's late count (CanvasLateNotice), a written
+ * line with no Undo or Redo.
  */
 export function RegionNotices({ canvas }: { canvas: boolean }) {
   return (
     <>
       {canvas && <InNoticeRegion slot="run-later"><DeferredRunNotice /></InNoticeRegion>}
       <InNoticeRegion slot="notice">{canvas ? <CanvasUndoNotice /> : <StudioNotice />}</InNoticeRegion>
+      <InNoticeRegion slot="late"><CanvasLateNotice /></InNoticeRegion>
     </>
   );
 }

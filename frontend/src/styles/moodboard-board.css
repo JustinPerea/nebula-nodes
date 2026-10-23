@@ -421,7 +421,7 @@ html body .moodboard-board-panel .moodboard-def__row {
   display: flex;
   align-items: center;
   gap: 8px;
-  max-width: min(560px, calc(100vw - 32px));
+  max-width: min(var(--notice-max-w, 560px), calc(100vw - 32px));
   box-sizing: border-box;
   padding: 6px 6px 6px 12px;
   border: 1px solid rgba(255, 255, 255, 0.14);

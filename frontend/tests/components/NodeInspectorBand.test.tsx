@@ -163,18 +163,55 @@ describe('the measured top line', () => {
     expect(bounds().top).toBeGreaterThanOrEqual(92 + 49 + GAP);
   });
 
-  it('follows the toolbar coming and going while it is open', () => {
+  // GM - Design, 2026-10-23 (round 3, answer 5): "The Inspector jumping on
+  // deselect: hold it. A panel shouldn't move unless someone moves it. While
+  // it's open, use the lower of the two top lines (the toolbar's) whether or
+  // not the toolbar is showing." The toolbar's Panel keeps the toolbar's
+  // height while it is empty (0 px wide), so its line is measured either way.
+  it("holds the toolbar's line while it is open: deselecting and reselecting never move it", () => {
     viewport(1280, 800);
     barAndBand(1280, 800);
     header(1280);
+    let showing = true;
+    place({ 'data-top-bar': '' }, () => (showing ? rect(365, 92, 550, 50) : rect(640, 92, 0, 50)));
     openBeside(rect(575, 40, 82, 90));
-    expect(bounds().top).toBe(24 + 40 + GAP);
-    const tools = selectionToolbar(1280);
+    expect(bounds().top).toBe(92 + 50 + GAP);
+    // Deselect: the toolbar goes, its Panel stays one toolbar tall.
+    showing = false;
     advanceLayout();
-    expect(bounds().top).toBe(92 + 49 + GAP);
-    tools.remove();
+    expect(bounds().top).toBe(92 + 50 + GAP);
+    // Reselect: the toolbar comes back, nothing moves down.
+    showing = true;
     advanceLayout();
-    expect(bounds().top).toBe(24 + 40 + GAP);
+    expect(bounds().top).toBe(92 + 50 + GAP);
+  });
+
+  it('opened while the toolbar is hidden, it already sits below the toolbar\'s line', () => {
+    viewport(1280, 800);
+    barAndBand(1280, 800);
+    header(1280);
+    let showing = false;
+    place({ 'data-top-bar': '' }, () => (showing ? rect(365, 92, 550, 50) : rect(640, 92, 0, 50)));
+    openBeside(rect(575, 40, 82, 90));
+    expect(bounds().top).toBe(92 + 50 + GAP);
+    showing = true;
+    advanceLayout();
+    expect(bounds().top).toBe(92 + 50 + GAP);
+  });
+
+  it('the pinned Inspector holds the line too', () => {
+    useUIStore.getState().setInspectorPinned(true);
+    viewport(1280, 560);
+    barAndBand(1280, 560);
+    header(1280);
+    let showing = true;
+    place({ 'data-top-bar': '' }, () => (showing ? rect(365, 92, 550, 50) : rect(640, 92, 0, 50)));
+    openBeside(rect(575, 200, 82, 90));
+    const before = bounds();
+    expect(before.top).toBeGreaterThanOrEqual(92 + 50 + GAP);
+    showing = false;
+    advanceLayout();
+    expect(bounds()).toEqual(before);
   });
 
   it('a short window: the room between the lines is less than the panel, so the panel gets shorter', () => {

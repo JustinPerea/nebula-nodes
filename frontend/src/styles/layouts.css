@@ -279,13 +279,13 @@ body.agent-log-reserved .canvas-navigation.react-flow__panel {
 
 body.agent-log-reserved .proposal-bar {
   --proposal-bar-room: calc(100vw - 2 * (var(--page-gutter) + var(--col-right-w) + var(--stack-gap-sm)));
-  --proposal-bar-w: min(620px, calc(100vw - 32px), max(420px, var(--proposal-bar-room)));
+  --proposal-bar-w: min(var(--notice-max-w, 560px), calc(100vw - 32px), max(420px, var(--proposal-bar-room)));
   width: var(--proposal-bar-w);
   translate: min(0px, calc((var(--proposal-bar-room) - var(--proposal-bar-w)) / 2));
 }
 
 body.agent-log-reserved .project-switch-toast {
-  max-width: min(640px, calc(100vw - 32px), max(420px, calc(100vw - 2 * (var(--page-gutter) + var(--col-right-w) + var(--stack-gap-sm)))));
+  max-width: min(var(--notice-max-w, 560px), calc(100vw - 32px), max(420px, calc(100vw - 2 * (var(--page-gutter) + var(--col-right-w) + var(--stack-gap-sm)))));
 }
 
 /* Once the user drags/resizes chat into an explicit position, it must escape

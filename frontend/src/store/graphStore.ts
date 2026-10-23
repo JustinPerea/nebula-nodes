@@ -81,7 +81,7 @@ import {
   warnFailure,
 } from '../lib/errorCopy';
 import { CANVAS_NOTICE_EVENT, type CanvasNoticeDetail } from '../lib/canvasNotice';
-import { cleanRemovals, deletedNoticeText, mergeRemovals, notRestoredText, pinsOnAnotherModel, restoredNoticeText, supersededBy, type RemovalRecord } from '../lib/deleteNotice';
+import { cleanRemovals, deletedNoticeText, lateRestoreText, mergeRemovals, notRestoredText, pinsOnAnotherModel, restoredNoticeText, supersededBy, type RemovalRecord } from '../lib/deleteNotice';
 import { NOTHING_RAN_LINE, OTHER_NODE_LINE, SHOT_NOT_STARTED_LINE, validationReadings, writtenReading, type ValidationReading } from '../lib/validationCopy';
 import {
   RUNTIME_FIELDS, applySlice, diffCanvas, edgeKey, editArrivedText, foldArrange, foreignSource, isForeignEdit, isOwnEcho,
@@ -473,6 +473,24 @@ export interface UndoNotice {
 
 let undoNoticeSeq = 0;
 
+/**
+ * A restore's count that arrived after the person moved on (GM - Design,
+ * 2026-10-23, round 3: "show it as a plain notice with no button, using the
+ * standard timeout, under the newer notice"). Its own line in its own slot
+ * under the canvas notice (lib/noticeSlots.ts 'late'), never the canvas
+ * notice itself, so it never replaces the newer notice, and it has no Undo or
+ * Redo: the store's rule for offers (withLiveNotice) never reads it. Two late
+ * counts while one shows add up on the one line.
+ */
+export interface LateNotice {
+  id: number;
+  text: string;
+  notReopened: number;
+  notReattached: number;
+}
+
+let lateNoticeSeq = 0;
+
 /** Whether a notice's Undo or Redo still applies: its step is next in line on its stack. */
 function offerApplies(notice: UndoNotice, stacks: { undoStack: UndoEntry[]; redoStack: UndoEntry[] }): boolean {
   if (!notice.offer || !notice.entry) return true;
@@ -789,6 +807,9 @@ interface GraphState {
   /** The notice for someone else's edit: it landed, or was undone or redone. */
   undoNotice: UndoNotice | null;
   dismissUndoNotice: () => void;
+  /** A restore's late count, shown under the canvas notice (LateNotice). */
+  lateNotice: LateNotice | null;
+  dismissLateNotice: () => void;
   /** Show a written line as the canvas notice, non-blocking and dismissable,
    * where a native alert used to stop the canvas (round 3f). 'error' by
    * default; 'info' for a note such as an import's warnings. */
@@ -2819,6 +2840,16 @@ function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): voi
     { noticeId, ownLine: ownLine?.kind === 'restored' && waitsForBackend ? ownLine : null });
 }
 
+/** A restore's count that arrived too late for its own line: the plain line
+ * under the canvas notice, added to one already showing (LateNotice). */
+function lateCount(state: GraphState, missed: Missed): Partial<GraphState> {
+  const shown = state.lateNotice;
+  const notReopened = missed.notReopened + (shown?.notReopened ?? 0);
+  const notReattached = missed.notReattached + (shown?.notReattached ?? 0);
+  if (missed.notReopened + missed.notReattached === 0) return {};
+  return { lateNotice: { id: ++lateNoticeSeq, text: lateRestoreText(notReopened, notReattached), notReopened, notReattached } };
+}
+
 /** What a person's own undo or redo says: the nodes it brought back or deleted again. */
 interface OwnStepLine { kind: 'restored' | 'deleted'; count: number }
 
@@ -2878,18 +2909,20 @@ function sendRestore(
   const holds = [...body.wire.map((w) => holdWire(w, true)), ...body.unwire.map((w) => holdWire(w, false))];
   // Shown once the backend answers, unless another notice came since, or a
   // new step has landed since: its Redo (or Undo) would no longer apply, so
-  // the line stays away (withLiveNotice; GM - Design, 2026-10-23).
+  // the line stays away (withLiveNotice; GM - Design, 2026-10-23). What it
+  // couldn't put back is never lost with it: that count shows on its own
+  // plain line under the newer notice (lateCount; GM, round 3).
   const answerNotice = (missed: Missed) => set((state) => {
     if (notice.ownLine) {
-      if (undoNoticeSeq !== notice.noticeId) return {};
       const shown = ownStepNotice(notice.noticeId, notice.ownLine, missed, action, inverse);
-      if (!offerApplies(shown, state)) return {};
-      return { undoNotice: shown };
+      if (undoNoticeSeq === notice.noticeId && offerApplies(shown, state)) return { undoNotice: shown };
+      return lateCount(state, missed);
     }
     const shown = state.undoNotice;
     const text = notRestoredText(missed.notReattached, missed.notReopened);
-    if (!text || !shown || shown.id !== notice.noticeId) return {};
-    return { undoNotice: { ...shown, text: `${shown.text}. ${text}` } };
+    if (!text) return {};
+    if (shown && shown.id === notice.noticeId) return { undoNotice: { ...shown, text: `${shown.text}. ${text}` } };
+    return lateCount(state, missed);
   });
   const task = restoreQueue.then(async () => {
     const replacementRevision = canvasReplacementRevision;
@@ -3361,6 +3394,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
 
   undoNotice: null,
   dismissUndoNotice: () => set({ undoNotice: null }),
+  lateNotice: null,
+  dismissLateNotice: () => set({ lateNotice: null }),
   notify: (text, tone = 'error') => set({ undoNotice: { id: ++undoNoticeSeq, text, offer: null, tone } }),
 
   // ---------------------------------------------------------------------------
@@ -5897,8 +5932,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       // makes it paste with its copy-time params (see CanvasClipboard).
       undoStack: [], redoStack: [], backendFreshStartPending: false,
       // The old project's notice (its edit's Undo, its error) is about that
-      // canvas; a notice for the new one is set after this load.
-      undoNotice: null,
+      // canvas; a notice for the new one is set after this load. Its late
+      // restore count too.
+      undoNotice: null, lateNotice: null,
       providerRecoveryWarning: null, providerRecoveries: [], providerStartAmbiguities: [],
       uncertainWorldLabsRunId: null,
     });

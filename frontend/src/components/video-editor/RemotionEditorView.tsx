@@ -17,11 +17,13 @@ import { RemotionPropertiesPanel } from './RemotionPropertiesPanel';
 import { PlayerOverlay } from './PlayerOverlay';
 import { useRemotionKeyboard } from './useRemotionKeyboard';
 import { WorkspaceHeader } from '../WorkspaceHeader';
+import { useBottomBarClearance } from '../../hooks/useBottomBarClearance';
 import '../../styles/remotion-editor.css';
 
 export function RemotionEditorView() {
   const playerRef = useRef<PlayerRef>(null);
   const playerFrameRef = useRef<HTMLDivElement>(null);
+  const timelineTrayRef = useRef<HTMLDivElement>(null);
   const [currentFrame, setCurrentFrame] = useState(0);
   const timelineStateRef = useRef<TimelineState | null>(null);
   const targetNodeId = useUIStore((s) => s.remotionEditorTargetNodeId);
@@ -29,6 +31,13 @@ export function RemotionEditorView() {
   const node = useGraphStore((s) =>
     targetNodeId ? s.nodes.find((n) => n.id === targetNodeId) : null,
   );
+
+  // The timeline tray is this screen's bottom bar: it publishes its top edge,
+  // so the app's notices sit 8 px above it (GM - Design, 2026-10-23, round 3:
+  // "Yes, the Remotion tray publishes its top edge, the same as the canvas bar
+  // and the composer."). Measured again when the tray comes or goes.
+  const hasTray = Boolean(targetNodeId && node);
+  useBottomBarClearance([timelineTrayRef], hasTray);
 
   // Keyboard shortcuts (Delete, Cmd+D). Hook is no-op when targetNodeId is null.
   useRemotionKeyboard({
@@ -121,7 +130,8 @@ export function RemotionEditorView() {
       <aside className="remotion-editor-view__panel" data-testid="remotion-panel-slot">
         <RemotionPropertiesPanel remotionNodeId={targetNodeId} />
       </aside>
-      <div className="remotion-editor-view__timeline" data-testid="remotion-timeline-slot">
+      <div ref={timelineTrayRef} className="remotion-editor-view__timeline" data-testid="remotion-timeline-slot"
+        data-bottom-bar="">
         <RemotionTimeline
           remotionNodeId={targetNodeId}
           manifest={manifest}

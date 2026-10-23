@@ -84,8 +84,16 @@ export function floatingBottomLimit(gutter: number, viewportHeight = window.inne
  * The top line floating panels stop below (GM - Design, 2026-10-23: "Floating
  * panels stop below the workspace header and the selection toolbar, whichever
  * is lower, plus the same 8 px gap."). Each carries `data-top-bar`; measured
- * when asked, so the toolbar appearing or going and a resize move the line.
- * With neither on screen, the window's `gutter`.
+ * when asked, so a resize moves the line. With neither on screen, the
+ * window's `gutter`.
+ *
+ * Round 3 (GM: "The Inspector jumping on deselect: hold it. A panel
+ * shouldn't move unless someone moves it. While it's open, use the lower of
+ * the two top lines (the toolbar's) whether or not the toolbar is showing."):
+ * the toolbar's marker is its React Flow Panel, which keeps the toolbar's
+ * height while it is empty (canvas.css --selection-toolbar-h). An empty Panel
+ * has no width, so a part counts by its height alone: the toolbar going or
+ * coming back never moves the line.
  */
 export const TOP_BAR_ATTR = 'data-top-bar';
 
@@ -94,7 +102,7 @@ export function floatingTopLimit(gutter: number): number {
   let line = gutter;
   for (const part of document.querySelectorAll<HTMLElement>(`[${TOP_BAR_ATTR}]`)) {
     const box = part.getBoundingClientRect();
-    if (box.width <= 0 || box.height <= 0) continue;
+    if (box.height <= 0) continue;
     line = Math.max(line, box.bottom + BOTTOM_BAR_GAP);
   }
   return line;

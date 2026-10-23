@@ -140,7 +140,7 @@ body.app-slava-restraint .asset-trash__toast {
   display: flex;
   align-items: center;
   gap: 4px;
-  max-width: calc(100vw - 32px);
+  max-width: min(var(--notice-max-w, 560px), calc(100vw - 32px));
   padding: 6px 6px 6px 16px;
   border: 1px solid var(--sr-edge-strong);
   border-radius: 6px;
