@@ -15,7 +15,7 @@ from services.file_access import require_allowed_path
 from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir, save_base64_image
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import as_person_line
+from execution.person_line import as_person_line, field_label, slow_job_line, with_person_line
 
 FAL_QUEUE_BASE = "https://queue.fal.run"
 STREAMING_FAL_ENDPOINTS = {"openai/gpt-image-2", "openai/gpt-image-2/edit"}
@@ -111,7 +111,7 @@ def _build_fal_stream_body(node: GraphNode, inputs: dict[str, PortValueDict]) ->
             else:
                 valid = bool(raw)
         if not valid:
-            raise as_person_line(ValueError("At least one reference image is required for gpt-image-2 edit"))
+            raise with_person_line(ValueError("At least one reference image is required for gpt-image-2 edit"), "GPT Image 2 Edit needs at least one reference image. Connect one, then run the node again.")
 
     body: dict[str, Any] = {}
 
@@ -154,7 +154,8 @@ async def handle_fal_universal(
 
     endpoint_id = node.params.get("endpoint_id", "")
     if not endpoint_id:
-        raise as_person_line(ValueError("FAL endpoint ID is required (e.g. fal-ai/flux-pro/v1.1-ultra)"))
+        raise with_person_line(ValueError("FAL endpoint ID is required (e.g. fal-ai/flux-pro/v1.1-ultra)"), f"Enter a fal.ai endpoint in the node's {field_label(node.definition_id, 'endpoint_id', 'Endpoint')} field, "
+            "then run the node again.")
 
     endpoint_id = str(endpoint_id).strip("/")
 
@@ -209,7 +210,7 @@ async def handle_fal_universal(
     # Validate: gpt-image-1-5-edit requires at least one reference image
     endpoint_id = node.params.get("endpoint_id", "")
     if endpoint_id.startswith("fal-ai/gpt-image-1.5/edit") and not fal_input.get("image_urls"):
-        raise as_person_line(ValueError("gpt-image-1.5 edit requires at least one reference image"))
+        raise with_person_line(ValueError("gpt-image-1.5 edit requires at least one reference image"), "GPT Image 1.5 Edit needs at least one reference image. Connect one, then run the node again.")
 
     if endpoint_id.endswith("/edit") and "nano-banana" in endpoint_id and not fal_input.get("image_urls"):
         raise as_person_line(ValueError("Nano Banana edit requires at least one reference image"))
@@ -337,7 +338,7 @@ async def handle_fal_universal(
             # Out of polls: stop the job upstream so it doesn't finish and
             # bill a result Nebula has stopped waiting for.
             _schedule_fal_cancel(_fal_cancel_url(submit_data, endpoint_id, request_id), api_key)
-            raise RuntimeError(f"FAL job timed out after {max_polls} polls")
+            raise with_person_line(RuntimeError(f"FAL job timed out after {max_polls} polls"), slow_job_line("fal.ai"))
 
         # Step 3: Fetch result
         result_resp = await client.get(result_url, headers=headers)
@@ -504,7 +505,7 @@ async def _fal_queue_run(
                 raise RuntimeError(f"FAL job failed: {status_data.get('error', status)}")
         else:
             _schedule_fal_cancel(_fal_cancel_url(submit_data, endpoint_id, request_id), api_key)
-            raise RuntimeError(f"FAL job timed out after {max_polls} polls")
+            raise with_person_line(RuntimeError(f"FAL job timed out after {max_polls} polls"), slow_job_line("fal.ai"))
 
         result_resp = await client.get(result_url, headers=headers)
         if result_resp.status_code != 200:

@@ -205,6 +205,7 @@ async def run_model(
                 max_polls=MAX_POLLS,
                 cancel_url_template=f"{REPLICATE_API_BASE}/predictions/{{task_id}}/cancel",
                 cancel_method="POST",
+                provider="Replicate",
             )
             prediction = await poll_until_terminal(client, config, task_id, node_id, emit or _quiet)
         logging.getLogger(__name__).info("Replicate %s prediction %s: %s", model, task_id,

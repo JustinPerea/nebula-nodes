@@ -228,7 +228,7 @@ def build_body(node: GraphNode, prompt: str) -> dict[str, Any]:
         return build_25_body(node, prompt)
     quality = params.get("quality") or "auto"
     if quality not in {"auto", "low", "medium", "high"}:
-        raise as_person_line(ValueError(f"{model} quality must be auto, low, medium or high"))
+        raise with_person_line(ValueError(f"{model} quality must be auto, low, medium or high"), "Set Quality to Auto, Low, Medium or High, then run the node again.")
     body = build_generate_body(node, prompt, model=model)
     background = params.get("background") or "auto"
     if background not in {"auto", "opaque", "transparent"}:

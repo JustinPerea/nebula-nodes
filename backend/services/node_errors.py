@@ -74,7 +74,7 @@ class NodeErrors:
                 continue
             kept = {
                 str(node_id): {key: _clip(value) for key, value in entry.items()
-                               if key in {"error", "hint", "category", "person"} and value}
+                               if key in {"error", "hint", "category", "person", "providerText"} and value}
                 for node_id, entry in nodes.items()
                 if isinstance(entry, dict) and entry.get("error")
             }
@@ -127,7 +127,7 @@ class NodeErrors:
     # -- the open project's nodes -------------------------------------------
 
     def record(self, node_id: str, message: str, *, friendly: str | None = None,
-               category: str | None = None, person: str | None = None) -> None:
+               category: str | None = None, person: str | None = None, provider_text: bool = False) -> None:
         if not node_id or not message:
             return
         entry = {"error": _clip(message)}
@@ -135,6 +135,10 @@ class NodeErrors:
         # never get it from here (get() is the specific text, word for word).
         if person:
             entry["person"] = _clip(person)
+            # Its line was written for a provider's answer: the card keeps the
+            # text behind Details beside it (error copy round 3d).
+            if provider_text:
+                entry["providerText"] = "1"
         hint = _clip(friendly) if friendly else ""
         # classify_error's fallback is the message itself less its full stop.
         if hint and hint.rstrip(".") != entry["error"].rstrip("."):
@@ -163,7 +167,7 @@ class NodeErrors:
         """Follow one execution event the way the canvas card does."""
         if isinstance(event, ErrorEvent):
             self.record(event.node_id, event.error, friendly=event.friendly, category=event.category,
-                        person=event.person)
+                        person=event.person, provider_text=event.provider_text)
         elif isinstance(event, (ExecutingEvent, ExecutedEvent, SkippedEvent)):
             self.forget(event.node_id)
 
@@ -181,7 +185,7 @@ class NodeErrors:
         entry = self._errors.get(node_id)
         return {key: value for key, value in entry.items() if key in {"error", "hint"}} if entry else None
 
-    def card(self, node_id: str) -> dict[str, str] | None:
+    def card(self, node_id: str) -> dict[str, Any] | None:
         """The node data fields the canvas card shows a failure with (NodeError)."""
         entry = self._errors.get(node_id)
         if not entry:
@@ -189,7 +193,8 @@ class NodeErrors:
         return {"state": "error", "error": entry["error"],
                 **({"errorFriendly": entry["hint"]} if entry.get("hint") else {}),
                 **({"errorCategory": entry["category"]} if entry.get("category") else {}),
-                **({"errorPerson": entry["person"]} if entry.get("person") else {})}
+                **({"errorPerson": entry["person"]} if entry.get("person") else {}),
+                **({"errorProviderText": True} if entry.get("person") and entry.get("providerText") else {})}
 
     def forget_canvas(self) -> None:
         """The open project's canvas was replaced or cleared: node ids restart.

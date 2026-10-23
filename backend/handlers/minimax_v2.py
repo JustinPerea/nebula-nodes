@@ -38,7 +38,7 @@ from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
 from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir, save_video_from_url
-from execution.person_line import as_person_line
+from execution.person_line import as_person_line, slow_job_line, with_person_line
 
 MAX_REFERENCE_IMAGES = 9
 MAX_REFERENCE_VIDEOS = 3
@@ -99,8 +99,9 @@ def build_content(inputs: dict[str, PortValueDict]) -> tuple[list[dict[str, Any]
     has_frames = any(values for _, values in frames)
     has_refs = any(values for _, _, values, _ in refs)
     if has_frames and has_refs:
-        raise as_person_line(ValueError("MiniMax H3 takes either a start/end image or references (images, videos, audio), "
-                         "not both in one run."))
+        raise with_person_line(ValueError("MiniMax H3 takes either a start/end image or references (images, videos, audio), "
+                         "not both in one run."), "MiniMax H3 takes either a start or end image or references, not both in one run. "
+                         "Disconnect one kind, then run the node again.")
     for role, values in frames:
         if len(values) > 1:
             raise as_person_line(ValueError(f"MiniMax H3 takes one {role.replace('_', ' ')} image"))
@@ -108,7 +109,8 @@ def build_content(inputs: dict[str, PortValueDict]) -> tuple[list[dict[str, Any]
             content.append({"type": "image_url", "image_url": {"url": media_url(value, "image")}, "role": role})
     for role, kind, values, limit in refs:
         if len(values) > limit:
-            raise as_person_line(ValueError(f"MiniMax H3 takes at most {limit} reference {kind}s (got {len(values)})"))
+            raise with_person_line(ValueError(f"MiniMax H3 takes at most {limit} reference {kind}s (got {len(values)})"), f"MiniMax H3 takes at most {limit} reference {'audio clips' if kind == 'audio' else kind + 's'}, and "
+                         f"{len(values)} are connected. Disconnect the extra ones, then run the node again.")
         for value in values:
             field = _MEDIA_KINDS[kind]
             content.append({"type": field, field: {"url": media_url(value, kind)}, "role": role})
@@ -154,8 +156,8 @@ async def handle_minimax_video_v2(
     content, scenario = build_content(inputs)
     ratio = str(params.get("ratio") or "")
     if scenario == "t2v" and ratio not in RATIOS:
-        raise as_person_line(ValueError("MiniMax H3 text-to-video needs a set aspect ratio (not adaptive). Pick one, or connect "
-                         "a start image."))
+        raise with_person_line(ValueError("MiniMax H3 text-to-video needs a set aspect ratio (not adaptive). Pick one, or connect "
+                         "a start image."), "MiniMax H3 text-to-video needs a set aspect ratio, not Adaptive. Pick one, or connect a start image.")
     body: dict[str, Any] = {"model": model, "content": content,
                             "resolution": str(params.get("resolution") or "2K"),
                             "duration": int(params.get("duration") or 5)}
@@ -203,4 +205,4 @@ async def handle_minimax_video_v2(
                     error = task.get("error") or {}
                     code = f" ({error['code']})" if error.get("code") else ""
                     raise RuntimeError(f"MiniMax H3 task {status}: {error.get('message') or 'no reason given'}{code}")
-            raise RuntimeError(f"MiniMax H3 task timed out after {MAX_POLLS} polls")
+            raise with_person_line(RuntimeError(f"MiniMax H3 task timed out after {MAX_POLLS} polls"), slow_job_line("MiniMax"))

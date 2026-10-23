@@ -285,8 +285,10 @@ async def test_the_engine_carries_the_person_line_beside_the_specific_text() -> 
     async def failing(_node, _inputs, _keys):
         raise with_person_line(RuntimeError("Provider X failed for op-123 (job_id=9)"), "The person's line.")
 
+    # Round 3d gives a provider's status a line from one table
+    # (tests/test_error_copy_round3d.py); a failure it can't tell keeps none.
     async def plain(_node, _inputs, _keys):
-        raise RuntimeError("HTTP 500 from provider")
+        raise RuntimeError("Provider X stopped: worker exited")
 
     events: list[Any] = []
 
@@ -302,7 +304,7 @@ async def test_the_engine_carries_the_person_line_beside_the_specific_text() -> 
             assert error.error == "Provider X failed for op-123 (job_id=9)"
             assert error.person == "The person's line."
         else:
-            assert error.error == "HTTP 500 from provider"
+            assert error.error == "Provider X stopped: worker exited"
             assert error.person is None
 
 

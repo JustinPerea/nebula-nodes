@@ -7896,13 +7896,13 @@ class _ShotPassError(RuntimeError):
     ``failure`` is the node run error behind it, as the card reads one:
     category, friendly, person and the raw text (round 3c-2)."""
 
-    def __init__(self, message: str, failure: dict[str, str] | None = None) -> None:
+    def __init__(self, message: str, failure: dict[str, Any] | None = None) -> None:
         super().__init__(message)
         self.failure = failure
 
 
 # What a failed shot's output carries beside ``error`` for the Cinema panel.
-_SHOT_FAILURE_FIELDS = ("errorCategory", "errorFriendly", "errorPerson", "errorRaw")
+_SHOT_FAILURE_FIELDS = ("errorCategory", "errorFriendly", "errorPerson", "errorProviderText", "errorRaw")
 
 
 def _shot_task_error_message(exc: Exception) -> str:
@@ -7912,7 +7912,7 @@ def _shot_task_error_message(exc: Exception) -> str:
     return f"Shot generation failed: {detail}"
 
 
-def _shot_failure_fields(exc: Exception) -> dict[str, str]:
+def _shot_failure_fields(exc: Exception) -> dict[str, Any]:
     """How the Cinema panel reads a failed shot, the way a node card reads its
     run error (lib/nodeErrorCopy.ts): the handler's person line, the
     classifier's category and line, and the full raw text for Details. A
@@ -7921,7 +7921,8 @@ def _shot_failure_fields(exc: Exception) -> dict[str, str]:
     if isinstance(exc, _ShotPassError):
         failure = exc.failure or {}
         fields = {"errorCategory": failure.get("category"), "errorFriendly": failure.get("friendly"),
-                  "errorPerson": failure.get("person"), "errorRaw": failure.get("raw")}
+                  "errorPerson": failure.get("person"), "errorProviderText": failure.get("provider_text"),
+                  "errorRaw": failure.get("raw")}
         return {key: value for key, value in fields.items() if value}
     return {"errorCategory": "unknown"}
 
@@ -7964,7 +7965,8 @@ async def _execute_single_shot_pass(
             captured["error"] = event.friendly or event.error
             if event.category:
                 captured["failure"] = {"category": event.category, "friendly": event.friendly,
-                                       "person": event.person, "raw": event.error}
+                                       "person": event.person, "provider_text": event.provider_text,
+                                       "raw": event.error}
         await _emit_and_sync(event)
 
     await execute_graph(

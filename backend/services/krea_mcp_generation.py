@@ -16,7 +16,7 @@ from jsonschema import Draft202012Validator
 
 from services.cancellation import schedule_detached_cancel
 from models.events import ProgressEvent
-from execution.person_line import as_person_line
+from execution.person_line import as_person_line, slow_job_line, with_person_line
 
 
 def _balance_reason(value) -> str | None:
@@ -276,12 +276,12 @@ async def poll_job(tools, job, node_id, emit, *, max_polls, poll_interval, on_co
         if status not in KREA_STATUS_PENDING:
             raise RuntimeError(f'Krea job returned unknown status: {status}')
         if index == max_polls:
-            raise RuntimeError('Krea MCP job timed out; cancellation requested')
+            raise with_person_line(RuntimeError('Krea MCP job timed out; cancellation requested'), slow_job_line("Krea"))
         await asyncio.sleep(poll_interval)
         job = _job(await tools.call('get_job', [(JOB_KEYS, job_id)]))
         if emit:
             await emit(ProgressEvent(node_id=node_id, value=min((index + 1) / max_polls, 0.99)))
-    raise RuntimeError('Krea MCP job timed out; cancellation requested')
+    raise with_person_line(RuntimeError('Krea MCP job timed out; cancellation requested'), slow_job_line("Krea"))
 
 
 async def generate(node, body, model, assets, map_body, validate, emit, *, max_polls, poll_interval):

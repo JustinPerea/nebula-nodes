@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable, Mapping, NamedTuple
 
 from models.graph import GraphNode, PortValueDict
-from execution.person_line import with_person_line
+from execution.person_line import missing_file_line, with_person_line
 
 RouteRun = Callable[..., Awaitable[dict[str, Any]]]
 
@@ -168,7 +168,7 @@ def local_media_path(value: Any) -> Path | None:
     if not path.is_file():
         raise with_person_line(
             ValueError(f"A wired input isn't a readable file: {Path(ref).name}"),
-            "A connected file can't be read. Connect it again, then run the node again.")
+            missing_file_line("file", ref))
     return path
 
 

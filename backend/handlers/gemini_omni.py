@@ -18,7 +18,7 @@ from services.public_url import fetch_public_media
 from services.provider_capabilities import enforce_gemini_omni_capabilities
 from execution.missing_credential import MissingCredentialError
 from execution.poll_retry import UpstreamTask, poll_request
-from execution.person_line import as_person_line, missing_file_line, with_person_line
+from execution.person_line import as_person_line, it_was, missing_file_line, slow_job_line, with_person_line
 
 INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
 FILES_URL = "https://generativelanguage.googleapis.com/v1beta/files"
@@ -75,7 +75,7 @@ async def _load_bytes(value: str) -> tuple[bytes, str]:
         return base64.b64decode(b64_data), mime
     path = Path(value)
     if not path.exists():
-        raise with_person_line(ValueError(f"Media not found: {value}"), missing_file_line())
+        raise with_person_line(ValueError(f"Media not found: {value}"), missing_file_line("Media", value))
     return read_local_media(path, label="Gemini Omni input", max_bytes=MAX_INPUT_BYTES)[1], _mime_for_path(path)
 
 
@@ -188,7 +188,7 @@ async def _poll_interaction(
             return data
         if status in {"failed", "cancelled", "canceled"}:
             raise RuntimeError(f"Gemini Omni interaction {status}: {data.get('error', data)}")
-    raise RuntimeError(f"Gemini Omni timed out after {max_polls} polls")
+    raise with_person_line(RuntimeError(f"Gemini Omni timed out after {max_polls} polls"), slow_job_line("Gemini"))
 
 
 async def handle_gemini_omni(
@@ -258,7 +258,7 @@ async def handle_gemini_omni(
     if duration not in (None, ""):
         seconds = int(str(duration).rstrip("s"))
         if not 3 <= seconds <= 10:
-            raise as_person_line(ValueError(f"Gemini Omni makes 3-10 second videos (got {seconds})"))
+            raise with_person_line(ValueError(f"Gemini Omni makes 3-10 second videos (got {seconds})"), f"Gemini Omni makes videos of 3 to 10 seconds. Set Duration in that range. {it_was(seconds)}")
         request_body["response_format"]["duration"] = f"{seconds}s"
 
     if task:

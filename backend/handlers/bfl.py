@@ -47,7 +47,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import as_person_line, with_person_line
+from execution.person_line import as_person_line, slow_job_line, with_person_line
 
 BFL_KEY = "BFL_API_KEY"
 BFL_BASE_URL = "https://api.bfl.ai/v1"
@@ -347,4 +347,4 @@ async def run_task(
                     f"Black Forest Labs task {task_id} was still {status or 'pending'} after "
                     f"{int(timeout // 60)} minutes; Nebula stopped waiting. BFL has no cancel endpoint, so the "
                     "task may still finish and bill on BFL."),
-                    f"Black Forest Labs didn't finish this job in {int(timeout // 60)} minutes, so Nebula stopped waiting. Black Forest Labs can't cancel it, so it may still finish and be billed there.")
+                    slow_job_line("Black Forest Labs"))

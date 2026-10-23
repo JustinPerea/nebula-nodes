@@ -20,7 +20,7 @@ from services.moodboard_weights import native_strengths
 from services.cancellation import schedule_detached_cancel
 from services.output import OUTPUT_ROOT, get_run_dir
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import as_person_line, with_person_line
+from execution.person_line import as_person_line, field_label, option_label, slow_job_line, with_person_line
 
 KREA_BASE_URL = "https://api.krea.ai"
 KREA_STATUS_PENDING = {
@@ -77,11 +77,35 @@ def _clean_str(value: Any) -> str:
     return str(value or "").strip()
 
 
+# GM's Krea lines (error copy round 3d). They use the connection names the
+# node shows, in quotes, and the lines that run before anything is sent end
+# "Nothing was sent to Krea." ({fields}: each label in quotes, joined with
+# "and".)
+NOTHING_SENT_TO_KREA = "Nothing was sent to Krea."
+UNSET_CONNECTION_LINE = "This node's Krea connection isn't set. Choose “API token” or “Krea account”."
+
+
+def _label(definition_id: str, key: str) -> str:
+    return field_label(definition_id, key)
+
+
+def _option_label(definition_id: str, key: str, value: str) -> str:
+    """An option's label as the node shows it, less a "(Krea account)" note."""
+    return option_label(definition_id, key, value) or value
+
+
+def quoted_and(labels: list[str]) -> str:
+    """“A”, “A” and “B”, “A”, “B” and “C”: GM's {fields}."""
+    quoted = [label if label.startswith("“") else f"“{label}”" for label in labels]
+    return quoted[0] if len(quoted) == 1 else f"{', '.join(quoted[:-1])} and {quoted[-1]}"
+
+
 def _auth_mode(node: GraphNode) -> str:
     """Saved billing choice; nodes saved before the choice existed keep the API token."""
     mode = node.params.get("_kreaAuth", "api-token")
     if mode not in {"api-token", "mcp"}:
-        raise as_person_line(ValueError("Unknown Krea connection; choose API token or Krea account"))
+        raise with_person_line(ValueError("Unknown Krea connection; choose API token or Krea account"),
+                               UNSET_CONNECTION_LINE)
     return mode
 
 
@@ -317,7 +341,7 @@ async def _poll_krea_job(
             raise RuntimeError(f"Krea job {job_id} {status}: {message}")
         if status and status not in KREA_STATUS_PENDING | KREA_STATUS_TERMINAL:
             raise RuntimeError(f"Krea job {job_id} returned unknown status: {status}")
-    raise RuntimeError(f"Krea job {job_id} timed out after {max_polls} polls")
+    raise with_person_line(RuntimeError(f"Krea job {job_id} timed out after {max_polls} polls"), slow_job_line("Krea"))
 
 
 def _resource_kind(item: Any) -> str:
@@ -782,7 +806,10 @@ async def handle_krea_style_train(
     if _auth_mode(node) == "mcp":
         return await _account_style_train(node, name, model, image_values, emit)
     if model in KREA_STYLE_TRAINING_MODELS_ACCOUNT_ONLY:
-        raise as_person_line(ValueError(f"Krea trains {model} styles only on a connected Krea account; nothing was sent"))
+        raise with_person_line(
+            ValueError(f"Krea trains {model} styles only on a connected Krea account; nothing was sent"),
+            f"Training {_option_label('krea-style-train', 'model', model)} styles needs the “Krea account” "
+            f"connection. {NOTHING_SENT_TO_KREA}")
 
     api_key = _api_key(api_keys)
     async with httpx.AsyncClient(timeout=120.0) as client:
@@ -879,11 +906,15 @@ def _job_result_id(job: dict[str, Any], *keys: str) -> str:
 
 async def _account_style_search(node: GraphNode) -> dict[str, Any]:
     from services.krea_account import account_tools
-    unsupported = [label for key, label in (("user", "User"), ("liked", "Liked only")) if _set(node.params.get(key))]
+    keys = [key for key in ("user", "liked") if _set(node.params.get(key))]
     if _clean_str(node.params.get("filter")) not in {"", "all"}:
-        unsupported.append("Filter")
-    if unsupported:
-        raise as_person_line(ValueError(f"{', '.join(unsupported)} needs a Krea API token; the Krea account lists the styles available to you. Nothing was sent"))
+        keys.append("filter")
+    if keys:
+        unsupported = [{"user": "User", "liked": "Liked only", "filter": "Filter"}[key] for key in keys]
+        raise with_person_line(
+            ValueError(f"{', '.join(unsupported)} needs a Krea API token; the Krea account lists the styles available to you. Nothing was sent"),
+            f"To use {quoted_and([_label('krea-style-search', key) for key in keys])}, switch to the “API token” "
+            f"connection. The “Krea account” connection lists every style you can use. {NOTHING_SENT_TO_KREA}")
     ids = {part.strip() for part in _clean_str(node.params.get("ids")).split(",") if part.strip()}
     model = _clean_str(node.params.get("model"))
     limit = _int_value(node.params.get("limit"), 25, 1, 1000)
@@ -907,13 +938,21 @@ async def _account_style_search(node: GraphNode) -> dict[str, Any]:
 async def _account_style_train(node, name, model, image_values, emit) -> dict[str, Any]:
     from services.krea_account import account_tools, run_job
     training_type = _clean_str(node.params.get("training_type")) or "Style"
-    unsupported = [label for key, label in (("max_train_steps", "Max steps"), ("learning_rate", "Learning rate"),
-                                            ("batch_size", "Batch size"), ("share_with_workspace", "Share workspace"))
-                   if _set(node.params.get(key))]
+    keys = [key for key in ("max_train_steps", "learning_rate", "batch_size", "share_with_workspace")
+            if _set(node.params.get(key))]
+    unsupported = [{"max_train_steps": "Max steps", "learning_rate": "Learning rate", "batch_size": "Batch size",
+                    "share_with_workspace": "Share workspace"}[key] for key in keys]
+    fields = [_label("krea-style-train", key) for key in keys]
     if training_type == "Default":
         unsupported.append("Type: Default")
+        # GM: write "Type: Default" as “Type” set to Default.
+        fields.append(f"“{_label('krea-style-train', 'training_type')}” set to "
+                      f"{_option_label('krea-style-train', 'training_type', 'Default')}")
     if unsupported:
-        raise as_person_line(ValueError(f"{', '.join(unsupported)} needs a Krea API token; the Krea account trains with Krea's defaults. Nothing was sent"))
+        raise with_person_line(
+            ValueError(f"{', '.join(unsupported)} needs a Krea API token; the Krea account trains with Krea's defaults. Nothing was sent"),
+            f"To use {quoted_and(fields)}, switch to the “API token” connection. The “Krea account” connection "
+            f"trains with Krea's default settings. {NOTHING_SENT_TO_KREA}")
     arguments: dict[str, Any] = {"name": name, "model": model, "train_type": training_type, "images": []}
     trigger_word = _clean_str(node.params.get("trigger_word"))
     if trigger_word:
@@ -1033,7 +1072,10 @@ async def handle_krea_library_manage(
 
     if _auth_mode(node) == "api-token":
         if action != "rename-style":
-            raise as_person_line(ValueError("Only renaming a style works with a Krea API token; use the Krea account for moodboards and deletes. Nothing was sent"))
+            raise with_person_line(
+                ValueError("Only renaming a style works with a Krea API token; use the Krea account for moodboards and deletes. Nothing was sent"),
+                "The “API token” connection can only rename styles. To make moodboards or delete styles, switch to "
+                f"the “Krea account” connection. {NOTHING_SENT_TO_KREA}")
         api_key = _api_key(api_keys)
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.patch(f"{KREA_BASE_URL}/styles/{item_id}", headers=_json_headers(api_key),

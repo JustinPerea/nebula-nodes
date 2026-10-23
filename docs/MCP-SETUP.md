@@ -690,6 +690,19 @@ keeps `error` on the shot's `output` as before and adds `errorCategory`,
 cut) for the Cinema panel. Read `error`; don't parse `person` or the shot's
 error* fields.
 
+Round 3d gives a provider's answer a line too, from one table: a 401 or 403
+reads "{Provider} didn't accept your API key. ...", a 402 or an exhausted
+quota "Your {Provider} account is out of credits. ...", a 429 "{Provider} is
+busy. ...", a 5xx "{Provider} is having trouble right now. ...", an empty
+answer "{Provider} didn't return a result. ...", and a paid job Nebula stopped
+waiting on "{Provider} is taking longer than usual. ...", naming the provider
+the run called (a provider switcher's or Auto's route). Such a line rides as
+`person` with the additive `providerText: true` on the execution event
+(`errorProviderText` in the graph and on a shot's `output`): the card keeps
+the provider's own words, your `error`, behind "Details". A failure Nebula
+can't tell keeps today's line. `error` and every text you read are unchanged,
+word for word.
+
 ### Numbers in request bodies
 
 Every JSON request body (`application/json`, `application/*+json`, any
@@ -2008,7 +2021,7 @@ whoever ran it (the canvas Run button too). It is kept per project, in
 `node-errors.json` in the state dir, so it survives a page reload, a switch to
 another project and back, and a backend restart; every graph the canvas loads
 (graphSync, `GET /api/projects/{id}`) gives such a node `state: "error"` with
-the card's `error`, `errorFriendly`, `errorCategory` and `errorPerson`. Loading a graph over
+the card's `error`, `errorFriendly`, `errorCategory`, `errorPerson` and `errorProviderText`. Loading a graph over
 the project or clearing it forgets its errors, as does deleting the project
 for good. Deleting a node keeps its error, so undoing the delete
 (`POST /api/graph/restore`) puts the node back failed, as the canvas's undo

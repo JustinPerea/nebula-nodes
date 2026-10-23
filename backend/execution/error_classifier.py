@@ -64,6 +64,7 @@ _QUOTA_MARKERS = (
     "exceeded your current quota",
     "insufficient credit",
     "insufficient credits",
+    "insufficient balance",
     "out of credits",
     "billing hard limit",
     "billing_hard_limit",

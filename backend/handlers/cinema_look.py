@@ -22,7 +22,7 @@ from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.output import OUTPUT_ROOT, get_run_dir
-from execution.person_line import as_person_line, missing_file_line, with_person_line
+from execution.person_line import missing_file_line, with_person_line
 
 
 _OUTPUTS_URL_PREFIX = "/api/outputs/"
@@ -122,7 +122,7 @@ async def handle_cinema_look(
 
     ref = _input_image_ref(node, inputs)
     if not ref:
-        raise as_person_line(ValueError("Cinema Look needs an input image (connect the image port)"))
+        raise with_person_line(ValueError("Cinema Look needs an input image (connect the image port)"), "Cinema Look needs an input image. Connect one, then run the node again.")
     abs_path = _resolve_local_path(ref)
     if abs_path is None:
         raise with_person_line(ValueError(f"Input image not found: {ref}"), missing_file_line("image file"))

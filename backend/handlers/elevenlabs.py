@@ -17,7 +17,7 @@ from services.media_input import checked_local_file, read_local_media
 from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import as_person_line, missing_file_line, with_person_line
+from execution.person_line import (and_list, as_person_line, missing_file_line, slow_job_line, with_person_line, with_provider_line)
 
 ELEVENLABS_API_BASE = "https://api.elevenlabs.io/v1/text-to-speech"
 DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"  # Rachel
@@ -222,23 +222,25 @@ def parse_dialogue_script(script: str) -> list[tuple[str, str]]:
                 f"ElevenLabs voices and a colon, e.g. 'Rachel: Hello there.' Received {raw.strip()[:60]!r}"
             ))
         if not text:
-            raise as_person_line(ValueError(f"Dialogue line {number} ({speaker}) has no text after the colon."))
+            raise with_person_line(ValueError(f"Dialogue line {number} ({speaker}) has no text after the colon."), f"Dialogue line {number} has no text after the colon. Add what {speaker} says, then run the node again.")
         turns.append((speaker, text))
     if not turns:
         raise as_person_line(ValueError("The dialogue script is empty. Write one line per turn, e.g. 'Rachel: Hello.' then 'Adam: Hi!'"))
     speakers = _distinct_speakers(turns)
     if len(speakers) > DIALOGUE_MAX_VOICES:
-        raise as_person_line(ValueError(
+        raise with_person_line(ValueError(
             f"The script has {len(speakers)} speakers ({', '.join(speakers)}). ElevenLabs allows at most "
             f"{DIALOGUE_MAX_VOICES} different voices in one Text to Dialogue request. Split it across two nodes."
-        ))
+        ), f"The script has {len(speakers)} speakers: {and_list(speakers)}. ElevenLabs allows at most "
+            f"{DIALOGUE_MAX_VOICES} different voices in one Text to Dialogue request. Split it across two nodes.")
     total = sum(len(text) for _, text in turns)
     if total > DIALOGUE_MAX_CHARS:
-        raise as_person_line(ValueError(
+        raise with_person_line(ValueError(
             f"The dialogue is {total:,} characters. ElevenLabs asks for at most {DIALOGUE_MAX_CHARS:,} "
             "characters per Text to Dialogue request for reliable generation (longer ones can stop early "
             "or be refused). Split the script across two nodes."
-        ))
+        ), f"The dialogue is {total:,} characters. ElevenLabs asks for at most {DIALOGUE_MAX_CHARS:,} characters per "
+            "Text to Dialogue request, and longer ones can stop early or be refused. Split the script across two nodes.")
     return turns
 
 
@@ -422,7 +424,7 @@ async def resolve_dialogue_voices(client: Any, api_key: str, speakers: list[str]
         # dialogue call rejects a bad one); any other label stops here.
         names = [s for s in speakers if not _VOICE_ID_SHAPE.fullmatch(s.strip())]
         if names:
-            raise with_person_line(ValueError(
+            raise with_provider_line(ValueError(
                 f"Your ElevenLabs API key can't list your voices ({exc}), so Nebula can't look up "
                 f"{', '.join(repr(n) for n in names)}. Give the key Voices read access (voices_read) under "
                 "Developers > API Keys in ElevenLabs, or write each voice's ID in place of its name, "
@@ -599,7 +601,7 @@ async def _poll_dubbing(
                 f"ElevenLabs Dubbing failed: {status_data.get('error', 'Unknown')}"
             )
 
-    raise RuntimeError("ElevenLabs Dubbing timed out")
+    raise with_person_line(RuntimeError("ElevenLabs Dubbing timed out"), slow_job_line("ElevenLabs"))
 
 
 async def handle_elevenlabs_sfx(

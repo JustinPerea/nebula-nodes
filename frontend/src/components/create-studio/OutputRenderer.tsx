@@ -23,6 +23,7 @@ export function OutputRenderer({
   errorCategory,
   errorFriendly,
   errorPerson,
+  errorProviderText,
   streamingText,
   streamingPartials,
   streamingSvg,
@@ -34,6 +35,7 @@ export function OutputRenderer({
   errorCategory?: string;
   errorFriendly?: string;
   errorPerson?: string;
+  errorProviderText?: boolean;
   streamingText?: string;
   streamingPartials?: { index: number; src: string }[];
   streamingSvg?: { index: number; svg: string; isFinal: boolean };
@@ -62,7 +64,7 @@ export function OutputRenderer({
     // The same lines as the canvas card (lib/nodeErrorCopy.ts): the person's
     // line or GM's, the raw provider text only behind Details.
     return <NodeError className="create-output create-output--error" raw={error ?? 'Generation failed'}
-      category={errorCategory} friendly={errorFriendly} person={errorPerson} />;
+      category={errorCategory} friendly={errorFriendly} person={errorPerson} providerText={errorProviderText} />;
   }
 
   const isComplete = state === 'complete';

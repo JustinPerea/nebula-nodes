@@ -45,7 +45,7 @@ from services.typesafe_client import (
     prepare_images,
     system_one,
 )
-from execution.person_line import as_person_line, with_person_line
+from execution.person_line import as_person_line, option_label, with_person_line
 
 PRESENCE_ID = "present"
 BOX_ID = "where"
@@ -211,7 +211,8 @@ async def handle_jev_box(
         raise as_person_line(ValueError("Jev Box needs a target: what to find, e.g. 'the red car'"))
     model = check_model(params.get("model") or BOX_MODELS[0])
     if model not in BOX_MODELS:
-        raise as_person_line(ValueError(f"Jev Box needs Jev 1.14: pick {' or '.join(BOX_MODELS)}, not {model}"))
+        raise with_person_line(ValueError(f"Jev Box needs Jev 1.14: pick {' or '.join(BOX_MODELS)}, not {model}"), f"Jev Box runs on Jev 1.14 only. Pick {option_label(node.definition_id, 'model', BOX_MODELS[0])} in the "
+                         "node's Model field, then run the node again.")
     presence_threshold = _fraction(params.get("presence_threshold"), 0.5, "presence_threshold")
     min_confidence = _fraction(params.get("min_confidence"), 0.5, "min_confidence")
     pad = _fraction(params.get("pad"), 0.05, "pad", MAX_PAD)

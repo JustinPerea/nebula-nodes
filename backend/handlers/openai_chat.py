@@ -7,9 +7,11 @@ from models.events import ExecutionEvent
 from execution.stream_runner import StreamConfig, stream_execute
 from services.image_input import load_local_image
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import as_person_line
+from execution.person_line import as_person_line, model_name, option_label, option_labels, with_person_line
 
 OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
+# The node this handler runs (execution/engine.py), for its labels on the card.
+CHAT_DEFINITION = "gpt-4o-chat"
 
 # GPT-6 and GPT-5.6 families (OpenAI model pages, checked 2026-10-16). All are
 # reasoning models on Chat Completions: they take reasoning_effort and Nebula
@@ -94,7 +96,8 @@ async def handle_openai_chat(
             # "max" is offered only for GPT-6, but a node switched over from a
             # GPT-6 model can still hold it. OpenAI's gpt-5.5 page lists none,
             # low, medium, high and xhigh, so refuse it before a paid HTTP 400.
-            raise as_person_line(ValueError(f"Reasoning effort 'max' isn't available for {model}."))
+            raise with_person_line(ValueError(f"Reasoning effort 'max' isn't available for {model}."), f"Reasoning Effort Max isn't available for {model_name(model, node.definition_id)}. "
+                "Pick another level, then run the node again.")
         if reasoning_effort:
             request_body["reasoning_effort"] = reasoning_effort
     else:
@@ -155,6 +158,8 @@ def _listed_effort(model: str, effort: str) -> str:
     allowed = REASONING_EFFORTS[model]
     if effort in allowed:
         return effort
-    raise as_person_line(ValueError(
+    raise with_person_line(ValueError(
         f"Reasoning effort '{effort}' isn't available for {model}. Pick one of: {', '.join(allowed)}."
-    ))
+    ), f"{model_name(model, CHAT_DEFINITION)} doesn't offer Reasoning Effort "
+        f"{option_label(CHAT_DEFINITION, 'reasoning_effort', effort) or effort}. "
+        f"Pick {option_labels(CHAT_DEFINITION, 'reasoning_effort', allowed)}, then run the node again.")

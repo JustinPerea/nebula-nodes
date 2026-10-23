@@ -197,7 +197,8 @@ async def handle_style_reference(
             "GOOGLE_API_KEY required for Auto mode. Switch the Mode param to Manual or "
             "Image only to use this node without a Gemini call."
         ),
-            "Add your Gemini API key in Settings, or set the node's Description Mode to Manual or Image only.")
+            "Add your Gemini API key in Settings, then run the node again. Or set the node's Description Mode to "
+            "Manual or Image only, which need no key.")
 
     description = await _describe_style(api_key, abs_path, system_prompt)
     description = _apply_strength_suffix(description, strength)

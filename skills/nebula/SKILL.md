@@ -276,10 +276,11 @@ Marble — unlock" and "Checked Marble — forget" refused while a job is still
 waiting keep their exact text for you. A node's run error works the same way:
 `error` (in `nebula result`, `nebula look` and the run record) is the specific
 text, ids and parameter names included; the card shows a written line (the
-graph's `errorPerson`, when the node's handler wrote one) that you shouldn't
-parse. A failed Cinema shot's `output` works the same: read its `error`; its
-`errorCategory`, `errorFriendly`, `errorPerson` and `errorRaw` are for the
-Cinema panel.
+graph's `errorPerson`, when the node's handler wrote one, or a line for the
+provider's answer such as "Meshy is busy. ..." with `errorProviderText`) that
+you shouldn't parse. A failed Cinema shot's `output` works the same: read its
+`error`; its `errorCategory`, `errorFriendly`, `errorPerson`,
+`errorProviderText` and `errorRaw` are for the Cinema panel.
 
 ## Moodboards
 

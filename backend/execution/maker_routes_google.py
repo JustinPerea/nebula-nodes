@@ -292,12 +292,13 @@ async def vertex_krea_veo(
         raise as_person_line(ValueError("Veo needs a prompt or a start image"))
     resolution = str(params.get("resolution") or "")
     if resolution == "4k" and model not in veo.VERTEX_4K_MODELS:
-        raise as_person_line(ValueError("On Vertex only Veo 3.1 (Standard) renders 4K; pick 1080p"))
+        raise with_person_line(ValueError("On Vertex only Veo 3.1 (Standard) renders 4K; pick 1080p"), "On Vertex only Veo 3.1 Standard renders 4K. Pick 1080p.")
     if references:
         if model not in VERTEX_REFERENCE_MODELS:
             raise as_person_line(ValueError("Veo 3.1 Lite takes no reference images on Vertex"))
         if len(references) > MAX_VEO_REFERENCES:
-            raise as_person_line(ValueError(f"Vertex takes up to {MAX_VEO_REFERENCES} reference images (got {len(references)})"))
+            raise with_person_line(ValueError(f"Vertex takes up to {MAX_VEO_REFERENCES} reference images (got {len(references)})"), f"Vertex takes up to {MAX_VEO_REFERENCES} reference images, and {len(references)} are "
+                f"connected. Disconnect the extra ones, then run the node again.")
         if str(params.get("duration") or "8") != "8":
             raise as_person_line(ValueError("On Vertex, reference images only make 8-second videos; set duration to 8"))
         if resolution == "4k":
@@ -370,12 +371,14 @@ def krea_omni_to_google(model: str) -> maker_routes.Translate:
         images = _port_or_param_list(inputs, params, "reference_images")
         videos = _port_or_param_list(inputs, params, "reference_videos")
         if len(videos) > MAX_OMNI_VIDEO_REFERENCES:
-            raise as_person_line(ValueError(f"Gemini Omni takes up to {MAX_OMNI_VIDEO_REFERENCES} reference videos (got {len(videos)})"))
+            raise with_person_line(ValueError(f"Gemini Omni takes up to {MAX_OMNI_VIDEO_REFERENCES} reference videos (got {len(videos)})"), f"Gemini Omni takes up to {MAX_OMNI_VIDEO_REFERENCES} reference videos, and {len(videos)} are "
+                f"connected. Disconnect the extra ones, then run the node again.")
         if start and (images or videos):
-            raise as_person_line(ValueError(
+            raise with_person_line(ValueError(
                 "Gemini Omni on Google's API can't take a start image and references together "
                 "(Google tells them apart only by tags in the prompt); use one or the other"
-            ))
+            ), "Gemini Omni on Google's API can't take a start image and references together, since Google tells "
+                "them apart only by tags in the prompt. Use one or the other.")
         if start:
             out["task"] = "image_to_video"
             routed["images"] = PortValueDict(type="Image", value=[start])

@@ -12,7 +12,7 @@ from models.events import ExecutionEvent, ProgressEvent
 from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import as_person_line
+from execution.person_line import as_person_line, slow_job_line, with_person_line
 
 
 def _log(msg: str) -> None:
@@ -163,4 +163,4 @@ async def handle_higgsfield(
                 raise RuntimeError("Higgsfield generation was cancelled")
             # "queued" and "in_progress" → continue polling
 
-        raise RuntimeError("Higgsfield timed out")
+        raise with_person_line(RuntimeError("Higgsfield timed out"), slow_job_line("Higgsfield"))

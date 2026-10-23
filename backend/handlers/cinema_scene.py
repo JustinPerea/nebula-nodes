@@ -62,7 +62,8 @@ from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.output import OUTPUT_ROOT, get_run_dir
 from execution.error_classifier import classify_error
-from execution.person_line import person_line, with_person_line
+from execution.person_line import with_person_line
+from execution.provider_status import card_line
 
 
 _OUTPUTS_URL_PREFIX = "/api/outputs/"
@@ -420,6 +421,7 @@ async def handle_cinema_scene(
             continue
         shot_id = str(shot.get("id") or f"shot{index}")
         port_id = _output_port_id(shot_id)
+        base_node = None
 
         try:
             if base_handler is None:
@@ -543,8 +545,11 @@ async def handle_cinema_scene(
             # are how the Cinema panel reads the failure, the way a node card
             # reads its run error (error copy round 3c-2, lib/nodeErrorCopy.ts).
             category, friendly, _retryable = classify_error(str(exc))
+            # The base node's own line, else GM's line for the provider's
+            # answer, naming the provider the base called (round 3d).
+            card = card_line(exc, base_model, base_node.params if base_node is not None else {}, api_keys)
             fields = {"errorCategory": category, "errorFriendly": friendly,
-                      "errorPerson": person_line(exc), "errorRaw": str(exc)}
+                      "errorPerson": card.person, "errorProviderText": card.provider_text, "errorRaw": str(exc)}
             shot["output"] = {"status": "error", "error": str(exc),
                               **{key: value for key, value in fields.items() if value}}
             outputs[port_id] = {"type": "Image", "value": None}

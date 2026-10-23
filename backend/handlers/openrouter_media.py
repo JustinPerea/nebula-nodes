@@ -50,7 +50,7 @@ import httpx
 
 from execution.missing_credential import MissingCredentialError
 from models.events import ExecutionEvent, ProgressEvent
-from execution.person_line import with_person_line
+from execution.person_line import slow_job_line, with_person_line
 
 OPENROUTER_KEY = "OPENROUTER_API_KEY"
 OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
@@ -232,4 +232,4 @@ async def generate_video(
                 raise with_person_line(RuntimeError(
                     f"OpenRouter video {job_id} was still {status or 'pending'} after {int(limit // 60)} minutes; "
                     "Nebula stopped waiting. OpenRouter has no cancel for video jobs, so it may still finish and bill."),
-                    f"OpenRouter didn't finish this video in {int(limit // 60)} minutes, so Nebula stopped waiting. OpenRouter can't cancel video jobs, so it may still finish and be billed there.")
+                    slow_job_line("OpenRouter"))

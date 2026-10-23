@@ -33,7 +33,7 @@ from handlers.xai_image import XAI_API_BASE, xai_image_url
 from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
 from services.output import get_run_dir
-from execution.person_line import as_person_line
+from execution.person_line import as_person_line, slow_job_line, with_person_line
 
 # Canonical xAI model id for the grok-imagine-video node
 # (https://docs.x.ai/developers/models/grok-imagine-video: "Model name: `grok-imagine-video`").
@@ -116,7 +116,7 @@ async def run_xai_video(
                 err = poll_data.get("error") or {}
                 raise RuntimeError(f"Grok failed: {err.get('message', status)}")
 
-        raise RuntimeError("Grok timed out")
+        raise with_person_line(RuntimeError("Grok timed out"), slow_job_line("xAI"))
 
 
 async def handle_grok_video(

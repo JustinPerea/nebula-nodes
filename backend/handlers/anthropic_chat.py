@@ -8,7 +8,7 @@ from execution.stream_runner import StreamConfig, stream_execute
 from services.image_input import load_local_image
 from execution.missing_credential import MissingCredentialError
 from services.param_defaults import param_default
-from execution.person_line import as_person_line, with_person_line
+from execution.person_line import as_person_line, model_name, option_labels, with_person_line
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
@@ -185,7 +185,7 @@ async def handle_claude_chat(
         if effort:
             levels = MODEL_EFFORT_LEVELS[model]
             if effort not in levels:
-                raise as_person_line(ValueError(f"Effort must be one of {', '.join(levels)} for {model}, got {effort!r}"))
+                raise with_person_line(ValueError(f"Effort must be one of {', '.join(levels)} for {model}, got {effort!r}"), f"{model_name(model, node.definition_id)} takes {option_labels(node.definition_id, 'effort', levels)} effort. Pick one in the node's Effort field, then run the node again.")
             request_body["output_config"] = {"effort": effort}
 
     stop: dict[str, str] = {}

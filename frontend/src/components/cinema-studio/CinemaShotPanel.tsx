@@ -128,7 +128,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
           {shot.output?.status === 'error' && shot.output.error && (
             <NodeError className="cinema-shot-panel__error" raw={shot.output.errorRaw ?? shot.output.error}
               category={shot.output.errorCategory} friendly={shot.output.errorFriendly}
-              person={shot.output.errorPerson} />
+              person={shot.output.errorPerson} providerText={shot.output.errorProviderText} />
           )}
         </div>
 

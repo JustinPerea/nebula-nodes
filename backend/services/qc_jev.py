@@ -47,7 +47,7 @@ from services.typesafe_client import (
     score_criteria,
     system_one,
 )
-from execution.person_line import as_person_line, with_person_line
+from execution.person_line import as_person_line, key_line, with_person_line
 
 JEV_MODE = "jev"
 MAX_FRAMES = 8
@@ -82,7 +82,7 @@ def setup(params: Mapping[str, Any], api_keys: Mapping[str, str]) -> Setup:
     if not key:
         raise with_person_line(
             MissingCredentialError(f"{CREDENTIAL} is required for Jev mode"),
-            "Add your TypeSafe API key in Settings to use Jev mode, then run the node again.")
+            key_line([CREDENTIAL]) or "")
     model = check_model(params.get("model") or DEFAULT_MODEL)
     raw = params.get("min_confidence")
     if raw is None or raw == "":

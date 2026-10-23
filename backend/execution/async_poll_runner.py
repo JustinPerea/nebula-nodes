@@ -7,6 +7,7 @@ from urllib.parse import quote
 
 import httpx
 
+from execution.person_line import slow_job_line, with_person_line
 from execution.poll_retry import UpstreamTask, poll_request
 from models.events import ExecutionEvent, ProgressEvent
 from services.cancellation import schedule_detached_cancel
@@ -42,6 +43,9 @@ class AsyncPollConfig:
     # whose cancel differs (e.g. Replicate's POST .../cancel) set these.
     cancel_url_template: str | None = None
     cancel_method: str = "DELETE"
+    # Who runs the job, as Settings names them ("Runway", "Replicate"): the
+    # card's line when Nebula stops waiting on it.
+    provider: str | None = None
 
 
 def _get_nested(data: dict[str, Any], path: str) -> Any:
@@ -120,5 +124,12 @@ async def poll_until_terminal(
                 error_msg = poll_data.get("error", poll_data.get("failure", f"Job failed with status: {status}"))
                 raise RuntimeError(f"Async job failed: {error_msg}")
 
+        # The provider accepted the job and may still finish and bill it (GM,
+        # error copy round 3d); a config that names no provider keeps the
+        # classifier's timeout line.
+        if config.provider:
+            raise with_person_line(RuntimeError(
+                f"Async job timed out after {config.max_polls} polls ({config.max_polls * config.poll_interval:.0f}s)"),
+                slow_job_line(config.provider))
         raise RuntimeError(
             f"Async job timed out after {config.max_polls} polls ({config.max_polls * config.poll_interval:.0f}s)")

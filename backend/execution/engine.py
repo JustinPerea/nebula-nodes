@@ -65,7 +65,9 @@ from models.events import (
 from execution import gating, provider_calls
 from services.moodboard_brief import apply_to_generator as apply_board_to_generator
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import as_person_line, person_line, with_person_line
+from execution.person_line import (as_person_line, carries_provider_text, missing_file_line, person_line,
+                                   with_person_line)
+from execution.provider_status import card_line
 
 CycleError = _GraphlibCycleError
 
@@ -1377,7 +1379,7 @@ async def _execute_graph(
                         video_path = resolve_output_ref(str(video_input.value))
                         is_remote = video_path.startswith(("http://", "https://"))
                         if not is_remote and not Path(video_path).is_file():
-                            raise as_person_line(ValueError("Video source file not found; restore or upload the source video before extracting frames"))
+                            raise with_person_line(ValueError("Video source file not found; restore or upload the source video before extracting frames"), missing_file_line("video file"))
                         mode = node.params.get("mode", "first_frame")
                         timestamp = float(node.params.get("timestamp", 0))
 
@@ -1482,7 +1484,7 @@ async def _execute_graph(
                         raise as_person_line(ValueError("No mask painted yet — open the Mask Painter node and paint one"))
                     image_input = resolved_inputs.get("image")
                     if not image_input or not image_input.value:
-                        raise as_person_line(ValueError("Image input is required (the mask must match its dimensions)"))
+                        raise with_person_line(ValueError("Image input is required (the mask must match its dimensions)"), "Mask Painter needs the image the mask is painted on. Connect one, then run the node again.")
 
                     import base64 as _b64
                     import io as _io
@@ -1605,6 +1607,10 @@ async def _execute_graph(
 
         except Exception as exc:
             category, friendly, retryable = classify_error(str(exc))
+            # The handler's own line, else GM's for a provider's answer from
+            # the shared table, naming the provider this run called (error
+            # copy round 3d, execution/provider_status.py).
+            card = card_line(exc, node.definition_id, node.params, api_keys)
             await emit(
                 ErrorEvent(
                     node_id=nid,
@@ -1614,7 +1620,8 @@ async def _execute_graph(
                     friendly=friendly,
                     missing_credential=isinstance(exc, MissingCredentialError)
                     and handler_calls.get(nid, 0) <= 1,
-                    person=person_line(exc),
+                    person=card.person,
+                    provider_text=card.provider_text,
                 )
             )
             return nid, False, 0
@@ -1672,7 +1679,7 @@ async def _execute_graph(
                 category, friendly, retryable = classify_error(str(exc))
                 await emit(ErrorEvent(node_id=nid, error=str(exc), category=category,
                                       friendly=friendly, retryable=retryable,
-                                      person=person_line(exc)))
+                                      person=person_line(exc), provider_text=carries_provider_text(exc)))
                 return nid, False, 0
 
         executed_count = 0

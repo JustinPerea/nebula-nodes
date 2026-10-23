@@ -12,7 +12,8 @@ from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent, ProgressEvent
 from services.output import get_run_dir, image_to_data_uri, resolve_output_ref, save_video_from_url
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import as_person_line, missing_file_line, with_person_line
+from execution.person_line import (as_person_line, missing_file_line, slow_job_line, status_line, with_person_line,
+                                   with_provider_line)
 
 MINIMAX_API_BASE = "https://api.minimaxi.com"
 # MiniMax keys belong to one region: "The API host and key vary by region and
@@ -27,6 +28,9 @@ MINIMAX_API_BASES = (MINIMAX_API_BASE, MINIMAX_GLOBAL_API_BASE)
 # "1004, Account authentication failed", "2049, Invalid API Key"
 # (platform.minimax.io/docs/api-reference/errorcode).
 _AUTH_ERROR_CODES = {1004, 2049}
+# "1008, insufficient balance", "2053, insufficient credit" (same page, read
+# 2026-10-22).
+_NO_BALANCE_CODES = {1008, 2053}
 
 
 def _log(msg: str) -> None:
@@ -188,7 +192,17 @@ async def handle_minimax_video(
         _log(f"submit_data: {submit_data}")
         task_id = submit_data.get("task_id")
         if not task_id:
-            raise RuntimeError(f"MiniMax did not return task_id: {submit_data}")
+            # V1 says a refused key (after every region) or an empty balance
+            # with its own code in an HTTP 200, so the card reads the code,
+            # not the missing task id (error copy 3d review).
+            base_resp = submit_data.get("base_resp") if isinstance(submit_data, dict) else None
+            code = base_resp.get("status_code") if isinstance(base_resp, dict) else None
+            exc = RuntimeError(f"MiniMax did not return task_id: {submit_data}")
+            if code in _AUTH_ERROR_CODES:
+                raise with_provider_line(exc, status_line("key", "MiniMax"))
+            if code in _NO_BALANCE_CODES:
+                raise with_provider_line(exc, status_line("credits", "MiniMax"))
+            raise exc
 
         # Step 2: Poll for completion
         _log(f"polling task_id={task_id}")
@@ -253,4 +267,4 @@ async def handle_minimax_video(
             # Queueing / Processing — keep polling
 
         _log("TIMED OUT")
-        raise RuntimeError(f"MiniMax task timed out after {max_polls} polls")
+        raise with_person_line(RuntimeError(f"MiniMax task timed out after {max_polls} polls"), slow_job_line("MiniMax"))

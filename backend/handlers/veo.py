@@ -21,7 +21,7 @@ from services.media_input import read_local_media
 from services.public_url import fetch_public_media
 from execution.missing_credential import MissingCredentialError
 from execution.poll_retry import UpstreamTask, poll_request
-from execution.person_line import as_person_line, missing_file_line, with_person_line
+from execution.person_line import as_person_line, key_line, missing_file_line, slow_job_line, with_person_line
 
 VEO_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
@@ -192,7 +192,7 @@ async def handle_veo(
     assert api_key is not None
     if previews_retired():
         # Checked before any request, so the run never reaches Google.
-        raise MissingCredentialError(VERTEX_ONLY_MESSAGE)
+        raise with_person_line(MissingCredentialError(VERTEX_ONLY_MESSAGE), key_line(["GOOGLE_VERTEX_CREDENTIALS"]))
     gemini_model = GEMINI_API_MODELS[model]
 
     instance: dict[str, Any] = {}
@@ -217,11 +217,12 @@ async def handle_veo(
         if "generativelanguage.googleapis.com" in video_ref and "/files/" in video_ref:
             instance["video"] = {"uri": video_ref}
         else:
-            raise as_person_line(ValueError(
+            raise with_person_line(ValueError(
                 "Veo extension needs a Veo-generated clip's source URI (a Gemini files/... URI). "
                 "Wire the upstream Veo node's 'Source URI' output into 'Extend Video' — Veo "
                 "rejects re-uploaded or external video files."
-            ))
+            ), "Veo extends only a clip Veo made, by its source URI. Wire the upstream Veo node's “Source URI” output "
+                "into “Extend Video”. Veo rejects re-uploaded or external video files.")
 
     parameters = _veo_parameters(node.params)
 
@@ -346,7 +347,7 @@ async def _poll_veo_operation(
             raise RuntimeError(f"Veo completed but no video found: {list(poll_data.keys())}")
 
     _log("TIMED OUT")
-    raise RuntimeError(f"Veo timed out after {max_polls} polls")
+    raise with_person_line(RuntimeError(f"Veo timed out after {max_polls} polls"), slow_job_line("Gemini"))
 
 
 # -- Vertex AI ---------------------------------------------------------------
@@ -393,10 +394,11 @@ async def _vertex_video_payload(value: str) -> dict[str, Any]:
     if value.startswith("gs://"):
         return {"gcsUri": value, "mimeType": "video/mp4"}
     if "generativelanguage.googleapis.com" in value:
-        raise as_person_line(ValueError(
+        raise with_person_line(ValueError(
             "Vertex can't read a Gemini API file URI. Wire the upstream node's 'Video' output "
             "(the saved clip) into 'Extend Video' instead."
-        ))
+        ), "Vertex can't read a Gemini API file URI. Wire the upstream node's “Video” output, the saved clip, "
+            "into “Extend Video” instead.")
     if value.startswith(("http://", "https://")):
         data, _type = await fetch_public_media(value, label="Veo clip", max_bytes=MAX_CLIP_BYTES)
     elif value.startswith("data:"):
@@ -496,7 +498,7 @@ async def _poll_vertex_operation(
             "video": {"type": "Video", "value": str(file_path)},
             "source_uri": {"type": "Video", "value": gcs_uri or str(file_path)},
         }
-    raise RuntimeError(f"Veo (Vertex) timed out after {max_polls} polls")
+    raise with_person_line(RuntimeError(f"Veo (Vertex) timed out after {max_polls} polls"), slow_job_line("Google Vertex AI"))
 
 
 def _veo_parameters(params: dict[str, Any]) -> dict[str, Any]:
@@ -531,7 +533,7 @@ async def _handle_veo_vertex(
     # Lite's model card is contradictory about frames (modalities say no image
     # input, capabilities list image-to-video), so they're sent and Google decides.
     if str(node.params.get("resolution")) == "4k" and model not in VERTEX_4K_MODELS:
-        raise as_person_line(ValueError("On Vertex only Veo 3.1 (Standard) renders 4K; pick 1080p or Veo 3.1"))
+        raise with_person_line(ValueError("On Vertex only Veo 3.1 (Standard) renders 4K; pick 1080p or Veo 3.1"), "On Vertex only Veo 3.1 Standard renders 4K. Pick 1080p, or pick Veo 3.1.")
     instance: dict[str, Any] = {}
     if prompt_text:
         instance["prompt"] = prompt_text

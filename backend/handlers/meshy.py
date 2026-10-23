@@ -14,7 +14,7 @@ from pathlib import Path
 
 import sys
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import as_person_line, missing_file_line, with_person_line
+from execution.person_line import as_person_line, missing_file_line, slow_job_line, with_person_line
 
 MESHY_API_BASE = "https://api.meshy.ai/openapi"
 # "Maximum file size: 20 MB" for image_url and texture_image_url
@@ -316,7 +316,7 @@ async def _poll_meshy_task(
             error = data.get("task_error", {}).get("message", "Unknown error")
             raise RuntimeError(f"Meshy task {status.lower()}: {error}")
 
-    raise RuntimeError(f"Meshy task timed out after {max_polls} polls")
+    raise with_person_line(RuntimeError(f"Meshy task timed out after {max_polls} polls"), slow_job_line("Meshy"))
 
 
 async def handle_meshy_multi_image_to_3d(

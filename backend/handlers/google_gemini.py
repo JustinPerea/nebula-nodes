@@ -16,7 +16,7 @@ from services.retired_nodes import GEMINI_TTS_PREVIEWS_SHUTDOWN, default_until
 from services.output import get_run_dir, save_base64_image
 from execution.missing_credential import MissingCredentialError
 from services.param_defaults import param_default
-from execution.person_line import as_person_line
+from execution.person_line import as_person_line, model_name, option_label, option_labels, with_person_line
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
@@ -169,9 +169,11 @@ async def handle_gemini_chat(
         if levels is not None and thinking_level not in levels:
             # The card marks a saved level the model lacks as "(unavailable for
             # selected model)"; refuse it before the request, like a Runway ratio.
-            raise as_person_line(ValueError(
+            raise with_person_line(ValueError(
                 f"Thinking level '{thinking_level}' isn't available for {model}. Pick one of: {', '.join(levels)}."
-            ))
+            ), f"{model_name(model, node.definition_id)} doesn't offer Thinking Level "
+                f"{option_label(node.definition_id, 'thinking_level', thinking_level) or thinking_level}. "
+                f"Pick {option_labels(node.definition_id, 'thinking_level', levels)}, then run the node again.")
         request_body["generationConfig"] = request_body.get("generationConfig", {})
         request_body["generationConfig"]["thinkingConfig"] = {"thinkingLevel": thinking_level}
     elif thinking_budget is not None and thinking_budget != "":

@@ -14,7 +14,10 @@ import { REFUSED_FALLBACK_COPY } from './errorCopy';
  *
  * In order:
  * - the handler wrote the person's line (`errorPerson`): the heading over
- *   that line, and nothing else (the specific text is for agents);
+ *   that line, and nothing else (the specific text is for agents), unless
+ *   the line was written for a provider's answer (`providerText`, round 3d:
+ *   "Meshy is busy. ...", Krea's refused input). GM: "Raw provider text
+ *   stays behind Details in every case.", so that text goes behind Details;
  * - the backend's classifier named the failure (blocked, auth, quota, rate
  *   limit, timeout, network, invalid input): the heading over its line, the
  *   fact the person needs, with the raw text behind Details;
@@ -30,6 +33,9 @@ export interface NodeErrorFields {
   category?: string;
   friendly?: string;
   person?: string;
+  /** The person's line was written for a provider's answer, whose own words
+   * are in `raw` (round 3d). */
+  providerText?: boolean;
 }
 
 export interface NodeErrorCopy {
@@ -39,9 +45,12 @@ export interface NodeErrorCopy {
   details: string | null;
 }
 
-export function nodeErrorCopy({ raw, category, friendly, person }: NodeErrorFields): NodeErrorCopy {
+export function nodeErrorCopy({ raw, category, friendly, person, providerText }: NodeErrorFields): NodeErrorCopy {
   const text = raw?.trim() ?? '';
-  if (person?.trim()) return { heading: RUN_NODE_HEADING, reason: person.trim(), details: null };
+  const line = person?.trim();
+  if (line) {
+    return { heading: RUN_NODE_HEADING, reason: line, details: providerText && text && text !== line ? text : null };
+  }
   if (!category) return { heading: '', reason: text || REFUSED_FALLBACK_COPY, details: null };
   // A named failure whose stored line was dropped (node_errors keeps no
   // hint equal to the error, e.g. a capability guardrail) reads its own text

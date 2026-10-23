@@ -14,7 +14,7 @@ import base64
 import math
 import httpx
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import as_person_line, missing_file_line, with_person_line
+from execution.person_line import as_person_line, missing_file_line, option_label, or_list, with_person_line
 
 RUNWAY_API_BASE = "https://api.dev.runwayml.com/v1"
 RUNWAY_HEADERS_BASE = {
@@ -172,6 +172,7 @@ def _runway_poll_config(api_key: str, submit_url: str) -> AsyncPollConfig:
         task_id_path="id",
         poll_interval=2.0,
         max_polls=300,
+        provider="Runway",
     )
 
 
@@ -295,7 +296,7 @@ async def handle_runway_video(
         raise ValueError(RETIRED_RUNWAY_MODELS[model])
     spec = RUNWAY_VIDEO_MODELS.get(model)
     if spec is None:
-        raise as_person_line(ValueError(f"Unknown Runway video model '{model}'. Choose one of: {_choices(RUNWAY_VIDEO_MODELS)}."))
+        raise with_person_line(ValueError(f"Unknown Runway video model '{model}'. Choose one of: {_choices(RUNWAY_VIDEO_MODELS)}."), "Pick a model in the node's Model field, then run the node again.")
     duration = _video_duration(spec, node.params.get("duration", 5))
     ratio = str(node.params.get("ratio") or "1280:720")
 
@@ -330,11 +331,13 @@ async def handle_runway_video(
             raise as_person_line(ValueError("Either an image or a text prompt is required"))
         if spec["t2v_ratios"] is None:
             text_capable = ", ".join(sorted(TEXT_TO_VIDEO_MODELS))
-            raise as_person_line(ValueError(
+            raise with_person_line(ValueError(
                 f"Model '{model}' requires an image input ({spec['label']} has no text-to-video). "
                 f"Connect an image, or use a text-to-video model: {text_capable}. "
                 "Nodes saved with the retired Gen-3a Turbo now use Gen-4 Turbo."
-            ))
+            ), f"{spec['label']} has no text-to-video, so it needs an image. Connect one, or pick a text-to-video "
+                f"model: {or_list(sorted(RUNWAY_VIDEO_MODELS[name]['label'] for name in TEXT_TO_VIDEO_MODELS))}. "
+                "Nodes saved with the retired Gen-3a Turbo now use Gen-4 Turbo.")
         if ratio not in spec["t2v_ratios"]:
             raise as_person_line(ValueError(
                 f"Ratio '{ratio}' isn't available for {spec['label']} text-to-video. "
@@ -392,7 +395,8 @@ async def handle_runway_aleph(
     if model in RETIRED_RUNWAY_MODELS:
         raise ValueError(RETIRED_RUNWAY_MODELS[model])
     if model != "aleph2":
-        raise as_person_line(ValueError(f"Unknown Runway Aleph model '{model}'. Use aleph2."))
+        raise with_person_line(ValueError(f"Unknown Runway Aleph model '{model}'. Use aleph2."), f"Pick {option_label(node.definition_id, 'model', 'aleph2') or 'Aleph 2.0'} in the node's Model field, "
+            "then run the node again.")
 
     video_input = inputs.get("video")
     if not video_input or not video_input.value:
@@ -465,7 +469,7 @@ async def handle_runway_image(
     model = str(node.params.get("model") or "gen4_image")
     spec = RUNWAY_IMAGE_MODELS.get(model)
     if spec is None:
-        raise as_person_line(ValueError(f"Unknown Runway image model '{model}'. Choose one of: {_choices(RUNWAY_IMAGE_MODELS)}."))
+        raise with_person_line(ValueError(f"Unknown Runway image model '{model}'. Choose one of: {_choices(RUNWAY_IMAGE_MODELS)}."), "Pick a model in the node's Model field, then run the node again.")
     ratio = str(node.params.get("ratio") or "1360:768")
     if ratio not in spec["ratios"]:
         raise as_person_line(ValueError(f"Ratio '{ratio}' isn't available for {spec['label']}. Pick one of: {_choices(spec['ratios'])}."))
