@@ -385,6 +385,39 @@ describe('hidden settings: a provider shows only what it offers (PR 5)', () => {
     expect(document.querySelector('.provider-switcher__stop')).toBeNull();
   });
 
+  // The Inspector's bug (GM - Design, 2026-10-23): a floating panel beside a
+  // node low on the canvas must stay above the bottom bar. The chip's popover
+  // flipped up only when it ran off the window, so just above the bar it
+  // opened down over the bar.
+  it('the chip popover flips above the chip rather than over the bottom bar', () => {
+    vi.stubGlobal('innerWidth', 1280);
+    vi.stubGlobal('innerHeight', 800);
+    const bar = document.createElement('div');
+    bar.setAttribute('data-bottom-bar', '');
+    document.body.append(bar);
+    const rects = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.hasAttribute('data-bottom-bar')) return new DOMRect(395, 729, 490, 47);
+      if (this.classList.contains('provider-switcher__popover')) return new DOMRect(0, 0, 300, 200);
+      if (this.classList.contains('model-node__provider-chip')) return new DOMRect(600, 536, 120, 24);
+      return new DOMRect();
+    });
+    try {
+      withKeys({ FAL_KEY: KEY });
+      const node: Node<NodeData> = { id: 'n1', type: 'model-node', position: { x: 0, y: 0 },
+        data: { definitionId: 'flux-2-pro', label: 'FLUX.2', params: {}, state: 'idle', outputs: {} } };
+      useGraphStore.setState({ nodes: [node], edges: [] });
+      render(<ModelNode {...({ id: 'n1', data: node.data, selected: false } as NodeProps)} />);
+      fireEvent.click(screen.getByRole('button', { name: /^Provider for FLUX\.2/ }));
+      const popover = document.querySelector<HTMLElement>('.provider-switcher__popover')!;
+      expect(popover.classList.contains('provider-switcher__popover--above')).toBe(true);
+      expect(parseFloat(popover.style.top) + 200).toBeLessThanOrEqual(536);
+    } finally {
+      rects.mockRestore();
+      bar.remove();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('the chip popover offers the same reset row, and it writes the node', () => {
     withKeys({ FAL_KEY: KEY });
     const node: Node<NodeData> = { id: 'n1', type: 'model-node', position: { x: 0, y: 0 },

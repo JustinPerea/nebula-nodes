@@ -38,9 +38,11 @@ export function computeCanvasFitPadding(): PixelPadding {
     // the `.canvas-tabs` class when it became the workspace header.
     { selector: '.canvas-tabs-wrap', side: 'top' as const },
     { selector: '.toolbar', side: 'bottom' as const },
-    // An agent's proposal bar (and its undo notice) floats above the
-    // toolbar; Fit view with a proposal open must not tuck nodes under it.
+    // An agent's proposal bar floats above the toolbar, and the app's
+    // notices just above it (NoticeRegion); Fit view must not tuck nodes
+    // under either.
     { selector: '.proposal-bar-panel', side: 'bottom' as const },
+    { selector: '.notice-region__stack', side: 'bottom' as const },
     // The open Updates list and a dropped update card (top right): Show and
     // Fit view keep the nodes they frame out from under them.
     { selector: '.agent-notes-panel', side: 'right' as const },

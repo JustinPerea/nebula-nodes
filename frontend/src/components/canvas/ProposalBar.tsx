@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { Panel, useReactFlow } from '@xyflow/react';
-import { ChevronDown, ChevronLeft, ChevronRight, Eye, Play, X } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Eye, X } from 'lucide-react';
 import {
   acceptLabel,
   countdown,
@@ -11,9 +11,7 @@ import {
 } from '../../lib/canvasProposals';
 import { useProposalNotReady } from '../../hooks/useProposalReadiness';
 import { useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasProposalsStore';
-import { useGraphStore } from '../../store/graphStore';
 import '../../styles/canvasProposals.css';
-import { CanvasUndoNotice } from './CanvasUndoNotice';
 
 /** How long Accept/Reject ignore clicks after the shown proposal changes on its own. */
 const SWITCH_GUARD_MS = 600;
@@ -67,17 +65,11 @@ export function ProposalBar() {
   const proposals = useCanvasProposalsStore((s) => s.proposals);
   const pending = useCanvasProposalsStore((s) => s.pending);
   const errors = useCanvasProposalsStore((s) => s.errors);
-  const deferredRun = useCanvasProposalsStore((s) => s.deferredRun);
   // Review on its Update (Q112 a) asks for this one; paging moves on from it.
   const focusedId = useCanvasProposalsStore((s) => s.focusedId);
   const accept = useCanvasProposalsStore((s) => s.accept);
   const reject = useCanvasProposalsStore((s) => s.reject);
   const pruneExpired = useCanvasProposalsStore((s) => s.pruneExpired);
-  const runDeferred = useCanvasProposalsStore((s) => s.runDeferred);
-  const dismissDeferred = useCanvasProposalsStore((s) => s.dismissDeferred);
-  const isExecuting = useGraphStore((s) => s.isExecuting);
-  // The undo notice shares this panel, so the two stack instead of overlap.
-  const hasUndoNotice = useGraphStore((s) => Boolean(s.undoNotice));
   const { fitBounds, getInternalNode } = useReactFlow();
   // Track the shown proposal by id, never by position: a proposal that
   // arrives while the person is reading another must not take its place
@@ -122,7 +114,10 @@ export function ProposalBar() {
     };
   }, [currentId]);
 
-  if (open.length === 0 && !deferredRun && !hasUndoNotice) return null;
+  // The bar's notices (an accepted proposal waiting for the run, the canvas
+  // notice) are in the app's notice region (NoticeRegion, GM - Design
+  // 2026-10-23); the bar lifts above them in CSS (--notice-stack-h).
+  if (!current) return null;
 
   const page = (step: number) => {
     const next = open[(position + step + open.length) % open.length];
@@ -164,177 +159,153 @@ export function ProposalBar() {
 
   return (
     <Panel position="bottom-center" className="proposal-bar-panel">
-      {current && (
-        <div
-          className="proposal-bar"
-          tabIndex={-1}
-          role="region"
-          aria-label={`Proposal from ${current.view.agent.name}`}
-          style={{ ['--agent-color' as string]: current.view.agent.color }}
-        >
-          <div className="proposal-bar__main">
-            <div className="proposal-bar__who">
-              <span className="proposal-bar__dot" aria-hidden="true" />
-              <span className="proposal-bar__agent">{current.view.agent.name}</span>
-              <span className="proposal-bar__proposes">proposes</span>
-              {open.length > 1 && (
-                <span className="proposal-bar__pager">
-                  <button
-                    type="button"
-                    aria-label="Previous proposal"
-                    onClick={() => page(-1)}
-                  >
-                    <ChevronLeft size={12} aria-hidden="true" />
-                  </button>
-                  {position + 1} of {open.length}
-                  <button
-                    type="button"
-                    aria-label="Next proposal"
-                    onClick={() => page(1)}
-                  >
-                    <ChevronRight size={12} aria-hidden="true" />
-                  </button>
-                </span>
+      <div
+        className="proposal-bar"
+        tabIndex={-1}
+        role="region"
+        aria-label={`Proposal from ${current.view.agent.name}`}
+        style={{ ['--agent-color' as string]: current.view.agent.color }}
+      >
+        <div className="proposal-bar__main">
+          <div className="proposal-bar__who">
+            <span className="proposal-bar__dot" aria-hidden="true" />
+            <span className="proposal-bar__agent">{current.view.agent.name}</span>
+            <span className="proposal-bar__proposes">proposes</span>
+            {open.length > 1 && (
+              <span className="proposal-bar__pager">
+                <button
+                  type="button"
+                  aria-label="Previous proposal"
+                  onClick={() => page(-1)}
+                >
+                  <ChevronLeft size={12} aria-hidden="true" />
+                </button>
+                {position + 1} of {open.length}
+                <button
+                  type="button"
+                  aria-label="Next proposal"
+                  onClick={() => page(1)}
+                >
+                  <ChevronRight size={12} aria-hidden="true" />
+                </button>
+              </span>
+            )}
+          </div>
+          <p ref={noteRef} className="proposal-bar__note">{current.view.note}</p>
+          <p className="proposal-bar__summary">{proposalSummary(current.view)}</p>
+          {notReady.length > 0 && (
+            // Accept stays as the Run button does for a node without its
+            // key: the run is refused at that node, before anything is spent.
+            <ul className="proposal-bar__readiness" aria-label="Can't run here">
+              {notReady.slice(0, READINESS_LINES).map((row) => (
+                <li key={row.ref} className="proposal-bar__not-ready">
+                  <span className="proposal-bar__not-ready-mark" aria-hidden="true">&#x26A0;</span>
+                  {notReadyLine(row)}
+                </li>
+              ))}
+              {moreNotReady && (
+                <li className="proposal-bar__not-ready proposal-bar__not-ready--more">
+                  and {notReady.length - READINESS_LINES} more in the details
+                </li>
               )}
-            </div>
-            <p ref={noteRef} className="proposal-bar__note">{current.view.note}</p>
-            <p className="proposal-bar__summary">{proposalSummary(current.view)}</p>
-            {notReady.length > 0 && (
-              // Accept stays as the Run button does for a node without its
-              // key: the run is refused at that node, before anything is spent.
-              <ul className="proposal-bar__readiness" aria-label="Can't run here">
-                {notReady.slice(0, READINESS_LINES).map((row) => (
-                  <li key={row.ref} className="proposal-bar__not-ready">
-                    <span className="proposal-bar__not-ready-mark" aria-hidden="true">&#x26A0;</span>
-                    {notReadyLine(row)}
-                  </li>
-                ))}
-                {moreNotReady && (
-                  <li className="proposal-bar__not-ready proposal-bar__not-ready--more">
-                    and {notReady.length - READINESS_LINES} more in the details
-                  </li>
-                )}
-              </ul>
-            )}
-            <p className="proposal-bar__meta">
-              {current.view.run.length > 0 && current.view.cost.paidRuns > 0
-                ? (current.view.cost.estimate ? 'List prices, not a quote · ' : 'No list price · ')
-                : ''}
-              expires in {countdown(current.view.expiresAt, now)}
-            </p>
-            {hasDetails && (
-              <button
-                type="button"
-                className="proposal-bar__details-toggle"
-                aria-expanded={detailsOpen}
-                onClick={() => setDetailsOpen((value) => !value)}
-              >
-                <ChevronDown size={12} aria-hidden="true" className="proposal-bar__chevron" />
-                {detailsLabel}
-              </button>
-            )}
-            {detailsOpen && hasDetails && (
-              <div className="proposal-bar__details" aria-label={hasChangeLines ? 'What Accept writes' : 'Details'}>
-                {noteClamped && (
-                  <section className="proposal-bar__group">
-                    <h3 className="proposal-bar__group-title">Note</h3>
-                    <p className="proposal-bar__note-full">{current.view.note}</p>
-                  </section>
-                )}
-                {moreNotReady && (
-                  <section className="proposal-bar__group">
-                    <h3 className="proposal-bar__group-title">Can&apos;t run here</h3>
-                    {notReady.map((row) => (
-                      <p key={row.ref} className="proposal-bar__line">{notReadyLine(row)}</p>
-                    ))}
-                  </section>
-                )}
-                {hasChangeLines && changes.map((group) => (
-                  <section key={group.id} className="proposal-bar__group">
-                    <h3 className="proposal-bar__group-title">{group.title}</h3>
-                    {group.lines.length === 0 ? (
-                      <p className="proposal-bar__line">default settings</p>
-                    ) : (
-                      <dl className="proposal-bar__lines">
-                        {group.lines.map((line) => (
-                          <div key={line.key} className="proposal-bar__line">
-                            <dt>{line.key}</dt>
-                            <dd>
-                              {line.from !== undefined && (
-                                <>
-                                  <span className="proposal-bar__from">{line.from}</span>
-                                  <span className="proposal-bar__arrow" aria-label="becomes"> → </span>
-                                </>
-                              )}
-                              <span className="proposal-bar__to">{line.to}</span>
-                            </dd>
-                          </div>
-                        ))}
-                      </dl>
-                    )}
-                  </section>
-                ))}
-              </div>
-            )}
-            {errors[current.view.id] && (
-              <p className="proposal-bar__error" role="alert">{errors[current.view.id]}</p>
-            )}
-          </div>
-          <div className="proposal-bar__actions">
-            <button
-              type="button"
-              className="proposal-bar__button"
-              onClick={() => show(current)}
-            >
-              <Eye size={13} aria-hidden="true" />
-              Show
-            </button>
-            <button
-              type="button"
-              className="proposal-bar__button"
-              disabled={Boolean(pending[current.view.id])}
-              onClick={() => {
-                if (settled()) void reject(current.view.id);
-              }}
-            >
-              <X size={13} aria-hidden="true" />
-              {pending[current.view.id] === 'reject' ? 'Rejecting…' : 'Reject'}
-            </button>
-            <button
-              type="button"
-              className="proposal-bar__button proposal-bar__button--primary"
-              disabled={Boolean(pending[current.view.id])}
-              onClick={() => {
-                if (settled()) void accept(current.view.id);
-              }}
-            >
-              {pending[current.view.id] === 'accept' ? 'Accepting…' : acceptLabel(current.view)}
-            </button>
-          </div>
-        </div>
-      )}
-      {deferredRun && (
-        <div className="proposal-bar proposal-bar--notice" role="status">
-          <p className="proposal-bar__summary">
-            Added {deferredRun.agentName}&apos;s nodes. Run them when the current run finishes.
+            </ul>
+          )}
+          <p className="proposal-bar__meta">
+            {current.view.run.length > 0 && current.view.cost.paidRuns > 0
+              ? (current.view.cost.estimate ? 'List prices, not a quote · ' : 'No list price · ')
+              : ''}
+            expires in {countdown(current.view.expiresAt, now)}
           </p>
-          <div className="proposal-bar__actions">
+          {hasDetails && (
             <button
               type="button"
-              className="proposal-bar__button proposal-bar__button--primary"
-              disabled={isExecuting}
-              onClick={() => void runDeferred()}
+              className="proposal-bar__details-toggle"
+              aria-expanded={detailsOpen}
+              onClick={() => setDetailsOpen((value) => !value)}
             >
-              <Play size={13} aria-hidden="true" />
-              Run
+              <ChevronDown size={12} aria-hidden="true" className="proposal-bar__chevron" />
+              {detailsLabel}
             </button>
-            <button type="button" className="proposal-bar__button" aria-label="Dismiss" onClick={dismissDeferred}>
-              <X size={13} aria-hidden="true" />
-            </button>
-          </div>
+          )}
+          {detailsOpen && hasDetails && (
+            <div className="proposal-bar__details" aria-label={hasChangeLines ? 'What Accept writes' : 'Details'}>
+              {noteClamped && (
+                <section className="proposal-bar__group">
+                  <h3 className="proposal-bar__group-title">Note</h3>
+                  <p className="proposal-bar__note-full">{current.view.note}</p>
+                </section>
+              )}
+              {moreNotReady && (
+                <section className="proposal-bar__group">
+                  <h3 className="proposal-bar__group-title">Can&apos;t run here</h3>
+                  {notReady.map((row) => (
+                    <p key={row.ref} className="proposal-bar__line">{notReadyLine(row)}</p>
+                  ))}
+                </section>
+              )}
+              {hasChangeLines && changes.map((group) => (
+                <section key={group.id} className="proposal-bar__group">
+                  <h3 className="proposal-bar__group-title">{group.title}</h3>
+                  {group.lines.length === 0 ? (
+                    <p className="proposal-bar__line">default settings</p>
+                  ) : (
+                    <dl className="proposal-bar__lines">
+                      {group.lines.map((line) => (
+                        <div key={line.key} className="proposal-bar__line">
+                          <dt>{line.key}</dt>
+                          <dd>
+                            {line.from !== undefined && (
+                              <>
+                                <span className="proposal-bar__from">{line.from}</span>
+                                <span className="proposal-bar__arrow" aria-label="becomes"> → </span>
+                              </>
+                            )}
+                            <span className="proposal-bar__to">{line.to}</span>
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  )}
+                </section>
+              ))}
+            </div>
+          )}
+          {errors[current.view.id] && (
+            <p className="proposal-bar__error" role="alert">{errors[current.view.id]}</p>
+          )}
         </div>
-      )}
-      <CanvasUndoNotice />
+        <div className="proposal-bar__actions">
+          <button
+            type="button"
+            className="proposal-bar__button"
+            onClick={() => show(current)}
+          >
+            <Eye size={13} aria-hidden="true" />
+            Show
+          </button>
+          <button
+            type="button"
+            className="proposal-bar__button"
+            disabled={Boolean(pending[current.view.id])}
+            onClick={() => {
+              if (settled()) void reject(current.view.id);
+            }}
+          >
+            <X size={13} aria-hidden="true" />
+            {pending[current.view.id] === 'reject' ? 'Rejecting…' : 'Reject'}
+          </button>
+          <button
+            type="button"
+            className="proposal-bar__button proposal-bar__button--primary"
+            disabled={Boolean(pending[current.view.id])}
+            onClick={() => {
+              if (settled()) void accept(current.view.id);
+            }}
+          >
+            {pending[current.view.id] === 'accept' ? 'Accepting…' : acceptLabel(current.view)}
+          </button>
+        </div>
+      </div>
     </Panel>
   );
 }

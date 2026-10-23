@@ -119,8 +119,8 @@ export const DeferredCommandPalette = lazyWithPreload(
 );
 
 // Canvas overlays that draw only what the socket or a fetch brings in (an
-// agent's proposal and the undo notice that shares its bar, pins, agent
-// cursors); mounted at once inside Canvas by components/canvas/DeferredCanvasOverlays.tsx.
+// agent's proposal and its decision bar, pins, agent cursors); mounted at once
+// inside Canvas by components/canvas/DeferredCanvasOverlays.tsx.
 // Their stores stay in the entry, so nothing is missed before they arrive.
 export const DeferredProposalBar = lazyWithPreload(
   () => import('../components/canvas/ProposalBar'),
@@ -142,11 +142,12 @@ export const DeferredAgentCursorLayer = lazyWithPreload(
   (module) => module.AgentCursorLayer,
 );
 
-// The canvas notice on the other screens (round 3f): a line arrives only
-// after something fails, never at the first paint.
-export const DeferredStudioNotice = lazyWithPreload(
-  () => import('../components/canvas/StudioNotice'),
-  (module) => module.StudioNotice,
+// The app's one notice region (NoticeRegion, GM - Design 2026-10-23): a
+// notice arrives only after an edit, an undo or a failure, never at the
+// first paint. App mounts it at once on every screen but Projects.
+export const DeferredNoticeRegion = lazyWithPreload(
+  () => import('../components/NoticeRegion'),
+  (module) => module.NoticeRegion,
 );
 
 // Graph save / open (lib/graphFile.ts): used only inside those two actions,
@@ -173,7 +174,7 @@ export const DEFERRED_PRELOADS: readonly (() => Promise<unknown>)[] = [
   DeferredProposalLayer.preload,
   DeferredPinLayer.preload,
   DeferredAgentCursorLayer.preload,
-  DeferredStudioNotice.preload,
+  DeferredNoticeRegion.preload,
   graphFileModule.preload,
 ];
 
@@ -238,6 +239,8 @@ export const DEFERRED_MODULES: readonly string[] = [
   'components/canvas/ProposalLayer.tsx',
   'components/canvas/CanvasUndoNotice.tsx',
   'components/canvas/StudioNotice.tsx',
+  'components/canvas/DeferredRunNotice.tsx',
+  'components/NoticeRegion.tsx',
   'hooks/useProposalReadiness.ts',
   'components/canvas/PinLayer.tsx',
   'components/canvas/AgentCursorLayer.tsx',

@@ -61,6 +61,8 @@ type Card = { kind: 'note'; id: string } | { kind: 'summary'; ids: string[] };
 /** What the card and the list stop above (never overlap) when they share its columns. */
 const BELOW = [
   '.proposal-bar-panel',
+  // The app's notices, just above the bottom bar (NoticeRegion).
+  '.notice-region__stack',
   '.agent-log',
   '.agent-log-hidden-notice',
   '.panel-launcher--chat',

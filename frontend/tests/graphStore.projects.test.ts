@@ -67,6 +67,15 @@ describe('project graph replacement', () => {
     expect(loadRunHistory().map((run) => run.id)).toEqual(['run-A']);
   });
 
+  it('clears the canvas notice, so the old project\'s line and its buttons do not follow onto the new canvas', () => {
+    // Review, 2026-10-23: only Dismiss or the hold cleared it, so after an agent's
+    // switch the old project's edit notice stayed under the switch toast.
+    useGraphStore.getState().notify('An agent changed the canvas.', 'info');
+    expect(useGraphStore.getState().undoNotice).not.toBeNull();
+    expect(useGraphStore.getState().loadProjectGraph([node('B')], [], [])).toBe(true);
+    expect(useGraphStore.getState().undoNotice).toBeNull();
+  });
+
   it('preserves paid-run ownership on reload and refuses replacement until a terminal backend status', () => {
     const running = history('paid-run', 'running');
     setProjectContext({ id: 'A', revision: 'a' });
