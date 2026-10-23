@@ -45,8 +45,8 @@ export interface ExecutionStatusResult {
  * the caller with the client-owned run ID. Like every request's error it
  * carries a heading (the call's, when it came from one) and a reason. */
 export class ExecutionStartRejectedError extends RequestFailedError {
-  constructor(reason: string, status: number, options: { heading?: string; detail?: unknown } = {}) {
-    super(options.heading ?? '', status, { reason, detail: options.detail });
+  constructor(reason: string, status: number, options: { heading?: string; detail?: unknown; code?: string | null } = {}) {
+    super(options.heading ?? '', status, { reason, detail: options.detail, code: options.code });
     this.name = 'ExecutionStartRejectedError';
   }
 }
@@ -59,7 +59,7 @@ async function executionStartResponseError(heading: string, response: Response):
   // forwarded and the backend scheduled work, so it is not proof of rejection.
   // 507 is Nebula's explicit pre-provider durable-safety rejection.
   if ((response.status >= 500 && response.status !== 507) || response.status === 408) return error;
-  return new ExecutionStartRejectedError(error.reason, response.status, { heading, detail: error.detail });
+  return new ExecutionStartRejectedError(error.reason, response.status, { heading, detail: error.detail, code: error.code });
 }
 
 /* Every call below names its action (GM, error-copy round 2: "Couldn't

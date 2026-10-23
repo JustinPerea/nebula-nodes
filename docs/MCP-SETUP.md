@@ -1453,6 +1453,17 @@ How it works (`backend/services/agent_spend.py`):
 - A refusal is a 403 whose message names the cost, the limit and the exact
   `nebula propose ... --run <node>` to send instead. Accepting a proposal is
   the person's approval, so the canvas runs it without checking a limit.
+- Which refusals carry a `code`: every 403 that refuses a request only
+  because it isn't the person's (a billing change on any route above, a
+  run the person approved started by someone else, a run or a Moodboard read
+  over the spending limits) answers a request with no agent marker (a canvas
+  tab not connected as the person, the CLI without `NEBULA_AGENT_NAME`, curl)
+  with `code: "person_required"` beside the same `detail`, as the person-only
+  routes do. The canvas reads the code and asks the person to reconnect; a tab
+  whose person token is from an earlier launch can then send the same request
+  again. An agent's refusal is unchanged: the same `detail` and no `code`.
+  `detail` is word for word the same either way, so scripts and the CLI, which
+  read it, see no difference.
 - Only the person can change the limits: `PUT /api/settings` refuses every
   change from anyone without the person token.
 

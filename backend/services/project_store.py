@@ -32,7 +32,15 @@ class ProjectStoreError(Exception):
 
 
 class ProjectLimitError(ProjectStoreError):
-    pass
+    """A limit the store keeps. ``limit`` says which: "projects" (how many
+    there may be) or "storage" (how big the catalog may grow). The answer
+    carries it beside ``detail`` (main._storage_error_body), so the Projects
+    screen can tell a full store from a copy that is itself too large without
+    reading the words (Q116 a)."""
+
+    def __init__(self, message: str, limit: str) -> None:
+        super().__init__(message)
+        self.limit = limit
 
 
 def now() -> str:
@@ -311,10 +319,10 @@ class ProjectStore:
         """Write/fsync a private temporary catalog before any live graph edit."""
         self._ensure_root()
         if len(catalog["projects"]) > MAX_PROJECTS:
-            raise ProjectLimitError("Project limit reached")
+            raise ProjectLimitError("Project limit reached", "projects")
         encoded = json.dumps(catalog, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8")
         if len(encoded) > MAX_CATALOG_BYTES:
-            raise ProjectLimitError("Project storage limit reached")
+            raise ProjectLimitError("Project storage limit reached", "storage")
         temporary = self.root / f".catalog.{uuid4().hex}.tmp"
         try:
             fd = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)

@@ -56,7 +56,13 @@ export function CommandPalette() {
     ? s.nodes.flatMap((n) => [n.id, (typeof n.data?.label === 'string' && n.data.label) || n.data?.definitionId || n.id])
     : NO_NODE_FIELDS)));
 
+  // Mirrors `open` for the global hotkey handler, which subscribes once. The
+  // handlers that open and close set it at once, so a ⌘K right after the
+  // palette opens closes it instead of opening it again before an effect runs.
+  const openRef = useRef(false);
+
   const close = useCallback(() => {
+    openRef.current = false;
     setOpen(false);
     setMode('commands');
     setQuery('');
@@ -129,8 +135,7 @@ export function CommandPalette() {
     [open, addNodeAtCenter, executeGraph, fitCanvasView, enterCreateView, togglePanel, nodeCount, isExecuting, isImportingGraph, canSave, canLoad, canvasNodes, focusNode]
   );
 
-  // Mirror `open` into a ref so the global hotkey handler stays subscribed once.
-  const openRef = useRef(false);
+  // And kept in step with `open` after every render.
   useEffect(() => {
     openRef.current = open;
   }, [open]);
@@ -145,6 +150,7 @@ export function CommandPalette() {
       setMode('commands');
       setQuery('');
       setSelected(0);
+      openRef.current = true;
       setOpen(true);
     };
     function onKey(e: KeyboardEvent) {

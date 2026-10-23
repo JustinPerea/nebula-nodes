@@ -34,7 +34,8 @@ import { claimIntent } from '../../lib/heldIntents';
 import '../../styles/personal-agents.css';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl, personTokenForSocket } from '../../lib/backend';
 import { DEFAULT_BACKEND_PORT, devProxyPort } from '../../lib/devBackendPort';
-import { CONNECTION_LOST_COPY, ConnectionLostError, NO_ANSWER_STATUS, readDetail, warnFailure, failureMessage, failureCopy, oneLine } from '../../lib/errorCopy';
+import { CONNECTION_LOST_COPY, ConnectionLostError, NO_ANSWER_STATUS, PERSON_REQUIRED_CODE, personRequiredCopy, readDetail, warnFailure, failureMessage, failureCopy, oneLine } from '../../lib/errorCopy';
+import { ErrorDetails } from '../failure/ErrorDetails';
 import { chatUploadChipError } from '../../lib/chatUploadCopy';
 import { chatAuthority } from '../../lib/commonsChatAuthority';
 import { onPersonConnected, reportPersonRequired } from '../../lib/personSession';
@@ -135,6 +136,9 @@ type SystemLine = {
   kind: 'system';
   text: string;
   tone?: 'neutral' | 'error' | 'success';
+  /** Text behind a collapsed Details toggle under the line: a person-only
+   * refusal's own words, written for agents (GM, Q116 a). */
+  details?: string;
 };
 
 type ThoughtChunk = {
@@ -353,7 +357,7 @@ function AssistantBubble({ message, agentName, onPermission }: {
               className={`chat__system chat__system--${tone}`}
               data-chat-system-tone={tone}
             >
-              {part.text}
+              {part.details ? <><span>{part.text}</span><ErrorDetails raw={part.details} className="chat__system-details" /></> : part.text}
             </div>
           );
         }
@@ -1152,7 +1156,10 @@ export function ChatPanel() {
           }
           if (type === 'error') {
             const errText = String(event.message ?? 'unknown error');
-            if (event.code === 'person_required') reportPersonRequired();
+            // A person-only refusal says GM's line, by its code; the backend's
+            // words, written for agents, go behind Details (Q116 a).
+            const personRequired = event.code === PERSON_REQUIRED_CODE;
+            if (personRequired) reportPersonRequired();
             // The personal agent stopped (crash, idle timeout, closed): the next send starts a new one.
             if (event.code === 'personal_session_ended') setSessionId(null);
             if (event.code === 'personal_agent_warning_required') {
@@ -1170,7 +1177,9 @@ export function ChatPanel() {
                     ? { ...p, result: '(stream ended before this tool returned)', isError: true }
                     : p,
                 ),
-                { kind: 'system', text: `Warning: ${errText}`, tone: 'error' },
+                personRequired
+                  ? { kind: 'system', text: personRequiredCopy(), tone: 'error', details: errText }
+                  : { kind: 'system', text: `Warning: ${errText}`, tone: 'error' },
               ],
               streaming: false,
             }));

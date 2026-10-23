@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import type { Node, Edge, Viewport } from '@xyflow/react';
-import type { DynamicNodeData, NodeData, NodeState } from '../types';
+import type { DynamicNodeData, NodeData } from '../types';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { shotPortId } from '../constants/ports';
 import { backendAssetUrlSync, getCachedBackendBaseUrl } from './backend';
@@ -18,7 +18,18 @@ import {
   GRAPH_BUNDLE_MAX_ASSET_BYTES,
   GRAPH_BUNDLE_MAX_IMPORT_BYTES,
   GRAPH_BUNDLE_MAX_TOTAL_BYTES,
+  GRAPH_JSON_MAX_IMPORT_BYTES,
+  GRAPH_MAX_DEPTH,
+  GRAPH_MAX_EDGES,
+  GRAPH_MAX_NODES,
+  GRAPH_MAX_VALUES,
+  GraphStructureLimitError,
+  assertGraphComplexityWithinLimits,
   normalizeRuntimeMediaParams,
+  saveBlobWithPicker,
+  serializeGraph,
+  type NebulaFile,
+  type NebulaNode,
 } from './graphFileShared';
 
 /** The Toolbar's "Save graph" / "Load graph", as GM's headings (round 2). */
@@ -51,48 +62,21 @@ const LOAD_GRAPH = "Couldn't load the graph.";
 export { GRAPH_PARAMS_VERSION };
 // Shared with startup code (lib/graphFileShared.ts); re-exported for this module's callers.
 export { GRAPH_BUNDLE_MAX_ASSET_BYTES, GRAPH_BUNDLE_MAX_IMPORT_BYTES, GRAPH_BUNDLE_MAX_TOTAL_BYTES, normalizeRuntimeMediaParams };
+// The .nebula writer lives in the startup entry (graphFileShared) so a held
+// recovered copy can be downloaded even when this chunk can't load (Q116 a).
+export { serializeGraph };
+export type { NebulaFile };
+// Load graph's limits and its shape walk live there too, so the unsaved
+// edits download can tell whether Load graph will open its file
+// (editsFileReopens), from the same numbers (Q116 a review).
+export {
+  GRAPH_JSON_MAX_IMPORT_BYTES, GRAPH_MAX_DEPTH, GRAPH_MAX_EDGES, GRAPH_MAX_NODES, GRAPH_MAX_VALUES,
+  GraphStructureLimitError, assertGraphComplexityWithinLimits,
+};
 
-export interface NebulaFile {
-  version: 1 | 2 | 3;
-  /** See GRAPH_PARAMS_VERSION. Missing in files saved before 2026-10-17. */
-  paramsVersion?: number;
-  name: string;
-  createdAt: string;
-  nodes: NebulaNode[];
-  edges: NebulaEdge[];
-  viewport?: { x: number; y: number; zoom: number };
-}
 
-interface NebulaNode {
-  id: string;
-  type: string;
-  position: { x: number; y: number };
-  data: {
-    label: string;
-    definitionId: string;
-    params: Record<string, unknown>;
-    outputs?: NodeData['outputs'];
-    state?: NodeState;
-  };
-}
-
-interface NebulaEdge {
-  id: string;
-  source: string;
-  sourceHandle: string | null | undefined;
-  target: string;
-  targetHandle: string | null | undefined;
-  type: string;
-  data?: Record<string, unknown>;
-}
-
-export const GRAPH_JSON_MAX_IMPORT_BYTES = 16 * 1024 * 1024;
 export const GRAPH_BUNDLE_MAX_MEMBERS = 4096;
 export const GRAPH_BUNDLE_MAX_ASSET_MEMBERS = GRAPH_BUNDLE_MAX_MEMBERS - 1; // graph.json
-export const GRAPH_MAX_NODES = 10_000;
-export const GRAPH_MAX_EDGES = 50_000;
-export const GRAPH_MAX_DEPTH = 64;
-export const GRAPH_MAX_VALUES = 1_000_000;
 
 export interface GraphBundleAssetLimits {
   maxAssetBytes: number;
@@ -138,12 +122,6 @@ export class GraphBundleImportTooLargeError extends FailureNotice {
     this.name = 'GraphBundleImportTooLargeError';
   }
 }
-export class GraphStructureLimitError extends FailureNotice {
-  constructor(reason: string) {
-    super('', reason);
-    this.name = 'GraphStructureLimitError';
-  }
-}
 
 const GRAPH_FILE_DAMAGED_COPY = "This file is damaged or isn't a Nebula graph.";
 const GRAPH_FILE_NEWER_COPY = 'This file is from a newer Nebula. Update Nebula, then open it again.';
@@ -178,50 +156,6 @@ export async function inspectGraphFileWithinLimit(file: Blob): Promise<GraphFile
   return { file, isZip };
 }
 
-/**
- * Serialize current graph state to .nebula format.
- * Strips outputs, errors, progress, streaming state — only persists structure + params.
- */
-export function serializeGraph(
-  nodes: Node<NodeData>[],
-  edges: Edge[],
-  viewport?: Viewport,
-  name?: string,
-): NebulaFile {
-  return {
-    version: 2,
-    paramsVersion: GRAPH_PARAMS_VERSION,
-    name: name ?? 'Untitled Graph',
-    createdAt: new Date().toISOString(),
-    nodes: nodes.map((n) => {
-      const hasOutputs = n.data.outputs && Object.keys(n.data.outputs).length > 0;
-      return {
-        id: n.id,
-        type: n.type ?? 'model-node',
-        position: { x: n.position.x, y: n.position.y },
-        data: {
-          label: n.data.label,
-          definitionId: n.data.definitionId,
-          params: normalizeRuntimeMediaParams(n.data.definitionId, n.data.params),
-          outputs: hasOutputs ? { ...n.data.outputs } : undefined,
-          state: hasOutputs ? 'complete' : 'idle',
-        },
-      };
-    }),
-    edges: edges.map((e) => ({
-      id: e.id,
-      source: e.source,
-      sourceHandle: e.sourceHandle,
-      target: e.target,
-      targetHandle: e.targetHandle,
-      type: e.type ?? 'typed-edge',
-      data: e.data ? { ...(e.data as Record<string, unknown>) } : undefined,
-    })),
-    viewport: viewport
-      ? { x: viewport.x, y: viewport.y, zoom: viewport.zoom }
-      : undefined,
-  };
-}
 
 /**
  * Deserialize a .nebula file back into React Flow nodes and edges.
@@ -710,52 +644,9 @@ export async function saveToFile(
     return null;
   }
   const suggestedName = `${file.name.replace(/[^a-zA-Z0-9-_ ]/g, '')}.nebula.zip`;
-
-  // Try File System Access API first (Chrome/Edge)
-  if ('showSaveFilePicker' in window) {
-    try {
-      const handle = await (window as unknown as {
-        showSaveFilePicker: (opts: {
-          suggestedName: string;
-          types: Array<{
-            description: string;
-            accept: Record<string, string[]>;
-          }>;
-        }) => Promise<FileSystemFileHandle>;
-      }).showSaveFilePicker({
-        suggestedName,
-        types: [
-          {
-            description: 'Nebula Node Graph Bundle',
-            accept: { 'application/zip': ['.nebula.zip', '.zip'] },
-          },
-        ],
-      });
-      const writable = await handle.createWritable();
-      await writable.write(blob);
-      await writable.close();
-      warnAboutSkippedBundleAssets(assetSummary);
-      return assetSummary;
-    } catch (err) {
-      if ((err as DOMException).name === 'AbortError') return null;
-      console.warn('File System Access API failed, falling back to download:', err);
-    }
-  }
-
-  // Fallback: download via <a> tag
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = suggestedName;
-  try {
-    document.body.appendChild(a);
-    a.click();
-  } finally {
-    a.remove();
-    // Match World asset downloads: allow the browser to consume the URL
-    // before releasing its backing Blob, including asynchronous WebViews.
-    window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
-  }
+  const saved = await saveBlobWithPicker(blob, suggestedName,
+    { description: 'Nebula Node Graph Bundle', accept: { 'application/zip': ['.nebula.zip', '.zip'] } });
+  if (saved === null) return null;
   warnAboutSkippedBundleAssets(assetSummary);
   return assetSummary;
 }
@@ -908,86 +799,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function* jsonChildValues(value: object): Generator<unknown> {
-  if (Array.isArray(value)) {
-    // JSON.stringify materializes sparse slots as null, so count every index.
-    for (let index = 0; index < value.length; index += 1) yield value[index];
-    return;
-  }
-  for (const key in value as Record<string, unknown>) {
-    if (Object.prototype.hasOwnProperty.call(value, key)) {
-      yield (value as Record<string, unknown>)[key];
-    }
-  }
-}
-
-/** Match the backend restore preflight without recursive JavaScript calls.
- * The enter/exit frames preserve JSON-tree depth semantics and reject cycles
- * in live state before JSON.stringify can throw after expensive asset work. */
-export function assertGraphComplexityWithinLimits(value: unknown): void {
-  if (isRecord(value)) {
-    if (Array.isArray(value.nodes) && value.nodes.length > GRAPH_MAX_NODES) {
-      throw new GraphStructureLimitError(`Graph contains more than ${GRAPH_MAX_NODES.toLocaleString()} nodes.`);
-    }
-    if (Array.isArray(value.edges) && value.edges.length > GRAPH_MAX_EDGES) {
-      throw new GraphStructureLimitError(`Graph contains more than ${GRAPH_MAX_EDGES.toLocaleString()} edges.`);
-    }
-  }
-
-  type Frame =
-    | { kind: 'value'; value: unknown; depth: number }
-    | { kind: 'children'; iterator: Iterator<unknown>; depth: number }
-    | { kind: 'exit'; value: object };
-  const stack: Frame[] = [{ kind: 'value', value, depth: 0 }];
-  const ancestors = new WeakSet<object>();
-  let valueCount = 0;
-
-  while (stack.length > 0) {
-    const frame = stack.pop() as Frame;
-    if (frame.kind === 'exit') {
-      ancestors.delete(frame.value);
-      continue;
-    }
-    if (frame.kind === 'children') {
-      const child = frame.iterator.next();
-      if (!child.done) {
-        // Resume this iterator after validating one child. Keeping iterators
-        // rather than pushing every sibling bounds traversal memory by depth,
-        // including for a sparse or million-value live array.
-        stack.push(frame);
-        stack.push({ kind: 'value', value: child.value, depth: frame.depth });
-      }
-      continue;
-    }
-
-    const current = frame.value;
-    valueCount += 1;
-    if (valueCount > GRAPH_MAX_VALUES) {
-      throw new GraphStructureLimitError(
-        `Graph contains more than ${GRAPH_MAX_VALUES.toLocaleString()} values.`,
-      );
-    }
-    if (frame.depth > GRAPH_MAX_DEPTH) {
-      throw new GraphStructureLimitError(`Graph is nested more than ${GRAPH_MAX_DEPTH} levels deep.`);
-    }
-    if (typeof current === 'number' && !Number.isFinite(current)) {
-      throw new GraphStructureLimitError('Graph contains a non-finite number.');
-    }
-    if (!current || typeof current !== 'object') continue;
-    if (ancestors.has(current)) {
-      throw new GraphStructureLimitError('Graph contains a circular value that cannot be saved.');
-    }
-
-    ancestors.add(current);
-    stack.push({ kind: 'exit', value: current });
-    stack.push({
-      kind: 'children',
-      iterator: jsonChildValues(current),
-      depth: frame.depth + 1,
-    });
-  }
-}
-
 function isFinitePoint(value: unknown): value is { x: number; y: number } {
   return isRecord(value)
     && typeof value.x === 'number'
@@ -1115,6 +926,58 @@ function validatedRestoreMapping(value: unknown): Map<string, string> {
 /** GM's heading for the bundle restore (error-copy round 2). */
 const RESTORE_ASSETS = "Couldn't restore the asset.";
 
+/** What Load graph hands the canvas. */
+export interface LoadedGraph {
+  nodes: Node<NodeData>[];
+  edges: Edge[];
+  viewport?: Viewport;
+  /** Forwarded to POST /api/graph/import, which upgrades older files once. */
+  paramsVersion: number;
+  warnings: string[];
+}
+
+/** A graph file as Load graph reads it (the reader loadFromFile uses, after
+ * its picker): a .nebula.zip bundle goes through POST /api/outputs/restore,
+ * a plain .nebula (JSON) is checked and read here. Throws what it found
+ * wrong; loadFromFile turns that into the notice. */
+export async function readGraphSelection(selection: GraphFileSelection): Promise<LoadedGraph> {
+  let parsed: unknown;
+  let restoreWarnings: string[] = [];
+
+  if (selection.isZip) {
+    // The backend owns bounded ZIP preflight, graph.json inflation, graph
+    // validation, and atomic extraction. Do not pass this buffer to JSZip:
+    // compressed member sizes are not a trustworthy browser-memory bound.
+    const resp = await apiRequest(RESTORE_ASSETS, '/api/outputs/restore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/zip' },
+      body: selection.file,
+    });
+
+    const restored = await resp.json() as unknown;
+    if (!isRecord(restored)) throw new GraphFileInvalidError('Asset restore returned an invalid response');
+    parsed = restored.graph;
+    assertGraphComplexityWithinLimits(parsed);
+    assertValidNebulaEnvelope(parsed);
+    const mapping = validatedRestoreMapping(restored.urlMapping);
+    restoreWarnings = rewriteAssetUrls(parsed.nodes, mapping);
+  } else {
+    // Plain JSON — v1/v2 backward compat.
+    const buffer = await selection.file.arrayBuffer();
+    const text = new TextDecoder('utf-8').decode(buffer);
+    parsed = JSON.parse(text) as unknown;
+    assertGraphComplexityWithinLimits(parsed);
+    assertValidNebulaEnvelope(parsed);
+  }
+
+  const worldWarnings = sanitizeImportedSpatialOutputs(parsed.nodes);
+  const result = deserializeGraph(parsed);
+  return {
+    ...result,
+    warnings: [...restoreWarnings, ...worldWarnings, ...result.warnings],
+  };
+}
+
 /**
  * Load graph from a file using the File System Access API.
  * Falls back to <input type="file"> if the API is not available.
@@ -1126,14 +989,7 @@ const RESTORE_ASSETS = "Couldn't restore the asset.";
  *
  * Returns null on user cancellation or hard parse failure.
  */
-export async function loadFromFile(): Promise<{
-  nodes: Node<NodeData>[];
-  edges: Edge[];
-  viewport?: Viewport;
-  /** Forwarded to POST /api/graph/import, which upgrades older files once. */
-  paramsVersion: number;
-  warnings: string[];
-} | null> {
+export async function loadFromFile(): Promise<LoadedGraph | null> {
   let selection: GraphFileSelection | null = null;
 
   // Try File System Access API first
@@ -1177,41 +1033,7 @@ export async function loadFromFile(): Promise<{
   }
 
   try {
-    let parsed: unknown;
-    let restoreWarnings: string[] = [];
-
-    if (selection.isZip) {
-      // The backend owns bounded ZIP preflight, graph.json inflation, graph
-      // validation, and atomic extraction. Do not pass this buffer to JSZip:
-      // compressed member sizes are not a trustworthy browser-memory bound.
-      const resp = await apiRequest(RESTORE_ASSETS, '/api/outputs/restore', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/zip' },
-        body: selection.file,
-      });
-
-      const restored = await resp.json() as unknown;
-      if (!isRecord(restored)) throw new GraphFileInvalidError('Asset restore returned an invalid response');
-      parsed = restored.graph;
-      assertGraphComplexityWithinLimits(parsed);
-      assertValidNebulaEnvelope(parsed);
-      const mapping = validatedRestoreMapping(restored.urlMapping);
-      restoreWarnings = rewriteAssetUrls(parsed.nodes, mapping);
-    } else {
-      // Plain JSON — v1/v2 backward compat.
-      const buffer = await selection.file.arrayBuffer();
-      const text = new TextDecoder('utf-8').decode(buffer);
-      parsed = JSON.parse(text) as unknown;
-      assertGraphComplexityWithinLimits(parsed);
-      assertValidNebulaEnvelope(parsed);
-    }
-
-    const worldWarnings = sanitizeImportedSpatialOutputs(parsed.nodes);
-    const result = deserializeGraph(parsed);
-    return {
-      ...result,
-      warnings: [...restoreWarnings, ...worldWarnings, ...result.warnings],
-    };
+    return await readGraphSelection(selection);
   } catch (err) {
     console.error('[nebula] graph load', err instanceof GraphFileInvalidError ? err.detail : err);
     // A request's error already names its action ("Couldn't restore the

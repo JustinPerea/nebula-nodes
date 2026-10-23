@@ -149,7 +149,28 @@ body.app-slava-restraint .project-home__loading { display: flex; align-items: ce
 body.app-slava-restraint .project-home__loading-dot { width: 6px; height: 6px; border-radius: var(--sr-radius-pill); background: var(--sr-ink-light); }
 body.app-slava-restraint .project-home__error { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; margin-bottom: 28px; border: 1px solid var(--sr-error-border); border-radius: var(--sr-node-media-radius); background: var(--sr-error-soft); color: var(--sr-ink); font-size: 13px; line-height: 1.5; }
 body.app-slava-restraint .project-home__error > span { overflow-wrap: anywhere; }
+/* GM, Q116 a: a person-only refusal's line, with the agents' text behind the
+   shared collapsed Details toggle (components/failure/ErrorDetails) under it. */
+body.app-slava-restraint .project-home__error-text { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+body.app-slava-restraint .project-home__error-details summary { width: fit-content; color: var(--sr-ink-light); font-size: 12px; cursor: pointer; }
+body.app-slava-restraint .project-home__error-details summary:focus-visible { outline: var(--sr-focus-outline); outline-offset: 2px; }
+body.app-slava-restraint .project-home__error-details .error-details__raw { display: block; margin-top: 4px; max-height: 8.5em; overflow-y: auto; color: var(--sr-ink-light); font-family: var(--sr-mono); font-size: var(--sr-type-label); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 body.app-slava-restraint .project-home__error button { flex-shrink: 0; min-height: 34px; padding: 0 10px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: var(--sr-surface-control); color: var(--sr-ink); font-size: 12px; }
+/* Q116 a): a stale tab's unsaved edits Nebula refused for good. The error's
+   box, with GM's heading over the reason and the two choices under it. */
+body.app-slava-restraint .project-home__edits { align-items: flex-start; flex-direction: column; gap: 12px; }
+body.app-slava-restraint .project-home__edits-text { display: grid; gap: 2px; }
+body.app-slava-restraint .project-home__edits-heading { font-weight: 600; }
+body.app-slava-restraint .project-home__edits-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+body.app-slava-restraint .project-home__error .project-home__edits-primary { border-color: var(--sr-ink); background: var(--sr-ink); color: var(--sr-canvas); font-weight: 600; }
+body.app-slava-restraint .project-home__error .project-home__edits-primary:hover:not(:disabled) { border-color: var(--sr-ink-bold); background: var(--sr-ink-bold); }
+body.app-slava-restraint .project-home__error button:disabled { opacity: 0.55; cursor: default; }
+/* Focus lands on the saved line or the heading when the held edits' notice
+   goes (ProjectHome useFocusAfterHeldEdits): the neutral ring from the
+   keyboard; a click shows none, since the browser rings :focus-visible only. */
+body.app-slava-restraint .project-home__notice:focus-visible,
+body.app-slava-restraint .project-home #project-home-title:focus-visible { outline: var(--sr-focus-outline); outline-offset: 4px; }
+body.app-slava-restraint .project-home__notice { padding: 14px 16px; margin-bottom: 28px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-node-media-radius); background: var(--sr-canvas-elevated); color: var(--sr-ink); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
 body.app-slava-restraint .project-home__sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 @media (max-width: 1000px) {
   body.app-slava-restraint .project-home__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { ArrowUpRight, Check, ChevronRight, ImageIcon, Pencil, Plus, RotateCcw, Search, Settings, Trash2, X } from 'lucide-react';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { coverImages, type CoverChoices, type ProjectCover } from '../../lib/projects';
@@ -8,6 +8,10 @@ import { ProposalsFor } from '../proposals/ProposalsFor';
 import { UpdatesSlot } from '../agent-notes/UpdatesSlot';
 import { InNoticeRegion } from '../InNoticeRegion';
 import { failureMessage, shortLine } from '../../lib/errorCopy';
+import { ErrorDetails } from '../failure/ErrorDetails';
+import { UnsavedEditsNotice } from './UnsavedEditsNotice';
+import { editsSavedLine, editsSavedTooLargeLine } from './unsavedEditsCopy';
+import type { SavedEditsFile } from '../../lib/graphFileShared';
 import '../../styles/project-home.css';
 
 export interface ProjectSummary {
@@ -40,6 +44,9 @@ export interface ProjectHomeProps {
   loading: boolean;
   busy: boolean;
   error: string | null;
+  /** The text behind `error`'s collapsed Details toggle: a person-only
+   * refusal's own words, written for agents (GM, Q116 a). */
+  errorDetails?: string | null;
   onCreate: (name?: string) => void;
   onOpen: (id: string) => void;
   onRename: (id: string, name: string) => void;
@@ -56,6 +63,15 @@ export interface ProjectHomeProps {
   onPurge?: (id: string) => void;
   onEmptyTrash?: () => void;
   onDismissUndo?: () => void;
+  /** A stale tab's unsaved edits Nebula refused for good (Q116 a): GM's
+   * "Couldn't save your edits." with this reason, in place of the error line
+   * and its Try again, until the person downloads them or continues without. */
+  unsavedEdits?: { reason: string; downloadFailed?: boolean } | null;
+  /** The file the held edits were downloaded as, for GM's line after it, and
+   * whether Load graph can open it. */
+  editsSavedAs?: SavedEditsFile | null;
+  onDownloadEdits?: () => void;
+  onContinueWithoutEdits?: () => void;
   /** Settings (API keys included) opens from home too, so a first run needn't start a project to add keys. */
   settingsOpen?: boolean;
   onToggleSettings?: () => void;
@@ -341,10 +357,35 @@ function UndoToast({ project, busy, onUndo, onDismiss }: {
 
 const noop = () => {};
 
-export function ProjectHome({ projects, loading, busy, error, onCreate, onOpen, onRename, onDelete, onRetry, retry = 'redo',
+/** The held edits' notice goes when the person chooses, and takes the
+ * focused button (or the confirm's) with it, which would drop focus to the
+ * page body and send the next Tab back to the top. Focus moves to the line
+ * that says where the file went, or, after Continue without them, to the
+ * page heading. Only when focus was lost: never from something the person
+ * moved to meanwhile (Q116 a review). */
+function useFocusAfterHeldEdits(held: boolean, savedLine: RefObject<HTMLElement | null>,
+  heading: RefObject<HTMLElement | null>): void {
+  const wasHeld = useRef(held);
+  useEffect(() => {
+    const had = wasHeld.current;
+    wasHeld.current = held;
+    if (!had || held) return;
+    // After the commit that removed the notice: no frame to wait for (a
+    // frame never comes in a background tab).
+    const active = document.activeElement;
+    if (active && active !== document.body && active.isConnected) return;
+    (savedLine.current ?? heading.current)?.focus();
+  }, [held, savedLine, heading]);
+}
+
+export function ProjectHome({ projects, loading, busy, error, errorDetails = null, onCreate, onOpen, onRename, onDelete, onRetry, retry = 'redo',
   trash = [], lastDeleted = null, onRestore = noop, onPurge = noop, onEmptyTrash = noop, onDismissUndo = noop,
-  settingsOpen = false, onToggleSettings, loadCoverChoices, onPinCover }: ProjectHomeProps) {
+  settingsOpen = false, onToggleSettings, loadCoverChoices, onPinCover,
+  unsavedEdits = null, editsSavedAs = null, onDownloadEdits = noop, onContinueWithoutEdits = noop }: ProjectHomeProps) {
   const [query, setQuery] = useState('');
+  const savedLine = useRef<HTMLDivElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  useFocusAfterHeldEdits(Boolean(unsavedEdits), savedLine, heading);
   const visibleProjects = useMemo(() => projects
     .filter((project) => project.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
     .sort((left, right) => recentTimestamp(right) - recentTimestamp(left)), [projects, query]);
@@ -363,13 +404,20 @@ export function ProjectHome({ projects, loading, busy, error, onCreate, onOpen, 
       </header>
       <main className="project-home__main" aria-busy={loading || busy}>
         <section className="project-home__welcome" aria-labelledby="project-home-title">
-          <div><p className="project-home__eyebrow">Your workspace</p><h1 id="project-home-title">A place for your next idea.</h1><p className="project-home__intro">Start a new canvas or pick up where you left off.</p></div>
-          <button className="project-home__new" type="button" disabled={loading || busy} onClick={() => onCreate()}><Plus aria-hidden="true" />New project</button>
+          <div><p className="project-home__eyebrow">Your workspace</p><h1 id="project-home-title" ref={heading} tabIndex={-1}>A place for your next idea.</h1><p className="project-home__intro">Start a new canvas or pick up where you left off.</p></div>
+          <button className="project-home__new" type="button" disabled={loading || busy || Boolean(unsavedEdits)} onClick={() => onCreate()}><Plus aria-hidden="true" />New project</button>
         </section>
 
         {/* GM's WRAP rule: where "Try again" redoes the failure it is the retry, so the
             reason drops its own; where it only reloads, or can't help, the line stays whole. */}
-        {error && <div className="project-home__error" role="alert"><span>{retry === 'redo' ? shortLine(error) : error}</span>
+        {unsavedEdits ? <UnsavedEditsNotice reason={unsavedEdits.reason} downloadFailed={unsavedEdits.downloadFailed} busy={busy}
+          onDownload={onDownloadEdits} onContinue={onContinueWithoutEdits} />
+          : editsSavedAs && <div ref={savedLine} tabIndex={-1} className="project-home__notice" role="status">
+            {editsSavedAs.reopens ? editsSavedLine(editsSavedAs.name) : editsSavedTooLargeLine(editsSavedAs.name)}</div>}
+        {!unsavedEdits && error && <div className="project-home__error" role="alert">
+          {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? shortLine(error) : error}</span>
+            <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>
+            : <span>{retry === 'redo' ? shortLine(error) : error}</span>}
           {retry !== 'none' && <button type="button" disabled={loading || busy} onClick={onRetry}>Try again</button>}</div>}
 
         <section className="project-home__projects" aria-labelledby="recent-projects-title">
@@ -380,7 +428,7 @@ export function ProjectHome({ projects, loading, busy, error, onCreate, onOpen, 
           {loading ? <div className="project-home__loading" role="status"><span className="project-home__loading-dot" />Loading your projects…</div>
             : visibleProjects.length > 0 ? <div className="project-home__grid">{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} busy={busy} onOpen={onOpen} onRename={onRename} onDelete={onDelete} loadCoverChoices={loadCoverChoices} onPinCover={onPinCover} />)}</div>
               : projects.length > 0 ? <div className="project-home__empty" role="status"><Search className="project-home__empty-search" aria-hidden="true" /><h3>No projects match “{query.trim()}”</h3><p>Try another name or clear your search.</p><button type="button" className="project-home__secondary" onClick={() => setQuery('')}>Clear search</button></div>
-                : !error && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={busy} onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
+                : !error && !unsavedEdits && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={busy} onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
         </section>
         {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={busy} onRestore={onRestore} onPurge={onPurge} onEmptyTrash={onEmptyTrash} />}
       </main>

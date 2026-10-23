@@ -23,7 +23,7 @@ from cli.commands import moodboard as moodboard_cmd
 from nebula_api import NebulaAPI
 from services import agent_spend
 from services.output import OUTPUT_ROOT
-from tests.conftest import PERSON
+from tests.conftest import FORGED_ORIGIN, PERSON
 from tests.test_moodboard_reader import FakeGoogle, labels_of, phase_of, reading, sse
 
 
@@ -331,3 +331,23 @@ def test_mcp_only_takes_numbers_as_the_docs_show(cli, client, google):
         "moodboard_analyze", {"board": board["id"], "read_with": "gemini-4-argon", "estimate_only": True,
                               "only": [3, 5]}))
     assert est["count"] == 2 and google.bodies == []
+
+
+@pytest.mark.parametrize("headers", [
+    FORGED_ORIGIN,
+    {**FORGED_ORIGIN, "X-Nebula-Person": "stale-person-token-" + "1" * 24},
+], ids=["no-person-token", "stale-person-token"])
+def test_a_read_from_a_tab_not_connected_as_the_person_says_person_required(client, google, headers):
+    """The person's reads pass; a tab that isn't connected as them is held to
+    the agents' limits, so its refusal is one reconnecting fixes (GM, Q116 a:
+    "Use it for every person-only refusal"). Same status and words; an agent's
+    answer has no code."""
+    board = _board(client, 6)
+    SETTINGS["runCostConfirmUsd"] = 0.01
+    path = f"/api/moodboards/{board['id']}/read?dryRun=1"
+    agent = client.post(path, json={"model": "gemini-4-argon"}, headers={"X-Nebula-Agent": "Codex"})
+    assert agent.status_code == 403 and set(agent.json()) == {"detail"}, agent.text
+    unmarked = client.post(path, json={"model": "gemini-4-argon"}, headers=headers)
+    assert unmarked.status_code == 403
+    assert unmarked.json() == {"detail": agent.json()["detail"], "code": "person_required"}
+    assert google.bodies == [] and _spent() == 0

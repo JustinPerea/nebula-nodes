@@ -5,7 +5,7 @@ import { readDraft, useCreateDraftStore } from './createDraftStore';
 import { useArrangeStore } from './arrangeStore';
 import { fetchCLIGraph } from '../lib/api';
 import { rewriteBackendAssetUrls } from '../lib/backend';
-import { normalizeRuntimeMediaParams } from '../lib/graphFileShared';
+import { normalizeRuntimeMediaParams, saveEditsToFile, type SavedEditsFile } from '../lib/graphFileShared';
 import { GRAPH_PARAMS_VERSION } from '../lib/savedParamsUpgrades';
 import { getProjectContext, setProjectContext } from '../lib/projectContext';
 import { currentProjectOf, publishOpenProject } from '../lib/currentProject';
@@ -19,7 +19,10 @@ import { isOwnEcho, type EditOrigin } from '../lib/canvasUndo';
 import { TAB_ID } from '../lib/tabId';
 import { holdCommonsExits, holdProjects, refuseWhileCommonsUnsaved } from '../lib/commonsUnsaved';
 import { showNotice } from '../lib/canvasNotice';
-import { FailureNotice, REFUSED_FALLBACK_COPY, RequestFailedError, canTryAgain, failureCopy, failureMessage, oneLine, shortReason } from '../lib/errorCopy';
+import {
+  FailureNotice, PERSON_REQUIRED_CODE, REFUSED_FALLBACK_COPY, RequestFailedError, canTryAgain, failureCopy, failureDetails,
+  failureMessage, oneLine, shortReason,
+} from '../lib/errorCopy';
 import { SOME_NODE_WAITING_UNLOCK } from '../lib/worldLabsWaiting';
 import type { ProjectSnapshot, ProjectSummary, SavedProject, TrashedProject } from '../lib/projects';
 
@@ -71,6 +74,22 @@ export function projectRetryOffer(state: { error: string | null; errorRetry: Pro
   return state.errorRetry.action === 'load' && state.errorRetry.full ? 'reload' : 'redo';
 }
 
+/** The text behind the Projects error line's collapsed Details toggle: a
+ * person-only refusal's own words, written for agents (GM - Design, Q116 a:
+ * "The agents' text stays behind Details."), only while the line it was
+ * written for is still the one showing. */
+export function projectErrorDetails(state: { error: string | null; errorDetails: ProjectErrorDetails | null }): string | null {
+  return state.error !== null && state.errorDetails?.line === state.error ? state.errorDetails.raw : null;
+}
+
+/** Details for one error line: the line it belongs to, so a later line
+ * (set anywhere, by any action) never shows them. */
+export interface ProjectErrorDetails { line: string; raw: string }
+function detailsFor(line: string, error: unknown): ProjectErrorDetails | null {
+  const raw = failureDetails(error);
+  return raw ? { line, raw } : null;
+}
+
 interface ProjectState {
   screen: 'home' | 'workspace';
   initialized: boolean; loading: boolean; busy: boolean;
@@ -80,6 +99,8 @@ interface ProjectState {
   /** The project the Undo toast offers to bring back. */
   lastDeleted: { id: string; name: string } | null;
   workspaceRevision: string; error: string | null;
+  /** What `error`'s Details toggle holds, for that line (projectErrorDetails). */
+  errorDetails: ProjectErrorDetails | null;
   /** What Try again does for `error`; null hides it (projectRetryOffer). */
   errorRetry: ProjectRetry | null;
   /** The last failed save's own line, for the canvas's "Save failed · Retry". */
@@ -87,6 +108,22 @@ interface ProjectState {
   saveStatus: 'saved' | 'saving' | 'unsaved' | 'error'; dirty: boolean;
   /** The last switch this tab followed (an agent's), for the toast. */
   switchNotice: ProjectSwitchNotice | null;
+  /** A stale tab's unsaved edits that Nebula refused for good as a recovered
+   * project (too large, say): the Projects screen shows GM's "Couldn't save
+   * your edits." with this reason, and offers to download them or continue
+   * without them (Q116 a). Null otherwise. `downloadFailed`: the last
+   * download couldn't be written, so the screen says GM's line 2 instead of
+   * the reason, with the same two choices. */
+  unsavedEdits: { reason: string; downloadFailed?: true } | null;
+  /** The file those edits were downloaded as, for GM's line after it, and
+   * whether Load graph can open it (a copy past its limits can't). */
+  editsSavedAs: SavedEditsFile | null;
+  /** "Download your edits": write the held copy as a .nebula file, then load
+   * the projects. A cancelled save picker keeps the two choices. */
+  downloadUnsavedEdits: () => Promise<void>;
+  /** "Continue without them", once the person confirmed: drop the held copy
+   * (nothing is sent) and load the projects. */
+  continueWithoutEdits: () => Promise<void>;
   dismissSwitchNotice: () => void;
   /** Back to the project that was open before the switch in switchNotice. */
   switchBack: () => Promise<void>;
@@ -151,7 +188,22 @@ let applying = false;
  * saves this one, so looking around there is never an unsaved edit; the
  * backend keeps the stored view for its saves anyway (design-canvas gap 19). */
 let projectViewport: ProjectSnapshot['viewport'] = null;
-let pendingRecovery: { sourceProjectId: string; snapshot: ProjectSnapshot; recoveryId: string; paramsVersion: number } | null = null;
+/** A stale tab's unsaved work, waiting to be saved as a recovered project.
+ * `projectName` names the download if Nebula refuses it for good; `held` is
+ * set then, and from that moment nothing sends it again: only the person's
+ * choice on the Projects screen lets go of it (Q116 a). */
+interface PendingRecovery {
+  sourceProjectId: string; snapshot: ProjectSnapshot; recoveryId: string; paramsVersion: number;
+  projectName: string; held: boolean;
+}
+let pendingRecovery: PendingRecovery | null = null;
+/** The open Try again was finishing when the held edits stopped it (an Open
+ * whose answer was lost): done once the person has chosen. */
+let heldEditsReopen: string | undefined;
+/** The person downloaded the held edits during a params-version stop: the
+ * tab asks for its reload instead of reloading, so GM's line saying where
+ * the file went stays on screen. */
+let editsDownloaded = false;
 /** The one-time param upgrades the canvas had when it was loaded. Every
  * project the backend returns is already upgraded to the backend's version,
  * and a project is applied only from a backend that reported this bundle's
@@ -300,7 +352,12 @@ function applyProject(project: SavedProject, revision: string, bootstrap = false
       paramsVersionChange = null;
       paramsHandling += 1;
     }
+    // Held edits (Q116 a) are let go of the same way: only following an
+    // agent's switch gets here while they show, after saving the canvas.
     pendingRecovery = null;
+    heldEditsReopen = undefined;
+    editsDownloaded = false;
+    if (useProjectStore.getState().unsavedEdits) useProjectStore.setState({ unsavedEdits: null });
     const sessionId = snapshot.createSessionId ?? `project:${project.id}:create`;
     const draft = readDraft(snapshot.createDraft);
     if (draft) {
@@ -325,9 +382,14 @@ function applyProject(project: SavedProject, revision: string, bootstrap = false
 
 /** A refusal the same request would get again (a 4xx other than 408/429:
  * World Labs state on the canvas, a stale revision, a project that's gone):
- * Try again can't redo it, so it isn't offered (GM: hide it). */
+ * Try again can't redo it, so it isn't offered (GM: hide it). A refusal
+ * because this tab isn't connected as the person (`code: person_required`:
+ * no person token, or one from before Nebula restarted) isn't: once the
+ * person opens the launch link in this tab, the same request passes, so Try
+ * again stays and a held copy isn't held for it (Q116 a review). */
 function refusedForGood(error: unknown): boolean {
-  return error instanceof WorldLabsHold || (error instanceof RequestFailedError && !canTryAgain(error.status));
+  return error instanceof WorldLabsHold || (error instanceof RequestFailedError && !canTryAgain(error.status)
+    && error.code !== PERSON_REQUIRED_CODE);
 }
 /** The canvas holds World Labs state that only the person can clear (a start
  * Nebula couldn't confirm, or a run it couldn't confirm): switching or
@@ -358,7 +420,8 @@ const RETRY_HEADINGS: Record<ProjectRetry['action'], string> = {
  * round 3e): a written failure keeps its heading and reason, anything else
  * reads the action's heading over GM's general line, never its own message. */
 function showError(error: unknown, retry: ProjectRetry | null = null): void {
-  useProjectStore.setState({ error: failureMessage(error, RETRY_HEADINGS[retry?.action ?? 'save']),
+  const line = failureMessage(error, RETRY_HEADINGS[retry?.action ?? 'save']);
+  useProjectStore.setState({ error: line, errorDetails: detailsFor(line, error),
     errorRetry: refusedForGood(error) ? null : retry });
 }
 /** What counts as unsaved work when the tab stops for a params version: run
@@ -379,6 +442,9 @@ function paramsStopWork(snapshot: ProjectSnapshot, neverRan: Set<string>): strin
 function preserveWorkspaceConflict(message: string, neverRan?: Set<string>, captured?: ProjectSnapshot,
   retry: ProjectRetry = { action: 'load', full: true }): void {
   cancelPendingSaves();
+  // Edits held for the person's choice keep their screen: another stop
+  // (another window, an update) doesn't replace it or capture them again.
+  if (pendingRecovery?.held) return;
   const context = getProjectContext();
   let snapshot = captureProjectSnapshot();
   if (captured) snapshot = captured;
@@ -389,20 +455,100 @@ function preserveWorkspaceConflict(message: string, neverRan?: Set<string>, capt
     try { saved = lastSaved ? JSON.parse(lastSaved) as ProjectSnapshot : null; } catch { saved = null; }
     dirty = Boolean(context) && (!saved || paramsStopWork(snapshot, neverRan) !== paramsStopWork(saved, new Set()));
   } else dirty = Boolean(context) && JSON.stringify(snapshot) !== lastSaved;
-  if (dirty && context) pendingRecovery = {
-    sourceProjectId: context.id, snapshot, recoveryId: crypto.randomUUID().replaceAll('-', ''),
-    paramsVersion: canvasParamsVersion,
-  };
+  if (dirty && context) pendingRecovery = pendingRecoveryOf(context.id, snapshot);
   // Try again reloads the saved projects (initialize), as these lines say.
   useProjectStore.setState({ screen: 'home', initialized: false, loading: false, dirty, error: message, errorRetry: retry });
 }
+/** recoverPendingWork's refusal for good: the held edits are on the Projects
+ * screen (holdRefusedEdits), so a caller stops here and shows nothing else. */
+class EditsRefused extends Error {
+  constructor() { super('The recovered copy was refused for good.'); this.name = 'EditsRefused'; }
+}
+
+/** GM - Design, Q116 a): the second sentence of every reason on the held
+ * edits' screen, and the reason for a copy that is itself too large. */
+const KEEP_OR_CONTINUE = 'Download them so nothing is lost, or continue without them.';
+const EDITS_TOO_LARGE = 'These edits are too large for Nebula to save.';
+const asSentence = (line: string) => (!line || /[.!?”"]$/.test(line) ? line : `${line}.`);
+
+/** The held edits' reason (GM): too large for a copy the backend found too
+ * big (a 413 that names no store limit: the snapshot's size, its node or
+ * value count); else the mapped reason the screen used before (a reason with
+ * none of its own says nothing, since GM's general line says "reload"),
+ * then GM's second sentence. Read from the status and the answer's `limit`,
+ * never from its words. */
+function heldEditsReason(error: unknown): string {
+  if (error instanceof RequestFailedError && error.status === 413 && error.storageLimit === null) {
+    return sentences(EDITS_TOO_LARGE, KEEP_OR_CONTINUE);
+  }
+  return sentences(asSentence(reasonSentence(error, false)), KEEP_OR_CONTINUE);
+}
+
+/** The backend refused `recovery` for good: hold it and show the person the
+ * choice. The tab stays stopped (no project, nothing saves) and the unload
+ * prompt stays armed until they choose. */
+function holdRefusedEdits(recovery: PendingRecovery, error: unknown): void {
+  recovery.held = true;
+  heldEditsReopen = undefined;
+  useProjectStore.setState({ screen: 'home', initialized: false, loading: false, dirty: true, error: null,
+    errorRetry: null, unsavedEdits: { reason: heldEditsReason(error) }, editsSavedAs: null });
+}
+
+/** The person chose (downloaded the edits, or continued without them): the
+ * tab lets go of the copy, and the canvas it came from counts as handled, so
+ * a later stop doesn't copy it again. */
+function letGoOfHeldEdits(recovery: PendingRecovery, savedAs: SavedEditsFile | null = null): void {
+  if (pendingRecovery === recovery) pendingRecovery = null;
+  lastSaved = JSON.stringify(recovery.snapshot);
+  // One update: the screen trades the notice for the saved line at once, so
+  // focus can move to it (ProjectHome).
+  useProjectStore.setState({ unsavedEdits: null, dirty: false, editsSavedAs: savedAs });
+}
+
+/** After the choice: load the projects, then the open Try again was finishing. */
+async function loadAfterHeldEdits(): Promise<void> {
+  const reopen = heldEditsReopen;
+  heldEditsReopen = undefined;
+  const store = useProjectStore.getState();
+  await store.initialize();
+  const state = useProjectStore.getState();
+  if (!reopen || state.error || !state.initialized || state.unsavedEdits) return;
+  if (state.activeProject?.id === reopen && getProjectContext()) useProjectStore.setState({ screen: 'workspace' });
+  else await state.open(reopen);
+}
+
+/** The project a stale tab's copy comes from, by name, for the download. */
+function projectNameOf(id: string): string {
+  const state = useProjectStore.getState();
+  return (state.activeProject?.id === id ? state.activeProject.name : state.projects.find((item) => item.id === id)?.name)
+    ?? 'Untitled project';
+}
+
+function pendingRecoveryOf(sourceProjectId: string, snapshot: ProjectSnapshot): PendingRecovery {
+  return { sourceProjectId, snapshot, recoveryId: crypto.randomUUID().replaceAll('-', ''),
+    paramsVersion: canvasParamsVersion, projectName: projectNameOf(sourceProjectId), held: false };
+}
+
 /** Save a stale tab's unsaved work as an inactive recovered copy, once: the
  * recoveryId makes a retry of the same request idempotent, and afterwards the
- * captured canvas counts as saved, so a later conflict doesn't copy it again. */
+ * captured canvas counts as saved, so a later conflict doesn't copy it again.
+ * Every send of the copy goes through here (Projects' load and Try again, a
+ * params-version stop, following an agent's switch). A refusal a retry can't
+ * fix (a 4xx other than 408/429) holds it for the person (holdRefusedEdits)
+ * and throws EditsRefused; once held, it is never sent again. */
 async function recoverPendingWork(): Promise<boolean> {
   const recovery = pendingRecovery;
   if (!recovery) return false;
-  await api.recoverProject(recovery.sourceProjectId, recovery.snapshot, recovery.recoveryId, recovery.paramsVersion);
+  if (recovery.held) throw new EditsRefused();
+  try {
+    await api.recoverProject(recovery.sourceProjectId, recovery.snapshot, recovery.recoveryId, recovery.paramsVersion);
+  } catch (error) {
+    if (pendingRecovery === recovery && refusedForGood(error)) {
+      holdRefusedEdits(recovery, error);
+      throw new EditsRefused();
+    }
+    throw error;
+  }
   // Another send of the same copy (Retry) already finished it, and the tab
   // may have loaded a project since: "saved" is what that project holds now,
   // not this older canvas, so a late answer leaves it alone.
@@ -428,6 +574,8 @@ export function resetProjectStoreForTests(): void {
   applying = false;
   projectViewport = null;
   pendingRecovery = null;
+  heldEditsReopen = undefined;
+  editsDownloaded = false;
   canvasParamsVersion = GRAPH_PARAMS_VERSION;
   paramsVersionChange = null;
   paramsHandling += 1;
@@ -477,18 +625,24 @@ function handleParamsVersionChange(backendVersion: number | null): Promise<void>
     } catch (error) {
       if (superseded()) return;
       paramsVersionChange = null;
+      // Refused for good: the held edits' screen says it (holdRefusedEdits).
+      if (error instanceof EditsRefused) return;
       // Try again sends the same recovered copy again (initialize does it first).
-      useProjectStore.setState({ error: sentences(
+      const line = sentences(
         "Nebula was updated while this tab was open, and your unsaved edits haven't been saved yet.",
-        reasonSentence(error, true), "Try again before you reload, or they'll be lost."),
-      errorRetry: { action: 'load' } });
+        reasonSentence(error, true), "Try again before you reload, or they'll be lost.");
+      useProjectStore.setState({ error: line, errorDetails: detailsFor(line, error), errorRetry: { action: 'load' } });
       return;
     }
     if (superseded()) return;
     const kept = recovered ? ' Your unsaved edits were saved as a recovered project.' : ' Your saved work is kept.';
     useProjectStore.setState({ dirty: false });
     const newer = backendVersion === null || backendVersion > GRAPH_PARAMS_VERSION;
-    const reload = newer ? reloadOnceFor(backendVersion) : null;
+    const marked = newer ? reloadOnceFor(backendVersion) : null;
+    // After a download the tab asks for the reload it would make (the
+    // 'unmarked' line; the mark counts the person's reload): reloading now
+    // would take away GM's line saying where the file went.
+    const reload = marked === 'reload' && editsDownloaded ? 'unmarked' : marked;
     if (reload === 'reload') {
       reloadingForParams = true;
       useProjectStore.setState({ error: `${PARAMS_UPDATED} Reloading it so it uses the update.${kept}`, errorRetry: null });
@@ -637,7 +791,7 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
     showError(runStillGoing(heading), retry);
     return;
   }
-  useProjectStore.setState({ busy: true, error: null, errorRetry: null });
+  useProjectStore.setState({ busy: true, error: null, errorRetry: null, editsSavedAs: null });
   let reserved = false;
   try {
     // The outgoing snapshot must be durable before the backend can replace it.
@@ -855,8 +1009,7 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
       try {
         await api.saveProject(context.id, snapshot, context.revision);
       } catch {
-        pendingRecovery = { sourceProjectId: context.id, snapshot, recoveryId: crypto.randomUUID().replaceAll('-', ''),
-          paramsVersion: canvasParamsVersion };
+        pendingRecovery = pendingRecoveryOf(context.id, snapshot);
         await recoverPendingWork();
         keptCopy = true;
       }
@@ -875,12 +1028,14 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
       previousProjectName: reopened ? null : notice.previousProjectName, keptCopy,
     } });
   } catch (error) {
+    // Refused for good: the held edits' screen says it (holdRefusedEdits).
+    if (error instanceof EditsRefused) return;
     const who = notice.actor?.name ?? 'Another app';
     // Try again loads what is open now (initialize), as the line says.
+    const line = sentences(`${who} opened “${notice.projectName}”, but this window couldn't follow it.`,
+      reasonSentence(error, true));
     useProjectStore.setState({ screen: 'home', initialized: false, dirty: Boolean(pendingRecovery),
-      error: sentences(`${who} opened “${notice.projectName}”, but this window couldn't follow it.`,
-        reasonSentence(error, true)),
-      errorRetry: { action: 'load' } });
+      error: line, errorDetails: detailsFor(line, error), errorRetry: { action: 'load' } });
   } finally {
     useProjectStore.setState({ busy: false });
   }
@@ -912,8 +1067,9 @@ async function emptyTrashOf(ids: string[]): Promise<void> {
 // Projects waits while the Commons holds unsaved labels (lib/commonsUnsaved).
 export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectState>(holdProjects, (set, get) => ({
   screen: 'home', initialized: false, loading: true, busy: false,
-  projects: [], activeProject: null, trash: [], lastDeleted: null, workspaceRevision: '', error: null,
+  projects: [], activeProject: null, trash: [], lastDeleted: null, workspaceRevision: '', error: null, errorDetails: null,
   errorRetry: null, saveError: null, saveStatus: 'saved', dirty: false, switchNotice: null,
+  unsavedEdits: null, editsSavedAs: null,
   dismissSwitchNotice: () => set({ switchNotice: null }),
   switchBack: async () => {
     const back = get().switchNotice?.previousProjectId;
@@ -942,6 +1098,8 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
         await recoverPendingWork();
         await loadWorkspace();
       } catch (error) {
+        // Refused for good: the held edits' screen says it (holdRefusedEdits).
+        if (error instanceof EditsRefused) return;
         // Never strand the screen (round 3b review): until it loads, New
         // project and Open do nothing, so Try again always stays. A refusal
         // for good (the active project went away between the listing and its
@@ -959,7 +1117,8 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
         const reason = error instanceof RequestFailedError && error.storageFull ? LOAD_DISK_FULL
           : general ? LOAD_GENERAL : copy.reason;
         const line = oneLine({ heading: copy.heading, reason });
-        set({ error: pendingRecovery && general ? LOAD_HEADING : line,
+        const shown = pendingRecovery && general ? LOAD_HEADING : line;
+        set({ error: shown, errorDetails: detailsFor(shown, error),
           errorRetry: refusedForGood(error) ? { action: 'load', full: true } : { action: 'load' } });
       }
       finally { set({ loading: false }); initializing = null; }
@@ -1181,9 +1340,47 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
     }
     // An open whose reply was lost: finish it, unless it already landed.
     const reopen = failed?.action === 'load' ? failed.reopen : undefined;
+    // Held edits stopped it: it finishes once the person has chosen.
+    if (get().unsavedEdits) { heldEditsReopen ??= reopen; return; }
     if (!reopen || get().error || !get().initialized) return;
     if (get().activeProject?.id === reopen && getProjectContext()) set({ screen: 'workspace' });
     else await get().open(reopen);
+  },
+  downloadUnsavedEdits: async () => {
+    const recovery = pendingRecovery;
+    if (!recovery?.held || get().busy) return;
+    set({ busy: true });
+    let savedAs: SavedEditsFile | null = null;
+    let failed = false;
+    try {
+      savedAs = await saveEditsToFile(recovery.snapshot, recovery.projectName);
+    } catch (error) {
+      // A file that couldn't be written at all (a full disk, a write the
+      // browser refused; the writer only falls back to a plain download when
+      // the picker itself fails, before a file was chosen). GM's line 2 says
+      // so; the two choices stay, with the copy still held (Q116 a).
+      failed = true;
+      console.error('[nebula] unsaved edits download', error);
+    } finally { set({ busy: false }); }
+    if (savedAs === null) {
+      // A failed write says GM's line 2; a cancelled save picker goes back to
+      // the two choices with no line. Nothing is lost either way.
+      const held = get().unsavedEdits;
+      if (pendingRecovery === recovery && held) {
+        set({ unsavedEdits: failed ? { reason: held.reason, downloadFailed: true } : { reason: held.reason } });
+      }
+      return;
+    }
+    if (pendingRecovery !== recovery) return;
+    editsDownloaded = true;
+    letGoOfHeldEdits(recovery, savedAs);
+    await loadAfterHeldEdits();
+  },
+  continueWithoutEdits: async () => {
+    const recovery = pendingRecovery;
+    if (!recovery?.held || get().busy) return;
+    letGoOfHeldEdits(recovery);
+    await loadAfterHeldEdits();
   },
   retrySave: async () => {
     if (get().errorRetry?.action === 'save') set({ error: null, errorRetry: null });
