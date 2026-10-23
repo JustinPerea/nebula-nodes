@@ -62,6 +62,7 @@ This branch is a). Every canvas delete path deletes at once and shows GM's notic
 - **`reopen` checks status, not `closed_by`.** `_undo_removals` pops the matched removal ids before calling it. An earlier version checked the intersection after that pop and never reopened anything (caught by the shared-proposal test).
 - **The journal drops unknown kinds silently.** The new kinds had to be registered in `canvas_events.EVENT_KINDS`, or the events never reached agents.
 - **The restore's removals are computed lazily** inside the queued restore task, so a delete that is still in flight (its answer not back yet) has its record by the time the undo is sent (`restoreQueue = restoreQueue.then(() => deleting)`).
+- **A record undoes one delete of one node** (second review). Node ids are not unique over time, so nothing matches a record, a proposal's tag or a pin by the bare node id. See "Second review" for how each place is bound.
 
 ## Tests (written first, red on 54bf7cd6)
 
@@ -125,6 +126,8 @@ Final run, after the review fixes. The machine was loaded by other sessions (loa
 
 - **Clear canvas and graph import** still replace the graph without removal records. Their own undo is unchanged by this branch.
 - **Pins the person deleted since** are reported to agents (`pinsLeft`) but not in the person's notice. GM's notice only names proposals.
+- **`replaces` doesn't survive a restart unless a pin proves it** (second review). The ledger of minted removals and the "this restore undid that removal" memory are in memory, like the undo book. After a restart, a restore that puts a pin back still records what it undid (the pin's persisted `detachedBy` proves it), but a node with no pins brought back across a restart has nothing to prove it. Its next delete then replaces nothing, and an older step naming the spent removal leaves the proposal closed and uncounted. Rare (it needs an undo, a restart, a redo and then an older undo, all on a node with no pin), and it fails safe.
+- ~~An agent that reads the person's removal ids off the WebSocket can still name one in a restore of its own.~~ Closed: see "Only the person's restore carries removal records" below.
 
 ## Review
 
@@ -182,3 +185,108 @@ What undo still can't restore, and why:
 - **Proposals that no longer pass Accept's checks** against the restored graph. In practice this is rare, because a change the person makes after the delete is undone first. Counted.
 - **Asset (cover) proposals after a restart.** Memory-only like canvas proposals. Counted (since the review fix below).
 - **Pins the person deleted since the delete, or a pin an import or a clear detached again since.** Left as they are. Agents are told (`pinsLeft`); the notice says nothing, since GM's line covers proposals only.
+- **New since the second review: proposals closed before a clear, an import or a project switch.** Node ids start again after a clear or an import, so a later "n1" may be another node. Undoing a delete from before one of those still puts the node and its pins back, but its proposals stay closed. Counted: "Restored the node. 1 proposal couldn't be reopened." (reason "the canvas was cleared since" / "the canvas was replaced since").
+- **New since the second review: a pin whose node came back as a different model.** It stays detached (an agent can't move the person's pin onto its own node this way). Agents are told; the notice says nothing.
+
+## Second review
+
+A second independent review confirmed five defects, each reproduced (scratch tests in the session scratchpad's `undo-second-review/`). They share one root cause: a removal record was bound to a bare node id, and node ids are not unique over time. An import or a clear restarts CLIGraph's counter at n1, a restore may place any id, and every project has its own n1. The structural fix: **a record reverses exactly one delete of exactly one node, and nothing matches it by node id alone.** Base for this round: 71b4ef66 (the feature plus the merge of main).
+
+### The five findings and their fixes
+
+1. **(medium) Renewal keyed on the node id.** After an import gave n1 out again, `renewStackedRemovals` (canvas) and `CanvasUndoBook.renew_removals` (backend) rewrote an older step that deleted X with the record of a later delete of Y. Undo then put Y's pin on X and left X's own pin detached.
+   - Fix: a new `services/node_removals.py` (`RemovalLedger`). It remembers what each removal id was minted for (node id, project, model), and, per node a restore brought back, the removal that restore undid. The next delete of that same node names it: `replaces: <that id>`.
+   - Both renewals now swap only items whose id equals `replaces`. A node an import, a clear or a plain add put under the id has consumed nothing, so its delete replaces nothing. `mergeRemovals` drops only the records a fresh one repeats or replaces.
+   - `replaces` survives `cleanRemovals` and the restore body's validation (`_restore_removals`, which also checks its shape).
+2. **(low) The renewal read the project after an await.** `_renew_kept_removals` read the active project after the delete's graphSync, so a project switch in that window renewed the other project's records.
+   - Fix: the record carries `projectId`, set in `_remove_side_effects` right after the mutation, before any await. `renew_removals` matches only kept edits of the record's own project. `_undo_removals` ignores a record that names another project.
+   - The restore captures its project inside the mutation too. If another project is open by the time the pins and proposals are checked, it touches nothing and reports each one as "another project is open now". `CanvasPins.reattach` checks the project inside the catalog transaction.
+   - Canvas side: the delete answer and the restore answer skip the renewal when the canvas was replaced while they were on their way (the existing `canvasReplacementRevision`). With id-only matching an old project's records can't match anyway, so this is a second guard.
+   - Surprise: on the base, a delete answer that landed after a project switch also took the new project's n1 off the canvas. That has been so since before this branch. It now applies no change and shows no notice; the step keeps its records.
+3. **(medium) Proposals were tagged across projects and graphs.** `invalidate_referencing` tagged every invalidated proposal that read the node id, whatever its project. After a clear, a later delete of a new n1 and its undo reopened a proposal from the old graph. In another project the proposal was counted as "couldn't be reopened".
+   - Fix: only proposals in the delete's own project are tagged, for both the closed ones and the "needs this node too" ones. A record's `proposals` lists only the ones it tagged.
+   - `invalidate_all` (clear, import, project open, create or delete) now calls `drop_removal_tags`. The tags move to `dropped_by`, with the reason. Asset proposals get the same call at the same two places (clear, and the replaced-graph branch of `_broadcast_graph_sync`). `_follow_cover_proposals` tags only from records of the cover's own project.
+   - A proposal whose tag was dropped is counted in `notReopened` ("the canvas was cleared since" / "the canvas was replaced since") when its delete is undone, so the notice stays honest.
+4. **(medium) A forged record spoiled the real undo.** `_undo_removals` kept any record whose node was in `back` and popped `closed_by` entries by removal id alone, before its checks. So `{id: rm_A (real), nodeId: n9 (wrong)}` left the proposal closed and uncounted.
+   - Fix: matching is by `(removal id, node id)` pairs (`ProposalBook.closed_by_pairs`, inherited by asset proposals, project-filtered). Nothing is popped any more: the tags stay until the proposal reopens (`reopen` clears them). The "still waiting on another delete" rule reads the tags that don't match this undo's pairs. A record the ledger minted for another node, project or model takes part in nothing but the pin check.
+   - `closed_by_removals` (id-only) is gone.
+5. **(low) An agent could move the person's pin onto another model.** A restore with `nodes: [{id: n1, definitionId: <another model>}]` and the pin's removal re-attached the pin, and the person's own undo then 409'd.
+   - Fix: a pin detached by a delete keeps `detachedDefinition`, persisted with `detachedBy`. It goes back only when the node came back as that model, in the same project, with the same `detachedFrom` and `detachedBy`. Otherwise it is left, with `pinsLeft` reason "its node came back as another model". The check holds after a restart.
+   - **Decided:** `detachedBy`, `detachedDefinition` and `attachedPosition` are never shown to anyone. `canvas_pins.public_pin` strips them from `list()` (REST, the person's `canvasPins` socket message, `agent/start`), `for_agents()` (the canvas snapshot and `look_at_canvas`) and the add, resolve and remove answers. The person's canvas never used them. Agents undo through their own `EditRecord`, which the backend holds, so they don't need removal ids.
+
+### Other places that matched by bare node id
+
+- **`removalsFor`** (canvas): a step names only the records of the nodes it brings back as the model each record was made for (`definitionId`).
+- **`mergeRemovals`**: by `replaces` and id, not node id.
+- **Cover proposals**: project-bound tags and pair matching (above).
+- **Persistence across a restart**: a pin carries its own binding (`detachedBy`, `detachedFrom`, `detachedDefinition`). After a restart the ledger is empty, so `verdict` is "unknown". Pins still check their own fields, and a restore that puts a pin back records what it undid, so the node's next delete still says `replaces`. See the open item about nodes with no pins.
+- **`pinsLeft` reporting**: only for pins a record bound to this restore names, or a pin whose `detachedBy` matches.
+- **The "needs this node too" tag** (found by this round's live check). A proposal closed by the person's delete of X also picked up a tag from the delete of another node an agent had put under X's id, because the rule matched the bare id. The person's undo of X then found it still "waiting" on that other node and left it closed, uncounted.
+  - Fix: `RemovalLedger.lineage` names which node sits under an id. A node keeps its lineage through deletes and the undos that bring it back. A node a plain add put there is the generation's own (`g<n>`, bumped by a clear or an import). Anything else a restore put there (no record of its own, or one minted for another node) gets a new one.
+  - A proposal keeps the lineage of each node it reads (`Proposal.lineage`, set when it is made). A delete tags it, closing or "needs too", only when it took that very node.
+  - Tests: `test_another_node_under_the_id_doesnt_tag_a_closed_proposal` (red on the base and on the first fix), and `test_the_same_node_brought_back_still_tags_a_shared_proposal` (a guard; it passes on both).
+- Kept: an open proposal that reads a deleted node id still closes. Every open proposal is the current graph's: a project switch closes them all.
+
+### Record shape now
+
+`{id, nodeId, projectId, definitionId, replaces?, pins, proposals}`. Agents see it in the delete, apply and restore answers and in `edit.removals`. The message texts are unchanged; the docs grew additively. `docs/MCP-SETUP.md` covers the record fields, the binding, the dropped tags, the new `pinsLeft` reasons and the hidden pin fields. `skills/nebula/SKILL.md` has one paragraph, and the `remove_from_canvas` docstring one clause. INSTRUCTIONS is unchanged.
+
+### Tests (written first, red on 71b4ef66)
+
+- **Backend:** `backend/tests/test_undo_removal_binding.py`, 24 tests. Run against an export of 71b4ef66: **22 failed, 2 passed**. The two that passed are guards: "a node an import put under the id replaces nothing", which the base trivially satisfies because it has no `replaces`, and the shared-proposal re-tag. The 22nd failure is the lineage test, added after this round's first live run.
+  - 6 failed with a `KeyError` (`projectId`, `replaces`, `detachedDefinition`).
+  - 9 failed on the behaviour itself: the pin moved, tags across a clear or another project, a forged record counted, `detachedBy` visible to agents, the race renewed project B's record.
+  - 5 failed because the base accepted bad `replaces`, `projectId` or `definitionId` values (`200`, not `400`).
+  - 1 failed because the base's restore body dropped the binding fields.
+  - Red output: the session scratchpad's `undo-fix/red-backend.txt`.
+- `test_undo_restores_deletes.py`: reads `detachedBy` from the stored catalog now (`_stored_pins`), since the API no longer shows it. It also checks the three undo fields are gone after a re-attach.
+- **Frontend:** `frontend/tests/undoRestoresDeletes.test.tsx`, 6 new tests plus 2 updated (the older renewal tests' later records now carry `replaces`, as the backend sends them). On the base: **8 of 17 failed**:
+  - import reuse: X's step named Y's record;
+  - an unrelated `replaces` renewed the step;
+  - the model filter;
+  - the binding fields dropped by `cleanRemovals` (3 tests: the 2 updated ones and the round-trip);
+  - after a project switch, the new project's step renewed and its n1 taken off the canvas (2 tests).
+  - Red output: `undo-fix/red-frontend.txt`.
+- **The review's own scratch probes, run on the fix:**
+  - Pass now: the clear revive (both cases), another project's proposal, and the import baseline.
+  - Fail now, as intended: the hijack, forged-record and pin-move probes read `detachedBy` off the agents' pin list, which no longer has it (their asserts are covered by the new tests). The race probe asserts the old wrong renewal.
+  - `test_detached_by_survives_a_clear_and_restore_reattaches` (not one of the five) still re-attaches. After a clear, a restore of a same-model node at the same id with the person's real removal puts the pin back. That is also the legitimate path: the person's Cmd+Z of the clear, then of the delete.
+  - `test_backend_renewal_after_import_undo_crosses_nodes` still "passes". It feeds X's restore with Y's record, which is what the old canvas did. The fixed canvas never sends that (X's step keeps X's record; `replaces` is the only way a step is renewed). The backend can't tell two same-model nodes under one id apart from a record alone, so a client that sends another node's real record of the same model is trusted that far. See the open item about the WebSocket.
+
+### Live check (second review)
+
+- Isolated backend on 8795 and Vite on 5795 (`VITE_NEBULA_BACKEND_PORT=8795`), a temp HOME, every key, token, `NEBULA_*` and `VITE_*` variable dropped, and outside requests refused by the backend guard. 8000-8010 and 5173 were blocked over CDP plus a dead proxy; the canary port 8799 was unreachable. Shots at 1280x800 and 1440x900. Script: the session scratchpad's `undo-fix/live/live-review.mjs` (round 2's, plus the new checks).
+- **First run: 31 PASS, 1 FAIL.** The failure was real: after the forged restores, the person's undo put X and its pin back, but the proposal stayed closed and the notice said nothing. That was the "needs this node too" tag above. Fixed with a test first.
+- **Second run: 32 PASS, 0 FAIL. Blocked requests: 0. Outside requests refused: 0.** No page errors, no native dialogs.
+  - Round 2's 26 checks all passed again: the four delete paths, the hold, MCP remove and undo, the cover proposal, the restart and the reload.
+  - **Import reuse (finding 1).** The person deleted X (n1) from the toolbar. A graph import put Y under n1, and the person pinned Y. Cmd+Z of the import, then Cmd+Z of X's delete: X came back with its own text and its own pin, and Y's pin stayed detached. The notice read "Restored the node. 1 proposal couldn't be reopened.": the import spent X's proposal tag.
+  - **Agents can't read the removal id.** The REST pin list (as an agent) and `look_at_canvas` over a real MCP stdio session showed the detached pin without `detachedBy`, `attachedPosition` or `detachedDefinition`.
+  - **Forged restores (findings 4 and 5).** As an agent: the person's real removal id under a made-up n9, and the person's pin's removal with a Nano Banana under n1. Nothing was re-attached or reopened, and nothing was counted. The second answered `pinsLeft` "its node came back as another model". The pin stayed detached under the same removal. The agent then removed both nodes.
+  - The person's four Cmd+Z back to their own delete then gave "Restored the node.": X back, its pin on it and the new proposal open.
+
+### Gates (second review)
+
+- **Backend** `pytest -q` (whole suite): **10,248 passed, 71 skipped, 0 failed** in 10 min 32 s.
+- **Frontend** `npx vitest run` (whole suite): 5 files and 14 tests failed out of 382 files and 4,945 tests (4,931 passed), under load. 9 of them were "Test timed out"; the rest were slow waits in the same files. The 5 files rerun alone passed: 129 of 129. None of them touch this change (CommandPalette, GraphFileActions, NodeLibrary, Settings, ResultsGallery).
+- `tsc -b`: 0 errors.
+- Lint: 0.
+- `vite build` plus the budget check: entry 363,426 bytes raw / 109,187 gzip, under 512,000.
+
+## Third review
+
+- **Review (low): an import cleared the removal ledger too late.** `import_graph` committed the new graph and then awaited `_broadcast_graph_sync`, and only that sync's last line called `node_removals.forget_project`. A delete of the imported n1 landing during the sync's awaits (export, cover proposals, the broadcast, pins, closed proposals) was minted while the ledger still held the old node's entry. So Y's record said `replaces: rm_A` and carried X's lineage, which is finding 1 again, through a race.
+  - Fix: the reset moved into the import's `_paid_graph_mutation` block, right after the commit and before any await, as `clear_graph` already did. The call at the end of the sync is gone, not kept as well: a second reset after the awaits would forget a delete-and-undo that landed during the sync, so the node's next delete wouldn't name its removal.
+  - Same cause, one more path (found while checking every place ids start again): deleting the open project leaves the unfiled canvas (no project), empty, its ids starting again at n1. The ledger's no-project entries outlived it, and the same API sequence gave a fresh n1's delete an old `replaces`. `delete_saved_project` now resets the no-project ledger in its mutation block. Project open and create don't need it: a project opened brings back its own nodes, and a new project has no entries.
+  - Tests (written first, all 3 red on this round's base): `test_a_delete_during_an_imports_sync_replaces_nothing` (Y's record had `replaces`), `test_an_undo_during_an_imports_sync_is_still_remembered` (the late second reset dropped what the undo recorded: `replaces` was None), `test_deleting_the_open_project_starts_the_unfiled_ids_again` (Y's record had `replaces`). The race tests hook `manager.broadcast_raw`, a real await point of the sync. The reviewer's probe file passes now (8 of 8).
+  - Backend only; no field agents read changed, so the docs stay as they are. Live check rerun on 8795/5795 below.
+  - Live check, rerun on this fix: backend 8795, Vite 5795 (`VITE_NEBULA_BACKEND_PORT=8795`), the same isolation and blocking as the second review, 1280x800 and 1440x900. **32 PASS, 0 FAIL. Blocked requests: 0. Outside requests refused: 0.** It includes the import-reuse chain (X back with its own pin, Y's pin still detached), the forged restores over a real MCP stdio session, and the round-2 checks. The race itself can't be timed from a browser; the tests cover it.
+  - Gates: backend whole suite **10,251 passed, 71 skipped, 0 failed** (the 10,248 before plus the 3 new). No frontend file changed this round: `tsc -b` 0 errors, lint 0, `vite build` plus budget 363,426 bytes raw / 109,187 gzip (unchanged), and `undoRestoresDeletes.test.tsx` 17 of 17. The whole vitest suite wasn't rerun.
+
+## Only the person's restore carries removal records
+
+- **The gap (flagged by the third round's fix lane).** Every socket gets the graphSync's `edit.removals`, agents' too. With the second review's bindings an agent's restore naming the person's real record still worked when it brought back the same model under the same id: it re-attached the person's pin (pins are person-only: creating one needs the person, and pins have no move action) and reopened the proposal. The test reproduced it on this branch: `reattached` listed the person's pin.
+- **Fix.** `POST /api/graph/restore` ignores `removals` unless the caller is the person (`_is_person_request()`), the same rule it already applies to `edit`. The nodes and wires still go back (anyone may restore); only the pins and proposals don't. An agent's own undo (`POST /api/graph/apply/undo`) is unaffected: it calls `_restore_graph` with the records the backend kept on the edit, never through that field. The only client of the route is the person's canvas (graphStore.ts), so nothing else loses anything.
+- Hiding `edit.removals` from agents' sockets instead was the other option. It would change what every socket's graphSync carries, and once agents' restores ignore the records, seeing the ids gives an agent nothing to act with. So the gate is the smaller and stricter change.
+- **Tests (written first):** `test_an_agents_restore_cant_use_the_persons_removal_record` (red on this branch: the agent's restore re-attached the pin), and `test_an_agents_own_undo_still_puts_back_what_its_delete_removed` (green before and after). The finding-4 and finding-5 tests that sent a forged record as Claude now send it from a person's tab (a stale or forged list), so they still exercise the (removal, node) pair and model checks instead of passing at the gate; `test_an_agent_cant_move_the_persons_pin_onto_another_model` is now `test_a_stale_record_cant_put_the_pin_on_another_model`.
+- **Agents:** docs/MCP-SETUP.md says a restore from anyone but the person ignores `removals` and its answer's four lists stay empty. No agent text changed. skills/nebula/SKILL.md never mentions the restore route (agents use `nebula undo`), so it stays.
+

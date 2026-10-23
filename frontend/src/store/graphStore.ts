@@ -78,7 +78,7 @@ import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, waitingOnWorldLabs } from '../lib/worldLabsWaiting';
 import { FailureNotice, REFUSED_FALLBACK_COPY, copyForStatus, failureCopy, failureMessage, readDetail, requestError, warnFailure } from '../lib/errorCopy';
 import { CANVAS_NOTICE_EVENT, type CanvasNoticeDetail } from '../lib/canvasNotice';
-import { cleanRemovals, deletedNoticeText, mergeRemovals, notReopenedText, restoredNoticeText, type RemovalRecord } from '../lib/deleteNotice';
+import { cleanRemovals, deletedNoticeText, mergeRemovals, notReopenedText, restoredNoticeText, supersededBy, type RemovalRecord } from '../lib/deleteNotice';
 import { NOTHING_RAN_LINE, OTHER_NODE_LINE, SHOT_NOT_STARTED_LINE, validationReadings, writtenReading, type ValidationReading } from '../lib/validationCopy';
 import {
   RUNTIME_FIELDS, applySlice, diffCanvas, edgeKey, editArrivedText, foldArrange, foreignSource, isForeignEdit, isOwnEcho,
@@ -427,18 +427,21 @@ type UndoEntry = UndoSnapshot | ForeignEdit;
  * A node has one live removal, its latest delete's: only that one's undo can
  * put its pins back and reopen its proposals. When a delete answers with new
  * records (a redo, an undo of an agent's undo, this tab's delete, another
- * tab's or an agent's edit), every stacked step that names the same node
- * takes them, not just the step that deleted again, or an older step that
- * brings the node back would name a spent removal (review, 2026-10-23). The
- * backend still re-checks every id. Steps are kept by identity, so this
- * renews them in place.
+ * tab's or an agent's edit), every stacked step that names the removal a new
+ * record supersedes takes it, not just the step that deleted again, or an
+ * older step that brings the node back would name a spent removal (review,
+ * 2026-10-23). Only by that removal's id (`replaces`, which the backend sets
+ * when a restore brought this very node back by undoing it): node ids are
+ * not unique over time, so a record for another node under the same id
+ * renews nothing (second review). The backend still re-checks every id.
+ * Steps are kept by identity, so this renews them in place.
  */
 function renewStackedRemovals(stacks: { undoStack: UndoEntry[]; redoStack: UndoEntry[] }, fresh: RemovalRecord[]): void {
-  if (fresh.length === 0) return;
-  const byNode = new Map(fresh.map((record) => [record.nodeId, record]));
+  const byReplaced = supersededBy(fresh);
+  if (byReplaced.size === 0) return;
   for (const step of [...stacks.undoStack, ...stacks.redoStack]) {
-    if (!step.removals?.some((record) => byNode.has(record.nodeId))) continue;
-    step.removals = step.removals.map((record) => byNode.get(record.nodeId) ?? record);
+    if (!step.removals?.some((record) => byReplaced.has(record.id))) continue;
+    step.removals = step.removals.map((record) => byReplaced.get(record.id) ?? record);
   }
 }
 
@@ -2776,10 +2779,13 @@ function ownStepNotice(id: number, line: OwnStepLine, notReopened: number, actio
   };
 }
 
-/** The removal records a step's restore names: those of the nodes it brings back. */
+/** The removal records a step's restore names: those of the nodes it brings
+ * back, as the model each record was made for (second review). */
 function removalsFor(entry: UndoEntry, body: RestoreBody): RemovalRecord[] {
-  const back = new Set(body.nodes.filter((node) => node.outputs !== undefined).map((node) => node.id));
-  return (entry.removals ?? []).filter((record) => back.has(record.nodeId));
+  const back = new Map(body.nodes.filter((node) => node.outputs !== undefined)
+    .map((node) => [node.id, node.definitionId]));
+  return (entry.removals ?? []).filter((record) => back.has(record.nodeId)
+    && (!record.definitionId || record.definitionId === back.get(record.nodeId)));
 }
 
 // Undo and redo reach the backend one at a time, in the order the person
@@ -2821,6 +2827,7 @@ function sendRestore(
     return { undoNotice: { ...shown, text: `${shown.text}. ${notReopenedText(notReopened)}` } };
   });
   const task = restoreQueue.then(async () => {
+    const replacementRevision = canvasReplacementRevision;
     // Read now, not when the step was taken: the answer to the delete (or to
     // the redo before this undo) may have landed since.
     const removals = removalsFor(entry, body);
@@ -2848,11 +2855,14 @@ function sendRestore(
       const fresh = cleanRemovals(answer.removals);
       if (fresh.length > 0) {
         inverse.removals = mergeRemovals(inverse.removals, fresh);
-        // And every other step naming those nodes (an older one that brings them back).
-        set((state) => {
-          renewStackedRemovals(state, fresh);
-          return {};
-        });
+        // And every other step naming the removals these supersede (an older
+        // one that brings the nodes back), unless another graph is open now.
+        if (replacementRevision === canvasReplacementRevision) {
+          set((state) => {
+            renewStackedRemovals(state, fresh);
+            return {};
+          });
+        }
       }
       answerNotice(Array.isArray(answer.notReopened) ? answer.notReopened.length : 0);
       return;
@@ -3879,6 +3889,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     breakUndoDebounce();
     const undoStep = pushUndo(set, get);
     const shownBefore = new Set(get().nodes.map((node) => node.id));
+    // A project opened (or a graph loaded) before the answers came: the
+    // canvas and its steps are another graph's now (second review).
+    const replacementRevision = canvasReplacementRevision;
     const deleting = Promise.allSettled(cliRemovedIds.map(deleteCLIOriginNode)).then((results) => {
       const confirmed = new Set<string>();
       const failures: string[] = [];
@@ -3890,8 +3903,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         } else failures.push(failureCopy(result.reason).reason);
       });
       // Undoing this step names what each delete removed (GM, 2026-10-23).
+      if (removals.length > 0) undoStep.removals = mergeRemovals(undoStep.removals, removals);
+      if (replacementRevision !== canvasReplacementRevision) {
+        // Nothing here is that graph's any more: no node to take off, no
+        // step to renew, no notice. The step keeps its records, for an undo
+        // that comes back to that graph (an import undone).
+        if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length);
+        return;
+      }
       if (removals.length > 0) {
-        undoStep.removals = mergeRemovals(undoStep.removals, removals);
         set((state) => {
           renewStackedRemovals(state, removals);
           return {};

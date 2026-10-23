@@ -22,6 +22,10 @@ const net = vi.hoisted(() => ({
   calls: [] as Array<{ path: string; method: string; body: unknown }>,
   restoreAnswers: [] as Array<Record<string, unknown>>,
   seq: 0,
+  // Second review: hold the delete answers until a test lets them land.
+  hold: false,
+  held: [] as Array<() => void>,
+  removalExtra: {} as Record<string, unknown>,
 }));
 vi.mock('../src/lib/backend', async (importOriginal) => ({
   ...await importOriginal<typeof import('../src/lib/backend')>(),
@@ -32,8 +36,11 @@ vi.mock('../src/lib/backend', async (importOriginal) => ({
     if (deleted && method === 'DELETE') {
       net.seq += 1;
       const id = `rm_${String(net.seq).padStart(16, '0')}`;
-      return new Response(JSON.stringify({ status: 'deleted', id: deleted[1],
-        removal: { id, nodeId: deleted[1], pins: [`pin_${deleted[1]}`], proposals: ['p_shared'] } }), { status: 200 });
+      const response = new Response(JSON.stringify({ status: 'deleted', id: deleted[1],
+        removal: { id, nodeId: deleted[1], pins: [`pin_${deleted[1]}`], proposals: ['p_shared'], ...net.removalExtra } }),
+      { status: 200 });
+      if (!net.hold) return response;
+      return new Promise<Response>((resolve) => { net.held.push(() => resolve(response)); });
     }
     if (path === '/api/graph/restore') {
       const answer = net.restoreAnswers.shift() ?? {};
@@ -82,6 +89,9 @@ beforeEach(() => {
   net.calls.length = 0;
   net.restoreAnswers.length = 0;
   net.seq = 0;
+  net.hold = false;
+  net.held.length = 0;
+  net.removalExtra = {};
   confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
   useGraphStore.setState({ nodes: [textNode('n1'), textNode('n2')], edges: [], undoStack: [], redoStack: [],
     undoNotice: null, isExecuting: false, providerRecoveries: [], providerStartAmbiguities: [] });
@@ -200,7 +210,8 @@ describe('a node deleted again by another step', () => {
   // named the first removal, so the pin stayed detached and the proposal closed.
   it("the agent's delete, its undo, then Cmd+Z twice names the newest removal", async () => {
     const first = { id: 'rm_00000000000000a1', nodeId: 'n1', pins: ['pin_n1'], proposals: ['p_1'] };
-    const again = { id: 'rm_00000000000000c3', nodeId: 'n1', pins: ['pin_n1'], proposals: ['p_1'] };
+    // The backend's record of the delete that supersedes `first` says so (second review).
+    const again = { id: 'rm_00000000000000c3', nodeId: 'n1', pins: ['pin_n1'], proposals: ['p_1'], replaces: first.id };
     sync([textNode('n2')], [], { edit: { actor: CLAUDE, id: 'ed_00000000000000e1', removals: [first] } });
     sync([textNode('n1'), textNode('n2')], [], { edit: { actor: CLAUDE, id: 'ed_00000000000000e2',
       undoes: 'ed_00000000000000e1' } });
@@ -218,7 +229,8 @@ describe('a node deleted again by another step', () => {
   });
 
   it("another tab's undo then redo of this tab's delete renews this tab's step too", async () => {
-    const later = { id: 'rm_00000000000000d4', nodeId: 'n1', pins: ['pin_n1'], proposals: [] };
+    const later = { id: 'rm_00000000000000d4', nodeId: 'n1', pins: ['pin_n1'], proposals: [],
+      replaces: 'rm_0000000000000001' };
     useGraphStore.getState().deleteNode('n1');
     await settle();
     const own = useGraphStore.getState().undoStack.at(-1)!;
@@ -227,5 +239,93 @@ describe('a node deleted again by another step', () => {
     sync([textNode('n1'), textNode('n2')], [], { edit: { actor: { kind: 'person' }, id: 'ed_00000000000000e5' } });
     sync([textNode('n2')], [], { edit: { actor: { kind: 'person' }, id: 'ed_00000000000000e6', removals: [later] } });
     expect(own.removals).toEqual([later]);
+  });
+});
+
+describe('a removal record undoes one delete of one node (second review)', () => {
+  // Node ids are not unique over time: an import or a clear starts the
+  // backend's counter at n1 again. A record is renewed only by the delete
+  // that names it in `replaces`, never by a node id alone.
+  it("a pre-import step that brings back the old n1 names X's own removal", async () => {
+    useGraphStore.getState().deleteNode('n1');
+    await settle();
+    const xRemoval = useGraphStore.getState().undoStack.at(-1)!.removals?.[0];
+    expect(xRemoval?.id).toBe('rm_0000000000000001');
+    // An agent loads a graph into the project: n1 is now Y, a different node.
+    const y = { ...textNode('n1'), data: { ...textNode('n1').data, params: { value: 'Y, a different node' } } };
+    sync([y], [], { graphReplaced: true, edit: { actor: CLAUDE, id: 'ed_00000000000000f1' } });
+    // Cmd+Z of the import removes Y; its record replaces nothing of X's.
+    net.restoreAnswers.push({ removals: [{ id: 'rm_00000000000000cc', nodeId: 'n1', pins: ['pin_Y'], proposals: ['p_on_Y'] }] });
+    useGraphStore.getState().undo();
+    await settle();
+    expect(ids()).toEqual(['n2']);
+    useGraphStore.getState().undo();
+    await settle();
+    const last = restores().at(-1)!;
+    expect(last.nodes.map((node) => node.id)).toEqual(['n1']);
+    expect(last.removals).toEqual([xRemoval]);
+  });
+
+  it('a later delete renews only the record it replaces', async () => {
+    useGraphStore.getState().deleteNode('n1');
+    await settle();
+    const own = useGraphStore.getState().undoStack.at(-1)!;
+    const mine = own.removals![0];
+    // Another tab deletes a node that is under n1 now, superseding some other removal: not this step's.
+    sync([textNode('n2')], [], { edit: { actor: { kind: 'person' }, id: 'ed_00000000000000e7',
+      removals: [{ id: 'rm_00000000000000e7', nodeId: 'n1', pins: [], proposals: [], replaces: 'rm_00000000000000ff' }] } });
+    expect(own.removals).toEqual([mine]);
+    // The delete that supersedes this step's record does renew it.
+    const next = { id: 'rm_00000000000000e8', nodeId: 'n1', pins: ['pin_n1'], proposals: [], replaces: mine.id };
+    sync([textNode('n2')], [], { edit: { actor: { kind: 'person' }, id: 'ed_00000000000000e8', removals: [next] } });
+    expect(own.removals).toEqual([next]);
+  });
+
+  it('an undo names only the records of the model it brings back', async () => {
+    net.removalExtra = { definitionId: 'nano-banana', projectId: 'prj_a' };
+    useGraphStore.getState().deleteNode('n1');
+    await settle();
+    expect(useGraphStore.getState().undoStack.at(-1)!.removals?.[0]).toMatchObject({ definitionId: 'nano-banana' });
+    useGraphStore.getState().undo();
+    await settle();
+    // n1 comes back as a Text Input: the record of a Nano Banana's delete isn't its.
+    expect(restores()[0].removals ?? []).toEqual([]);
+  });
+
+  it("keeps a record's project, model and replaces through to the restore", async () => {
+    net.removalExtra = { definitionId: 'text-input', projectId: 'prj_a', replaces: 'rm_00000000000000aa' };
+    useGraphStore.getState().deleteNode('n1');
+    await settle();
+    useGraphStore.getState().undo();
+    await settle();
+    expect(restores()[0].removals).toEqual([{ id: 'rm_0000000000000001', nodeId: 'n1', pins: ['pin_n1'],
+      proposals: ['p_shared'], definitionId: 'text-input', projectId: 'prj_a', replaces: 'rm_00000000000000aa' }]);
+  });
+
+  it("a delete's answer that lands after a project switch leaves the new project's steps alone", async () => {
+    net.hold = true;
+    useGraphStore.getState().deleteNode('n1');
+    await settle();
+    // Another project opens: the stacks empty, and its own history starts.
+    sync([textNode('n1'), textNode('n2')], [], { graphReplaced: true });
+    expect(useGraphStore.getState().undoStack).toEqual([]);
+    const theirs = { id: 'rm_00000000000000b7', nodeId: 'n1', pins: ['pin_b'], proposals: [] };
+    sync([textNode('n2')], [], { edit: { actor: CLAUDE, id: 'ed_00000000000000b7', removals: [theirs] } });
+    const step = useGraphStore.getState().undoStack.at(-1)!;
+    expect(step.removals).toEqual([theirs]);
+    for (const release of net.held.splice(0)) release();
+    await settle();
+    expect(step.removals).toEqual([theirs]);
+  });
+
+  it("a delete's answer that lands after a project switch doesn't take the new project's node", async () => {
+    net.hold = true;
+    useGraphStore.getState().deleteNode('n1');
+    await settle();
+    sync([textNode('n1'), textNode('n2')], [], { graphReplaced: true });
+    for (const release of net.held.splice(0)) release();
+    await settle();
+    expect(ids()).toEqual(['n1', 'n2']);
+    expect(notice()?.text).not.toBe('Deleted the node.');
   });
 });

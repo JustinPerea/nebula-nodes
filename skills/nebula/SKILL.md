@@ -262,7 +262,10 @@ marks such a proposal "N node(s) can't run here".
 back. A proposal invalidated because a node it needs was deleted opens again,
 with the same id and expiry, if the delete is undone and it still fits
 (`nebula watch` prints `proposal.reopened`; `pin.reattached` when a pin goes
-back on its node).
+back on its node). That holds only for the very node that was deleted: after
+a clear, an import or a project switch, undoing an earlier delete prints
+"Couldn't reopen …" (the canvas was cleared or replaced since), and a pin goes
+back only onto the model it was on.
 
 Curating the Commons (when it is on) is the person's too: correcting a
 reference's reading, its regions, or its role, why or inbox place in a

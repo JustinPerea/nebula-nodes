@@ -713,20 +713,26 @@ class CanvasUndoBook:
                                  "Open it again (open_project) to undo it.", "other_project")
         return record
 
-    def renew_removals(self, project_id: str | None, removals: list[dict[str, Any]]) -> None:
-        """New deletes of nodes that kept edits in ``project_id`` also deleted
-        (a redo of the edit, an undo of its undo): only a node's latest
-        removal can bring its pins and proposals back, so each record naming
-        one of those nodes takes the new removal in place of its old one.
-        Never adds a node a record didn't name. main re-checks every id."""
-        fresh = {str(item["nodeId"]): item for item in removals if isinstance(item, dict) and item.get("nodeId")}
+    def renew_removals(self, removals: list[dict[str, Any]]) -> None:
+        """New deletes that supersede removals kept edits name (a redo of the
+        edit, an undo of its undo): each new record says which removal it
+        replaces (``replaces``: the one the restore that brought its node back
+        undid), and only an item with exactly that id, in a kept edit of the
+        record's own project, takes the new record. Never by the node id
+        alone: an import, a clear or another project gives the same id to
+        another node (second review). main re-checks every id."""
+        fresh: dict[tuple[str | None, str], dict[str, Any]] = {}
+        for item in removals:
+            if isinstance(item, dict) and isinstance(item.get("replaces"), str) and item["replaces"]:
+                fresh[(item.get("projectId"), item["replaces"])] = item
         if not fresh:
             return
         for record in self._records.values():
-            if record.project_id != project_id or not record.removals:
+            if not record.removals:
                 continue
-            if any(str(item.get("nodeId")) in fresh for item in record.removals):
-                record.removals = [copy.deepcopy(fresh.get(str(item.get("nodeId")), item)) for item in record.removals]
+            if any((record.project_id, str(item.get("id"))) in fresh for item in record.removals):
+                record.removals = [copy.deepcopy(fresh.get((record.project_id, str(item.get("id"))), item))
+                                   for item in record.removals]
 
     def by_edit(self, edit_id: str | None) -> EditRecord | None:
         token = self._by_edit.get(edit_id or "")

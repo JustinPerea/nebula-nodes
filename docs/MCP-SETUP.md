@@ -165,7 +165,9 @@ The server exposes these tools for building and running (see
   result has `undo` too, which puts the nodes back with their params,
   outputs, names and wires, the person's pins on them, and the proposals
   the delete closed when they still fit. `removals` lists, per node it
-  deleted, the pins it detached and the proposals it closed.
+  deleted, the pins it detached and the proposals it closed (each record
+  also names its `projectId` and the node's `definitionId`, and `replaces`
+  when it supersedes an earlier delete of the same node).
 - `undo_canvas_edit`: takes one of your own edits back with its `undo.token`
   (or a steps plan's `undo.tokens`, newest first). A part someone changed
   since stays as it is and is listed in `skipped`; so does a node someone
@@ -2072,8 +2074,9 @@ restart), and a proposal reopens only if that removal closed it and it still
 passes Accept's checks (the params it sets unchanged, the proposal staged on
 the live graph, what its runs would start unchanged), hasn't expired, and
 the open caps allow it. The restore's answer says what happened:
-`reattached`, `pinsLeft` (`{id, reason}`: `deleted since` or `changed
-since`), `reopened` and `notReopened` (`{id, reason}`). Proposals live in
+`reattached`, `pinsLeft` (`{id, reason}`: `deleted since`, `changed
+since`, `its node came back as another model` or `another project is open
+now`), `reopened` and `notReopened` (`{id, reason}`). Proposals live in
 memory, so after a restart the ones the delete closed can't reopen and are
 counted in `notReopened`. A proposal that also needs another deleted node
 waits, closed and uncounted, until that delete is undone too. Redo deletes
@@ -2087,6 +2090,32 @@ has one live removal, its latest delete's: when the person redoes your
 delete, or undoes your undo, the nodes are deleted again under new records,
 and your `undo_canvas_edit` token names those from then on, so it still
 puts the pins back and reopens the proposals.
+
+A record undoes exactly one delete of exactly one node, never "whatever is
+n1 now": node ids are not unique over time (a clear or an import starts them
+again at n1, and every project has its own n1). So each record is
+`{id: "rm_…", nodeId, projectId, definitionId, replaces?, pins, proposals}`.
+`projectId` and `definitionId` are the project and model the node was
+deleted from; a restore uses a record only in that project and only for a
+node that comes back as that model, and the backend also checks them against
+what it minted the id for. `replaces` is set when the deleted node is one an
+undo had brought back: it names the removal that undo used, and only
+records with exactly that id (the canvas's older steps, your undo token) are
+renewed to the new one. A node that a clear, an import or a plain add put
+under the id replaces nothing. A pin goes back only onto the model it was
+on (`pinsLeft` reason `its node came back as another model` otherwise). A
+proposal is tagged only by deletes in its own project, as a (removal, node)
+pair, and a clear, an import or a project switch drops the earlier deletes'
+tags: undoing a delete from before one of those can't reopen the proposal,
+and `notReopened` says so ("the canvas was cleared since", "the canvas was
+replaced since"). Pins never show the removal ids or anchors undo keeps
+(`detachedBy` and the rest stay in Nebula's own copy); agents undo their own
+edits by token and never need them. Only the person's restore carries
+records: an edit's graphSync shows every socket its `edit.removals`, so a
+restore from anyone else that names `removals` restores its nodes and wires
+but ignores the records (its answer's `reattached`, `pinsLeft`, `reopened`
+and `notReopened` stay empty). Your `undo_canvas_edit` puts back what your
+deletes removed from the records the backend kept for that edit.
 
 A run from `run_nodes` is a CLI run (`POST /api/graph/run` with `wait`), so
 it gets the same spending check and the same long-run handling. It also gets

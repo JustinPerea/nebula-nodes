@@ -52,6 +52,13 @@ def _pins(api) -> dict[str, dict]:
     return {pin["id"]: pin for pin in api.client.get("/api/canvas/pins").json()["pins"]}
 
 
+def _stored_pins(api) -> dict[str, dict]:
+    """The pins as the catalog keeps them, with what undo needs and nobody is
+    shown (detachedBy, detachedDefinition, attachedPosition; second review)."""
+    catalog = api.main.project_store.read()
+    return {pin["id"]: pin for pin in catalog["projects"][catalog["activeProjectId"]].get("pins") or []}
+
+
 def _whole(api, node_id: str) -> dict:
     """The restore item that brings a node back, as the canvas sends it."""
     node = api.graph.nodes[node_id]
@@ -92,7 +99,7 @@ def test_the_delete_answer_names_the_pins_it_detached_and_the_proposals_it_close
     assert removal["id"].startswith("rm_") and len(removal["id"]) == 19
     assert removal["nodeId"] == n1
     assert removal["pins"] == [pin["id"]] and removal["proposals"] == [proposal]
-    stored = _pins(canvas)[pin["id"]]
+    stored = _stored_pins(canvas)[pin["id"]]
     assert stored["detached"] is True and stored["detachedFrom"] == n1 and stored["detachedBy"] == removal["id"]
 
 
@@ -114,6 +121,8 @@ def test_undo_puts_the_pin_back_at_its_anchor_and_reopens_the_proposal(canvas):
     assert back["anchor"] == pin["anchor"] == {"nodeId": n1}
     assert back["position"] == pin["position"] and back["detached"] is False
     assert "detachedFrom" not in back and "detachedBy" not in back
+    assert not any(key in _stored_pins(canvas)[pin["id"]] for key in ("detachedBy", "detachedDefinition",
+                                                                       "attachedPosition"))
     assert canvas.book.get(proposal).status == "open" and canvas.book.get(proposal).reason is None
     # The person's canvas gets it as open again, with its key; agents read the journal.
     opened = [m for m in canvas.browser if m.get("type") == "proposalOpened"]
@@ -146,7 +155,7 @@ def test_redo_deletes_again_and_a_second_undo_still_restores(canvas):
     assert redo.status_code == 200, redo.text
     (second,) = redo.json()["removals"]
     assert second["id"] != first["id"] and second["pins"] == [pin["id"]] and second["proposals"] == [proposal]
-    assert _pins(canvas)[pin["id"]]["detachedBy"] == second["id"]
+    assert _stored_pins(canvas)[pin["id"]]["detachedBy"] == second["id"]
     assert canvas.book.get(proposal).status == "invalidated"
 
     # The first removal is spent: naming it again does nothing.
@@ -155,7 +164,7 @@ def test_redo_deletes_again_and_a_second_undo_still_restores(canvas):
     assert _pins(canvas)[pin["id"]]["detached"] is True
     canvas.client.post("/api/graph/restore", headers=PERSON, json={
         "action": "redo", "nodes": [], "remove": [n1], "wire": [], "unwire": []})
-    third = canvas.client.get("/api/canvas/pins").json()["pins"][0]["detachedBy"]
+    third = _stored_pins(canvas)[pin["id"]]["detachedBy"]
     again = _restore(canvas, [item], [{"id": third, "nodeId": n1, "pins": [pin["id"]], "proposals": [proposal]}])
     assert again.json()["reattached"] == [pin["id"]] and again.json()["reopened"] == [proposal]
 
@@ -275,7 +284,7 @@ def test_a_forged_or_stale_list_attaches_nothing_and_reopens_nothing(canvas):
     assert _pins(canvas)[pin["id"]]["detached"] is True
     canvas.client.post("/api/graph/restore", headers=PERSON, json={
         "action": "redo", "nodes": [], "remove": [n1], "wire": [], "unwire": []})
-    current = _pins(canvas)[pin["id"]]["detachedBy"]
+    current = _stored_pins(canvas)[pin["id"]]["detachedBy"]
     wrong_node = _restore(canvas, [item], [{"id": current, "nodeId": n2, "pins": [other_pin["id"]]}]).json()
     # n2 isn't what this restore brings back; the named pin belongs to another removal.
     assert wrong_node["reattached"] == []

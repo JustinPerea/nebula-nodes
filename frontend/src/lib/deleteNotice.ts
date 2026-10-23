@@ -13,13 +13,21 @@
  * The delete confirm of round 3f is gone with it.
  */
 
-/** One node's delete, as the backend answered it (DELETE /api/graph/node's
- * `removal`, an edit's graphSync `edit.removals`, a restore's `removals`). */
+/** One delete of one node, as the backend answered it (DELETE
+ * /api/graph/node's `removal`, an edit's graphSync `edit.removals`, a
+ * restore's `removals`). Node ids are not unique over time (an import or a
+ * clear starts them again at n1), so a record is bound to the project and
+ * model it was made for, and a later delete of the same node names the one
+ * it supersedes (`replaces`): only that record is renewed, never one that
+ * merely has the same node id (second review). */
 export interface RemovalRecord {
   id: string;
   nodeId: string;
   pins: string[];
   proposals: string[];
+  projectId?: string;
+  definitionId?: string;
+  replaces?: string;
 }
 
 export function deletedNoticeText(count: number): string {
@@ -50,15 +58,28 @@ export function cleanRemovals(raw: unknown): RemovalRecord[] {
   const records: RemovalRecord[] = [];
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue;
-    const { id, nodeId, pins, proposals } = item as Record<string, unknown>;
+    const { id, nodeId, pins, proposals, projectId, definitionId, replaces } = item as Record<string, unknown>;
     if (typeof id !== 'string' || !REMOVAL_ID.test(id) || typeof nodeId !== 'string' || !NODE_ID.test(nodeId)) continue;
-    records.push({ id, nodeId, pins: ids(pins), proposals: ids(proposals) });
+    records.push({
+      id, nodeId, pins: ids(pins), proposals: ids(proposals),
+      ...(typeof projectId === 'string' && projectId.length > 0 && projectId.length <= 64 ? { projectId } : {}),
+      ...(typeof definitionId === 'string' && definitionId.length > 0 && definitionId.length <= 128
+        ? { definitionId } : {}),
+      ...(typeof replaces === 'string' && REMOVAL_ID.test(replaces) ? { replaces } : {}),
+    });
   }
   return records;
 }
 
-/** `kept` with `fresh` in place of any record for the same node (a redo deletes again, with new records). */
+/** The records in `fresh` keyed by the removal each supersedes. */
+export function supersededBy(fresh: RemovalRecord[]): Map<string, RemovalRecord> {
+  return new Map(fresh.filter((record) => record.replaces).map((record) => [record.replaces as string, record]));
+}
+
+/** `kept` with each record `fresh` supersedes (`replaces`) or repeats taken
+ * out, and `fresh` added (a redo deletes again, with new records). Never by
+ * node id alone. */
 export function mergeRemovals(kept: RemovalRecord[] | undefined, fresh: RemovalRecord[]): RemovalRecord[] {
-  const nodes = new Set(fresh.map((record) => record.nodeId));
-  return [...(kept ?? []).filter((record) => !nodes.has(record.nodeId)), ...fresh];
+  const gone = new Set([...fresh.map((record) => record.id), ...supersededBy(fresh).keys()]);
+  return [...(kept ?? []).filter((record) => !gone.has(record.id)), ...fresh];
 }

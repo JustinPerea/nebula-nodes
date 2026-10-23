@@ -1086,8 +1086,9 @@ def remove_from_canvas(node_ids: list[str] | None = None, wires: list[dict] | No
     look_at_canvas lists them. Their outputs stay in Nebula's output folder.
     Ask first before deleting the person's own work. Deleting a node detaches
     the person's pins on it and closes the proposals that read it; `removals`
-    lists them per node, and undo_canvas_edit (or the person's Cmd+Z) puts
-    them back.
+    lists them per node (with its `projectId`, `definitionId` and, when it
+    supersedes an earlier delete of the same node, `replaces`), and
+    undo_canvas_edit (or the person's Cmd+Z) puts them back.
     """
     body: dict[str, Any] = {}
     if node_ids:

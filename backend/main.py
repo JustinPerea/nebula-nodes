@@ -150,7 +150,8 @@ from services.canvas_events import (
     param_changes,
     parse_kinds,
 )
-from services.canvas_pins import CanvasPins, PinError, pin_summary
+from services.canvas_pins import ANOTHER_PROJECT, CanvasPins, PinError, pin_summary
+from services.node_removals import RemovalLedger
 from services.agent_notes import AgentNotes, NoteError, note_summary
 from services import person_session
 from services import asset_trash
@@ -262,6 +263,8 @@ cli_graph = CLIGraph(persist_path=_STATE_PATH)
 project_store = ProjectStore(_STATE_DIR / "projects")
 # Pins follow `main.project_store` through the getter (tests swap the store).
 canvas_pins = CanvasPins(lambda: project_store)
+# Which delete of which node each removal record undoes (services/node_removals.py).
+node_removals = RemovalLedger()
 # Updates (plan section 5.9): the agent's and the reader's notices, kept with
 # the project (main canvas) or beside each board. Same getter as pins.
 agent_notes = AgentNotes(lambda: project_store)
@@ -4888,14 +4891,23 @@ async def _journal_detached_pins(pins: list[dict[str, Any]], reason: str) -> Non
 # notice says so." Every node delete (DELETE /api/graph/node, an agent's
 # apply, a restore that removes nodes: Cmd+Z of an add, redo of a delete)
 # detaches the pins on the node and closes the proposals that read it. Each
-# one gets a removal record, {id: "rm_...", nodeId, pins, proposals}: the
-# delete's answer carries it, so does the edit's graphSync (edit.removals,
-# for a canvas that didn't send it) and an agent's undo record. The restore
-# that brings the node back names it (``removals``), and _undo_removals
-# re-checks each pin and proposal rather than trusting the list: a pin goes
-# back only if this very removal detached it (it keeps the id, persisted
-# with the project, canvas_pins.reattach), a proposal reopens only if this
-# removal closed it and the accept checks still pass (_proposal_reopen_misfit).
+# one gets a removal record, {id: "rm_...", nodeId, projectId, definitionId,
+# replaces?, pins, proposals}: the delete's answer carries it, so does the
+# edit's graphSync (edit.removals, for a canvas that didn't send it) and an
+# agent's undo record. The restore that brings the node back names it
+# (``removals``), and _undo_removals re-checks each pin and proposal rather
+# than trusting the list: a pin goes back only if this very removal detached
+# it from a node of this model (it keeps the id, persisted with the project,
+# canvas_pins.reattach), a proposal reopens only if this (removal, node) pair
+# closed it and the accept checks still pass (_proposal_reopen_misfit).
+#
+# Node ids are not unique over time (an import or a clear restarts the
+# counter at n1, a restore may put any id back, each project has its own n1),
+# so a record undoes exactly one delete of exactly one node and nothing
+# matches it by the node id alone (second review): the record carries its
+# project and model, node_removals knows what each id was minted for, and a
+# later delete of a node a restore brought back names the removal that
+# restore consumed (``replaces``), the only record renewed to it.
 
 REMOVAL_ID_RE = re.compile(r"^rm_[0-9a-f]{16}$")
 MAX_REMOVAL_PINS = 200
@@ -4905,31 +4917,35 @@ MAX_REMOVAL_PROPOSALS = 50
 _removals_ctx: ContextVar[list[dict[str, Any]] | None] = ContextVar("node_removals", default=None)
 
 
-def _new_removal_id() -> str:
-    return "rm_" + secrets.token_hex(8)
-
-
 def _remove_side_effects(gone: list[dict[str, Any]], reason: Callable[[dict[str, Any]], str]) -> list[dict[str, Any]]:
-    """For each deleted node ({id, name, position}): detach its pins and close
-    the proposals that read it, under a new removal id. Before the delete's
-    graphSync, so the sync can name them; journaled after it
-    (_announce_removed_nodes). Returns one entry per node: the public
-    ``record`` plus what the journal needs (``detached``, ``closed``)."""
+    """For each deleted node ({id, name, definitionId, position}): detach its
+    pins and close the proposals that read it, under a new removal id. Right
+    after the mutation, before any await, so the project the record names is
+    the one the node was deleted from; before the delete's graphSync, so the
+    sync can name them; journaled after it (_announce_removed_nodes). Returns
+    one entry per node: the public ``record`` plus what the journal needs
+    (``detached``, ``closed``)."""
+    project_id = _workspace_context()["activeProjectId"]
     entries: list[dict[str, Any]] = []
     for item in gone:
-        removal = _new_removal_id()
+        definition_id = str(item.get("definitionId") or "")
+        lineage = node_removals.lineage(project_id, item["id"])
+        record = node_removals.mint(node_id=item["id"], project_id=project_id, definition_id=definition_id)
         try:
-            detached = canvas_pins.detach_node(item["id"], item.get("position"), removal=removal)
+            detached = canvas_pins.detach_node(item["id"], item.get("position"), removal=record["id"],
+                                               definition_id=definition_id)
         except (PinError, ProjectStoreError):
             detached = []
-        closed = canvas_proposals.invalidate_referencing(item["id"], reason(item), removal=removal)
+        closed = canvas_proposals.invalidate_referencing(item["id"], reason(item), removal=record["id"],
+                                                         project_id=project_id, lineage=lineage)
         entries.append({
             "gone": item,
             "detached": detached,
             "closed": closed,
-            "record": {"id": removal, "nodeId": item["id"],
+            "record": {**record,
                        "pins": [str(pin.get("id")) for pin in detached if pin.get("id")],
-                       "proposals": [proposal.id for proposal in closed]},
+                       # Only those it tagged: one in another project isn't this undo's.
+                       "proposals": [proposal.id for proposal in closed if record["id"] in proposal.closed_by]},
         })
     return entries
 
@@ -4939,14 +4955,16 @@ def _removal_records(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _renew_kept_removals(removals: list[dict[str, Any]]) -> None:
-    """These deletes took nodes an agent's kept edit also deleted (the
-    person's redo of that edit, their Cmd+Z of the agent's undo): a node has
-    one live removal, its latest, so the edit's undo names these now.
-    After the delete's graphSync, so the records carry its cover proposals."""
-    if not removals:
+    """These deletes took nodes a restore had brought back by undoing an
+    earlier delete (the person's redo of an agent's edit, their Cmd+Z of the
+    agent's undo): each record says which removal it supersedes
+    (``replaces``), and an agent's kept edit that names that one names the
+    new one now. By the records' own project, not the one open after the
+    graphSync's await. After the sync, so the records carry its cover proposals."""
+    if not any(record.get("replaces") for record in removals):
         return
     try:
-        canvas_undo_book.renew_removals(_workspace_context()["activeProjectId"], removals)
+        canvas_undo_book.renew_removals(removals)
     except Exception:  # noqa: BLE001 - never fail a delete over undo bookkeeping
         pass
 
@@ -4973,7 +4991,8 @@ def _restore_removals(raw: Any) -> list[dict[str, Any]]:
     """The ``removals`` a restore names: the removal records of the deletes it undoes."""
     if raw is None:
         return []
-    shape = "removals must be a list of the removal records the delete answered with ({id, nodeId, pins, proposals})"
+    shape = ("removals must be a list of the removal records the delete answered with "
+             "({id, nodeId, projectId, definitionId, replaces?, pins, proposals})")
     if not isinstance(raw, list) or len(raw) > RESTORE_MAX_GRAPH_NODES:
         raise HTTPException(status_code=400, detail=shape)
     records: list[dict[str, Any]] = []
@@ -4985,6 +5004,23 @@ def _restore_removals(raw: Any) -> list[dict[str, Any]]:
             raise HTTPException(status_code=400, detail=f"removals[{index}].id must be a removal id like rm_0123456789abcdef")
         if not isinstance(node_id, str) or SHORT_ID_RE.fullmatch(node_id) is None:
             raise HTTPException(status_code=400, detail=f"removals[{index}].nodeId must be a node id like n3")
+        bound: dict[str, Any] = {}
+        project_id = item.get("projectId")
+        if project_id is not None:
+            if not isinstance(project_id, str) or not 0 < len(project_id) <= 64:
+                raise HTTPException(status_code=400, detail=f"removals[{index}].projectId must be a project id")
+            bound["projectId"] = project_id
+        definition_id = item.get("definitionId")
+        if definition_id is not None:
+            if not isinstance(definition_id, str) or not 0 < len(definition_id) <= 128:
+                raise HTTPException(status_code=400, detail=f"removals[{index}].definitionId must be a model id")
+            bound["definitionId"] = definition_id
+        replaces = item.get("replaces")
+        if replaces is not None:
+            if not isinstance(replaces, str) or REMOVAL_ID_RE.fullmatch(replaces) is None:
+                raise HTTPException(status_code=400,
+                                    detail=f"removals[{index}].replaces must be a removal id like rm_0123456789abcdef")
+            bound["replaces"] = replaces
         lists: dict[str, list[str]] = {}
         for key, cap in (("pins", MAX_REMOVAL_PINS), ("proposals", MAX_REMOVAL_PROPOSALS)):
             values = item.get(key, [])
@@ -4992,7 +5028,7 @@ def _restore_removals(raw: Any) -> list[dict[str, Any]]:
                     or not all(isinstance(value, str) and 0 < len(value) <= 64 for value in values)):
                 raise HTTPException(status_code=400, detail=f"removals[{index}].{key} must be a list of ids")
             lists[key] = list(dict.fromkeys(values))
-        records.append({"id": removal, "nodeId": node_id, **lists})
+        records.append({"id": removal, "nodeId": node_id, **bound, **lists})
     return records
 
 
@@ -5046,26 +5082,80 @@ async def _reopen_update(ref: Mapping[str, Any] | None, proposal_id: str) -> Non
                                                     ids=[ref["id"]], note=result["note"], unread=result["unread"]))
 
 
-async def _undo_removals(records: list[dict[str, Any]], back: set[str]) -> dict[str, list[Any]]:
-    """The restore brought ``back`` these nodes: undo what their deletes
-    removed. Only records whose node this restore brought back count, and
-    only pins and proposals those very removals detached or closed. Returns
+def _bound_removals(records: list[dict[str, Any]], back: Mapping[str, str],
+                    project_id: str | None) -> list[tuple[dict[str, Any], bool | None]]:
+    """The records that may undo the delete of a node this restore brought
+    back (``back``: node id -> its model, in ``project_id``), each with
+    node_removals' verdict: True when this backend minted it for exactly
+    this node, False when for anything else (another node, project or
+    model), None when it doesn't know the id (after a restart). A record
+    that says it is for another project or model is dropped here."""
+    bound: list[tuple[dict[str, Any], bool | None]] = []
+    for record in records:
+        node_id = record["nodeId"]
+        if node_id not in back:
+            continue
+        if record.get("projectId", project_id) != project_id:
+            continue
+        if record.get("definitionId", back[node_id]) != back[node_id]:
+            continue
+        bound.append((record, node_removals.verdict(record, project_id=project_id, definition_id=back[node_id])))
+    return bound
+
+
+def _note_restored(project_id: str | None, back: Mapping[str, str], consumed: Mapping[str, str]) -> None:
+    """Each node this restore brought back, with the removal it undid (or
+    none): the next delete of that node names it (``replaces``)."""
+    for node_id in back:
+        node_removals.restored(project_id, node_id, consumed.get(node_id))
+
+
+async def _undo_removals(records: list[dict[str, Any]], back: Mapping[str, str],
+                         project_id: str | None) -> dict[str, list[Any]]:
+    """The restore brought ``back`` these nodes (node id -> model) in
+    ``project_id``: undo what their deletes removed. Only records bound to
+    those very nodes count (_bound_removals), and only pins and proposals
+    those removals detached or closed: a pin by its ``detachedBy`` and
+    model, a proposal by a (removal, node) pair in its ``closed_by``. Returns
     the restore's ``reattached`` (pin ids), ``pinsLeft`` ({id, reason}),
     ``reopened`` (proposal ids) and ``notReopened`` ({id, reason}): a
     proposal the delete closed that doesn't fit the restored graph, expired,
-    or that Nebula no longer has (a restart; proposals live in memory)."""
+    lost its tag to a clear, an import or a project switch, or that Nebula
+    no longer has (a restart; proposals live in memory)."""
     out: dict[str, list[Any]] = {"reattached": [], "pinsLeft": [], "reopened": [], "notReopened": []}
-    relevant = [record for record in records if record["nodeId"] in back]
-    if not relevant:
+    bound = _bound_removals(records, back, project_id)
+    # Pins check their own persisted binding (detachedBy, detachedFrom,
+    # detachedDefinition), so a record minted for something else still gets
+    # each pin it names reported as left; proposals and ``replaces`` take only
+    # the records not known to be another delete's.
+    for_pins = [record for record, _verdict in bound]
+    relevant = [record for record, verdict in bound if verdict is not False]
+    if _workspace_context()["activeProjectId"] != project_id:
+        # Another project opened while the restore was on its way: its pins
+        # and proposals aren't these; say so rather than touch them.
+        out["pinsLeft"] = [{"id": pin_id, "reason": ANOTHER_PROJECT}
+                           for pin_id in dict.fromkeys(p for r in for_pins for p in r.get("pins") or [])]
+        out["notReopened"] = [{"id": proposal_id, "reason": ANOTHER_PROJECT}
+                              for proposal_id in dict.fromkeys(p for r in relevant for p in r.get("proposals") or [])]
         return out
-    ids = {record["id"] for record in relevant}
+    consumed = {record["nodeId"]: record["id"] for record, verdict in bound if verdict}
+    if not for_pins:
+        _note_restored(project_id, back, consumed)
+        return out
+    pairs = {(record["id"], record["nodeId"]) for record in relevant}
 
     try:
-        pins = canvas_pins.reattach(relevant, back)
+        pins = canvas_pins.reattach(for_pins, back, project_id)
     except (PinError, ProjectStoreError):
         pins = {"reattached": [], "left": []}
     out["reattached"] = [str(pin.get("id")) for pin in pins["reattached"]]
     out["pinsLeft"] = pins["left"]
+    # After a restart only a pin proves which delete a record undid.
+    by_pin = {str(pin.get("id")): str((pin.get("anchor") or {}).get("nodeId")) for pin in pins["reattached"]}
+    for record, verdict in bound:
+        if verdict is None and any(by_pin.get(str(pin_id)) == record["nodeId"] for pin_id in record.get("pins") or []):
+            consumed.setdefault(record["nodeId"], record["id"])
+    _note_restored(project_id, back, consumed)
     if pins["reattached"]:
         await _broadcast_pins()
         for pin in pins["reattached"][:50]:
@@ -5078,14 +5168,14 @@ async def _undo_removals(records: list[dict[str, Any]], back: set[str]) -> dict[
             )
 
     named = {proposal_id for record in relevant for proposal_id in record.get("proposals") or []}
-    found = sorted(canvas_proposals.closed_by_removals(ids), key=lambda p: p.created_at)
+    found = sorted(canvas_proposals.closed_by_pairs(pairs, project_id), key=lambda p: p.created_at)
     reopened: list[Proposal] = []
     for proposal in found:
-        # These deletes are undone: the proposal no longer waits on them.
-        for removal in ids:
-            proposal.closed_by.pop(removal, None)
+        # Its tags stay as they are until it reopens: only a matching pair
+        # counts, and nothing is taken off before the checks pass.
+        waiting_on = {node_id for removal, node_id in proposal.closed_by.items() if (removal, node_id) not in pairs}
         missing = {node_id for node_id in proposal.references if node_id not in cli_graph.nodes}
-        if missing and missing <= set(proposal.closed_by.values()):
+        if missing and missing <= waiting_on:
             # It still needs nodes other deletes took, and undoing those may
             # bring them back: it waits for that, closed, and isn't counted.
             continue
@@ -5099,10 +5189,17 @@ async def _undo_removals(records: list[dict[str, Any]], back: set[str]) -> dict[
             reopened.append(proposal)
         else:
             out["notReopened"].append({"id": proposal.id, "reason": reason})
-    found_ids = {proposal.id for proposal in found}
+    assets = [p for p in asset_proposals.closed_by_pairs(pairs, project_id) if isinstance(p, AssetProposal)]
+    found_ids = {proposal.id for proposal in found} | {proposal.id for proposal in assets}
     for proposal_id in sorted(named - found_ids):
-        if canvas_proposals.get(proposal_id) is None and asset_proposals.get(proposal_id) is None:
+        proposal_now = canvas_proposals.get(proposal_id) or asset_proposals.get(proposal_id)
+        if proposal_now is None:
             out["notReopened"].append({"id": proposal_id, "reason": _PROPOSAL_GONE})
+        elif (proposal_now.status == "invalidated" and proposal_now.project_id == project_id
+              and any(pair in pairs for pair in proposal_now.dropped_by.items())):
+            # A clear, an import or a project switch spent this delete's tag.
+            out["notReopened"].append({"id": proposal_id,
+                                       "reason": f"{proposal_now.dropped_reason or 'the canvas was replaced'} since"})
         # One that is there but this delete didn't close (decided, or another
         # delete's) isn't this undo's: it stays as it is and isn't counted.
     for proposal in reopened:
@@ -5125,7 +5222,6 @@ async def _undo_removals(records: list[dict[str, Any]], back: set[str]) -> dict[
         await _reopen_update(proposal.update, proposal.id)
         _schedule_canvas_expiry(proposal)
 
-    assets = [p for p in asset_proposals.closed_by_removals(ids) if isinstance(p, AssetProposal)]
     reopened_assets: list[AssetProposal] = []
     live: dict[str, Any] | None = None
     if any(p.kind == "project" for p in assets):
@@ -6057,6 +6153,8 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         )
     except ProposalError as exc:
         raise _proposal_http_error(exc) from exc
+    # Which node it reads under each id, so only a delete of that very node tags it (second review).
+    proposal.lineage = {node_id: node_removals.lineage(proposal.project_id, node_id) for node_id in spec.references}
     await _post_canvas_update(proposal)  # Q112 a: the person hears of it on every screen
     view = _proposal_view(proposal)
     # The agent's other open proposals here that can't run: Justin (Q109)
@@ -6796,7 +6894,9 @@ async def _follow_cover_proposals(exported: dict[str, Any]) -> None:
                 # A node delete took its image: that delete's undo may reopen
                 # it. Its records name it too, so an undo after a restart
                 # (asset proposals live in memory) still counts it as lost.
-                records = _removals_ctx.get() or []
+                # Only deletes in its own project tag it (second review).
+                records = [record for record in _removals_ctx.get() or []
+                           if record.get("projectId") == proposal.project_id]
                 proposal.closed_by = {str(record["id"]): str(record["nodeId"]) for record in records}
                 for record in records:
                     named = record.setdefault("proposals", [])
@@ -8996,6 +9096,9 @@ async def _broadcast_graph_sync(
         # Nor do runs approved on Accept that haven't started.
         run_approvals.clear()
         await _announce_closed_proposals(canvas_proposals.invalidate_all("the canvas was replaced"))
+        # Node ids started again, or another project's are live: no earlier
+        # delete's undo may reopen a cover proposal by its node id either.
+        asset_proposals.drop_removal_tags("the canvas was replaced")
     return export
 
 
@@ -10365,6 +10468,8 @@ async def clear_graph(force: bool = False) -> dict:
         _reject_graph_replacement_during_paid_start("clear the canvas")
         cli_graph.clear()
         run_approvals.clear()
+        # Ids start again at n1: no node now is one a restore brought back.
+        node_removals.forget_project(_workspace_context()["activeProjectId"])
     agent_presence.forget_graph()
     _forget_canvas_undo("the canvas was cleared since")
     await _broadcast_graph_sync(edit=True)
@@ -10376,6 +10481,7 @@ async def clear_graph(force: bool = False) -> dict:
         detached = []
     await _journal_detached_pins(detached, "the canvas was cleared")
     await _announce_closed_proposals(canvas_proposals.invalidate_all("the canvas was cleared"))
+    asset_proposals.drop_removal_tags("the canvas was cleared")
     return {"status": "cleared"}
 
 
@@ -11058,7 +11164,16 @@ async def restore_graph_state(body: dict[str, Any]) -> dict[str, Any]:
     ``edit.redone`` event follows, and the agent's undo token for it knows
     the person undid it (services/canvas_undo.py). From anyone else it is
     ignored: agents undo their own edits with POST /api/graph/apply/undo.
+
+    ``removals`` (the removal records of the deletes this step undoes) are
+    the person's too. From the person's canvas they re-attach the pins and
+    reopen the proposals those deletes removed; from anyone else they are
+    ignored, since graphSync shows every socket an edit's removals and pins
+    are the person's. An agent's own undo puts back what its deletes removed
+    from the records the backend keeps.
     """
+    if body.get("removals") is not None and not _is_person_request():
+        body = {key: value for key, value in body.items() if key != "removals"}
     link = _restore_edit_link(body)
     if link is None:
         return await _restore_graph(body)
@@ -11114,7 +11229,10 @@ async def _restore_graph(
     renamed: dict[str, tuple[str, str]] = {}
     moved: list[str] = []
     removed: list[dict[str, Any]] = []
+    added_models: dict[str, str] = {}
     with _paid_graph_mutation(f"{action} an edit"):
+        # The project these nodes come back into: their deletes' records must name it.
+        project_id = _workspace_context()["activeProjectId"]
         candidate = cli_graph.clone()
         unwired: list[dict[str, Any]] = []
         for source, source_handle, target, target_handle in unwires:
@@ -11156,6 +11274,7 @@ async def _restore_graph(
                 if label:
                     candidate.set_label(node_id, label)
                 added.append(node_id)
+                added_models[node_id] = definition_id
                 continue
             if str(current.get("definitionId") or "") != definition_id:
                 raise HTTPException(status_code=409, detail=(
@@ -11278,7 +11397,10 @@ async def _restore_graph(
     # their deletes closed open again where they still fit (GM, 2026-10-23).
     # A swapped id (in ``remove`` too) holds another node now, not the one deleted.
     swapped = {gone["id"] for gone in removed}
-    undone = await _undo_removals(named_removals, {node_id for node_id in added if node_id not in swapped})
+    undone = await _undo_removals(named_removals, {node_id: added_models[node_id] for node_id in added
+                                                   if node_id not in swapped}, project_id)
+    for node_id in swapped & set(added):
+        node_removals.restored(project_id, node_id, None)
     return {
         "status": "restored",
         "action": action,
@@ -12129,6 +12251,10 @@ async def import_graph(body: dict[str, Any]) -> dict:
             list(candidate.nodes.values()),
             source="import",
         )
+        # Ids start again under this project: no node now is one a restore
+        # brought back. Here, with the commit, not after the sync's awaits: a
+        # delete landing during the sync would name the old node's removal.
+        node_removals.forget_project(_workspace_context()["activeProjectId"])
     exported = await _broadcast_graph_sync(graph_replaced=True, edit=True)
     publish_action(
         f"Loaded graph ({len(cli_graph.nodes)} nodes, {len(cli_graph.edges)} edges)"
@@ -13252,6 +13378,8 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
             catalog["activeProjectId"] = None
             catalog["workspaceRevision"] = uuid4().hex
             _commit_project_workspace(catalog, CLIGraph())
+            # The canvas is now the unfiled one, empty, its ids starting again at n1.
+            node_removals.forget_project(None)
         else:
             project_store.commit(catalog)
         result = {
