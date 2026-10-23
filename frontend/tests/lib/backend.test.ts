@@ -245,7 +245,8 @@ describe('backendWebSocketUrl with injected endpoint (VAL-TRANSPORT-005)', () =>
     expect(new Headers(fetchSpy.mock.calls[0][1].headers).get('X-Nebula-Person')).toBeNull();
     const session = await import('../../src/lib/personSession');
     expect(session.personUnavailableReason()).toBe('debug-port');
-    expect(session.personRequiredMessage()).toMatch(/remote-debugging port/);
+    expect(session.personRequiredMessage()).toBe(
+      'Debug mode: a debugging port is open, so Settings, proposals and chats are off.');
   });
 
   afterEach(() => {
