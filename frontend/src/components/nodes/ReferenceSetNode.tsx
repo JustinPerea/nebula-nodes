@@ -13,6 +13,8 @@ import {
 } from '../../lib/referenceRoles';
 import { useGraphStore } from '../../store/graphStore';
 import { edgesInto } from '../../lib/graphIndex';
+import type { NodeData } from '../../types';
+import { NodeRunError } from './NodeError';
 import '../../styles/reference-set-node.css';
 
 // The ReferenceSetNode is the canvas card for the reference-set utility node.
@@ -154,6 +156,8 @@ export function ReferenceSetNode({ id, data, selected }: NodeProps) {
           ))
         )}
       </div>
+
+      <NodeRunError data={data as unknown as NodeData} className="reference-set-node__run-error" />
 
       {/* Single ReferenceSet-typed source handle on the right. */}
       <Handle

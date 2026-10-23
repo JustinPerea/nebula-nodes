@@ -749,7 +749,8 @@ describe('graphStore', () => {
 
     expect(nodeId).toBeNull();
     expect(useGraphStore.getState().nodes).toHaveLength(0);
-    expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('known backend'));
+    // Round 3e (GM): a written line, no "known backend" or "node creation".
+    expect(alertMock).toHaveBeenCalledWith("Couldn't add Text Input. Nebula lost contact with its backend, so the node wasn't added. Reconnect, then add it again.");
   });
 
   it('removes a node and cleans up connected edges', async () => {

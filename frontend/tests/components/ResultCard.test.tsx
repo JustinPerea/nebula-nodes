@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../../src/types';
 import { ResultCard } from '../../src/components/create-studio/ResultCard';
+import { RequestFailedError } from '../../src/lib/errorCopy';
 
 function node(state: NodeData['state'], outputs: NodeData['outputs']): Node<NodeData> {
   return { id: 'n1', type: 'model-node', position: { x: 0, y: 0 },
@@ -133,7 +134,7 @@ describe('ResultCard saves', () => {
   });
 
   it('shows a failed save and allows a successful retry', async () => {
-    const onSaveToFolder = vi.fn().mockRejectedValueOnce(new Error('Disk full'))
+    const onSaveToFolder = vi.fn().mockRejectedValueOnce(new RequestFailedError("Couldn't save the file.", 507, { reason: 'Disk full.' }))
       .mockResolvedValueOnce({ savedPath: '/tmp/retry.png' });
     const view = render(<ResultCard node={completed()} onOpenInCanvas={noop} onUseAsInput={noop}
       onDelete={noop} onSaveToFolder={onSaveToFolder} />);
@@ -208,7 +209,7 @@ describe('ResultCard saves', () => {
   });
 
   it('resets an existing save error when a different node has the same output URL', async () => {
-    const onSaveToFolder = vi.fn().mockRejectedValueOnce(new Error('First node failed'));
+    const onSaveToFolder = vi.fn().mockRejectedValueOnce(new RequestFailedError("Couldn't save the file.", 409, { reason: 'First node failed.' }));
     const view = render(<ResultCard node={completed()} onOpenInCanvas={noop} onUseAsInput={noop}
       onDelete={noop} onSaveToFolder={onSaveToFolder} />);
     fireEvent.click(view.getByTitle('Save to folder'));

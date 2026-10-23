@@ -54,7 +54,7 @@ describe('uploadReference', () => {
 
   it('rejects a successful response without a usable image reference', async () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => ({ filePath: null, url: '' }) });
-    await expect(uploadReference(image())).rejects.toThrow('no image reference');
+    await expect(uploadReference(image())).rejects.toThrow('The upload sent back no image.');
   });
 });
 

@@ -1,7 +1,7 @@
 import { backendAssetUrlSync } from './backend';
 import { AssetByteLimitError, readBoundedAssetResponse } from './boundedAsset';
 import { isSafeWorldUrl } from './worldValue';
-import { ConnectionLostError, oneLine, requestError, requestSucceeded } from './errorCopy';
+import { ConnectionLostError, FailureNotice, requestError, requestSucceeded } from './errorCopy';
 
 // Blob fallback intentionally stays below graph-bundle totals: the browser
 // briefly holds both the byte array and Blob/object URL. Larger exports should
@@ -40,7 +40,7 @@ export async function downloadWorldAsset(
   options: WorldDownloadOptions = {},
 ): Promise<void> {
   const heading = options.heading ?? "Couldn't download the world.";
-  const failed = (reason: string) => new Error(oneLine({ heading, reason }));
+  const failed = (reason: string) => new FailureNotice(heading, reason);
   if (!isSafeWorldUrl(url)) throw failed('The asset URL is not safe to download.');
 
   let response: Response;

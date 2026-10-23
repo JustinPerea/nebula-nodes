@@ -15,7 +15,10 @@ import type {
 export interface ExecutionValidationError {
   nodeId: string;
   portId: string;
+  /** The specific text agents keep, word for word. */
   message: string;
+  /** The card's line (error copy round 3e); null/absent: GM's general line, `message` behind Details. */
+  person?: string | null;
 }
 
 export interface ExecutionStartResult {
@@ -173,7 +176,7 @@ export async function generateCinemaShot(
   seed?: number,
   variations?: number,
   runId?: string,
-): Promise<{ status: string; shotId?: string; variations?: number; errorCount?: number }> {
+): Promise<{ status: string; shotId?: string; variations?: number; errorCount?: number; errors?: ExecutionValidationError[] }> {
   const response = await startRequest("Couldn't start the shot.", '/api/cinema/generate-shot',
     { nodes, edges, nodeId, shotId, seed, variations, runId });
   return response.json();

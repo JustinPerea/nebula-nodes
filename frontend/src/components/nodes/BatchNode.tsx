@@ -21,6 +21,11 @@ function BatchNodeComponent({ id, data, selected }: NodeProps) {
   const name = typeof nodeData.params.display_name === 'string' && nodeData.params.display_name.trim()
     ? nodeData.params.display_name : 'Batch';
   const isSelected = selected || selectedInUi;
+  // The run stopped at the cap check (error copy round 3e): its error says
+  // the cap with the field's label, so the card's own warning, which says
+  // the same, steps aside while both would show (GM: one fact once). The
+  // agents' text names the check word for word (backend engine._batch_items).
+  const stoppedOnCap = nodeData.state === 'error' && /exceeding its batch_size_cap of \d+/.test(nodeData.error ?? '');
   const inspectorExpanded = useUIStore((state) => isSelected && state.panels.inspector.visible);
 
   return (
@@ -46,7 +51,7 @@ function BatchNodeComponent({ id, data, selected }: NodeProps) {
       </div>
       <p className="batch-node__guidance">Cap {cap} · Run explicitly. Editing does not generate.</p>
       {authoringError && <p className="batch-node__warning" role="alert">{authoringError}</p>}
-      {items.length > cap && <p className="batch-node__warning" role="alert">
+      {items.length > cap && !stoppedOnCap && <p className="batch-node__warning" role="alert">
         {items.length} items exceed the cap of {cap}. Reduce items or raise the cap in settings (maximum 25).
       </p>}
       {/* The run error reads like every node card's (error copy round 3c-2):

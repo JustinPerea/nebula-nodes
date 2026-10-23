@@ -70,14 +70,16 @@ describe('explicit provider connection checks', () => {
     expect(fetch).toHaveBeenCalledOnce();
   });
 
+  // Error copy round 3e (GM): "Couldn't {verb} {object}." then the reason.
+  const CHECK_FAILED = "Couldn't check the connections. Make sure Nebula's backend is running, then try again.";
   it('sanitizes transport failures and rejects malformed status data', async () => {
     fetch.mockRejectedValueOnce(new Error('https://private.test/?token=secret'));
     await useProviderReadinessStore.getState().checkConnections();
-    expect(useProviderReadinessStore.getState().error).toContain('Connections could not be checked');
+    expect(useProviderReadinessStore.getState().error).toBe(CHECK_FAILED);
     expect(useProviderReadinessStore.getState().error).not.toContain('secret');
     fetch.mockResolvedValue(response('OpenAI', 'surprise-status'));
     await useProviderReadinessStore.getState().checkConnections();
     expect(useProviderReadinessStore.getState()).toMatchObject({ providers: {}, checkedAt: null, loading: false });
-    expect(useProviderReadinessStore.getState().error).toContain('Connections could not be checked');
+    expect(useProviderReadinessStore.getState().error).toBe(CHECK_FAILED);
   });
 });

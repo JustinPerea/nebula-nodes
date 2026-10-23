@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CommonsDetail } from '../src/components/commons/CommonsDetail';
 import { CommonsSettings } from '../src/components/commons/CommonsSettings';
 import type { AssetDetail } from '../src/lib/commonsTypes';
+import { RequestFailedError } from '../src/lib/errorCopy';
 
 const api = vi.hoisted(() => ({
   asset: vi.fn(), comment: vi.fn(), folders: vi.fn(), settings: vi.fn(), candidates: vi.fn(), linkFolder: vi.fn(),
@@ -38,13 +39,14 @@ afterEach(() => cleanup());
 
 describe('Commons comment submissions', () => {
   it('preserves a rejected comment, shows the error and permits an explicit successful retry', async () => {
-    api.comment.mockRejectedValueOnce(new Error('Comment could not be saved'));
+    // Round 3e: the Commons API's typed refusals (CommonsRequestError is one), not plain Errors.
+    api.comment.mockRejectedValueOnce(new RequestFailedError("Couldn't save the comment.", 409, { reason: 'The comment was not saved.' }));
     const onChanged = vi.fn();
     render(<CommonsDetail assetId="fixture-asset" onClose={vi.fn()} onDeleted={vi.fn()} onChanged={onChanged} />);
     const input = await screen.findByRole('textbox', { name: 'Add a comment' });
     fireEvent.change(input, { target: { value: 'Keep this comment' } });
     fireEvent.click(screen.getByRole('button', { name: 'Post' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Comment could not be saved');
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't save the comment. The comment was not saved.");
     expect(input).toHaveValue('Keep this comment');
     expect(onChanged).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Post' }));
@@ -74,14 +76,14 @@ describe('Commons comment submissions', () => {
   });
 
   it('clears a committed comment even when its read-back fails, retaining the read error', async () => {
-    api.asset.mockResolvedValueOnce(detail()).mockRejectedValue(new Error('Read-back offline'));
+    api.asset.mockResolvedValueOnce(detail()).mockRejectedValue(new RequestFailedError("Couldn't load the reference.", 409, { reason: 'Read-back offline.' }));
     const onChanged = vi.fn();
     render(<CommonsDetail assetId="fixture-asset" onClose={vi.fn()} onDeleted={vi.fn()} onChanged={onChanged} />);
     const input = await screen.findByRole('textbox', { name: 'Add a comment' });
     fireEvent.change(input, { target: { value: 'Committed comment' } });
     fireEvent.click(screen.getByRole('button', { name: 'Post' }));
     await waitFor(() => expect(input).toHaveValue(''));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Read-back offline');
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load the reference. Read-back offline.");
     expect(api.comment).toHaveBeenCalledTimes(1);
     expect(onChanged).toHaveBeenCalledTimes(1);
   });
@@ -89,14 +91,14 @@ describe('Commons comment submissions', () => {
 
 describe('Commons linked-folder submissions', () => {
   it('preserves a rejected path, shows its error and retries without losing the input', async () => {
-    api.linkFolder.mockRejectedValueOnce(new Error('Folder is not allowed'));
+    api.linkFolder.mockRejectedValueOnce(new RequestFailedError("Couldn't link the folder.", 403, { reason: 'Folder is not allowed.' }));
     const onChanged = vi.fn();
     render(<CommonsSettings status={null} onOpenAsset={vi.fn()} onChanged={onChanged} />);
     const input = screen.getByRole('textbox', { name: 'Folder path' });
     await waitFor(() => expect(api.folders).toHaveBeenCalledTimes(1));
     fireEvent.change(input, { target: { value: '/synthetic/references' } });
     fireEvent.click(screen.getByRole('button', { name: 'Link folder' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Folder is not allowed');
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't link the folder. Folder is not allowed.");
     expect(input).toHaveValue('/synthetic/references');
     expect(onChanged).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Link folder' }));
@@ -127,7 +129,7 @@ describe('Commons linked-folder submissions', () => {
   });
 
   it('clears a committed path if refreshing the folder list fails and preserves that error', async () => {
-    api.folders.mockResolvedValueOnce([]).mockRejectedValue(new Error('Folder refresh offline'));
+    api.folders.mockResolvedValueOnce([]).mockRejectedValue(new RequestFailedError("Couldn't load the folders.", 409, { reason: 'Folder refresh offline.' }));
     const onChanged = vi.fn();
     render(<CommonsSettings status={null} onOpenAsset={vi.fn()} onChanged={onChanged} />);
     const input = screen.getByRole('textbox', { name: 'Folder path' });
@@ -135,7 +137,7 @@ describe('Commons linked-folder submissions', () => {
     fireEvent.change(input, { target: { value: '/synthetic/committed' } });
     fireEvent.click(screen.getByRole('button', { name: 'Link folder' }));
     await waitFor(() => expect(input).toHaveValue(''));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Folder refresh offline');
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load the folders. Folder refresh offline.");
     expect(api.linkFolder).toHaveBeenCalledTimes(1);
     expect(onChanged).toHaveBeenCalledTimes(1);
   });

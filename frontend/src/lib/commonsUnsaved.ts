@@ -1,4 +1,5 @@
 import type { StateCreator } from 'zustand';
+import { writtenLine } from './errorCopy';
 
 /**
  * Whether the Commons holds unsaved work: Blind labeling or Agent review has
@@ -73,7 +74,7 @@ export function commonsUnsaved(): boolean {
  * exits that didn't ask first (askBeforeLeavingCommons).
  */
 export function refuseWhileCommonsUnsaved(): void {
-  if (unsaved) throw new Error(COMMONS_UNSAVED_REASON);
+  if (unsaved) throw writtenLine(COMMONS_UNSAVED_REASON);
 }
 
 type Write<T> = Partial<T> | ((state: T) => Partial<T>);

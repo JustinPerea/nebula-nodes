@@ -118,7 +118,7 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
       .catch((err) => {
         if (cancelled) return;
         setItemsFor(where);
-        setError(err instanceof Error ? err.message : 'Couldn’t load Recently deleted.');
+        setError(failureMessage(err, "Couldn't load Recently deleted."));
       });
     return () => { cancelled = true; };
   }, [kind, scope, projectId, noProject, where, refreshKey, reload]);

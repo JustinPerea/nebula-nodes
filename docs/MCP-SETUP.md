@@ -690,6 +690,24 @@ keeps `error` on the shot's `output` as before and adds `errorCategory`,
 cut) for the Cinema panel. Read `error`; don't parse `person` or the shot's
 error* fields.
 
+Round 3e gave the pre-run check the same split. A run the check refuses
+(a missing key, an unconnected required input, a Batch over its cap, a wire
+that no longer fits) still answers agents exactly as before: `run_nodes`,
+`/api/graph/run` and `nebula run` list each node's `message` in `errors`,
+word for word ("Missing API key: OPENAI_API_KEY", "Required input port
+'prompt' is not connected", "Batch has 3 items, exceeding its
+batch_size_cap of 2. ..."), and `look_at_canvas` / `nebula look` show it
+as the node's `error`. Only the canvas's own answer (`/api/execute`,
+`/api/execute-node`, a shot run) and the `validationError` socket event
+gain an additive `person` on each error ("Add your OpenAI API key in
+Settings, then run the node again.", "Connect a prompt, then run the node
+again."), which the card shows; a check only agents or a damaged saved
+graph reach has none, and the card reads the general line. The Paper source
+routes (`/api/paper/...`, the person's) work the same way: `detail.message`
+is unchanged and `detail.person` is the card's line, and a source record
+keeps `lastError` beside the new `lastErrorPerson`. Read `message` /
+`error` / `lastError`; never parse `person`.
+
 ### Numbers in request bodies
 
 Every JSON request body (`application/json`, `application/*+json`, any

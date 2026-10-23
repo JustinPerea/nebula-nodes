@@ -14,6 +14,7 @@ from uuid import uuid4
 
 from PIL import Image
 from services.file_access import require_allowed_path
+from services.paper_copy import paper_person_line
 from services.paper_transport import PaperCLI, PaperError
 
 
@@ -122,11 +123,13 @@ class PaperSources:
                 record["snapshot"] = snapshot
             record.update(identity=resolved, exportSettings=settings, state="current", lastSuccessfulRefresh=stamp)
             record.pop("lastError", None)
+            record.pop("lastErrorPerson", None)
             result = self._commit(record, record.get("snapshot"))
             return {**result, "changed": changed and not result.get("superseded", False)}
         except (PaperError, OSError, ValueError, Image.DecompressionBombError) as exc:
             error = exc if isinstance(exc, PaperError) else PaperError("Paper export could not be validated; last good snapshot retained")
-            record.update(state=error.state, lastError=str(error))
+            # lastError for agents, word for word; lastErrorPerson for the card (round 3e).
+            record.update(state=error.state, lastError=str(error), lastErrorPerson=paper_person_line(error))
             retained = self._commit(record)
             if retained.get("superseded"):
                 return retained

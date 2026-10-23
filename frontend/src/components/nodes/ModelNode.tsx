@@ -44,6 +44,7 @@ import { JevResultView, type JevResultInputs } from './JevResult';
 import { JevCardField } from './JevCardField';
 import { isJevNode, jevBrandStyle, parseJevOutputs, JEV_BOX, JEV_BRAND, JEV_DECIDE, JEV_PICK_BEST } from '../../lib/jev';
 import { JEV_CARD_FIELDS, jevCardText, jevResultKey, upstreamPortValues } from '../../lib/jevView';
+import { failureMessage } from '../../lib/errorCopy';
 
 // Trigger a browser download for a URL produced by the backend. We fetch the
 // blob ourselves so the `download` attribute is honoured even across localhost
@@ -57,8 +58,9 @@ async function downloadOutput(url: string, filename: string): Promise<void> {
     });
   } catch (err) {
     console.error('[nebula] output download', err);
-    // The message is already "Couldn't download the output. <reason>".
-    window.alert(err instanceof Error ? err.message : "Couldn't download the output.");
+    // "Couldn't download the output. <reason>" (downloadWorldAsset's own
+    // lines keep their reason; anything else reads GM's general line).
+    window.alert(failureMessage(err, "Couldn't download the output."));
   }
 }
 

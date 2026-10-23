@@ -6,7 +6,7 @@ import { shotPortId } from '../constants/ports';
 import { backendAssetUrlSync, getCachedBackendBaseUrl } from './backend';
 import { AssetByteLimitError, readBoundedAssetResponse } from './boundedAsset';
 import { apiRequest } from './apiRequest';
-import { ConnectionLostError, RequestFailedError } from './errorCopy';
+import { FailureNotice, failureMessage, oneLine } from './errorCopy';
 import {
   hasRepresentationViewer,
   parseRepresentation,
@@ -114,8 +114,36 @@ function warnAboutSkippedBundleAssets(summary: GraphBundleAssetSummary): void {
   );
 }
 
-export class GraphBundleImportTooLargeError extends Error {}
-export class GraphStructureLimitError extends Error {}
+// Error copy round 3e (GM): the file's own size and shape limits are written
+// lines (FailureNotice with no heading: the save or load alert puts its own
+// heading over them). A file that fails its shape checks reads one written
+// line; the check's text ("nodes[0] must be an object") is `detail`, for the
+// console.
+export class GraphBundleImportTooLargeError extends FailureNotice {
+  constructor(reason: string) {
+    super('', reason);
+    this.name = 'GraphBundleImportTooLargeError';
+  }
+}
+export class GraphStructureLimitError extends FailureNotice {
+  constructor(reason: string) {
+    super('', reason);
+    this.name = 'GraphStructureLimitError';
+  }
+}
+
+const GRAPH_FILE_DAMAGED_COPY = "This file is damaged or isn't a Nebula graph.";
+const GRAPH_FILE_NEWER_COPY = 'This file is from a newer Nebula. Update Nebula, then open it again.';
+
+export class GraphFileInvalidError extends FailureNotice {
+  readonly detail: string;
+
+  constructor(detail: string, reason = GRAPH_FILE_DAMAGED_COPY) {
+    super('', reason);
+    this.name = 'GraphFileInvalidError';
+    this.detail = detail;
+  }
+}
 
 export interface GraphFileSelection {
   file: Blob;
@@ -646,13 +674,13 @@ export async function saveToFile(
     const graphBytes = new TextEncoder().encode(graphJson).byteLength;
     if (graphBytes > GRAPH_JSON_MAX_IMPORT_BYTES) {
       throw new GraphStructureLimitError(
-        `graph.json is ${(graphBytes / (1024 * 1024)).toFixed(1)} MB; the portable limit is `
+        `The graph is ${(graphBytes / (1024 * 1024)).toFixed(1)} MB, over the portable limit of `
         + `${Math.floor(GRAPH_JSON_MAX_IMPORT_BYTES / (1024 * 1024))} MB.`,
       );
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'The graph could not be serialized safely.';
-    alert(`${SAVE_GRAPH} ${message}`);
+    console.error('[nebula] graph save', error);
+    alert(failureMessage(error, SAVE_GRAPH));
     return null;
   }
 
@@ -669,8 +697,8 @@ export async function saveToFile(
     // every frontend-produced bundle inside the backend's ratio policy.
     blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'The portable bundle could not be created.';
-    alert(`${SAVE_GRAPH} ${message}`);
+    console.error('[nebula] graph bundle', error);
+    alert(failureMessage(error, SAVE_GRAPH));
     return null;
   }
   if (blob.size > GRAPH_BUNDLE_MAX_IMPORT_BYTES) {
@@ -972,34 +1000,35 @@ function isOptionalHandle(value: unknown): value is string | null | undefined {
 }
 
 function assertValidNebulaEnvelope(parsed: unknown): asserts parsed is NebulaFile {
-  if (!isRecord(parsed)) throw new Error('Invalid .nebula file: graph must be an object');
+  if (!isRecord(parsed)) throw new GraphFileInvalidError('Invalid .nebula file: graph must be an object');
   if (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3) {
-    throw new Error(`Unsupported .nebula file version: ${String(parsed.version)}`);
+    throw new GraphFileInvalidError(`Unsupported .nebula file version: ${String(parsed.version)}`,
+      typeof parsed.version === 'number' && parsed.version > 3 ? GRAPH_FILE_NEWER_COPY : GRAPH_FILE_DAMAGED_COPY);
   }
   if (parsed.paramsVersion !== undefined
     && !(Number.isInteger(parsed.paramsVersion) && (parsed.paramsVersion as number) >= 0)) {
-    throw new Error('Invalid .nebula file: paramsVersion must be a non-negative integer');
+    throw new GraphFileInvalidError('Invalid .nebula file: paramsVersion must be a non-negative integer');
   }
   if (typeof parsed.name !== 'string' || !parsed.name.trim()) {
-    throw new Error('Invalid .nebula file: name must be a non-empty string');
+    throw new GraphFileInvalidError('Invalid .nebula file: name must be a non-empty string');
   }
   if (typeof parsed.createdAt !== 'string' || !parsed.createdAt.trim()) {
-    throw new Error('Invalid .nebula file: createdAt must be a non-empty string');
+    throw new GraphFileInvalidError('Invalid .nebula file: createdAt must be a non-empty string');
   }
   if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
-    throw new Error('Invalid .nebula file: missing nodes or edges arrays');
+    throw new GraphFileInvalidError('Invalid .nebula file: missing nodes or edges arrays');
   }
 
   parsed.nodes.forEach((node, index) => {
-    if (!isRecord(node)) throw new Error(`Invalid .nebula file: nodes[${index}] must be an object`);
+    if (!isRecord(node)) throw new GraphFileInvalidError(`Invalid .nebula file: nodes[${index}] must be an object`);
     if (typeof node.id !== 'string' || !node.id) {
-      throw new Error(`Invalid .nebula file: nodes[${index}].id must be a non-empty string`);
+      throw new GraphFileInvalidError(`Invalid .nebula file: nodes[${index}].id must be a non-empty string`);
     }
     if (typeof node.type !== 'string' || !node.type || !isFinitePoint(node.position)) {
-      throw new Error(`Invalid .nebula file: nodes[${index}] is missing its type or position`);
+      throw new GraphFileInvalidError(`Invalid .nebula file: nodes[${index}] is missing its type or position`);
     }
     if (!isRecord(node.data)) {
-      throw new Error(`Invalid .nebula file: nodes[${index}].data must be an object`);
+      throw new GraphFileInvalidError(`Invalid .nebula file: nodes[${index}].data must be an object`);
     }
     if (
       typeof node.data.label !== 'string'
@@ -1007,15 +1036,15 @@ function assertValidNebulaEnvelope(parsed: unknown): asserts parsed is NebulaFil
       || !node.data.definitionId
       || !isRecord(node.data.params)
     ) {
-      throw new Error(`Invalid .nebula file: nodes[${index}].data has an invalid graph shape`);
+      throw new GraphFileInvalidError(`Invalid .nebula file: nodes[${index}].data has an invalid graph shape`);
     }
     if (node.data.outputs != null && !isRecord(node.data.outputs)) {
-      throw new Error(`Invalid .nebula file: nodes[${index}].data.outputs must be an object`);
+      throw new GraphFileInvalidError(`Invalid .nebula file: nodes[${index}].data.outputs must be an object`);
     }
     if (isRecord(node.data.outputs)) {
       Object.entries(node.data.outputs).forEach(([portId, output]) => {
         if (!portId || !isRecord(output) || typeof output.type !== 'string' || !output.type) {
-          throw new Error(`Invalid .nebula file: nodes[${index}].data.outputs.${portId} must be a typed port object`);
+          throw new GraphFileInvalidError(`Invalid .nebula file: nodes[${index}].data.outputs.${portId} must be a typed port object`);
         }
       });
     }
@@ -1023,12 +1052,12 @@ function assertValidNebulaEnvelope(parsed: unknown): asserts parsed is NebulaFil
       node.data.state != null
       && !['idle', 'queued', 'executing', 'complete', 'error', 'skipped'].includes(String(node.data.state))
     ) {
-      throw new Error(`Invalid .nebula file: nodes[${index}].data.state is invalid`);
+      throw new GraphFileInvalidError(`Invalid .nebula file: nodes[${index}].data.state is invalid`);
     }
   });
 
   parsed.edges.forEach((edge, index) => {
-    if (!isRecord(edge)) throw new Error(`Invalid .nebula file: edges[${index}] must be an object`);
+    if (!isRecord(edge)) throw new GraphFileInvalidError(`Invalid .nebula file: edges[${index}] must be an object`);
     if (
       typeof edge.id !== 'string'
       || !edge.id
@@ -1041,7 +1070,7 @@ function assertValidNebulaEnvelope(parsed: unknown): asserts parsed is NebulaFil
       || !isOptionalHandle(edge.targetHandle)
       || (edge.data != null && !isRecord(edge.data))
     ) {
-      throw new Error(`Invalid .nebula file: edges[${index}] has an invalid graph shape`);
+      throw new GraphFileInvalidError(`Invalid .nebula file: edges[${index}] has an invalid graph shape`);
     }
   });
 
@@ -1056,26 +1085,26 @@ function assertValidNebulaEnvelope(parsed: unknown): asserts parsed is NebulaFil
       || !Number.isFinite(parsed.viewport.zoom)
       || parsed.viewport.zoom <= 0)
   ) {
-    throw new Error('Invalid .nebula file: viewport must contain finite x, y, and zoom values');
+    throw new GraphFileInvalidError('Invalid .nebula file: viewport must contain finite x, y, and zoom values');
   }
 }
 
 function validatedRestoreMapping(value: unknown): Map<string, string> {
-  if (!isRecord(value)) throw new Error('Asset restore returned an invalid URL mapping');
+  if (!isRecord(value)) throw new GraphFileInvalidError('Asset restore returned an invalid URL mapping');
   const mapping = new Map<string, string>();
   for (const [rawPath, rawMappedUrl] of Object.entries(value)) {
     if (typeof rawMappedUrl !== 'string') {
-      throw new Error('Asset restore returned an invalid URL mapping');
+      throw new GraphFileInvalidError('Asset restore returned an invalid URL mapping');
     }
     const path = canonicalPortableOutputRelativePath(rawPath);
     const mapped = parseLocalOutputReference(rawMappedUrl);
     if (!path || mapped.kind !== 'valid') {
-      throw new Error('Asset restore returned an invalid URL mapping');
+      throw new GraphFileInvalidError('Asset restore returned an invalid URL mapping');
     }
     const existing = mapping.get(path);
     const portableUrl = `${OUTPUTS_PREFIX}${mapped.relativePath}`;
     if (existing && existing !== portableUrl) {
-      throw new Error('Asset restore returned colliding URL mapping keys');
+      throw new GraphFileInvalidError('Asset restore returned colliding URL mapping keys');
     }
     mapping.set(path, portableUrl);
   }
@@ -1161,7 +1190,7 @@ export async function loadFromFile(): Promise<{
       });
 
       const restored = await resp.json() as unknown;
-      if (!isRecord(restored)) throw new Error('Asset restore returned an invalid response');
+      if (!isRecord(restored)) throw new GraphFileInvalidError('Asset restore returned an invalid response');
       parsed = restored.graph;
       assertGraphComplexityWithinLimits(parsed);
       assertValidNebulaEnvelope(parsed);
@@ -1183,12 +1212,13 @@ export async function loadFromFile(): Promise<{
       warnings: [...restoreWarnings, ...worldWarnings, ...result.warnings],
     };
   } catch (err) {
-    console.error('[nebula] graph load', err);
+    console.error('[nebula] graph load', err instanceof GraphFileInvalidError ? err.detail : err);
     // A request's error already names its action ("Couldn't restore the
-    // asset. <reason>"); anything else is the load's own written reason.
-    alert(err instanceof RequestFailedError || err instanceof ConnectionLostError
-      ? err.message
-      : `${LOAD_GRAPH} ${(err as Error).message}`);
+    // asset. <reason>"); the file's own checks are written lines under
+    // LOAD_GRAPH; anything else (JSON that doesn't parse) is a damaged file.
+    alert(err instanceof SyntaxError
+      ? oneLine({ heading: LOAD_GRAPH, reason: GRAPH_FILE_DAMAGED_COPY })
+      : failureMessage(err, LOAD_GRAPH));
     return null;
   }
 }
@@ -1209,8 +1239,8 @@ export function loadViaInput(): Promise<GraphFileSelection | null> {
       try {
         resolve(await inspectGraphFileWithinLimit(file));
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'The selected file could not be read.';
-        alert(`${LOAD_GRAPH} ${message}`);
+        console.error('[nebula] graph pick', error);
+        alert(failureMessage(error, LOAD_GRAPH));
         resolve(null);
       }
     };

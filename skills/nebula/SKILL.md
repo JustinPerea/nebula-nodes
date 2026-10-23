@@ -279,7 +279,11 @@ text, ids and parameter names included; the card shows a written line (the
 graph's `errorPerson`, when the node's handler wrote one) that you shouldn't
 parse. A failed Cinema shot's `output` works the same: read its `error`; its
 `errorCategory`, `errorFriendly`, `errorPerson` and `errorRaw` are for the
-Cinema panel.
+Cinema panel. A run the pre-run check refuses (a missing key, an
+unconnected input, a Batch over its cap) prints the same specific text as
+before ("Missing API key: OPENAI_API_KEY"); the card's line ("Add your
+OpenAI API key in Settings, then run the node again.") rides only on the
+canvas's own answer, so nothing you read changed.
 
 ## Moodboards
 

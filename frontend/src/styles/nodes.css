@@ -544,6 +544,18 @@ body:not(.app-slava-restraint) .reroute-node:hover {
   border-color: #888;
 }
 
+/* The reroute dot's run error (error copy round 3e): the dot has no body,
+   so the shared error block hangs centred below it at a card's width. */
+.reroute-node__run-error {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  width: 200px;
+  translate: -50% 0;
+  z-index: 1;
+  cursor: default;
+}
+
 .reroute-node__handle {
   width: 8px !important;
   height: 8px !important;

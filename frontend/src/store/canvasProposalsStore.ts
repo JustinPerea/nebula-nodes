@@ -15,6 +15,7 @@ import {
 } from '../lib/canvasProposals';
 import type { Point } from '../lib/agentCursorMotion';
 import { useGraphStore, watchGraphSyncs } from './graphStore';
+import { failureMessage } from '../lib/errorCopy';
 
 /** How long a closed proposal's ghosts fade before they go. Matches canvasProposals.css. */
 export const PROPOSAL_EXIT_MS = 220;
@@ -227,7 +228,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
       if (!accepted) useGraphStore.getState().cancelUndoStep(undoStep);
       const message = error instanceof ProposalRequestError && error.status === 403
         ? 'Only the canvas can accept this. Reload the page.'
-        : error instanceof Error ? error.message : String(error);
+        : failureMessage(error, "Couldn't accept the proposal.");
       set((state) => ({ errors: { ...state.errors, [id]: message } }));
     } finally {
       synced.stop();
@@ -245,7 +246,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
     } catch (error) {
       const message = error instanceof ProposalRequestError && error.status === 403
         ? 'Only the canvas can reject this. Reload the page.'
-        : error instanceof Error ? error.message : String(error);
+        : failureMessage(error, "Couldn't reject the proposal.");
       set((state) => ({ errors: { ...state.errors, [id]: message } }));
     } finally {
       set((state) => ({ pending: without(state.pending, id) }));

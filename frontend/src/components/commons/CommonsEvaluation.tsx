@@ -6,6 +6,7 @@ import { CommonsCloseBatch } from './CommonsCloseBatch';
 import { saveFailure, type LabelingWork, type SaveResult } from './commonsLeave';
 import { SectionEyebrow } from './CommonsSectionEyebrow';
 import '../../styles/commons-evaluation.css';
+import { failureMessage } from '../../lib/errorCopy';
 
 const pretty = (value: string) => value === 'n_a' ? 'Not applicable' : value.replaceAll('_', ' ');
 const emptyLabels = (): EvaluationLabels => ({ tags: {}, axes: {}, palette_roles: {}, keywords: [], no_keywords: false, flagged: false });
@@ -31,7 +32,7 @@ function followScan(pending: Scan, live: () => boolean, show: (outcome: ScanOutc
     if (scan === pending) scan = null;
     show(outcome);
   };
-  pending.result.then((batch) => settle({ batch }), (e: Error) => settle({ error: e.message }));
+  pending.result.then((batch) => settle({ batch }), (e: unknown) => settle({ error: failureMessage(e, "Couldn't load the review.") }));
 }
 
 /**
@@ -70,7 +71,7 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
       followScan(resumed, () => !cancelled, showScan);
       return () => { cancelled = true; };
     }
-    api.get().then((value) => { if (!cancelled) setBatch(value); }, (e: Error) => { if (!cancelled) setError(e.message); })
+    api.get().then((value) => { if (!cancelled) setBatch(value); }, (e: unknown) => { if (!cancelled) setError(failureMessage(e, "Couldn't load the review.")); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [resumed, showScan]);
@@ -193,9 +194,9 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
       image.onload = () => { if (!controller.signal.aborted && canvas.current) {
         canvas.current.getContext('2d')?.drawImage(image, 0, 0); setUrl(objectUrl);
       } };
-      image.onerror = () => { if (!controller.signal.aborted) setImageError('Could not decode this reference. Reload to try again.'); };
+      image.onerror = () => { if (!controller.signal.aborted) setImageError("Couldn't show this reference. Reload to try again."); };
       image.src = objectUrl;
-    }, (e: Error) => { if (!controller.signal.aborted) setImageError(e.message); });
+    }, (e: unknown) => { if (!controller.signal.aborted) setImageError(failureMessage(e, "Couldn't load this reference.")); });
     return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [item.position]);
   const change = (patch: Partial<EvaluationLabels>) => { setLabels((current) => ({ ...current, ...patch })); onDirty(true); };

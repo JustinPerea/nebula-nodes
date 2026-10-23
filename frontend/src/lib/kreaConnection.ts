@@ -1,4 +1,5 @@
 import { apiFetch } from './backend';
+import { copyForError, copyForStatus, FailureNotice, REFUSED_FALLBACK_COPY } from './errorCopy';
 import { hasRoutes, routeUnavailable, usesRoutePlan } from './directRoute';
 import { keysNeeded } from './nodeKeys';
 import type { ModelNodeDefinition } from '../types';
@@ -111,15 +112,32 @@ export function isKreaAuthorizationUrl(value: string): boolean {
   }
 }
 
-async function requestConnection(method: 'GET' | 'POST' | 'DELETE', suffix = ''): Promise<KreaConnectionState> {
+/**
+ * A Krea call, one line on failure (error copy round 3e, GM: "Couldn't
+ * {verb} {object}." then the reason). The reason comes from what kind of
+ * failure it was, never from the error or the answer's body: network and
+ * parsing exceptions, and Krea's own answers, can contain credential-bearing
+ * URLs, so nothing of theirs is kept, shown or logged.
+ */
+async function kreaJson<T>(heading: string, path: string, init?: RequestInit): Promise<T> {
+  let response: Response;
   try {
-    const response = await apiFetch(`/api/krea/connection${suffix}`, { method });
-    if (!response.ok) throw new Error('Connection request failed');
-    return await response.json();
-  } catch {
-    // Network and parsing exceptions can contain credential-bearing URLs.
-    throw new Error('Could not update the Krea connection. Check that the Nebula backend is available.');
+    response = await (init === undefined ? apiFetch(path) : apiFetch(path, init));
+  } catch (error) {
+    throw new FailureNotice(heading, copyForError(error));
   }
+  if (!response.ok) throw new FailureNotice(heading, copyForStatus(response.status, undefined));
+  try {
+    return await response.json() as T;
+  } catch {
+    throw new FailureNotice(heading, REFUSED_FALLBACK_COPY);
+  }
+}
+
+const KREA_CONNECTION_HEADING = "Couldn't update the Krea connection.";
+
+function requestConnection(method: 'GET' | 'POST' | 'DELETE', suffix = ''): Promise<KreaConnectionState> {
+  return kreaJson(KREA_CONNECTION_HEADING, `/api/krea/connection${suffix}`, { method });
 }
 
 export const getKreaConnection = () => requestConnection('GET');
@@ -163,14 +181,7 @@ export function isSafeKreaBillingUrl(value: unknown, trial = false): value is st
 }
 
 export async function getKreaPlans(): Promise<KreaPlans> {
-  let body: KreaPlans;
-  try {
-    const response = await apiFetch('/api/krea/plans');
-    if (!response.ok) throw new Error('Plans request failed');
-    body = await response.json();
-  } catch {
-    throw new Error('Could not load Krea plans. Check the Krea connection and try again.');
-  }
+  const body = await kreaJson<KreaPlans>("Couldn't load the Krea plans.", '/api/krea/plans');
   const link = (value: unknown) => (isSafeKreaBillingUrl(value) ? value : null);
   return {
     plans: (Array.isArray(body.plans) ? body.plans : []).map((plan) => ({
@@ -184,14 +195,10 @@ export async function getKreaPlans(): Promise<KreaPlans> {
 
 /** Starts Krea's trial checkout; payment details are entered on that page, never in Nebula. */
 export async function startKreaTrial(): Promise<string> {
-  let url: unknown;
-  try {
-    const response = await apiFetch('/api/krea/trial', { method: 'POST' });
-    if (!response.ok) throw new Error('Trial request failed');
-    url = (await response.json()).url;
-  } catch {
-    throw new Error('Could not start the Krea trial. Check the Krea connection and try again.');
+  const heading = "Couldn't start the Krea trial.";
+  const url = (await kreaJson<{ url?: unknown }>(heading, '/api/krea/trial', { method: 'POST' }))?.url;
+  if (!isSafeKreaBillingUrl(url, true)) {
+    throw new FailureNotice(heading, "Krea sent back an unexpected trial link, so Nebula didn't open it.");
   }
-  if (!isSafeKreaBillingUrl(url, true)) throw new Error('Krea returned an unexpected trial link.');
   return url;
 }

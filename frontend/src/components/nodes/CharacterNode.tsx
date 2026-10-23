@@ -7,6 +7,8 @@ import { PORT_COLORS } from '../../lib/portCompatibility';
 import { storedImageView } from '../../lib/storedImage';
 import { OutsideImageNote } from '../OutsideImageNote';
 import { useOpenOnDoubleClick } from './useOpenOnDoubleClick';
+import { NodeRunError } from './NodeError';
+import type { NodeData } from '../../types';
 import '../../styles/character-node.css';
 
 // The node stores only the Character's id (its `character` param, which agents
@@ -54,6 +56,8 @@ export function CharacterNode({ id, data, selected }: NodeProps) {
       </div>
 
       <div className="character-node__summary">{summary}</div>
+
+      <NodeRunError data={data as unknown as NodeData} className="character-node__run-error" />
 
       {status === 'trashed' && (
         <RestoreTrashedAsset kind="character" id={characterId} className="character-node__open" />

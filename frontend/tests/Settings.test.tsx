@@ -972,10 +972,12 @@ describe('Settings — preferences', () => {
   });
 
   it('says why the connected apps could not load', async () => {
-    getOutsideSpendMock.mockRejectedValue(new Error('Only the person can do this from the Nebula canvas.'));
+    // Round 3e: a refusal arrives as the API's typed error (apiRequest), not a plain Error,
+    // whose own text no surface shows any more.
+    getOutsideSpendMock.mockRejectedValue(new RequestFailedError("Couldn't load the connected apps.", 403, { reason: 'Only the person can do this from the Nebula canvas.' }));
     await renderSettings({ apiKeys: {}, runCostConfirmUsd: 1 });
     openTab('Preferences');
-    expect(await screen.findByText('Only the person can do this from the Nebula canvas.')).toBeInTheDocument();
+    expect(await screen.findByText("Couldn't load the connected apps. Only the person can do this from the Nebula canvas.")).toBeInTheDocument();
   });
 });
 

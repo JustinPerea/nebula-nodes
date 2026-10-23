@@ -22,6 +22,7 @@ import {
   downloadSelectedOutputs,
   selectedNodeIds,
 } from '../lib/canvasSelection';
+import { failureMessage } from '../lib/errorCopy';
 
 
 export function SelectionToolbar() {
@@ -83,7 +84,7 @@ export function SelectionToolbar() {
     try {
       await downloadSelectedOutputs(selectedNodes);
     } catch (error) {
-      setDownloadError(error instanceof Error ? error.message : String(error));
+      setDownloadError(failureMessage(error, "Couldn't download the outputs."));
     } finally {
       setDownloading(false);
     }

@@ -668,6 +668,7 @@ describe('graph import memory ceiling', () => {
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     vi.stubGlobal('fetch', fetchMock);
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     Object.defineProperty(window, 'showOpenFilePicker', {
       configurable: true,
       value: vi.fn().mockResolvedValue([{ getFile: vi.fn().mockResolvedValue(zipSelection()) }]),
@@ -675,7 +676,10 @@ describe('graph import memory ceiling', () => {
 
     await expect(loadFromFile()).resolves.toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('nodes[0] must be an object'));
+    // Error copy round 3e (GM): the person reads a written line; the check's
+    // own text ("nodes[0] must be an object") goes to the console only.
+    expect(alertSpy).toHaveBeenCalledWith("Couldn't load the graph. This file is damaged or isn't a Nebula graph.");
+    expect(consoleError).toHaveBeenCalledWith('[nebula] graph load', expect.stringContaining('nodes[0] must be an object'));
   });
 
   it('uses own mapping entries and marks inherited or missing local paths unavailable', async () => {
@@ -780,6 +784,7 @@ describe('graph import memory ceiling', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     Object.defineProperty(window, 'showOpenFilePicker', {
       configurable: true,
       value: vi.fn().mockResolvedValue([{ getFile: vi.fn().mockResolvedValue(file) }]),
@@ -787,6 +792,7 @@ describe('graph import memory ceiling', () => {
 
     await expect(loadFromFile()).resolves.toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('Unsupported .nebula file version'));
+    expect(alertSpy).toHaveBeenCalledWith("Couldn't load the graph. This file is from a newer Nebula. Update Nebula, then open it again.");
+    expect(consoleError).toHaveBeenCalledWith('[nebula] graph load', expect.stringContaining('Unsupported .nebula file version'));
   });
 });

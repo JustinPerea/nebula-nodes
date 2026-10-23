@@ -338,10 +338,21 @@ function worldLabsHold(heading: string): WorldLabsHold | null {
   return graph.providerStartAmbiguities.length > 0 || graph.uncertainWorldLabsRunId !== null
     ? new WorldLabsHold(heading) : null;
 }
+/** The heading each Projects action's failure reads under: the same words
+ * as its request (lib/projects.ts), so a failure that isn't a request's
+ * (a plain Error) names the action too. */
+const RETRY_HEADINGS: Record<ProjectRetry['action'], string> = {
+  load: LOAD_HEADING, list: LOAD_HEADING, save: "Couldn't save the project.", open: "Couldn't open the project.",
+  create: "Couldn't create the project.", rename: "Couldn't rename the project.", delete: "Couldn't delete the project.",
+  restore: "Couldn't restore the project.", purge: "Couldn't delete the project for good.",
+  emptyTrash: "Couldn't empty Recently deleted.", cover: "Couldn't set the cover.",
+};
 /** Show `error` with what Try again does for it: `retry`, unless the backend
- * refused for good (then no Try again). */
+ * refused for good (then no Try again). The line is GM's mapping (error copy
+ * round 3e): a written failure keeps its heading and reason, anything else
+ * reads the action's heading over GM's general line, never its own message. */
 function showError(error: unknown, retry: ProjectRetry | null = null): void {
-  useProjectStore.setState({ error: error instanceof Error ? error.message : "Couldn't save the project.",
+  useProjectStore.setState({ error: failureMessage(error, RETRY_HEADINGS[retry?.action ?? 'save']),
     errorRetry: refusedForGood(error) ? null : retry });
 }
 /** What counts as unsaved work when the tab stops for a params version: run
@@ -658,7 +669,7 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
     // again only reloads, and says so.
     if (reserved && !(error instanceof api.ProjectRequestError && error.status < 500)) {
       if (retry.action === 'open') {
-        preserveWorkspaceConflict(error instanceof Error ? error.message : "Couldn't open the project.", undefined, undefined,
+        preserveWorkspaceConflict(failureMessage(error, "Couldn't open the project."), undefined, undefined,
           { action: 'load', reopen: retry.id });
       } else preserveWorkspaceConflict(sentences("Couldn't confirm the project change.", reasonSentence(error, true),
         TRY_AGAIN_CHECKS));
@@ -1095,7 +1106,7 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
         set({ dirty: true, saveStatus: 'saved' });
         return canvasTimer === null;
       } catch (error) {
-        set({ dirty: true, saveStatus: 'error', saveError: error instanceof Error ? error.message : "Couldn't save the project." });
+        set({ dirty: true, saveStatus: 'error', saveError: failureMessage(error, "Couldn't save the project.") });
         showError(error, { action: 'save' });
         throw error;
       } finally { inFlight = null; }

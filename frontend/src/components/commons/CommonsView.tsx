@@ -25,6 +25,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useCommonsLeave } from './commonsLeave';
 import { CommonsLeavePopover } from './CommonsLeavePopover';
 import '../../styles/commons.css';
+import { failureMessage } from '../../lib/errorCopy';
 
 type Tab = 'all' | 'inbox' | 'settings' | 'labeling' | 'review';
 type PageResult = Extract<UrlAddResult, { kind: 'page' }>;
@@ -334,7 +335,7 @@ export function CommonsView() {
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
-  const fail = (e: unknown) => setError((e as Error).message);
+  const fail = (e: unknown) => setError(failureMessage(e, "Couldn't update the library."));
 
   const loadCollections = useCallback(async () => {
     const list = (await commonsApi.collections()).filter((c) => c.kind !== 'system');
@@ -351,14 +352,14 @@ export function CommonsView() {
         setCollections(list);
         setTarget((current) => current || list[0]?.id || '');
       },
-      (e: Error) => { if (!cancelled) setError(e.message); },
+      (e: unknown) => { if (!cancelled) setError(failureMessage(e, "Couldn't load the collections.")); },
     );
     return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
     let cancelled = false;
-    const poll = () => commonsApi.status().then((s) => { if (!cancelled) setStatus(s); }, (e: Error) => { if (!cancelled) setError(e.message); });
+    const poll = () => commonsApi.status().then((s) => { if (!cancelled) setStatus(s); }, (e: unknown) => { if (!cancelled) setError(failureMessage(e, "Couldn't load the library status.")); });
     poll();
     const timer = window.setInterval(poll, STATUS_POLL_MS);
     return () => {
@@ -380,9 +381,9 @@ export function CommonsView() {
           setError(null);
           setLoading(false);
         },
-        (e: Error) => {
+        (e: unknown) => {
           if (cancelled) return;
-          setError(e.message);
+          setError(failureMessage(e, "Couldn't search the library."));
           setLoading(false);
         },
       );

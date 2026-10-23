@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StoreApi, UseBoundStore } from 'zustand';
 import { Toolbar } from '../../src/components/panels/Toolbar';
 import { GRAPH_LOAD_EVENT, GRAPH_SAVE_EVENT } from '../../src/lib/graphFileActions';
+import { ConnectionLostError, RequestFailedError } from '../../src/lib/errorCopy';
 
 interface ToolbarGraph {
   isExecuting: boolean;
@@ -380,6 +381,19 @@ describe('Canvas toolbar hierarchy', () => {
     await act(async () => finishCLI!({ nodes: [{ id: 'imported' }], edges: [] }));
     expect(mocks.load).not.toHaveBeenCalled();
     expect(mocks.fit).not.toHaveBeenCalled();
+  });
+
+  // Error copy round 3e (GM): "Couldn't import the CLI graph." then the
+  // reason; it said "Could not fetch CLI graph — is the backend running?".
+  it.each([
+    [new ConnectionLostError(new TypeError('Failed to fetch')), "Couldn't reach Nebula. Check your connection and try again."],
+    [new RequestFailedError("Couldn't load the canvas.", 503), "Nebula didn't respond. Try again."],
+    [new Error('boom'), "That didn't work. Try again, or reload if it keeps happening."],
+  ])('a failed CLI import names the action over the reason (%#)', async (error, reason) => {
+    mocks.cli.mockRejectedValue(error);
+    render(<Toolbar />);
+    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI graph' }));
+    await waitFor(() => expect(window.alert).toHaveBeenCalledWith(`Couldn't import the CLI graph. ${reason}`));
   });
 
   it('runs layout only after explicit selection and preserves Reset panels behavior', () => {

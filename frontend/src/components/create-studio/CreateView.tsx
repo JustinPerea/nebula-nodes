@@ -26,8 +26,11 @@ import { usePrompt } from '../../hooks/usePrompt';
 import type { AttachedRef } from './ReferenceTray';
 import '../../styles/create-studio.css';
 import '../../styles/create-gallery.css';
+import { FailureNotice, failureMessage } from '../../lib/errorCopy';
 
 const MAX_CONCURRENT = 2;
+/** A Generate that didn't start, named by its button (error copy round 3e). */
+const GENERATE_HEADING = "Couldn't generate.";
 
 export function CreateView() {
   const exitCreateView = useUIStore((s) => s.exitCreateView);
@@ -193,7 +196,7 @@ export function CreateView() {
       styleName.current = null;
       if (mounted.current) setPresetReloadKey((k) => k + 1);
     } catch (err) {
-      if (mounted.current) setStyleSaveError(err instanceof Error ? err.message : 'Could not save this style. Please try again.');
+      if (mounted.current) setStyleSaveError(failureMessage(err, "Couldn't save the style."));
     } finally {
       styleSavePending.current = false;
       if (mounted.current) setSavingStyle(false);
@@ -278,13 +281,15 @@ export function CreateView() {
       });
       const lifecycle = useGraphStore.getState();
       if (!lifecycle.createLaunchingIds.includes(genId) || lifecycle.createCancelledLaunchIds.includes(genId)) return;
-      if (modelNodeIds.length === 0 || allNodeIds.length === 0) throw new Error('Could not create generation nodes. Please try again.');
+      if (modelNodeIds.length === 0 || allNodeIds.length === 0) {
+        throw new FailureNotice(GENERATE_HEADING, "Its nodes weren't added to the canvas. Try again.");
+      }
       // The shared execution store consumes the reservation atomically when it
       // creates the history/Stop owner. This survives leaving Create mid-launch.
       await store.executeClusterConcurrent(allNodeIds, { genId, prompt: currentDraft.prompt, ts, sessionId, modelNodeIds, allNodeIds });
     } catch (error) {
       if (mounted.current && !useGraphStore.getState().createCancelledLaunchIds.includes(genId)) {
-        setGenerationError(error instanceof Error ? error.message : 'Could not start generation. Please try again.');
+        setGenerationError(failureMessage(error, GENERATE_HEADING));
       }
     } finally {
       store.releaseCreateGeneration(genId);

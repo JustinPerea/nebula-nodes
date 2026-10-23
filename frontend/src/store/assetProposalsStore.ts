@@ -6,6 +6,7 @@ import {
   type AssetProposalStatus,
   type AssetProposalView,
 } from '../lib/assetProposals';
+import { failureMessage } from '../lib/errorCopy';
 
 /** How long a closed proposal's strip fades before it goes. Matches asset-proposals.css. */
 export const ASSET_PROPOSAL_EXIT_MS = 220;
@@ -157,7 +158,7 @@ async function decide(id: string, verb: 'accept' | 'reject', reason?: string): P
     store.getState().close({ proposalId: id, status: verb === 'accept' ? 'accepted' : 'rejected' });
   } catch (error) {
     // A 409 means it no longer fits; the backend closes it and says so over the socket.
-    const message = error instanceof Error ? error.message : `Couldn't ${verb}`;
+    const message = failureMessage(error, `Couldn't ${verb} the proposal.`);
     store.setState((state) => ({ pending: without(state.pending, id), errors: { ...state.errors, [id]: message } }));
   }
 }

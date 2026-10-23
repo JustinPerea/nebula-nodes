@@ -7,6 +7,7 @@ import { saveFailure, type LabelingWork, type SaveResult } from './commonsLeave'
 import { SectionEyebrow } from './CommonsSectionEyebrow';
 import '../../styles/commons-evaluation.css';
 import '../../styles/commons-review.css';
+import { failureMessage } from '../../lib/errorCopy';
 
 const pretty = (text: string) => text === 'n_a' ? 'Not applicable' : text.replaceAll('_', ' ');
 
@@ -49,8 +50,10 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
         if (!cancelled && !pendingWrites.current && !editingDraft.current && version === requestVersion.current) {
           setBatch(value); setError('');
         }
-      }, (e: Error) => {
-        if (!cancelled && !pendingWrites.current && !editingDraft.current && version === requestVersion.current) setError(e.message);
+      }, (e: unknown) => {
+        if (!cancelled && !pendingWrites.current && !editingDraft.current && version === requestVersion.current) {
+          setError(failureMessage(e, "Couldn't load the review."));
+        }
       }).finally(() => { if (!cancelled) setLoading(false); });
     };
     void refresh();
@@ -96,7 +99,7 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
         if (alive.current && !editingDraft.current) setBatch(value);
         if (value.items.find((i) => i.position === item.position)?.status === 'failed') break;
       }
-    } catch (e) { if (alive.current) setError((e as Error).message); }
+    } catch (e) { if (alive.current) setError(failureMessage(e, "Couldn't propose labels.")); }
     finally {
       pendingWrites.current--;
       if (alive.current) setGenerating(false);
@@ -182,7 +185,7 @@ function ReferenceImage({ item }: { item: ReviewItem }) {
     const controller = new AbortController(); let objectUrl = '';
     commonsEvaluationApi.image(item.position, controller.signal).then((blob) => {
       if (!controller.signal.aborted) { objectUrl = URL.createObjectURL(blob); setUrl(objectUrl); }
-    }, (e: Error) => { if (!controller.signal.aborted) setError(e.message); });
+    }, (e: unknown) => { if (!controller.signal.aborted) setError(failureMessage(e, "Couldn't load this reference.")); });
     return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [item.position]);
   return <div className="evaluation-image"><h3 className="evaluation-step">Reference {String(item.position + 1).padStart(2, '0')}</h3>

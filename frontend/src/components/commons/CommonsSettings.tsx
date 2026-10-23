@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { commonsApi } from '../../lib/commonsApi';
 import type { CommonsStatus, FolderLink } from '../../lib/commonsTypes';
 import { saveBlob } from '../../lib/commonsFiles';
+import { failureMessage } from '../../lib/errorCopy';
 
 interface Props {
   status: CommonsStatus | null;
@@ -86,7 +87,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
         setSettings(s);
         setCandidates(c);
       },
-      (e: Error) => { if (!cancelled) setError(e.message); },
+      (e: unknown) => { if (!cancelled) setError(failureMessage(e, "Couldn't load the Commons settings.")); },
     );
     return () => { cancelled = true; };
   }, []);
@@ -102,7 +103,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
       onChanged();
       return true;
     } catch (e) {
-      setError((e as Error).message);
+      setError(failureMessage(e, "Couldn't save the settings."));
       // The write may have committed even if its read-back failed. Preserve
       // the error without inviting the user to submit that write again.
       if (committed) onChanged();
@@ -115,7 +116,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
       const blob = await commonsApi.exportZip();
       await saveBlob(blob, `commons-export-${new Date().toISOString().slice(0, 10)}.zip`);
     } catch (e) {
-      setError((e as Error).message);
+      setError(failureMessage(e, "Couldn't export the Commons."));
     }
   };
 

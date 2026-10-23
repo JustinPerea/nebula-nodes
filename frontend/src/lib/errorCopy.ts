@@ -150,13 +150,25 @@ export class RequestFailedError extends Error {
 export class FailureNotice extends Error {
   readonly heading: string;
   readonly reason: string;
+  /** A whole written line that reads on its own (writtenLine): failureCopy
+   * puts no heading over it, whatever heading the catch passes. */
+  readonly standalone: boolean;
 
-  constructor(heading: string, reason: string) {
+  constructor(heading: string, reason: string, options: { standalone?: boolean } = {}) {
     super(oneLine({ heading, reason }));
     this.name = 'FailureNotice';
     this.heading = heading;
     this.reason = reason;
+    this.standalone = options.standalone === true;
   }
+}
+
+/** A step written in the browser that says it all on its own ("The project
+ * didn't open. Try again.", "This proposal is no longer waiting for you."):
+ * thrown as this, a catch's failureMessage shows it word for word instead of
+ * GM's general line, and never puts its own heading over it (round 3e). */
+export function writtenLine(line: string): FailureNotice {
+  return new FailureNotice('', line, { standalone: true });
 }
 
 const isAbort = (error: unknown) => error instanceof DOMException && error.name === 'AbortError';
@@ -258,13 +270,22 @@ export function shortLine(line: string): string {
  */
 export function failureCopy(error: unknown, options: { heading?: string; short?: boolean } = {}): FailureCopy {
   const parts = partsOf(error) ?? { heading: '', reason: copyForError(error) };
-  const heading = parts.heading || options.heading || '';
+  const standalone = error instanceof FailureNotice && error.standalone;
+  const heading = standalone ? '' : parts.heading || options.heading || '';
   return { heading, reason: options.short ? shortReason(parts.reason) : parts.reason };
 }
 
 /** The one-line form of failureCopy, for a catch that has its own heading. */
 export function failureMessage(error: unknown, heading: string): string {
   return oneLine(failureCopy(error, { heading }));
+}
+
+/** The one-line form under the caller's own heading, whatever heading the
+ * error carried: for an action whose request names a smaller step (Import
+ * CLI graph reads the canvas: "Couldn't import the CLI graph." over the
+ * reason, not "Couldn't load the canvas."). Round 3e. */
+export function failureUnder(error: unknown, heading: string): string {
+  return oneLine({ heading, reason: failureCopy(error).reason });
 }
 
 // GM: "Never 'failed:', '(HTTP 503)' or status codes in the UI. Keep them in
