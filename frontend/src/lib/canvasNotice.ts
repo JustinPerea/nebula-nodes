@@ -2,9 +2,9 @@
  * A written line as the canvas notice, where a window.alert used to stop the
  * whole canvas (error copy round 3f, GM - Design: "Every error alert becomes
  * a canvas notice (non-blocking, dismissable) ... A native alert stops the
- * whole canvas over something that needs no answer."). The canvas shows it in
- * the proposal bar's panel, every other screen at the bottom (StudioNotice).
- * 'error' is announced as an alert; 'info' (an import's notes) as a status.
+ * whole canvas over something that needs no answer."). Every screen shows it
+ * in the app's one notice region (components/NoticeRegion.tsx), above every
+ * panel. 'error' is announced as an alert; 'info' (an import's notes) as a status.
  *
  * Sent as a window event that the graph store turns into its notice
  * (graphStore.notify), so a deferred module such as lib/graphFile.ts can say

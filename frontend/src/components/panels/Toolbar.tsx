@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useReactFlow, useStore } from '@xyflow/react';
 import {
@@ -24,6 +24,7 @@ import { fetchCLIGraph } from '../../lib/api';
 import { apiRequest } from '../../lib/apiRequest';
 import { failureMessage, failureUnder } from '../../lib/errorCopy';
 import { showNotice } from '../../lib/canvasNotice';
+import { BOTTOM_BAR_ATTR, BOTTOM_BAR_PANEL, clearBottomBarClearance, publishBottomBarClearance } from '../../lib/bottomBar';
 import { CANVAS_FIT_DURATION, CANVAS_ZOOM_DURATION, computeCanvasFitPadding } from '../../lib/canvasFit';
 import { displayKey } from '../../lib/keyboardShortcuts';
 import { describeRunScope, runChipLabel, summarizeRunScope } from '../../lib/runScope';
@@ -109,6 +110,25 @@ export function Toolbar() {
       unsubscribe();
     };
   }, []);
+
+  // Where the bar starts, its open Canvas actions panel included, for the
+  // notices above it and the floating panels that end above it (GM - Design,
+  // 2026-10-23). Measured again whenever the bar, its panel or the window
+  // changes size.
+  const barRoot = useRef<HTMLDivElement>(null);
+  const actionsPanel = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    publishBottomBarClearance();
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(publishBottomBarClearance) : null;
+    if (barRoot.current) observer?.observe(barRoot.current);
+    if (actionsPanel.current) observer?.observe(actionsPanel.current);
+    window.addEventListener('resize', publishBottomBarClearance);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', publishBottomBarClearance);
+    };
+  }, [actionsOpen]);
+  useLayoutEffect(() => clearBottomBarClearance, []);
 
   useEffect(() => {
     if (!actionsOpen) return;
@@ -235,7 +255,8 @@ export function Toolbar() {
   }, [fitView]);
 
   return (
-    <div className={`toolbar toolbar--grouped${actionsOpen ? ' toolbar--actions-open' : ''}`} role="group" aria-label="Canvas controls">
+    <div ref={barRoot} className={`toolbar toolbar--grouped${actionsOpen ? ' toolbar--actions-open' : ''}`} role="group" aria-label="Canvas controls"
+      {...{ [BOTTOM_BAR_ATTR]: '' }}>
       {isExecuting ? (
         <button
           type="button"
@@ -275,7 +296,8 @@ export function Toolbar() {
           <ChevronUp className="toolbar__actions-chevron" size={12} aria-hidden="true" />
         </button>
         {actionsOpen && (
-          <section id={actionsId} className="toolbar__actions-panel" aria-label="Canvas actions">
+          <section ref={actionsPanel} id={actionsId} className="toolbar__actions-panel" aria-label="Canvas actions"
+            {...{ [BOTTOM_BAR_ATTR]: BOTTOM_BAR_PANEL }}>
             {!canLoad && <p className="toolbar__blocked" id={blockedId} role="status">{loadBlockedReason}</p>}
             {canLoad && !canSave && providerStartAmbiguities.length > 0 && (
               <p className="toolbar__blocked" id={blockedId} role="status">{saveBlockedReason}</p>

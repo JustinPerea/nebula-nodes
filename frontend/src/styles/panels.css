@@ -253,6 +253,22 @@ body:not(.app-slava-restraint) .node-inspector-popover__pin--active {
   flex-wrap: wrap;
 }
 
+/* The Run / Duplicate / Delete row, under the scrolling body so it is always
+   whole (InspectorFoot.tsx; GM - Design, 2026-10-23). */
+.node-inspector-popover__foot {
+  flex: 0 0 auto;
+  padding: 0 10px 10px;
+}
+
+.node-inspector-popover__foot:empty {
+  display: none;
+}
+
+.node-inspector-popover__foot .inspector__actions {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
 .node-inspector-popover:not(.node-inspector-popover--pinned) .inspector__section {
   margin-bottom: 10px;
 }

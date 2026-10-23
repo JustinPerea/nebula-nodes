@@ -8,6 +8,7 @@ import type { RouteFix } from '../../lib/directRoute';
 import type { ProviderSetupTarget } from '../../lib/providerReadiness';
 import { useUIStore } from '../../store/uiStore';
 import { useSwitchContext } from '../../hooks/useSwitchContext';
+import { floatingBottomLimit } from '../../lib/bottomBar';
 import '../../styles/provider-switcher.css';
 
 /**
@@ -273,8 +274,11 @@ function ProviderPopover({ anchorRef, id, onClose, children }: {
     const width = popover?.width ?? 300;
     const height = popover?.height ?? 0;
     const gap = 6;
-    const above = anchor.bottom + gap + height > window.innerHeight - 8 && anchor.top - gap - height > 8;
     const left = Math.min(Math.max(8, anchor.left), Math.max(8, window.innerWidth - width - 8));
+    // Under the chip unless that crosses the window's bottom or the canvas's
+    // bottom bar, or the Canvas actions panel where it is over it (lib/bottomBar.ts).
+    const bottom = floatingBottomLimit(8, window.innerHeight, { left, right: left + width });
+    const above = anchor.bottom + gap + height > bottom && anchor.top - gap - height > 8;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- DOM measurement: the popover's place depends on its own rendered size
     setPosition({ left, top: above ? anchor.top - gap - height : anchor.bottom + gap, above });
   }, [anchorRef]);
