@@ -23,7 +23,8 @@ export interface ValidationReading {
 /** A node in the run with nothing wrong of its own, while another has. */
 export const OTHER_NODE_LINE = 'Nothing ran. Another node in this run needs a fix first.';
 /** The refusal named no node (an older answer, or a replay with no errors). */
-export const NOTHING_RAN_LINE = 'Nothing ran. Check the inputs and API keys, then run again.';
+// Round 3f, GM's rule 8: "run again" → "then run the node again."
+export const NOTHING_RAN_LINE = 'Nothing ran. Check the inputs and API keys, then run the node again.';
 
 function reading(errors: Pick<ExecutionValidationError, 'message' | 'person'>[]): ValidationReading {
   const messages: string[] = [];

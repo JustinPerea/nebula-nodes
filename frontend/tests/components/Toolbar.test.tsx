@@ -42,6 +42,7 @@ const mocks = vi.hoisted(() => ({
   flow: { transform: [0, 0, 1] as [number, number, number], minZoom: 0.1, maxZoom: 4 },
 }));
 
+import { CANVAS_NOTICE_EVENT, type CanvasNoticeDetail } from '../../src/lib/canvasNotice';
 vi.mock('@xyflow/react', () => ({
   useReactFlow: () => ({ fitView: mocks.fit, zoomIn: mocks.zoomIn, zoomOut: mocks.zoomOut, zoomTo: mocks.zoomTo }),
   useStore: <T,>(selector: (state: typeof mocks.flow) => T) => selector(mocks.flow),
@@ -76,6 +77,8 @@ vi.mock('../../src/lib/api', () => ({ fetchCLIGraph: () => mocks.cli() }));
 vi.mock('../../src/lib/canvasFit', () => ({ CANVAS_ZOOM_DURATION: 200, CANVAS_FIT_DURATION: 300, computeCanvasFitPadding: () => 0.2 }));
 
 const INITIAL_GRAPH = { ...mocks.graph!.getState() };
+const notices = vi.fn();
+const onNotice = (event: Event) => notices((event as CustomEvent<CanvasNoticeDetail>).detail.text);
 const INITIAL_UI = { ...mocks.ui!.getState() };
 function openActions() {
   const trigger = screen.getByRole('button', { name: 'Canvas actions' });
@@ -92,9 +95,13 @@ describe('Canvas toolbar hierarchy', () => {
     mocks.fetch.mockResolvedValue({ ok: true });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    // Error copy round 3f (GM): the alerts are canvas notices now.
+    notices.mockReset();
+    window.addEventListener(CANVAS_NOTICE_EVENT, onNotice);
   });
   afterEach(() => {
     cleanup();
+    window.removeEventListener(CANVAS_NOTICE_EVENT, onNotice);
     vi.restoreAllMocks();
     vi.useRealTimers();
   });
@@ -290,7 +297,7 @@ describe('Canvas toolbar hierarchy', () => {
     const { panel } = openActions();
     fireEvent.click(within(panel).getByRole('button', { name: 'Clear canvas…' }));
     // error-copy round 2 (GM): the heading names the action, then the reason.
-    await waitFor(() => expect(window.alert).toHaveBeenCalledWith("Couldn't clear the canvas. Provider is still settling."));
+    await waitFor(() => expect(notices).toHaveBeenCalledWith("Couldn't clear the canvas. Provider is still settling."));
     expect(mocks.clear).not.toHaveBeenCalled();
     expect(mocks.cancelStep).toHaveBeenCalledWith(mocks.undoStep);
     expect(mocks.graph!.getState().providerRecoveries).toHaveLength(1);
@@ -302,8 +309,8 @@ describe('Canvas toolbar hierarchy', () => {
     mocks.fetch.mockResolvedValue({ ok: false, status: 409, json: async () => ({}) });
     render(<Toolbar />);
     fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Clear canvas…' }));
-    await waitFor(() => expect(window.alert).toHaveBeenCalledWith(
-      "Couldn't clear the canvas. That didn't work. Try again, or reload if it keeps happening."));
+    await waitFor(() => expect(notices).toHaveBeenCalledWith(
+      "Couldn't clear the canvas. Try again, or reload if it keeps happening."));
   });
 
   it('does not request clear after a declined confirmation or a run starting during confirmation', () => {
@@ -386,14 +393,14 @@ describe('Canvas toolbar hierarchy', () => {
   // Error copy round 3e (GM): "Couldn't import the CLI graph." then the
   // reason; it said "Could not fetch CLI graph — is the backend running?".
   it.each([
-    [new ConnectionLostError(new TypeError('Failed to fetch')), "Couldn't reach Nebula. Check your connection and try again."],
+    [new ConnectionLostError(new TypeError('Failed to fetch')), "Nebula's server isn't answering. Make sure it's running, then try again."],
     [new RequestFailedError("Couldn't load the canvas.", 503), "Nebula didn't respond. Try again."],
-    [new Error('boom'), "That didn't work. Try again, or reload if it keeps happening."],
+    [new Error('boom'), "Try again, or reload if it keeps happening."],
   ])('a failed CLI import names the action over the reason (%#)', async (error, reason) => {
     mocks.cli.mockRejectedValue(error);
     render(<Toolbar />);
     fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI graph' }));
-    await waitFor(() => expect(window.alert).toHaveBeenCalledWith(`Couldn't import the CLI graph. ${reason}`));
+    await waitFor(() => expect(notices).toHaveBeenCalledWith(`Couldn't import the CLI graph. ${reason}`));
   });
 
   it('runs layout only after explicit selection and preserves Reset panels behavior', () => {

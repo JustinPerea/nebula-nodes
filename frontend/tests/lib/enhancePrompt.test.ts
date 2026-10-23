@@ -18,7 +18,7 @@ describe('enhancePrompt errors', () => {
   it('a validation list says GM\'s fallback line, not [object Object] (error-copy round 2)', async () => {
     apiFetch.mockResolvedValue(json({ detail: [{ loc: ['body', 'prompt'], msg: 'Field required', type: 'missing' }] }, 422));
     await expect(enhancePrompt('x')).rejects.toThrow(
-      "Couldn't enhance the prompt. That didn't work. Try again, or reload if it keeps happening.");
+      "Couldn't enhance the prompt. Try again, or reload if it keeps happening.");
   });
 
   it('shows the person gate refusal', async () => {

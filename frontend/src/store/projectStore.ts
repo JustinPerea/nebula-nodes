@@ -18,7 +18,8 @@ import type { ProjectSwitch } from '../lib/wsClient';
 import { isOwnEcho, type EditOrigin } from '../lib/canvasUndo';
 import { TAB_ID } from '../lib/tabId';
 import { holdCommonsExits, holdProjects, refuseWhileCommonsUnsaved } from '../lib/commonsUnsaved';
-import { FailureNotice, REFUSED_FALLBACK_COPY, RequestFailedError, canTryAgain, failureCopy, failureMessage, shortReason } from '../lib/errorCopy';
+import { showNotice } from '../lib/canvasNotice';
+import { FailureNotice, REFUSED_FALLBACK_COPY, RequestFailedError, canTryAgain, failureCopy, failureMessage, oneLine, shortReason } from '../lib/errorCopy';
 import { SOME_NODE_WAITING_UNLOCK } from '../lib/worldLabsWaiting';
 import type { ProjectSnapshot, ProjectSummary, SavedProject, TrashedProject } from '../lib/projects';
 
@@ -250,6 +251,11 @@ const RUN_STILL_GOING = 'A run is still going. Let it finish or stop it.';
  * Try again beside it does, since it only re-reads. */
 const TRY_AGAIN_CHECKS = "Try again checks your saved projects; it won't make the change twice.";
 const LOAD_HEADING = "Couldn't load your projects.";
+/** GM, round 3f: "Projects startup: drop "That didn't work." → "Couldn't load
+ * your projects. Try again, or reload the page if it keeps happening." A full
+ * disk is the one cause a person can fix, so give it its own line". */
+const LOAD_GENERAL = 'Try again, or reload the page if it keeps happening.';
+const LOAD_DISK_FULL = 'Your disk is full. Free up some space, then try again.';
 const runStillGoing = (heading: string) => new FailureNotice(heading, RUN_STILL_GOING);
 
 /** A failure's reason as its own sentence (GM, round 3c: "Reasons in
@@ -656,7 +662,8 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
     applyProject(result.project, result.workspaceRevision, false, heading);
     updateSummary(result.project);
     useProjectStore.setState({ screen: 'workspace' });
-    if (result.warnings?.length) alert(`Opened.\n${result.warnings.map((line) => `• ${line}`).join('\n')}`);
+    // A canvas notice, not a window.alert (round 3f).
+    if (result.warnings?.length) showNotice(`Opened.\n${result.warnings.map((line) => `• ${line}`).join('\n')}`, 'info');
   } catch (error) {
     // A lost activation reply can follow a successful server commit. Re-read
     // on Retry instead of sending a second create/open or saving under an old
@@ -939,8 +946,14 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
         // heading over GM's general line. While unsaved edits still wait for
         // their recovered copy it says the heading alone, as the params
         // reload does: the general line says "reload", which drops them.
-        const line = failureMessage(error, LOAD_HEADING);
-        set({ error: pendingRecovery && line === `${LOAD_HEADING} ${REFUSED_FALLBACK_COPY}` ? LOAD_HEADING : line,
+        // A full disk is read from the answer (RequestFailedError.storageFull,
+        // the backend's storage refusal), never from its words (round 3f).
+        const copy = failureCopy(error, { heading: LOAD_HEADING });
+        const general = copy.reason === REFUSED_FALLBACK_COPY;
+        const reason = error instanceof RequestFailedError && error.storageFull ? LOAD_DISK_FULL
+          : general ? LOAD_GENERAL : copy.reason;
+        const line = oneLine({ heading: copy.heading, reason });
+        set({ error: pendingRecovery && general ? LOAD_HEADING : line,
           errorRetry: refusedForGood(error) ? { action: 'load', full: true } : { action: 'load' } });
       }
       finally { set({ loading: false }); initializing = null; }

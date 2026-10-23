@@ -14,8 +14,7 @@ from pathlib import Path
 
 import sys
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import (as_job_failure, as_person_line, missing_file_line, slow_job_line, with_api_status,
-                                   with_person_line)
+from execution.person_line import as_job_failure, missing_file_line, slow_job_line, with_api_status, with_person_line
 
 MESHY_API_BASE = "https://api.meshy.ai/openapi"
 # "Maximum file size: 20 MB" for image_url and texture_image_url
@@ -37,19 +36,20 @@ def check_smart_topology(params: dict[str, Any]) -> None:
     if params.get("model_type") != "smart-topology":
         return
     if params.get("topology") == "quad":
-        raise as_person_line(ValueError("Smart Topology makes triangles only. Set Topology to Triangle."))
+        raise with_person_line(ValueError("Smart Topology makes triangles only. Set Topology to Triangle."), "Smart Topology makes triangles only. Set “Topology” to Triangle.")
     polycount = params.get("target_polycount")
     if isinstance(polycount, (int, float)) and polycount > SMART_TOPOLOGY_MAX_POLYCOUNT:
-        raise as_person_line(ValueError(
+        raise with_person_line(ValueError(
             f"Smart Topology makes at most {SMART_TOPOLOGY_MAX_POLYCOUNT:,} faces. "
             f"Set Polycount to {SMART_TOPOLOGY_MAX_POLYCOUNT:,} or less."
-        ))
+        ), f"Smart Topology makes at most {SMART_TOPOLOGY_MAX_POLYCOUNT:,} faces. "
+            f"Set “Polycount” to {SMART_TOPOLOGY_MAX_POLYCOUNT:,} or less.")
 
 
 def check_model_options(params: dict[str, Any]) -> None:
     """Meshy 6 Lite makes "``2k`` texture only" (https://docs.meshy.ai/llms.txt, checked 2026-10-14)."""
     if params.get("ai_model") == "meshy-6-lite" and params.get("hd_texture") is True:
-        raise as_person_line(ValueError("Meshy 6 Lite makes 2K textures only. Turn off HD Texture (4K) or pick another model."))
+        raise with_person_line(ValueError("Meshy 6 Lite makes 2K textures only. Turn off HD Texture (4K) or pick another model."), "Meshy 6 Lite makes 2K textures only. Turn off “HD Texture (4K)” or pick another model.")
 
 
 def _apply_smart_topology(body: dict[str, Any]) -> None:
@@ -91,7 +91,7 @@ async def handle_meshy_image_to_3d(
 
     image_input = inputs.get("image")
     if not image_input or not image_input.value:
-        raise as_person_line(ValueError("Image input is required"))
+        raise with_person_line(ValueError("Image input is required"), "Connect an image to this node, then run it again.")
 
     image_value = str(image_input.value)
     _log(f"image_value starts with: {image_value[:80]}...")
@@ -180,7 +180,7 @@ async def handle_meshy_text_to_3d(
 
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
-        raise as_person_line(ValueError("Prompt input is required"))
+        raise with_person_line(ValueError("Prompt input is required"), "Connect a prompt to this node, then run it again.")
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -336,7 +336,7 @@ async def handle_meshy_multi_image_to_3d(
 
     images_input = inputs.get("images")
     if not images_input or not images_input.value:
-        raise as_person_line(ValueError("At least one image input is required"))
+        raise with_person_line(ValueError("At least one image input is required"), "Connect at least one image to this node, then run it again.")
 
     image_values = images_input.value if isinstance(images_input.value, list) else [images_input.value]
     image_urls: list[str] = []
@@ -410,7 +410,7 @@ async def handle_meshy_retexture(
 
     model_url_input = inputs.get("model_url")
     if not model_url_input or not model_url_input.value:
-        raise as_person_line(ValueError("Model URL input is required for retexturing"))
+        raise with_person_line(ValueError("Model URL input is required for retexturing"), "Connect a 3D model to this node, then run it again.")
 
     prompt_input = inputs.get("prompt")
 
@@ -477,7 +477,7 @@ async def handle_meshy_rigging(
 
     model_url_input = inputs.get("model_url")
     if not model_url_input or not model_url_input.value:
-        raise as_person_line(ValueError("Model URL input is required for rigging"))
+        raise with_person_line(ValueError("Model URL input is required for rigging"), "Connect a 3D model to this node, then run it again.")
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -543,11 +543,11 @@ async def handle_meshy_animate(
 
     rig_task_id_input = inputs.get("rig_task_id")
     if not rig_task_id_input or not rig_task_id_input.value:
-        raise as_person_line(ValueError("Rig Task ID is required — connect from a Meshy Auto-Rig node"))
+        raise with_person_line(ValueError("Rig Task ID is required — connect from a Meshy Auto-Rig node"), "Connect a Meshy Auto-Rig node to “Rig Task ID”, then run the node again.")
 
     action_id = node.params.get("action_id")
     if not action_id:
-        raise as_person_line(ValueError("Action ID is required — pick an animation from the library"))
+        raise with_person_line(ValueError("Action ID is required — pick an animation from the library"), "Pick an animation in “Animation”, then run the node again.")
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -613,7 +613,7 @@ async def handle_meshy_remesh(
 
     model_url_input = inputs.get("model_url")
     if not model_url_input or not model_url_input.value:
-        raise as_person_line(ValueError("Model URL input is required for remeshing"))
+        raise with_person_line(ValueError("Model URL input is required for remeshing"), "Connect a 3D model to this node, then run it again.")
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -679,7 +679,7 @@ async def handle_meshy_text_to_image(
 
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
-        raise as_person_line(ValueError("Prompt is required"))
+        raise with_person_line(ValueError("Prompt is required"), "Connect a prompt to this node, then run it again.")
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -751,11 +751,11 @@ async def handle_meshy_image_to_image(
 
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
-        raise as_person_line(ValueError("Prompt is required"))
+        raise with_person_line(ValueError("Prompt is required"), "Connect a prompt to this node, then run it again.")
 
     images_input = inputs.get("images")
     if not images_input or not images_input.value:
-        raise as_person_line(ValueError("At least one reference image is required"))
+        raise with_person_line(ValueError("At least one reference image is required"), "Connect at least one reference image to this node, then run it again.")
 
     image_values = images_input.value if isinstance(images_input.value, list) else [images_input.value]
     image_urls: list[str] = []
@@ -839,7 +839,7 @@ async def handle_meshy_3d_print(
 
     task_id_input = inputs.get("task_id")
     if not task_id_input or not task_id_input.value:
-        raise as_person_line(ValueError("Task ID from a completed 3D generation is required"))
+        raise with_person_line(ValueError("Task ID from a completed 3D generation is required"), "Connect a finished Meshy 3D generation to “Task ID”, then run the node again.")
 
     headers = {
         "Authorization": f"Bearer {api_key}",

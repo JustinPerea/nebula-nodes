@@ -160,13 +160,13 @@ async def handle_style_reference(
     if not file_path_value:
         raise with_person_line(
             ValueError("Style Reference needs a reference image (filePath param)"),
-            "Choose an image in the node's Reference Image field, then run it again.")
+            "Choose an image in “Reference Image”, then run it again.")
 
     abs_path = _resolve_local_path(str(file_path_value))
     if abs_path is None:
         raise with_person_line(
             ValueError(f"Reference image not found: {file_path_value}"),
-            "The node's Reference Image can't be found. Choose it again, then run the node again.")
+            "The node's reference image can't be found. Choose it again, then run the node again.")
 
     image_value: dict[str, Any] = {"type": "Image", "value": str(abs_path)}
 
@@ -199,7 +199,7 @@ async def handle_style_reference(
             "GOOGLE_API_KEY required for Auto mode. Switch the Mode param to Manual or "
             "Image only to use this node without a Gemini call."
         ),
-            "Add your Gemini API key in Settings, then run the node again. Or set the node's Description Mode to "
+            "Add your Gemini API key in Settings, then run the node again. Or set “Description Mode” to "
             "Manual or Image only, which need no key.")
 
     description = await _describe_style(api_key, abs_path, system_prompt)

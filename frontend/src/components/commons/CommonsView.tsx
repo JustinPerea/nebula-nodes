@@ -26,6 +26,7 @@ import { useCommonsLeave } from './commonsLeave';
 import { CommonsLeavePopover } from './CommonsLeavePopover';
 import '../../styles/commons.css';
 import { failureMessage } from '../../lib/errorCopy';
+import { clockTime } from '../../lib/clockTime';
 
 type Tab = 'all' | 'inbox' | 'settings' | 'labeling' | 'review';
 type PageResult = Extract<UrlAddResult, { kind: 'page' }>;
@@ -243,13 +244,14 @@ export function StatusLine({ status, onStart, onStop }: { status: CommonsStatus 
       text = 'Paused · daily cap is 0';
       title = 'Library analysis is paused. Settings has “Analysis calls per day” at 0, so it reads nothing. Raise it to resume.';
     } else {
-      const resets = new Date(status.meter.resets_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      const resets = clockTime(new Date(status.meter.resets_at));
       text = `Paused until ${resets} · daily cap`;
       title = `Library analysis is paused. It made ${calls} analysis calls today, and Settings has “Analysis calls per day” at ${cap}. It resumes on its own at ${resets}.`;
     }
   } else if (state === 'paused_load') {
     text = `Paused · computer busy (${status.load}/${status.load_threshold})`;
-    title = `Library analysis is paused while this computer is busy. Its load average is ${status.load}, and Settings has “Pause above load” at ${status.load_threshold}. It resumes on its own when the load drops.`;
+    // GM, round 3f: drop "load average".
+    title = `Library analysis is paused while this computer is busy. Its load is ${status.load}, above the ${status.load_threshold} set in “Pause above load” in Settings. It resumes on its own when the load drops.`;
   } else if (waiting || state === 'analyzing') {
     text = `Analyzing${waiting ? ` · ${waiting} queued` : ''}`;
     title = `Library analysis is reading references${waiting ? `: ${waiting} waiting` : ''}.`;

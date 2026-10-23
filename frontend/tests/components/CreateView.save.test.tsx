@@ -159,7 +159,7 @@ describe('Create result save delegation', () => {
     expect(mocks.saveToFolder).toHaveBeenCalledExactlyOnceWith('/api/outputs/result.png');
     expect(view.getByTitle('Saving…')).toBeDisabled();
     expect(view.queryByTitle('Saved!')).toBeNull();
-    await act(async () => { reject(new RequestFailedError("Couldn't save the file.", 409, { reason: 'Export storage unavailable.' })); });
+    await act(async () => { reject(new RequestFailedError("Couldn't save the output.", 409, { reason: 'Export storage unavailable.' })); });
     expect(view.getByRole('alert')).toHaveTextContent('Export storage unavailable');
     expect(view.getByTitle('Save to folder')).toBeEnabled();
     expect(view.queryByTitle('Saved!')).toBeNull();

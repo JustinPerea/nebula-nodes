@@ -54,13 +54,13 @@ BUSY = "World Labs is busy. Wait a moment, then run the node again."
 
 def kept(field: str) -> str:
     return ("World Labs accepted this run, and it may be billed, but Nebula couldn't finish it here. "
-            f"Check the job in Marble. The node's {field} field keeps the job, so running the node "
+            f"Check the job in Marble. “{field}” keeps the job, so running the node "
             "again picks it up without paying twice.")
 
 
 def job_failed(field: str) -> str:
     return ("World Labs couldn't finish this run. Check the job in Marble to see why. To run it "
-            f"from scratch, clear the node's {field} field first.")
+            f"from scratch, clear “{field}” first.")
 
 
 # What no person line may say: ids, parameter and record names, internal words.
@@ -225,12 +225,12 @@ async def test_the_world_nodes_own_checks_say_lines_without_parameter_names() ->
         await handle_worldlabs_environment(
             _node(params={"resume_operation_id": "op-1", "existing_world_id": "w-1"}), {}, API_KEYS)
     assert str(both.value) == "Set either resume_operation_id or existing_world_id, not both"
-    assert _person(both.value) == "Fill in the node's Resume Operation ID or its Existing World ID, not both."
+    assert _person(both.value) == "Fill in “Resume Operation ID” or “Existing World ID”, not both."
 
     with pytest.raises(ValueError) as bad_id:
         await handle_worldlabs_environment(_node(params={"resume_operation_id": "bad\x01id"}), {}, API_KEYS)
     assert str(bad_id.value) == "World Labs resume operation ID is invalid"
-    assert _person(bad_id.value) == ("The node's Resume Operation ID field doesn't hold a World Labs job. "
+    assert _person(bad_id.value) == ("“Resume Operation ID” doesn't hold a World Labs job. "
                                      "Copy the job's ID from Marble, or clear the field.")
 
     with pytest.raises(Exception) as no_key:
@@ -412,11 +412,11 @@ def test_a_hold_saved_with_the_old_words_reads_the_new_ones(tmp_path: Path):
 
 # -- review: the World node checks the person can hit, and the seed read as a rate limit --
 
-SEED = "Set the node's Seed to a whole number from 0 to 4294967295, or clear it for a random seed."
+SEED = "Set “Seed” to a whole number from 0 to 4294967295, or clear it for a random seed."
 SEED_TEXT = "World Labs seed must be an integer from 0 to 4294967295"
-NAME = "The node's World Name is too long. Keep it to 64 characters or fewer."
-TAGS = "The node's Tags field takes up to 10 tags of 32 characters each, separated by commas."
-AZIMUTHS = ("Write the node's Image Azimuths as numbers separated by commas, one for each connected "
+NAME = "“World Name” is too long. Keep it to 64 characters or fewer."
+TAGS = "“Tags” takes up to 10 tags of 32 characters each, separated by commas."
+AZIMUTHS = ("Write “Image Azimuths” as numbers separated by commas, one for each connected "
             "image, or clear the field.")
 
 
@@ -478,7 +478,7 @@ async def test_the_image_checks_say_their_lines(tmp_path: Path, monkeypatch) -> 
     with pytest.raises(ValueError) as five:
         await handle_worldlabs_environment(_node(), {"images": _port(pictures[:5], "Image")}, API_KEYS)
     assert str(five.value) == "World Labs accepts at most 4 images when reconstruct_images is disabled"
-    assert _person(five.value) == ("This node takes up to 4 images. Turn on the node's Reconstruct Image Set "
+    assert _person(five.value) == ("This node takes up to 4 images. Turn on “Reconstruct Image Set” "
                                    "for up to 8, or disconnect some.")
     with pytest.raises(ValueError) as nine:
         await handle_worldlabs_environment(

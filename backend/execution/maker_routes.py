@@ -35,7 +35,7 @@ from execution import maker_routes_elevenlabs
 from execution.missing_credential import MissingCredentialError
 from models.graph import GraphNode, PortValueDict
 from services import node_route
-from execution.person_line import as_person_line, key_line, key_phrase, with_call_facts, with_person_line
+from execution.person_line import as_person_line, count_field, key_line, key_phrase, with_call_facts, with_person_line
 
 Handler = Callable[[GraphNode, dict[str, PortValueDict], dict[str, str]], Awaitable[dict[str, Any]]]
 Translate = Callable[
@@ -77,12 +77,22 @@ def _blocked_reason(definition: Mapping[str, Any], block: node_route.DirectBlock
     return f"this recipe can't run on {direct_key} because the maker doesn't take {block.detail}"
 
 
-def _blocked_key_line(definition: Mapping[str, Any], direct_key: str) -> str:
-    """The person's line for a run the saved maker key can't take (error copy 3c-2)."""
-    maker = key_phrase([direct_key]) or "saved key"
-    fallback = key_phrase(node_route.fallback_keys(definition)) or "other key"
-    return (f"This node's settings can't run on your {maker}. "
-            f"Add your {fallback} in Settings, then run the node again.")
+def _blocked_key_line(definition: Mapping[str, Any], direct_key: str,
+                      block: node_route.DirectBlock | None = None) -> str:
+    """The person's line for a run the saved maker key can't take (error copy
+    3c-2; GM's words since round 3f: "These settings need your {other
+    provider} {key kind}. Add it in Settings, then run the node again.", and
+    for several keys "... Add one in Settings, ..."). A BLOCKED setting is one
+    only the copy route takes, so it names the copy's own key (the
+    fallback provider's), not every other key."""
+    keys = node_route.fallback_keys(definition)
+    if block is not None and block.reason == node_route.BLOCKED and len(keys) > 1:
+        keys = keys[:1]
+    phrase = key_phrase(keys)
+    if phrase is None:
+        return "These settings need another provider's key. Add it in Settings, then run the node again."
+    it = "one" if len(keys) > 1 else "them" if phrase.endswith("credentials") else "it"
+    return f"These settings need your {phrase}. Add {it} in Settings, then run the node again."
 
 
 def dual_route(*, direct: Handler, fallback: Handler, translate: Translate | None = None) -> Handler:
@@ -104,7 +114,7 @@ def dual_route(*, direct: Handler, fallback: Handler, translate: Translate | Non
                 # name the key that would run it, and why.
                 raise with_person_line(MissingCredentialError(
                     f"{' or '.join(node_route.fallback_keys(definition))} is required: "
-                    f"{_blocked_reason(definition, block, set_direct[0])}"), _blocked_key_line(definition, set_direct[0]))
+                    f"{_blocked_reason(definition, block, set_direct[0])}"), _blocked_key_line(definition, set_direct[0], block))
             raise MissingCredentialError(f"{' or '.join(node_route.env_keys(definition))} is required")
         if route.kind == node_route.DIRECT:
             routed = route_node(node, node_route.route_param_keys(definition, node_route.DIRECT))
@@ -259,13 +269,13 @@ def nano_banana_fal_to_google(node: GraphNode, inputs: dict[str, PortValueDict])
     return node.model_copy(update={"params": out}), inputs
 
 
-def _image_count(value: Any) -> int:
+def _image_count(value: Any, definition_id: str = "") -> int:
     if value in (None, ""):
         return 1
     if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 4:
         raise with_person_line(
             ValueError(f"num_images must be an integer from 1 to 4 (received {value!r})"),
-            "Set the number of images to a whole number from 1 to 4.")
+            f"Set {count_field(definition_id)} to a whole number from 1 to 4.")
     return value
 
 
@@ -277,7 +287,7 @@ async def google_nano_banana(node: GraphNode, inputs: dict[str, PortValueDict], 
     fal or Krea copy instead)."""
     from handlers.google_gemini import handle_nano_banana
 
-    count = _image_count(node.params.get("num_images"))
+    count = _image_count(node.params.get("num_images"), node.definition_id)
     call = node.model_copy(update={"params": {k: v for k, v in node.params.items() if k != "num_images"}})
     first: dict[str, Any] | None = None
     for _ in range(count):
@@ -306,7 +316,7 @@ def _json_list(value: Any) -> list[Any]:
         except ValueError as exc:
             raise with_person_line(
                 ValueError("image_urls must be a JSON list of image URLs"),
-                "Write the node's image URLs as a JSON list of links.") from exc
+                "Write “Image URLs (JSON)” as a JSON list of links.") from exc
     return value if isinstance(value, list) else [value]
 
 

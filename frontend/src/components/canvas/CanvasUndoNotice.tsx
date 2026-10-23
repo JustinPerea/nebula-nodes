@@ -11,9 +11,16 @@ export const UNDO_NOTICE_MS = NOTICE_HOLD_MS;
  * with Redo after Cmd-Z. The button acts only while that edit is next in
  * line on the undo (or redo) stack, so it never undoes something else.
  * Rendered in the proposal bar's panel so the two stack instead of overlap.
+ *
+ * Round 3f (GM): "Every error alert becomes a canvas notice (non-blocking,
+ * dismissable)". A notice with tone 'error' (graphStore.notify) is
+ * announced as role="alert"; Dismiss is a button, so the keyboard reaches
+ * it. `messagesOnly`: the studio screens (StudioNotice) show the written
+ * lines, never an agent edit's Undo, which belongs to the canvas.
  */
-export function CanvasUndoNotice() {
-  const notice = useGraphStore((state) => state.undoNotice);
+export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: boolean } = {}) {
+  const stored = useGraphStore((state) => state.undoNotice);
+  const notice = messagesOnly && stored?.offer ? null : stored;
   const dismiss = useGraphStore((state) => state.dismissUndoNotice);
   const actionable = useGraphStore((state) => {
     const offer = state.undoNotice?.offer;
@@ -42,8 +49,8 @@ export function CanvasUndoNotice() {
     <div
       key={notice.id}
       className={notice.offer ? 'canvas-undo-notice' : 'canvas-undo-notice canvas-undo-notice--message'}
-      role="status"
-      aria-live="polite"
+      role={notice.tone === 'error' ? 'alert' : 'status'}
+      aria-live={notice.tone === 'error' ? 'assertive' : 'polite'}
       style={notice.agentColor ? { ['--agent-color' as string]: notice.agentColor } : undefined}
     >
       {notice.agentColor && <span className="canvas-undo-notice__dot" aria-hidden="true" />}

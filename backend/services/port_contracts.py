@@ -81,8 +81,8 @@ PORT_TYPE_HINTS: dict[tuple[str, str], str] = {
 # wrong-kind line.
 PORT_TYPE_PERSON_HINTS: dict[tuple[str, str], str] = {
     ("krea-2-generate", "moodboard"): (
-        "Krea 2's Moodboard input takes a Nebula moodboard now. To use a Krea moodboard, put its ID in the "
-        "node's Moodboard ID field and remove the wire."),
+        "Krea 2's Moodboard input takes a Nebula moodboard now. To use a Krea moodboard, put its ID in "
+        "“Moodboard ID” and remove the wire."),
 }
 
 # The card's lines for a wire the run can't use (error copy round 3e).

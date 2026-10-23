@@ -71,7 +71,10 @@ describe('explicit provider connection checks', () => {
   });
 
   // Error copy round 3e (GM): "Couldn't {verb} {object}." then the reason.
-  const CHECK_FAILED = "Couldn't check the connections. Make sure Nebula's backend is running, then try again.";
+  // Round 3f: a plain Error or a malformed answer reads GM's general line;
+  // no answer at all reads GM's "server isn't answering" line
+  // (tests/errorCopy.round3f.projects.test.ts).
+  const CHECK_FAILED = "Couldn't check the connections. Try again, or reload if it keeps happening.";
   it('sanitizes transport failures and rejects malformed status data', async () => {
     fetch.mockRejectedValueOnce(new Error('https://private.test/?token=secret'));
     await useProviderReadinessStore.getState().checkConnections();

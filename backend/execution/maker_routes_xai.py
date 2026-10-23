@@ -27,7 +27,7 @@ from typing import Any, Awaitable, Callable
 from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
 from services import node_route
-from execution.person_line import as_person_line, it_was, model_name, with_person_line
+from execution.person_line import it_was, model_name, with_person_line
 
 Emit = Callable[[ExecutionEvent], Awaitable[None]]
 Translate = Callable[
@@ -102,7 +102,7 @@ def fal_grok_image_to_xai(node: GraphNode, inputs: dict[str, PortValueDict]) -> 
         sources = inputs.get("images")
         values = sources.value if sources is not None else None
         if not _list(values, "images"):
-            raise as_person_line(ValueError("Grok Imagine Image Edit needs at least one source image"))
+            raise with_person_line(ValueError("Grok Imagine Image Edit needs at least one source image"), "Grok Imagine Image Edit needs at least one source image. Connect one, then run the node again.")
     out: dict[str, Any] = {"model": GROK_IMAGE_1, "n": params.get("num_images", 1)}
     for key in ("aspect_ratio", "resolution"):
         if _present(params.get(key)):
@@ -134,7 +134,7 @@ def krea_grok_image_to_xai(model: str) -> Translate:
     def translate(node: GraphNode, inputs: dict[str, PortValueDict]) -> tuple[GraphNode, dict[str, PortValueDict]]:
         params = node.params
         if _present(_port_or_param(inputs, params, "style_images")):
-            raise as_person_line(ValueError("Style images are a Krea feature; xAI's API has no style references"))
+            raise with_person_line(ValueError("Style images are a Krea feature; xAI's API has no style references"), "xAI takes no style images, so run this node on Krea for them.")
         out: dict[str, Any] = {"model": model}
         if _present(params.get("quality")):
             out["quality"] = str(params["quality"])
@@ -143,12 +143,12 @@ def krea_grok_image_to_xai(model: str) -> Translate:
         resolution = params.get("resolution")
         if _present(resolution):
             if resolution not in _KREA_RESOLUTION:
-                raise with_person_line(ValueError(f"xAI takes resolution 1K or 2K (received {resolution!r})"), f"Set Resolution to 1K or 2K, then run the node again. {it_was(resolution)}")
+                raise with_person_line(ValueError(f"xAI takes resolution 1K or 2K (received {resolution!r})"), f"Set “Resolution” to 1K or 2K, then run the node again. {it_was(resolution)}")
             out["resolution"] = _KREA_RESOLUTION[resolution]
         routed = _prompt(inputs, params)
         images = _list(_port_or_param(inputs, params, "image_urls"), "image_urls")
         if node.definition_id.endswith("-edit") and not images:
-            raise as_person_line(ValueError("Grok Imagine 2.0 Edit needs at least one image in Image URLs"))
+            raise with_person_line(ValueError("Grok Imagine 2.0 Edit needs at least one image in Image URLs"), "Grok Imagine 2.0 Edit needs at least one image. Connect one, then run the node again.")
         if len(images) > KREA_EDIT_MAX_IMAGES:
             raise with_person_line(ValueError(f"This node takes up to {KREA_EDIT_MAX_IMAGES} images (received {len(images)})"), f"This node takes up to {KREA_EDIT_MAX_IMAGES} images, and {len(images)} are connected. Disconnect the extra ones, then run the node again.")
         if images:
@@ -198,7 +198,7 @@ def _effective(node: GraphNode, key: str) -> Any:
 
 def _whole_seconds(value: Any) -> int:
     if isinstance(value, bool) or not isinstance(value, (int, float)) or float(value) != int(value):
-        raise with_person_line(ValueError(f"xAI takes a whole number of seconds (received duration {value!r})"), f"Set Duration to a whole number of seconds. {it_was(value)}")
+        raise with_person_line(ValueError(f"xAI takes a whole number of seconds (received duration {value!r})"), f"Set “Duration” to a whole number of seconds. {it_was(value)}")
     return int(value)
 
 
@@ -226,7 +226,7 @@ def krea_grok_video_to_xai(model: str) -> Translate:
     def translate(node: GraphNode, inputs: dict[str, PortValueDict]) -> tuple[GraphNode, dict[str, PortValueDict]]:
         params = node.params
         if _present(_port_or_param(inputs, params, "start_video")):
-            raise as_person_line(ValueError("Start video is a Krea feature here; this run belongs on Krea"))
+            raise with_person_line(ValueError("Start video is a Krea feature here; this run belongs on Krea"), "A start video runs only on Krea, so run this node on Krea.")
         routed = _prompt(inputs, params)
         start_image = _port_or_param(inputs, params, "start_image")
         edit_video = _port_or_param(inputs, params, "edit_video")
@@ -234,8 +234,8 @@ def krea_grok_video_to_xai(model: str) -> Translate:
         out: dict[str, Any] = {"model": model}
         if _present(edit_video):
             if model != GROK_VIDEO:
-                raise with_person_line(ValueError(f"xAI edits videos on {GROK_VIDEO} only, not {model}"), f"xAI edits videos only on {model_name(GROK_VIDEO)}, not on {model_name(model)}. Disconnect the "
-                    "edit video, then run the node again.")
+                raise with_person_line(ValueError(f"xAI edits videos on {GROK_VIDEO} only, not {model}"), f"xAI edits videos only on {model_name(GROK_VIDEO)}. Pick it in the node's Model field, or disconnect the video "
+                    "to edit.")
             extra = [name for name, value in (("start_image", start_image), ("reference_images", references))
                      if _present(value)]
             if extra:
@@ -243,7 +243,7 @@ def krea_grok_video_to_xai(model: str) -> Translate:
                     ValueError(f"xAI takes edit_video on its own; this run also sets {', '.join(extra)}"),
                     f"xAI edits a video on its own. Disconnect the {' and '.join(name.replace('_', ' ') for name in extra)}, then run the node again.")
             if "prompt" not in routed:
-                raise as_person_line(ValueError("xAI needs a prompt to edit a video"))
+                raise with_person_line(ValueError("xAI needs a prompt to edit a video"), "xAI needs a prompt to edit a video. Connect one, then run the node again.")
             out["endpoint"] = "edits"
             routed["video"] = PortValueDict(type="Video", value=edit_video)
             return node.model_copy(update={"params": out}), routed
@@ -252,7 +252,7 @@ def krea_grok_video_to_xai(model: str) -> Translate:
             raise with_person_line(ValueError("xAI's grok-imagine-video takes a start image or reference images, not both"), "xAI takes a start image or reference images, not both. Disconnect one, then run the node again.")
         seconds = _whole_seconds(_effective(node, "duration"))
         if not 1 <= seconds <= 15:
-            raise with_person_line(ValueError(f"xAI makes videos of 1 to 15 seconds (received {seconds})"), f"xAI makes videos of 1 to 15 seconds. Set Duration in that range. {it_was(seconds)}")
+            raise with_person_line(ValueError(f"xAI makes videos of 1 to 15 seconds (received {seconds})"), f"xAI makes videos of 1 to 15 seconds. Set “Duration” in that range. {it_was(seconds)}")
         out.update(endpoint="generations", duration=seconds)
         if references:
             if len(references) > GROK_VIDEO_MAX_REFERENCES:
@@ -262,12 +262,12 @@ def krea_grok_video_to_xai(model: str) -> Translate:
             if seconds > GROK_VIDEO_R2V_MAX_SECONDS:
                 raise with_person_line(ValueError(f"Reference-to-video on {model} runs up to {GROK_VIDEO_R2V_MAX_SECONDS} seconds "
                                  f"(received {seconds})"), f"Reference-to-video on {model_name(model)} runs up to {GROK_VIDEO_R2V_MAX_SECONDS} seconds. Set "
-                                 f"Duration to {GROK_VIDEO_R2V_MAX_SECONDS} or less. {it_was(seconds)}")
+                                 f"“Duration” to {GROK_VIDEO_R2V_MAX_SECONDS} or less. {it_was(seconds)}")
             routed["reference_images"] = PortValueDict(type="Image", value=references)
         if _present(start_image):
             routed["image"] = PortValueDict(type="Image", value=start_image)
         if "prompt" not in routed and "image" not in routed:
-            raise as_person_line(ValueError("xAI needs a prompt unless a start image is set"))
+            raise with_person_line(ValueError("xAI needs a prompt unless a start image is set"), "xAI needs a prompt or a start image. Connect one, then run the node again.")
         for key in ("resolution", "aspect_ratio"):
             value = _effective(node, key)
             if _present(value):

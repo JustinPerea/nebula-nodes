@@ -45,7 +45,7 @@ from services.typesafe_client import (
     prepare_images,
     system_one,
 )
-from execution.person_line import as_person_line, option_label, with_person_line
+from execution.person_line import option_label, with_person_line
 
 PRESENCE_ID = "present"
 BOX_ID = "where"
@@ -59,7 +59,7 @@ _FIELD_LABELS = {"presence_threshold": "Presence Threshold", "min_confidence": "
 
 
 def _fraction_line(name: str, high: str) -> str:
-    return f"Set the node's {_FIELD_LABELS.get(name, 'setting')} to a number from 0 to {high}."
+    return f"Set “{_FIELD_LABELS.get(name, 'setting')}” to a number from 0 to {high}."
 
 
 def _fraction(raw: Any, default: float, name: str, high: float = 1.0) -> float:
@@ -90,7 +90,7 @@ def _image_value(inputs: dict[str, PortValueDict]) -> str:
     if isinstance(value, list):
         value = next((item for item in value if item not in (None, "")), None)
     if value in (None, ""):
-        raise as_person_line(ValueError("Jev Box needs an image: connect one to Image"))
+        raise with_person_line(ValueError("Jev Box needs an image: connect one to Image"), "Connect an image to this node, then run it again.")
     return str(value)
 
 
@@ -208,11 +208,10 @@ async def handle_jev_box(
     params = node.params
     target = _target_text(node, inputs)
     if not target:
-        raise as_person_line(ValueError("Jev Box needs a target: what to find, e.g. 'the red car'"))
+        raise with_person_line(ValueError("Jev Box needs a target: what to find, e.g. 'the red car'"), "Jev Box needs a target, what to find, like “the red car”. Fill in “Target”, then run the node again.")
     model = check_model(params.get("model") or BOX_MODELS[0])
     if model not in BOX_MODELS:
-        raise with_person_line(ValueError(f"Jev Box needs Jev 1.14: pick {' or '.join(BOX_MODELS)}, not {model}"), f"Jev Box runs on Jev 1.14 only. Pick {option_label(node.definition_id, 'model', BOX_MODELS[0])} in the "
-                         "node's Model field, then run the node again.")
+        raise with_person_line(ValueError(f"Jev Box needs Jev 1.14: pick {' or '.join(BOX_MODELS)}, not {model}"), f"Jev Box runs on Jev 1.14 only. Pick {option_label(node.definition_id, 'model', BOX_MODELS[0])} in “Model”, then run the node again.")
     presence_threshold = _fraction(params.get("presence_threshold"), 0.5, "presence_threshold")
     min_confidence = _fraction(params.get("min_confidence"), 0.5, "min_confidence")
     pad = _fraction(params.get("pad"), 0.05, "pad", MAX_PAD)

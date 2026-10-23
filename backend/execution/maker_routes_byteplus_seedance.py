@@ -192,15 +192,15 @@ def _setting(node: GraphNode, key: str) -> Any:
 def _whole_seconds(value: Any, model: str) -> int:
     shortest, longest = DURATIONS[model]
     if isinstance(value, bool) or not isinstance(value, (int, float, str)):
-        raise with_person_line(ValueError(f"duration must be whole seconds from {shortest} to {longest} (received {value!r})"), f"Set Duration to whole seconds from {shortest} to {longest}. {it_was(value)}")
+        raise with_person_line(ValueError(f"duration must be whole seconds from {shortest} to {longest} (received {value!r})"), f"Set “Duration” to whole seconds from {shortest} to {longest}. {it_was(value)}")
     try:
         seconds = float(value)
     except ValueError:
-        raise with_person_line(ValueError(f"duration must be whole seconds from {shortest} to {longest} (received {value!r})"), f"Set Duration to whole seconds from {shortest} to {longest}. {it_was(value)}") from None
+        raise with_person_line(ValueError(f"duration must be whole seconds from {shortest} to {longest} (received {value!r})"), f"Set “Duration” to whole seconds from {shortest} to {longest}. {it_was(value)}") from None
     if not seconds.is_integer() or not shortest <= seconds <= longest:
         raise with_person_line(ValueError(
             f"BytePlus takes whole seconds from {shortest} to {longest} for this model (received {value!r}). "
-            "Change the duration, or run it on the copy."), f"Set Duration to whole seconds from {shortest} to {longest}. {it_was(value)}")
+            "Change the duration, or run it on the copy."), f"Set “Duration” to whole seconds from {shortest} to {longest}. {it_was(value)}")
     return int(seconds)
 
 
@@ -210,7 +210,7 @@ def _resolution(value: Any, model: str) -> str:
         choices = RESOLUTIONS[model]
         raise with_person_line(
             ValueError(f"BytePlus's {model} renders {', '.join(RESOLUTIONS[model])}, not {resolution!r}"),
-            f"{model_name(model)} on BytePlus renders {or_list(choices)}. Pick one in the node's Resolution field.")
+            f"{model_name(model)} on BytePlus renders {or_list(choices)}. Pick one in “Resolution”.")
     return resolution
 
 
@@ -226,14 +226,14 @@ def _task(model: str, *, ratio: str | None, duration: int, resolution: str, audi
             out["camera_fixed"] = camera_fixed
         if seed not in (None, ""):
             if isinstance(seed, bool) or not isinstance(seed, int) or not -1 <= seed <= 2147483647:
-                raise with_person_line(ValueError(f"BytePlus takes a seed from -1 to 2147483647 (received {seed!r})"), f"Set Seed to a whole number from -1 to 2147483647. {it_was(seed)}")
+                raise with_person_line(ValueError(f"BytePlus takes a seed from -1 to 2147483647 (received {seed!r})"), f"Set “Seed” to a whole number from -1 to 2147483647. {it_was(seed)}")
             out["seed"] = seed
     return out
 
 
 def _frames(model: str, first: list[str], last: list[str]) -> dict[str, PortValueDict]:
     if len(first) > 1 or len(last) > 1:
-        raise as_person_line(ValueError("Seedance takes one start image and one end image"))
+        raise with_person_line(ValueError("Seedance takes one start image and one end image"), "Seedance takes one start image and one end image. Disconnect the extra ones, then run the node again.")
     if last and not first:
         raise with_person_line(ValueError("BytePlus needs a start image to use an end image (first and last frames)"), "BytePlus needs a start image to use an end image. Connect one, then run the node again.")
     if last and model not in _LAST_FRAME_MODELS:
@@ -273,7 +273,7 @@ def fal_to_byteplus(node: GraphNode, inputs: dict[str, PortValueDict]) -> tuple[
     aspect = str(_setting(node, "aspect_ratio") or "auto")
     ratio = "adaptive" if aspect == "auto" else aspect
     if ratio != "adaptive" and ratio not in RATIOS:
-        raise as_person_line(ValueError(f"BytePlus has no {aspect!r} ratio"))
+        raise with_person_line(ValueError(f"BytePlus has no {aspect!r} ratio"), "BytePlus doesn't offer this aspect ratio. Pick another one, then run the node again.")
     raw_duration = _setting(node, "duration")
     duration = -1 if raw_duration in (None, "", "auto") else _whole_seconds(raw_duration, model)
     task = _task(model, ratio=ratio, duration=duration, resolution=_resolution(_setting(node, "resolution"), model),
@@ -342,7 +342,7 @@ def krea_to_byteplus(model: str):
                 "a Seedance 2.5 feature.")
         aspect = str(_setting(node, "aspect_ratio") or "16:9")
         if aspect not in RATIOS:
-            raise as_person_line(ValueError(f"BytePlus has no {aspect!r} ratio; run this on Krea"))
+            raise with_person_line(ValueError(f"BytePlus has no {aspect!r} ratio; run this on Krea"), "BytePlus doesn't offer this aspect ratio, so run this node on Krea.")
         ratio = "adaptive" if model == SEEDANCE_2_5 and first else aspect
         if ratio == "adaptive" and model in maker_sizes.START_SHAPES:
             # The aspect ratio the node shows isn't used: say so beside the
@@ -453,7 +453,7 @@ def task_body(node: GraphNode, inputs: Mapping[str, PortValueDict]) -> dict[str,
     for value in _port_values(inputs, "reference_audios"):
         content.append({"type": "audio_url", "audio_url": {"url": _audio(value)}, "role": "reference_audio"})
     if not content:
-        raise as_person_line(ValueError("Seedance needs a prompt or an image"))
+        raise with_person_line(ValueError("Seedance needs a prompt or an image"), "Seedance needs a prompt or an image. Connect one, then run the node again.")
     from handlers.byteplus import TASK_EXPIRES_AFTER
 
     inline = sum(len(item[item["type"]]["url"]) for item in content

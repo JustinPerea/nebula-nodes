@@ -16,7 +16,7 @@ from jsonschema import Draft202012Validator
 
 from services.cancellation import schedule_detached_cancel
 from models.events import ProgressEvent
-from execution.person_line import as_job_failure, as_person_line, slow_job_line, with_person_line
+from execution.person_line import as_job_failure, slow_job_line, with_person_line
 
 
 def _balance_reason(value) -> str | None:
@@ -203,7 +203,8 @@ async def prepare_generation(tools, model, preview_body, validate):
                and isinstance(entry.get('id'), str)
                and entry['id'] in {endpoint, endpoint.removeprefix(category + '/')}}
     if len(matches) != 1:
-        raise as_person_line(RuntimeError('The saved Krea model is unavailable or ambiguous in this account; no job was submitted'))
+        raise with_person_line(RuntimeError('The saved Krea model is unavailable or ambiguous in this account; no job was submitted'), "The saved Krea model isn't in this Krea account, or matches more than one, so pick another model. "
+                             "Nothing was sent to Krea.")
     model_id = matches.pop()
     schema_value = await tools.call('get_model_schema', [(MODEL_KEYS, model_id)])
     if not isinstance(schema_value, dict):

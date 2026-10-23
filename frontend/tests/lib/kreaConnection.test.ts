@@ -77,12 +77,12 @@ describe('Krea connection contract', () => {
     // Error copy round 3e (GM): "Couldn't {verb} {object}." then the reason;
     // never "Could not", and still never the error's own text (it can hold
     // credential-bearing URLs).
-    const GENERAL = "That didn't work. Try again, or reload if it keeps happening.";
+    const GENERAL = "Try again, or reload if it keeps happening.";
     const HEADING = "Couldn't update the Krea connection.";
     apiFetchMock.mockRejectedValueOnce(new Error('https://private.test/?token=fixture-secret'));
     await expect(connectKrea()).rejects.toThrow(`${HEADING} ${GENERAL}`);
     apiFetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch https://private.test/?token=fixture-secret'));
-    await expect(connectKrea()).rejects.toThrow(`${HEADING} Couldn't reach Nebula. Check your connection and try again.`);
+    await expect(connectKrea()).rejects.toThrow(`${HEADING} Nebula's server isn't answering. Make sure it's running, then try again.`);
     apiFetchMock.mockResolvedValueOnce({ ok: false, status: 503, json: vi.fn() });
     await expect(checkKreaConnection()).rejects.toThrow(`${HEADING} Nebula didn't respond. Try again.`);
     apiFetchMock.mockResolvedValueOnce({ ok: true, json: async () => { throw new Error('token=fixture'); } });

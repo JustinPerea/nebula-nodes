@@ -12,9 +12,9 @@ import {
  * table is GM's suggestion: error kind -> the line the person reads.
  */
 
-const LOST = "Couldn't reach Nebula. Check your connection and try again.";
+const LOST = "Nebula's server isn't answering. Make sure it's running, then try again.";
 const NO_ANSWER = "Nebula didn't respond. Try again.";
-const REFUSED = "That didn't work. Try again, or reload if it keeps happening.";
+const REFUSED = "Try again, or reload if it keeps happening.";
 const ACCESS = "You don't have access to this anymore. Reload to sign in again.";
 const TOO_LARGE = "That's too large to save.";
 
@@ -111,7 +111,7 @@ describe('ConnectionLostError keeps the original for debugging', () => {
  */
 describe('round 2: heading + reason + kind', async () => {
   const copy = await import('../../src/lib/errorCopy');
-  const LOST_SHORT = "Couldn't reach Nebula. Check your connection.";
+  const LOST_SHORT = "Nebula's server isn't answering. Make sure it's running.";
   const NO_ANSWER_SHORT = "Nebula didn't respond.";
   const HEADING = "Couldn't save the board.";
 
@@ -212,10 +212,10 @@ describe('round 2: shortLine, the WRAP rule for a one-line string beside a retry
     const { shortLine } = await import('../../src/lib/errorCopy');
     expect(shortLine("Couldn't load your projects. Nebula didn't respond. Try again."))
       .toBe("Couldn't load your projects. Nebula didn't respond.");
-    expect(shortLine("Couldn't load your projects. Couldn't reach Nebula. Check your connection and try again."))
-      .toBe("Couldn't load your projects. Couldn't reach Nebula. Check your connection.");
+    expect(shortLine("Couldn't load your projects. Nebula's server isn't answering. Make sure it's running, then try again."))
+      .toBe("Couldn't load your projects. Nebula's server isn't answering. Make sure it's running.");
     // GM's 4xx fallback keeps its "Try again" (listed for GM).
-    const refused = "Couldn't open the project. That didn't work. Try again, or reload if it keeps happening.";
+    const refused = "Couldn't open the project. Try again, or reload if it keeps happening.";
     expect(shortLine(refused)).toBe(refused);
     expect(shortLine('Projects could not be loaded.')).toBe('Projects could not be loaded.');
   });

@@ -18,6 +18,7 @@ import { CHAT_SEND_EVENT, type ChatSendDetail } from '../lib/chatSend';
 import { COMMAND_PALETTE_OPEN_EVENT, isPaletteHotkey, paletteOpenRequestApplies } from '../lib/commandPaletteKeys';
 import { dropIntent, heldIntent, holdIntent, isIntentClaimed } from '../lib/heldIntents';
 import { DeferredBoundary } from './DeferredBoundary';
+import { CONNECTION_LOST_SHORT_COPY } from '../lib/errorCopy';
 
 /**
  * Run History, the onboarding tour and the canvas connection popup ("add a
@@ -164,8 +165,9 @@ export function MaskPainterModal(props: ComponentProps<typeof DeferredMaskPainte
       chunk={DeferredMaskPainterModal}
       failed={({ retry, retrying }) => (
         <MaskPainterShell onClose={props.onClose} busy={retrying}>
-          {/* GM's WRAP rule (round 3b): Try again is beside it and loads it again. */}
-          <div className="mask-painter__empty" role="alert">Couldn't load the mask painter. Check your connection.</div>
+          {/* GM's WRAP rule (round 3b): Try again is beside it and loads it again.
+              Round 3f: the server is on this computer, not "your connection". */}
+          <div className="mask-painter__empty" role="alert">Couldn't load the mask painter. {CONNECTION_LOST_SHORT_COPY}</div>
           <div className="mask-painter__toolbar">
             <div className="mask-painter__spacer" />
             <button type="button" className="mask-painter__cancel" onClick={props.onClose}>Close</button>

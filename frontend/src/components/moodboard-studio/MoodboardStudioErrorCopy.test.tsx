@@ -14,14 +14,14 @@ import type { Moodboard } from '../../types';
  * run here; only the browser's fetch is stubbed.
  */
 
-const LOST = "Couldn't reach Nebula. Check your connection and try again.";
+const LOST = "Nebula's server isn't answering. Make sure it's running, then try again.";
 const NO_ANSWER = "Nebula didn't respond. Try again.";
 // Round 2 (GM): "Change 'Save failed: <reason>' to 'Couldn't save the board.
 // <reason>' so it matches everything else", heading on line 1, reason on
 // line 2; and the WRAP rule: with Retry shown, "the reason line drops its
 // 'try again'. The button is the retry."
 const SAVE = "Couldn't save the board.";
-const LOST_SHORT = "Couldn't reach Nebula. Check your connection.";
+const LOST_SHORT = "Nebula's server isn't answering. Make sure it's running.";
 const NO_ANSWER_SHORT = "Nebula didn't respond.";
 
 vi.mock('../../lib/wsClient', () => ({
@@ -141,7 +141,7 @@ describe('a board save that fails', () => {
     state.edits = 'field-list';
     await openStudio();
     fireEvent.change(screen.getAllByRole('slider', { name: /^Weight/ })[0], { target: { value: '0.5' } });
-    expect(lines(await notice())).toEqual([SAVE, "That didn't work. Try again, or reload if it keeps happening."]);
+    expect(lines(await notice())).toEqual([SAVE, "Try again, or reload if it keeps happening."]);
     expect(screen.queryByText(/field required|images\.0\.url/)).toBeNull();
     expect(vi.mocked(console.warn).mock.calls.some((call) => JSON.stringify(call).includes('field required'))).toBe(true);
   });
@@ -166,7 +166,7 @@ describe('a board save that fails', () => {
   });
 
   it.each([
-    ['bare-400', "That didn't work. Try again, or reload if it keeps happening."],
+    ['bare-400', "Try again, or reload if it keeps happening."],
     ['bare-403', "You don't have access to this anymore. Reload to sign in again."],
     ['bare-413', "That's too large to save."],
   ] as const)('a %s with no reason says GM\'s line for it, without the status code', async (failure, line) => {

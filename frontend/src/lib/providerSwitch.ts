@@ -1,6 +1,7 @@
 import type { ModelNodeDefinition, ParamDefinition, RouteSpec } from '../types';
 import {
-  allParamDefinitions, AUTO, effectiveValues, hiddenStops, matchValue, portLimitName, PROVIDER_PARAM, providerChoice,
+  allParamDefinitions, AUTO, blockedSetting, effectiveValues, hiddenStops, matchValue, personWords, portLimitName,
+  PROVIDER_PARAM, providerChoice,
   providerLabel, routeAcceptRule, routeBlock, routeById, routeParamDefinitions, routeSentKeys, routesOf, routeSwitch,
   routeTakesValue,
   routeUnavailable, selectRoute, settingText, usesRoutePlan, withWiredBlockers, type DirectBlock, type HiddenStop,
@@ -102,44 +103,42 @@ function billingWrites(definition: ModelNodeDefinition, routeId: string, plan: b
   return { [PROVIDER_PARAM]: routeId, _kreaAuth: plan ? 'mcp' : 'api-token' };
 }
 
-/** A block's value without its param name: "resolution 1.5k" -> "1.5k". A
- * switch keeps its name ("draft true" -> "draft", "draft false" -> "no
- * draft"), since "true" alone says nothing. */
-function blockedValue(block: Partial<DirectBlock>): string {
-  const detail = String(block.detail ?? block.param ?? '');
-  const value = block.param && detail.startsWith(`${block.param} `) ? detail.slice(block.param.length + 1) : detail;
-  if (block.param && value === 'true') return block.param;
-  if (block.param && value === 'false') return `no ${block.param}`;
-  return value;
-}
-
-/** A row's block note: what this route doesn't take of the recipe. */
-function rowBlock(route: RouteSpec, block: DirectBlock): string {
-  if (block.reason === 'hidden') return `Doesn't take ${block.detail ?? block.param}`;
-  if (block.reason === 'unsupported') return `Doesn't take ${blockedValue(block)}`;
-  if (block.reason === 'blocked') return `Doesn't take ${block.param}`;
-  if (block.reason === 'requires') return `Needs ${block.param}`;
-  if (block.reason === 'size') return "Can't make that size";
-  if (block.reason === 'retired') return 'Retired by the maker';
+/** A row's block note: what this route doesn't take of the recipe, the
+ * setting by its label in quotes (error copy round 3f, GM: "Switcher notes
+ * become "Doesn't take “{Label}”." / "Needs “{Label}”.""). */
+function rowBlock(definition: ModelNodeDefinition, route: RouteSpec, block: DirectBlock, params: Params): string {
+  if (block.reason === 'hidden' || block.reason === 'unsupported' || block.reason === 'blocked') {
+    return `Doesn't take ${blockedSetting(definition, block, params)}.`;
+  }
+  if (block.reason === 'requires') return `Needs ${blockedSetting(definition, block, params)}.`;
+  if (block.reason === 'size') return "Can't make that size.";
+  if (block.reason === 'retired') return 'Retired by the maker.';
   if (block.reason === 'ports') {
     const limit = route.rules?.ports?.[block.param ?? ''];
-    const name = portLimitName(block.param ?? '', limit);
-    return limit?.max ? `Takes at most ${limit.max} ${name}` : `Doesn't take wired ${name}`;
+    const name = personWords(portLimitName(block.param ?? '', limit));
+    return limit?.max ? `Takes at most ${limit.max} ${name}.` : `Doesn't take connected ${name}.`;
   }
-  return String(block.detail ?? block.reason);
+  return `${personWords(String(block.detail ?? block.reason))}.`;
 }
 
-/** The Auto row's reason when the run can't start ("1.5k isn't on Black Forest Labs"). */
-function autoReason(definition: ModelNodeDefinition, unavailable: NonNullable<ReturnType<typeof routeUnavailable>>): string {
+/** The Auto row's reason when the run can't start ("fal.ai doesn't take
+ * “Resolution” set to 1.5K"). */
+function autoReason(definition: ModelNodeDefinition, unavailable: NonNullable<ReturnType<typeof routeUnavailable>>,
+  params: Params): string {
   const spec = unavailable.routeId ? routeById(definition, unavailable.routeId) : undefined;
   const label = providerLabel(spec?.provider);
   const block = unavailable.block;
   if (!spec) return unavailable.missing.length ? 'no provider key set' : 'no route can take it';
   if (!block) return `no ${label} key`;
-  if (block.reason === 'hidden') return `${label} doesn't offer ${block.detail ?? block.param}`;
-  if (block.reason === 'unsupported' || block.reason === 'blocked') return `${blockedValue(block)} isn't on ${label}`;
-  if (block.reason === 'ports') return `too many ${portLimitName(block.param ?? '', spec.rules?.ports?.[block.param ?? ''])} for ${label}`;
-  return rowBlock(spec, block as DirectBlock).toLowerCase();
+  if (block.reason === 'hidden' || block.reason === 'unsupported' || block.reason === 'blocked') {
+    return `${label} doesn't take ${blockedSetting(definition, block, params)}`;
+  }
+  if (block.reason === 'requires') return `${label} needs ${blockedSetting(definition, block, params)}`;
+  if (block.reason === 'ports') {
+    return `too many ${personWords(portLimitName(block.param ?? '', spec.rules?.ports?.[block.param ?? '']))} for ${label}`;
+  }
+  const note = rowBlock(definition, spec, block as DirectBlock, params);
+  return note.charAt(0).toLowerCase() + note.slice(1, -1);
 }
 
 function price(definition: ModelNodeDefinition, route: RouteSpec, estimates: ReturnType<typeof estimateRoutes>,
@@ -177,14 +176,14 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
 
   const rows: ProviderRow[] = [{
     id: AUTO, routeId: null, plan: false,
-    label: autoUnavailable ? `Auto · can't run: ${autoReason(definition, autoUnavailable)}` : `Auto · runs on ${autoName}`,
+    label: autoUnavailable ? `Auto · can't run: ${autoReason(definition, autoUnavailable, { ...routed, [PROVIDER_PARAM]: AUTO })}` : `Auto · runs on ${autoName}`,
     keyState: null, price: autoUnavailable || !autoSpec ? '-'
       : price(definition, autoSpec, estimates, context.pricing, autoRoute.kind === 'plan', saved, wiredPorts).price,
     block: null, selected: choice === AUTO, writes: billingWrites(definition, AUTO, false),
   }];
   for (const spec of routesOf(definition)) {
     const block = routeBlock(definition, spec, routed);
-    const note = block ? rowBlock(spec, block) : null;
+    const note = block ? rowBlock(definition, spec, block, routed) : null;
     const keyed = spec.keys.some((key) => isSet(context.apiKeys, key));
     const label = providerLabel(spec.provider);
     if (spec.plan !== 'only') {

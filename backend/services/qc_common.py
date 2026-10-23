@@ -21,7 +21,7 @@ from PIL import Image, ImageDraw, ImageOps
 
 from services.ffmpeg import ffprobe_video, run_ffmpeg
 from services.output import DEFAULT_OUTPUT_ROOT, OUTPUT_ROOT, get_run_dir, resolve_output_ref
-from execution.person_line import as_person_line, missing_file_line, with_person_line
+from execution.person_line import input_words, missing_file_line, with_person_line
 
 MAX_SAMPLE_FRAMES = 12
 FRAME_EXTRACTION_TIMEOUT_SECONDS = 60
@@ -40,7 +40,7 @@ def _allowed_roots() -> tuple[Path, ...]:
 def resolve_local_media(value: str, *, label: str) -> Path:
     """Resolve a graph media reference to a contained, existing local file."""
     if not isinstance(value, str) or not value.strip():
-        raise as_person_line(ValueError(f"{label} is required"))
+        raise with_person_line(ValueError(f"{label} is required"), f"Connect {input_words(label)} to this node, then run it again.")
     raw = value.strip()
     if raw.startswith(("http://", "https://", "data:")):
         raise with_person_line(ValueError(
@@ -94,7 +94,7 @@ async def extract_frames(
 
     points = list(sample_points)[:MAX_SAMPLE_FRAMES]
     if not points:
-        raise as_person_line(ValueError("At least one sample point is required"))
+        raise with_person_line(ValueError("At least one sample point is required"), "This check needs at least one frame to sample. Raise the number of samples, then run the node again.")
     work_dir.mkdir(parents=True, exist_ok=True)
     loop = asyncio.get_running_loop()
     deadline = loop.time() + FRAME_EXTRACTION_TIMEOUT_SECONDS
@@ -104,7 +104,7 @@ async def extract_frames(
         try:
             normalized = float(point)
         except (TypeError, ValueError):
-            raise as_person_line(ValueError(f"Invalid sample point: {point!r}")) from None
+            raise with_person_line(ValueError(f"Invalid sample point: {point!r}"), "A frame to sample isn't valid. Check the sampling settings, then run the node again.") from None
         normalized = min(1.0, max(0.0, normalized))
         # Seeking exactly to EOF commonly yields no frame. Keep the final sample
         # inside the media timeline while preserving a true boundary comparison.

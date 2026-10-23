@@ -37,7 +37,7 @@ from models.graph import GraphNode, PortValueDict
 from services.image_input import is_remote_or_data_uri, load_local_image
 from services.media_input import owned_output_value
 from services.output import get_run_dir, save_base64_image
-from execution.person_line import as_person_line, it_was, model_name, or_list, with_api_status, with_person_line
+from execution.person_line import field_label, it_was, model_name, or_list, with_api_status, with_person_line
 
 XAI_API_BASE = "https://api.x.ai/v1"
 GENERATIONS_URL = f"{XAI_API_BASE}/images/generations"
@@ -62,7 +62,7 @@ def xai_image_url(value: Any) -> str:
     or unsupported file (services.image_input) instead of dropping it."""
     text = str(value or "").strip()
     if not text:
-        raise as_person_line(ValueError("Image input is empty"))
+        raise with_person_line(ValueError("Image input is empty"), "The connected image is empty. Connect another image.")
     text = owned_output_value(text)
     if is_remote_or_data_uri(text):
         return text
@@ -78,7 +78,7 @@ def xai_video_url(value: Any) -> str:
 
     text = str(value or "").strip()
     if not text:
-        raise as_person_line(ValueError("Video input is empty"))
+        raise with_person_line(ValueError("Video input is empty"), "The connected video is empty. Connect another video.")
     text = owned_output_value(text)
     if is_remote_or_data_uri(text):
         return text
@@ -139,11 +139,11 @@ async def handle_xai_image(
     params = node.params
     model = str(params.get("model") or "")
     if not model:
-        raise as_person_line(ValueError("xAI image model is required"))
+        raise with_person_line(ValueError("xAI image model is required"), "Pick a model in “Model”, then run the node again.")
     prompt_port = inputs.get("prompt")
     prompt = str(prompt_port.value).strip() if prompt_port and prompt_port.value not in (None, "") else ""
     if not prompt:
-        raise as_person_line(ValueError("Prompt is required"))
+        raise with_person_line(ValueError("Prompt is required"), "Connect a prompt to this node, then run it again.")
 
     body: dict[str, Any] = {"model": model, "prompt": prompt, "response_format": "b64_json"}
     count = _count(params.get("n"))
@@ -154,8 +154,9 @@ async def handle_xai_image(
             body[key] = str(params[key])
     if params.get("quality"):
         if model not in QUALITY_MODELS:
-            raise with_person_line(ValueError(f"xAI takes quality only on {', '.join(sorted(QUALITY_MODELS))}, not {model}"), f"xAI takes Quality only on {or_list(model_name(name) for name in sorted(QUALITY_MODELS))}. Clear the "
-                             "node's Quality field, then run the node again.")
+            quality = field_label(node.definition_id, "quality", "Quality")
+            raise with_person_line(ValueError(f"xAI takes quality only on {', '.join(sorted(QUALITY_MODELS))}, not {model}"), f"xAI takes “{quality}” only on {or_list(model_name(name) for name in sorted(QUALITY_MODELS))}. "
+                             f"Clear “{quality}”, then run the node again.")
         body["quality"] = str(params["quality"])
 
     sources = _image_values(inputs.get("images"))

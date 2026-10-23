@@ -7,6 +7,7 @@ import { backendAssetUrlSync, getCachedBackendBaseUrl } from './backend';
 import { AssetByteLimitError, readBoundedAssetResponse } from './boundedAsset';
 import { apiRequest } from './apiRequest';
 import { FailureNotice, failureMessage, oneLine } from './errorCopy';
+import { showNotice } from './canvasNotice';
 import {
   hasRepresentationViewer,
   parseRepresentation,
@@ -105,13 +106,25 @@ export interface GraphBundleAssetSummary {
   totalBytes: number;
 }
 
+/** GM, round 3f: "Graph saved without {n} of its files. They may be missing
+ * when the graph is opened somewhere else." (singular: "without 1 of its
+ * files. It may be missing…"). */
+export function skippedFilesLine(skipped: number): string {
+  return skipped === 1
+    ? 'Graph saved without 1 of its files. It may be missing when the graph is opened somewhere else.'
+    : `Graph saved without ${skipped} of its files. They may be missing when the graph is opened somewhere else.`;
+}
+
+/** GM, round 3f: "This graph is {n} MB. Nebula opens graphs up to {m} MB."
+ * (the same pattern for the JSON and the finished bundle). */
+export function graphSizeLine(bytes: number, limitBytes: number): string {
+  return `This graph is ${(bytes / (1024 * 1024)).toFixed(1)} MB. `
+    + `Nebula opens graphs up to ${Math.floor(limitBytes / (1024 * 1024))} MB.`;
+}
+
 function warnAboutSkippedBundleAssets(summary: GraphBundleAssetSummary): void {
   if (summary.skipped === 0) return;
-  const noun = summary.skipped === 1 ? 'asset was' : 'assets were';
-  alert(
-    `Graph saved, but ${summary.skipped} referenced ${noun} not included. `
-    + 'Those outputs may be unavailable when the bundle is opened elsewhere.',
-  );
+  showNotice(skippedFilesLine(summary.skipped), 'info');
 }
 
 // Error copy round 3e (GM): the file's own size and shape limits are written
@@ -155,18 +168,12 @@ export interface GraphFileSelection {
  * JavaScript memory. Plain JSON gets a much smaller parse-memory ceiling. */
 export async function inspectGraphFileWithinLimit(file: Blob): Promise<GraphFileSelection> {
   if (file.size > GRAPH_BUNDLE_MAX_IMPORT_BYTES) {
-    throw new GraphBundleImportTooLargeError(
-      `The selected graph is ${(file.size / (1024 * 1024)).toFixed(1)} MB. `
-      + `Nebula can safely open bundles up to ${Math.floor(GRAPH_BUNDLE_MAX_IMPORT_BYTES / (1024 * 1024))} MB.`,
-    );
+    throw new GraphBundleImportTooLargeError(graphSizeLine(file.size, GRAPH_BUNDLE_MAX_IMPORT_BYTES));
   }
   const signature = await file.slice(0, 4).arrayBuffer();
   const isZip = isZipBuffer(signature);
   if (!isZip && file.size > GRAPH_JSON_MAX_IMPORT_BYTES) {
-    throw new GraphBundleImportTooLargeError(
-      `The selected JSON graph is ${(file.size / (1024 * 1024)).toFixed(1)} MB. `
-      + `Nebula can safely parse JSON graphs up to ${Math.floor(GRAPH_JSON_MAX_IMPORT_BYTES / (1024 * 1024))} MB.`,
-    );
+    throw new GraphBundleImportTooLargeError(graphSizeLine(file.size, GRAPH_JSON_MAX_IMPORT_BYTES));
   }
   return { file, isZip };
 }
@@ -673,14 +680,11 @@ export async function saveToFile(
     graphJson = JSON.stringify(file, null, 2);
     const graphBytes = new TextEncoder().encode(graphJson).byteLength;
     if (graphBytes > GRAPH_JSON_MAX_IMPORT_BYTES) {
-      throw new GraphStructureLimitError(
-        `The graph is ${(graphBytes / (1024 * 1024)).toFixed(1)} MB, over the portable limit of `
-        + `${Math.floor(GRAPH_JSON_MAX_IMPORT_BYTES / (1024 * 1024))} MB.`,
-      );
+      throw new GraphStructureLimitError(graphSizeLine(graphBytes, GRAPH_JSON_MAX_IMPORT_BYTES));
     }
   } catch (error) {
     console.error('[nebula] graph save', error);
-    alert(failureMessage(error, SAVE_GRAPH));
+    showNotice(failureMessage(error, SAVE_GRAPH));
     return null;
   }
 
@@ -698,14 +702,11 @@ export async function saveToFile(
     blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
   } catch (error) {
     console.error('[nebula] graph bundle', error);
-    alert(failureMessage(error, SAVE_GRAPH));
+    showNotice(failureMessage(error, SAVE_GRAPH));
     return null;
   }
   if (blob.size > GRAPH_BUNDLE_MAX_IMPORT_BYTES) {
-    alert(
-      `${SAVE_GRAPH} The finished bundle is ${(blob.size / (1024 * 1024)).toFixed(1)} MB, `
-      + `above Nebula's ${Math.floor(GRAPH_BUNDLE_MAX_IMPORT_BYTES / (1024 * 1024))} MB portable limit.`,
-    );
+    showNotice(`${SAVE_GRAPH} ${graphSizeLine(blob.size, GRAPH_BUNDLE_MAX_IMPORT_BYTES)}`);
     return null;
   }
   const suggestedName = `${file.name.replace(/[^a-zA-Z0-9-_ ]/g, '')}.nebula.zip`;
@@ -1163,7 +1164,7 @@ export async function loadFromFile(): Promise<{
     } catch (err) {
       if ((err as DOMException).name === 'AbortError') return null;
       if (err instanceof GraphBundleImportTooLargeError) {
-        alert(`${LOAD_GRAPH} ${err.message}`);
+        showNotice(failureMessage(err, LOAD_GRAPH));
         return null;
       }
       console.warn('File System Access API failed, falling back to input:', err);
@@ -1216,7 +1217,7 @@ export async function loadFromFile(): Promise<{
     // A request's error already names its action ("Couldn't restore the
     // asset. <reason>"); the file's own checks are written lines under
     // LOAD_GRAPH; anything else (JSON that doesn't parse) is a damaged file.
-    alert(err instanceof SyntaxError
+    showNotice(err instanceof SyntaxError
       ? oneLine({ heading: LOAD_GRAPH, reason: GRAPH_FILE_DAMAGED_COPY })
       : failureMessage(err, LOAD_GRAPH));
     return null;
@@ -1240,7 +1241,7 @@ export function loadViaInput(): Promise<GraphFileSelection | null> {
         resolve(await inspectGraphFileWithinLimit(file));
       } catch (error) {
         console.error('[nebula] graph pick', error);
-        alert(failureMessage(error, LOAD_GRAPH));
+        showNotice(failureMessage(error, LOAD_GRAPH));
         resolve(null);
       }
     };

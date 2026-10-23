@@ -549,7 +549,8 @@ async def handle_cinema_scene(
             # answer, naming the provider the base called (round 3d).
             card = card_line(exc, base_model, base_node.params if base_node is not None else {}, api_keys)
             fields = {"errorCategory": category, "errorFriendly": friendly,
-                      "errorPerson": card.person, "errorProviderText": card.provider_text, "errorRaw": str(exc)}
+                      "errorPerson": card.person, "errorProviderText": card.provider_text,
+                      "errorProvider": card.provider, "errorRaw": str(exc)}
             shot["output"] = {"status": "error", "error": str(exc),
                               **{key: value for key, value in fields.items() if value}}
             outputs[port_id] = {"type": "Image", "value": None}

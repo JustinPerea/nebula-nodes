@@ -44,7 +44,7 @@ from services.port_contracts import (
     ContractNode,
     validate_edge_contracts,
 )
-from services.provider_capabilities import gemini_omni_capability_error
+from services.provider_capabilities import GEMINI_OMNI_EXTENSION_LINE, gemini_omni_capability_error
 from services.provider_operation_policy import bypasses_output_cache, operation_policy
 from services.retired_nodes import migrate_params
 from services.worldlabs_capabilities import worldlabs_capability_gate
@@ -65,8 +65,8 @@ from models.events import (
 from execution import gating, provider_calls
 from services.moodboard_brief import apply_to_generator as apply_board_to_generator
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import (as_person_line, carries_provider_text, is_job_failure, missing_file_line,
-                                   missing_key_line, person_line, port_line, with_person_line)
+from execution.person_line import (carries_provider_text, is_job_failure, missing_file_line, missing_key_line,
+                                   person_line, port_line, with_person_line)
 from execution.provider_status import card_line
 
 CycleError = _GraphlibCycleError
@@ -318,7 +318,7 @@ def _image_input_output(params: dict) -> dict:
             f"Image Input file not found: {file_path!r}. Set a valid path — "
             "downstream nodes would otherwise receive a reference no model can load."
         ),
-            "The node's File can't be found. Choose the file again, then run the node again.")
+            "The node's file can't be found. Choose it again, then run the node again.")
     return {"image": {"type": "Image", "value": file_path}}
 
 
@@ -683,7 +683,7 @@ def _fanout_over_cap(definition_id: str, planned: int, cap: Any) -> ValueError:
         f"Nested iterator expands to {planned} items, exceeding "
         f"this iterator's batch_size_cap of {cap}. Reduce the batch "
         "before running; no downstream generation was started."
-    ), f"This {noun} would make {planned} items, more than its {label} of {cap}. Make the batch smaller, "
+    ), f"This {noun} would make {planned} items, more than its “{label}” of {cap}. Make the batch smaller, "
        "then run it again. Nothing after it was generated.")
 InvocationContext = tuple[tuple[str, int], ...]
 
@@ -718,7 +718,7 @@ def _batch_items(params: dict[str, Any]) -> list[str]:
     if isinstance(cap, bool) or not isinstance(cap, int) or not 1 <= cap <= 25:
         raise with_person_line(
             ValueError("Batch batch_size_cap must be an integer from 1 to 25"),
-            "Set the node's Item cap to a whole number from 1 to 25.")
+            "Set “Item cap” to a whole number from 1 to 25.")
     text = params.get("items_text", "")
     if mode == "none":
         items = [text] if text else []
@@ -730,7 +730,7 @@ def _batch_items(params: dict[str, Any]) -> list[str]:
             f"Batch has {len(items)} items, exceeding its batch_size_cap of {cap}. "
             "Reduce the list or raise the cap before running; no generation was started."
         ),
-            f"This Batch has {len(items)} items, more than its Item cap of {cap}. Remove items or raise the cap, then run it again. Nothing was generated.")
+            f"This Batch has {len(items)} items, more than its “Item cap” of {cap}. Remove items or raise the cap, then run it again. Nothing was generated.")
     return items
 
 
@@ -765,7 +765,7 @@ def _iterator_validation_errors(
             errors.append(ValidationErrorDetail(
                 node_id=node.id, port_id="array",
                 message="Iterator batch_size_cap must be an integer from 1 to 25",
-                person="Set the node's Batch Size Cap to a whole number from 1 to 25.",
+                person="Set “Batch Size Cap” to a whole number from 1 to 25.",
             ))
     try:
         order = topological_sort(nodes, edges)
@@ -969,9 +969,9 @@ def validate_graph(
                         node_id=node.id,
                         port_id="prompt",
                         message=capability_error,
-                        # Written for the person already (3c: the guardrail
-                        # sentence shows as it is).
-                        person=capability_error,
+                        # The card's line in GM's rules (round 3f); agents
+                        # read the guardrail's text as it is.
+                        person=GEMINI_OMNI_EXTENSION_LINE,
                     )
                 )
 
@@ -1389,7 +1389,7 @@ async def _execute_graph(
                 elif node.definition_id == "frame-extractor":
                     video_input = resolved_inputs.get("video")
                     if not video_input or not video_input.value:
-                        raise as_person_line(ValueError("Video input is required for frame extraction"))
+                        raise with_person_line(ValueError("Video input is required for frame extraction"), "Connect a video to this node, then run it again.")
                     try:
                         from services.ffmpeg import ffprobe_video, run_ffmpeg
                         from services.output import get_run_dir
@@ -1424,7 +1424,7 @@ async def _execute_graph(
                         )
                         node_outputs = {"image": {"type": "Image", "value": str(out_path)}}
                     except FileNotFoundError:
-                        raise as_person_line(ValueError("ffmpeg not found — install ffmpeg to use Frame Extractor"))
+                        raise with_person_line(ValueError("ffmpeg not found — install ffmpeg to use Frame Extractor"), "Frame Extractor needs ffmpeg, which isn't installed on this computer. Install ffmpeg, then run the node again.")
                 elif node.definition_id == "array-builder":
                     items = []
                     for port_id in ("item1", "item2", "item3", "item4", "item5", "item6", "item7", "item8"):
@@ -1458,7 +1458,7 @@ async def _execute_graph(
                 elif node.definition_id == "svg-rasterize":
                     svg_input = resolved_inputs.get("svg")
                     if not svg_input or not svg_input.value:
-                        raise as_person_line(ValueError("SVG input is required"))
+                        raise with_person_line(ValueError("SVG input is required"), "Connect an SVG to this node, then run it again.")
                     svg_value = str(svg_input.value)
                     width = int(node.params.get("width", 1024))
                     height = int(node.params.get("height", 1024))
@@ -1500,7 +1500,7 @@ async def _execute_graph(
                     #   black-edit (Ideogram)   -> inverted, painted becomes black
                     mask_data = node.params.get("_maskData")
                     if not mask_data or not str(mask_data).startswith("data:image"):
-                        raise as_person_line(ValueError("No mask painted yet — open the Mask Painter node and paint one"))
+                        raise with_person_line(ValueError("No mask painted yet — open the Mask Painter node and paint one"), "No mask is painted yet. Open the Mask Painter node and paint one, then run the node again.")
                     image_input = resolved_inputs.get("image")
                     if not image_input or not image_input.value:
                         raise with_person_line(ValueError("Image input is required (the mask must match its dimensions)"), "Mask Painter needs the image the mask is painted on. Connect one, then run the node again.")
@@ -1641,6 +1641,7 @@ async def _execute_graph(
                     and handler_calls.get(nid, 0) <= 1,
                     person=card.person,
                     provider_text=card.provider_text,
+                    provider=card.provider,
                 )
             )
             return nid, False, 0
@@ -1675,7 +1676,7 @@ async def _execute_graph(
                     else:
                         source = resolve_inputs(nid, context).get("array")
                         if source is None or not isinstance(source.value, list):
-                            raise as_person_line(ValueError("Iterator requires an Array input"))
+                            raise with_person_line(ValueError("Iterator requires an Array input"), "Connect an array to this node, then run it again.")
                         items = source.value[:cap]
                     planned.extend((context + ((nid, index),), item)
                                    for index, item in enumerate(items))

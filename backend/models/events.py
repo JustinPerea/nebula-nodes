@@ -123,6 +123,12 @@ class ErrorEvent(RunScopedEvent):
     # with_provider_line. False: a `person` in Nebula's own words, with no
     # Details (the specific text is for agents).
     provider_text: bool = False
+    # The provider the run called, from the route it took (round 3f): the
+    # card's general line says "Details shows what {Provider} said." when a
+    # failure has no line of its own. Additive and card-only: never read from
+    # the error's text, None for a node that calls no provider or a failure
+    # that provider never answered (execution/provider_status.card_line).
+    provider: str | None = None
 
 
 class ValidationErrorDetail(BaseModel):

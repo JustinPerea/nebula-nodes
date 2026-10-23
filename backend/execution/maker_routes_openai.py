@@ -50,7 +50,7 @@ from typing import Any, Awaitable, Callable
 from execution.missing_credential import MissingCredentialError
 from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
-from execution.person_line import as_person_line, with_person_line
+from execution.person_line import count_field, with_person_line
 
 Emit = Callable[[ExecutionEvent], Awaitable[None]] | None
 
@@ -162,7 +162,7 @@ def krea_openai_size(params: dict[str, Any]) -> str | None:
     resolution = str(resolution) if _set(resolution) else KREA_DEFAULT_RESOLUTION
     size = KREA_OPENAI_SIZES.get(aspect, {}).get(resolution)
     if size is None:
-        raise as_person_line(ValueError(f"Krea size {aspect} at {resolution} has no OpenAI equivalent"))
+        raise with_person_line(ValueError(f"Krea size {aspect} at {resolution} has no OpenAI equivalent"), "OpenAI has no size for this aspect ratio and resolution. Pick another, or run this node on Krea.")
     return size
 
 
@@ -175,7 +175,7 @@ def _json_list(value: Any) -> list[Any]:
         except ValueError as exc:
             raise with_person_line(
                 ValueError("image_urls must be a JSON list of image URLs"),
-                "Write the node's image URLs as a JSON list of links.") from exc
+                "Write “Image URLs (JSON)” as a JSON list of links.") from exc
     return value if isinstance(value, list) else [value]
 
 
@@ -228,13 +228,13 @@ def build_body(node: GraphNode, prompt: str) -> dict[str, Any]:
         return build_25_body(node, prompt)
     quality = params.get("quality") or "auto"
     if quality not in {"auto", "low", "medium", "high"}:
-        raise with_person_line(ValueError(f"{model} quality must be auto, low, medium or high"), "Set Quality to Auto, Low, Medium or High, then run the node again.")
+        raise with_person_line(ValueError(f"{model} quality must be auto, low, medium or high"), "Set “Quality” to Auto, Low, Medium or High, then run the node again.")
     body = build_generate_body(node, prompt, model=model)
     background = params.get("background") or "auto"
     if background not in {"auto", "opaque", "transparent"}:
-        raise as_person_line(ValueError("Background must be auto, opaque or transparent"))
+        raise with_person_line(ValueError("Background must be auto, opaque or transparent"), "Pick one of the “Background” options, then run the node again.")
     if background == "transparent" and body.get("output_format", "png") not in {"png", "webp"}:
-        raise as_person_line(ValueError("A transparent background needs PNG or WebP output, not JPEG"))
+        raise with_person_line(ValueError("A transparent background needs PNG or WebP output, not JPEG"), "A transparent background needs PNG or WebP output, not JPEG. Change “Format”, then run the node again.")
     if background != "auto":
         body["background"] = background
     if model == GPT_IMAGE_15 and params.get("input_fidelity") in {"low", "high"}:
@@ -242,13 +242,13 @@ def build_body(node: GraphNode, prompt: str) -> dict[str, Any]:
     return body
 
 
-def image_count(value: Any) -> int:
+def image_count(value: Any, definition_id: str = "") -> int:
     if value in (None, ""):
         return 1
     if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 4:
         raise with_person_line(
             ValueError(f"num_images must be an integer from 1 to 4 (received {value!r})"),
-            "Set the number of images to a whole number from 1 to 4.")
+            f"Set {count_field(definition_id)} to a whole number from 1 to 4.")
     return value
 
 
@@ -262,7 +262,7 @@ async def local_images(values: list[Any], run_dir: Path) -> list[str]:
     from services.public_url import fetch_public_media
 
     if len(values) > MAX_REFERENCE_IMAGES:
-        raise as_person_line(ValueError(f"OpenAI image edits take up to {MAX_REFERENCE_IMAGES} images; got {len(values)}"))
+        raise with_person_line(ValueError(f"OpenAI image edits take up to {MAX_REFERENCE_IMAGES} images; got {len(values)}"), f"OpenAI image edits take up to {MAX_REFERENCE_IMAGES} images, and {len(values)} are connected.")
     paths: list[str] = []
     for value in values:
         text = owned_output_value(str(value))
@@ -290,7 +290,7 @@ def openai_image_direct(*, emit: Emit = None) -> Callable[[GraphNode, dict[str, 
 
         if not api_keys.get("OPENAI_API_KEY"):
             raise MissingCredentialError("OPENAI_API_KEY is required")
-        count = image_count(node.params.get("num_images"))
+        count = image_count(node.params.get("num_images"), node.definition_id)
         call = node.model_copy(update={"params": {k: v for k, v in node.params.items() if k != "num_images"}})
         run_dir = get_run_dir()
         build_body(call, "check")  # refuse what OpenAI would reject before any request or download

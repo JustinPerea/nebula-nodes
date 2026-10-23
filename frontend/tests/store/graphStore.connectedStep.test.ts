@@ -14,8 +14,10 @@ vi.mock('../../src/lib/wsClient', () => ({
 
 import { useGraphStore } from '../../src/store/graphStore';
 import { GRAPH_PARAMS_VERSION } from '../../src/lib/savedParamsUpgrades';
+import { noticeSpy } from '../helpers/noticeSpy';
 
-const alert = vi.spyOn(window, 'alert').mockImplementation(() => {});
+// Round 3f: the alerts are canvas notices (tests/helpers/noticeSpy.ts).
+const alert = noticeSpy();
 vi.spyOn(console, 'warn').mockImplementation(() => {});
 const position = { x: 420, y: 100 };
 const connect = { source: 'n1', sourceHandle: 'image', target: '', targetHandle: 'image', newNodeIs: 'target' as const };

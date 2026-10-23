@@ -31,7 +31,7 @@ from models.spatial import (
     parse_spatial_value,
 )
 from services.output import portable_output_ref
-from execution.person_line import as_person_line
+from execution.person_line import with_person_line
 
 
 Emit = Callable[[ExecutionEvent], Awaitable[None]] | None
@@ -180,7 +180,7 @@ async def handle_camera_path(
     raw_poses = _port_values(inputs.get("poses"))
     poses = [CameraPose.model_validate(value) for value in raw_poses]
     if not poses:
-        raise as_person_line(ValueError("Camera Path requires at least one CameraPose input"))
+        raise with_person_line(ValueError("Camera Path requires at least one CameraPose input"), "Connect camera poses to this node, then run it again.")
     params = node.params or {}
     camera_path = CameraPath(
         schemaVersion=1,
@@ -217,7 +217,7 @@ async def handle_spatial_context(
     raw_poses = _port_values(inputs.get("poses"))
     raw_assets = _port_values(inputs.get("assets"))
     if not raw_poses or len(raw_poses) != len(raw_assets):
-        raise as_person_line(ValueError("Spatial Context requires equal non-zero CameraPose and Image inputs"))
+        raise with_person_line(ValueError("Spatial Context requires equal non-zero CameraPose and Image inputs"), "Spatial Context needs as many camera poses as images, and at least one of each. Connect them, then run the node again.")
     poses = [CameraPose.model_validate(value) for value in raw_poses]
     params = node.params or {}
     role = _string_param(params, "role", "reference")
@@ -254,7 +254,7 @@ async def handle_sensor_rig(
     del api_keys, emit
     poses = [CameraPose.model_validate(value) for value in _port_values(inputs.get("poses"))]
     if not poses:
-        raise as_person_line(ValueError("Sensor Rig requires at least one CameraPose input"))
+        raise with_person_line(ValueError("Sensor Rig requires at least one CameraPose input"), "Connect sensor poses to this node, then run it again.")
     params = node.params or {}
     modality = _string_param(params, "modality", "rgb")
     sensors = [

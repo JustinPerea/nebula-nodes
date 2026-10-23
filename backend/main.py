@@ -10,6 +10,7 @@ _env_check.run_startup_checks()
 
 import asyncio
 import copy
+import errno
 import hashlib
 import json
 import logging
@@ -623,9 +624,33 @@ if _bootstrap_checkpoints:
 app = FastAPI(title="Nebula Node Backend", version="0.1.0")
 
 
+_DISK_FULL_ERRNOS = {errno.ENOSPC, getattr(errno, "EDQUOT", errno.ENOSPC)}
+
+
+def _storage_full(exc: BaseException) -> bool:
+    """The store failed because the disk (or the person's quota) is full: an
+    OSError with ENOSPC or EDQUOT in the error's causes. Read from the cause,
+    never the text (error copy round 3f)."""
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, OSError) and current.errno in _DISK_FULL_ERRNOS:
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def _storage_error_body(exc: ProjectStoreError) -> dict[str, Any]:
+    """A storage refusal's JSON: ``detail`` as before (agents read it), and an
+    additive ``storage: "full"`` when the disk is full, so the Projects view
+    can say the one cause a person can fix (GM, round 3f)."""
+    return {"detail": str(exc), **({"storage": "full"} if _storage_full(exc) else {})}
+
+
 @app.exception_handler(ProjectStoreError)
 async def project_storage_error(request, exc: ProjectStoreError):
-    return JSONResponse(status_code=413 if isinstance(exc, ProjectLimitError) else 507, content={"detail": str(exc)})
+    return JSONResponse(status_code=413 if isinstance(exc, ProjectLimitError) else 507, content=_storage_error_body(exc))
 
 
 def _workspace_context() -> dict[str, Any]:
@@ -745,7 +770,7 @@ async def project_workspace_fence(request: Request, call_next):
         except HTTPException as exc:
             return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
         except ProjectStoreError as exc:
-            return JSONResponse(status_code=507, content={"detail": str(exc)})
+            return JSONResponse(status_code=507, content=_storage_error_body(exc))
         return await call_next(request)
     finally:
         _execution_workspace_context.reset(execution_token)
@@ -5603,11 +5628,18 @@ def _not_ready_nodes(
         need = node_readiness.instance_missing(definition, node.get("params") or {}, keys, krea_signed_in,
                                                definitions, wired.get(node_id, {}))
         if need:
+            name = str(node.get("label") or definition.get("displayName") or definition.get("id"))
             rows.append({
                 "ref": ref_for.get(node_id, node_id),
                 "nodeId": None if node_id in ref_for else node_id,
-                "name": str(node.get("label") or definition.get("displayName") or definition.get("id")),
+                "name": name,
                 "missing": need,
+                # The line the proposal bar and layer show (error copy round
+                # 3f): the key by its provider, the node by its name. Agents
+                # keep `missing`, find_nodes' words, as before.
+                "person": node_readiness.instance_missing_line(
+                    definition, node.get("params") or {}, keys, krea_signed_in, definitions,
+                    wired.get(node_id, {}), name=name) or need,
             })
     return rows
 
@@ -7921,7 +7953,8 @@ class _ShotPassError(RuntimeError):
 
 
 # What a failed shot's output carries beside ``error`` for the Cinema panel.
-_SHOT_FAILURE_FIELDS = ("errorCategory", "errorFriendly", "errorPerson", "errorProviderText", "errorRaw")
+_SHOT_FAILURE_FIELDS = ("errorCategory", "errorFriendly", "errorPerson", "errorProviderText", "errorProvider",
+                        "errorRaw")
 
 
 def _shot_task_error_message(exc: Exception) -> str:
@@ -7941,7 +7974,7 @@ def _shot_failure_fields(exc: Exception) -> dict[str, Any]:
         failure = exc.failure or {}
         fields = {"errorCategory": failure.get("category"), "errorFriendly": failure.get("friendly"),
                   "errorPerson": failure.get("person"), "errorProviderText": failure.get("provider_text"),
-                  "errorRaw": failure.get("raw")}
+                  "errorProvider": failure.get("provider"), "errorRaw": failure.get("raw")}
         return {key: value for key, value in fields.items() if value}
     return {"errorCategory": "unknown"}
 
@@ -7985,6 +8018,7 @@ async def _execute_single_shot_pass(
             if event.category:
                 captured["failure"] = {"category": event.category, "friendly": event.friendly,
                                        "person": event.person, "provider_text": event.provider_text,
+                                       "provider": event.provider,
                                        "raw": event.error}
         await _emit_and_sync(event)
 
@@ -8831,7 +8865,7 @@ def _sync_provider_recovery_to_cli_graph(
             # terminal in-memory param sync remain available as fallbacks.
             print(f"[provider-recovery] journal rejected checkpoint: {exc}", flush=True)
             durability_warning = (
-                "Nebula captured this World Labs recovery ID but could not "
+                "Nebula captured this World Labs recovery ID but couldn't "
                 "save it durably. Keep this tab open and copy the ID before "
                 "reloading."
             )
@@ -8851,7 +8885,7 @@ def _sync_provider_recovery_to_cli_graph(
     else:
         durability_warning = (
             "Nebula captured this World Labs recovery ID without a run ID, "
-            "so it could not save it durably. Keep this tab open and copy the "
+            "so it couldn't save it durably. Keep this tab open and copy the "
             "ID before reloading."
         )
 

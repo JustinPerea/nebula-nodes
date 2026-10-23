@@ -47,7 +47,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import as_job_failure, as_person_line, slow_job_line, with_api_status, with_person_line
+from execution.person_line import as_job_failure, slow_job_line, with_api_status, with_person_line
 
 BFL_KEY = "BFL_API_KEY"
 BFL_BASE_URL = "https://api.bfl.ai/v1"
@@ -215,9 +215,10 @@ async def get_result(key: str, polling_url: str, *, client: httpx.AsyncClient) -
     the HTTP code (BFL sends a failed task as a 503 with a normal body, and an
     unknown id as a 404 "Task not found"); any other error raises BFLError."""
     if not polling_url_allowed(polling_url):
-        raise as_person_line(RuntimeError(
+        raise with_person_line(RuntimeError(
             "Black Forest Labs returned a polling URL outside https://*.bfl.ai; Nebula didn't send the key "
-            "to it and stopped the run."))
+            "to it and stopped the run."), "Black Forest Labs sent a status link from outside its own site, so Nebula didn't send your key there and stopped. "
+            "The job may still run and be billed on Black Forest Labs.")
     response = await client.get(polling_url, headers={"x-key": key, "accept": "application/json"})
     try:
         data = response.json()
@@ -270,7 +271,7 @@ async def _download(url: Any, media_type: str, *, client: httpx.AsyncClient) -> 
         # no API status: a download of the result from its signed URL, not BFL's API.
         raise with_person_line(RuntimeError(f"Black Forest Labs' result download failed (HTTP {response.status_code}); "
                            "the signed URL may have expired. Run again."),
-            "Black Forest Labs' result couldn't be downloaded; its link may have expired. Run the node again.")
+            "Couldn't download the result from Black Forest Labs. Its download link may have expired. Run the node again.")
     path = await write_media_bytes(response.content, response.headers.get("content-type", ""),
                                    media_type, get_run_dir(), url)
     return str(path)

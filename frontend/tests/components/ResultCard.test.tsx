@@ -134,7 +134,7 @@ describe('ResultCard saves', () => {
   });
 
   it('shows a failed save and allows a successful retry', async () => {
-    const onSaveToFolder = vi.fn().mockRejectedValueOnce(new RequestFailedError("Couldn't save the file.", 507, { reason: 'Disk full.' }))
+    const onSaveToFolder = vi.fn().mockRejectedValueOnce(new RequestFailedError("Couldn't save the output.", 507, { reason: 'Disk full.' }))
       .mockResolvedValueOnce({ savedPath: '/tmp/retry.png' });
     const view = render(<ResultCard node={completed()} onOpenInCanvas={noop} onUseAsInput={noop}
       onDelete={noop} onSaveToFolder={onSaveToFolder} />);
@@ -209,7 +209,7 @@ describe('ResultCard saves', () => {
   });
 
   it('resets an existing save error when a different node has the same output URL', async () => {
-    const onSaveToFolder = vi.fn().mockRejectedValueOnce(new RequestFailedError("Couldn't save the file.", 409, { reason: 'First node failed.' }));
+    const onSaveToFolder = vi.fn().mockRejectedValueOnce(new RequestFailedError("Couldn't save the output.", 409, { reason: 'First node failed.' }));
     const view = render(<ResultCard node={completed()} onOpenInCanvas={noop} onUseAsInput={noop}
       onDelete={noop} onSaveToFolder={onSaveToFolder} />);
     fireEvent.click(view.getByTitle('Save to folder'));

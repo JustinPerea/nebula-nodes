@@ -72,13 +72,13 @@ export interface ProjectDeletion {
  * 2), its reason is the backend's or GM's line for the status, and `status`
  * stays for the store's retry and conflict rules. */
 export class ProjectRequestError extends RequestFailedError {
-  constructor(reason: string, status: number, options: { heading?: string; detail?: unknown } = {}) {
-    super(options.heading ?? '', status, { reason, detail: options.detail });
+  constructor(reason: string, status: number, options: { heading?: string; detail?: unknown; storageFull?: boolean } = {}) {
+    super(options.heading ?? '', status, { reason, detail: options.detail, storageFull: options.storageFull });
     this.name = 'ProjectRequestError';
   }
 }
-const asProjectError = (error: RequestFailedError) =>
-  new ProjectRequestError(error.reason, error.status, { heading: error.heading, detail: error.detail });
+const asProjectError = (error: RequestFailedError) => new ProjectRequestError(error.reason, error.status,
+  { heading: error.heading, detail: error.detail, storageFull: error.storageFull });
 async function request<T>(heading: string, path: string, init?: RequestInit): Promise<T> {
   const response = await apiRequest(heading, path, init, { as: asProjectError });
   return response.json() as Promise<T>;

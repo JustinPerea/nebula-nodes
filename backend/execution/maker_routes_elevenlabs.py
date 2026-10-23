@@ -33,7 +33,7 @@ from typing import Any, Awaitable, Callable, Mapping
 
 from models.graph import GraphNode, PortValueDict
 from services import node_route
-from execution.person_line import as_person_line, with_person_line
+from execution.person_line import with_person_line
 
 Handler = Callable[[GraphNode, dict[str, PortValueDict], dict[str, str]], Awaitable[dict[str, Any]]]
 Translate = Callable[
@@ -171,7 +171,7 @@ def _voice_id(node: GraphNode) -> str:
         # the guard if a caller skips it.
         raise with_person_line(
             ValueError("The ElevenLabs route needs an ElevenLabs voice_id; Runway voice presets don't carry over"),
-            "To run this on ElevenLabs, fill in the node's ElevenLabs voice ID. Runway voice presets don't carry over.")
+            "To run this on ElevenLabs, fill in “ElevenLabs voice ID”. Runway voice presets don't carry over.")
     return voice.strip()
 
 
@@ -199,8 +199,8 @@ def runway_sts_to_elevenlabs(node: GraphNode, inputs: dict[str, PortValueDict]) 
         if inputs.get("video") is not None and inputs["video"].value not in (None, ""):
             raise with_person_line(ValueError("ElevenLabs speech-to-speech takes audio, not video. Wire the audio track into "
                              "Audio, or clear the ElevenLabs voice_id to run this on Runway."),
-                "ElevenLabs speech-to-speech takes audio, not video. Connect the audio track to Audio, or clear the node's ElevenLabs voice ID to run this on Runway.")
-        raise as_person_line(ValueError("Audio input is required for speech-to-speech"))
+                "ElevenLabs speech-to-speech takes audio, not video. Connect the audio track to “Audio”, or clear “ElevenLabs voice ID” to run this on Runway.")
+        raise with_person_line(ValueError("Audio input is required for speech-to-speech"), "Connect audio to this node, then run it again.")
     params = {"voice_id": _voice_id(node), "model_id": RUNWAY_STS_MODEL,
               "remove_background_noise": bool(_value(node, "removeBackgroundNoise"))}
     return _copy(node, params), {"audio": audio}

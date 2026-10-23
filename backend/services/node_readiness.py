@@ -264,6 +264,48 @@ def instance_missing(
     return None
 
 
+def instance_missing_line(
+    definition: Mapping[str, Any], params: Mapping[str, Any] | None, configured_keys: Iterable[str],
+    krea_signed_in: bool = False, definitions: Mapping[str, Mapping[str, Any]] | None = None,
+    wired: Any = (), name: str | None = None,
+) -> str | None:
+    """instance_missing in words for the person (error copy round 3f): the
+    node by its name, a key by its provider, never an env-var name or a ref
+    ("GPT Image 2 needs your OpenAI API key. Add it in Settings."). The
+    proposal bar and layer show it; agents keep instance_missing's text.
+    None when the node can run."""
+    from execution.person_line import key_phrase
+    from services import node_route
+
+    need = instance_missing(definition, params, configured_keys, krea_signed_in, definitions, wired)
+    if need is None:
+        return None
+    title = name or str(definition.get("displayName") or "This node")
+    sign_in = f"{title} needs your Krea account. Connect it in Settings."
+    configured = set(configured_keys)
+    if node_route.has_routes(definition):
+        routed = node_route.with_wired_blockers(definition, params, wired)
+        if node_route.uses_krea_plan(definition, routed):
+            return sign_in
+        line = node_route.route_unavailable_line(definition, routed, {key: "set" for key in configured})
+        if line:
+            return line
+    if need == KREA_SIGN_IN:
+        return sign_in
+    needs = keys_needed(definition, params, definitions) or []
+    target = next((item for item in needs if _plain_access(item, configured, krea_signed_in) is None), definition)
+    via = provider_via(target)
+    if via is not None and via.get("kind") == "param":
+        keys, _ = param_route(via, param_value(target, params or {}))
+    else:
+        keys = _keys(target.get("envKeyName")) + _keys(target.get("directKeyName"))
+    keys = list(dict.fromkeys(keys))
+    phrase = key_phrase(keys) if keys else None
+    if phrase:
+        return f"{title} needs your {phrase}. Add {'one' if len(keys) > 1 else 'it'} in Settings."
+    return f"{title} isn't set up to run here yet. Check its provider in Settings."
+
+
 def missing(
     definition: Mapping[str, Any], krea_signed_in: bool,
     definitions: Mapping[str, Mapping[str, Any]] | None = None,

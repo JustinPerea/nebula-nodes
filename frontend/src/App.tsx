@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { Canvas } from './components/Canvas';
 import { CanvasTabs } from './components/CanvasTabs';
+import { StudioNotice } from './components/canvas/DeferredCanvasOverlays';
 import { NodeLibrary } from './components/panels/NodeLibrary';
 // Closed or empty at the first paint, loaded after it (lib/deferredChunks.ts).
 import {
@@ -320,6 +321,8 @@ export default function App() {
           mount, so the list, the card and the count carry across screens. */}
       {!isBrandShowcase && <AgentNotes />}
       {!isHome && !isBrandShowcase && !isCommons && <CommandPalette />}
+      {/* The canvas notice off the canvas (round 3f): on the canvas it sits in the proposal bar. */}
+      {!isHome && !isCanvas && !isBrandShowcase && <StudioNotice />}
       {isCanvas && <OnboardingOverlay />}
       {isCanvas && <KeyboardShortcuts />}
     </ReactFlowProvider>

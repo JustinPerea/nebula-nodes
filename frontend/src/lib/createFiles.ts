@@ -9,7 +9,8 @@ export async function revealInFinder(url: string): Promise<void> {
 }
 
 export async function saveToFolder(url: string, filename?: string): Promise<{ savedPath: string }> {
-  const res = await apiRequest("Couldn't save the file.", '/api/export', {
+  // GM, round 3f: "Couldn't save the file." → "Couldn't save the output."
+  const res = await apiRequest("Couldn't save the output.", '/api/export', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url, filename }),

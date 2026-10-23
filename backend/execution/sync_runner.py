@@ -26,7 +26,7 @@ from handlers.jev_decide import handle_jev_decide
 from handlers.jev_pick_best import handle_jev_pick_best
 from handlers.moodboard import handle_moodboard_node
 from handlers.paper_source import handle_paper_source
-from execution.person_line import as_person_line, with_call_facts, with_person_line
+from execution.person_line import count_field, with_call_facts, with_person_line
 
 
 SYNC_HANDLERS: dict[
@@ -177,7 +177,7 @@ def _validate_ideogram_fal_params(node: GraphNode) -> None:
             f"{node.definition_id} num_images must be an integer from 1 to {max_images} "
             f"(received {num_images!r})"
         ),
-            f"Set the number of images to a whole number from 1 to {max_images}.")
+            f"Set {count_field(node.definition_id)} to a whole number from 1 to {max_images}.")
 
     if node.definition_id == "ideogram-v4":
         expansion = params.get("expansion_model")
@@ -218,7 +218,7 @@ def _validate_ideogram_fal_params(node: GraphNode) -> None:
                     f"Ideogram Upscale FAL {key} must be an integer from 1 to 100 "
                     f"(received {value!r})"
                 ),
-                    f"Set the node's {key.capitalize()} to a whole number from 1 to 100.")
+                    f"Set “{key.capitalize()}” to a whole number from 1 to 100.")
 
 
 def _nano_banana_fal_node(node: GraphNode, *, edit: bool) -> GraphNode:
@@ -1516,10 +1516,10 @@ def get_handler_registry(
             expanded = expand_character_inputs(routed_node, inputs)
             refs = expanded.get("reference_images")
             if not refs or not refs.value:
-                raise as_person_line(ValueError(
+                raise with_person_line(ValueError(
                     "Ideogram Character needs reference images — connect Character Refs "
                     "or attach a Character node"
-                ))
+                ), "Ideogram Character needs reference images. Connect “Character Refs” or a Character node, then run the node again.")
             raw_refs = refs.value if isinstance(refs.value, list) else [refs.value]
             reference_count = sum(1 for value in raw_refs if value)
             if reference_count != 1:

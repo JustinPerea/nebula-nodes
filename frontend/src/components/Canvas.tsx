@@ -449,8 +449,10 @@ export function Canvas() {
   // The Delete key: a node holding World Labs state stays, and the canvas
   // says why (error copy round 3b). Refused here, before React Flow removes
   // anything, so its wires stay too; one notice per press.
+  // Then GM's confirm (round 3f, lib/deleteConfirm.ts): undo doesn't put
+  // back everything a delete removes. A press that removes only wires asks nothing.
   const onBeforeDelete = useCallback(async ({ nodes: doomed }: { nodes: { id: string }[] }) => (
-    doomed.length === 0 || useGraphStore.getState().allowCanvasDelete(doomed.map((node) => node.id))
+    doomed.length === 0 || useGraphStore.getState().allowCanvasDelete(doomed.map((node) => node.id), { confirm: true })
   ), []);
 
   const onConnectStart: OnConnectStart = useCallback((_event, params) => {

@@ -9,6 +9,7 @@ import {
   ghostKeyWarning,
   ghostPosition,
   ghostRows,
+  notReadyWarning,
   wireEnd,
   wirePath,
   type ProposalView,
@@ -281,7 +282,7 @@ function ProposalGhosts({ entry }: { entry: ProposalEntry }) {
           exact={entry.values?.nodes[node.ref]}
           agentName={view.agent.name}
           warning={ghostKeyWarning(NODE_DEFINITIONS[node.definitionId], entry.values?.nodes[node.ref] ?? node.params, cache)
-            ?? notReady.find((row) => row.nodeId === null && row.ref === node.ref)?.missing ?? null}
+            ?? notReadyWarning(notReady.find((row) => row.nodeId === null && row.ref === node.ref))}
           register={(ref, el) => {
             if (el) {
               cards.current.set(ref, el);

@@ -223,7 +223,7 @@ describe('WorldPreview', () => {
     fireEvent.click(screen.getByRole('button', { name: /Panorama/i }));
     expect(await screen.findByRole('alert')).toHaveTextContent(
       // error-copy round 2 (GM): the heading names the action, the reason says why.
-      "Couldn't download the world. Couldn't reach Nebula. Check your connection and try again.",
+      "Couldn't download the world. Nebula's server isn't answering. Make sure it's running, then try again.",
     );
     expect(screen.getByRole('alert')).not.toHaveTextContent('CORS detail');
   });

@@ -50,7 +50,7 @@ async def handle_moodboard_node(
                 "This node's board is in Recently deleted. Restore it in Moodboard Studio, then run the node again.")
         raise with_person_line(ValueError(f"Moodboard {moodboard_id!r} not found; it may have been deleted for good. "
                          "Pick another board for this node."),
-            "This node's board can't be found; it may have been deleted for good. Pick another board for this node.")
+            "This node's board can't be found. It may have been deleted for good. Pick another board for this node.")
 
     analysis = moodboard.get("analysis")
     if not analysis_is_current(moodboard, analysis):

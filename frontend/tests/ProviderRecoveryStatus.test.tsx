@@ -76,7 +76,7 @@ describe('ProviderRecoveryStatus', () => {
     render(<ProviderRecoveryStatus />);
     expect(screen.getByRole('alert')).toHaveTextContent(
       // Error copy round 3e (GM): no "could not", and the reason in words.
-      "Nebula couldn't save the hold, so don't restart the backend.",
+      "Nebula couldn't save the hold, so keep Nebula running until this run finishes.",
     );
   });
 

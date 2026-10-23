@@ -40,7 +40,7 @@ import httpx
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from services.http_errors import TRANSPORT_ERRORS
-from execution.person_line import as_person_line, with_person_line, with_provider_line
+from execution.person_line import with_person_line, with_provider_line
 
 API_URL = "https://api.typesafe.ai/v1/systemone"
 CREDENTIAL = "TYPESAFE_API_KEY"
@@ -230,13 +230,13 @@ async def load_image_source(value: str, *, label: str = "Image") -> bytes:
 
     raw = str(value or "").strip()
     if not raw:
-        raise as_person_line(ValueError(f"{label} is empty"))
+        raise with_person_line(ValueError(f"{label} is empty"), f"{label} is empty. Connect another image.")
     if raw.startswith("data:"):
         header, _, payload = raw.partition(",")
         if ";base64" not in header or not payload:
             raise ValueError(f"{label} is a data URI without base64 image data")
         if len(payload) > MAX_SOURCE_BYTES * 4 // 3 + 4:
-            raise as_person_line(ValueError(f"{label} is larger than {MAX_SOURCE_BYTES // (1024 * 1024)} MiB"))
+            raise with_person_line(ValueError(f"{label} is larger than {MAX_SOURCE_BYTES // (1024 * 1024)} MiB"), f"{label} is larger than {MAX_SOURCE_BYTES // (1024 * 1024)} MB. Connect a smaller image.")
         try:
             return base64.b64decode(payload, validate=False)
         except (ValueError, TypeError) as exc:
@@ -255,7 +255,7 @@ async def load_image_source(value: str, *, label: str = "Image") -> bytes:
                 fetch_public_media(raw, label=label, max_bytes=MAX_SOURCE_BYTES, timeout=60.0),
                 URL_FETCH_DEADLINE)
         except asyncio.TimeoutError:
-            raise as_person_line(ValueError(f"{label} took longer than {URL_FETCH_DEADLINE:.0f} s to download")) from None
+            raise with_person_line(ValueError(f"{label} took longer than {URL_FETCH_DEADLINE:.0f} s to download"), f"Couldn't download {label}. It took longer than {URL_FETCH_DEADLINE:.0f} seconds.") from None
         return content
     # The allowed-path policy runs before anything about the file is looked
     # at, so a protected path can't even be sized.
@@ -288,9 +288,10 @@ def _open_first_frame(data: bytes, label: str) -> tuple[Image.Image, str, int, i
         image = open_image(data)
         width, height = image.size
         if width <= 0 or height <= 0 or width * height > MAX_SOURCE_PIXELS:
-            raise as_person_line(ValueError(
+            raise with_person_line(ValueError(
                 f"{label} is {width}x{height}, over Nebula's {MAX_SOURCE_PIXELS // 1_000_000} megapixel "
-                "input limit; downscale it first"))
+                "input limit; downscale it first"), f"{label} is {width}x{height}, over Nebula's {MAX_SOURCE_PIXELS // 1_000_000} megapixel limit for an "
+                "input. Downscale it, then run the node again.")
         source_format = (image.format or "unknown").upper()
         frames = int(getattr(image, "n_frames", 1) or 1)
         if frames > 1:
@@ -302,7 +303,7 @@ def _open_first_frame(data: bytes, label: str) -> tuple[Image.Image, str, int, i
             orientation = 1
         image.load()
     except Image.DecompressionBombError as exc:
-        raise as_person_line(ValueError(f"{label} is too large to decode safely")) from exc
+        raise with_person_line(ValueError(f"{label} is too large to decode safely"), f"{label} is too large to decode safely. Connect a smaller image.") from exc
     except UnidentifiedImageError as exc:
         raise with_person_line(ValueError(f"{label} isn't an image Nebula can read (PNG, JPEG, WebP or GIF)"), f"{label} isn't an image Nebula can read. Use a PNG, JPEG, WebP or GIF, then run the node again.") from exc
     except OSError as exc:
@@ -416,8 +417,9 @@ def _prepare_all(sources: Sequence[tuple[str, bytes]], label: str, budget: int,
             if len(data) <= MAX_IMAGE_BYTES:
                 break
             if steps[index] + 1 >= len(ladders[index]):
-                raise as_person_line(ValueError(f"{label} {index + 1} is over TypeSafe's 16 MiB per-image limit even as a "
-                                 "small JPEG"))
+                raise with_person_line(ValueError(f"{label} {index + 1} is over TypeSafe's 16 MiB per-image limit even as a "
+                                 "small JPEG"), f"{label} {index + 1} is over TypeSafe's 16 MB limit for one image, even as a small JPEG. Connect a "
+                                 "smaller image.")
             steps[index] += 1
         encoded.append(data)
     # Over the request budget: step the largest image that can still shrink
@@ -426,9 +428,10 @@ def _prepare_all(sources: Sequence[tuple[str, bytes]], label: str, budget: int,
         candidates = [i for i in range(len(works)) if steps[i] + 1 < len(ladders[i])]
         if not candidates:
             total = sum(len(data) for data in encoded) / (1024 * 1024)
-            raise as_person_line(ValueError(
+            raise with_person_line(ValueError(
                 f"The {len(encoded)} images come to {total:.1f} MiB even as small JPEGs, over TypeSafe's "
-                "32 MiB request limit. Send fewer images or split the work across nodes."))
+                "32 MiB request limit. Send fewer images or split the work across nodes."), f"The {len(encoded)} images come to {total:.1f} MB even as small JPEGs, over TypeSafe's 32 MB "
+                "request limit. Send fewer images or split the work across nodes.")
         index = max(candidates, key=lambda i: len(encoded[i]))
         steps[index] += 1
         fmt, quality = ladders[index][steps[index]]
@@ -456,16 +459,17 @@ async def prepare_images(values: Iterable[Any], *, label: str = "Image",
         raise ValueError(f"max_side must be from {MIN_SIDE} to {MAX_SIDE}")
     items = [str(value) for value in values if value not in (None, "")]
     if len(items) > max_images:
-        raise as_person_line(ValueError(f"{len(items)} images connected; this node takes at most {max_images}"))
+        raise with_person_line(ValueError(f"{len(items)} images connected; this node takes at most {max_images}"), f"This node takes up to {max_images} images, and {len(items)} are connected.")
     loaded: list[tuple[str, bytes]] = []
     total = 0
     for index, item in enumerate(items):
         data = await load_image_source(item, label=f"{label} {index + 1}")
         total += len(data)
         if total > MAX_TOTAL_SOURCE_BYTES:
-            raise as_person_line(ValueError(
+            raise with_person_line(ValueError(
                 f"The images come to more than {MAX_TOTAL_SOURCE_BYTES // (1024 * 1024)} MiB before resizing. "
-                "Send fewer or smaller images."))
+                "Send fewer or smaller images."), f"The images come to more than {MAX_TOTAL_SOURCE_BYTES // (1024 * 1024)} MB before resizing. "
+                "Send fewer or smaller images.")
         loaded.append((item, data))
     if not loaded:
         return []
@@ -482,7 +486,7 @@ def neutral_keys(count: int) -> list[str]:
     answer. The wording goes in the option's description instead.
     """
     if count < 0 or count > MAX_CHOICE_OPTIONS:
-        raise as_person_line(ValueError(f"A Choice takes 1 to {MAX_CHOICE_OPTIONS} options"))
+        raise with_person_line(ValueError(f"A Choice takes 1 to {MAX_CHOICE_OPTIONS} options"), f"A Choice takes 1 to {MAX_CHOICE_OPTIONS} options.")
     keys = []
     for index in range(count):
         name, number = "", index
@@ -520,9 +524,9 @@ class ChoiceOptions:
     def from_labels(cls, labels: Sequence[str]) -> "ChoiceOptions":
         labels = tuple(str(label) for label in labels)
         if len(labels) < 2:
-            raise as_person_line(ValueError("A Choice needs at least two options"))
+            raise with_person_line(ValueError("A Choice needs at least two options"), "A Choice needs at least two options.")
         if len(set(labels)) != len(labels):
-            raise as_person_line(ValueError("Choice options must be different from each other"))
+            raise with_person_line(ValueError("Choice options must be different from each other"), "Choice options must be different from each other.")
         return cls(labels=labels, keys=tuple(neutral_keys(len(labels))))
 
     def criteria(self, descriptions: Sequence[Any] | None = None) -> dict[str, Any]:
@@ -560,9 +564,9 @@ def score_criteria(levels: Sequence[str]) -> list[str]:
     as the API reference and the SDK's Score type both say."""
     levels = [str(level) for level in levels]
     if not MIN_SCORE_LEVELS <= len(levels) <= MAX_SCORE_LEVELS:
-        raise as_person_line(ValueError(f"A Score needs {MIN_SCORE_LEVELS} to {MAX_SCORE_LEVELS} levels"))
+        raise with_person_line(ValueError(f"A Score needs {MIN_SCORE_LEVELS} to {MAX_SCORE_LEVELS} levels"), f"A Score needs {MIN_SCORE_LEVELS} to {MAX_SCORE_LEVELS} levels.")
     if len(set(levels)) != len(levels):
-        raise as_person_line(ValueError("Score levels must be different from each other"))
+        raise with_person_line(ValueError("Score levels must be different from each other"), "Score levels must be different from each other.")
     return levels
 
 
@@ -726,7 +730,7 @@ def build_request(*, model: str, state: Any, questions: Mapping[str, Mapping[str
                   images: Sequence[PreparedImage] = (), long_context: bool = False) -> tuple[dict[str, str], dict[str, Any]]:
     """The headers (without auth) and the httpx request kwargs for one call."""
     if not questions:
-        raise as_person_line(ValueError("A Jev request needs at least one question"))
+        raise with_person_line(ValueError("A Jev request needs at least one question"), "A Jev request needs at least one question.")
     body: dict[str, Any] = {"model": check_model(model), "state": state, "questions": dict(questions)}
     content = json.dumps({"state": state, "questions": body["questions"]}, ensure_ascii=False)
     _check_placeholders(content, images)
@@ -746,9 +750,10 @@ def build_request(*, model: str, state: Any, questions: Mapping[str, Mapping[str
     # About 200 bytes of multipart framing per part.
     total = len(encoded) + sum(len(image.data) + 256 for image in images)
     if total > MAX_REQUEST_BYTES:
-        raise as_person_line(ValueError(
+        raise with_person_line(ValueError(
             f"The request is {total / (1024 * 1024):.1f} MiB, over TypeSafe's 32 MiB limit. "
-            "Shorten the context or send fewer images."))
+            "Shorten the context or send fewer images."), f"The request is {total / (1024 * 1024):.1f} MB, over TypeSafe's 32 MB limit. "
+            "Shorten the context or send fewer images.")
     if not images:
         headers["Content-Type"] = "application/json"
         return headers, {"content": encoded}

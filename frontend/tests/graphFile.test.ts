@@ -21,12 +21,27 @@ import {
   type NebulaFile,
 } from '../src/lib/graphFile';
 import { readBoundedAssetResponse } from '../src/lib/boundedAsset';
+import { CANVAS_NOTICE_EVENT, type CanvasNoticeDetail } from '../src/lib/canvasNotice';
 import {
   spatialFixtureByType,
   worldV2Fixture,
 } from './fixtures/spatialValues';
 
+// Error copy round 3f (GM): every alert is a canvas notice now. `noticeSpy`
+// records each notice's text, so the checks below read as they did; the
+// window.alert stub stays to prove nothing still calls it.
+const noticeStops: (() => void)[] = [];
+function noticeSpy() {
+  const spy = vi.fn();
+  vi.spyOn(window, 'alert').mockImplementation(() => { throw new Error('window.alert called'); });
+  const listener = (event: Event) => spy((event as CustomEvent<CanvasNoticeDetail>).detail.text);
+  window.addEventListener(CANVAS_NOTICE_EVENT, listener);
+  noticeStops.push(() => window.removeEventListener(CANVAS_NOTICE_EVENT, listener));
+  return spy;
+}
+
 afterEach(() => {
+  for (const stop of noticeStops.splice(0)) stop();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   Reflect.deleteProperty(window, 'showOpenFilePicker');
@@ -349,7 +364,7 @@ describe('portable graph asset bounds', () => {
   it('warns after saving a bundle when a referenced World asset was skipped', async () => {
     Reflect.deleteProperty(window, 'showSaveFilePicker');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const alertSpy = noticeSpy();
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:saved-graph');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
@@ -381,7 +396,7 @@ describe('portable graph asset bounds', () => {
 
     expect(summary).toMatchObject({ included: 0, skipped: 1 });
     expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining(
-      'Graph saved, but 1 referenced asset was not included',
+      'Graph saved without 1 of its files. It may be missing when the graph is opened somewhere else.',
     ));
   });
 
@@ -406,7 +421,7 @@ describe('portable graph asset bounds', () => {
   });
 
   it('refuses an oversized graph.json before asset fetch or compression', async () => {
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const alertSpy = noticeSpy();
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     const generateSpy = vi.spyOn(JSZip.prototype, 'generateAsync');
@@ -426,11 +441,11 @@ describe('portable graph asset bounds', () => {
     await expect(saveToFile([node], [])).resolves.toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
     expect(generateSpy).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('portable limit'));
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Couldn't save the graph\. This graph is [\d.]+ MB\. Nebula opens graphs up to 16 MB\.$/));
   });
 
   it('refuses too many live nodes before mapping or compression', async () => {
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const alertSpy = noticeSpy();
     const generateSpy = vi.spyOn(JSZip.prototype, 'generateAsync');
     const node = {
       id: 'repeated',
@@ -451,7 +466,7 @@ describe('portable graph asset bounds', () => {
   });
 
   it('refuses a generated bundle larger than its own import ceiling', async () => {
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const alertSpy = noticeSpy();
     vi.spyOn(JSZip.prototype, 'generateAsync').mockResolvedValue({
       size: GRAPH_BUNDLE_MAX_IMPORT_BYTES + 1,
     } as Blob);
@@ -459,7 +474,7 @@ describe('portable graph asset bounds', () => {
 
     await expect(saveToFile([], [])).resolves.toBeNull();
     expect(createUrl).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('finished bundle'));
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Couldn't save the graph\. This graph is [\d.]+ MB\. Nebula opens graphs up to \d+ MB\.$/));
   });
 
   it('stores generated members without creating a restore-rejected compression ratio', async () => {
@@ -519,7 +534,7 @@ describe('graph import memory ceiling', () => {
 
   it('rejects an oversized File System Access selection before arrayBuffer()', async () => {
     const file = oversizedFile();
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const alertSpy = noticeSpy();
     Object.defineProperty(window, 'showOpenFilePicker', {
       configurable: true,
       value: vi.fn().mockResolvedValue([{ getFile: vi.fn().mockResolvedValue(file) }]),
@@ -527,13 +542,13 @@ describe('graph import memory ceiling', () => {
 
     await expect(loadFromFile()).resolves.toBeNull();
     expect(file.arrayBuffer).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('Nebula can safely open bundles up to'));
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Couldn't load the graph\. This graph is [\d.]+ MB\. Nebula opens graphs up to \d+ MB\.$/));
     delete (window as Window & { showOpenFilePicker?: unknown }).showOpenFilePicker;
   });
 
   it('rejects an oversized fallback input selection before arrayBuffer()', async () => {
     const file = oversizedFile();
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const alertSpy = noticeSpy();
     vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(function triggerSelection() {
       Object.defineProperty(this, 'files', { configurable: true, value: [file] });
       this.onchange?.(new Event('change'));
@@ -541,7 +556,7 @@ describe('graph import memory ceiling', () => {
 
     await expect(loadViaInput()).resolves.toBeNull();
     expect(file.arrayBuffer).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('Nebula can safely open bundles up to'));
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Couldn't load the graph\. This graph is [\d.]+ MB\. Nebula opens graphs up to \d+ MB\.$/));
   });
 
   it('applies a smaller parse-memory ceiling to plain JSON after signature inspection', async () => {
@@ -551,7 +566,7 @@ describe('graph import memory ceiling', () => {
       slice: vi.fn().mockReturnValue(new Blob([new Uint8Array([0x7b, 0x22, 0x76, 0x65])])),
       arrayBuffer: fullRead,
     } as unknown as File;
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const alertSpy = noticeSpy();
     Object.defineProperty(window, 'showOpenFilePicker', {
       configurable: true,
       value: vi.fn().mockResolvedValue([{ getFile: vi.fn().mockResolvedValue(file) }]),
@@ -560,7 +575,7 @@ describe('graph import memory ceiling', () => {
     await expect(loadFromFile()).resolves.toBeNull();
     expect(file.slice).toHaveBeenCalledWith(0, 4);
     expect(fullRead).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('safely parse JSON graphs up to'));
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Couldn't load the graph\. This graph is [\d.]+ MB\. Nebula opens graphs up to 16 MB\.$/));
   });
 
   function zipSelection(): File {
@@ -616,7 +631,7 @@ describe('graph import memory ceiling', () => {
       urlMapping: {},
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     vi.stubGlobal('fetch', fetchMock);
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const alertSpy = noticeSpy();
     Object.defineProperty(window, 'showOpenFilePicker', {
       configurable: true,
       value: vi.fn().mockResolvedValue([{ getFile: vi.fn().mockResolvedValue(file) }]),
@@ -641,14 +656,14 @@ describe('graph import memory ceiling', () => {
     // never "(HTTP 503)"; on 1fc3d846 this said "Failed to load graph: Asset
     // restore failed (HTTP 503)".
     [new Response('', { status: 503 }), "Couldn't restore the asset. Nebula didn't respond. Try again."],
-    [new Response('', { status: 400 }), "Couldn't restore the asset. That didn't work. Try again, or reload if it keeps happening."],
+    [new Response('', { status: 400 }), "Couldn't restore the asset. Try again, or reload if it keeps happening."],
     [new Response(JSON.stringify({ detail: 'That bundle has too many files.' }), { status: 422, headers: { 'Content-Type': 'application/json' } }),
       "Couldn't restore the asset. That bundle has too many files."],
   ])('a refused restore names the action and the reason (%#)', async (answer, line) => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(answer));
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const alertSpy = noticeSpy();
     Object.defineProperty(window, 'showOpenFilePicker', {
       configurable: true,
       value: vi.fn().mockResolvedValue([{ getFile: vi.fn().mockResolvedValue(zipSelection()) }]),
@@ -667,7 +682,7 @@ describe('graph import memory ceiling', () => {
       urlMapping: {},
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     vi.stubGlobal('fetch', fetchMock);
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const alertSpy = noticeSpy();
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     Object.defineProperty(window, 'showOpenFilePicker', {
       configurable: true,
@@ -691,7 +706,7 @@ describe('graph import memory ceiling', () => {
       urlMapping: {},
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     vi.stubGlobal('fetch', fetchMock);
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const alertSpy = noticeSpy();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     Object.defineProperty(window, 'showOpenFilePicker', {
       configurable: true,
@@ -721,7 +736,7 @@ describe('graph import memory ceiling', () => {
       },
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     vi.stubGlobal('fetch', fetchMock);
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const alertSpy = noticeSpy();
     Object.defineProperty(window, 'showOpenFilePicker', {
       configurable: true,
       value: vi.fn().mockResolvedValue([{ getFile: vi.fn().mockResolvedValue(zipSelection()) }]),
@@ -767,7 +782,7 @@ describe('graph import memory ceiling', () => {
     graph.nodes[0].data.params = { _nested: nested };
     const file = new Blob([JSON.stringify(graph)], { type: 'application/json' }) as File;
     vi.stubGlobal('fetch', vi.fn());
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const alertSpy = noticeSpy();
     Object.defineProperty(window, 'showOpenFilePicker', {
       configurable: true,
       value: vi.fn().mockResolvedValue([{ getFile: vi.fn().mockResolvedValue(file) }]),
@@ -783,7 +798,7 @@ describe('graph import memory ceiling', () => {
     ], { type: 'application/json' }) as File;
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const alertSpy = noticeSpy();
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     Object.defineProperty(window, 'showOpenFilePicker', {
       configurable: true,

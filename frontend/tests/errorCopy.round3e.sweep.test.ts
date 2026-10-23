@@ -24,7 +24,7 @@ describe('run history notes', () => {
     expect(WORLD_LABS_RECOVERY_VOLATILE_NOTE).toBe(
       "World Labs sent back the job's ID, but Nebula couldn't save it. Keep this tab open and copy the ID before you reload.");
     expect(providerRecoveryWarningText({ durable: false })).toBe(WORLD_LABS_RECOVERY_VOLATILE_NOTE);
-    expect(WORLD_LABS_RECONNECTING_NOTE).toBe('Reconnecting to this World Labs run. Run stays off until Nebula hears back about it.');
+    expect(WORLD_LABS_RECONNECTING_NOTE).toBe('Reconnecting to this World Labs run. You can\'t run it again until Nebula hears back about it.');
     expect(EXECUTION_RECONNECTING_NOTE).toBe('Reconnecting to this run. It stays active until Nebula hears back about it.');
     for (const note of [WORLD_LABS_RECOVERY_VOLATILE_NOTE, WORLD_LABS_RECONNECTING_NOTE, EXECUTION_RECONNECTING_NOTE]) {
       expect(note).not.toMatch(/backend status|durabl|remains locked|could not/i);
@@ -53,7 +53,7 @@ describe('a step written in the browser', () => {
     expect(failureMessage(writtenLine("The project didn't open. Try again."), "Couldn't update the note."))
       .toBe("The project didn't open. Try again.");
     expect(failureMessage(new Error("The project didn't open. Try again."), "Couldn't update the note."))
-      .toBe("Couldn't update the note. That didn't work. Try again, or reload if it keeps happening.");
+      .toBe("Couldn't update the note. Try again, or reload if it keeps happening.");
   });
 
   it('is what the step helpers throw', async () => {

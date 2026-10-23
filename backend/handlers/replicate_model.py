@@ -162,7 +162,7 @@ async def _save_output(client: httpx.AsyncClient, key: str, output: Any, media_t
         # no API status: a download of the result file, not Replicate's API.
         raise with_person_line(
             RuntimeError(f"Replicate's result download failed (HTTP {response.status_code}). Run again."),
-            "Replicate's result couldn't be downloaded. Run the node again.")
+            "Couldn't download the result from Replicate. Its download link may have expired. Run the node again.")
     path = await write_media_bytes(response.content, response.headers.get("content-type", ""), media_type,
                                    get_run_dir(), url)
     return str(path)

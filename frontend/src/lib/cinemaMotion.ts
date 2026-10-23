@@ -8,7 +8,7 @@ import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { cinemaMotionSource, cinemaMotionTarget, useCinemaMotionStore, type CinemaMotionHandoff } from '../store/cinemaMotionStore';
 import type { NodeData } from '../types';
-import { CONNECTION_LOST_SHORT_COPY, copyForStatus, isConnectionFailure, readDetail, shortReason } from './errorCopy';
+import { NO_RESPONSE_SHORT_COPY, copyForStatus, isConnectionFailure, readDetail, shortReason } from './errorCopy';
 
 // The handoff's lines sit beside its "Retry connection" button, so they name
 // what failed and why and leave the retry to the button (GM's WRAP rule, error
@@ -113,7 +113,9 @@ export async function sendCinemaShotToMotion(nodeId: string, shotId: string): Pr
   } catch (error) {
     if (!owns(handoff)) return;
     replace({ ...handoff, status: 'error', error: error instanceof HandoffError ? error.message
-      : isConnectionFailure(error, controller.signal) ? `${UNCONFIRMED} ${CONNECTION_LOST_SHORT_COPY}` : UNCONFIRMED });
+      // GM, round 3f: "don't stack two "Couldn't"s, and Nebula is local, so →
+      // "Couldn't confirm the video connection. Nebula didn't respond."".
+      : isConnectionFailure(error, controller.signal) ? `${UNCONFIRMED} ${NO_RESPONSE_SHORT_COPY}` : UNCONFIRMED });
   } finally { controllers.delete(handoff.attempt); }
 }
 

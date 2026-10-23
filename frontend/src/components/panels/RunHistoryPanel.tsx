@@ -8,6 +8,7 @@ import { BatchRunInspection } from './BatchRunInspection';
 import { ScrollFade } from '../ScrollFade';
 import { FORGET_RECOVERY_HEADING } from '../../lib/api';
 import { failureMessage } from '../../lib/errorCopy';
+import { showNotice } from '../../lib/canvasNotice';
 import type { PaperSourceRecord } from '../../lib/paperSource';
 import {
   formatRunAge,
@@ -67,7 +68,7 @@ export function RunHistoryPanel() {
     } catch (error) {
       // Round 3b: a request's line or the store's written one; any other
       // error says GM's general line, never its own message.
-      alert(failureMessage(error, FORGET_RECOVERY_HEADING));
+      showNotice(failureMessage(error, FORGET_RECOVERY_HEADING));
     } finally {
       setClearingRecovery(null);
     }

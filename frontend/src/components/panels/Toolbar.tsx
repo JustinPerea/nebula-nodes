@@ -23,6 +23,7 @@ import { canLoadGraph, canSaveGraph, requestGraphLoad, requestGraphSave } from '
 import { fetchCLIGraph } from '../../lib/api';
 import { apiRequest } from '../../lib/apiRequest';
 import { failureMessage, failureUnder } from '../../lib/errorCopy';
+import { showNotice } from '../../lib/canvasNotice';
 import { CANVAS_FIT_DURATION, CANVAS_ZOOM_DURATION, computeCanvasFitPadding } from '../../lib/canvasFit';
 import { displayKey } from '../../lib/keyboardShortcuts';
 import { describeRunScope, runChipLabel, summarizeRunScope } from '../../lib/runScope';
@@ -176,7 +177,7 @@ export function Toolbar() {
       useGraphStore.getState().clearGraph({ undoStep });
     } catch (error) {
       useGraphStore.getState().cancelUndoStep(undoStep);
-      alert(failureMessage(error, CLEAR_CANVAS));
+      showNotice(failureMessage(error, CLEAR_CANVAS));
     }
   }, []);
 
@@ -209,7 +210,7 @@ export function Toolbar() {
       const data = await fetchCLIGraph();
       if (!mounted.current || !canLoadGraph(useGraphStore.getState())) return;
       if (data.empty) {
-        alert('The CLI graph is empty. Build one with the nebula CLI first.');
+        showNotice('The CLI graph is empty. Build one with the nebula CLI first.', 'info');
         return;
       }
       useGraphStore.getState().loadGraph(
@@ -229,7 +230,7 @@ export function Toolbar() {
         void fitView({ padding: computeCanvasFitPadding(), duration: CANVAS_FIT_DURATION });
       }, 50);
     } catch (error) {
-      if (mounted.current) alert(failureUnder(error, "Couldn't import the CLI graph."));
+      if (mounted.current) showNotice(failureUnder(error, "Couldn't import the CLI graph."));
     }
   }, [fitView]);
 

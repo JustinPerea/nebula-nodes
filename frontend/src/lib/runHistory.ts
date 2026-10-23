@@ -709,7 +709,8 @@ export const WORLD_LABS_RECOVERY_READY_NOTE =
   'Recovery ID restored. Recover resumes the accepted World Labs work without submitting a new paid operation.';
 
 export const WORLD_LABS_RECONNECTING_NOTE =
-  'Reconnecting to this World Labs run. Run stays off until Nebula hears back about it.';
+  // GM, round 3f.
+  "Reconnecting to this World Labs run. You can't run it again until Nebula hears back about it.";
 
 export const EXECUTION_RECONNECTING_NOTE =
   'Reconnecting to this run. It stays active until Nebula hears back about it.';

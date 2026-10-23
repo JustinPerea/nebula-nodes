@@ -53,7 +53,7 @@ const ALLOWED: Record<string, { count: number; why: string }> = {
   'components/panels/AgentLog.tsx': { count: 1, why: "an agent-log entry's message, not an Error" },
   // `${err.message}` under `err instanceof GraphBundleImportTooLargeError`:
   // a FailureNotice whose reason is a written size line.
-  'lib/graphFile.ts': { count: 1, why: 'GraphBundleImportTooLargeError is a FailureNotice with a written reason' },
+  // lib/graphFile.ts left the list in round 3f: its size notice reads failureMessage, not err.message.
 };
 
 function files(dir: string): string[] {

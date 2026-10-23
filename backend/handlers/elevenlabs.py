@@ -52,7 +52,7 @@ def _voice_id(node: GraphNode) -> str:
     if not _VOICE_ID.fullmatch(voice):
         raise with_person_line(
             ValueError(f"voice_id must be an ElevenLabs voice ID (letters and digits), received {voice!r}"),
-            "The node's Voice ID must be an ElevenLabs voice ID, letters and digits only.")
+            "“Voice ID” must be an ElevenLabs voice ID, letters and digits only.")
     return quote(voice, safe="")
 
 
@@ -81,7 +81,7 @@ async def handle_elevenlabs_tts(
     voice settings, so they don't override the voice either."""
     text_input = inputs.get("text")
     if not text_input or not text_input.value:
-        raise as_person_line(ValueError("Text input is required but was not provided"))
+        raise with_person_line(ValueError("Text input is required but was not provided"), "Connect text to this node, then run it again.")
 
     text = str(text_input.value)
 
@@ -219,15 +219,17 @@ def parse_dialogue_script(script: str) -> list[tuple[str, str]]:
         speaker, colon, text = raw.partition(":")
         speaker, text = speaker.strip(), text.strip()
         if not colon or not speaker:
-            raise as_person_line(ValueError(
+            raise with_person_line(ValueError(
                 f"Dialogue line {number} has no speaker. Start each line with a voice name from your "
                 f"ElevenLabs voices and a colon, e.g. 'Rachel: Hello there.' Received {raw.strip()[:60]!r}"
-            ))
+            ), f"Dialogue line {number} has no speaker. Start each line with a voice name from your ElevenLabs "
+                "voices and a colon, like “Rachel: Hello there.”")
         if not text:
             raise with_person_line(ValueError(f"Dialogue line {number} ({speaker}) has no text after the colon."), f"Dialogue line {number} has no text after the colon. Add what {speaker} says, then run the node again.")
         turns.append((speaker, text))
     if not turns:
-        raise as_person_line(ValueError("The dialogue script is empty. Write one line per turn, e.g. 'Rachel: Hello.' then 'Adam: Hi!'"))
+        raise with_person_line(ValueError("The dialogue script is empty. Write one line per turn, e.g. 'Rachel: Hello.' then 'Adam: Hi!'"), "The dialogue script is empty. Write one line per turn, each starting with a voice name and a "
+                             "colon, like “Rachel: Hello.”")
     speakers = _distinct_speakers(turns)
     if len(speakers) > DIALOGUE_MAX_VOICES:
         raise with_person_line(ValueError(
@@ -282,7 +284,7 @@ def build_dialogue_request(node: GraphNode, script: str) -> tuple[str, dict[str,
         if not _LANGUAGE_CODE.fullmatch(code):
             raise with_person_line(
                 ValueError(f"language_code must be an ISO 639-1 code like en or es, received {language!r}"),
-                "Set the node's Language Code to a two-letter code like en or es, or clear it.")
+                "Set “Language Code” to a two-letter code like en or es, or clear it.")
         body["language_code"] = code
 
     seed = node.params.get("seed")
@@ -291,7 +293,7 @@ def build_dialogue_request(node: GraphNode, script: str) -> tuple[str, dict[str,
         if not 0 <= value <= DIALOGUE_SEED_MAX:
             raise with_person_line(
                 ValueError(f"seed must be between 0 and {DIALOGUE_SEED_MAX}, received {value}"),
-                f"Set the node's Seed to a whole number from 0 to {DIALOGUE_SEED_MAX}, or clear it.")
+                f"Set “Seed” to a whole number from 0 to {DIALOGUE_SEED_MAX}, or clear it.")
         body["seed"] = value
 
     output_format = node.params.get("output_format", "mp3_44100_128")
@@ -487,7 +489,7 @@ async def handle_elevenlabs_dialogue(
     """
     script_input = inputs.get("script")
     if not script_input or not script_input.value:
-        raise as_person_line(ValueError("Script input is required but was not provided"))
+        raise with_person_line(ValueError("Script input is required but was not provided"), "Connect a script to this node, then run it again.")
 
     api_key = api_keys.get("ELEVENLABS_API_KEY")
     if not api_key:
@@ -618,7 +620,7 @@ async def handle_elevenlabs_sfx(
 ) -> dict[str, Any]:
     text_input = inputs.get("text")
     if not text_input or not text_input.value:
-        raise as_person_line(ValueError("Text input is required for sound effects"))
+        raise with_person_line(ValueError("Text input is required for sound effects"), "Connect text to this node, then run it again.")
 
     api_key = api_keys.get("ELEVENLABS_API_KEY")
     if not api_key:
@@ -666,7 +668,7 @@ async def handle_elevenlabs_sts(
 ) -> dict[str, Any]:
     audio_input = inputs.get("audio")
     if not audio_input or not audio_input.value:
-        raise as_person_line(ValueError("Audio input is required for speech-to-speech"))
+        raise with_person_line(ValueError("Audio input is required for speech-to-speech"), "Connect audio to this node, then run it again.")
 
     api_key = api_keys.get("ELEVENLABS_API_KEY")
     if not api_key:
@@ -736,7 +738,7 @@ async def handle_elevenlabs_isolation(
 ) -> dict[str, Any]:
     audio_input = inputs.get("audio")
     if not audio_input or not audio_input.value:
-        raise as_person_line(ValueError("Audio input is required for audio isolation"))
+        raise with_person_line(ValueError("Audio input is required for audio isolation"), "Connect audio to this node, then run it again.")
 
     api_key = api_keys.get("ELEVENLABS_API_KEY")
     if not api_key:
@@ -772,7 +774,7 @@ async def handle_elevenlabs_dubbing(
 ) -> dict[str, Any]:
     audio_input = inputs.get("audio")
     if not audio_input or not audio_input.value:
-        raise as_person_line(ValueError("Audio input is required for dubbing"))
+        raise with_person_line(ValueError("Audio input is required for dubbing"), "Connect audio to this node, then run it again.")
 
     api_key = api_keys.get("ELEVENLABS_API_KEY")
     if not api_key:
@@ -843,7 +845,7 @@ async def handle_elevenlabs_stt(
     """
     audio_input = inputs.get("audio")
     if not audio_input or not audio_input.value:
-        raise as_person_line(ValueError("Audio input is required for transcription"))
+        raise with_person_line(ValueError("Audio input is required for transcription"), "Connect audio to this node, then run it again.")
 
     api_key = api_keys.get("ELEVENLABS_API_KEY")
     if not api_key:
@@ -930,7 +932,7 @@ async def handle_elevenlabs_music(
     the length) and ``force_instrumental``."""
     prompt_input = inputs.get("prompt")
     if not prompt_input or prompt_input.value in (None, ""):
-        raise as_person_line(ValueError("Prompt input is required for ElevenLabs Music"))
+        raise with_person_line(ValueError("Prompt input is required for ElevenLabs Music"), "Connect a prompt to this node, then run it again.")
 
     api_key = api_keys.get("ELEVENLABS_API_KEY")
     if not api_key or not str(api_key).strip():
@@ -946,18 +948,18 @@ async def handle_elevenlabs_music(
         if isinstance(length, bool):
             raise with_person_line(
                 ValueError("music_length_ms must be a whole number of milliseconds"),
-                "Set the node's Duration (ms) to a whole number of milliseconds.")
+                "Set “Duration (ms)” to a whole number of milliseconds.")
         try:
             length_ms = int(length)
         except (TypeError, ValueError) as exc:
             raise with_person_line(
                 ValueError("music_length_ms must be a whole number of milliseconds"),
-                "Set the node's Duration (ms) to a whole number of milliseconds.") from exc
+                "Set “Duration (ms)” to a whole number of milliseconds.") from exc
         low, high = MUSIC_LENGTH_MS
         if not low <= length_ms <= high:
             raise with_person_line(
                 ValueError(f"music_length_ms must be between {low} and {high} (received {length_ms})"),
-                f"Set the node's Duration (ms) to a number from {low} to {high}.")
+                f"Set “Duration (ms)” to a number from {low} to {high}.")
         body["music_length_ms"] = length_ms
 
     if node.params.get("force_instrumental"):

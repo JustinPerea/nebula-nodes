@@ -7,7 +7,7 @@ from models.events import ExecutionEvent
 from execution.stream_runner import StreamConfig, stream_execute
 from services.image_input import load_local_image
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import as_person_line, model_name, option_label, option_labels, with_person_line
+from execution.person_line import field_label, model_name, option_label, option_labels, with_person_line
 
 OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
 # The node this handler runs (execution/engine.py), for its labels on the card.
@@ -40,7 +40,7 @@ async def handle_openai_chat(
 ) -> dict[str, Any]:
     messages_input = inputs.get("messages")
     if not messages_input or not messages_input.value:
-        raise as_person_line(ValueError("Messages input is required for OpenAI chat"))
+        raise with_person_line(ValueError("Messages input is required for OpenAI chat"), "Connect messages to this node, then run it again.")
 
     messages_text = str(messages_input.value)
 
@@ -96,7 +96,9 @@ async def handle_openai_chat(
             # "max" is offered only for GPT-6, but a node switched over from a
             # GPT-6 model can still hold it. OpenAI's gpt-5.5 page lists none,
             # low, medium, high and xhigh, so refuse it before a paid HTTP 400.
-            raise with_person_line(ValueError(f"Reasoning effort 'max' isn't available for {model}."), f"Reasoning Effort Max isn't available for {model_name(model, node.definition_id)}. "
+            raise with_person_line(ValueError(f"Reasoning effort 'max' isn't available for {model}."), f"{model_name(model, node.definition_id)} doesn't offer "
+                f"{option_label(CHAT_DEFINITION, 'reasoning_effort', 'max') or 'Max'} for "
+                f"“{field_label(CHAT_DEFINITION, 'reasoning_effort', 'Reasoning Effort')}”. "
                 "Pick another level, then run the node again.")
         if reasoning_effort:
             request_body["reasoning_effort"] = reasoning_effort
@@ -160,6 +162,7 @@ def _listed_effort(model: str, effort: str) -> str:
         return effort
     raise with_person_line(ValueError(
         f"Reasoning effort '{effort}' isn't available for {model}. Pick one of: {', '.join(allowed)}."
-    ), f"{model_name(model, CHAT_DEFINITION)} doesn't offer Reasoning Effort "
-        f"{option_label(CHAT_DEFINITION, 'reasoning_effort', effort) or effort}. "
+    ), f"{model_name(model, CHAT_DEFINITION)} doesn't offer "
+        f"{option_label(CHAT_DEFINITION, 'reasoning_effort', effort) or effort} for "
+        f"“{field_label(CHAT_DEFINITION, 'reasoning_effort', 'Reasoning Effort')}”. "
         f"Pick {option_labels(CHAT_DEFINITION, 'reasoning_effort', allowed)}, then run the node again.")

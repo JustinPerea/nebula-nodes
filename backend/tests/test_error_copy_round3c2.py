@@ -83,7 +83,8 @@ def test_as_person_line_marks_the_text_as_the_persons_line_and_changes_nothing()
 async def test_a_mask_painter_with_no_mask_shows_its_own_line() -> None:
     error = await _run_one(_node("mask-painter"))
     assert error.error == "No mask painted yet — open the Mask Painter node and paint one"
-    assert error.person == error.error
+    # Round 3f: GM's rules (no dash, a final period) on the card; agents keep the text.
+    assert error.person == "No mask is painted yet. Open the Mask Painter node and paint one, then run the node again."
 
 
 def test_a_batch_over_its_cap_says_so_in_the_cards_words() -> None:
@@ -94,7 +95,7 @@ def test_a_batch_over_its_cap_says_so_in_the_cards_words() -> None:
     exc = _raised(_batch_items, {"items_text": "a\nb\nc", "batch_size_cap": 2})
     assert str(exc) == ("Batch has 3 items, exceeding its batch_size_cap of 2. "
                         "Reduce the list or raise the cap before running; no generation was started.")
-    assert person_line(exc) == ("This Batch has 3 items, more than its Item cap of 2. Remove items or raise "
+    assert person_line(exc) == ("This Batch has 3 items, more than its “Item cap” of 2. Remove items or raise "
                             "the cap, then run it again. Nothing was generated.")
 
 
@@ -106,10 +107,10 @@ def test_a_fan_out_over_its_cap_names_the_cap_by_its_nodes_own_label() -> None:
     exc = _fanout_over_cap("batch", 12, 10)
     assert str(exc) == ("Nested iterator expands to 12 items, exceeding this iterator's batch_size_cap of 10. "
                         "Reduce the batch before running; no downstream generation was started.")
-    assert person_line(exc) == ("This Batch would make 12 items, more than its Item cap of 10. Make the batch "
+    assert person_line(exc) == ("This Batch would make 12 items, more than its “Item cap” of 10. Make the batch "
                                 "smaller, then run it again. Nothing after it was generated.")
     exc = _fanout_over_cap("iterator-image", 12, 10)
-    assert person_line(exc) == ("This iterator would make 12 items, more than its Batch Size Cap of 10. Make "
+    assert person_line(exc) == ("This iterator would make 12 items, more than its “Batch Size Cap” of 10. Make "
                                 "the batch smaller, then run it again. Nothing after it was generated.")
 
 
@@ -119,7 +120,8 @@ async def test_the_openai_routes_reference_count_is_the_persons_line(tmp_path) -
 
     exc = await _araised(local_images, ["https://example.com/a.png"] * (MAX_REFERENCE_IMAGES + 4), tmp_path)
     assert str(exc) == f"OpenAI image edits take up to {MAX_REFERENCE_IMAGES} images; got {MAX_REFERENCE_IMAGES + 4}"
-    assert person_line(exc) == str(exc)
+    assert person_line(exc) == (f"OpenAI image edits take up to {MAX_REFERENCE_IMAGES} images, and "
+                                f"{MAX_REFERENCE_IMAGES + 4} are connected.")
 
 
 def test_the_route_wiring_lines_are_the_persons_lines() -> None:
@@ -130,40 +132,42 @@ def test_the_route_wiring_lines_are_the_persons_lines() -> None:
     where = route_clients.Where("Replicate's black-forest-labs/flux-3", "FLUX 3 Video on Replicate")
     exc = _raised(route_clients.replicate_input, {}, {}, where)
     assert str(exc) == "Replicate's black-forest-labs/flux-3 needs a prompt"
-    assert person_line(exc) == "FLUX 3 Video on Replicate needs a prompt"
+    assert person_line(exc) == "FLUX 3 Video on Replicate needs a prompt. Connect one, then run the node again."
 
     where = route_clients.Where("fal.ai's fal-ai/kling-video/v2.1", "Kling 2.1 on fal.ai")
     exc = _raised(route_clients.refuse_unwired, {"start_image": _port("a.png", "Image")}, {"prompt"}, where)
     assert str(exc) == ("fal.ai's fal-ai/kling-video/v2.1 can't take the wired start_image. "
                         "Disconnect it or choose another provider.")
-    assert person_line(exc) == ("Kling 2.1 on fal.ai can't take the wired start image. "
+    assert person_line(exc) == ("Kling 2.1 on fal.ai can't take the connected start image. "
                                 "Disconnect it or choose another provider.")
 
     exc = _raised(route_clients.one_value, {"start_image": _port(["a.png", "b.png"], "Image")}, "start_image", where)
     assert str(exc) == "fal.ai's fal-ai/kling-video/v2.1 takes one start_image, but 2 are wired"
-    assert person_line(exc) == "Kling 2.1 on fal.ai takes one start image, but 2 are wired. Disconnect the extra ones."
+    assert person_line(exc) == "Kling 2.1 on fal.ai takes one start image, but 2 are connected. Disconnect the extra ones."
 
     # A plain string from a caller with no person form never reaches the card.
     exc = _raised(route_clients.replicate_input, {}, {}, "Replicate's owner/model")
-    assert person_line(exc) == "This node needs a prompt"
+    assert person_line(exc) == "This node needs a prompt. Connect one, then run the node again."
 
 
 def test_meshys_smart_topology_lines_are_the_persons_lines() -> None:
     from handlers.meshy import check_model_options, check_smart_topology
 
     exc = _raised(check_smart_topology, {"model_type": "smart-topology", "topology": "quad"})
-    assert str(exc) == person_line(exc) == "Smart Topology makes triangles only. Set Topology to Triangle."
+    assert str(exc) == "Smart Topology makes triangles only. Set Topology to Triangle."
+    assert person_line(exc) == "Smart Topology makes triangles only. Set “Topology” to Triangle."
     exc = _raised(check_model_options, {"ai_model": "meshy-6-lite", "hd_texture": True})
-    assert str(exc) == person_line(exc) == ("Meshy 6 Lite makes 2K textures only. "
-                                            "Turn off HD Texture (4K) or pick another model.")
+    assert str(exc) == "Meshy 6 Lite makes 2K textures only. Turn off HD Texture (4K) or pick another model."
+    assert person_line(exc) == "Meshy 6 Lite makes 2K textures only. Turn off “HD Texture (4K)” or pick another model."
 
 
 def test_the_elevenlabs_dialogue_script_lines_are_the_persons_lines() -> None:
     from handlers.elevenlabs import parse_dialogue_script
 
     exc = _raised(parse_dialogue_script, "  ")
-    assert str(exc) == person_line(exc) == ("The dialogue script is empty. Write one line per turn, "
-                                            "e.g. 'Rachel: Hello.' then 'Adam: Hi!'")
+    assert str(exc) == "The dialogue script is empty. Write one line per turn, e.g. 'Rachel: Hello.' then 'Adam: Hi!'"
+    assert person_line(exc) == ("The dialogue script is empty. Write one line per turn, each starting with a voice "
+                                "name and a colon, like “Rachel: Hello.”")
     exc = _raised(parse_dialogue_script, "Rachel:")
     assert str(exc) == "Dialogue line 1 (Rachel) has no text after the colon."
     # Round 3d: no parentheses in a person line (GM).
@@ -177,7 +181,7 @@ def test_kreas_node_app_image_count_is_the_persons_line() -> None:
     exc = _raised(node_app_input, schema, {}, ["a.png", "b.png"], None)
     assert str(exc) == "This node app takes 1 more image(s); 2 are wired"
     # Round 3d: no parentheses in a person line (GM).
-    assert person_line(exc) == "This node app takes 1 more image, and 2 are wired. Disconnect the extra ones, then run the node again."
+    assert person_line(exc) == "This node app takes 1 more image, and 2 are connected. Disconnect the extra ones, then run the node again."
 
 
 def test_runways_duration_line_is_the_persons_line() -> None:
@@ -186,7 +190,8 @@ def test_runways_duration_line_is_the_persons_line() -> None:
     spec = next(spec for spec in RUNWAY_VIDEO_MODELS.values() if not spec["auto"])
     exc = _raised(_video_duration, spec, "auto")
     assert str(exc).startswith(f"{spec['label']} has no automatic duration. Pick one of: ")
-    assert person_line(exc) == str(exc)
+    assert person_line(exc).startswith(f"{spec['label']} has no automatic duration. Pick ")
+    assert person_line(exc).endswith(" seconds in “Duration”.")
 
 
 @pytest.mark.asyncio
@@ -204,7 +209,7 @@ async def test_a_character_node_with_no_character_names_the_field_not_the_api() 
 
     exc = await _araised(handle_character_node, _node("character"), {}, {})
     assert str(exc) == "No character chosen: set character to a character id (GET /api/characters lists them)"
-    assert person_line(exc) == "Choose a character in the node's Character field, then run it again."
+    assert person_line(exc) == "Choose a character in “Character”, then run it again."
 
 
 # -- a missing key points at Settings, in the provider's own spelling ----------
@@ -252,7 +257,7 @@ RUN_TIME_DIRS = ("handlers", "execution")
 RUN_TIME_SERVICES = ("media_input", "qc_common", "qc_jev", "typesafe_client", "vision_llm",
                      "google_vertex", "quiver_client", "krea_mcp_generation", "edit_masks", "ffmpeg", "krea_account",
                      "nous_auth")
-WRAPPERS = {"with_person_line", "as_person_line", "with_provider_line"}
+WRAPPERS = {"with_person_line", "as_person_line", "with_provider_line", "with_details_line"}
 # Facts a raise attaches beside its text (round 3d, part 2): the guard reads
 # the exception inside them.
 MARKERS = {"with_api_status", "as_job_failure", "with_call_facts"}
@@ -405,7 +410,14 @@ FORBIDDEN_IN_A_LINE = re.compile(
     # reads a line with its URLs taken out (forbidden_in_a_line).
     r"\b[A-Z][A-Za-z0-9]*-[A-Za-z0-9.]+-\d[\d.]*(?:-[A-Za-z0-9.]+)*\b|"
     r"(?<![\w-])(?![a-z]+(?:-[a-z]+)*-(?:to|and|or|of|in|on|by|for|the)-)[a-z]+(?:-[a-z]+){2,}\b(?!-)|"
-    r"\b[\w.-]+/[\w.-]+"
+    r"\b[\w.-]+/[\w.-]+|"
+    # Round 3f (GM's rule 5: "Never a param key, a port id or a code name
+    # ('filePath param', 'Array input', 'CameraPose input')"): a camelCase
+    # name that starts lowercase ("filePath"; "xAI" is the provider's own
+    # spelling), "... param", a type's name ("CameraPose"), and a type's name
+    # as an input ("Array input").
+    r"\b(?!xAI\b)[a-z]+[A-Z][A-Za-z]*\b|\b\w+ param\b|\bCameraPose\b|"
+    r"\b(?:Array|String|Number|Boolean|Object|SensorRig|SpatialContext) inputs?\b"
 )
 
 _URL = re.compile(r"https?://\S+")
@@ -570,7 +582,7 @@ def test_the_recovery_warnings_say_world_labs_not_paid_provider() -> None:
     strings = [node.value for node in ast.walk(ast.parse(source))
                if isinstance(node, ast.Constant) and isinstance(node.value, str)]
     assert not [text for text in strings if "paid-provider recovery ID" in text]
-    assert any("Nebula captured this World Labs recovery ID but could not" in text for text in strings)
+    assert any("Nebula captured this World Labs recovery ID but couldn't" in text for text in strings)
 
 
 # -- a whole-scene run's failed shot carries the same fields --------------------
@@ -628,7 +640,7 @@ def test_quivers_own_credits_and_key_lines_reach_the_card() -> None:
 
     credits = _wrap_provider_error(QuiverInsufficientCreditsError("402 from QuiverAI", status_code=402))
     assert str(credits) == "Insufficient QuiverAI credits — top up or upgrade plan"
-    assert person_line(credits) == "Insufficient QuiverAI credits — top up or upgrade plan"
+    assert person_line(credits) == "Your QuiverAI account is out of credits. Add credits, then run the node again."
     auth = _wrap_provider_error(QuiverAuthError("401 from QuiverAI", status_code=401))
     assert str(auth) == "QuiverAI auth failed — check QUIVER_API_KEY"
     assert person_line(auth) == "Add your QuiverAI API key in Settings, then run the node again."
@@ -641,13 +653,15 @@ def test_the_edit_mask_lines_are_the_persons_lines(tmp_path, monkeypatch) -> Non
     from services import edit_masks
 
     exc = _raised(edit_masks._open, b"not an image", "The mask")
-    assert str(exc) == person_line(exc) == "The mask isn't a PNG, JPEG, WebP or GIF image Nebula can read"
+    assert str(exc) == "The mask isn't a PNG, JPEG, WebP or GIF image Nebula can read"
+    assert person_line(exc) == "The mask isn't a PNG, JPEG, WebP or GIF image Nebula can read."
     monkeypatch.setattr(edit_masks, "require_allowed_path", lambda path: Path(path))
     not_an_image = tmp_path / "edit.png"
     not_an_image.write_bytes(b"not an image")
     exc = _raised(edit_masks.image_size, not_an_image)
-    assert str(exc) == person_line(exc) == ("The image to edit isn't a PNG, JPEG, WebP or GIF file Nebula can read, "
-                                            "so its mask can't be sized to it")
+    assert str(exc) == ("The image to edit isn't a PNG, JPEG, WebP or GIF file Nebula can read, "
+                        "so its mask can't be sized to it")
+    assert person_line(exc) == str(exc) + "."
 
 
 def test_the_guard_reads_the_edit_mask_service() -> None:
@@ -704,7 +718,7 @@ def test_a_replicate_result_of_another_type_says_to_pick_the_model_again(monkeyp
         "ports), so nothing was passed on. The result is still on Replicate (prediction pred-1).")
     assert person_line(exc) == (
         "The model returned an image file, but this node's output is set to text, so nothing was passed on. "
-        "Pick the model again in the node's Model ID field to re-read its outputs, then run the node again.")
+        "Pick the model again in “Model ID” to re-read its outputs, then run the node again.")
 
     monkeypatch.setattr(universal_ports, "declared_output",
                         lambda *_: {"id": "image", "dataType": "Image", "typeUnconfirmed": True})
@@ -713,7 +727,7 @@ def test_a_replicate_result_of_another_type_says_to_pick_the_model_again(monkeyp
                                "Image (")
     assert person_line(exc) == (
         "The model returned text, but this node's output is set to image, so nothing was passed on. "
-        "Pick the model again in the node's Model ID field to re-read its outputs, then run the node again.")
+        "Pick the model again in “Model ID” to re-read its outputs, then run the node again.")
 
 
 def _route(definition_id: str, route_id: str) -> dict[str, Any]:
@@ -728,15 +742,15 @@ ID_IN_A_LINE = re.compile(r"/|(?<![{\w])[a-z0-9]+_[a-z0-9_]+(?![}\w])|\b[a-z0-9]
 @pytest.mark.asyncio
 @pytest.mark.parametrize("route_id, endpoint, wired, text, line", [
     ("replicate", None, {}, "Replicate's black-forest-labs/flux-3 needs a prompt",
-     "FLUX 3 Video on Replicate needs a prompt"),
+     "FLUX 3 Video on Replicate needs a prompt. Connect one, then run the node again."),
     ("bfl", None, {}, "Black Forest Labs' flux-3-video needs a prompt",
-     "FLUX 3 Video on Black Forest Labs needs a prompt"),
+     "FLUX 3 Video on Black Forest Labs needs a prompt. Connect one, then run the node again."),
     ("openrouter", None, {}, "OpenRouter's black-forest-labs/flux-3-video needs a prompt",
-     "FLUX 3 Video on OpenRouter needs a prompt"),
+     "FLUX 3 Video on OpenRouter needs a prompt. Connect one, then run the node again."),
     ("fal", None, {"prompt": _port("p"), "end_image": _port("https://e.com/b.png", "Image")},
      "fal.ai's blackforestlabs/flux-3/text-to-video can't take the wired end_image. Disconnect it or choose "
      "another provider.",
-     "FLUX 3 Video on fal.ai can't take the wired end image. Disconnect it or choose another provider."),
+     "FLUX 3 Video on fal.ai can't take the connected end image. Disconnect it or choose another provider."),
     ("fal", "blackforestlabs/flux-3/edit-video",
      {"prompt": _port("p"), "start_video": _port("https://e.com/a.mp4", "Video"),
       "video": _port("https://e.com/b.mp4", "Video")},
@@ -746,7 +760,7 @@ ID_IN_A_LINE = re.compile(r"/|(?<![{\w])[a-z0-9]+_[a-z0-9_]+(?![}\w])|\b[a-z0-9]
     ("fal", "blackforestlabs/flux-3/keyframes-to-video", {"prompt": _port("p"), "keyframes": _port(["a.png"], "Image")},
      "fal.ai's blackforestlabs/flux-3/keyframes-to-video needs a set duration in seconds to place its keyframes "
      "(got 'auto')",
-     "FLUX 3 Video on fal.ai needs a number of seconds to place its keyframes. Set the node's Duration field, "
+     "FLUX 3 Video on fal.ai needs a number of seconds to place its keyframes. Set “Duration”, "
      "then run it again."),
     ("krea", None, {"prompt": _port("p"), "end_image": _port("https://e.com/b.png", "Image")},
      "Krea's krea-video-black-forest-labs-flux-3-video needs a start image (or keyframes) to end on an end image",
@@ -798,13 +812,13 @@ async def test_veos_model_lines_name_the_field_not_the_model_id() -> None:
 
     exc = await _araised(handle_veo, _node("veo-3", {"model": "veo-9-nope"}), {}, {"GOOGLE_API_KEY": "fixture"})
     assert str(exc) == "'veo-9-nope' isn't a Veo 3.1 model"
-    assert person_line(exc) == "Pick a Veo 3.1 model in the node's Model field, then run it again."
+    assert person_line(exc) == "Pick a Veo 3.1 model in “Model”, then run it again."
 
     exc = await _araised(handle_veo, _node("veo-3", {"model": "veo-3.1-lite-generate-001"}),
                          {"video": _port("https://e.com/v.mp4", "Video")}, {"GOOGLE_API_KEY": "fixture"})
     assert str(exc) == "Video extension requires Veo 3.1 or 3.1 Fast (got 'veo-3.1-lite-generate-001')"
-    assert person_line(exc) == ("Extending a video takes Veo 3.1 or Veo 3.1 Fast. Pick one in the node's Model "
-                                "field, or disconnect Extend Video.")
+    assert person_line(exc) == ("Extending a video takes Veo 3.1 or Veo 3.1 Fast. Pick one in “Model”, "
+                                "or disconnect “Extend Video”.")
 
 
 def test_a_route_tables_own_model_check_keeps_the_general_line() -> None:
@@ -831,7 +845,7 @@ def test_a_krea_connection_without_the_tool_says_so_without_its_name() -> None:
     tools = AccountTools(SimpleNamespace(tools={}), None)
     exc = _raised(tools.check, "generate_image", {})
     assert str(exc) == "Your Krea connection does not offer generate_image; nothing was sent"
-    assert person_line(exc) == ("Your Krea connection doesn't offer what this node needs, so nothing was sent. "
+    assert person_line(exc) == ("Your Krea connection doesn't offer what this node needs. Nothing was sent to Krea. "
                                 "Choose another provider, or check the connection in Settings.")
 
 
@@ -842,7 +856,8 @@ async def test_a_krea_upload_with_no_media_is_the_persons_line() -> None:
     from services.krea_account import AccountTools
 
     exc = await _araised(AccountTools(SimpleNamespace(tools={}), None).upload, None, "  ")
-    assert str(exc) == person_line(exc) == "Krea needs a media URL or a local file"
+    assert str(exc) == "Krea needs a media URL or a local file"
+    assert person_line(exc) == "Krea needs a media link or a file. Connect one, then run the node again."
 
 
 @pytest.mark.asyncio

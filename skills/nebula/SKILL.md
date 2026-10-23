@@ -280,7 +280,10 @@ graph's `errorPerson`, when the node's handler wrote one, or a line for the
 provider's answer such as "Meshy is busy. ..." with `errorProviderText`) that
 you shouldn't parse. A failed Cinema shot's `output` works the same: read its
 `error`; its `errorCategory`, `errorFriendly`, `errorPerson`,
-`errorProviderText` and `errorRaw` are for the Cinema panel. A job the
+`errorProviderText`, `errorProvider` and `errorRaw` are for the Cinema panel.
+Round 3f rewrote the card lines to GM's rules; nothing you read changed (a
+proposal's `cost.notReady` rows add a `person` line beside `missing`: read
+`missing`). A job the
 provider ran and then reported failed is never `category: "auth"`, even when
 its text says "unauthorized" (the job's input, not the key): check the job at
 the provider rather than the key. A run the pre-run check refuses (a missing

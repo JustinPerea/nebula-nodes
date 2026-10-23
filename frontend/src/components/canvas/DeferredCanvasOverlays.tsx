@@ -3,6 +3,7 @@ import {
   DeferredPinLayer,
   DeferredProposalBar,
   DeferredProposalLayer,
+  DeferredStudioNotice,
 } from '../../lib/deferredChunks';
 import { deferredAtOnce } from '../deferredAtOnce';
 // The agent cursors' store subscribes to the socket at import; it stays in
@@ -25,3 +26,5 @@ export const ProposalBar = deferredAtOnce(DeferredProposalBar, 'ProposalBar');
 export const ProposalLayer = deferredAtOnce(DeferredProposalLayer, 'ProposalLayer');
 export const PinLayer = deferredAtOnce(DeferredPinLayer, 'PinLayer');
 export const AgentCursorLayer = deferredAtOnce(DeferredAgentCursorLayer, 'AgentCursorLayer');
+/** The canvas notice on the screens that aren't the canvas (round 3f). */
+export const StudioNotice = deferredAtOnce(DeferredStudioNotice, 'StudioNotice');

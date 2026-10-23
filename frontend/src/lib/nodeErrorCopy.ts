@@ -1,4 +1,3 @@
-import { REFUSED_FALLBACK_COPY } from './errorCopy';
 
 /**
  * What a node's card says when its run failed (error copy round 3c, GM -
@@ -22,11 +21,30 @@ import { REFUSED_FALLBACK_COPY } from './errorCopy';
  *   limit, timeout, network, invalid input): the heading over its line, the
  *   fact the person needs, with the raw text behind Details;
  * - any other run failure (category "unknown", or no line): the heading over
- *   GM's general line, the raw text behind Details;
+ *   GM's general line for a card, the raw text behind Details;
  * - no category at all: a line Nebula wrote itself (a refused start, a
  *   pre-run check such as a missing key), shown as it is.
+ *
+ * Round 3f (GM): ""Couldn't run the node." followed by "That didn't work."
+ * says the same thing twice, and reloading doesn't fix a provider failure.
+ * On node cards and the Cinema shot panel → "Run the node again. If it keeps
+ * failing, Details shows what {Provider} said." With no provider: "Run the
+ * node again. If it keeps failing, open Details."" The provider is the one
+ * the run called (the ErrorEvent's `provider`, node data `errorProvider`,
+ * from the route the backend took), never read from the error's text.
  */
 export const RUN_NODE_HEADING = "Couldn't run the node.";
+/** The Cinema shot panel's heading (GM, round 3f); the scene's card keeps RUN_NODE_HEADING. */
+export const GENERATE_SHOT_HEADING = "Couldn't generate the shot.";
+
+/** GM's general line on a card, by what is behind Details. */
+export function cardGeneralLine(provider: string | undefined, hasDetails: boolean): string {
+  if (!hasDetails) return 'Run the node again.';
+  const name = provider?.trim();
+  return name
+    ? `Run the node again. If it keeps failing, Details shows what ${name} said.`
+    : 'Run the node again. If it keeps failing, open Details.';
+}
 
 export interface NodeErrorFields {
   raw?: string;
@@ -36,6 +54,10 @@ export interface NodeErrorFields {
   /** The person's line was written for a provider's answer, whose own words
    * are in `raw` (round 3d). */
   providerText?: boolean;
+  /** The provider the run called (round 3f): GM's general line names it. */
+  provider?: string;
+  /** The surface's heading: RUN_NODE_HEADING on a card, GENERATE_SHOT_HEADING on the shot panel. */
+  heading?: string;
 }
 
 export interface NodeErrorCopy {
@@ -45,17 +67,17 @@ export interface NodeErrorCopy {
   details: string | null;
 }
 
-export function nodeErrorCopy({ raw, category, friendly, person, providerText }: NodeErrorFields): NodeErrorCopy {
+export function nodeErrorCopy({ raw, category, friendly, person, providerText, provider, heading = RUN_NODE_HEADING }: NodeErrorFields): NodeErrorCopy {
   const text = raw?.trim() ?? '';
   const line = person?.trim();
   if (line) {
-    return { heading: RUN_NODE_HEADING, reason: line, details: providerText && text && text !== line ? text : null };
+    return { heading, reason: line, details: providerText && text && text !== line ? text : null };
   }
-  if (!category) return { heading: '', reason: text || REFUSED_FALLBACK_COPY, details: null };
+  if (!category) return { heading: '', reason: text || cardGeneralLine(provider, false), details: null };
   // A named failure whose stored line was dropped (node_errors keeps no
   // hint equal to the error, e.g. a capability guardrail) reads its own text
   // after a reload, as the live event's line said.
   const named = category !== 'unknown' ? (friendly?.trim() || text) : '';
-  const reason = named || REFUSED_FALLBACK_COPY;
-  return { heading: RUN_NODE_HEADING, reason, details: text && text !== reason ? text : null };
+  if (named) return { heading, reason: named, details: text && text !== named ? text : null };
+  return { heading, reason: cardGeneralLine(provider, Boolean(text)), details: text || null };
 }

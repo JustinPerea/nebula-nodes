@@ -868,18 +868,117 @@ function why(route: RouteSpec, block: DirectBlock): string {
   return String(block.detail ?? block.reason);
 }
 
-/** why() for the card: a setting by its label, never its key
- * (node_route._why_person). */
-function whyPerson(definition: ModelNodeDefinition, route: RouteSpec, block: DirectBlock): string {
-  const param = block.param ?? '';
-  const label = param ? (allParamDefinitions(definition).find((candidate) => candidate.key === param)?.label || param) : '';
-  if (block.reason === 'unsupported' && block.detail && param && block.detail.startsWith(`${param} `)) {
-    return `it doesn't take ${label} ${block.detail.slice(param.length + 1)}`;
+// The card's words for a route stop (error copy round 3f, GM: "A switch reads
+// "{Node} can't run on {Provider} with “{Label}” on." Never "Draft true".
+// Listed values use the option's label as the field shows it, never its
+// value."): a setting by its label in quotes, a value by its option's label
+// less any note in parentheses, no parentheses, "seconds" for "s".
+// node_route._why_person and _fix_person are the same, word for word.
+
+function plain(text: string): string {
+  return String(text).replace(/\s*\([^)]*\)/g, '').trim();
+}
+
+/** A rule's own label ("a video continuation longer than 15 s") in GM's rules. */
+export function personWords(text: string): string {
+  return plain(text).replace(/\b(\d+(?:\.\d+)?) ?s\b/g, '$1 seconds').replace(/\bwired\b/g, 'connected');
+}
+
+function paramDef(definition: RoutedDefinition, key: string): ParamDefinition | undefined {
+  return allParamDefinitions(definition).find((candidate) => candidate.key === key);
+}
+
+/** “Draft (fast preview)” on, “Safety” set to 5, “Resolution” set to 1.5K. */
+function personSetting(param: ParamDefinition | undefined, key: string, value: unknown): string {
+  const label = `“${param?.label || key}”`;
+  if (Array.isArray(param?.options) && param.options.length && hasValue(value)) {
+    return `${label} set to ${plain(optionLabelOf(param, value))}`;
   }
-  if (block.reason === 'blocked') return `it doesn't take ${label}`;
-  if (block.reason === 'requires') return `it needs ${label} set`;
-  if (block.reason === 'size') return `it can't render that ${label} exactly`;
-  return why(route, block);
+  if (typeof value === 'boolean' || param?.type === 'boolean') {
+    const on = typeof value === 'boolean' ? value : ['true', WIRED].includes(matchValue(value));
+    return `${label} ${on ? 'on' : 'off'}`;
+  }
+  if (typeof value === 'number') return `${label} set to ${matchValue(value)}`;
+  return `${label} set`;
+}
+
+/** The setting a block names, as the switcher's notes say it: “Draft (fast
+ * preview)” on, “Resolution” set to 1.5K, or the label alone for a field
+ * the route doesn't take (error copy round 3f, GM: "Switcher notes become
+ * "Doesn't take “{Label}”." / "Needs “{Label}”.""). */
+export function blockedSetting(definition: RoutedDefinition, block: Partial<DirectBlock>, params: Record<string, unknown>): string {
+  const param = block.param ?? '';
+  const spec = param ? paramDef(definition, param) : undefined;
+  if (!param) return personWords(String(block.detail ?? ''));
+  if (block.reason === 'unsupported') {
+    if (!block.detail || !block.detail.startsWith(`${param} `)) return personWords(String(block.detail ?? ''));
+    const value = hasValue(params[param]) ? params[param] : block.detail.slice(param.length + 1);
+    return personSetting(spec, param, value);
+  }
+  return `“${spec?.label || param}”`;
+}
+
+/** How a `hidden` stop is fixed without a switch: the setting back to its
+ * default, or cleared when it has none (node_route._hidden_fix_person). */
+function hiddenFixSentence(definition: ModelNodeDefinition, param: string): string {
+  const spec = paramDef(definition, param);
+  const label = `“${spec?.label || param}”`;
+  const fallback = spec?.default;
+  if (fallback === undefined || fallback === null) return `Clear ${label}, or switch provider.`;
+  if (typeof fallback === 'boolean') return `Turn ${label} ${fallback ? 'on' : 'off'}, or switch provider.`;
+  return `Set ${label} back to ${plain(optionLabelOf(spec, fallback))}, or switch provider.`;
+}
+
+/** Why a route stops, as the clause after "{Node} can't run on {Provider}"
+ * (node_route._why_person). */
+function whyPerson(definition: ModelNodeDefinition, route: RouteSpec, block: DirectBlock, params: Record<string, unknown>): string {
+  const param = block.param ?? '';
+  const spec = param ? paramDef(definition, param) : undefined;
+  const label = param ? `“${spec?.label || param}”` : '';
+  if (block.reason === 'hidden') {
+    let setting = personSetting(spec, param, params[param]);
+    const stop = hiddenStops(definition, route, params).find((candidate) => candidate.param === param);
+    if (stop?.controllers.length) {
+      const effective = effectiveValues(definition, params);
+      setting += stop.controllers.map((ctrl) => ` and ${personSetting(paramDef(definition, ctrl), ctrl, effective[ctrl])}`).join('');
+    }
+    return ` with ${setting}`;
+  }
+  if (block.reason === 'unsupported') {
+    if (param && block.detail && block.detail.startsWith(`${param} `)) {
+      const value = hasValue(params[param]) ? params[param] : block.detail.slice(param.length + 1);
+      return ` with ${personSetting(spec, param, value)}`;
+    }
+    return ` with ${personWords(block.detail ?? '')}`;
+  }
+  if (block.reason === 'blocked') return ` with ${personSetting(spec, param, params[param])}`;
+  if (block.reason === 'requires') return ` without ${label}`;
+  if (block.reason === 'size') return `, because it can't render this ${label} exactly`;
+  if (block.reason === 'retired') return `, because the maker retired this model on ${block.on}`;
+  if (block.reason === 'ports') {
+    const limit = route.rules?.ports?.[block.param ?? ''];
+    const name = personWords(portLimitName(block.param ?? '', limit));
+    return limit?.max ? ` with more than ${limit.max} ${name} connected` : ` with ${name} connected`;
+  }
+  return `, because ${personWords(why(route, block))}`;
+}
+
+/** The next step for a route stop (node_route._fix_person). */
+function fixPerson(definition: ModelNodeDefinition, route: RouteSpec, block: DirectBlock, params: Record<string, unknown>): string {
+  const param = block.param ?? '';
+  const spec = param ? paramDef(definition, param) : undefined;
+  if (block.reason === 'hidden') return hiddenFixSentence(definition, param);
+  const values = acceptedValues(route, block);
+  const label = `“${spec?.label || param}”`;
+  if (spec?.type === 'boolean' && (block.reason === 'unsupported' || block.reason === 'blocked')) {
+    const on = ['true', WIRED].includes(matchValue(params[param]));
+    return `Turn ${label} ${on || block.reason === 'blocked' ? 'off' : 'on'}, or switch provider.`;
+  }
+  if (block.reason === 'blocked') return `Clear ${label}, or switch provider.`;
+  if (values.length) return `Pick ${orList(values.map((value) => plain(optionLabelOf(spec, value))))}, or switch provider.`;
+  if (block.reason === 'ports') return 'Disconnect the extra inputs, or switch provider.';
+  if (block.reason === 'requires') return `Set ${label}, or switch provider.`;
+  return 'Change that setting, or switch provider.';
 }
 
 /** "OpenAI API key", "ElevenLabs or Runway API key", "Google Vertex AI
@@ -907,17 +1006,6 @@ function acceptedValues(route: RouteSpec, block: DirectBlock): string[] {
   return (rule?.values ?? []).map(matchValue);
 }
 
-/** How a `hidden` stop is fixed without a switch: the setting back to its
- * default, or cleared when it has none (node_route._hidden_fix_sentence). */
-function hiddenFixSentence(definition: ModelNodeDefinition, param: string): string {
-  const spec = allParamDefinitions(definition).find((candidate) => candidate.key === param);
-  const label = spec?.label || param;
-  const fallback = spec?.default;
-  if (fallback === undefined || fallback === null) return `Clear ${label}, or switch provider.`;
-  if (typeof fallback === 'boolean') return `Turn ${label} ${fallback ? 'on' : 'off'}, or switch provider.`;
-  return `Set ${label} back to ${optionLabelOf(spec, fallback)}, or switch provider.`;
-}
-
 /** Why a route-table run can't start, as the card says it: the switcher's
  * stop line, its title, the run-cost summary (node_route.route_unavailable_line,
  * word for word; route_cases.json `unavailableLine` pins both). No env-var
@@ -926,7 +1014,8 @@ function hiddenFixSentence(definition: ModelNodeDefinition, param: string): stri
  * text (node_route.route_unavailable), which names the keys.
  * `keyless` are routes that would take the run but have no key set: a
  * `hidden` stop with no alternative names them. */
-export function routeUnavailableMessage(definition: ModelNodeDefinition, route: NodeRoute, alternatives: string[] = [], keyless: string[] = []): string {
+export function routeUnavailableMessage(definition: ModelNodeDefinition, route: NodeRoute, alternatives: string[] = [], keyless: string[] = [],
+  params: Record<string, unknown> = {}): string {
   const name = definition.displayName || 'This node';
   const spec = route.routeId ? routeById(definition, route.routeId) : undefined;
   const others = alternatives.map((alt) => providerLabel(routeById(definition, alt)?.provider));
@@ -938,12 +1027,8 @@ export function routeUnavailableMessage(definition: ModelNodeDefinition, route: 
     return `${name} is set to a provider it doesn't have. Choose one in the node's provider switcher.`;
   }
   if (block && spec) {
-    const values = acceptedValues(spec, block);
-    const fix = block.reason === 'hidden' ? hiddenFixSentence(definition, block.param ?? '')
-      : values.length ? `Pick ${orList(values)}, or switch provider.`
-      : block.reason === 'ports' ? 'Disconnect the extra inputs, or switch provider.'
-        : 'Change that setting, or switch provider.';
-    return `${name} can't run on ${providerLabel(spec.provider)}: ${whyPerson(definition, spec, block)}. ${fix}${also}`;
+    const fix = fixPerson(definition, spec, block, params);
+    return `${name} can't run on ${providerLabel(spec.provider)}${whyPerson(definition, spec, block, params)}. ${fix}${also}`;
   }
   const missing = route.missing ?? [];
   if (spec) {
@@ -1001,7 +1086,7 @@ export function routeUnavailable(
     block: blockFields(route.block),
     alternatives,
     fixes: hidden ? [hiddenFix(definition, route.block?.param ?? '')] : [],
-    message: routeUnavailableMessage(definition, route, alternatives, keyless),
+    message: routeUnavailableMessage(definition, route, alternatives, keyless, values),
   };
 }
 

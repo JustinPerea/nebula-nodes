@@ -639,3 +639,19 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
     justify-content: flex-end;
   }
 }
+
+/* The same notice on the screens that aren't the canvas (StudioNotice,
+   error copy round 3f): bottom centre, above the studio's own chrome. */
+.studio-notice {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 1100; /* with the workspace docks, below full-screen modals */
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+/* A note with several lines (an import's warnings) keeps its line breaks. */
+.canvas-undo-notice--message .canvas-undo-notice__text {
+  white-space: pre-line;
+}

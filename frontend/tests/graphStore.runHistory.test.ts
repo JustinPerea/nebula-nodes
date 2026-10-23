@@ -9,6 +9,7 @@ import {
   WORLD_LABS_RECONNECTING_NOTE,
   type RunRecord,
 } from '../src/lib/runHistory';
+import { noticeSpy } from './helpers/noticeSpy';
 
 function worldEnvironmentNode(id = 'world') {
   return {
@@ -1272,7 +1273,7 @@ describe('graphStore run-history lifecycle', () => {
   });
 
   it('blocks cloning a blank fresh-paid World node even when this stale tab has no checkpoint', () => {
-    const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const alert = noticeSpy();
     const source = {
       ...worldEnvironmentNode('world-stale-source'),
       selected: true,

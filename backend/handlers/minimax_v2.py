@@ -90,7 +90,7 @@ def build_content(inputs: dict[str, PortValueDict]) -> tuple[list[dict[str, Any]
     """The V2 ``content`` array from the inputs, and the scenario (t2v, i2v, r2v)."""
     prompt = " ".join(_values(inputs.get("prompt"))).strip()
     if not prompt:
-        raise as_person_line(ValueError("MiniMax H3 needs a prompt"))
+        raise with_person_line(ValueError("MiniMax H3 needs a prompt"), "MiniMax H3 needs a prompt. Connect one, then run the node again.")
     content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
     frames = [(role, _values(inputs.get(role))) for role in ("first_frame", "last_frame")]
     refs = [("reference_image", "image", _values(inputs.get("reference_images")), MAX_REFERENCE_IMAGES),
@@ -104,7 +104,7 @@ def build_content(inputs: dict[str, PortValueDict]) -> tuple[list[dict[str, Any]
                          "Disconnect one kind, then run the node again.")
     for role, values in frames:
         if len(values) > 1:
-            raise as_person_line(ValueError(f"MiniMax H3 takes one {role.replace('_', ' ')} image"))
+            raise with_person_line(ValueError(f"MiniMax H3 takes one {role.replace('_', ' ')} image"), f"MiniMax H3 takes one {role.replace('_', ' ')} image. Disconnect the extra ones, then run the node again.")
         for value in values:
             content.append({"type": "image_url", "image_url": {"url": media_url(value, "image")}, "role": role})
     for role, kind, values, limit in refs:

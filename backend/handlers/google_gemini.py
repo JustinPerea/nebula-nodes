@@ -16,8 +16,7 @@ from services.retired_nodes import GEMINI_TTS_PREVIEWS_SHUTDOWN, default_until
 from services.output import get_run_dir, save_base64_image
 from execution.missing_credential import MissingCredentialError
 from services.param_defaults import param_default
-from execution.person_line import (as_person_line, model_name, option_label, option_labels, with_api_status,
-                                   with_person_line)
+from execution.person_line import field_label, model_name, option_label, option_labels, with_api_status, with_person_line
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
@@ -58,7 +57,7 @@ async def handle_gemini_chat(
 ) -> dict[str, Any]:
     messages_input = inputs.get("messages")
     if not messages_input or not messages_input.value:
-        raise as_person_line(ValueError("Messages input is required for Gemini chat"))
+        raise with_person_line(ValueError("Messages input is required for Gemini chat"), "Connect messages to this node, then run it again.")
 
     messages_text = str(messages_input.value)
 
@@ -132,9 +131,9 @@ async def handle_gemini_chat(
     if stop_sequences_raw:
         sequences = [s.strip() for s in str(stop_sequences_raw).split(",") if s.strip()]
         if len(sequences) > GEMINI_MAX_STOP_SEQUENCES:
-            raise as_person_line(ValueError(
+            raise with_person_line(ValueError(
                 f"Gemini takes up to {GEMINI_MAX_STOP_SEQUENCES} stop sequences; this node has {len(sequences)}."
-            ))
+            ), f"Gemini takes up to {GEMINI_MAX_STOP_SEQUENCES} stop sequences, and this node has {len(sequences)}.")
         if sequences:
             generation_config["stopSequences"] = sequences
 
@@ -172,9 +171,10 @@ async def handle_gemini_chat(
             # selected model)"; refuse it before the request, like a Runway ratio.
             raise with_person_line(ValueError(
                 f"Thinking level '{thinking_level}' isn't available for {model}. Pick one of: {', '.join(levels)}."
-            ), f"{model_name(model, node.definition_id)} doesn't offer Thinking Level "
-                f"{option_label(node.definition_id, 'thinking_level', thinking_level) or thinking_level}. "
-                f"Pick {option_labels(node.definition_id, 'thinking_level', levels)}, then run the node again.")
+            ), f"{model_name(model, node.definition_id)} doesn't offer "
+                f"{option_label(node.definition_id, 'thinkingLevel', thinking_level) or thinking_level} for "
+                f"“{field_label(node.definition_id, 'thinkingLevel', 'Thinking Level')}”. "
+                f"Pick {option_labels(node.definition_id, 'thinkingLevel', levels)}, then run the node again.")
         request_body["generationConfig"] = request_body.get("generationConfig", {})
         request_body["generationConfig"]["thinkingConfig"] = {"thinkingLevel": thinking_level}
     elif thinking_budget is not None and thinking_budget != "":
@@ -316,7 +316,7 @@ async def handle_nano_banana(
 ) -> dict[str, Any]:
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
-        raise as_person_line(ValueError("Prompt input is required"))
+        raise with_person_line(ValueError("Prompt input is required"), "Connect a prompt to this node, then run it again.")
 
     api_key = api_keys.get("GOOGLE_API_KEY")
     if not api_key:
@@ -424,7 +424,7 @@ async def handle_lyria3(
 ) -> dict[str, Any]:
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
-        raise as_person_line(ValueError("Prompt input is required for Lyria 3"))
+        raise with_person_line(ValueError("Prompt input is required for Lyria 3"), "Connect a prompt to this node, then run it again.")
 
     api_key = api_keys.get("GOOGLE_API_KEY")
     if not api_key:
@@ -542,7 +542,7 @@ async def handle_gemini_tts(
 ) -> dict[str, Any]:
     text_input = inputs.get("text")
     if not text_input or not text_input.value:
-        raise as_person_line(ValueError("Text input is required for Gemini TTS"))
+        raise with_person_line(ValueError("Text input is required for Gemini TTS"), "Connect text to this node, then run it again.")
 
     api_key = api_keys.get("GOOGLE_API_KEY")
     if not api_key:
@@ -609,7 +609,7 @@ async def handle_gemini_embeddings(
 ) -> dict[str, Any]:
     text_input = inputs.get("text")
     if not text_input or not text_input.value:
-        raise as_person_line(ValueError("Text input is required for embeddings"))
+        raise with_person_line(ValueError("Text input is required for embeddings"), "Connect text to this node, then run it again.")
 
     api_key = api_keys.get("GOOGLE_API_KEY")
     if not api_key:

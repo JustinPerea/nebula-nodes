@@ -12,7 +12,7 @@ from services.output import get_run_dir, portable_output_ref, save_base64_image
 from execution.missing_credential import MissingCredentialError
 from services.retired_nodes import GPT_IMAGE_1_SHUTDOWN, default_until
 from handlers.openai_image import check_background
-from execution.person_line import as_person_line, missing_file_line, with_api_status, with_person_line
+from execution.person_line import missing_file_line, with_api_status, with_person_line
 
 OPENAI_IMAGE_EDIT_URL = "https://api.openai.com/v1/images/edits"
 # gpt-image-1 shuts down 2026-10-23; OpenAI names gpt-image-2.5-sunburst or
@@ -42,11 +42,11 @@ async def handle_openai_image_edit(
     # --- required inputs ---
     image_input = inputs.get("image")
     if not image_input or not image_input.value:
-        raise as_person_line(ValueError("Image input is required but was not provided"))
+        raise with_person_line(ValueError("Image input is required but was not provided"), "Connect an image to this node, then run it again.")
 
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
-        raise as_person_line(ValueError("Prompt input is required but was not provided"))
+        raise with_person_line(ValueError("Prompt input is required but was not provided"), "Connect a prompt to this node, then run it again.")
 
     api_key = api_keys.get("OPENAI_API_KEY")
     if not api_key:

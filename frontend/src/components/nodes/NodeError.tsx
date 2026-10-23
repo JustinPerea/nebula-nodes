@@ -11,6 +11,10 @@ interface NodeErrorProps {
   /** That line was written for a provider's answer: its words go behind
    * Details (round 3d). */
   providerText?: boolean;
+  /** The provider the run called (round 3f): GM's general line names it. */
+  provider?: string;
+  /** The surface's heading, when it isn't "Couldn't run the node." (the Cinema shot panel). */
+  heading?: string;
   raw?: string;
   /** Classes for the outer block (Create Studio's result card has its own). */
   className?: string;
@@ -26,8 +30,8 @@ interface NodeErrorProps {
  * no category and shows as it is. Safety/moderation blocks keep their calmer
  * treatment.
  */
-export function NodeError({ category, friendly, person, providerText, raw, className = 'model-node__error' }: NodeErrorProps) {
-  const copy = nodeErrorCopy({ raw, category, friendly, person, providerText });
+export function NodeError({ category, friendly, person, providerText, provider, heading, raw, className = 'model-node__error' }: NodeErrorProps) {
+  const copy = nodeErrorCopy({ raw, category, friendly, person, providerText, provider, heading });
   const blocked = category === 'blocked' && !person;
   const modifier = `${className.split(' ').at(-1)}--blocked`;
   return (
@@ -49,12 +53,13 @@ export function NodeError({ category, friendly, person, providerText, raw, class
  * model-node__error, kept last so a block gets its calmer modifier.
  */
 export function NodeRunError({ data, className }: {
-  data: Pick<NodeData, 'state' | 'error' | 'errorCategory' | 'errorFriendly' | 'errorPerson' | 'errorProviderText'>;
+  data: Pick<NodeData, 'state' | 'error' | 'errorCategory' | 'errorFriendly' | 'errorPerson' | 'errorProviderText' | 'errorProvider'>;
   className: string;
 }) {
   if (data.state !== 'error' || !data.error) return null;
   return (
     <NodeError className={`${className} model-node__error`} raw={data.error} category={data.errorCategory}
-      friendly={data.errorFriendly} person={data.errorPerson} providerText={data.errorProviderText} />
+      friendly={data.errorFriendly} person={data.errorPerson} providerText={data.errorProviderText}
+      provider={data.errorProvider} />
   );
 }
