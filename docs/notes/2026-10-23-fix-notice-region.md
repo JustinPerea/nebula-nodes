@@ -147,4 +147,18 @@ I stopped both servers by port and deleted the state dir.
 - **Other toasts outside the region:** the project switch toast now stacks above the notices (Review). Still on their own: the canvas pin error toast (`.canvas-pin-toast`, role alert with Dismiss, z 30, fixed bottom 24 px) sits on top of the bottom bar, and a popover (40) can cover it; the asset trash toast (z 60, bottom 24 px, centred) and the moodboard window toast (z 60) sit at the region's no-bar spot, so on a screen without the bar they can cover a notice. Each could join the region, or stack on `--notice-stack-h` the way the switch toast does. GM named the canvas, 3g and proposal notices, so I left these for GM.
 - **For GM: the switch toast and the proposal bar.** Both now stack above the notices. The proposal bar is still inside `.react-flow` (z 0), so the toast (z 60) can draw over it when both show; that was so before too.
 - **The floating Inspector's top limit** is still the window's 16 px gutter, so a node at the top opens it over the workspace header and selection toolbar (`near-top-1280.png`). That's unchanged from before, but a measured top line like the bottom one would fix it.
-- **After #175 merges:** its hold-while-hovered handlers live on the notice element, so they work in the region unchanged. Its `messagesOnly` change (the person's own "Deleted the node." keeps its Undo off the canvas) flows through `StudioNotice` as before.
+- **#175 is merged in now** (see below): its hold-while-hovered handlers live on the notice element, so they work in the region unchanged. Its `messagesOnly` change (the person's own "Deleted the node." keeps its Undo off the canvas) flows through `StudioNotice` as before.
+
+## Merging main after #175
+
+#175 (the complete undo) merged as adf5cbe0 while this branch waited. Merging it in was clean: #175 changed what the notices say and this branch changed where they render, as planned.
+
+Checks on the merged tree:
+- `npx tsc -b`: clean. The focused files (the region, the notice, the Inspector's placement, the bottom bar, the proposal bar, the undo notices): 10 files, 93 tests, all passed.
+- Backend pytest, the whole suite through `iso.sh`: 10,257 passed.
+- Frontend `npx vitest run`, the whole suite: 4,975 passed, 12 failed in 6 files under load. Those 6 files run alone: 113 tests, all passed.
+- `npx vite build && node scripts/check-build-budget.mjs`: passed, 364,996 bytes raw against the 512,000 budget.
+
+Live, on the isolated stack (no paid calls, 8000-8010 and 5173 blocked, 0 requests reached them):
+- **#175's own live check, pointed at this tree:** 32 passed, 0 failed. That covers each delete's "Deleted the node." with Undo, the "Restored …" lines, and the agent and forged-record probes, with every notice now in the region. The first run had two misses. One was a client socket drop that never reached the backend. The other: two "Deleted" checks read the previous "Restored the node." for a moment, with its Redo already hidden. The rerun was clean, but that brief stale line is real, and it came from #175, not from this branch. A follow-up will clear a notice whose action no longer applies when a new step is pushed.
+- **This branch's live check:** 30 passed, 0 failed, run alone. In the run beside #175's check, one check failed: "a real click on the notice's Redo redoes the agent's edit" at 1280x800 (1440x900 passed). The notice holds for 6 s unless the pointer or focus is on it. In that run the script's camera pan took long enough, with the two runs sharing the machine, that the notice had gone before the click. The click then landed on the Inspector under it. The script now moves the pointer onto Redo first, as a person reaching for it would, which holds the notice, and it logs the notice's age. Run alone, the pointer reached Redo 1.3 s (1440: 1.6 s) after the notice showed, and the click redid the edit at both sizes.
