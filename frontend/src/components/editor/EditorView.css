@@ -94,6 +94,12 @@
   top: 8px;
   left: 50%;
   transform: translateX(-50%);
+  /* The timecode and its "Rendered" tag are two spans: without a gap they
+     read "00:00:05:00Rendered" (GM, round 4b). */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
 }
 
 .editor-preview--error {

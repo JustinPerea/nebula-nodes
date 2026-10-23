@@ -303,3 +303,9 @@ I stopped both servers by port, and the script deleted its state dir.
 - The two wrapping forget forms and the kept-copy toasts beside their Back button (For GM, above). Built as GM wrote them.
 - The rendered preview's 52 px inset (Review, above, and For GM).
 - Seen in the shots, already there before this branch: the "Rendered" tag in the readout has no style or gap, so it reads "00:00:05:00Rendered". Not changed here.
+
+## GM's call on the trim editor (round 4b, merged as built)
+
+- GM chose (a): the readout stays on the preview's top edge, and the rendered video stops above the band.
+- GM also called the readout's missing gap ("00:00:05:00Rendered") a visible defect to fix here. `.editor-preview__hud` is now a flex row with an 8 px gap and no wrapping. The test is in tests/components/VideoPreview.noticeBand.test.tsx: red first (1 of 5, no flex or gap), then 5 of 5. The editor tests (6 files, 51 of 51), tsc and lint are clean. It's checked by test only, not in a live browser.
+- GM's wording for the next batch (not built here): the all-held forget form, and the shorter switch toasts ("Edits saved as a copy.", "made" instead of "made and opened").

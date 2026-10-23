@@ -80,6 +80,17 @@ describe("the trim editor's preview keeps its own readout and controls clear of 
     expect(hud).not.toMatch(/(^|[\s;])bottom:/);
   });
 
+  it('the readout keeps a gap before its "Rendered" tag (GM: "00:00:05:00Rendered" is a visible defect)', () => {
+    const css = readFileSync(join(__dirname, '../../src/components/editor/EditorView.css'), 'utf8');
+    const hud = rule(css, '.editor-preview__hud');
+    expect(hud).toMatch(/(^|[\s;])display:\s*(inline-)?flex/);
+    expect(hud).toMatch(/(^|[\s;])gap:\s*\d+px/);
+    useUIStore.setState({ renderedPreviewUrl: '/api/outputs/rendered.mp4' });
+    const view = render(<VideoPreview sourceUrl="/synthetic.mp4" editNode={edit} />);
+    const tag = view.container.querySelector('.editor-preview__hud .editor-preview__hud-tag');
+    expect(tag?.textContent).toBe('Rendered');
+  });
+
   it('the rendered preview (native controls) stops above the reserved notice band', () => {
     layout({ previewBottom: 466, transportTop: 476 });
     useUIStore.setState({ renderedPreviewUrl: '/api/outputs/rendered.mp4' });
