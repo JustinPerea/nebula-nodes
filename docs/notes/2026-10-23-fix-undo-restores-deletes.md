@@ -322,3 +322,4 @@ GM approved a)'s lines as built and answered the two pin cases: "6, a pin you de
     - The tool docstring lists every field, `pinsLeft` as `{id, reason, code}` with its codes.
     - SKILL.md names the new CLI line.
   - These additions show only when a pin was left. Every existing message is unchanged.
+- **Gates** (e73bba23): backend whole suite **10,257 passed, 71 skipped, 0 failed** (4 new). Vitest **4,950 of 4,950**. `tsc -b` and lint clean. Budget 363,426 bytes raw / 109,183 gzip.
