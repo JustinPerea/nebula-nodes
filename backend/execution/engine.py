@@ -65,7 +65,13 @@ from models.events import (
 from execution import gating, provider_calls
 from services.moodboard_brief import apply_to_generator as apply_board_to_generator
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import as_person_line, person_line, with_person_line
+from execution.person_line import (
+    as_person_line,
+    missing_key_line,
+    person_line,
+    port_line,
+    with_person_line,
+)
 
 CycleError = _GraphlibCycleError
 
@@ -750,8 +756,10 @@ def _iterator_validation_errors(
             try:
                 _batch_items(node.params)
             except ValueError as exc:
+                # The run-time check's own line (with_person_line), or None
+                # for the checks only an agent reaches (a non-string field).
                 errors.append(ValidationErrorDetail(
-                    node_id=node.id, port_id="set", message=str(exc),
+                    node_id=node.id, port_id="set", message=str(exc), person=person_line(exc),
                 ))
             continue
         if node.definition_id not in _ITERATOR_NODE_IDS:
@@ -761,6 +769,7 @@ def _iterator_validation_errors(
             errors.append(ValidationErrorDetail(
                 node_id=node.id, port_id="array",
                 message="Iterator batch_size_cap must be an integer from 1 to 25",
+                person="Set the node's Batch Size Cap to a whole number from 1 to 25.",
             ))
     try:
         order = topological_sort(nodes, edges)
@@ -785,6 +794,9 @@ def _iterator_validation_errors(
                 message="Joining independent iterator batches is unsupported. "
                         "Use one iterator for the shared downstream workflow; "
                         "Nebula will not implicitly multiply generation requests.",
+                person="This node takes items from two separate Batch or iterator nodes. Nebula won't "
+                       "combine them, because that would multiply the paid runs. Feed it from one of "
+                       "them, then run it again.",
             ))
         policy = operation_policy(node_map[nid].definition_id)
         if upstream and policy is not None and policy.provider == "worldlabs":
@@ -792,6 +804,8 @@ def _iterator_validation_errors(
                 node_id=nid, port_id="",
                 message="World Labs recovery-aware operations cannot run inside an iterator. "
                         "Use separate tracked nodes so every operation retains its own recovery ID.",
+                person="A World Labs node can't run once for each item of a Batch or iterator. Give "
+                       "each World Labs run its own node, then run them one at a time.",
             ))
         ancestors[nid] = upstream | ({nid} if node_map[nid].definition_id in _FANOUT_NODE_IDS else set())
     return errors
@@ -829,6 +843,7 @@ def validate_graph(
             node_id=issue.node_id,
             port_id=issue.port_id,
             message=issue.message,
+            person=issue.person,
         )
         for issue in edge_contracts.issues
     )
@@ -859,6 +874,7 @@ def validate_graph(
                         node_id=node.id,
                         port_id="",
                         message=f"Missing API key: {env_key}",
+                        person=missing_key_line([env_key]),
                     )
                 )
             continue
@@ -871,6 +887,7 @@ def validate_graph(
                             node_id=node.id,
                             port_id=port["id"],
                             message=f"Required input port '{port['id']}' is not connected",
+                            person=port_line(port.get("label") or ""),
                         )
                     )
 
@@ -895,8 +912,10 @@ def validate_graph(
         if krea_account:
             from services.krea_connector import is_krea_connected
             if not is_krea_connected():
-                errors.append(ValidationErrorDetail(node_id=node.id, port_id="",
-                                                   message="Connect your Krea account in Settings before running this recipe"))
+                errors.append(ValidationErrorDetail(
+                    node_id=node.id, port_id="",
+                    message="Connect your Krea account in Settings before running this recipe",
+                    person="Connect your Krea account in Settings, then run the node again."))
         from services import node_route
         if node_route.has_routes(node_def) and not krea_account:
             # A route-table node runs on its chosen route (or Auto's), never
@@ -905,7 +924,9 @@ def validate_graph(
             routed = node_route.with_wired_blockers(node_def, node.params, wired)
             unavailable = node_route.route_unavailable(node_def, routed, api_keys)
             if unavailable is not None:
-                errors.append(ValidationErrorDetail(node_id=node.id, port_id="", message=unavailable["message"]))
+                errors.append(ValidationErrorDetail(
+                    node_id=node.id, port_id="", message=unavailable["message"],
+                    person=node_route.route_unavailable_line(node_def, routed, api_keys)))
         elif key_names and not krea_account and not any(api_keys.get(k) for k in key_names):
             key_display = " or ".join(key_names)
             errors.append(
@@ -913,6 +934,7 @@ def validate_graph(
                     node_id=node.id,
                     port_id="",
                     message=f"Missing API key: {key_display}",
+                    person=missing_key_line(key_names),
                 )
             )
 
@@ -951,6 +973,9 @@ def validate_graph(
                         node_id=node.id,
                         port_id="prompt",
                         message=capability_error,
+                        # Written for the person already (3c: the guardrail
+                        # sentence shows as it is).
+                        person=capability_error,
                     )
                 )
 

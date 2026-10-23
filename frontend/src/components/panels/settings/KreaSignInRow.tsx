@@ -7,6 +7,7 @@ import { ProviderRow } from './ProviderRow';
 import { KREA_ROW, type RowTone } from './rowHelpers';
 import type { KreaController } from './useKreaConnection';
 import '../../../styles/krea-connection.css';
+import { failureMessage } from '../../../lib/errorCopy';
 
 const STATUS: Record<KreaConnectionState['status'], { label: string; tone: RowTone }> = {
   disconnected: { label: 'Not signed in', tone: 'idle' },
@@ -31,7 +32,7 @@ function KreaPlans() {
     setBusy(true);
     setError(null);
     try { await action(); }
-    catch (value) { setError(value instanceof Error ? value.message : 'Krea plans are unavailable.'); }
+    catch (value) { setError(failureMessage(value, "Couldn't load the Krea plans.")); }
     finally { setBusy(false); }
   }
 

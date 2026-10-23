@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { CommonsCloseBatch } from '../src/components/commons/CommonsCloseBatch';
+import { RequestFailedError } from '../src/lib/errorCopy';
 
 const api = vi.hoisted(() => ({ close: vi.fn() }));
 vi.mock('../src/lib/commonsApi', () => ({ commonsEvaluationApi: api }));
@@ -32,7 +33,8 @@ it('closes once with the current revision after confirmation', async () => {
 });
 
 it('shows the server refusal and stays open', async () => {
-  api.close.mockRejectedValue(new Error('A grading attempt is still running. Close after it finishes.'));
+  // Round 3e: the API's typed refusal, as commonsApi throws it.
+  api.close.mockRejectedValue(new RequestFailedError("Couldn't close the batch.", 409, { reason: 'A grading attempt is still running. Close after it finishes.' }));
   render(<CommonsCloseBatch revision={1} assisted={false} disabled={false} onClosed={vi.fn()} />);
   fireEvent.click(screen.getByText('Close without sealing…'));
   fireEvent.click(screen.getByText('Close without sealing'));

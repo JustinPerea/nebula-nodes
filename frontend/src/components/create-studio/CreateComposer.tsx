@@ -6,6 +6,7 @@ import { ModelPicker } from './ModelPicker';
 import { ParamPills } from './ParamPills';
 import { isCreateModel } from '../../lib/createModels';
 import { ProviderReadinessBadge } from '../ProviderReadinessBadge';
+import { failureMessage } from '../../lib/errorCopy';
 
 interface CreateComposerProps {
   modelDef: ModelNodeDefinition | null;
@@ -71,7 +72,7 @@ export function CreateComposer({
       onPromptChange(enhanced);
     } catch (err) {
       if (mounted.current && request === enhanceRequest.current && currentPrompt.current === original) {
-        setEnhanceError(err instanceof Error ? err.message : 'Enhance failed.');
+        setEnhanceError(failureMessage(err, "Couldn't enhance the prompt."));
       }
     } finally {
       if (mounted.current && request === enhanceRequest.current) setEnhancing(false);

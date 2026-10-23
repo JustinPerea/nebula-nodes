@@ -7,6 +7,7 @@ import { CreateView } from '../../src/components/create-studio/CreateView';
 import { CREATE_DRAFT_STORAGE_KEY, useCreateDraftStore } from '../../src/store/createDraftStore';
 import { GRAPH_PARAMS_VERSION } from '../../src/lib/savedParamsUpgrades';
 import { publishOpenProject } from '../../src/lib/currentProject';
+import { RequestFailedError } from '../../src/lib/errorCopy';
 
 const mocks = vi.hoisted(() => ({
   createPreset: vi.fn(), fetchPresets: vi.fn(),
@@ -96,7 +97,7 @@ describe('Create style saving', () => {
     fireEvent.click(view.getByRole('button', { name: 'OK' }));
     await waitFor(() => expect(mocks.createPreset).toHaveBeenCalledTimes(1));
     expect(view.getByRole('button', { name: 'Saving…' })).toBeDisabled();
-    await act(async () => { reject(new Error('Preset storage unavailable')); });
+    await act(async () => { reject(new RequestFailedError("Couldn't save the style.", 409, { reason: 'Preset storage unavailable.' })); });
     expect(view.getByRole('alert')).toHaveTextContent('Preset storage unavailable');
     fireEvent.click(view.getByRole('button', { name: 'Save current' }));
     expect(await view.findByRole('textbox', { name: 'Name this style:' })).toHaveValue('Retry name');
@@ -158,7 +159,7 @@ describe('Create result save delegation', () => {
     expect(mocks.saveToFolder).toHaveBeenCalledExactlyOnceWith('/api/outputs/result.png');
     expect(view.getByTitle('Saving…')).toBeDisabled();
     expect(view.queryByTitle('Saved!')).toBeNull();
-    await act(async () => { reject(new Error('Export storage unavailable')); });
+    await act(async () => { reject(new RequestFailedError("Couldn't save the file.", 409, { reason: 'Export storage unavailable.' })); });
     expect(view.getByRole('alert')).toHaveTextContent('Export storage unavailable');
     expect(view.getByTitle('Save to folder')).toBeEnabled();
     expect(view.queryByTitle('Saved!')).toBeNull();

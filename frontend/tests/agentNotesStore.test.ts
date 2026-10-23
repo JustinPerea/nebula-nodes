@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentNote } from '../src/lib/agentNotes';
+import { RequestFailedError } from '../src/lib/errorCopy';
 
 const ws = vi.hoisted(() => ({ handlers: [] as Array<(event: unknown) => void> }));
 const api = vi.hoisted(() => ({
@@ -146,14 +147,16 @@ describe('agent notes store (Updates)', () => {
 
   it('dismisses optimistically and puts the update back if the server refuses', async () => {
     sync('p1', [note('an_1')], 1);
-    api.dismissAgentNote.mockRejectedValue(new Error('That update is no longer in the list'));
+    // Round 3e: a refusal arrives as the API's typed error (apiRequest), not a plain Error,
+    // whose own text no surface shows any more.
+    api.dismissAgentNote.mockRejectedValue(new RequestFailedError("Couldn't dismiss the update.", 404, { reason: 'That update is no longer in the list.' }));
     const done = useAgentNotesStore.getState().dismiss({ kind: 'canvas' }, 'an_1');
     expect(selectCanvasList(useAgentNotesStore.getState()).notes[0].dismissedAt).toBeTruthy();
     expect(selectCanvasList(useAgentNotesStore.getState()).unread).toBe(0);
     await done;
     expect(selectCanvasList(useAgentNotesStore.getState()).notes[0].dismissedAt).toBeNull();
     expect(selectCanvasList(useAgentNotesStore.getState()).unread).toBe(1);
-    expect(useAgentNotesStore.getState().error).toBe('That update is no longer in the list');
+    expect(useAgentNotesStore.getState().error).toBe("Couldn't dismiss the update. That update is no longer in the list.");
   });
 
   it('loads the canvas list on demand', async () => {

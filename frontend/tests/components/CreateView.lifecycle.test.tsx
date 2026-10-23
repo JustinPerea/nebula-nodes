@@ -163,7 +163,7 @@ describe('Create lifecycle across view visits', () => {
     mocks.author.mockResolvedValueOnce({ modelNodeIds: [], allNodeIds: [] });
     const view = render(<CreateView />);
     fireEvent.click(view.getByRole('button', { name: 'Generate' }));
-    expect(await view.findByRole('alert')).toHaveTextContent('Could not create generation nodes');
+    expect(await view.findByRole('alert')).toHaveTextContent("Couldn't generate. Its nodes weren't added to the canvas.");
     expect(mocks.store!.getState().createLaunchingIds).toHaveLength(0);
     expect(mocks.execute).not.toHaveBeenCalled();
     fireEvent.click(view.getByRole('button', { name: 'Generate' }));

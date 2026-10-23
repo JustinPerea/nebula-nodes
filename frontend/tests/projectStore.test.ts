@@ -105,7 +105,8 @@ describe('saved project coordinator', () => {
     expect(projects.openProject).not.toHaveBeenCalled();
     expect(useProjectStore.getState().activeProject?.id).toBe('alpha');
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('alpha');
-    expect(useProjectStore.getState().error).toBe('Disk full');
+    // Error copy round 3e: a plain Error's own words never show; the action's heading and GM's general line do.
+    expect(useProjectStore.getState().error).toBe("Couldn't open the project. That didn't work. Try again, or reload if it keeps happening.");
   });
   it('creates a blank canvas without replaying a recipe or clearing the outgoing saved project', async () => {
     await useProjectStore.getState().initialize();
@@ -175,7 +176,8 @@ describe('saved project coordinator', () => {
     await useProjectStore.getState().restore('beta');
     expect(useProjectStore.getState().trash).toEqual([]);
     expect(useProjectStore.getState().lastDeleted).toBeNull();
-    expect(useProjectStore.getState().error).toBe('That project is no longer in Recently deleted');
+    // Round 3e: the action's heading leads a reason the request carried without one.
+    expect(useProjectStore.getState().error).toBe("Couldn't restore the project. That project is no longer in Recently deleted");
   });
   it('purges one trashed project or empties the trash', async () => {
     vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project()], trash: [trashed('beta'), trashed('gamma')], activeProjectId: 'alpha', workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION });
@@ -200,7 +202,7 @@ describe('saved project coordinator', () => {
     expect(useProjectStore.getState().activeProject?.id).toBe('alpha');
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('alpha');
     expect(useGraphStore.getState().isImportingGraph).toBe(false);
-    expect(useProjectStore.getState().error).toBe('This project view is out of date.');
+    expect(useProjectStore.getState().error).toBe("Couldn't delete the project. This project view is out of date.");
     vi.mocked(projects.deleteProject).mockClear();
     useGraphStore.setState({ isExecuting: true });
     await useProjectStore.getState().remove('alpha');

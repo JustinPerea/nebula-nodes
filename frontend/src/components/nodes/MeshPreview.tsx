@@ -11,7 +11,7 @@ import { Download, X } from 'lucide-react';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { AssetByteLimitError, readBoundedAssetResponse } from '../../lib/boundedAsset';
 import { downloadWorldAsset, worldAssetFilename } from '../../lib/worldDownload';
-import { ConnectionLostError, oneLine, requestError, requestSucceeded } from '../../lib/errorCopy';
+import { ConnectionLostError, oneLine, requestError, requestSucceeded, FailureNotice, failureMessage } from '../../lib/errorCopy';
 import { isSafeWorldUrl } from '../../lib/worldValue';
 import { isSplatExport, meshFormatLabel } from '../../lib/meshFormat';
 
@@ -168,7 +168,7 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
       // GM, error-copy round 2: "Couldn't load the 3D preview." then the
       // reason; the status stays in the console.
       const heading = "Couldn't load the 3D preview.";
-      const failed = (reason: string) => new Error(oneLine({ heading, reason }));
+      const failed = (reason: string) => new FailureNotice(heading, reason);
       try {
         if (!isSafeWorldUrl(src)) throw failed('The mesh URL is not safe to preview.');
         let response: Response;
@@ -199,7 +199,7 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
             status: 'error',
             errorMessage: error instanceof AssetByteLimitError
               ? oneLine({ heading, reason: 'This model is too large for a safe interactive preview. Download it instead.' })
-              : error instanceof Error ? error.message : 'Interactive preview unavailable.',
+              : failureMessage(error, heading),
           });
         }
       }
@@ -263,7 +263,7 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
           'This mesh is too large for a safe in-browser download. Use the local Nebula output folder instead.',
       });
     } catch (error) {
-      setDownloadError(error instanceof Error ? error.message : "Couldn't download the 3D model.");
+      setDownloadError(failureMessage(error, "Couldn't download the 3D model."));
     }
   }, [src]);
 

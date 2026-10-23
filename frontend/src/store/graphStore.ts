@@ -76,7 +76,8 @@ import {
 } from '../lib/backend';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, waitingOnWorldLabs } from '../lib/worldLabsWaiting';
-import { FailureNotice, REFUSED_FALLBACK_COPY, copyForStatus, failureCopy, readDetail, requestError, warnFailure } from '../lib/errorCopy';
+import { FailureNotice, REFUSED_FALLBACK_COPY, copyForStatus, failureCopy, failureMessage, readDetail, requestError, warnFailure } from '../lib/errorCopy';
+import { NOTHING_RAN_LINE, OTHER_NODE_LINE, SHOT_NOT_STARTED_LINE, validationReadings, writtenReading, type ValidationReading } from '../lib/validationCopy';
 import {
   RUNTIME_FIELDS, applySlice, diffCanvas, edgeKey, editArrivedText, foldArrange, foreignSource, isForeignEdit, isOwnEcho,
   restoreRequest, undoNoticeText, type EditOrigin, type ForeignEdit,
@@ -350,32 +351,30 @@ function markNodesErrored(
   });
 }
 
+/** The pre-run check's refusal on every node in the run (error copy round
+ * 3e, lib/validationCopy.ts): a named node reads its checks' lines (the
+ * agents' text stays in `error`); a node with nothing wrong of its own reads
+ * that another node needs a fix; an answer that names no node, a written
+ * line. Never "Validation failed before execution". */
 function markNodesWithValidationErrors(
   nodes: Node<NodeData>[],
   nodeIds: Set<string>,
   errors: ExecutionValidationError[] | undefined,
-  fallback: string,
 ): Node<NodeData>[] {
-  const messageByNode = new Map<string, string>();
-  let globalMessage: string | undefined;
-  for (const error of errors ?? []) {
-    if (error.nodeId) {
-      if (!messageByNode.has(error.nodeId)) messageByNode.set(error.nodeId, error.message);
-    } else if (!globalMessage) {
-      globalMessage = error.message;
-    }
-  }
+  const { byNode, global } = validationReadings(errors);
+  const fallback = writtenReading(byNode.size ? OTHER_NODE_LINE : NOTHING_RAN_LINE);
   return nodes.map((node) => {
     if (!nodeIds.has(node.id)) return node;
+    const reading = byNode.get(node.id) ?? global ?? fallback;
     return {
       ...node,
       data: {
         ...node.data,
         state: 'error' as const,
-        error: messageByNode.get(node.id) ?? globalMessage ?? fallback,
-        errorCategory: undefined,
+        error: reading.error,
+        errorCategory: reading.errorCategory,
         errorFriendly: undefined,
-        errorPerson: undefined,
+        errorPerson: reading.errorPerson,
         progress: undefined,
         streamingText: undefined,
         streamingPartials: undefined,
@@ -2355,7 +2354,6 @@ async function executeHistoricalRun(
           state.nodes,
           scopeIds,
           'errors' in result ? result.errors as ExecutionValidationError[] : undefined,
-          'Validation failed before execution. Check the saved inputs and API keys.',
         ),
         ...ownershipState(),
       }));
@@ -2373,7 +2371,7 @@ async function executeHistoricalRun(
       nodes: markNodesErrored(
         state.nodes,
         scopeIds,
-        err instanceof Error ? err.message : "Couldn't start the run.",
+        failureMessage(err, "Couldn't start the run."),
       ),
       ...ownershipState(),
     }));
@@ -2394,20 +2392,20 @@ async function ensureBackendFreshForLocalCanvas(
   } catch {
     set({ backendFreshStartPending: true });
     if (!backendWasDiscovered && getCachedBackendBaseUrl() === null) return false;
-    throw new Error(
-      'Nebula lost contact with the known backend before node creation. No local copy was added; reconnect and try again.',
-    );
+    // Written lines under reportNodeCreationFailure's "Couldn't add {node}."
+    // (error copy round 3e).
+    throw new FailureNotice('', "Nebula lost contact with its backend, so the node wasn't added. Reconnect, then add it again.");
   }
 
   if (!exportRes.ok) {
-    throw new Error(await backendRejectionReason(exportRes, "Couldn't check the canvas."));
+    throw new FailureNotice('', await backendRejectionReason(exportRes, "Couldn't check the canvas."));
   }
 
   let exported: { empty?: boolean };
   try {
     exported = (await exportRes.json()) as { empty?: boolean };
   } catch {
-    throw new Error('Backend returned an invalid graph export response.');
+    throw new FailureNotice('', "Nebula couldn't read the backend's answer, so the node wasn't added. Reload, then add it again.");
   }
 
   if (exported.empty === false) {
@@ -2417,12 +2415,11 @@ async function ensureBackendFreshForLocalCanvas(
       clearRes = await graphMutationFetch('/api/graph?force=true', { method: 'DELETE' });
     } catch {
       set({ backendFreshStartPending: true });
-      throw new Error(
-        'Nebula lost the response after sending the graph-clear request. No local node was added because the clear may have completed; reload before trying again.',
-      );
+      throw new FailureNotice('', "Nebula lost the answer to clearing the canvas, so the node wasn't added. "
+        + 'The canvas may be clear already. Reload before you add it again.');
     }
     if (!clearRes.ok) {
-      throw new Error(await backendRejectionReason(clearRes, "Couldn't clear the canvas."));
+      throw new FailureNotice('', await backendRejectionReason(clearRes, "Couldn't clear the canvas."));
     }
   }
 
@@ -2973,7 +2970,11 @@ wsClient.subscribe((event) => {
               outputs: paperSource.snapshot
                 ? { image: { type: 'Image' as const, value: paperSource.snapshot.filePath } }
                 : existing.data.outputs,
-              state: paperSource.snapshot ? 'complete' as const : 'idle' as const,
+              // The backend's 'error' (a run that couldn't read the pinned
+              // snapshot) stands, as worked out above; the snapshot decides
+              // the state only when there is none (error copy round 3e).
+              ...(cliNode.data.state === 'error' ? {}
+                : { state: paperSource.snapshot ? 'complete' as const : 'idle' as const }),
             } : {}),
             ...(cinemaScene ? {
               params: { ...cliNode.data.params, scene: cinemaScene },
@@ -3444,10 +3445,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     try {
       backendFresh = await ensureBackendFreshForLocalCanvas(localCanvasWasEmpty, set, get);
     } catch (err) {
-      return reportNodeCreationFailure(
-        definition.displayName,
-        err instanceof Error ? err.message : REFUSED_FALLBACK_COPY,
-      );
+      return reportNodeCreationFailure(definition.displayName, failureCopy(err).reason);
     }
     if (!backendFresh) return addLocally(new Error('Backend is unavailable.'));
 
@@ -4642,7 +4640,6 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             state.nodes,
             new Set(nodesInExecutionScope(state.nodes, state.edges).map((node) => node.id)),
             result.errors,
-            'Validation failed before execution. Check required inputs and API keys.',
           ),
           ...ownershipState(),
         }));
@@ -4660,7 +4657,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         nodes: markNodesErrored(
           state.nodes,
           new Set(nodesInExecutionScope(state.nodes, state.edges).map((node) => node.id)),
-          err instanceof Error ? err.message : "Couldn't start the run.",
+          failureMessage(err, "Couldn't start the run."),
         ),
         ...ownershipState(),
       }));
@@ -4719,7 +4716,6 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             state.nodes,
             new Set(nodesInExecutionScope(state.nodes, state.edges, nodeId).map((node) => node.id)),
             result.errors,
-            'Validation failed before execution. Check required inputs and API keys.',
           ),
           ...ownershipState(),
         }));
@@ -4737,7 +4733,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         nodes: markNodesErrored(
           state.nodes,
           new Set(nodesInExecutionScope(state.nodes, state.edges, nodeId).map((node) => node.id)),
-          err instanceof Error ? err.message : "Couldn't run the node.",
+          failureMessage(err, "Couldn't run the node."),
         ),
         ...ownershipState(),
       }));
@@ -4800,12 +4796,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
     // Clear the optimistic spinner to an error state when no graphSync will
     // follow (up-front validation failure or a thrown request).
-    const failShot = (message: string) => {
+    const failShot = (message: string, reading?: ValidationReading) => {
       const cur = get().nodes.find((n) => n.id === nodeId);
       const curScene = (cur?.data.params as { scene?: CinemaSceneSpec } | undefined)?.scene;
       if (!curScene) return;
       const curShot = curScene.shots.find((s) => s.id === shotId);
-      applySceneToNode(set, nodeId, patchShot(curScene, { ...withoutShotError(curShot?.output), status: 'error', error: message }));
+      applySceneToNode(set, nodeId, patchShot(curScene, { ...withoutShotError(curShot?.output), status: 'error',
+        error: reading?.error ?? message,
+        ...(reading?.errorPerson ? { errorPerson: reading.errorPerson } : {}),
+        ...(reading?.errorCategory ? { errorCategory: reading.errorCategory } : {}) }));
     };
 
     const runId = uuidv4();
@@ -4822,7 +4821,13 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       if (!ownsRun(runId)) return;
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
       if (result.status !== 'started') {
-        failShot(result.status === 'validation_error' ? 'Validation failed. Check inputs and API keys.' : notStartedMessage("Couldn't start the shot.", result.status));
+        if (result.status === 'validation_error') {
+          // The scene's own checks' line, or that another node needs a fix
+          // (error copy round 3e); the answer names no node from an older backend.
+          const { byNode, global } = validationReadings(result.errors);
+          failShot(SHOT_NOT_STARTED_LINE, byNode.get(nodeId) ?? global
+            ?? (byNode.size ? writtenReading(OTHER_NODE_LINE) : writtenReading(SHOT_NOT_STARTED_LINE)));
+        } else failShot(notStartedMessage("Couldn't start the shot.", result.status));
         settleTrackedExecutionStatus('failed', runId, set, get);
         return;
       }
@@ -4834,7 +4839,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       if (!ownsRun(runId)) return;
       console.error('Failed to generate shot:', err);
       if (err instanceof ExecutionStartRejectedError) {
-        failShot(err.message);
+        failShot(failureMessage(err, "Couldn't start the shot."));
         settleTrackedExecutionStatus('failed', runId, set, get);
       } else await reconcileWorldLabsExecutionStatus(runId, set, get);
     }
@@ -4945,7 +4950,6 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             state.nodes,
             idSet,
             result.errors,
-            'Validation failed before generation. Check required inputs and API keys.',
           ),
           ...ownershipState(),
         }));
@@ -4960,7 +4964,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
       closeCurrentRun(set, { status: 'failed' });
       set((state) => ({
-        nodes: markNodesErrored(state.nodes, idSet, err instanceof Error ? err.message : "Couldn't start the run."),
+        nodes: markNodesErrored(state.nodes, idSet, failureMessage(err, "Couldn't start the run.")),
         ...ownershipState(),
       }));
     }
@@ -5011,8 +5015,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
       closeTrackedRun(set, runId, { status: 'failed' });
       set((state) => ({ nodes: result.status === 'validation_error'
-        ? markNodesWithValidationErrors(state.nodes, idSet, result.errors,
-          'Validation failed before generation. Check required inputs and API keys.')
+        ? markNodesWithValidationErrors(state.nodes, idSet, result.errors)
         : markNodesErrored(state.nodes, idSet, notStartedMessage("Couldn't start the run.", result.status)) }));
     } catch (error) {
       settleFailedStart(runId, error);
@@ -5026,12 +5029,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
       closeTrackedRun(set, runId, { status: cancellationRequestedRunIds.has(runId) ? 'cancelled' : 'failed' });
       set((state) => ({ nodes: markNodesErrored(state.nodes, idSet,
-        error instanceof Error ? error.message : "Couldn't start the run.") }));
+        failureMessage(error, "Couldn't start the run.")) }));
     }
   },
 
   authorGenerationCluster: async (request) => {
-    if (get().isImportingGraph) throw new Error('Wait for the graph import to finish.');
+    if (get().isImportingGraph) throw new FailureNotice("Couldn't generate.", 'Wait for the graph import to finish.');
     const def = NODE_DEFINITIONS[request.definitionId];
     if (!def) return { modelNodeIds: [], allNodeIds: [] };
 
@@ -6038,11 +6041,14 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       case 'validationError': {
         const runId = event.runId ?? currentRunId;
         // CLI runs also annotate their validation errors, but an unrelated
-        // external validation cannot overwrite a locally owned node.
-        for (const error of event.errors) {
-          if (error.nodeId && ((runId && ownsRun(runId)) || !scopeOverlaps([error.nodeId]))) {
-            get().updateNodeData(error.nodeId, {
-              state: 'error', error: error.message, errorCategory: undefined, errorFriendly: undefined, errorPerson: undefined,
+        // external validation cannot overwrite a locally owned node. Each
+        // node reads all its checks together (lib/validationCopy.ts), as its
+        // run call's answer and a reload do.
+        for (const [nodeId, reading] of validationReadings(event.errors).byNode) {
+          if ((runId && ownsRun(runId)) || !scopeOverlaps([nodeId])) {
+            get().updateNodeData(nodeId, {
+              state: 'error', error: reading.error, errorCategory: reading.errorCategory, errorFriendly: undefined,
+              errorPerson: reading.errorPerson,
             });
           }
         }

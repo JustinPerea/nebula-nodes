@@ -4,6 +4,7 @@ import type { AssetProposalKind } from './assetProposals';
 import { requestReview } from '../store/assetProposalReviewRequest';
 import { openWorkspace } from './goToCanvas';
 import { refuseWhileCommonsUnsaved } from './commonsUnsaved';
+import { writtenLine } from './errorCopy';
 
 /**
  * Review on an asset proposal's Update (Justin's Q92 a): take the person to
@@ -17,7 +18,7 @@ export async function reviewAssetProposal(op: Record<string, unknown>): Promise<
   const kind = op.target as AssetProposalKind;
   const targetId = typeof op.targetId === 'string' ? op.targetId : '';
   if (!targetId || (kind !== 'project' && kind !== 'moodboard' && kind !== 'commons')) {
-    throw new Error("This update's proposal can't be opened from here.");
+    throw writtenLine("This update's proposal can't be opened from here.");
   }
   // Every Review but a Commons ask leaves the screen it starts on: not while
   // the Commons holds unsaved labels unless the person chose to leave (the
@@ -26,7 +27,7 @@ export async function reviewAssetProposal(op: Record<string, unknown>): Promise<
   if (kind !== 'commons') refuseWhileCommonsUnsaved();
   const ui = useUIStore.getState();
   if (kind === 'commons' && !ui.commonsEnabled) {
-    throw new Error('Turn on the Commons in Settings to review this proposal.');
+    throw writtenLine('Turn on the Commons in Settings to review this proposal.');
   }
   requestReview({ kind, targetId });
   if (kind === 'project') {

@@ -12,6 +12,7 @@ import {
   type AgentNotesEvent,
   type AgentNotesSurface,
 } from '../lib/agentNotes';
+import { failureMessage } from '../lib/errorCopy';
 
 /**
  * Updates for every surface, keyed `canvas:<projectId>` and `board:<boardId>`.
@@ -122,7 +123,7 @@ async function sendRead(
     if (keyFor(getState(), surface) !== key || typeof result.unread !== 'number') return;
     setState((state) => ({ lists: withList(state.lists, key, (list) => ({ ...list, unread: result.unread })) }));
   } catch (error) {
-    setState({ error: error instanceof Error ? error.message : String(error) });
+    setState({ error: failureMessage(error, "Couldn't mark the notes read.") });
     // (A board's list is read again by the corner when this error shows.)
     if (surface.kind === 'canvas') void getState().hydrateCanvas();
   }
@@ -268,7 +269,7 @@ export const useAgentNotesStore = create<AgentNotesState>((set, get) => ({
       await dismissAgentNote(surface, id);
     } catch (error) {
       set((state) => ({
-        error: error instanceof Error ? error.message : String(error),
+        error: failureMessage(error, "Couldn't dismiss the note."),
         lists: withList(state.lists, key, (list) => {
           const notes = list.notes.map((n) => (n.id === id ? before : n));
           return { ...list, notes, unread: countUnread(notes) };

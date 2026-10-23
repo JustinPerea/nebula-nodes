@@ -198,14 +198,16 @@ describe.each([
   it("a project item offers Move to Global; a refused move says why", async () => {
     api[kind === 'moodboard' ? 'fetchMoodboards' : 'fetchCharacters'].mockResolvedValue([
       { ...(kind === 'moodboard' ? board : character), projectId: 'pA' }]);
-    api.moveStoredAsset.mockRejectedValueOnce(new Error('Move failed: No project has the id'));
+    // Round 3e: a refusal arrives as the API's typed error (apiRequest), not a plain Error,
+    // whose own text no surface shows any more.
+    api.moveStoredAsset.mockRejectedValueOnce(new RequestFailedError("Couldn't move it.", 404, { reason: 'No project has the id.' }));
     await openTab(tab);
     fireEvent.click(screen.getByRole('tab', { name: 'Project' }));
     fireEvent.click(await screen.findByRole('button', { name: new RegExp(`^${item}`) }));
     fireEvent.click(screen.getByRole('button', { name: /^Move/ }));
     expect(screen.getAllByRole('menuitem').map((el) => el.textContent)).toEqual(['Move to Global']);
     fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Global' }));
-    expect(await screen.findByText('Move failed: No project has the id')).toBeTruthy();
+    expect(await screen.findByText("Couldn't move it. No project has the id.")).toBeTruthy();
     expect(api.moveStoredAsset).toHaveBeenCalledWith(kind, id, null);
   });
 });

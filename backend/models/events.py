@@ -122,6 +122,14 @@ class ValidationErrorDetail(BaseModel):
     node_id: str
     port_id: str
     message: str
+    # The person's line for this check (error copy round 3e), as ErrorEvent's
+    # `person`: what the canvas card shows, naming a field by its label, an
+    # input in words and a key by its provider, never a key, id or env-var
+    # name. `message` keeps the specific text word for word for agents (run
+    # results, look_at_canvas, the run record). Additive: None is a check
+    # only an agent or a damaged saved graph reaches; the card shows GM's
+    # general line with `message` behind "Details".
+    person: str | None = None
 
 
 class ValidationErrorEvent(RunScopedEvent):

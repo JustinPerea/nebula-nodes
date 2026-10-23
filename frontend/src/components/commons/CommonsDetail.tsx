@@ -13,6 +13,7 @@ import { useCommonsPrompt } from '../../hooks/useCommonsPrompt';
 import { FailureLines } from '../failure/FailureLines';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import { ANALYSIS_FAILED, analysisFailureReason } from '../../lib/commonsAnalysisCopy';
+import { failureMessage } from '../../lib/errorCopy';
 
 interface Props {
   assetId: string;
@@ -169,7 +170,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
       setDetail(await commonsApi.asset(assetId));
       setError(null);
     } catch (e) {
-      setError((e as Error).message);
+      setError(failureMessage(e, "Couldn't load the reference."));
     }
   }, [assetId]);
 
@@ -177,7 +178,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
     let cancelled = false;
     commonsApi.asset(assetId).then(
       (d) => { if (!cancelled) setDetail(d); },
-      (e: Error) => { if (!cancelled) setError(e.message); },
+      (e: unknown) => { if (!cancelled) setError(failureMessage(e, "Couldn't load the reference.")); },
     );
     return () => { cancelled = true; };
   }, [assetId]);
@@ -206,7 +207,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
       onChanged();
       return true;
     } catch (e) {
-      setError((e as Error).message);
+      setError(failureMessage(e, "Couldn't save the change."));
       return false;
     }
   }, [load, onChanged]);
@@ -283,7 +284,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
       await commonsApi.purge(assetId);
       onDeleted();
     } catch (e) {
-      setError((e as Error).message);
+      setError(failureMessage(e, "Couldn't delete the reference."));
     }
   };
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import '../../styles/personal-agents.css';
+import { failureMessage } from '../../lib/errorCopy';
 
 /** The one-time notice before Nebula starts any of the person's own agents.
  * The backend refuses to start one until this is acknowledged. */
@@ -26,7 +27,7 @@ export function PersonalAgentWarning({ agentName, onAccept, onCancel }: {
     try {
       await onAccept();
     } catch (exc) {
-      setError(exc instanceof Error ? exc.message : String(exc));
+      setError(failureMessage(exc, "Couldn't save your answer."));
       setBusy(false);
     }
   };

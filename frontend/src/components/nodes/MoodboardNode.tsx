@@ -8,6 +8,8 @@ import { storedImageView } from '../../lib/storedImage';
 import { OutsideImageNote } from '../OutsideImageNote';
 import { useOpenOnDoubleClick } from './useOpenOnDoubleClick';
 import { moodboardImagesLabel } from '../../lib/moodboardCount';
+import type { NodeData } from '../../types';
+import { NodeRunError } from './NodeError';
 import '../../styles/moodboard-node.css';
 
 // The node stores only the board's id (its `moodboard` param, which agents
@@ -79,6 +81,7 @@ export function MoodboardNode({ id, data, selected }: NodeProps) {
           Open Moodboard
         </button>
       )}
+      <NodeRunError data={data as unknown as NodeData} className="moodboard-node__run-error" />
       {OUTPUTS.map((output, index) => (
         <div
           key={output.id}

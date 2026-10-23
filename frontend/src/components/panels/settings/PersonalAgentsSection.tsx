@@ -10,6 +10,7 @@ import {
 } from '../../../lib/api';
 import { PERSONAL_AGENTS_CHANGED_EVENT } from '../../../lib/personalAgentsEvents';
 import '../../../styles/personal-agents.css';
+import { failureMessage } from '../../../lib/errorCopy';
 
 const STATUS_TEXT: Record<PersonalAgent['status'], string> = {
   ready: 'Ready',
@@ -129,7 +130,7 @@ export function PersonalAgentsSection() {
   const load = useCallback(() => {
     fetchPersonalAgents()
       .then((next) => { setList(next); setError(null); })
-      .catch((exc: unknown) => setError(exc instanceof Error ? exc.message : String(exc)));
+      .catch((exc: unknown) => setError(failureMessage(exc, "Couldn't load your agents.")));
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -150,7 +151,7 @@ export function PersonalAgentsSection() {
       load();
       announceChange();
     } catch (exc) {
-      setError(exc instanceof Error ? exc.message : String(exc));
+      setError(failureMessage(exc, "Couldn't update your agents."));
     } finally {
       setBusy(false);
     }

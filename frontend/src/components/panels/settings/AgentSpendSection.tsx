@@ -8,6 +8,7 @@ import {
 } from '../../../store/settingsDraftStore';
 import { useUIStore } from '../../../store/uiStore';
 import { ConnectedApps } from './ConnectedApps';
+import { failureMessage } from '../../../lib/errorCopy';
 
 const SESSION_CHOICES = [2, 5, 10, 25, 50, 100] as const;
 const PLAN_RUN_CHOICES = [5, 10, 25, 50, 100, 250] as const;
@@ -39,7 +40,7 @@ function useOutsideSpend() {
   const reload = useCallback(() => {
     getOutsideSpend()
       .then((next) => { setView(next); setError(null); })
-      .catch((exc: unknown) => setError(exc instanceof Error ? exc.message : String(exc)));
+      .catch((exc: unknown) => setError(failureMessage(exc, "Couldn't load the connected apps.")));
   }, []);
   useEffect(() => { reload(); }, [reload]);
   return { view, error, reload };

@@ -61,7 +61,7 @@ export function preflightWorldSpz(
   try {
     headerBytes = sparkUtils.decompressPartialGzip(fileBytes, SPZ_HEADER_BYTES);
   } catch {
-    invalidSpz('header could not be decompressed');
+    invalidSpz('header does not decompress');
   }
   if (headerBytes.byteLength !== SPZ_HEADER_BYTES) invalidSpz('truncated header');
 

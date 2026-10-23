@@ -44,6 +44,11 @@ class PortContractIssue:
     # "retyped": the wire was valid under the port's type before RETYPED_PORTS
     # changed it. A saved project keeps such an edge; a run refuses it.
     kind: str = ""
+    # The person's line (error copy round 3e, ValidationErrorDetail.person):
+    # the input by its label, no node, edge or handle ids. None for states
+    # only an agent or a damaged saved graph reaches (a duplicate id, a wire
+    # to a node that isn't there, an unknown node type).
+    person: str | None = None
 
 
 @dataclass(frozen=True)
@@ -72,6 +77,35 @@ PORT_TYPE_HINTS: dict[tuple[str, str], str] = {
         "Krea 2's Moodboard input takes a Nebula moodboard or the Krea Moodboard node's Moodboard output; "
         "put a Krea moodboard id in the node's Moodboard ID setting instead."),
 }
+# The same, for the card (error copy round 3e): it replaces the general
+# wrong-kind line.
+PORT_TYPE_PERSON_HINTS: dict[tuple[str, str], str] = {
+    ("krea-2-generate", "moodboard"): (
+        "Krea 2's Moodboard input takes a Nebula moodboard now. To use a Krea moodboard, put its ID in the "
+        "node's Moodboard ID field and remove the wire."),
+}
+
+# The card's lines for a wire the run can't use (error copy round 3e).
+STALE_INPUT_LINE = "A wire into this node no longer matches its inputs. Remove it, then connect it again."
+STALE_OUTPUT_LINE = "A wire from this node no longer matches its outputs. Remove it, then connect it again."
+
+
+def _input_name(port: Mapping[str, Any] | None, port_id: str) -> str:
+    from execution.person_line import port_name
+
+    return port_name((port or {}).get("label")) or "this"
+
+
+def _wrong_kind_line(port: Mapping[str, Any] | None, port_id: str) -> str:
+    return (f"The wire into the node's {_input_name(port, port_id)} input brings something it can't take. "
+            "Remove that wire, then connect a matching output.")
+
+
+def _too_many_line(port: Mapping[str, Any] | None, port_id: str, limit: int) -> str:
+    takes = "one wire" if limit == 1 else f"up to {limit} wires"
+    extra = "the extra one" if limit == 1 else "the extra ones"
+    return (f"The node's {_input_name(port, port_id)} input takes {takes}. Remove {extra}, then run the "
+            "node again.")
 
 
 # A configured Replicate node's ports are its model's file inputs; its other
@@ -315,6 +349,7 @@ def validate_edge_contracts(
                         f"{_valid_port_ids({'outputPorts': valid_outputs}, 'outputPorts') or '(none)'}"
                     ),
                     edge_index=index,
+                    person=STALE_OUTPUT_LINE,
                 )
             )
 
@@ -345,6 +380,7 @@ def validate_edge_contracts(
                            and stored_ports(target_node.definition_id, target_node.params) is not None else "")
                     ),
                     edge_index=index,
+                    person=STALE_INPUT_LINE,
                 )
             )
 
@@ -373,6 +409,8 @@ def validate_edge_contracts(
                         kind="retyped" if (was := RETYPED_PORTS.get(
                             (target_node.definition_id, str(target_handle)))) is not None
                         and port_types_compatible(source_type, was) else "",
+                        person=PORT_TYPE_PERSON_HINTS.get((target_node.definition_id, str(target_handle)))
+                        or _wrong_kind_line(target_port.definition, target_handle),
                     )
                 )
 
@@ -397,6 +435,7 @@ def validate_edge_contracts(
                         port_id=target_handle,
                         message=message,
                         edge_index=index,
+                        person=_too_many_line(target_port.definition, target_handle, limit),
                     )
                 )
 

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EvaluationBatch } from '../src/lib/commonsEvaluationTypes';
 import type { ReviewBatch } from '../src/lib/commonsReviewTypes';
 import { CommonsRequestError } from '../src/lib/commonsRequestError';
+import { RequestFailedError } from '../src/lib/errorCopy';
 
 /**
  * The real Blind labeling and Agent review panels inside the real Commons
@@ -256,11 +257,12 @@ describe('Preparing the held-out set outlives the panel', () => {
     expect(screen.queryByRole('alertdialog')).toBeNull();
     await waitFor(() => expect(useUIStore.getState().viewMode).toBe('canvas'));
     first.unmount();
-    fail(new Error('iCloud download failed: fixture'));
+    // Round 3e: the API's typed refusal; a plain Error's own text is never shown.
+    fail(new RequestFailedError("Couldn't prepare the held-out set.", 409, { reason: 'A reference is still downloading from iCloud.' }));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     await comeBack();
-    expect(await screen.findByText('iCloud download failed: fixture')).toHaveAttribute('role', 'alert');
+    expect(await screen.findByText(/A reference is still downloading from iCloud\./)).toHaveAttribute('role', 'alert');
     expect(screen.getByRole('button', { name: 'Prepare 15 held-out references' })).toBeEnabled();
     expect(evaluation.prepare).toHaveBeenCalledTimes(1);
   });
