@@ -289,4 +289,15 @@ A second independent review confirmed five defects, each reproduced (scratch tes
 - Hiding `edit.removals` from agents' sockets instead was the other option. It would change what every socket's graphSync carries, and once agents' restores ignore the records, seeing the ids gives an agent nothing to act with. So the gate is the smaller and stricter change.
 - **Tests (written first):** `test_an_agents_restore_cant_use_the_persons_removal_record` (red on this branch: the agent's restore re-attached the pin), and `test_an_agents_own_undo_still_puts_back_what_its_delete_removed` (green before and after). The finding-4 and finding-5 tests that sent a forged record as Claude now send it from a person's tab (a stale or forged list), so they still exercise the (removal, node) pair and model checks instead of passing at the gate; `test_an_agent_cant_move_the_persons_pin_onto_another_model` is now `test_a_stale_record_cant_put_the_pin_on_another_model`.
 - **Agents:** docs/MCP-SETUP.md says a restore from anyone but the person ignores `removals` and its answer's four lists stay empty. No agent text changed. skills/nebula/SKILL.md never mentions the restore route (agents use `nebula undo`), so it stays.
+- **Live check** (the second review's script, its forged-restore probe changed): it now sends, as an agent, a real removal id under a made-up n9, plus the person's whole real record (id, node, project, model, pins, proposals) with X itself, the same model under the same id. That second one is the restore that used to re-attach the pin. Both answered with all four lists empty. The pin stayed detached under the same removal, the proposal stayed closed, and the person's own Cmd+Z back to their delete then put X, its pin and the proposal back ("Restored the node.").
+  - Backend 8795, Vite 5795 (`VITE_NEBULA_BACKEND_PORT=8795`), same isolation and blocking as before, 1280x800 and 1440x900, a real MCP stdio session.
+  - Four runs. r4: 31 PASS, 1 FAIL. r5, r6 and r7: **32 PASS, 0 FAIL**. r6 and r7 ran while the whole gate suite was running. Blocked requests: 0. Outside requests refused: 0.
+  - r4's one miss: the context menu's Cmd+Z read no notice at all within 8 s, though the node, its pin and the proposal were all back. It didn't come back in the next three runs.
+  - A timing probe was added for r6 and r7. On every path the node returns in under 15 ms and "Restored the node." shows 158-188 ms after the keypress, once the backend has answered.
+  - The only code path that skips that line is a newer notice taking its place, which is by design, and nothing in this flow raises one. So r4 reads as a one-off stall, not a skipped line. The probe stays in the script so a repeat would say which it was.
 
+- **Gates** (on f8ff0356, with main at 43d43186 merged in):
+  - Backend, whole suite in 4 shards: **10,253 passed, 71 skipped, 0 failed** (the 10,251 before, plus the 2 new tests).
+  - `tsc -b`: 0 errors. Lint: 0.
+  - `vite build` plus the budget check: 363,426 bytes raw / 109,187 gzip, the same as before.
+  - Whole vitest suite: **4,945 of 4,945 passed**, 382 files.
