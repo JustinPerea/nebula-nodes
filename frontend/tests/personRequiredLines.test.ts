@@ -19,9 +19,9 @@
  * chosen by the app's existing flag (personSession's inDesktopShell(): the
  * preload bridge's apiBaseUrl). "The browser banner stays as I sent it."
  *
- * and the notice (PersonRequiredBanner) itself: "This tab isn't connected as
- * you, so Settings, proposals and chats are locked. Open the link Nebula
- * printed when it started, or restart Nebula with --open."
+ * and the notice (PersonRequiredBanner) itself, round 4 (one line, since it
+ * stays up): "This tab isn't connected as you. Open the link Nebula printed
+ * when it started."
  *
  * A refusal is a person-only one by its `code` ("person_required", the person
  * gate's), never by its words. The backend's own text, written for agents,
@@ -42,8 +42,9 @@ import { enhancePrompt } from '../src/lib/enhancePrompt';
 
 const GM_LINE = "This change needs your OK, and this tab isn't connected as you. Open the link Nebula printed when it started, then try again.";
 const APP_LINE = "This change needs your OK, and this window isn't connected as you. Quit Nebula and open it again, then try again.";
-const APP_BANNER = "This window isn't connected as you, so Settings, proposals and chats are locked. Quit Nebula and open it again.";
-const BANNER = "This tab isn't connected as you, so Settings, proposals and chats are locked. Open the link Nebula printed when it started, or restart Nebula with --open.";
+// GM, round 4 (2026-10-23), verbatim: the banners stay up, so each fits one line.
+const APP_BANNER = "This window isn't connected as you. Quit Nebula and open it again.";
+const BANNER = "This tab isn't connected as you. Open the link Nebula printed when it started.";
 const BILLING = "zz1: Changing how a Krea node is billed (_kreaAuth) is the person's call, so it needs their OK. Leave _kreaAuth as it is, and propose the change instead with propose_change (`nebula propose`); the person accepts it on the canvas.";
 const json = (body: unknown, status: number) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -211,10 +212,17 @@ describe("GM's app lines (round 2), chosen by the desktop flag", () => {
     expect(errorCopy.copyForAnswer(403, BILLING, 'person_required')).toBe(APP_LINE);
   });
 
+  it("GM's one-line debug and dev-renderer banners (round 4)", () => {
+    expect(personRequiredMessage('debug-port')).toBe(
+      'Debug mode: a debugging port is open, so Settings, proposals and chats are off.');
+    expect(personRequiredMessage('dev-renderer')).toBe(
+      "Dev mode: the Vite renderer can't use your token. Set NEBULA_DESKTOP_DEV_PERSON=1 to allow it.");
+  });
+
   it("the shell's own reasons keep their lines in the app, and the browser banner stays", async () => {
     inTheApp({ token: vi.fn().mockResolvedValue({ ok: false, error: 'DEBUG_PORT' }) });
     expect(await personCredential()).toBeNull();
-    expect(personRequiredMessage()).toMatch(/remote-debugging port/);
+    expect(personRequiredMessage()).toMatch(/^Debug mode: a debugging port is open/);
     expect(personRequiredMessage('desktop-unavailable')).toBe(
       "Nebula couldn't confirm this window is yours, so Settings, proposals and chats are off. Quit Nebula and open it again.");
     delete (window as unknown as Record<string, unknown>).nebulaDesktop;

@@ -241,11 +241,13 @@ export function personUnavailableReason(): PersonUnavailableReason {
 
 export function personRequiredMessage(reason: PersonUnavailableReason = personUnavailableReason()): string {
   switch (reason) {
+    // GM, round 4 (2026-10-23), verbatim: a banner stays up, so it fits one
+    // line at the region's 560 px (the dev-renderer one is developer-only and
+    // may wrap). Line 3 on the refusal still says what to do.
     case 'debug-port':
-      return 'Debug mode: a remote-debugging port is open, so actions only you can take (Settings, proposals, chats) are off.';
+      return 'Debug mode: a debugging port is open, so Settings, proposals and chats are off.';
     case 'dev-renderer':
-      return 'Desktop dev mode: the Vite renderer is not trusted with your token, so Settings, proposals and chats are off. '
-        + 'Set NEBULA_DESKTOP_DEV_PERSON=1 to opt in.';
+      return "Dev mode: the Vite renderer can't use your token. Set NEBULA_DESKTOP_DEV_PERSON=1 to allow it.";
     case 'untrusted-sender':
     case 'desktop-unavailable':
       // GM, round 3 (2026-10-23): it ends like the app banner, since the
@@ -254,16 +256,14 @@ export function personRequiredMessage(reason: PersonUnavailableReason = personUn
     default:
       // The desktop app gets here when its backend refuses the token the
       // shell handed over (desktopReason stays null then): GM's app banner
-      // (round 2, 2026-10-23, verbatim). A quit and reopen starts a fresh
+      // (round 4, 2026-10-23, verbatim). A quit and reopen starts a fresh
       // backend with a fresh token; a reload asks the same shell for the same
       // token, which the same backend refuses again.
       if (hasDesktopBridge()) {
-        return "This window isn't connected as you, so Settings, proposals and chats are locked. "
-          + 'Quit Nebula and open it again.';
+        return "This window isn't connected as you. Quit Nebula and open it again.";
       }
-      // GM - Design, 2026-10-23, verbatim. `--open` is backend/devserver.py's flag.
-      return "This tab isn't connected as you, so Settings, proposals and chats are locked. "
-        + 'Open the link Nebula printed when it started, or restart Nebula with --open.';
+      // GM - Design, round 4 (2026-10-23), verbatim.
+      return "This tab isn't connected as you. Open the link Nebula printed when it started.";
   }
 }
 

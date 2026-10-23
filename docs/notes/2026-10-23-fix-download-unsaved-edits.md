@@ -307,3 +307,15 @@ GM, verbatim: "Line 3 points to the banner's reason in the two dev cases instead
 - `personRequiredCopy(desktop, reason)` in errorCopy.ts: in the app, the shell's own reasons `debug-port` and `dev-renderer` (personSession's `personUnavailableReason()`) get `PERSON_REQUIRED_DEV_COPY`; every other app case keeps the app line 3; a browser tab keeps its line. Still picked only for a `person_required` code; Details keeps the agents' text.
 - personSession's line for a window the shell couldn't confirm now ends "Quit Nebula and open it again.".
 - Tests first in `tests/personRequiredLines.test.ts`: 3 failed on 11d2b0bf (the dev-case line, and the old ending in two places), then pass. The 10 related files: 146 of 146. `npx tsc -b` clean.
+
+## GM's banners, round 4 (2026-10-23)
+
+GM, after #180's copy check: "Person-required banners. These stay up, so a two-line one would sit over panel foot rows the whole time. Please fold these into #178, replacing my earlier banner lines" and "Line 3 stays as built. It still says what to do, and the banner no longer has to." Built verbatim in `personRequiredMessage`:
+- Browser: "This tab isn't connected as you. Open the link Nebula printed when it started."
+- App: "This window isn't connected as you. Quit Nebula and open it again."
+- Debug: "Debug mode: a debugging port is open, so Settings, proposals and chats are off."
+- Dev renderer: "Dev mode: the Vite renderer can't use your token. Set NEBULA_DESKTOP_DEV_PERSON=1 to allow it." (developer-only; GM: may wrap)
+
+Not trimmed by GM: the shell's line for a window it couldn't confirm ("Nebula couldn't confirm this window is yours, so Settings, proposals and chats are off. Quit Nebula and open it again.") is still two lines at 560 px. Asked GM.
+
+Tests first: `personRequiredLines` and `PersonRequiredBanner` pinned the old banners; with GM's lines expected, 4 failed in `personRequiredLines` (then the component test's 2 once its expectations moved too), then all pass. The 6 related files: 52 of 52.
