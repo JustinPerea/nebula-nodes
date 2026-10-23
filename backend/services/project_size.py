@@ -121,6 +121,16 @@ def megabytes(size: int, limit: int) -> str:
     return f"{shown / 10:.1f} MB"
 
 
+def listed_count(rows: list[dict[str, Any]]) -> int:
+    """How many of the rows (largest first) are listed: those of 0.1 MiB and
+    up, at most TOP_ROWS; the rest go in "smaller" (frontend lib/projectSize.ts
+    listedRowCount; GM - Design, #182: "Rows under 0.1 MB: don't show them.")."""
+    count = 0
+    while count < len(rows) and count < TOP_ROWS and rows[count]["bytes"] * 10 >= MIB:
+        count += 1
+    return count
+
+
 def row_size(size: int) -> str:
     """A row's size as the canvas panel shows it (frontend lib/projectSize.ts
     rowSize): MiB to the nearest tenth, halves up like Math.round (Python's

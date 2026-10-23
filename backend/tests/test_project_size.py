@@ -152,7 +152,7 @@ def test_a_save_at_the_limit_saves(api):
 # -- the size, for agents --------------------------------------------------------------
 
 def test_the_size_route_reads_the_open_project_with_the_live_canvas_in_it(api):
-    big = api.graph.add_node("text-input", {"value": "y" * (LIMIT + 500)})
+    big = api.graph.add_node("text-input", {"value": "y" * 110_000})  # 0.1 MB: a listed row
     api.graph.add_node("text-input", {"value": "small"})
     response = api.client.get(f"/api/projects/{api.project_id}/size", headers=AGENT)
     assert response.status_code == 200, response.text
@@ -182,7 +182,7 @@ def test_the_size_route_on_a_project_under_the_limit(api):
 
 def test_the_size_route_shows_ten_rows_and_counts_the_rest(api):
     for index in range(14):
-        api.graph.add_node("text-input", {"value": "z" * (100 + index)})
+        api.graph.add_node("text-input", {"value": "z" * (110_000 + index)})
     body = api.client.get(f"/api/projects/{api.project_id}/size", headers=AGENT).json()
     assert len(body["largest"]) == 10
     # Fourteen nodes and the project's own settings: five more rows.
@@ -384,8 +384,25 @@ def test_each_rows_size_is_the_panels_nearest_tenth(api):
 
     for case in CASES["rowSizes"]:
         assert row_size(case["bytes"]) == case["size"], case
-    api.graph.add_node("text-input", {"value": "w" * 40_000})  # 0.04 MB: "0.0", not rounded up
+    api.graph.add_node("text-input", {"value": "w" * 110_000})  # 0.105 MB: "0.1"
+    api.graph.add_node("text-input", {"value": "v" * 40_000})  # 0.04 MB: not listed (below)
     body = api.client.get(f"/api/projects/{api.project_id}/size", headers=AGENT).json()
     for row in body["largest"]:
         assert row["size"] == row_size(row["bytes"]), row
-    assert body["largest"][0]["size"] == "0.0 MB"
+    assert [row["size"] for row in body["largest"]] == ["0.1 MB"]
+
+
+def test_rows_under_a_tenth_of_a_mb_fold_into_the_smaller_line(api):
+    """GM - Design (#182): "Rows under 0.1 MB: don't show them. "0.0 MB"
+    tells nobody anything. Fold them into the "{n} smaller items" line, and
+    show that line even if all the rows would be tiny." The panel's count for
+    the same rows (shared listedRows)."""
+    from services.project_size import listed_count
+
+    for case in CASES["listedRows"]:
+        assert listed_count([{"bytes": size} for size in case["bytes"]]) == case["listed"], case
+    for index in range(3):
+        api.graph.add_node("text-input", {"value": "s" * (500 + index)})
+    body = api.client.get(f"/api/projects/{api.project_id}/size", headers=AGENT).json()
+    assert body["largest"] == []
+    assert body["smaller"]["count"] == 4 and body["smaller"]["bytes"] == body["sizeBytes"]

@@ -175,6 +175,16 @@ export function overBy(bytes: number, limit = PROJECT_SAVE_LIMIT_BYTES): string 
   return (Math.ceil((Math.max(0, bytes - limit) / MIB) * 10) / 10).toFixed(1);
 }
 
+/** How many of the rows (largest first) the panel lists: those of 0.1 MB
+ * and up, at most TOP_ROWS. The rest go in "{n} smaller items, {size} MB in
+ * all" (GM - Design, #182: "Rows under 0.1 MB: don't show them. "0.0 MB"
+ * tells nobody anything."). services/project_size.py listed_count. */
+export function listedRowCount(rows: ReadonlyArray<{ bytes: number }>): number {
+  let count = 0;
+  while (count < rows.length && count < TOP_ROWS && rows[count].bytes * 10 >= MIB) count += 1;
+  return count;
+}
+
 /** A row's size: the nearest tenth of a MB. */
 export function rowSize(bytes: number): string {
   return (Math.round((bytes / MIB) * 10) / 10).toFixed(1);

@@ -2404,7 +2404,7 @@ def project_size(project_id: str = "current", ctx: Context | None = None) -> dic
     smaller, and an edit of yours that would make the open project over the
     limit, or larger while it is over, is refused. Returns `sizeBytes`,
     `limitBytes`, `overLimit`, `savingPaused`, `overByBytes`, `largest` (the
-    ten largest parts, largest first: a node's `nodeId`, `name` and which
+    largest parts of 0.1 MB and up, at most ten: a node's `nodeId`, `name` and which
     `part` takes the space, "Text" (its params), "Stored outputs" or
     "Embedded files"; or the project's own "Run history", "Wires", "Create
     draft"), `smaller` (the rest) and a `note`. To trim, use edit_canvas

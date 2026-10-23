@@ -5,7 +5,7 @@ import { captureProjectSnapshot, useProjectStore } from '../../store/projectStor
 import { useUIStore } from '../../store/uiStore';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { floatingBottomLimit, floatingTopLimit } from '../../lib/bottomBar';
-import { TOP_ROWS, projectSizeBreakdown, rowSize, type ProjectSizeRow } from '../../lib/projectSize';
+import { listedRowCount, projectSizeBreakdown, rowSize, type ProjectSizeRow } from '../../lib/projectSize';
 import {
   DOWNLOAD_A_COPY, LARGEST_FIRST, PART_LABELS, ROW_NAMES, SAVING_PAUSED, panelLine, smallerLine,
 } from '../../lib/savePausedCopy';
@@ -60,7 +60,7 @@ function frameStyle(): CSSProperties {
  * Design's layout): a floating panel within the Inspector's top and bottom
  * lines, opened from the header's "Saving paused · {size} MB" or the notice's
  * "See what's large". The heading, the live line, "Download a copy", then
- * "Largest first" and the ten largest rows: a node's name as the canvas shows
+ * "Largest first" and the largest rows (0.1 MB and up, at most ten): a node's name as the canvas shows
  * it (its title, else its type), a dimmer part, its size right-aligned. A
  * node row selects the node and pans to it; Run history opens its panel.
  * The rows come from this tab's own snapshot (a paused tab's edits aren't on
@@ -82,8 +82,9 @@ function SizePanel({ bytes }: { bytes: number }) {
   const { top, restCount, restBytes } = useMemo(() => {
     void bytes;
     const { rows } = projectSizeBreakdown(captureProjectSnapshot());
-    const rest = rows.slice(TOP_ROWS);
-    return { top: shownRows(rows).slice(0, TOP_ROWS), restCount: rest.length,
+    const listed = listedRowCount(rows);
+    const rest = rows.slice(listed);
+    return { top: shownRows(rows).slice(0, listed), restCount: rest.length,
       restBytes: rest.reduce((sum, row) => sum + row.bytes, 0) };
   }, [bytes]);
 

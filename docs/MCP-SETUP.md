@@ -261,8 +261,8 @@ The server exposes these tools for building and running (see
   overlaid. Returns `sizeBytes`, `limitBytes` (16 MiB, shown as "16 MB"),
   `size` and `limit` as the canvas words them, `overLimit`, `savingPaused`
   (the open project is over, so the person's canvas has paused saving it
-  until it is smaller), `overByBytes`, `largest` (the ten largest rows,
-  largest first: a node's `nodeId`, `name`, `definitionId` and the `part`
+  until it is smaller), `overByBytes`, `largest` (the largest rows of
+  0.1 MiB and up, at most ten, largest first: a node's `nodeId`, `name`, `definitionId` and the `part`
   that takes most of it, "Text" for its params, "Stored outputs", "Embedded
   files" for data: URLs in params, "Node data"; or the project's own "Run
   history", "Wires", "Create draft", "Project settings"), `smaller` (`count`

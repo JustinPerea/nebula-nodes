@@ -13049,8 +13049,9 @@ async def get_project_size(project_id: str) -> dict[str, Any]:
     with the live canvas overlaid, as a switch would store it (the person's
     tab may hold newer run history it hasn't saved). `savingPaused`: the
     open project is over the limit, so the person's canvas can't save it.
-    `largest` holds the ten largest rows with node ids (the person's panel
-    shows the same rows without them), `smaller` the rest."""
+    `largest` holds the largest rows of 0.1 MiB and up, at most ten, with
+    node ids (the person's panel shows the same rows without them), `smaller`
+    the rest."""
     exported = _graph_canvas_export(cli_graph)
     catalog = project_store.read()
     project = _project_id_or_404(project_id, catalog)
@@ -13073,7 +13074,8 @@ async def get_project_size(project_id: str) -> dict[str, Any]:
                 "size": project_size.row_size(row["bytes"])}
 
     rows = found["rows"]
-    rest = rows[project_size.TOP_ROWS:]
+    listed = project_size.listed_count(rows)
+    rest = rows[listed:]
     over = size > limit
     if over and is_open:
         note = (f"Saving is paused: the person's canvas can't save this project until it is "
@@ -13090,7 +13092,7 @@ async def get_project_size(project_id: str) -> dict[str, Any]:
         "sizeBytes": size, "limitBytes": limit,
         "size": project_size.megabytes(size, limit), "limit": project_size.limit_text(limit),
         "overLimit": over, "savingPaused": over and is_open, "overByBytes": max(0, size - limit),
-        "largest": [shown(row) for row in rows[:project_size.TOP_ROWS]],
+        "largest": [shown(row) for row in rows[:listed]],
         "smaller": {"count": len(rest), "bytes": sum(row["bytes"] for row in rest),
                     "size": project_size.row_size(sum(row["bytes"] for row in rest))},
         "note": note,

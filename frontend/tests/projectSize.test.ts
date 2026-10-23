@@ -18,7 +18,8 @@
 import { describe, expect, it } from 'vitest';
 import shared from '../../backend/tests/fixtures/project_size_cases.json';
 import {
-  PROJECT_SAVE_LIMIT_BYTES, displaySize, jsonBytes, overBy, projectSizeBreakdown, projectSizeBytes, rowSize,
+  PROJECT_SAVE_LIMIT_BYTES, TOP_ROWS, displaySize, jsonBytes, listedRowCount, overBy, projectSizeBreakdown, projectSizeBytes,
+  rowSize,
 } from '../src/lib/projectSize';
 
 const MIB = 1024 * 1024;
@@ -95,5 +96,22 @@ describe('sizes as GM writes them', () => {
     const cases = (shared as unknown as { rowSizes: Array<{ bytes: number; size: string }> }).rowSizes;
     expect(cases.length).toBeGreaterThan(5);
     for (const { bytes, size } of cases) expect(`${rowSize(bytes)} MB`).toBe(size);
+  });
+});
+
+describe('which rows the panel lists', () => {
+  // GM - Design (#182): "Rows under 0.1 MB: don't show them. "0.0 MB" tells
+  // nobody anything. Fold them into the "{n} smaller items, {size} MB in all"
+  // line, and show that line even if all the rows would be tiny."
+  const rows = (...sizes: number[]) => sizes.map((bytes) => ({ kind: 'project' as const, bytes }));
+  it('lists rows of 0.1 MB and up, largest first, at most ten', () => {
+    expect(listedRowCount(rows(Math.ceil(MIB / 10), Math.floor(MIB / 10)))).toBe(1);
+    expect(listedRowCount(rows(...Array.from({ length: 12 }, () => MIB)))).toBe(TOP_ROWS);
+    expect(listedRowCount(rows(500, 20))).toBe(0);
+  });
+  it("is the agents' tool's count for the same rows (shared listedRows)", () => {
+    const cases = (shared as unknown as { listedRows: Array<{ bytes: number[]; listed: number }> }).listedRows;
+    expect(cases.length).toBeGreaterThan(2);
+    for (const { bytes, listed } of cases) expect(listedRowCount(rows(...bytes))).toBe(listed);
   });
 });

@@ -39,7 +39,8 @@ describe("Projects: Couldn't save your edits.", () => {
     fireEvent.click(screen.getByRole('button', { name: 'Continue without them' }));
     const dialog = screen.getByRole('alertdialog');
     const line = dialog.getAttribute('aria-labelledby') ? document.getElementById(dialog.getAttribute('aria-labelledby')!)?.textContent : '';
-    expect(line).toContain('stay in “Glass campaign”');
+    expect(line).toBe("Continue without them? “Glass campaign” keeps its nodes, wires and settings. "
+      + 'Run history since the last save, and anything else only this tab has, will be lost.');
     expect(line).not.toContain("Continue without your edits? They can't be recovered after this.");
     fireEvent.click(within(dialog).getByRole('button', { name: 'Continue without them' }));
     expect(actions.onContinueWithoutEdits).toHaveBeenCalledTimes(1);

@@ -122,7 +122,6 @@ Screenshots for GM: `gm-panel-1280.png`, `gm-header-1280.png`, `gm-loadgraph-not
 - **Bundles over 16 MiB**: the `.nebula.zip` restore still refuses a graph.json over 16 MiB (`RESTORE_MAX_GRAPH_BYTES`), and Save graph's bundle refuses to write one. Only plain `.nebula` files over the limit open. Raising the bundle's graph limit wasn't asked.
 - **Download a copy** holds the canvas only: a `.nebula` has no run history or Create draft.
 - **Not covered for agent growth**: proposal accept and the model route (both the person's), and layout moves (above).
-- **The kept-in confirm line is a draft** (Review, below): GM - Design to write it.
 
 ## Review
 
@@ -145,6 +144,15 @@ Screenshots for GM: `gm-panel-1280.png`, `gm-header-1280.png`, `gm-loadgraph-not
   - Vitest, focused (13 files): **248 passed**.
   - `tsc -b` and lint clean.
   - The build budget passed at 378,697 bytes raw / 114,108 gzip. `dist/` was deleted afterwards.
+
+## GM's answers (2026-10-23)
+
+- **The kept-in confirm**, GM's line, verbatim: "Continue without them? “{project}” keeps its nodes, wires and settings. Run history since the last save, and anything else only this tab has, will be lost." The stale-tab and params-version stops keep the original line.
+- **Rows under 0.1 MB aren't listed** ("0.0 MB" tells nobody anything): they fold into "{n} smaller items, {size} MB in all", which shows even when every row is tiny. The panel (`listedRowCount`) and `project_size` (`listed_count`) list rows of 0.1 MiB and up, at most ten; the shared fixture's `listedRows` pins both. Red: the backend had no `listed_count`, the frontend no `listedRowCount`, and the panel listed ten rows with "0.0 MB".
+- **The Load graph notice** (moved up from the next light round, since #182 was still open): "Opened {filename}. It's {size} MB, over the save limit." The limit is in the panel.
+- **A save that fails some other way while paused**: no change. A new test pins GM's check that Save failed's Retry on a project over the limit again goes back to paused by itself and sends nothing. It passed on the code as built.
+- Every other panel choice was approved as built. MiB stays labelled "MB".
+- Open for GM: when every small row is tiny, the folded line can read "14 smaller items, 0.0 MB in all".
 
 ## For GM
 

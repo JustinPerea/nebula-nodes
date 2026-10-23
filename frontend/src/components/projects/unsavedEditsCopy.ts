@@ -9,8 +9,8 @@ export const CONFIRM_LINE = "Continue without your edits? They can't be recovere
  * project, so only what only this tab had is lost. DRAFT, not GM's yet: GM -
  * Design to replace it word for word. */
 export function keptConfirmLine(projectName: string): string {
-  return `Continue without them? The nodes, wires and settings stay in “${projectName}”. `
-    + "Run history and anything else only this tab has since the last save can't be recovered after this.";
+  return `Continue without them? “${projectName}” keeps its nodes, wires and settings. `
+    + 'Run history since the last save, and anything else only this tab has, will be lost.';
 }
 
 /** GM's line after a download, with the real way back in: Load graph, under

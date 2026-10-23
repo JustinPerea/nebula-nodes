@@ -106,7 +106,7 @@ describe('the panel', () => {
     return { opener, view };
   }
 
-  it("shows GM's heading, the live line, Download a copy and the ten largest rows, without ids", () => {
+  it("shows GM's heading, the live line, Download a copy and the largest rows of 0.1 MB and up, without ids", () => {
     const { opener } = open();
     const panel = screen.getByRole('dialog', { name: 'Saving paused' });
     expect(within(panel).getByRole('heading', { name: 'Saving paused' })).toBeTruthy();
@@ -114,7 +114,9 @@ describe('the panel', () => {
     expect(within(panel).getByRole('button', { name: 'Download a copy' })).toBeTruthy();
     expect(within(panel).getByText('Largest first')).toBeTruthy();
     const rows = within(panel).getAllByRole('button').filter((button) => button.closest('[data-size-row]'));
-    expect(rows).toHaveLength(10);
+    // Only the two Briefs are 0.1 MB or more; the rest fold into one line (GM, #182).
+    expect(rows).toHaveLength(2);
+    for (const row of rows) expect(row.textContent).not.toContain('0.0 MB');
     // The largest, by name as the canvas shows it, its part, its size.
     expect(rows[0].textContent).toContain('Brief');
     expect(rows[0].textContent).toContain('Text');
@@ -125,7 +127,8 @@ describe('the panel', () => {
     // No ids on screen.
     expect(panel.textContent).not.toMatch(/\bn1\b|\bm0\b/);
     // The rest, counted.
-    expect(within(panel).getByText(/^\d+ smaller items, \d+\.\d MB in all$/)).toBeTruthy();
+    // Thirteen small nodes and the project's settings.
+    expect(within(panel).getByText(/^14 smaller items, \d+\.\d MB in all$/)).toBeTruthy();
     opener.remove();
   });
 

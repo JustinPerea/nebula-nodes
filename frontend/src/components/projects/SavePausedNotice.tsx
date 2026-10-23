@@ -8,7 +8,7 @@ const dismiss = () => useProjectStore.getState().dismissSizeNotice();
 /**
  * The one region notice for a project over the save limit (Q118, GM - Design):
  * "Saving paused. This project is {size} MB, over the 16 MB limit." (or, after
- * Load graph, "Opened {filename}. It's {size} MB, over the 16 MB save limit.")
+ * Load graph, "Opened {filename}. It's {size} MB, over the save limit.")
  * with "See what's large", which opens the panel; later "Saving again. This
  * project is {size} MB." with no button. It goes like every written line (the
  * reading-time hold, Dismiss, the pause while the pointer or focus is on it):

@@ -26,7 +26,7 @@ def test_project_size_reads_the_open_project_and_its_twin_prints_the_same(cli, m
     big = mcp_server.edit_canvas(nodes=[{"ref": "+brief", "definitionId": "text-input",
                                          "params": {"value": "w" * 3000}}])["idMap"]["+brief"]
     # The person's own Load graph took it over the limit.
-    main.cli_graph.update_params(big, {"value": "w" * 5000})
+    main.cli_graph.update_params(big, {"value": "w" * 110_000})  # 0.1 MB: a listed row
 
     result = mcp_server.project_size()
     assert result["project"]["name"] == "Glass campaign" and result["project"]["open"] is True

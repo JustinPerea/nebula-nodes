@@ -8,7 +8,7 @@
  * The project store's "saving paused" state. GM - Design's lines, verbatim:
  * the notice on entering, "Saving paused. This project is {size} MB, over
  * the 16 MB limit." with "See what's large"; after Load graph, "Opened
- * {filename}. It's {size} MB, over the 16 MB save limit." with the same
+ * {filename}. It's {size} MB, over the save limit." with the same
  * button; on leaving it, "Saving again. This project is {size} MB.", the
  * header back to "Saved" and the panel closed.
  */
@@ -175,7 +175,7 @@ describe('entering the paused state', () => {
     state().noteLoadedGraph!('Big campaign.nebula');
     expect(state().saveStatus).toBe('paused');
     expect(state().sizeNotice).toMatchObject({
-      text: `Opened Big campaign.nebula. It's ${displaySize(measured())} MB, over the 16 MB save limit.`, action: true });
+      text: `Opened Big campaign.nebula. It's ${displaySize(measured())} MB, over the save limit.`, action: true });
     const notice = state().sizeNotice;
     await useProjectStore.getState().flush();
     expect(state().sizeNotice).toBe(notice);
@@ -190,7 +190,7 @@ describe('entering the paused state', () => {
     expect(state().sizeNotice ?? null).toBeNull();
     useGraphStore.setState({ isImportingGraph: false });
     state().noteLoadedGraph!('Big campaign.nebula');
-    expect(state().sizeNotice?.text).toBe(`Opened Big campaign.nebula. It's ${displaySize(measured())} MB, over the 16 MB save limit.`);
+    expect(state().sizeNotice?.text).toBe(`Opened Big campaign.nebula. It's ${displaySize(measured())} MB, over the save limit.`);
     expect(projects.saveProject).not.toHaveBeenCalled();
   });
 
@@ -261,6 +261,21 @@ describe('a save that fails while resuming (review)', () => {
     expect(state().saveStatus).toBe('paused');
     expect(state().savePaused).toEqual({ bytes: measured() });
     expect(state().sizeNotice?.id).not.toBe(first?.id);
+    expect(projects.saveProject).toHaveBeenCalledTimes(1);
+  });
+
+  it("Save failed's Retry on a project over the limit again goes back to paused by itself, sending nothing (GM, #182)", async () => {
+    editCanvas(BIG);
+    await useProjectStore.getState().flush();
+    vi.mocked(projects.saveProject).mockRejectedValueOnce(new projects.ProjectRequestError(
+      'Internal Server Error', 500, { heading: "Couldn't save the project." } as never));
+    editCanvas('trimmed');
+    await expect(useProjectStore.getState().flush()).rejects.toThrow();
+    expect(state().saveStatus).toBe('error');
+    editCanvas(`${BIG}back`);
+    await useProjectStore.getState().retrySave();
+    expect(state().saveStatus).toBe('paused');
+    expect(state().savePaused).toEqual({ bytes: measured() });
     expect(projects.saveProject).toHaveBeenCalledTimes(1);
   });
 });
