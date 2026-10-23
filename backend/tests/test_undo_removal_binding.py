@@ -309,7 +309,9 @@ def test_a_stale_record_cant_put_the_pin_on_another_model(bound):
                     [{"id": removal["id"], "nodeId": n1}])
     assert fake.status_code == 200, fake.text
     assert fake.json()["reattached"] == []
-    assert [row["id"] for row in fake.json()["pinsLeft"]] == [pin["id"]]
+    # The canvas counts it by ``code`` (GM: "1 pin couldn't be re-attached."); agents read ``reason``.
+    assert fake.json()["pinsLeft"] == [{"id": pin["id"], "reason": "its node came back as another model",
+                                        "code": "another-model"}]
     stored = _stored_pins(bound)[pin["id"]]
     assert stored["detached"] is True and stored["detachedBy"] == removal["id"]
     # An agent takes that node away again; the person's own undo still puts the pin back.
@@ -531,3 +533,30 @@ def test_an_agents_own_undo_still_puts_back_what_its_delete_removed(bound):
                                json={"token": applied.json()["undo"]["token"]})
     assert undone.status_code == 200, undone.text
     assert undone.json()["reattached"] == [pin["id"]] and undone.json()["reopened"] == [proposal]
+
+
+def test_a_stale_record_for_a_pin_a_later_delete_detached_says_changed(bound):
+    """Every pin left carries a ``code`` the canvas counts by (GM, 2026-10-23:
+    "1 pin couldn't be re-attached." only for another model; a pin the
+    person deleted or changed since stays silent), never the English ``reason``."""
+    n1, pin, _proposal = _setup(bound)
+    item = _whole(bound, n1)
+    first = _delete(bound, n1)["removal"]
+    assert _restore(bound, [item], [first]).json()["reattached"] == [pin["id"]]
+    again = _delete(bound, n1)["removal"]
+    # A stale step still names the first removal: the pin is the later delete's now.
+    stale = _restore(bound, [item], [first]).json()
+    assert stale["reattached"] == []
+    assert stale["pinsLeft"] == [{"id": pin["id"], "reason": "changed since", "code": "changed"}]
+    assert bound.client.post("/api/graph/apply", headers=CLAUDE, json={"remove": [n1]}).status_code == 200
+    assert _restore(bound, [item], [again]).json()["reattached"] == [pin["id"]]
+
+
+def test_a_pin_in_another_project_is_left_with_its_code(bound):
+    from services import canvas_pins
+
+    n1, pin, _proposal = _setup(bound)
+    removal = _delete(bound, n1)["removal"]
+    left = bound.main.canvas_pins.reattach([removal], {n1: "text-input"}, "prj_elsewhere")
+    assert left == {"reattached": [], "left": [{"id": pin["id"], "reason": canvas_pins.ANOTHER_PROJECT,
+                                                 "code": "another-project"}]}

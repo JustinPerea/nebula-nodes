@@ -310,7 +310,7 @@ def test_a_pin_deleted_since_is_left_and_reported(canvas):
     removal = _delete(canvas, n1)["removal"]
     assert canvas.client.delete(f"/api/canvas/pins/{pin['id']}", headers=PERSON).status_code == 200
     body = _restore(canvas, [item], [removal]).json()
-    assert body["reattached"] == [] and body["pinsLeft"] == [{"id": pin["id"], "reason": "deleted since"}]
+    assert body["reattached"] == [] and body["pinsLeft"] == [{"id": pin["id"], "reason": "deleted since", "code": "deleted"}]
 
 
 def test_a_pin_detached_before_this_delete_stays_where_it_is(canvas):
@@ -562,3 +562,31 @@ def test_nebula_undo_and_watch_say_what_came_back():
     line = format_event({"kind": "proposal.reopened", "seq": 3, "data": {"proposalId": "p_1"},
                          "summary": "reopened Claude's proposal p_1", "actor": {"kind": "person"}})
     assert "nebula proposal p_1 --wait" in line
+
+
+def test_agents_hear_which_pins_couldnt_go_back(canvas):
+    """Review of line 7: undo_canvas_edit's docs said its message tells what
+    was left and why, but pins left as they are (``pinsLeft``) were in no
+    message, no `nebula undo` line and not in the tool's documented answer."""
+    from cli.formatter import format_undone
+
+    left = [{"id": "pin_3", "reason": "deleted since", "code": "deleted"}]
+    assert canvas.main._undo_extras_text({"reattached": ["pin_1"], "pinsLeft": left}) == (
+        "1 pin back on its node; 1 pin left as it is (pin_3: deleted since).")
+    two = left + [{"id": "pin_4", "reason": "its node came back as another model", "code": "another-model"}]
+    assert "2 pins left as they are (pin_3: deleted since; pin_4: its node came back as another model)" in (
+        canvas.main._undo_extras_text({"pinsLeft": two}))
+    text = format_undone({"status": "undone", "added": ["n1"], "pinsLeft": left, "skipped": []})
+    assert "Couldn't re-attach pin_3: deleted since" in text
+    from mcp_server import undo_canvas_edit
+    doc = undo_canvas_edit.__doc__ or ""
+    assert all(field in doc for field in ("pinsLeft", "wired", "unwired", "code"))
+
+
+def test_an_agents_undo_says_the_pin_the_person_deleted_stayed_gone(canvas):
+    n1, pin, _proposal = _setup(canvas)
+    applied = canvas.client.post("/api/graph/apply", headers=CLAUDE, json={"remove": [n1]}).json()
+    assert canvas.client.delete(f"/api/canvas/pins/{pin['id']}", headers=PERSON).status_code == 200
+    undone = canvas.client.post("/api/graph/apply/undo", headers=CLAUDE, json={"token": applied["undo"]["token"]}).json()
+    assert undone["pinsLeft"] == [{"id": pin["id"], "reason": "deleted since", "code": "deleted"}]
+    assert f"1 pin left as it is ({pin['id']}: deleted since)" in undone["message"]

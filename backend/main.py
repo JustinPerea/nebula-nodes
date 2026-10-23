@@ -150,7 +150,7 @@ from services.canvas_events import (
     param_changes,
     parse_kinds,
 )
-from services.canvas_pins import ANOTHER_PROJECT, CanvasPins, PinError, pin_summary
+from services.canvas_pins import ANOTHER_PROJECT, CanvasPins, PinError, pin_left, pin_summary
 from services.node_removals import RemovalLedger
 from services.agent_notes import AgentNotes, NoteError, note_summary
 from services import person_session
@@ -5117,7 +5117,7 @@ async def _undo_removals(records: list[dict[str, Any]], back: Mapping[str, str],
     those very nodes count (_bound_removals), and only pins and proposals
     those removals detached or closed: a pin by its ``detachedBy`` and
     model, a proposal by a (removal, node) pair in its ``closed_by``. Returns
-    the restore's ``reattached`` (pin ids), ``pinsLeft`` ({id, reason}),
+    the restore's ``reattached`` (pin ids), ``pinsLeft`` ({id, reason, code}),
     ``reopened`` (proposal ids) and ``notReopened`` ({id, reason}): a
     proposal the delete closed that doesn't fit the restored graph, expired,
     lost its tag to a clear, an import or a project switch, or that Nebula
@@ -5133,7 +5133,7 @@ async def _undo_removals(records: list[dict[str, Any]], back: Mapping[str, str],
     if _workspace_context()["activeProjectId"] != project_id:
         # Another project opened while the restore was on its way: its pins
         # and proposals aren't these; say so rather than touch them.
-        out["pinsLeft"] = [{"id": pin_id, "reason": ANOTHER_PROJECT}
+        out["pinsLeft"] = [pin_left(pin_id, ANOTHER_PROJECT)
                            for pin_id in dict.fromkeys(p for r in for_pins for p in r.get("pins") or [])]
         out["notReopened"] = [{"id": proposal_id, "reason": ANOTHER_PROJECT}
                               for proposal_id in dict.fromkeys(p for r in relevant for p in r.get("proposals") or [])]
@@ -5258,12 +5258,18 @@ async def _undo_removals(records: list[dict[str, Any]], back: Mapping[str, str],
 
 
 def _undo_extras_text(result: Mapping[str, Any]) -> str:
-    """What else an undo put back, for its message: "1 pin back on its node;
+    """What else an undo put back, and what it couldn't, for its message: "1
+    pin back on its node; 1 pin left as it is (pin_3: deleted since);
     reopened 1 proposal; 1 proposal couldn't be reopened (it expired)."."""
     parts: list[str] = []
     pins = len(result.get("reattached") or [])
     if pins:
         parts.append(f"{pins} pin{'s' if pins != 1 else ''} back on {'its node' if pins == 1 else 'their nodes'}")
+    left = result.get("pinsLeft") or []
+    if left:
+        reasons = "; ".join(f"{row['id']}: {row['reason']}" for row in left[:3])
+        parts.append(f"{len(left)} pin{'s' if len(left) != 1 else ''} left as "
+                     f"{'it is' if len(left) == 1 else 'they are'} ({reasons})")
     reopened = len(result.get("reopened") or [])
     if reopened:
         parts.append(f"reopened {reopened} proposal{'s' if reopened != 1 else ''}")

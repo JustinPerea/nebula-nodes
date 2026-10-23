@@ -78,7 +78,7 @@ import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, waitingOnWorldLabs } from '../lib/worldLabsWaiting';
 import { FailureNotice, REFUSED_FALLBACK_COPY, copyForStatus, failureCopy, failureMessage, readDetail, requestError, warnFailure } from '../lib/errorCopy';
 import { CANVAS_NOTICE_EVENT, type CanvasNoticeDetail } from '../lib/canvasNotice';
-import { cleanRemovals, deletedNoticeText, mergeRemovals, notReopenedText, restoredNoticeText, supersededBy, type RemovalRecord } from '../lib/deleteNotice';
+import { cleanRemovals, deletedNoticeText, mergeRemovals, notRestoredText, pinsOnAnotherModel, restoredNoticeText, supersededBy, type RemovalRecord } from '../lib/deleteNotice';
 import { NOTHING_RAN_LINE, OTHER_NODE_LINE, SHOT_NOT_STARTED_LINE, validationReadings, writtenReading, type ValidationReading } from '../lib/validationCopy';
 import {
   RUNTIME_FIELDS, applySlice, diffCanvas, edgeKey, editArrivedText, foldArrange, foreignSource, isForeignEdit, isOwnEcho,
@@ -2759,7 +2759,7 @@ function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): voi
       id: noticeId, text: undoNoticeText(action, entry), agentColor: entry.agentColor,
       offer: action === 'undo' ? 'redo' as const : 'undo' as const, entry,
     } } : ownLine && !(ownLine.kind === 'restored' && waitsForBackend)
-      ? { undoNotice: ownStepNotice(noticeId, ownLine, 0, action, inverse) } : {}),
+      ? { undoNotice: ownStepNotice(noticeId, ownLine, NOTHING_MISSED, action, inverse) } : {}),
   });
   void sendRestore(action, nodes, edges, nextNodes, next.edges, entry, inverse, set,
     { noticeId, ownLine: ownLine?.kind === 'restored' && waitsForBackend ? ownLine : null });
@@ -2768,11 +2768,17 @@ function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): voi
 /** What a person's own undo or redo says: the nodes it brought back or deleted again. */
 interface OwnStepLine { kind: 'restored' | 'deleted'; count: number }
 
-function ownStepNotice(id: number, line: OwnStepLine, notReopened: number, action: 'undo' | 'redo',
+/** What a restore's answer says couldn't go back: proposals that didn't
+ * reopen, and pins whose node came back as another model. */
+interface Missed { notReopened: number; notReattached: number }
+const NOTHING_MISSED: Missed = { notReopened: 0, notReattached: 0 };
+
+function ownStepNotice(id: number, line: OwnStepLine, missed: Missed, action: 'undo' | 'redo',
   inverse: UndoEntry): UndoNotice {
   return {
     id,
-    text: line.kind === 'restored' ? restoredNoticeText(line.count, notReopened) : deletedNoticeText(line.count),
+    text: line.kind === 'restored' ? restoredNoticeText(line.count, missed.notReopened, missed.notReattached)
+      : deletedNoticeText(line.count),
     // The button acts on the step this one just put on the other stack.
     offer: action === 'undo' ? 'redo' : 'undo',
     entry: inverse,
@@ -2817,14 +2823,15 @@ function sendRestore(
   // The wires it puts back or takes off stay so until it lands (heldWires).
   const holds = [...body.wire.map((w) => holdWire(w, true)), ...body.unwire.map((w) => holdWire(w, false))];
   // Shown once the backend answers, unless another notice came since.
-  const answerNotice = (notReopened: number) => set((state) => {
+  const answerNotice = (missed: Missed) => set((state) => {
     if (notice.ownLine) {
       if (undoNoticeSeq !== notice.noticeId) return {};
-      return { undoNotice: ownStepNotice(notice.noticeId, notice.ownLine, notReopened, action, inverse) };
+      return { undoNotice: ownStepNotice(notice.noticeId, notice.ownLine, missed, action, inverse) };
     }
     const shown = state.undoNotice;
-    if (notReopened === 0 || !shown || shown.id !== notice.noticeId) return {};
-    return { undoNotice: { ...shown, text: `${shown.text}. ${notReopenedText(notReopened)}` } };
+    const text = notRestoredText(missed.notReattached, missed.notReopened);
+    if (!text || !shown || shown.id !== notice.noticeId) return {};
+    return { undoNotice: { ...shown, text: `${shown.text}. ${text}` } };
   });
   const task = restoreQueue.then(async () => {
     const replacementRevision = canvasReplacementRevision;
@@ -2845,11 +2852,13 @@ function sendRestore(
     }
     for (const done of holds) done(Boolean(response?.ok));
     if (!response) {
-      answerNotice(0);
+      answerNotice(NOTHING_MISSED);
       return;
     }
     if (response.ok) {
-      const answer = await response.json().catch(() => ({})) as { removals?: unknown; notReopened?: unknown };
+      const answer = await response.json().catch(() => ({})) as {
+        removals?: unknown; notReopened?: unknown; pinsLeft?: unknown;
+      };
       // This restore deleted nodes (a redo of a delete): the step that
       // brings them back names these records.
       const fresh = cleanRemovals(answer.removals);
@@ -2864,7 +2873,10 @@ function sendRestore(
           });
         }
       }
-      answerNotice(Array.isArray(answer.notReopened) ? answer.notReopened.length : 0);
+      answerNotice({
+        notReopened: Array.isArray(answer.notReopened) ? answer.notReopened.length : 0,
+        notReattached: pinsOnAnotherModel(answer.pinsLeft),
+      });
       return;
     }
     const reason = await backendRejectionReason(response, `Couldn't ${action} that.`);

@@ -2074,9 +2074,12 @@ restart), and a proposal reopens only if that removal closed it and it still
 passes Accept's checks (the params it sets unchanged, the proposal staged on
 the live graph, what its runs would start unchanged), hasn't expired, and
 the open caps allow it. The restore's answer says what happened:
-`reattached`, `pinsLeft` (`{id, reason}`: `deleted since`, `changed
-since`, `its node came back as another model` or `another project is open
-now`), `reopened` and `notReopened` (`{id, reason}`). Proposals live in
+`reattached`, `pinsLeft` (`{id, reason, code}`: `deleted since`
+(`deleted`), `changed since` (`changed`), `its node came back as another
+model` (`another-model`) or `another project is open now`
+(`another-project`); the canvas counts by `code`, and its notice names only
+`another-model` pins: "Restored the node. 1 pin couldn't be re-attached."),
+`reopened` and `notReopened` (`{id, reason}`). Proposals live in
 memory, so after a restart the ones the delete closed can't reopen and are
 counted in `notReopened`. A proposal that also needs another deleted node
 waits, closed and uncounted, until that delete is undone too. Redo deletes

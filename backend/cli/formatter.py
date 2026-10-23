@@ -973,6 +973,8 @@ def format_undone(result: dict[str, Any]) -> str:
     pins = result.get("reattached") or []
     if pins:
         lines.append(f"  Back on {'its node' if len(pins) == 1 else 'their nodes'}: {', '.join(pins)}")
+    for row in result.get("pinsLeft") or []:
+        lines.append(f"  Couldn't re-attach {row.get('id')}: {row.get('reason')}")
     reopened = result.get("reopened") or []
     if reopened:
         lines.append(f"  Reopened: {', '.join(reopened)}")

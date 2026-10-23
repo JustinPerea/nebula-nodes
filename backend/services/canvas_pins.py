@@ -105,6 +105,24 @@ def _stored_position(node: Mapping[str, Any] | None) -> dict[str, float] | None:
 _UNDO_KEYS = ("detachedBy", "detachedDefinition", "attachedPosition")
 _ANY_PROJECT = object()
 ANOTHER_PROJECT = "another project is open now"
+CHANGED_SINCE = "changed since"
+ANOTHER_MODEL = "its node came back as another model"
+DELETED_SINCE = "deleted since"
+# A pin an undo left as it is says why twice: ``reason`` for agents to read,
+# ``code`` for the canvas to count by. Only "another-model" is said in the
+# person's notice (GM, 2026-10-23: "1 pin couldn't be re-attached."); a pin
+# they deleted or changed since is their own doing and stays quiet.
+PIN_LEFT_CODES = {
+    CHANGED_SINCE: "changed",
+    ANOTHER_MODEL: "another-model",
+    DELETED_SINCE: "deleted",
+    ANOTHER_PROJECT: "another-project",
+}
+
+
+def pin_left(pin_id: str, reason: str) -> dict[str, str]:
+    """A pin an undo left as it is: ``{id, reason, code}``."""
+    return {"id": pin_id, "reason": reason, "code": PIN_LEFT_CODES[reason]}
 
 
 def public_pin(pin: Mapping[str, Any]) -> dict[str, Any]:
@@ -326,7 +344,7 @@ class CanvasPins:
         forged list attaches nothing: a pin someone deleted since, one another
         delete, an import or a clear detached, or one whose node came back as
         another model is left as it is and reported in ``left`` ({id,
-        reason}). Pins the record doesn't name but the removal detached go
+        reason, code}, see ``pin_left``). Pins the record doesn't name but the removal detached go
         back too (the record may come from a canvas that never saw the
         delete's answer)."""
         wanted = {str(r["id"]): str(r["nodeId"]) for r in removals if r.get("nodeId") in back}
@@ -346,13 +364,13 @@ class CanvasPins:
                         and pin.get("detachedFrom") == wanted[removal]):
                     if pin_id in named:
                         seen.add(pin_id)
-                        left.append({"id": pin_id, "reason": "changed since"})
+                        left.append(pin_left(pin_id, CHANGED_SINCE))
                     continue
                 seen.add(pin_id)
                 node_id = wanted[removal]
                 if pin.get("detachedDefinition") != back[node_id]:
                     # The node under that id now is another model: not the one it was on.
-                    left.append({"id": pin_id, "reason": "its node came back as another model"})
+                    left.append(pin_left(pin_id, ANOTHER_MODEL))
                     continue
                 spot = _stored_position({"position": pin.get("attachedPosition")})
                 pin["anchor"] = {"nodeId": node_id}
@@ -361,7 +379,7 @@ class CanvasPins:
                 for key in ("detachedFrom", *_UNDO_KEYS):
                     pin.pop(key, None)
                 back_on.append(copy.deepcopy(pin))
-            left.extend({"id": pin_id, "reason": "deleted since"} for pin_id in named if pin_id not in seen)
+            left.extend(pin_left(pin_id, DELETED_SINCE) for pin_id in named if pin_id not in seen)
             return {"reattached": back_on, "left": left}
 
         try:
@@ -369,7 +387,7 @@ class CanvasPins:
         except PinError as exc:
             if exc.detail != ANOTHER_PROJECT:
                 raise
-            return {"reattached": [], "left": [{"id": pin_id, "reason": ANOTHER_PROJECT} for pin_id in named]}
+            return {"reattached": [], "left": [pin_left(pin_id, ANOTHER_PROJECT) for pin_id in named]}
 
     def reanchor_missing(self, live_node_ids: set[str], positions: Mapping[str, Any] | None = None) -> list[dict[str, Any]]:
         """Detach every pin whose node is no longer on the canvas (after an import or a clear)."""

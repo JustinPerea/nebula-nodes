@@ -39,9 +39,30 @@ export function notReopenedText(count: number): string {
   return count === 1 ? "1 proposal couldn't be reopened." : `${count} proposals couldn't be reopened.`;
 }
 
-export function restoredNoticeText(count: number, notReopened: number): string {
+/** What couldn't go back with the nodes. A pin counts only when its node came
+ * back as another model (GM, 2026-10-23): "1 pin couldn't be re-attached.",
+ * and with proposals "1 pin and 2 proposals couldn't be restored.". */
+export function notRestoredText(notReattached: number, notReopened: number): string {
+  if (notReattached === 0) return notReopened > 0 ? notReopenedText(notReopened) : '';
+  const pins = notReattached === 1 ? '1 pin' : `${notReattached} pins`;
+  if (notReopened === 0) return `${pins} couldn't be re-attached.`;
+  const proposals = notReopened === 1 ? '1 proposal' : `${notReopened} proposals`;
+  return `${pins} and ${proposals} couldn't be restored.`;
+}
+
+export function restoredNoticeText(count: number, notReopened: number, notReattached = 0): string {
   const restored = count === 1 ? 'Restored the node.' : `Restored ${count} nodes.`;
-  return notReopened > 0 ? `${restored} ${notReopenedText(notReopened)}` : restored;
+  const missed = notRestoredText(notReattached, notReopened);
+  return missed ? `${restored} ${missed}` : restored;
+}
+
+/** The pins a restore answered it left on another model (`pinsLeft` code
+ * "another-model"): counted by the code, never by the reason's words. */
+export function pinsOnAnotherModel(raw: unknown): number {
+  return Array.isArray(raw)
+    ? raw.filter((item) => Boolean(item) && typeof item === 'object'
+      && (item as { code?: unknown }).code === 'another-model').length
+    : 0;
 }
 
 const REMOVAL_ID = /^rm_[0-9a-f]{16}$/;

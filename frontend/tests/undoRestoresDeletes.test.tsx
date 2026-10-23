@@ -60,7 +60,7 @@ import { CanvasUndoNotice } from '../src/components/canvas/CanvasUndoNotice';
 import { StudioNotice } from '../src/components/canvas/StudioNotice';
 import { SelectionToolbar } from '../src/components/SelectionToolbar';
 import { ContextMenu } from '../src/components/ContextMenu';
-import { deletedNoticeText, restoredNoticeText } from '../src/lib/deleteNotice';
+import { deletedNoticeText, notRestoredText, restoredNoticeText } from '../src/lib/deleteNotice';
 
 const CLAUDE = { kind: 'agent', id: 'claude', name: 'Claude', color: '#d97757' };
 const initialGraph = { ...useGraphStore.getState() };
@@ -110,6 +110,17 @@ describe("GM's lines", () => {
     expect(restoredNoticeText(3, 0)).toBe('Restored 3 nodes.');
     expect(restoredNoticeText(3, 1)).toBe("Restored 3 nodes. 1 proposal couldn't be reopened.");
     expect(restoredNoticeText(1, 2)).toBe("Restored the node. 2 proposals couldn't be reopened.");
+  });
+
+  // GM, 2026-10-23: a pin whose node came back as another model is counted like proposals.
+  it('counts pins that couldn\'t go back, alone and with proposals', () => {
+    expect(restoredNoticeText(1, 0, 1)).toBe("Restored the node. 1 pin couldn't be re-attached.");
+    expect(restoredNoticeText(2, 0, 2)).toBe("Restored 2 nodes. 2 pins couldn't be re-attached.");
+    expect(restoredNoticeText(3, 2, 1)).toBe("Restored 3 nodes. 1 pin and 2 proposals couldn't be restored.");
+    expect(restoredNoticeText(1, 1, 2)).toBe("Restored the node. 2 pins and 1 proposal couldn't be restored.");
+    expect(notRestoredText(0, 0)).toBe('');
+    expect(notRestoredText(1, 0)).toBe("1 pin couldn't be re-attached.");
+    expect(notRestoredText(0, 1)).toBe("1 proposal couldn't be reopened.");
   });
 });
 
@@ -164,6 +175,38 @@ describe('every delete path: no confirm, a notice with Undo', () => {
     expect(notice()?.text).toBe("Restored 2 nodes. 1 proposal couldn't be reopened.");
   });
 
+  it("counts a pin whose node came back as another model, and stays quiet about one deleted since", async () => {
+    useGraphStore.getState().deleteNode('n1');
+    await settle();
+    net.restoreAnswers.push({ pinsLeft: [
+      { id: 'pin_n1', reason: 'its node came back as another model', code: 'another-model' },
+      { id: 'pin_gone', reason: 'deleted since', code: 'deleted' },
+      { id: 'pin_moved', reason: 'changed since', code: 'changed' },
+    ] });
+    useGraphStore.getState().undo();
+    await settle();
+    expect(notice()?.text).toBe("Restored the node. 1 pin couldn't be re-attached.");
+  });
+
+  it('says pins and proposals together when both couldn\'t go back', async () => {
+    useGraphStore.getState().deleteNode('n1');
+    await settle();
+    net.restoreAnswers.push({ notReopened: [{ id: 'p_shared', reason: 'it expired' }, { id: 'p_2', reason: 'it expired' }],
+      pinsLeft: [{ id: 'pin_n1', reason: 'its node came back as another model', code: 'another-model' }] });
+    useGraphStore.getState().undo();
+    await settle();
+    expect(notice()?.text).toBe("Restored the node. 1 pin and 2 proposals couldn't be restored.");
+  });
+
+  it('never counts by the reason text: a pin left without a code is quiet', async () => {
+    useGraphStore.getState().deleteNode('n1');
+    await settle();
+    net.restoreAnswers.push({ pinsLeft: [{ id: 'pin_n1', reason: 'its node came back as another model' }] });
+    useGraphStore.getState().undo();
+    await settle();
+    expect(notice()?.text).toBe('Restored the node.');
+  });
+
   it('redo deletes again, and the next undo names the new removal', async () => {
     useGraphStore.getState().deleteNode('n1');
     await settle();
@@ -201,6 +244,16 @@ describe("an agent's delete, undone by the person", () => {
     await settle();
     expect(restores()[0].removals).toEqual([removal]);
     expect(notice()?.text).toBe("Undid Claude’s edit. 1 proposal couldn't be reopened.");
+  });
+
+  it('counts a pin that came back on another model there too', async () => {
+    const removal = { id: 'rm_00000000000000bc', nodeId: 'n1', pins: ['pin_n1'], proposals: ['p_1'] };
+    sync([textNode('n2')], [], { edit: { actor: CLAUDE, id: 'ed_0123456789abcdee', removals: [removal] } });
+    net.restoreAnswers.push({ notReopened: [{ id: 'p_1', reason: 'it expired' }],
+      pinsLeft: [{ id: 'pin_n1', reason: 'its node came back as another model', code: 'another-model' }] });
+    useGraphStore.getState().undo();
+    await settle();
+    expect(notice()?.text).toBe("Undid Claude’s edit. 1 pin and 1 proposal couldn't be restored.");
   });
 });
 

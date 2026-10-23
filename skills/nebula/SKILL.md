@@ -121,7 +121,8 @@ as it is (the output lists it). A run counts as a change: a node the person
 (or another agent) ran since your edit stays with its params, name and
 input wires ("n3 ran since (run by the person), so it stays"). Nodes only
 you ran still go, so you can undo your own experiments. A node you deleted
-comes back with the person's pins on it ("Back on its node: pin_…") and the
+comes back with the person's pins on it ("Back on its node: pin_…"; one the
+person deleted since prints "Couldn't re-attach …" with why) and the
 proposals the delete closed reopen when they still fit ("Reopened: p_…";
 one that expired or no longer fits prints "Couldn't reopen …" with why).
 The person's Cmd+Z of your delete does the same, and so does your undo

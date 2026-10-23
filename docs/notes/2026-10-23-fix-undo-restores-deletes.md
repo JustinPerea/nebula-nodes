@@ -184,9 +184,9 @@ What undo still can't restore, and why:
 - **Proposals when the agent already has 3 open (or 12 are open in all).** Reopening would break the cap. Counted.
 - **Proposals that no longer pass Accept's checks** against the restored graph. In practice this is rare, because a change the person makes after the delete is undone first. Counted.
 - **Asset (cover) proposals after a restart.** Memory-only like canvas proposals. Counted (since the review fix below).
-- **Pins the person deleted since the delete, or a pin an import or a clear detached again since.** Left as they are. Agents are told (`pinsLeft`); the notice says nothing, since GM's line covers proposals only.
+- **Pins the person deleted since the delete, or a pin an import or a clear detached again since.** Left as they are. Agents are told (`pinsLeft`); the notice says nothing (GM, 2026-10-23: "stay silent. You did that yourself.").
 - **New since the second review: proposals closed before a clear, an import or a project switch.** Node ids start again after a clear or an import, so a later "n1" may be another node. Undoing a delete from before one of those still puts the node and its pins back, but its proposals stay closed. Counted: "Restored the node. 1 proposal couldn't be reopened." (reason "the canvas was cleared since" / "the canvas was replaced since").
-- **New since the second review: a pin whose node came back as a different model.** It stays detached (an agent can't move the person's pin onto its own node this way). Agents are told; the notice says nothing.
+- **New since the second review: a pin whose node came back as a different model.** It stays detached. Agents are told, and since GM's answer the notice counts it: "Restored the node. 1 pin couldn't be re-attached.", or with proposals "Restored {n} nodes. 1 pin and 2 proposals couldn't be restored." (see "Line 7" below).
 
 ## Second review
 
@@ -301,3 +301,24 @@ A second independent review confirmed five defects, each reproduced (scratch tes
   - `tsc -b`: 0 errors. Lint: 0.
   - `vite build` plus the budget check: 363,426 bytes raw / 109,187 gzip, the same as before.
   - Whole vitest suite: **4,945 of 4,945 passed**, 382 files.
+
+## Line 7: a pin on another model is counted (GM, 2026-10-23)
+
+GM approved a)'s lines as built and answered the two pin cases: "6, a pin you deleted after the delete: stay silent. You did that yourself. 7, a pin whose node came back as a different model: count it like proposals. "Restored the node. 1 pin couldn't be re-attached." When both apply: "Restored {n} nodes. 1 pin and 2 proposals couldn't be restored.""
+
+- **Counted by a code, not by words.** Every `pinsLeft` entry now carries a `code` next to its `reason`: `deleted`, `changed`, `another-model` or `another-project` (`canvas_pins.PIN_LEFT_CODES` and `pin_left`, used by every place that leaves a pin). The canvas counts only `another-model` (`pinsOnAnotherModel`), so rewording a reason for agents can't change the notice. The field is additive for agents; the reasons are unchanged.
+- **Lines.** `notRestoredText(pins, proposals)`: "1 pin couldn't be re-attached." / "2 pins couldn't be re-attached." alone, "1 pin and 2 proposals couldn't be restored." with proposals (GM's form, my plurals), and the proposal-only line as before. The person's undo of an agent's edit gets the same tail: "Undid Claude’s edit. 1 pin and 1 proposal couldn't be restored."
+- **How often it shows.** Rarely, through the person's own canvas: a step names only the records of the nodes it brings back as the model each record was made for (`removalsFor`, second review), so the canvas doesn't send a record for a node that comes back as another model. The line shows when the backend finds the mismatch itself, for example from a record without `definitionId`. A record the canvas filters out is not counted, since the canvas can't tell whether its pin was deleted since (silent) or is still waiting.
+- **Tests (written first).** Backend: 4 red on 0acb7ca4 (the PR head before this change), all for the missing `code`. They are `test_a_stale_record_cant_put_the_pin_on_another_model`, `test_a_pin_deleted_since_is_left_and_reported` (both updated), `test_a_stale_record_for_a_pin_a_later_delete_detached_says_changed` (new; the first test of the "changed since" path) and `test_a_pin_in_another_project_is_left_with_its_code` (new). Frontend, `undoRestoresDeletes.test.tsx`: 5 new, 4 red (the lines, the count with deleted and changed pins quiet, pins and proposals together, the agent's edit). The fifth, "a pin left without a code is quiet", is a guard that passes either way. Red output: the session scratchpad's `undo-line7/`.
+
+- **Review** (two lenses, each finding verified):
+  - Correctness found nothing. It confirmed the 4 frontend tests are red on 0acb7ca4 by running them on an export, and that every pinsLeft writer goes through `pin_left`, so the code lookup can't raise.
+  - The contract lens raised two findings:
+    - Refuted: "line 7 effectively never shows", since the note's example (a record without `definitionId`) does reach it.
+    - Confirmed, and older than this change: `undo_canvas_edit`'s docstring left out `pinsLeft`, `wired` and `unwired`, and said its `message` tells what was left, which wasn't true for pins.
+  - Fixed on every agent surface, tests first (2 red):
+    - The undo `message` adds "1 pin left as it is (pin_3: deleted since)".
+    - `nebula undo` prints "Couldn't re-attach pin_3: deleted since".
+    - The tool docstring lists every field, `pinsLeft` as `{id, reason, code}` with its codes.
+    - SKILL.md names the new CLI line.
+  - These additions show only when a pin was left. Every existing message is unchanged.

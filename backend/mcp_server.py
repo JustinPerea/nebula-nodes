@@ -1115,12 +1115,15 @@ def undo_canvas_edit(token: str | list[str], ctx: Context | None = None) -> dict
     reason "ran since", with `ranBy` and a message such as "n3 ran since (run
     by the person), so it stays". Your own runs don't count, so you can still
     undo your own experiments.
-    Nodes you removed get back the pins that were on them (`reattached`), and
-    proposals your delete closed reopen when they still fit (`reopened`; the
-    ones that can't, say because they expired, are in `notReopened` with the
-    reason).
-    Returns `{status, added, removed, changed, renamed, moved, skipped,
-    reattached, reopened, notReopened, message}` (`message` says what went back and what was left, and why);
+    Nodes you removed get back the pins that were on them (`reattached`; a
+    pin that can't go back, say because the person deleted it since, is in
+    `pinsLeft` as `{id, reason, code}`, code "deleted", "changed",
+    "another-model" or "another-project"), and proposals your delete closed
+    reopen when they still fit (`reopened`; the ones that can't, say because
+    they expired, are in `notReopened` with the reason).
+    Returns `{status, added, removed, changed, renamed, moved, wired, unwired,
+    skipped, reattached, pinsLeft, reopened, notReopened, message}`
+    (`message` says what went back and what was left, and why);
     `status` is "undone", "skipped" (nothing could go back; the token still
     works if a changed part is put back, but a node someone ran since stays
     for good) or "already-undone" (by you, or by the person with Cmd+Z, in
