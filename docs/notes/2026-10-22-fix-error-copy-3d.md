@@ -145,6 +145,12 @@ Same branch, from `ff4ba0be` (3d's commit plus a merge of origin/main). No packa
 - **Review, backend whole suite again** through iso.sh (`.venv/bin/python -m pytest -q -p no:cacheprovider`): **10090 passed, 71 skipped, 0 failed** in 13.8 min (the 5 new review cases on top of 10085). Frontend gates skipped again: the review fix changed no frontend file.
 - **Frontend gates skipped**: part 2 changed no frontend file (the card reads the same `person`, `providerText` and `category` fields). The live check ran the worktree's frontend.
 
+## Merging main after round 3e (#171)
+
+- Seven files conflicted, all because 3d and 3e added next to each other. Both sides were kept: the engine's person_line imports, person_line's helpers (3d's names, then 3e's `missing_key_line`, `port_line` and `joined_lines`; no name defined twice), the socket event types (3d's `providerText` on the error event, 3e's `person` on the validation error), the graph store's validation readings, docs/MCP-SETUP.md, skills/nebula/SKILL.md and the round 3c notes' pointers.
+- **One fix the merge needed.** 3e's shared `NodeRunError` (the run error on the nine cards that showed none) was written before 3d's `errorProviderText` existed, so on those cards a status-table line ("fal.ai is having trouble right now. …") would have hidden the provider's words instead of putting them behind Details. It now passes `providerText`. Pinned per card type in `frontend/tests/errorCopy.round3e.cards.test.tsx` ("keeps the provider's words behind Details under a status-table line"): with the fix taken out, 9 failed, the nine cards that use `NodeRunError`; with it, 56 of 56 pass. Every other `NodeError` call site already passed it.
+- After the merge: the error-copy backend suites (3c, 3c-2, 3d, 3d-2, 3e, the CLI run errors, node routes, node_errors reload) 732 passed; `npx tsc -b` clean.
+
 ## Open items
 
 - The pre-run "Missing API key: X" lines and the cards with no run error belong to lane 3e.

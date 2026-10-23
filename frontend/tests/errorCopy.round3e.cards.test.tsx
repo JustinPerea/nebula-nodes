@@ -36,6 +36,7 @@ const HEADING = "Couldn't run the node.";
 const GENERAL = "That didn't work. Try again, or reload if it keeps happening.";
 const RAW = 'FAL submit failed (500): {"detail":"upstream exploded","request_id":"req_123"}';
 const PERSON = 'Add your fal.ai API key in Settings, then run the node again.';
+const TABLE_LINE = 'fal.ai is having trouble right now. Try again in a few minutes.';
 
 /** One node per card type, as the canvas makes them (graphStore's nodeTypes map). */
 const CASES: Record<string, Pick<NodeData, 'definitionId'> & Partial<NodeData>> = {
@@ -99,6 +100,18 @@ describe('every card on the canvas shows its run error', () => {
         expect(details!.textContent).toContain('req_123');
         // The raw text is never the line itself.
         expect(container.querySelector('.model-node__error-message')?.textContent).not.toContain('req_123');
+      });
+
+      // Round 3d: a status-table line keeps the provider's own words behind Details.
+      it("keeps the provider's words behind Details under a status-table line", () => {
+        seed(type, { state: 'error', error: RAW, errorCategory: 'unknown', errorPerson: TABLE_LINE, errorProviderText: true });
+        const { container } = render(<Card type={type} />);
+        expect(heading(container)).toBe(HEADING);
+        expect(reason(container)).toBe(TABLE_LINE);
+        const details = container.querySelector('details.error-details') as HTMLDetailsElement | null;
+        expect(details).not.toBeNull();
+        expect(details!.open).toBe(false);
+        expect(details!.textContent).toContain('req_123');
       });
 
       it("shows the person's line with no Details", () => {
