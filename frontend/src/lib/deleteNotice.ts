@@ -54,36 +54,24 @@ export function notRestoredText(notReattached: number, notReopened: number): str
  * What a restore's answer couldn't put back, on a line of its own, when the
  * "Restored …" line no longer applies because the person moved on before the
  * answer arrived (GM - Design, 2026-10-23, round 3: "Yes, show it as a plain
- * notice with no button, using the standard timeout, under the newer notice:
- * "1 proposal from the restored node couldn't be reopened." / "{n} proposals
- * from the restored nodes couldn't be reopened." Losing that count silently
- * is the one thing to avoid.").
+ * notice with no button, using the standard timeout ... Losing that count
+ * silently is the one thing to avoid.").
  *
- * GM's two lines, verbatim, picked by the count of proposals. The node count
- * can differ (two proposals on one node, one proposal among three restored
- * nodes); GM's lines are kept as written and that is noted for GM.
- *
- * The pin lines and the line for both are GM's too (follow-up, 2026-10-23):
- * "1 pin from the restored node couldn't be re-attached." / "{n} pins from the
- * restored nodes couldn't be re-attached." and, for both, "1 pin and 2
- * proposals from the restored nodes couldn't be restored.", built as "{p}
- * pin(s) and {q} proposal(s) from the restored nodes couldn't be restored."
- * with each noun following its own count. The line for both always says
- * "nodes", as GM's example does: the late count adds up across restores, so
- * no single node count reaches here. Empty when nothing was missed.
+ * GM's lines, round 4, verbatim: "LATE LINES: drop the node word, which fixes
+ * the mismatch for good. "After the restore, 1 proposal couldn't be
+ * reopened." / "…{n} proposals couldn't be reopened." "After the restore, 1
+ * pin couldn't be re-attached." / "…{n} pins couldn't be re-attached."
+ * "After the restore, {p} pin(s) and {q} proposal(s) couldn't be restored."
+ * (each noun by its own count)". No node count is named, so a line never
+ * disagrees with how many nodes came back (the late count adds up across
+ * restores). Empty when nothing was missed.
  */
 export function lateRestoreText(notReopened: number, notReattached: number): string {
   const proposals = notReopened === 1 ? '1 proposal' : `${notReopened} proposals`;
   const pins = notReattached === 1 ? '1 pin' : `${notReattached} pins`;
-  if (notReattached > 0 && notReopened > 0) return `${pins} and ${proposals} from the restored nodes couldn't be restored.`;
-  if (notReopened > 0) {
-    return notReopened === 1 ? "1 proposal from the restored node couldn't be reopened."
-      : `${proposals} from the restored nodes couldn't be reopened.`;
-  }
-  if (notReattached > 0) {
-    return notReattached === 1 ? "1 pin from the restored node couldn't be re-attached."
-      : `${pins} from the restored nodes couldn't be re-attached.`;
-  }
+  if (notReattached > 0 && notReopened > 0) return `After the restore, ${pins} and ${proposals} couldn't be restored.`;
+  if (notReopened > 0) return `After the restore, ${proposals} couldn't be reopened.`;
+  if (notReattached > 0) return `After the restore, ${pins} couldn't be re-attached.`;
   return '';
 }
 

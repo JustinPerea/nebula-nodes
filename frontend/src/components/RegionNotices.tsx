@@ -12,10 +12,11 @@ import '../styles/canvasProposals.css';
  * edit, an undo or a failure, never at the first paint). On the canvas, the
  * proposal's run-later notice (an accepted proposal waiting for the run to
  * finish) and the canvas notice with its Undo or Redo; on the other screens
- * the canvas notice's written lines (StudioNotice). On every screen, under
- * the canvas notice, a restore's late count (CanvasLateNotice), a written
- * line with no Undo or Redo. A project over the save limit (Q118): its one
- * notice, and the "what's large" panel it and the header open.
+ * the canvas notice's written lines (StudioNotice). On every screen, right
+ * above the canvas notice, a restore's late count (CanvasLateNotice), a
+ * written line with no Undo or Redo (its slot's place: lib/noticeSlots.ts).
+ * A project over the save limit (Q118): its one notice, and the "what's
+ * large" panel it and the header open.
  */
 export function RegionNotices({ canvas }: { canvas: boolean }) {
   return (

@@ -1100,12 +1100,18 @@ async function loadWorkspace(): Promise<void> {
   }
 }
 
-/** What the toast says when an agent (or a script) switched the open project. */
+/** What the toast says when an agent (or a script) switched the open project.
+ * GM's lines (round 4b, "there's room for about 58 characters"): "Claude Code
+ * opened “{name}”. Your edits are saved as a copy." / "Claude Code made and
+ * opened “{name}”. Your edits are saved as a copy." / made with no copy:
+ * "Claude Code made and opened “{name}”." ("A long name can still wrap.
+ * That's fine for a toast."). Opened with no copy is unchanged ("Claude Code
+ * opened “{name}”."). The agent's name is whatever the switch carries. */
 export function switchMessage(notice: ProjectSwitchNotice): string {
   const who = notice.actorName ?? 'An outside app';
-  const what = notice.created ? `made a new project, “${notice.projectName}”, and opened it` : `opened “${notice.projectName}”`;
-  const kept = notice.keptCopy ? ' Your last unsaved changes were kept as a copy in Projects.' : '';
-  return `${who} ${what}.${kept}`;
+  const name = `“${notice.projectName}”`;
+  const what = notice.created ? `made and opened ${name}` : `opened ${name}`;
+  return notice.keptCopy ? `${who} ${what}. Your edits are saved as a copy.` : `${who} ${what}.`;
 }
 
 /** True when a graphSync's projectSwitch is the switch away from the project

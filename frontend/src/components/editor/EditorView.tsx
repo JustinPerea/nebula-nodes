@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { WorkspaceHeader } from '../WorkspaceHeader';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
@@ -6,6 +6,7 @@ import { EditorBreadcrumb } from './EditorBreadcrumb';
 import { VideoPreview } from './VideoPreview';
 import { EditorTransport } from './EditorTransport';
 import { Timeline } from './Timeline';
+import { useBottomBarClearance } from '../../hooks/useBottomBarClearance';
 import './EditorView.css';
 
 export function EditorView() {
@@ -33,6 +34,20 @@ export function EditorView() {
     const videoOut = Object.values(outputs).find((o) => o.type === 'Video');
     return videoOut?.value ?? null;
   })();
+
+  // The transport row and the timeline are this screen's bottom bar: both
+  // publish their top edge, so the app's notices sit 8 px above the
+  // transport, over the preview's bottom edge (GM - Design, 2026-10-23, round
+  // 4: "A notice should never sit over a timeline being edited, even one that
+  // shares its column."; round 4b: "publish the transport's top edge as well,
+  // so notices sit over the preview's bottom edge. Cut, Vol and zoom are
+  // being used while someone edits."). Measured again when either changes
+  // size (the transport wraps to two rows when a clip is selected), on a
+  // resize, and when they come or go; the empty editor has neither.
+  const transportRef = useRef<HTMLDivElement>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
+  const hasTimeline = Boolean(editNode && sourceNode && sourceUrl);
+  useBottomBarClearance([transportRef, timelineRef], hasTimeline);
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -170,8 +185,8 @@ export function EditorView() {
       )}
       <EditorBreadcrumb sourceNode={sourceNode} editNode={editNode} />
       <VideoPreview sourceUrl={sourceUrl} editNode={editNode} />
-      <EditorTransport editNode={editNode} sourceUrl={sourceUrl} />
-      <Timeline editNode={editNode} sourceUrl={sourceUrl} />
+      <EditorTransport ref={transportRef} editNode={editNode} sourceUrl={sourceUrl} />
+      <Timeline ref={timelineRef} editNode={editNode} sourceUrl={sourceUrl} />
     </div>
   );
 }

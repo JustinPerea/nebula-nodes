@@ -1,24 +1,82 @@
 /**
- * Why the canvas keeps a node that holds World Labs state, in the words the
- * backend's delete refusal uses (backend/main.py _paid_state_person, GM -
- * Design, error copy round 3: "This node is still waiting on World Labs.
- * Check the job in Marble, then {the node's actual button label} before you
- * delete it."). The canvas refuses these deletes itself, without a request,
- * so it can't read the backend's line; these are the same words, pinned equal
- * by backend/tests/test_error_copy_round3b.py (round 3b). Each names the
- * control that clears the state: the status bar's "Checked Marble — unlock"
- * for a start Nebula couldn't confirm, Run History's "Checked Marble —
- * forget" for a recovery record. Several nodes take the canvas-wide line.
+ * The backend's words when it refuses a delete or a run because a node holds
+ * World Labs state (backend/main.py _paid_state_person, GM - Design, error
+ * copy round 3: "This node is still waiting on World Labs. Check the job in
+ * Marble, then {the node's actual button label} before you delete it."),
+ * pinned equal by backend/tests/test_error_copy_round3b.py (round 3b). The
+ * backend says them to the person (agents get the specific text), and they
+ * stay word for word: the project screen still shows the canvas-wide unlock
+ * line (projectStore worldLabsHold), and the canvas reads the two delete lines
+ * to know a refusal is one GM trimmed (deleteRefusalText).
  */
 export const NODE_WAITING_UNLOCK = "This node is still waiting on World Labs. Check the job in Marble, then use “Checked Marble — unlock” before you delete it.";
 export const NODE_WAITING_FORGET = "This node is still waiting on World Labs. Check the job in Marble, then use “Checked Marble — forget” in Run History before you delete it.";
 export const SOME_NODE_WAITING_UNLOCK = "A node is still waiting on World Labs. Check the job in Marble, then use “Checked Marble — unlock” before you try again.";
 export const SOME_NODE_WAITING_FORGET = "A node is still waiting on World Labs. Check the job in Marble, then use “Checked Marble — forget” in Run History before you try again.";
 
-/** The line for deleting `count` nodes when one holds an unconfirmed start (`unlock`) or only a recovery record. */
-export function waitingOnWorldLabs(count: number, unlock: boolean): string {
-  if (count === 1) return unlock ? NODE_WAITING_UNLOCK : NODE_WAITING_FORGET;
-  return unlock ? SOME_NODE_WAITING_UNLOCK : SOME_NODE_WAITING_FORGET;
+/**
+ * What the canvas notice says when it keeps nodes because one holds World
+ * Labs state (GM - Design, round 4, "TRIMS to one line at 560 px", and round
+ * 4b, its answers on #181).
+ *
+ * One node (round 4; round 4b: "The one-node fallback is fine as measured"):
+ * - unlock: "Couldn't delete the node. It's waiting on World Labs. Check
+ *   Marble, then unlock it."
+ * - forget: "Couldn't delete it. It's waiting on World Labs. Check Marble,
+ *   then forget it in Run History." (GM's fallback heading: the full one
+ *   wraps at 560 px.)
+ *
+ * Several nodes (round 4b), every line headed "Couldn't delete them.":
+ * - every one held: "They're waiting on World Labs. Check Marble, then unlock
+ *   them."
+ * - some held, {held} ≥ 2: "{held} are waiting on World Labs. Check Marble,
+ *   then unlock them."
+ * - one of them held: "One is waiting on World Labs. Check Marble, then
+ *   unlock it." (GM's newest line; it replaces round 4's counted "Couldn't
+ *   delete {n} nodes. One is waiting …").
+ * - every forget form ends "Check Marble, then use Run History." (GM: "Use
+ *   the same tail on every forget form that wraps, so the single-node one
+ *   stays as it is.").
+ *
+ * `unlock`: a held node has an unconfirmed start (the status bar's "Checked
+ * Marble — unlock"); else a recovery record (Run History's "Checked Marble —
+ * forget"). `held` is how many of the `count` nodes hold World Labs state.
+ */
+export function heldDeleteText(count: number, unlock: boolean, held = 1): string {
+  if (count === 1) {
+    return unlock ? "Couldn't delete the node. It's waiting on World Labs. Check Marble, then unlock it."
+      : "Couldn't delete it. It's waiting on World Labs. Check Marble, then forget it in Run History.";
+  }
+  const waiting = held <= 1 ? 'One is' : held >= count ? "They're" : `${held} are`;
+  const then = unlock ? `unlock ${held <= 1 ? 'it' : 'them'}.` : 'use Run History.';
+  return `Couldn't delete them. ${waiting} waiting on World Labs. Check Marble, then ${then}`;
+}
+
+const isHeldReason = (reason: string) => reason === NODE_WAITING_UNLOCK || reason === NODE_WAITING_FORGET;
+
+/**
+ * The canvas notice for deletes the backend refused, from the reasons it gave
+ * (one per refused node) under `heading` ("Couldn't delete the node." /
+ * "Couldn't delete {n} nodes."). The backend's two World Labs lines are the
+ * ones GM trimmed: when any reason is one, the person reads GM's line
+ * (heldDeleteText), the same words the canvas's own refusal uses, and any
+ * other reasons follow it, each once, word for word. So a held node among
+ * other reasons also reads "Couldn't delete them. One is waiting …" (round
+ * 4b: GM's lines for several nodes all drop the count; one heading for the
+ * held sentence wherever it shows). With no held node, `heading` and the
+ * backend's reasons as given. An unconfirmed start wins over a recovery
+ * record, as on the canvas. The held nodes are counted before duplicates go
+ * (two held nodes give the same line twice), so two of them read "They're
+ * waiting".
+ */
+export function deleteRefusalText(heading: string, count: number, reasons: readonly string[]): string {
+  const heldCount = reasons.filter(isHeldReason).length;
+  const unique = [...new Set(reasons)];
+  const held = unique.filter(isHeldReason);
+  if (held.length === 0) return `${heading} ${unique.join(' ')}`;
+  const unlock = held.includes(NODE_WAITING_UNLOCK);
+  const others = unique.filter((reason) => !isHeldReason(reason));
+  return [heldDeleteText(count, unlock, heldCount), ...others].join(' ');
 }
 
 /**

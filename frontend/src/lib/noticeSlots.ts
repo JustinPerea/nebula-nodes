@@ -4,17 +4,17 @@ import { useSyncExternalStore } from 'react';
  * The app's one notice region holds one stack (GM - Design, 2026-10-23: "One
  * region, one stack, and nothing else draws toasts."). Each kind of item has
  * a slot in it, listed here top to bottom as the column draws them, so the
- * order never depends on which item mounted first. Bottom up: a restore's
- * late count right above the bar, under the newer notice it arrived after
- * (GM - Design, round 3: "a plain notice with no button ... under the newer
- * notice"); then the canvas notice (its Undo or Redo, an error); then the toasts
- * about the person's own last action (an asset moved to the trash, a board
- * step, a pin that couldn't save, a project moved to the trash); then the
- * lines about the app and the agents (the project an agent switched to, a
- * project over the save limit pausing or resuming its saves (Q118), the tab
- * that isn't the person's); then the proposal's run-later notice; and on
- * top the proposal bar ("The order from the bottom up is notices, then the
- * proposal bar.").
+ * order never depends on which item mounted first. Bottom up: the canvas
+ * notice (its Undo or Redo, an error) right above the bar; then a restore's
+ * late count, above the newer notice it arrived after (GM - Design, round 4:
+ * "With two notices showing, put the late line above the newer one, so the
+ * notice with a button stays nearest the bar."); then the toasts about the
+ * person's own last action (an asset moved to the trash, a board step, a pin
+ * that couldn't save, a project moved to the trash); then the lines about the
+ * app and the agents (the project an agent switched to, a project over the
+ * save limit pausing or resuming its saves (Q118), the tab that isn't the
+ * person's); then the proposal's run-later notice; and on top the proposal
+ * bar ("The order from the bottom up is notices, then the proposal bar.").
  *
  * An item renders where its own state lives and portals into its slot
  * (InNoticeRegion), so it keeps its role, buttons, timers and hold.
@@ -29,8 +29,8 @@ export const NOTICE_SLOTS = [
   'pin',
   'board',
   'asset-trash',
-  'notice',
   'late',
+  'notice',
 ] as const;
 
 export type NoticeSlot = (typeof NOTICE_SLOTS)[number];
