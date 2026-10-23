@@ -262,6 +262,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
         <NodeError
           category={nodeData.errorCategory}
           friendly={nodeData.errorFriendly}
+          person={nodeData.errorPerson}
           raw={nodeData.error}
         />
       )}

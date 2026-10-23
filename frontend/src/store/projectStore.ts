@@ -18,7 +18,7 @@ import type { ProjectSwitch } from '../lib/wsClient';
 import { isOwnEcho, type EditOrigin } from '../lib/canvasUndo';
 import { TAB_ID } from '../lib/tabId';
 import { holdCommonsExits, holdProjects, refuseWhileCommonsUnsaved } from '../lib/commonsUnsaved';
-import { RequestFailedError, canTryAgain } from '../lib/errorCopy';
+import { FailureNotice, REFUSED_FALLBACK_COPY, RequestFailedError, canTryAgain, failureCopy, failureMessage, shortReason } from '../lib/errorCopy';
 import { SOME_NODE_WAITING_UNLOCK } from '../lib/worldLabsWaiting';
 import type { ProjectSnapshot, ProjectSummary, SavedProject, TrashedProject } from '../lib/projects';
 
@@ -236,7 +236,38 @@ function updateSummary(project: SavedProject): void {
   }));
 }
 
-function applyProject(project: SavedProject, revision: string, bootstrap = false): void {
+/** GM - Design, error copy round 3c: the older lines that asked the person
+ * to finish or stop the current run become "A run is still going. Let it
+ * finish or stop it.", every variant (opening, creating, deleting the open
+ * project, a canvas that turned busy on the way). It sits under the action's
+ * own heading, as the World Labs hold beside it does, and keeps its Try
+ * again: that one can work once the run ends. Every one sits beside that
+ * button, so the line drops its "then try again" (GM: "drop the "try again"
+ * ending, per the WRAP rule ... Keep the full line wherever there's no Try
+ * again button"). */
+const RUN_STILL_GOING = 'A run is still going. Let it finish or stop it.';
+/** After "Couldn't confirm …" and its short reason (GM, round 3c): what the
+ * Try again beside it does, since it only re-reads. */
+const TRY_AGAIN_CHECKS = "Try again checks your saved projects; it won't make the change twice.";
+const LOAD_HEADING = "Couldn't load your projects.";
+const runStillGoing = (heading: string) => new FailureNotice(heading, RUN_STILL_GOING);
+
+/** A failure's reason as its own sentence (GM, round 3c: "Reasons in
+ * parentheses: move each into its own sentence after the heading. No
+ * parentheses in error copy."): the request's line (never an error's own
+ * message), short when a Try again sits beside it (GM's WRAP rule). A failure
+ * with no reason of its own says none: GM's general line says "reload",
+ * which these lines warn would lose the unsaved edits. */
+function reasonSentence(error: unknown, short: boolean): string {
+  const { reason } = failureCopy(error);
+  if (reason === REFUSED_FALLBACK_COPY) return '';
+  return short ? shortReason(reason) : reason;
+}
+const sentences = (...parts: string[]) => parts.filter(Boolean).join(' ');
+
+/** `heading` names the action that loads it, for the busy line. */
+function applyProject(project: SavedProject, revision: string, bootstrap = false,
+  heading = "Couldn't load the project."): void {
   applying = true;
   const previous = getProjectContext();
   try {
@@ -245,7 +276,7 @@ function applyProject(project: SavedProject, revision: string, bootstrap = false
     const snapshot = rewriteBackendAssetUrls(project.snapshot);
     if (!useGraphStore.getState().loadProjectGraph(snapshot.nodes, snapshot.edges, snapshot.runHistory, { bootstrap })) {
       setProjectContext(previous);
-      throw new Error('The current canvas is still busy. Finish or stop its run before switching projects.');
+      throw runStillGoing(heading);
     }
     // A loaded project moves past any params-version stop, as Retry does: a
     // stop whose recovered copy is still unanswered (the tab followed an
@@ -299,8 +330,8 @@ function refusedForGood(error: unknown): boolean {
  * no Try again, and the line is the backend's refusal for the same state
  * (round 3b review). A run that is only going keeps the busy line and its
  * Try again: that one can succeed once the run ends. */
-class WorldLabsHold extends Error {
-  constructor(heading: string) { super(`${heading} ${SOME_NODE_WAITING_UNLOCK}`); }
+class WorldLabsHold extends FailureNotice {
+  constructor(heading: string) { super(heading, SOME_NODE_WAITING_UNLOCK); }
 }
 function worldLabsHold(heading: string): WorldLabsHold | null {
   const graph = useGraphStore.getState();
@@ -429,10 +460,11 @@ function handleParamsVersionChange(backendVersion: number | null): Promise<void>
     } catch (error) {
       if (superseded()) return;
       paramsVersionChange = null;
-      const reason = error instanceof Error ? error.message : 'the backend did not answer';
       // Try again sends the same recovered copy again (initialize does it first).
-      useProjectStore.setState({ error: `${PARAMS_UPDATED} Your unsaved edits couldn't be saved as a recovered project yet (${reason}). Try again before reloading.`,
-        errorRetry: { action: 'load' } });
+      useProjectStore.setState({ error: sentences(
+        "Nebula was updated while this tab was open, and your unsaved edits haven't been saved yet.",
+        reasonSentence(error, true), "Try again before you reload, or they'll be lost."),
+      errorRetry: { action: 'load' } });
       return;
     }
     if (superseded()) return;
@@ -585,7 +617,7 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
   const held = worldLabsHold(heading);
   if (held) { showError(held, retry); return; }
   if (!useGraphStore.getState().canSwitchProject()) {
-    showError(new Error('Finish or stop the current run and let pending edits finish before switching projects.'), retry);
+    showError(runStillGoing(heading), retry);
     return;
   }
   useProjectStore.setState({ busy: true, error: null, errorRetry: null });
@@ -596,10 +628,10 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
     const heldNow = worldLabsHold(heading);
     if (heldNow) throw heldNow;
     if (!useGraphStore.getState().canSwitchProject()) {
-      throw new Error('The canvas became busy. Let pending edits and runs finish before switching projects.');
+      throw runStillGoing(heading);
     }
     reserved = useGraphStore.getState().reserveGraphImport();
-    if (!reserved) throw new Error('The canvas became busy. Try again when its run finishes.');
+    if (!reserved) throw runStillGoing(heading);
     const result = await action();
     useGraphStore.getState().releaseGraphImport({ discardSuspended: true });
     reserved = false;
@@ -610,7 +642,7 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
       void handleParamsVersionChange(backendVersion);
       return;
     }
-    applyProject(result.project, result.workspaceRevision);
+    applyProject(result.project, result.workspaceRevision, false, heading);
     updateSummary(result.project);
     useProjectStore.setState({ screen: 'workspace' });
     if (result.warnings?.length) alert(`Opened.\n${result.warnings.map((line) => `• ${line}`).join('\n')}`);
@@ -628,7 +660,8 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
       if (retry.action === 'open') {
         preserveWorkspaceConflict(error instanceof Error ? error.message : "Couldn't open the project.", undefined, undefined,
           { action: 'load', reopen: retry.id });
-      } else preserveWorkspaceConflict('Could not confirm the project change. Try again to reload saved projects safely.');
+      } else preserveWorkspaceConflict(sentences("Couldn't confirm the project change.", reasonSentence(error, true),
+        TRY_AGAIN_CHECKS));
     } else showError(error, retry);
   }
   finally {
@@ -739,7 +772,8 @@ async function loadWorkspace(): Promise<void> {
     }
     const graph = await fetchCLIGraph();
     if (graph.workspaceRevision && graph.workspaceRevision !== list.workspaceRevision) {
-      throw new Error('The active project changed while loading. Try again to reload projects.');
+      // Try again sits beside the line and reloads the projects (WRAP).
+      throw new FailureNotice(LOAD_HEADING, 'The active project changed while loading.');
     }
     applyProject(project, list.workspaceRevision, true);
     useGraphStore.getState().hydrateProviderRecoveries(graph.providerRecoveries ?? []);
@@ -818,10 +852,10 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     } });
   } catch (error) {
     const who = notice.actor?.name ?? 'Another app';
-    const reason = error instanceof Error ? ` (${error.message})` : '';
     // Try again loads what is open now (initialize), as the line says.
     useProjectStore.setState({ screen: 'home', initialized: false, dirty: Boolean(pendingRecovery),
-      error: `${who} opened “${notice.projectName}”, but this window couldn't follow${reason}. Try again to load it.`,
+      error: sentences(`${who} opened “${notice.projectName}”, but this window couldn't follow it.`,
+        reasonSentence(error, true)),
       errorRetry: { action: 'load' } });
   } finally {
     useProjectStore.setState({ busy: false });
@@ -889,7 +923,13 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
         // for good (the active project went away between the listing and its
         // read, a refused recovered copy) gets the reload form, with the
         // whole line, since Try again only reads the saved projects again.
-        set({ error: error instanceof Error ? error.message : "Couldn't load your projects.",
+        // An error's own message is never the line (round 3c-2): a written
+        // failure keeps its heading and reason, anything else reads the
+        // heading over GM's general line. While unsaved edits still wait for
+        // their recovered copy it says the heading alone, as the params
+        // reload does: the general line says "reload", which drops them.
+        const line = failureMessage(error, LOAD_HEADING);
+        set({ error: pendingRecovery && line === `${LOAD_HEADING} ${REFUSED_FALLBACK_COPY}` ? LOAD_HEADING : line,
           errorRetry: refusedForGood(error) ? { action: 'load', full: true } : { action: 'load' } });
       }
       finally { set({ loading: false }); initializing = null; }
@@ -922,7 +962,7 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
     const held = deletingActive ? worldLabsHold("Couldn't delete the project.") : null;
     if (held) { showError(held, { action: 'delete', id }); return; }
     if (deletingActive && !useGraphStore.getState().canSwitchProject()) {
-      showError(new Error('Finish or stop the current run before deleting the open project.'), { action: 'delete', id });
+      showError(runStillGoing("Couldn't delete the project."), { action: 'delete', id });
       return;
     }
     set({ busy: true, error: null, errorRetry: null });
@@ -935,7 +975,7 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
         cancelPendingSaves();
         await saveQueue.catch(() => {});
         reserved = useGraphStore.getState().reserveGraphImport();
-        if (!reserved) throw new Error('The canvas became busy. Try again when its run finishes.');
+        if (!reserved) throw runStillGoing("Couldn't delete the project.");
       }
       const result = await api.deleteProject(id, get().workspaceRevision);
       if (deletingActive) {
@@ -956,7 +996,8 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
         // Round 3b: a second delete of the open project after an unknown
         // answer isn't small (it may be gone, or open elsewhere): Try again
         // reloads, as the line says.
-        preserveWorkspaceConflict('Could not confirm the project was deleted. Try again to reload saved projects safely.');
+        preserveWorkspaceConflict(sentences("Couldn't confirm the project was deleted.", reasonSentence(error, true),
+          TRY_AGAIN_CHECKS));
       } else showError(error, { action: 'delete', id });
     } finally {
       if (reserved) useGraphStore.getState().releaseGraphImport();

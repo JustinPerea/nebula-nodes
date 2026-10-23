@@ -419,7 +419,7 @@ describe('graphStore', () => {
       isExecuting: true,
       isCancelling: false,
       uncertainWorldLabsRunId: runId,
-      providerRecoveryWarning: expect.stringContaining('Run remains locked'),
+      providerRecoveryWarning: expect.stringContaining('the node stays locked to avoid paying twice'),
       runHistory: [expect.objectContaining({ id: runId, status: 'running' })],
     });
 

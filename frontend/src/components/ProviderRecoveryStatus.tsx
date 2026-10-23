@@ -3,10 +3,12 @@ import { ShieldCheck, X } from 'lucide-react';
 import { useGraphStore } from '../store/graphStore';
 import { UNLOCK_NODE_HEADING } from '../lib/api';
 import { failureMessage } from '../lib/errorCopy';
+import { WORLD_LABS_RUN_NEEDS_CHECK, WORLD_LABS_RUN_STATUS_UNKNOWN, moreNodesNeedCheck } from '../lib/worldLabsWaiting';
 
 /** Persistent paid-provider safety status. Recovery-journal write warnings may
  * be dismissed; an ambiguous paid start remains until the user explicitly says
- * they checked Marble and the backend durably removes its fail-closed hold. */
+ * they checked Marble and the backend durably removes its fail-closed hold.
+ * The person reads "World Labs run", never "paid start" (error copy round 3c). */
 export function ProviderRecoveryStatus() {
   const warning = useGraphStore((state) => state.providerRecoveryWarning);
   const uncertainRunId = useGraphStore((state) => state.uncertainWorldLabsRunId);
@@ -41,14 +43,14 @@ export function ProviderRecoveryStatus() {
     <div className="provider-recovery-status" role="alert" aria-live="assertive">
       <span>
         <strong>{ambiguity
-          ? 'Paid start needs review.'
-          : uncertainRunId ? 'Paid start status unknown.' : 'Recovery ID not saved.'}</strong>
+          ? WORLD_LABS_RUN_NEEDS_CHECK
+          : uncertainRunId ? WORLD_LABS_RUN_STATUS_UNKNOWN : 'Recovery ID not saved.'}</strong>
         {' '}{ambiguity?.message ?? warning}
         {ambiguity && !ambiguity.durable && (
           <> The hold could not be saved durably; do not restart the backend.</>
         )}
         {ambiguities.length > 1 && (
-          <> {ambiguities.length - 1} more node{ambiguities.length === 2 ? '' : 's'} also need review.</>
+          <> {moreNodesNeedCheck(ambiguities.length - 1)}</>
         )}
         {unlockError && <span className="provider-recovery-status__error"> {unlockError}</span>}
       </span>

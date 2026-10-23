@@ -670,6 +670,26 @@ a run start the paid-start guard refuses (`POST /api/execute`,
 journals "at capacity") and a canvas edit that races the recovery journal.
 You still get each text word for word; only the person's line is new.
 
+Round 3c gave a node's run error the same split. `error` stays the
+handler's specific text, word for word, wherever agents read it: `get_run`
+and `nebula result` (`errors`), `look_at_canvas` and `nebula look` (the
+node's `error`, with `errorHint`), `view_output`, the run record, and the
+journal. A handler may also write a line for the person (no ids, no
+parameter names: "World Labs accepted this run, ... The node's Resume
+Operation ID field keeps the job ..."); it rides beside `error` as the
+additive `person` on the execution event and `errorPerson` in the graph the
+canvas loads, and the card shows it. Since round 3c-2 every failure a
+handler words itself carries one (often the same text, when it names no id,
+path, parameter key or env var), and a plain "<KEY> is required" key check
+reads "Add your OpenAI API key in Settings, then run the node again." on the
+card. A provider's own text keeps no line: the card says "Couldn't run the
+node." with the classifier's line or the general one, and the raw text behind
+"Details". None of the texts you read changed. A Cinema shot that fails
+keeps `error` on the shot's `output` as before and adds `errorCategory`,
+`errorFriendly`, `errorPerson` and `errorRaw` (the full text when `error` was
+cut) for the Cinema panel. Read `error`; don't parse `person` or the shot's
+error* fields.
+
 ### Numbers in request bodies
 
 Every JSON request body (`application/json`, `application/*+json`, any
@@ -1988,7 +2008,7 @@ whoever ran it (the canvas Run button too). It is kept per project, in
 `node-errors.json` in the state dir, so it survives a page reload, a switch to
 another project and back, and a backend restart; every graph the canvas loads
 (graphSync, `GET /api/projects/{id}`) gives such a node `state: "error"` with
-the card's `error`, `errorFriendly` and `errorCategory`. Loading a graph over
+the card's `error`, `errorFriendly`, `errorCategory` and `errorPerson`. Loading a graph over
 the project or clearing it forgets its errors, as does deleting the project
 for good. Deleting a node keeps its error, so undoing the delete
 (`POST /api/graph/restore`) puts the node back failed, as the canvas's undo

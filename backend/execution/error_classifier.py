@@ -11,6 +11,8 @@ Categories: blocked, auth, quota, rate_limit, timeout, network, invalid_input, u
 
 from __future__ import annotations
 
+import re
+
 # Order of the checks below matters. BLOCKED is matched before the generic 4xx /
 # invalid-input buckets so that a 400 carrying a moderation marker is reported as
 # "blocked" rather than "invalid_input". Prefer explicit provider markers over
@@ -42,7 +44,6 @@ _RATE_MARKERS = (
     "rate_limit",
     "ratelimit",
     "too many requests",
-    "429",
     "overloaded",
 )
 _AUTH_MARKERS = (
@@ -56,7 +57,6 @@ _AUTH_MARKERS = (
     "unauthorized",
     "authentication failed",
     "authentication error",
-    "401",
 )
 _QUOTA_MARKERS = (
     "insufficient_quota",
@@ -69,7 +69,6 @@ _QUOTA_MARKERS = (
     "billing_hard_limit",
     "check your plan and billing",
     "payment required",
-    "402",
 )
 _TIMEOUT_MARKERS = (
     "timed out",
@@ -101,9 +100,15 @@ _INVALID_MARKERS = (
     "bad request",
     "validation error",
     "invalid",
-    "400",
-    "422",
 )
+# A status code counts only standing on its own: "429" inside 4294967295 (a
+# seed range) is not a rate limit, nor "401" inside frame 14012 a bad key.
+_STATUS_CODES = {
+    "rate_limit": ("429",),
+    "auth": ("401",),
+    "quota": ("402",),
+    "invalid_input": ("400", "422"),
+}
 
 _FRIENDLY = {
     "blocked": (
@@ -137,24 +142,27 @@ def classify_error(raw: str | None) -> tuple[str, str, bool]:
             return ("unknown", "Something went wrong.", False)
         text = str(raw).lower()
 
-        def has(markers: tuple[str, ...]) -> bool:
-            return any(m in text for m in markers)
+        def code(category: str) -> bool:
+            return any(re.search(rf"(?<!\d){c}(?!\d)", text) for c in _STATUS_CODES[category])
+
+        def has(markers: tuple[str, ...], category: str | None = None) -> bool:
+            return any(m in text for m in markers) or (category is not None and code(category))
 
         if "capability guardrail:" in text:
             return ("invalid_input", str(raw).strip(), False)
         if has(_BLOCKED_MARKERS):
             category = "blocked"
-        elif has(_RATE_MARKERS):
+        elif has(_RATE_MARKERS, "rate_limit"):
             category = "rate_limit"
-        elif has(_AUTH_MARKERS):
+        elif has(_AUTH_MARKERS, "auth"):
             category = "auth"
-        elif has(_QUOTA_MARKERS):
+        elif has(_QUOTA_MARKERS, "quota"):
             category = "quota"
         elif has(_TIMEOUT_MARKERS):
             category = "timeout"
         elif has(_NETWORK_MARKERS):
             category = "network"
-        elif has(_INVALID_MARKERS):
+        elif has(_INVALID_MARKERS, "invalid_input"):
             category = "invalid_input"
         else:
             category = "unknown"

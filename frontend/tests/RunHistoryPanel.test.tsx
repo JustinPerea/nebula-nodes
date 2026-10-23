@@ -211,6 +211,8 @@ describe('RunHistoryPanel replay actions', () => {
     const safeguards = screen.getByRole('region', {
       name: 'World Labs recovery safeguards',
     });
+    // Error copy round 3c (GM): "World Labs run" where it said "paid start".
+    expect(safeguards).toHaveTextContent('These IDs prevent an accidental second World Labs run.');
     expect(safeguards).toHaveTextContent('world-environment · operation operation-accepted');
     expect(safeguards).toHaveTextContent('world-export · world world-complete');
     expect(screen.getByTitle('world-environment · operation-accepted')).toBeInTheDocument();

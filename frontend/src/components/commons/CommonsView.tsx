@@ -240,15 +240,15 @@ export function StatusLine({ status, onStart, onStop }: { status: CommonsStatus 
     const { calls, cap } = status.meter;
     if (cap === 0) {
       text = 'Paused · daily cap is 0';
-      title = 'Library analysis is paused: Analysis calls per day is set to 0 in Settings, so it reads nothing. Raise it to resume.';
+      title = 'Library analysis is paused. Settings has “Analysis calls per day” at 0, so it reads nothing. Raise it to resume.';
     } else {
       const resets = new Date(status.meter.resets_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       text = `Paused until ${resets} · daily cap`;
-      title = `Library analysis is paused: it made ${calls} analysis calls today, and the daily cap is ${cap} (Analysis calls per day, in Settings). It resumes on its own at ${resets}.`;
+      title = `Library analysis is paused. It made ${calls} analysis calls today, and Settings has “Analysis calls per day” at ${cap}. It resumes on its own at ${resets}.`;
     }
   } else if (state === 'paused_load') {
     text = `Paused · computer busy (${status.load}/${status.load_threshold})`;
-    title = `Library analysis is paused while this computer is busy: its load average is ${status.load}, above ${status.load_threshold} (Pause above load, in Settings). It resumes on its own when the load drops.`;
+    title = `Library analysis is paused while this computer is busy. Its load average is ${status.load}, and Settings has “Pause above load” at ${status.load_threshold}. It resumes on its own when the load drops.`;
   } else if (waiting || state === 'analyzing') {
     text = `Analyzing${waiting ? ` · ${waiting} queued` : ''}`;
     title = `Library analysis is reading references${waiting ? `: ${waiting} waiting` : ''}.`;

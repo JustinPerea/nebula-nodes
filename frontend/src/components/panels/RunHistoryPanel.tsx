@@ -138,7 +138,7 @@ export function RunHistoryPanel() {
           <section className="run-history__safeguards" aria-label="World Labs recovery safeguards">
             <div className="run-history__safeguards-title">World Labs recovery safeguards</div>
             <p>
-              These IDs prevent an accidental second paid start. Keep them unless you have
+              These IDs prevent an accidental second World Labs run. Keep them unless you have
               checked Marble and intentionally want to forget recovery.
             </p>
             <ul>

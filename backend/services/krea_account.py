@@ -12,6 +12,7 @@ from typing import Any, AsyncIterator
 import httpx
 from jsonschema import Draft202012Validator
 
+from execution.person_line import as_person_line, with_person_line
 from models.graph import GraphNode
 from services.cancellation import schedule_detached_cancel
 from services.krea_mcp_generation import KreaTools, _cancel, _job, poll_job, tool_value, upload_asset
@@ -56,7 +57,11 @@ class AccountTools:
     def check(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         tool = self.tools.tools.get(name)
         if tool is None:
-            raise RuntimeError(f"Your Krea connection does not offer {name}; nothing was sent")
+            # The tool's name is for agents; the card says it in words.
+            raise with_person_line(
+                RuntimeError(f"Your Krea connection does not offer {name}; nothing was sent"),
+                "Your Krea connection doesn't offer what this node needs, so nothing was sent. "
+                "Choose another provider, or check the connection in Settings.")
         try:
             Draft202012Validator(tool.inputSchema).validate(arguments)
         except Exception as exc:
@@ -73,7 +78,7 @@ class AccountTools:
         if isinstance(value, dict):
             value = value.get("url") or value.get("image_url") or value.get("value")
         if not isinstance(value, str) or not value.strip():
-            raise ValueError("Krea needs a media URL or a local file")
+            raise as_person_line(ValueError("Krea needs a media URL or a local file"))
         asset = _asset_data(value.strip())
         return value.strip() if asset is None else await upload_asset(self.tools, client, asset)
 

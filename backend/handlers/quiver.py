@@ -29,6 +29,7 @@ from services.quiver_client import (
     QuiverServerError,
 )
 from execution.missing_credential import MissingCredentialError
+from execution.person_line import as_person_line, key_line, with_person_line
 
 
 _OUTPUTS_URL_PREFIX = "/api/outputs/"
@@ -153,9 +154,11 @@ def _wrap_provider_error(exc: QuiverError) -> ValueError:
     Quiver server error (502)".
     """
     if isinstance(exc, QuiverAuthError):
-        return ValueError("QuiverAI auth failed — check QUIVER_API_KEY")
+        # Names the env var for agents; the card asks for the key in Settings.
+        return with_person_line(ValueError("QuiverAI auth failed — check QUIVER_API_KEY"),
+                                key_line(["QUIVER_API_KEY"]) or "")
     if isinstance(exc, QuiverInsufficientCreditsError):
-        return ValueError("Insufficient QuiverAI credits — top up or upgrade plan")
+        return as_person_line(ValueError("Insufficient QuiverAI credits — top up or upgrade plan"))
     if isinstance(exc, QuiverRateLimitError):
         return ValueError("QuiverAI rate limit exceeded — retry in a moment")
     if isinstance(exc, QuiverServerError):
@@ -223,7 +226,7 @@ async def handle_quiver_arrow_generate(
 
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
-        raise ValueError("Prompt input is required for Quiver Arrow generate")
+        raise as_person_line(ValueError("Prompt input is required for Quiver Arrow generate"))
 
     references_input = inputs.get("references")
     references = _coerce_references(references_input.value if references_input else None)
@@ -270,7 +273,7 @@ async def handle_quiver_arrow_vectorize(
 
     image_input = inputs.get("image")
     if not image_input or not image_input.value:
-        raise ValueError("Image input is required for Quiver Arrow vectorize")
+        raise as_person_line(ValueError("Image input is required for Quiver Arrow vectorize"))
 
     image_url, image_base64 = _to_quiver_image_arg(str(image_input.value))
 

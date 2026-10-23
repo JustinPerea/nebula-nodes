@@ -137,8 +137,8 @@ def test_a_full_recovery_journal_says_the_limit_and_what_to_clear(monkeypatch, t
     monkeypatch.setattr(main_module, "provider_recovery_store", recoveries)
     person = _claim_refusal(PERSON, [_world()])
     assert person.detail == (
-        "Nebula can track up to 1 World Labs job that is still waiting, and this run would go over that. "
-        f"Check them in Marble, clear some with {UNLOCK} or {FORGET} in Run History, then try again.")
+        "Nebula is already waiting on 1 World Labs job, the most it can track. "
+        "Check it in Marble and clear it in Run History, then try again.")
     agent = _claim_refusal(AGENT, [_world()])
     assert agent.detail == ("provider recovery journal is at capacity; resolve an existing checkpoint before "
                             "starting more paid work")
@@ -151,8 +151,8 @@ def test_a_full_start_journal_says_the_limit_too(monkeypatch, tmp_path):
     monkeypatch.setattr(main_module, "provider_start_guard", guard)
     person = _claim_refusal(PERSON, [_world()])
     assert person.detail == (
-        "Nebula can track up to 2 World Labs jobs that are still waiting, and this run would go over that. "
-        f"Check them in Marble, clear some with {UNLOCK} or {FORGET} in Run History, then try again.")
+        "Nebula is already waiting on 2 World Labs jobs, the most it can track. "
+        "Check them in Marble and clear some in Run History, then try again.")
     agent = _claim_refusal(AGENT, [_world()])
     assert agent.detail == ("World Labs paid-start safety journal is at capacity; resolve an existing recovery "
                             "or ambiguity before starting more paid work")
@@ -248,8 +248,8 @@ def test_a_canvas_edit_at_journal_capacity_or_racing_a_change(monkeypatch):
     nodes = [{"id": "n1", "definitionId": ENVIRONMENT, "params": {"resume_operation_id": "op-1"}}]
     for fake, person, agent in (
         (full,
-         "Nebula can track up to 256 World Labs jobs that are still waiting, and this change would go over that. "
-         f"Check them in Marble, clear some with {UNLOCK} or {FORGET} in Run History, then try again.",
+         "Nebula is already waiting on 256 World Labs jobs, the most it can track. "
+         "Check them in Marble and clear some in Run History, then try again.",
          "provider recovery journal is at capacity; resolve an existing checkpoint before importing more paid state"),
         (changed,
          "A node's World Labs job changed while Nebula saved the canvas. Reload, then try again.",

@@ -14,6 +14,7 @@ import base64
 import math
 import httpx
 from execution.missing_credential import MissingCredentialError
+from execution.person_line import as_person_line, missing_file_line, with_person_line
 
 RUNWAY_API_BASE = "https://api.dev.runwayml.com/v1"
 RUNWAY_HEADERS_BASE = {
@@ -186,9 +187,10 @@ async def _upload_ephemeral(path: Path, api_key: str, mime: str) -> str:
     The upload URL is storage, not Runway's API, so it gets no API key."""
     size = path.stat().st_size
     if size > UPLOAD_LIMIT:
-        raise ValueError(
+        raise with_person_line(ValueError(
             f"{path.name} is {size / 1024 / 1024:.0f}MB; Runway accepts files up to 200MB."
-        )
+        ),
+            "A connected file is over Runway's 200 MB limit. Connect a smaller one.")
     async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, write=600.0)) as client:
         start = await client.post(
             f"{RUNWAY_API_BASE}/uploads",
@@ -217,12 +219,14 @@ async def _local_media_uri(value: str, mime: str, api_key: str | None, what: str
         return value
     path = Path(value)
     if not path.exists():
-        raise ValueError(f"{what} not found: {value}")
+        raise with_person_line(ValueError(f"{what} not found: {value}"), missing_file_line(what))
     path = require_allowed_path(path)
     if _data_uri_length(path.stat().st_size, mime) <= DATA_URI_LIMIT:
         return f"data:{mime};base64,{base64.b64encode(path.read_bytes()).decode('ascii')}"
     if not api_key:
-        raise ValueError(f"{path.name} is over Runway's 5MB data URI limit and needs an upload")
+        raise with_person_line(
+            ValueError(f"{path.name} is over Runway's 5MB data URI limit and needs an upload"),
+            "A connected file is too large to send to Runway this way. Connect one under 5 MB.")
     return await _upload_ephemeral(path, api_key, mime)
 
 
@@ -235,13 +239,15 @@ async def _resolve_image(image_value: str, api_key: str | None = None) -> str:
         return image_value
     image_path = Path(image_value)
     if not image_path.exists():
-        raise ValueError(f"Image file not found: {image_value}")
+        raise with_person_line(ValueError(f"Image file not found: {image_value}"), missing_file_line("image file"))
     image_path = require_allowed_path(image_path)
     mime = _IMAGE_MIME.get(image_path.suffix.lstrip(".").lower(), "image/png")
     if _data_uri_length(image_path.stat().st_size, mime) <= DATA_URI_LIMIT:
         return image_to_data_uri(image_path)
     if not api_key:
-        raise ValueError(f"{image_path.name} is over Runway's 5MB data URI limit and needs an upload")
+        raise with_person_line(
+            ValueError(f"{image_path.name} is over Runway's 5MB data URI limit and needs an upload"),
+            "A connected file is too large to send to Runway this way. Connect one under 5 MB.")
     return await _upload_ephemeral(image_path, api_key, mime)
 
 
@@ -253,24 +259,24 @@ def _video_duration(spec: dict[str, Any], raw: Any) -> int | str:
     if isinstance(raw, str) and raw.strip().lower() == "auto":
         if spec["auto"]:
             return "auto"
-        raise ValueError(f"{spec['label']} has no automatic duration. Pick one of: {_choices(spec['durations'])} s.")
+        raise as_person_line(ValueError(f"{spec['label']} has no automatic duration. Pick one of: {_choices(spec['durations'])} s."))
     try:
         duration = int(float(raw))
     except (TypeError, ValueError):
-        raise ValueError(f"Duration must be a number of seconds, got {raw!r}")
+        raise as_person_line(ValueError(f"Duration must be a number of seconds, got {raw!r}"))
     if duration not in spec["durations"]:
         allowed = spec["durations"]
         span = (f"{allowed[0]}-{allowed[-1]}" if len(allowed) > 3 and allowed == tuple(range(allowed[0], allowed[-1] + 1))
                 else _choices(allowed))
         extra = " or auto" if spec["auto"] else ""
-        raise ValueError(f"{spec['label']} takes a duration of {span} s{extra}; got {duration} s.")
+        raise as_person_line(ValueError(f"{spec['label']} takes a duration of {span} s{extra}; got {duration} s."))
     return duration
 
 
 def _prompt_for(spec: dict[str, Any], text: str) -> str:
     text = text[: spec["prompt_max"]]
     if text and len(text) < spec["prompt_min"]:
-        raise ValueError(f"{spec['label']} needs a prompt of at least {spec['prompt_min']} characters.")
+        raise as_person_line(ValueError(f"{spec['label']} needs a prompt of at least {spec['prompt_min']} characters."))
     return text
 
 
@@ -289,7 +295,7 @@ async def handle_runway_video(
         raise ValueError(RETIRED_RUNWAY_MODELS[model])
     spec = RUNWAY_VIDEO_MODELS.get(model)
     if spec is None:
-        raise ValueError(f"Unknown Runway video model '{model}'. Choose one of: {_choices(RUNWAY_VIDEO_MODELS)}.")
+        raise as_person_line(ValueError(f"Unknown Runway video model '{model}'. Choose one of: {_choices(RUNWAY_VIDEO_MODELS)}."))
     duration = _video_duration(spec, node.params.get("duration", 5))
     ratio = str(node.params.get("ratio") or "1280:720")
 
@@ -302,17 +308,17 @@ async def handle_runway_video(
     submit_body: dict[str, Any] = {"model": model}
     if has_image:
         if spec["i2v_prompt_required"] and not prompt_text:
-            raise ValueError(f"{spec['label']} image-to-video needs a text prompt too.")
+            raise as_person_line(ValueError(f"{spec['label']} image-to-video needs a text prompt too."))
         if spec["i2v_ratios"] is None:
             resolution = str(node.params.get("resolution") or spec["resolution"][0])
             if resolution not in spec["resolution"]:
-                raise ValueError(f"{spec['label']} resolution must be one of {_choices(spec['resolution'])}; got '{resolution}'.")
+                raise as_person_line(ValueError(f"{spec['label']} resolution must be one of {_choices(spec['resolution'])}; got '{resolution}'."))
             submit_body["resolution"] = resolution
         elif ratio not in spec["i2v_ratios"]:
-            raise ValueError(
+            raise as_person_line(ValueError(
                 f"Ratio '{ratio}' isn't available for {spec['label']} image-to-video. "
                 f"Pick one of: {_choices(spec['i2v_ratios'])}."
-            )
+            ))
         else:
             submit_body["ratio"] = ratio
         submit_body["promptImage"] = await _resolve_image(str(image_input.value), api_key)
@@ -321,19 +327,19 @@ async def handle_runway_video(
         endpoint = f"{RUNWAY_API_BASE}/image_to_video"
     else:
         if not prompt_text:
-            raise ValueError("Either an image or a text prompt is required")
+            raise as_person_line(ValueError("Either an image or a text prompt is required"))
         if spec["t2v_ratios"] is None:
             text_capable = ", ".join(sorted(TEXT_TO_VIDEO_MODELS))
-            raise ValueError(
+            raise as_person_line(ValueError(
                 f"Model '{model}' requires an image input ({spec['label']} has no text-to-video). "
                 f"Connect an image, or use a text-to-video model: {text_capable}. "
                 "Nodes saved with the retired Gen-3a Turbo now use Gen-4 Turbo."
-            )
+            ))
         if ratio not in spec["t2v_ratios"]:
-            raise ValueError(
+            raise as_person_line(ValueError(
                 f"Ratio '{ratio}' isn't available for {spec['label']} text-to-video. "
                 f"Pick one of: {_choices(spec['t2v_ratios'])}, or connect an image."
-            )
+            ))
         submit_body["promptText"] = prompt_text
         submit_body["ratio"] = ratio
         endpoint = f"{RUNWAY_API_BASE}/text_to_video"
@@ -386,15 +392,15 @@ async def handle_runway_aleph(
     if model in RETIRED_RUNWAY_MODELS:
         raise ValueError(RETIRED_RUNWAY_MODELS[model])
     if model != "aleph2":
-        raise ValueError(f"Unknown Runway Aleph model '{model}'. Use aleph2.")
+        raise as_person_line(ValueError(f"Unknown Runway Aleph model '{model}'. Use aleph2."))
 
     video_input = inputs.get("video")
     if not video_input or not video_input.value:
-        raise ValueError("Video input is required for Aleph")
+        raise as_person_line(ValueError("Video input is required for Aleph"))
 
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
-        raise ValueError("Text prompt is required for Aleph")
+        raise as_person_line(ValueError("Text prompt is required for Aleph"))
 
     # Public https URLs pass through; local files go as a data URI under 5MB,
     # else through Runway's upload flow.
@@ -454,19 +460,19 @@ async def handle_runway_image(
 
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
-        raise ValueError("Text prompt is required for Runway Image")
+        raise as_person_line(ValueError("Text prompt is required for Runway Image"))
 
     model = str(node.params.get("model") or "gen4_image")
     spec = RUNWAY_IMAGE_MODELS.get(model)
     if spec is None:
-        raise ValueError(f"Unknown Runway image model '{model}'. Choose one of: {_choices(RUNWAY_IMAGE_MODELS)}.")
+        raise as_person_line(ValueError(f"Unknown Runway image model '{model}'. Choose one of: {_choices(RUNWAY_IMAGE_MODELS)}."))
     ratio = str(node.params.get("ratio") or "1360:768")
     if ratio not in spec["ratios"]:
-        raise ValueError(f"Ratio '{ratio}' isn't available for {spec['label']}. Pick one of: {_choices(spec['ratios'])}.")
+        raise as_person_line(ValueError(f"Ratio '{ratio}' isn't available for {spec['label']}. Pick one of: {_choices(spec['ratios'])}."))
 
     prompt_text = str(prompt_input.value)[: spec["prompt_max"]]
     if len(prompt_text) < spec["prompt_min"]:
-        raise ValueError(f"{spec['label']} needs a prompt of at least {spec['prompt_min']} characters.")
+        raise as_person_line(ValueError(f"{spec['label']} needs a prompt of at least {spec['prompt_min']} characters."))
 
     submit_body: dict[str, Any] = {
         "model": model,
@@ -480,9 +486,9 @@ async def handle_runway_image(
         image_values = images_input.value if isinstance(images_input.value, list) else [images_input.value]
         image_values = [img for img in image_values if img]
     if len(image_values) > spec["refs_max"]:
-        raise ValueError(f"{spec['label']} takes up to {spec['refs_max']} reference images; {len(image_values)} are connected.")
+        raise as_person_line(ValueError(f"{spec['label']} takes up to {spec['refs_max']} reference images; {len(image_values)} are connected."))
     if len(image_values) < spec["refs_min"]:
-        raise ValueError(f"{spec['label']} needs at least {spec['refs_min']} reference image. Connect one, or use Gen-4 Image.")
+        raise as_person_line(ValueError(f"{spec['label']} needs at least {spec['refs_min']} reference image. Connect one, or use Gen-4 Image."))
     if image_values:
         submit_body["referenceImages"] = [{"uri": await _resolve_image(str(img), api_key)} for img in image_values]
 
@@ -536,7 +542,7 @@ async def handle_runway_image_upscale(
 
     image_input = inputs.get("image")
     if not image_input or not image_input.value:
-        raise ValueError("Image input is required for Runway Upscale")
+        raise as_person_line(ValueError("Image input is required for Runway Upscale"))
 
     image_uri = await _resolve_image(str(image_input.value), api_key)
 
@@ -604,12 +610,12 @@ async def handle_runway_act_two(
         v = await _local_media_uri(str(char_video_input.value), "video/mp4", api_key, "Video file")
         character = {"type": "video", "uri": v}
     else:
-        raise ValueError("Character image or video is required")
+        raise as_person_line(ValueError("Character image or video is required"))
 
     # Reference performance video
     ref_input = inputs.get("reference")
     if not ref_input or not ref_input.value:
-        raise ValueError("Reference performance video is required")
+        raise as_person_line(ValueError("Reference performance video is required"))
 
     ref_value = await _local_media_uri(str(ref_input.value), "video/mp4", api_key, "Reference video")
 
@@ -683,7 +689,7 @@ async def handle_runway_tts(
 
     prompt_input = inputs.get("text")
     if not prompt_input or not prompt_input.value:
-        raise ValueError("Text input is required")
+        raise as_person_line(ValueError("Text input is required"))
 
     voice_id = node.params.get("voiceId", "Maya")
 
@@ -738,7 +744,7 @@ async def handle_runway_speech_to_speech(
         media_value = await _local_media_uri(str(video_input.value), "video/mp4", api_key, "Video file")
         media = {"type": "video", "uri": media_value}
     else:
-        raise ValueError("Audio or video input is required")
+        raise as_person_line(ValueError("Audio or video input is required"))
 
     voice_id = node.params.get("voiceId", "Maya")
 
@@ -789,7 +795,7 @@ async def handle_runway_voice_dubbing(
 
     audio_input = inputs.get("audio")
     if not audio_input or not audio_input.value:
-        raise ValueError("Audio input is required for voice dubbing")
+        raise as_person_line(ValueError("Audio input is required for voice dubbing"))
 
     audio_value = await _local_media_uri(str(audio_input.value), "audio/mpeg", api_key, "Audio file")
 

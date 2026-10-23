@@ -27,6 +27,7 @@ from email.utils import parsedate_to_datetime
 from typing import Any, AsyncIterator, Literal
 
 import httpx
+from execution.person_line import with_person_line
 
 
 DEFAULT_BASE_URL = "https://api.quiver.ai"
@@ -279,7 +280,9 @@ class QuiverClient:
         max_retries: int = DEFAULT_MAX_RETRIES,
     ) -> None:
         if not api_key:
-            raise QuiverAuthError("QUIVER_API_KEY is required")
+            raise with_person_line(
+                QuiverAuthError("QUIVER_API_KEY is required"),
+                "Add your QuiverAI API key in Settings, then run the node again.")
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout

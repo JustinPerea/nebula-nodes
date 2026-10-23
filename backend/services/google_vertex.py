@@ -20,6 +20,7 @@ from typing import Any
 import httpx
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from execution.person_line import with_person_line
 
 VERTEX_REGION = "us-central1"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -39,16 +40,20 @@ def parse_service_account(raw: str) -> dict[str, str]:
     try:
         data = json.loads(raw)
     except (TypeError, ValueError):
-        raise VertexCredentialsError(
+        raise with_person_line(VertexCredentialsError(
             "GOOGLE_VERTEX_CREDENTIALS is not valid JSON (paste the full service-account key file)"
-        ) from None
+        ),
+            "Your Google Vertex AI credentials in Settings aren't a service-account key. Paste the whole key file again.") from None
     if not isinstance(data, dict) or data.get("type") != "service_account":
-        raise VertexCredentialsError(
+        raise with_person_line(VertexCredentialsError(
             "GOOGLE_VERTEX_CREDENTIALS must be a service-account JSON key (\"type\": \"service_account\")"
-        )
+        ),
+            "Your Google Vertex AI credentials in Settings aren't a service-account key. Paste the whole key file again.")
     missing = [k for k in ("client_email", "private_key", "project_id") if not isinstance(data.get(k), str) or not data[k]]
     if missing:
-        raise VertexCredentialsError(f"The service-account key is missing {', '.join(missing)}")
+        raise with_person_line(
+            VertexCredentialsError(f"The service-account key is missing {', '.join(missing)}"),
+            "Your Google Vertex AI credentials are missing parts of the key file. Paste the whole key file again in Settings.")
     return {
         "client_email": data["client_email"],
         "private_key": data["private_key"],
@@ -79,9 +84,13 @@ def signed_assertion(account: dict[str, str], now: float | None = None) -> str:
     try:
         key = serialization.load_pem_private_key(account["private_key"].encode(), password=None)
     except (ValueError, TypeError):
-        raise VertexCredentialsError("The service-account private_key can't be read") from None
+        raise with_person_line(
+            VertexCredentialsError("The service-account private_key can't be read"),
+            "The private key in your Google Vertex AI credentials can't be read. Paste the whole key file again in Settings.") from None
     if not isinstance(key, rsa.RSAPrivateKey):
-        raise VertexCredentialsError("The service-account private_key must be an RSA key")
+        raise with_person_line(
+            VertexCredentialsError("The service-account private_key must be an RSA key"),
+            "The private key in your Google Vertex AI credentials can't be read. Paste the whole key file again in Settings.")
     signature = key.sign(signing_input.encode("ascii"), padding.PKCS1v15(), hashes.SHA256())
     return f"{signing_input}.{_b64url(signature)}"
 

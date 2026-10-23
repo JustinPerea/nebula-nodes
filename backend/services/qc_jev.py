@@ -47,6 +47,7 @@ from services.typesafe_client import (
     score_criteria,
     system_one,
 )
+from execution.person_line import as_person_line, with_person_line
 
 JEV_MODE = "jev"
 MAX_FRAMES = 8
@@ -79,7 +80,9 @@ def setup(params: Mapping[str, Any], api_keys: Mapping[str, str]) -> Setup:
     MissingCredentialError, a bad model or min_confidence a ValueError."""
     key = api_keys.get(CREDENTIAL) or ""
     if not key:
-        raise MissingCredentialError(f"{CREDENTIAL} is required for Jev mode")
+        raise with_person_line(
+            MissingCredentialError(f"{CREDENTIAL} is required for Jev mode"),
+            "Add your TypeSafe API key in Settings to use Jev mode, then run the node again.")
     model = check_model(params.get("model") or DEFAULT_MODEL)
     raw = params.get("min_confidence")
     if raw is None or raw == "":
@@ -87,9 +90,13 @@ def setup(params: Mapping[str, Any], api_keys: Mapping[str, str]) -> Setup:
     try:
         value = float(raw)
     except (TypeError, ValueError):
-        raise ValueError(f"min_confidence must be a number from 0 to 1, got {raw!r}") from None
+        raise with_person_line(
+            ValueError(f"min_confidence must be a number from 0 to 1, got {raw!r}"),
+            "Set the node's Minimum Confidence to a number from 0 to 1.") from None
     if not math.isfinite(value) or not 0.0 <= value <= 1.0:
-        raise ValueError(f"min_confidence must be from 0 to 1, got {value}")
+        raise with_person_line(
+            ValueError(f"min_confidence must be from 0 to 1, got {value}"),
+            "Set the node's Minimum Confidence to a number from 0 to 1.")
     return Setup(key, model, value)
 
 
@@ -408,7 +415,7 @@ async def ask(
 ) -> JevRun:
     """Send every check in one request and read each answer."""
     if not checks:
-        raise ValueError("Jev mode needs at least one check")
+        raise as_person_line(ValueError("Jev mode needs at least one check"))
     ids = [check.id for check in checks]
     if len(set(ids)) != len(ids):
         raise ValueError("Jev check ids must be different")

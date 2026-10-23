@@ -12,6 +12,7 @@ from models.events import ExecutionEvent, ProgressEvent
 from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir
 from execution.missing_credential import MissingCredentialError
+from execution.person_line import as_person_line
 
 
 def _log(msg: str) -> None:
@@ -55,7 +56,7 @@ async def handle_higgsfield(
 
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
-        raise ValueError("Prompt is required")
+        raise as_person_line(ValueError("Prompt is required"))
 
     # Higgsfield auth: "Key {api_key}" (single-key form — key:secret pairs also accepted
     # but HIGGSFIELD_API_KEY stores the combined credential or the key alone).

@@ -110,6 +110,12 @@ class ErrorEvent(RunScopedEvent):
     # The handler stopped at its own key check, before any provider request
     # (execution.missing_credential), so the node cost nothing.
     missing_credential: bool = False
+    # The person's line for this failure, when the handler wrote one
+    # (execution/person_line.py, error copy round 3c): what the canvas card
+    # shows, with no ids or record names. `error` keeps the specific text
+    # word for word for agents, the run record and MCP. Additive: None means
+    # the card shows its fallback, with `error` behind "Details".
+    person: str | None = None
 
 
 class ValidationErrorDetail(BaseModel):

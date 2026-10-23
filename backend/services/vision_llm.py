@@ -16,6 +16,7 @@ from PIL import Image, ImageOps
 
 from execution.missing_credential import MissingCredentialError
 from services.http_errors import HTTP_ERRORS, describe
+from execution.person_line import as_person_line, with_person_line
 
 VISION_TIMEOUT_SECONDS = 45.0
 MAX_VISION_IMAGES = 13  # 12 sampled frames plus one optional reference image.
@@ -54,16 +55,16 @@ def available_vision_providers(api_keys: dict[str, str]) -> list[VisionProvider]
 
 def _encoded_images(paths: Sequence[Path]) -> list[tuple[str, str]]:
     if not paths:
-        raise ValueError("At least one vision image is required")
+        raise as_person_line(ValueError("At least one vision image is required"))
     if len(paths) > MAX_VISION_IMAGES:
-        raise ValueError(f"Vision requests support at most {MAX_VISION_IMAGES} images")
+        raise as_person_line(ValueError(f"Vision requests support at most {MAX_VISION_IMAGES} images"))
 
     encoded: list[tuple[str, str]] = []
     encoded_chars = 0
     for path in paths:
         mime = mimetypes.guess_type(path.name)[0] or "image/png"
         if mime not in {"image/png", "image/jpeg", "image/webp", "image/gif"}:
-            raise ValueError(f"Unsupported vision image type: {path.suffix}")
+            raise as_person_line(ValueError(f"Unsupported vision image type: {path.suffix}"))
         # Provider limits apply to the JSON request after base64 expansion, not
         # to the source file. Normalize every advisory frame to a bounded JPEG
         # in memory; the source artifact remains untouched on disk.
@@ -215,9 +216,10 @@ async def call_vision_llm(
 ) -> dict[str, Any]:
     providers = available_vision_providers(api_keys)
     if not providers:
-        raise NoVisionProviderError(
+        raise with_person_line(NoVisionProviderError(
             "vision-llm mode requires ANTHROPIC_API_KEY, OPENAI_API_KEY, or GOOGLE_API_KEY"
-        )
+        ),
+            "Add an Anthropic, OpenAI or Gemini API key in Settings, then run the node again.")
     provider = providers[0]
     url, headers, body = build_vision_request(
         provider,

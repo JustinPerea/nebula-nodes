@@ -205,7 +205,8 @@ describe('saved project coordinator', () => {
     useGraphStore.setState({ isExecuting: true });
     await useProjectStore.getState().remove('alpha');
     expect(projects.deleteProject).not.toHaveBeenCalled();
-    expect(useProjectStore.getState().error).toContain('before deleting the open project');
+    // Error copy round 3c (GM): every "Finish or stop …" variant reads this way.
+    expect(useProjectStore.getState().error).toBe("Couldn't delete the project. A run is still going. Let it finish or stop it.");
   });
   it('can return Home and resume the active canvas during a run, but rejects changing projects', async () => {
     await useProjectStore.getState().initialize();
@@ -296,7 +297,9 @@ describe('saved project coordinator', () => {
     vi.mocked(projects.recoverProject).mockRejectedValueOnce(new Error('Recovery disk full'));
     await useProjectStore.getState().retry();
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('Unsaved alpha edits');
-    expect(useProjectStore.getState().error).toBe('Recovery disk full');
+    // Error copy round 3c-2: never the error's own message, and not GM's
+    // general line either while these edits wait (it says "reload").
+    expect(useProjectStore.getState().error).toBe("Couldn't load your projects.");
     const firstRecovery = vi.mocked(projects.recoverProject).mock.calls[0];
     vi.mocked(projects.recoverProject).mockResolvedValueOnce(project('recovered-alpha'));
     vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project('beta'), project('recovered-alpha')],

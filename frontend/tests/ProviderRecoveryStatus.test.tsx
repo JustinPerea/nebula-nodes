@@ -49,7 +49,7 @@ describe('ProviderRecoveryStatus', () => {
     });
 
     render(<ProviderRecoveryStatus />);
-    expect(screen.getByRole('alert')).toHaveTextContent('Paid start needs review.');
+    expect(screen.getByRole('alert')).toHaveTextContent('A World Labs run needs your check.');
     expect(screen.queryByRole('button', { name: 'Dismiss recovery warning' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', {
@@ -93,7 +93,7 @@ describe('ProviderRecoveryStatus', () => {
     });
 
     render(<ProviderRecoveryStatus />);
-    expect(screen.getByRole('alert')).toHaveTextContent('Paid start status unknown.');
+    expect(screen.getByRole('alert')).toHaveTextContent("Nebula can't tell if this World Labs run started.");
     expect(screen.queryByRole('button', { name: 'Dismiss recovery warning' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', {

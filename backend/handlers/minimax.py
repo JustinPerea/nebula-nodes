@@ -12,6 +12,7 @@ from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent, ProgressEvent
 from services.output import get_run_dir, image_to_data_uri, resolve_output_ref, save_video_from_url
 from execution.missing_credential import MissingCredentialError
+from execution.person_line import as_person_line, missing_file_line, with_person_line
 
 MINIMAX_API_BASE = "https://api.minimaxi.com"
 # MiniMax keys belong to one region: "The API host and key vary by region and
@@ -82,7 +83,7 @@ def _resolve_image_url(value: str) -> str:
         return value
     image_path = Path(value)
     if not image_path.exists():
-        raise ValueError(f"Image file not found: {value}")
+        raise with_person_line(ValueError(f"Image file not found: {value}"), missing_file_line("image file"))
     return image_to_data_uri(image_path)
 
 
@@ -158,7 +159,7 @@ async def handle_minimax_video(
         }
 
     if not prompt:
-        raise ValueError("Prompt input is required")
+        raise as_person_line(ValueError("Prompt input is required"))
     # "Whether to automatically optimize the `prompt`. Defaults to `true`." Sent
     # only when a node sets it (the Krea copies' expand_prompt).
     if isinstance(node.params.get("prompt_optimizer"), bool):

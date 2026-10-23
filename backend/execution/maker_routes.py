@@ -35,6 +35,7 @@ from execution import maker_routes_elevenlabs
 from execution.missing_credential import MissingCredentialError
 from models.graph import GraphNode, PortValueDict
 from services import node_route
+from execution.person_line import as_person_line, key_phrase, with_person_line
 
 Handler = Callable[[GraphNode, dict[str, PortValueDict], dict[str, str]], Awaitable[dict[str, Any]]]
 Translate = Callable[
@@ -76,6 +77,14 @@ def _blocked_reason(definition: Mapping[str, Any], block: node_route.DirectBlock
     return f"this recipe can't run on {direct_key} because the maker doesn't take {block.detail}"
 
 
+def _blocked_key_line(definition: Mapping[str, Any], direct_key: str) -> str:
+    """The person's line for a run the saved maker key can't take (error copy 3c-2)."""
+    maker = key_phrase([direct_key]) or "saved key"
+    fallback = key_phrase(node_route.fallback_keys(definition)) or "other key"
+    return (f"This node's settings can't run on your {maker}. "
+            f"Add your {fallback} in Settings, then run the node again.")
+
+
 def dual_route(*, direct: Handler, fallback: Handler, translate: Translate | None = None) -> Handler:
     """The registry handler for a dual-route node (see the module docstring).
 
@@ -93,9 +102,9 @@ def dual_route(*, direct: Handler, fallback: Handler, translate: Translate | Non
                 # The maker key is saved, but this run can only go to the copy
                 # (a Krea-only field, Runway TTS without an ElevenLabs voice_id):
                 # name the key that would run it, and why.
-                raise MissingCredentialError(
+                raise with_person_line(MissingCredentialError(
                     f"{' or '.join(node_route.fallback_keys(definition))} is required: "
-                    f"{_blocked_reason(definition, block, set_direct[0])}")
+                    f"{_blocked_reason(definition, block, set_direct[0])}"), _blocked_key_line(definition, set_direct[0]))
             raise MissingCredentialError(f"{' or '.join(node_route.env_keys(definition))} is required")
         if route.kind == node_route.DIRECT:
             routed = route_node(node, node_route.route_param_keys(definition, node_route.DIRECT))
@@ -155,9 +164,9 @@ def multi_route(clients: Mapping[str, Handler]) -> Handler:
         client = clients.get(str(route.route_id))
         if client is None:
             name = definition.get("displayName") or node.definition_id
-            raise MissingCredentialError(
+            raise as_person_line(MissingCredentialError(
                 f"{name} can't run on {node_route.provider_label(spec.get('provider'))} in this version of Nebula yet. "
-                "Choose another provider.")
+                "Choose another provider."))
         extra = ({"_kreaAuth": "mcp" if route.kind == node_route.PLAN else "api-token"}
                  if spec.get("provider") == "krea" else None)
         # Only the settings this route shows with these values: one it hides
@@ -247,7 +256,9 @@ def _image_count(value: Any) -> int:
     if value in (None, ""):
         return 1
     if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 4:
-        raise ValueError(f"num_images must be an integer from 1 to 4 (received {value!r})")
+        raise with_person_line(
+            ValueError(f"num_images must be an integer from 1 to 4 (received {value!r})"),
+            "Set the number of images to a whole number from 1 to 4.")
     return value
 
 
@@ -286,7 +297,9 @@ def _json_list(value: Any) -> list[Any]:
         try:
             value = json.loads(value)
         except ValueError as exc:
-            raise ValueError("image_urls must be a JSON list of image URLs") from exc
+            raise with_person_line(
+                ValueError("image_urls must be a JSON list of image URLs"),
+                "Write the node's image URLs as a JSON list of links.") from exc
     return value if isinstance(value, list) else [value]
 
 

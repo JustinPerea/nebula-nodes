@@ -283,13 +283,20 @@ body:not(.app-slava-restraint) .model-node__error--blocked {
   opacity: 0.7;
   font-size: 9px;
   list-style: revert;
+  width: fit-content;
 }
-.model-node__error-raw {
+/* The raw provider text (error copy round 3c): it can be a long body, so it
+   wraps anywhere and scrolls inside the card's error area rather than
+   stretching the card (nowheel on the toggle lets the wheel scroll it). */
+.model-node__error-details .error-details__raw {
   display: block;
   margin-top: 3px;
+  max-height: 8.5em;
+  overflow-y: auto;
   opacity: 0.75;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
+  user-select: text;
 }
 
 /* --- Before/after compare slider (image-compare node) --- */

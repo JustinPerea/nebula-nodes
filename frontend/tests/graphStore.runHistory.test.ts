@@ -416,7 +416,7 @@ describe('graphStore run-history lifecycle', () => {
 
     expect(useGraphStore.getState().isExecuting).toBe(true);
     expect(useGraphStore.getState().runHistory[0].status).toBe('running');
-    expect(useGraphStore.getState().providerRecoveryWarning).toMatch(/remains locked/i);
+    expect(useGraphStore.getState().providerRecoveryWarning).toMatch(/stays locked/i);
     expect(useGraphStore.getState().uncertainWorldLabsRunId).toBe(runId);
 
     useGraphStore.getState().acknowledgeUncertainWorldLabsRun();

@@ -77,7 +77,7 @@ def _reserve(store, position):
                 'Agent review needs at least 1 analysis call a day, and Settings has it at 0. '
                 'Raise \u201cAnalysis calls per day\u201d, then try again.' if meter['cap'] == 0 else
                 f"Commons has made {meter['calls']} analysis calls today, and the daily cap is {meter['cap']}. "
-                'Try again tomorrow, or raise Analysis calls per day in Settings.'))
+                'Try again tomorrow, or raise \u201cAnalysis calls per day\u201d in Settings.'))
         # Meter and reservation commit together, before the external call.
         # A crash leaves a visible attempt, never an automatic second charge.
         conn.execute("INSERT INTO meter(day,kind,calls) VALUES (?,'analysis',1) "

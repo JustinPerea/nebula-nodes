@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from execution.person_line import with_person_line
 from services.child_env import scrubbed_env
 from services.file_access import require_allowed_path
 
@@ -147,7 +148,9 @@ async def ffprobe_video(source: Path | str) -> ProbeResult:
         None,
     )
     if video_stream is None:
-        raise RuntimeError("No video stream in source")
+        raise with_person_line(RuntimeError("No video stream in source"),
+                               "The connected video has no video track Nebula can read. "
+                               "Connect another video, then run the node again.")
 
     r_fps = _parse_frame_rate(video_stream.get("r_frame_rate", "0/1"))
     avg_fps = _parse_frame_rate(video_stream.get("avg_frame_rate", "0/1"))

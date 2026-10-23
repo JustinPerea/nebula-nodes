@@ -44,6 +44,7 @@ import httpx
 from execution.async_poll_runner import AsyncPollConfig, poll_until_terminal
 from execution.missing_credential import MissingCredentialError
 from models.events import ExecutionEvent
+from execution.person_line import with_person_line
 
 REPLICATE_KEY = "REPLICATE_API_TOKEN"
 REPLICATE_API_BASE = "https://api.replicate.com/v1"
@@ -67,6 +68,8 @@ def model_path(model: Any) -> str:
     a query, a ``..``)."""
     parts = str(model or "").split("/")
     if len(parts) != 2 or not all(_SEGMENT.fullmatch(part) and part not in (".", "..") for part in parts):
+        # The model comes from Nebula's route table (route_clients), never
+        # from the person: a developer-only state keeps the general line.
         raise ValueError(f"Replicate model must be owner/name (got {model!r})")
     return f"{quote(parts[0], safe='')}/{quote(parts[1], safe='')}"
 
@@ -107,7 +110,9 @@ async def upload_file(client: httpx.AsyncClient, key: str, path: Path) -> str:
     """Upload a local file with the files API; returns its ``urls.get``."""
     size = path.stat().st_size
     if not size or size > MAX_UPLOAD_BYTES:
-        raise ValueError(f"{path.name} is empty or over Replicate's 100MB file limit")
+        raise with_person_line(
+            ValueError(f"{path.name} is empty or over Replicate's 100MB file limit"),
+            "A connected file is empty or over Replicate's 100 MB limit. Connect another one.")
     mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
     try:
         response = await client.post(f"{REPLICATE_API_BASE}/files", headers={"Authorization": f"Bearer {key}"},
@@ -150,7 +155,9 @@ async def _save_output(client: httpx.AsyncClient, key: str, output: Any, media_t
     except httpx.TransportError as exc:
         raise RuntimeError(f"Couldn't download Replicate's result: {type(exc).__name__}: {exc}") from exc
     if response.status_code >= 400:
-        raise RuntimeError(f"Replicate's result download failed (HTTP {response.status_code}). Run again.")
+        raise with_person_line(
+            RuntimeError(f"Replicate's result download failed (HTTP {response.status_code}). Run again."),
+            "Replicate's result couldn't be downloaded. Run the node again.")
     path = await write_media_bytes(response.content, response.headers.get("content-type", ""), media_type,
                                    get_run_dir(), url)
     return str(path)

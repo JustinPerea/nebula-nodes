@@ -20,3 +20,21 @@ export function waitingOnWorldLabs(count: number, unlock: boolean): string {
   if (count === 1) return unlock ? NODE_WAITING_UNLOCK : NODE_WAITING_FORGET;
   return unlock ? SOME_NODE_WAITING_UNLOCK : SOME_NODE_WAITING_FORGET;
 }
+
+/**
+ * The status bar's lines for World Labs work Nebula holds (error copy round
+ * 3c, GM - Design: "People never see the word "start"; they ran a World Labs
+ * job. Status bar: "Paid start needs review." → "A World Labs run needs your
+ * check." In its warnings ..., write "World Labs run" wherever they now say
+ * "paid start". Keep the rest of each line.").
+ */
+export const WORLD_LABS_RUN_NEEDS_CHECK = 'A World Labs run needs your check.';
+export const WORLD_LABS_RUN_STATUS_UNKNOWN = "Nebula can't tell if this World Labs run started.";
+/** "N more node(s) also need your check.", after the first hold's line. */
+export function moreNodesNeedCheck(more: number): string {
+  return more === 1 ? '1 more node also needs your check.' : `${more} more nodes also need your check.`;
+}
+/** The warning under WORLD_LABS_RUN_STATUS_UNKNOWN: Nebula lost track of a
+ * World Labs run it started, so Run stays locked until someone checks Marble. */
+export const WORLD_LABS_STATUS_UNCERTAIN_WARNING =
+  "Nebula couldn't confirm whether World Labs accepted this run, so the node stays locked to avoid paying twice. Check the job in Marble before you unlock it or run it again.";

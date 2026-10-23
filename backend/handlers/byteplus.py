@@ -40,6 +40,7 @@ from urllib.parse import quote
 import httpx
 
 from execution.missing_credential import MissingCredentialError
+from execution.person_line import with_person_line
 
 BYTEPLUS_KEY = "BYTEPLUS_API_KEY"
 BYTEPLUS_BASE_URL = "https://ark.ap-southeast.bytepluses.com/api/v3"
@@ -262,8 +263,9 @@ async def run_video_task(
                     # BytePlus reports no percentage; creep toward done.
                     await emit(ProgressEvent(node_id=node_id, value=min(0.95, polls / (polls + 20))))
                 if loop.time() - started > timeout:
-                    raise RuntimeError(
+                    raise with_person_line(RuntimeError(
                         f"BytePlus ModelArk task {task_id} ({model}) was still {status or 'pending'} after "
                         f"{int(timeout // 60)} minutes; Nebula stopped waiting and asked BytePlus to cancel it "
                         f"(a task that has started can't be cancelled; it expires {TASK_EXPIRES_AFTER // 60} minutes "
-                        "after creation).")
+                        "after creation)."),
+                        f"BytePlus didn't finish this job in {int(timeout // 60)} minutes, so Nebula stopped waiting and asked BytePlus to cancel it. A job that has started can't be cancelled and may still be billed.")

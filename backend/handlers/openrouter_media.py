@@ -50,6 +50,7 @@ import httpx
 
 from execution.missing_credential import MissingCredentialError
 from models.events import ExecutionEvent, ProgressEvent
+from execution.person_line import with_person_line
 
 OPENROUTER_KEY = "OPENROUTER_API_KEY"
 OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
@@ -175,7 +176,9 @@ async def _download(client: httpx.AsyncClient, key: str, url: Any) -> str:
     except httpx.TransportError as exc:
         raise RuntimeError(f"Couldn't download OpenRouter's video: {type(exc).__name__}: {exc}") from exc
     if response.status_code >= 400:
-        raise RuntimeError(f"OpenRouter's video download failed (HTTP {response.status_code}). Run again.")
+        raise with_person_line(
+            RuntimeError(f"OpenRouter's video download failed (HTTP {response.status_code}). Run again."),
+            "OpenRouter's video couldn't be downloaded. Run the node again.")
     path = await write_media_bytes(response.content, response.headers.get("content-type", ""), "Video",
                                    get_run_dir(), url)
     return str(path)
@@ -226,6 +229,7 @@ async def generate_video(
             if emit is not None:
                 await emit(ProgressEvent(node_id=node_id, value=min(0.95, polls / (polls + 20))))
             if loop.time() - started > limit:
-                raise RuntimeError(
+                raise with_person_line(RuntimeError(
                     f"OpenRouter video {job_id} was still {status or 'pending'} after {int(limit // 60)} minutes; "
-                    "Nebula stopped waiting. OpenRouter has no cancel for video jobs, so it may still finish and bill.")
+                    "Nebula stopped waiting. OpenRouter has no cancel for video jobs, so it may still finish and bill."),
+                    f"OpenRouter didn't finish this video in {int(limit // 60)} minutes, so Nebula stopped waiting. OpenRouter can't cancel video jobs, so it may still finish and be billed there.")

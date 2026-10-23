@@ -19,6 +19,7 @@ from handlers.krea_gateway import _JOB_ID, _http_url
 from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
 from services.output import _MEDIA_EXTENSIONS, get_run_dir, portable_output_ref
+from execution.person_line import as_person_line
 
 EXPORT_FORMATS = {"obj", "fbx", "stl", "ply"}
 MAX_ARCHIVE_BYTES = 500_000_000
@@ -32,7 +33,7 @@ def _job_id(node: GraphNode, inputs: dict[str, PortValueDict]) -> str:
         wired = wired.get("job_id") or wired.get("id")
     job_id = _clean_str(wired or node.params.get("job_id"))
     if not _JOB_ID.fullmatch(job_id):
-        raise ValueError("Wire a Krea 3D job or enter its job ID")
+        raise as_person_line(ValueError("Wire a Krea 3D job or enter its job ID"))
     return job_id
 
 
@@ -92,7 +93,7 @@ async def handle_krea_3d_export(
     job_id = _job_id(node, inputs)
     file_format = _clean_str(node.params.get("file_format")) or "obj"
     if file_format not in EXPORT_FORMATS:
-        raise ValueError(f"Krea exports OBJ, FBX, STL or PLY, not {file_format}")
+        raise as_person_line(ValueError(f"Krea exports OBJ, FBX, STL or PLY, not {file_format}"))
     body: dict[str, Any] = {"job_id": job_id, "file_format": file_format}
     node_app_key = _clean_str(node.params.get("node_app_key"))
     if node_app_key:
