@@ -835,6 +835,31 @@ class AgentNotes:
         _, note = self._write_project(mutate, project_id=project_id)
         return None if note is None else {"projectId": project_id, "note": note_view(note)}
 
+    def reopen_proposal(self, project_id: str, note_id: str, proposal_id: str) -> dict[str, Any] | None:
+        """The undo of a node delete reopened the proposal (GM, 2026-10-23):
+        its Update reviews it again. The outcome line goes and Review is back;
+        it stays read (the person's own undo brought it back). None when the
+        update has left the list or still reviews another open proposal."""
+        def mutate(notes: list[dict[str, Any]]) -> tuple[dict[str, Any], int] | None:
+            note = next((n for n in notes if n.get("id") == note_id), None)
+            if note is None:
+                return None
+            if not note.get("resolvedAt"):
+                return None
+            for key in ("resolvedAt", "resolvedBy", "outcome"):
+                note.pop(key, None)
+            note["proposal"] = {**(note.get("proposal") or {}), "id": proposal_id[:64]}
+            for action in note.get("actions") or []:
+                if (action.get("op") or {}).get("kind") == "proposal.review":
+                    action["op"]["proposalId"] = proposal_id[:64]
+            return copy.deepcopy(note), unread_count(notes)
+
+        _, result = self._write_project(mutate, project_id=project_id)
+        if result is None:
+            return None
+        note, unread = result
+        return {"projectId": project_id, "note": note_view(note), "unread": unread}
+
     def resolve_proposal(self, project_id: str, note_id: str, *, outcome: str,
                          by: Mapping[str, Any]) -> dict[str, Any] | None:
         """The proposal closed (accepted, rejected, withdrawn, expired or no

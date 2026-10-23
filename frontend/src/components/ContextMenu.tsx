@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useUIStore } from '../store/uiStore';
 import { useGraphStore } from '../store/graphStore';
-import { confirmNodeDelete } from '../lib/deleteConfirm';
 import { useCanvasPinsStore } from '../store/canvasPinsStore';
 import { isBackendNodeId } from '../lib/canvasPins';
 import { floatingBottomLimit } from '../lib/bottomBar';
@@ -127,8 +126,9 @@ export function ContextMenu() {
       shortcut: 'Del',
       danger: true,
       action: () => {
-        // A World Labs hold refuses first, with its notice; then GM's confirm (round 3f).
-        if (useGraphStore.getState().allowCanvasDelete([nodeId]) && confirmNodeDelete(1)) deleteNode(nodeId);
+        // A World Labs hold refuses, with its notice; otherwise it deletes at
+        // once and says "Deleted the node." with Undo (GM, 2026-10-23).
+        if (useGraphStore.getState().allowCanvasDelete([nodeId])) deleteNode(nodeId);
         hideContextMenu();
       },
     },

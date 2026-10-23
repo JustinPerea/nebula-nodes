@@ -19,18 +19,15 @@ GM, verbatim (2026-10-23):
 
 The port guard extends 3f's (test_error_copy_round3f.rule_breaks and
 card_lines): a port's label written into a card line without quotes fails.
-The Delete key's rule is pinned against the backend's own delete here and
-against the canvas's reading of it (frontend/tests/errorCopy.round3g.test.tsx)
-through one fixture, tests/fixtures/delete_confirm_cases.json. What agents
-read (exception texts, a validation error's message) doesn't change.
+Item 1's interim Delete-key confirm is gone: undo puts back everything a
+delete removed (tests/test_undo_restores_deletes.py). What agents read
+(exception texts, a validation error's message) doesn't change.
 """
 from __future__ import annotations
 
 import ast
-import asyncio
 import json
 
-import pytest
 
 from tests.test_error_copy_round3f import BACKEND, _files, _line_beside, card_lines, port_breaks, rule_breaks
 
@@ -193,135 +190,3 @@ def test_the_gemini_omni_line_closes_the_quote_before_the_comma() -> None:
         "Gemini Omni capability guardrail: Gemini Omni can edit an existing video in place, but it cannot extend "
         "the video's duration. Rephrase this as an edit (for example, 'Change the lighting and keep everything "
         "else the same') or use Veo 3.1 for video extension.")
-
-
-# -- GM item 1: what the backend's delete takes with it ------------------------------
-
-CASES = json.loads((BACKEND / "tests" / "fixtures" / "delete_confirm_cases.json").read_text())["cases"]
-CLAUDE = {"X-Nebula-Agent": "Claude Code"}
-
-
-@pytest.fixture
-def delete_api(tmp_path, monkeypatch, person):
-    import main as main_module
-    from fastapi.testclient import TestClient
-
-    from services import asset_proposals, project_cover
-    from services.agent_presence import AgentPresence
-    from services.canvas_events import CanvasEventJournal
-    from services.canvas_pins import CanvasPins
-    from services.canvas_proposals import ProposalBook
-    from services.cli_graph import CLIGraph
-    from services.execution_runs import ExecutionRunRegistry
-    from services.project_store import ProjectStore, make_project
-    from services.provider_recovery import ProviderRecoveryStore
-    from services.provider_start_guard import ProviderStartGuard
-    from services.run_approvals import RunApprovals
-    from services.selection_context import SelectionContextStore
-
-    class Clock:
-        now = 1_760_000_000.0
-
-        def __call__(self) -> float:
-            return self.now
-
-    monkeypatch.setattr(project_cover, "_time_for", lambda url: None)
-    graph = CLIGraph(persist_path=tmp_path / "state.json")
-    store = ProjectStore(tmp_path / "projects")
-    with store.transaction() as catalog:
-        project = make_project("Open now")
-        catalog["projects"][project["id"]] = project
-        catalog["activeProjectId"] = project["id"]
-        store.commit(catalog)
-    clock = Clock()
-
-    async def quiet(_data):
-        return None
-
-    monkeypatch.setattr(main_module, "cli_graph", graph)
-    monkeypatch.setattr(main_module, "project_store", store)
-    monkeypatch.setattr(main_module, "canvas_pins", CanvasPins(lambda: main_module.project_store))
-    monkeypatch.setattr(main_module, "canvas_proposals", ProposalBook(clock))
-    monkeypatch.setattr(main_module, "asset_proposals", asset_proposals.AssetProposalBook(clock))
-    monkeypatch.setattr(main_module, "run_approvals", RunApprovals(clock))
-    monkeypatch.setattr(main_module, "agent_presence", AgentPresence())
-    monkeypatch.setattr(main_module, "selection_context", SelectionContextStore())
-    monkeypatch.setattr(main_module, "canvas_events", CanvasEventJournal())
-    monkeypatch.setattr(main_module, "provider_recovery_store", ProviderRecoveryStore(None))
-    monkeypatch.setattr(main_module, "provider_start_guard", ProviderStartGuard(tmp_path / "paid-starts.json"))
-    monkeypatch.setattr(main_module, "execution_runs", ExecutionRunRegistry())
-    monkeypatch.setattr(main_module, "_graph_recovery_bootstrap_error", None)
-    monkeypatch.setattr(main_module.manager, "broadcast_raw", quiet)
-    monkeypatch.setattr(main_module.manager, "broadcast_browser", quiet)
-    return main_module, TestClient(main_module.app), person.headers, project["id"]
-
-
-def _proposal_body(case_proposal: dict) -> dict:
-    node_id, how = case_proposal["reads"], case_proposal["as"]
-    if how == "edge":
-        return {"note": "Generate from the prompt",
-                "nodes": [{"ref": "+img", "definitionId": "nano-banana", "params": {"aspect_ratio": "16:9"}}],
-                "edges": [{"source": node_id, "sourceHandle": "text", "target": "+img", "targetHandle": "prompt"}],
-                "run": ["+img"]}
-    if how == "params":
-        return {"note": "A warmer prompt", "params": [{"nodeId": node_id, "params": {"value": "a warm cat"}}]}
-    return {"note": "Run it", "run": [node_id]}
-
-
-@pytest.mark.parametrize("case", CASES, ids=[case["name"] for case in CASES])
-def test_the_backends_delete_takes_what_the_fixture_says(delete_api, case) -> None:
-    """`asks` is whether deleting the nodes detaches a pin or closes a proposal,
-    as the real DELETE /api/graph/node and the asset-proposal sweep do it, and
-    each proposal's view (what the canvas reads) is the fixture's."""
-    main, client, person, project_id = delete_api
-    for index, spec in enumerate(case["nodes"], start=1):
-        if spec.get("image"):
-            made = main.cli_graph.add_node("nano-banana", {}, outputs={"image": {"type": "Image", "value": spec["image"]}})
-        else:
-            made = main.cli_graph.add_node("text-input", {"value": "a cat"})
-        assert made == spec["id"] == f"n{index}"
-    pins = []
-    for spec in case.get("pins", []):
-        body = {"text": "Check this", **({"nodeId": spec["on"]} if spec["on"] else {"position": {"x": 5, "y": 5}})}
-        made = client.post("/api/canvas/pins", json=body, headers=person)
-        assert made.status_code == 201, made.text
-        pin = made.json()["pin"]
-        if spec["status"] == "resolved":
-            answered = client.post(f"/api/canvas/pins/{pin['id']}/resolve", json={"reply": "Done"}, headers=CLAUDE)
-            assert answered.status_code == 200, answered.text
-        pins.append(pin["id"])
-    proposals = []
-    for spec in case.get("proposals", []):
-        made = client.post("/api/canvas/proposals", json=_proposal_body(spec), headers=CLAUDE)
-        assert made.status_code in (200, 201), made.text
-        view = made.json()["proposal"]
-        assert view["references"] == [spec["reads"]]  # what the canvas reads (ProposalView.references)
-        if spec["status"] == "withdrawn":
-            assert client.delete(f"/api/canvas/proposals/{view['id']}", headers=CLAUDE).status_code == 200
-        proposals.append(view["id"])
-    if case.get("coverPin"):
-        pinned = client.put(f"/api/projects/{project_id}/cover", json={"url": case["coverPin"]}, headers=person)
-        assert pinned.status_code == 200, pinned.text
-    covers = []
-    for spec in case.get("covers", []):
-        made = client.post("/api/asset-proposals", json={"kind": "project", "id": project_id,
-                                                          "change": {"cover": spec["to"]}, "note": "Use this one"},
-                           headers=CLAUDE)
-        assert made.status_code == 201, made.text
-        view = made.json()["proposal"]
-        # What the canvas reads (AssetProposalView.change.cover).
-        assert view["change"]["cover"]["to"] == spec["to"]
-        assert view["change"]["cover"]["from"] == case.get("coverPin")
-        assert view["target"]["id"] == project_id and view["status"] == "open"
-        covers.append(view["id"])
-
-    open_before = {pid for pid in proposals if main.canvas_proposals.get(pid).status == "open"}
-    for node_id in case["delete"]:
-        assert client.delete(f"/api/graph/node/{node_id}", headers=person).status_code == 200
-    asyncio.run(main._sweep_asset_proposals())
-
-    listed = {pin["id"]: pin for pin in main.canvas_pins.list()["pins"]}
-    detached = [pid for pid in pins if listed[pid].get("detached")]
-    closed = [pid for pid in open_before if main.canvas_proposals.get(pid).status != "open"]
-    covers_closed = [pid for pid in covers if main.asset_proposals.get(pid).status != "open"]
-    assert bool(detached or closed or covers_closed) is case["asks"], (detached, closed, covers_closed)
