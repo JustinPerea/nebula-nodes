@@ -250,9 +250,16 @@ export function personRequiredMessage(reason: PersonUnavailableReason = personUn
     case 'desktop-unavailable':
       return "Nebula couldn't confirm this window is yours, so Settings, proposals and chats are off. Restart the app.";
     default:
-      // GM - Design, 2026-10-23, verbatim. `--open` is backend/devserver.py's
-      // flag. The desktop app gets here too when its sidecar refuses the
-      // token the shell handed over (desktopReason stays null then).
+      // The desktop app gets here when its backend refuses the token the
+      // shell handed over (desktopReason stays null then): GM's app banner
+      // (round 2, 2026-10-23, verbatim). A quit and reopen starts a fresh
+      // backend with a fresh token; a reload asks the same shell for the same
+      // token, which the same backend refuses again.
+      if (hasDesktopBridge()) {
+        return "This window isn't connected as you, so Settings, proposals and chats are locked. "
+          + 'Quit Nebula and open it again.';
+      }
+      // GM - Design, 2026-10-23, verbatim. `--open` is backend/devserver.py's flag.
       return "This tab isn't connected as you, so Settings, proposals and chats are locked. "
         + 'Open the link Nebula printed when it started, or restart Nebula with --open.';
   }

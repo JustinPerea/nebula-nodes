@@ -23,6 +23,8 @@
  * site (warnFailure), lost connections aren't.
  */
 
+import { inDesktopShell } from './personSession';
+
 /** No answer at all: the connection dropped, or the backend isn't there.
  * Round 3f (GM): ""Check your connection" sends people to their Wi-Fi, but
  * the backend is on this computer." apiFetch only ever calls Nebula's own
@@ -48,10 +50,25 @@ export const TOO_LARGE_COPY = "That's too large to save.";
 export const PERSON_REQUIRED_CODE = 'person_required';
 /** GM - Design, 2026-10-23 (Q116 a), verbatim, for every refusal that says
  * PERSON_REQUIRED_CODE: "Use it for every person-only refusal, not just Krea
- * billing. The agents' text stays behind Details." The notice below it is
- * PersonRequiredBanner. Classified by the answer's `code`, never its words. */
+ * billing. The agents' text stays behind Details." Classified by the answer's
+ * `code`, never its words. Round 2 (GM): "line 3 shouldn't depend on the
+ * notice being there, since it can be dismissed", so it says the fix itself.
+ * A browser tab's line; the desktop app says PERSON_REQUIRED_APP_COPY. */
 export const PERSON_REQUIRED_COPY = "This change needs your OK, and this tab isn't connected as you. "
-  + 'Reconnect it with the link in the notice below, then try again.';
+  + 'Open the link Nebula printed when it started, then try again.';
+/** GM - Design, 2026-10-23 (round 2), verbatim: line 3 in the desktop app. A
+ * quit and reopen gives the app a fresh backend and a fresh person token. */
+export const PERSON_REQUIRED_APP_COPY = "This change needs your OK, and this window isn't connected as you. "
+  + 'Quit Nebula and open it again, then try again.';
+
+/** Line 3 for where this page runs: `desktop` is personSession's
+ * inDesktopShell() (the preload bridge), the flag the rest of the error copy
+ * reads (commonsSessionCopy). */
+export function personRequiredCopy(desktop: boolean = inDesktopShell()): string {
+  return desktop ? PERSON_REQUIRED_APP_COPY : PERSON_REQUIRED_COPY;
+}
+
+const isPersonRequiredCopy = (line: string) => line === PERSON_REQUIRED_COPY || line === PERSON_REQUIRED_APP_COPY;
 
 /** GM's WRAP rule (round 2): "when the surface already has a retry button,
  * the reason line drops its 'try again'. The button is the retry." Only
@@ -140,7 +157,7 @@ export class ConnectionLostError extends TypeError {
  * (every request names its action); the reason is copy for the status
  * (copyForStatus) unless the caller wrote one; `status`, the raw `detail`
  * and `cause` stay for debugging and the console. A person-only refusal
- * (`code` PERSON_REQUIRED_CODE) always reads GM's PERSON_REQUIRED_COPY,
+ * (`code` PERSON_REQUIRED_CODE) always reads GM's line 3 (personRequiredCopy),
  * whatever reason the caller passed: its `detail` is written for agents, and
  * failureDetails hands it to a Details toggle. */
 export class RequestFailedError extends Error {
@@ -253,11 +270,11 @@ export function copyForStatus(status: number, detail: unknown): string {
 
 /** The line for an answer read by hand (a caller with no RequestFailedError):
  * classified by the answer's `code` first, so a person-only refusal says GM's
- * PERSON_REQUIRED_COPY whatever its words (Q116 a), and otherwise as
+ * line 3 (personRequiredCopy) whatever its words (Q116 a), and otherwise as
  * copyForStatus says, or the caller's own `reason`. A person-only refusal
  * is a 4xx: a 5xx or no answer keeps GM's line for those. */
 export function copyForAnswer(status: number, detail: unknown, code: string | null, reason?: string): string {
-  if (code === PERSON_REQUIRED_CODE && failureKind(status) === 'refused') return PERSON_REQUIRED_COPY;
+  if (code === PERSON_REQUIRED_CODE && failureKind(status) === 'refused') return personRequiredCopy();
   return reason ?? copyForStatus(status, detail);
 }
 
@@ -267,7 +284,7 @@ export function copyForAnswer(status: number, detail: unknown, code: string | nu
  * agents' text stays behind Details."). Null for anything else, and for a
  * refusal with no words of its own. */
 export function failureDetails(error: unknown): string | null {
-  if (!(error instanceof RequestFailedError) || error.reason !== PERSON_REQUIRED_COPY) return null;
+  if (!(error instanceof RequestFailedError) || !isPersonRequiredCopy(error.reason)) return null;
   if (error.code !== PERSON_REQUIRED_CODE) return null;
   const text = detailText(error.detail);
   return text && text !== error.reason ? text : null;

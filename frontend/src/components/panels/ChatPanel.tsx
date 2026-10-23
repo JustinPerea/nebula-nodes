@@ -34,7 +34,7 @@ import { claimIntent } from '../../lib/heldIntents';
 import '../../styles/personal-agents.css';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl, personTokenForSocket } from '../../lib/backend';
 import { DEFAULT_BACKEND_PORT, devProxyPort } from '../../lib/devBackendPort';
-import { CONNECTION_LOST_COPY, ConnectionLostError, NO_ANSWER_STATUS, PERSON_REQUIRED_CODE, PERSON_REQUIRED_COPY, readDetail, warnFailure, failureMessage, failureCopy, oneLine } from '../../lib/errorCopy';
+import { CONNECTION_LOST_COPY, ConnectionLostError, NO_ANSWER_STATUS, PERSON_REQUIRED_CODE, personRequiredCopy, readDetail, warnFailure, failureMessage, failureCopy, oneLine } from '../../lib/errorCopy';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import { chatUploadChipError } from '../../lib/chatUploadCopy';
 import { chatAuthority } from '../../lib/commonsChatAuthority';
@@ -1178,7 +1178,7 @@ export function ChatPanel() {
                     : p,
                 ),
                 personRequired
-                  ? { kind: 'system', text: PERSON_REQUIRED_COPY, tone: 'error', details: errText }
+                  ? { kind: 'system', text: personRequiredCopy(), tone: 'error', details: errText }
                   : { kind: 'system', text: `Warning: ${errText}`, tone: 'error' },
               ],
               streaming: false,

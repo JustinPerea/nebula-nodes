@@ -378,7 +378,7 @@ describe("review: refusals reconnecting can fix, and files Load graph can't open
 
 /** GM - Design, 2026-10-23, verbatim (Q116 a). */
 describe("GM's lines in the store", () => {
-  const GM3 = "This change needs your OK, and this tab isn't connected as you. Reconnect it with the link in the notice below, then try again.";
+  const GM3 = "This change needs your OK, and this tab isn't connected as you. Open the link Nebula printed when it started, then try again.";
   const BILLING = "zz1: Changing how a Krea node is billed (_kreaAuth) is the person's call, so it needs their OK.";
   const errorDetails = () => (projectStore as unknown as {
     projectErrorDetails?: (state: unknown) => string | null }).projectErrorDetails?.(state()) ?? null;

@@ -92,7 +92,7 @@ describe("a person-only refusal (code person_required, GM Q116 a)", () => {
     fetchMock.mockResolvedValueOnce(json({ detail: 'krea-2-generate: propose the change instead with propose_change',
       code: 'person_required' }, 403));
     expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
-    expect(alerted()).toBe("Couldn't add Text Input. This change needs your OK, and this tab isn't connected as you. Reconnect it with the link in the notice below, then try again.");
+    expect(alerted()).toBe("Couldn't add Text Input. This change needs your OK, and this tab isn't connected as you. Open the link Nebula printed when it started, then try again.");
   });
 });
 

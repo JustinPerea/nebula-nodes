@@ -169,7 +169,7 @@ describe('review: the line after a download, and where focus goes', () => {
 /** GM - Design, 2026-10-23, verbatim (Q116 a, the three lines). */
 describe("GM's lines", () => {
   const BILLING = "zz1: Changing how a Krea node is billed (_kreaAuth) is the person's call. Propose the change instead with propose_change (`nebula propose`).";
-  const PERSON_LINE = "Couldn't recover the project. This change needs your OK, and this tab isn't connected as you. Reconnect it with the link in the notice below, then try again.";
+  const PERSON_LINE = "Couldn't recover the project. This change needs your OK, and this tab isn't connected as you. Open the link Nebula printed when it started, then try again.";
   const NOT_WRITTEN = "The download didn't save, so your edits are still only in this tab. Check that your disk has free space, then download them again, or continue without them.";
 
   it("too large for Load graph: GM's line 1", () => {

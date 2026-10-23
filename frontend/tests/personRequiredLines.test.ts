@@ -3,9 +3,21 @@
  * person, verbatim:
  *
  *   "This change needs your OK, and this tab isn't connected as you.
- *   Reconnect it with the link in the notice below, then try again."
+ *   Open the link Nebula printed when it started, then try again."
  *   "Use it for every person-only refusal, not just Krea billing. The agents'
  *   text stays behind Details."
+ *
+ * Round 2 (GM, 2026-10-23): "line 3 shouldn't depend on the notice being
+ * there, since it can be dismissed", and the desktop app gets its own line 3
+ * and banner, verbatim:
+ *
+ *   "This change needs your OK, and this window isn't connected as you. Quit
+ *   Nebula and open it again, then try again."
+ *   "This window isn't connected as you, so Settings, proposals and chats are
+ *   locked. Quit Nebula and open it again."
+ *
+ * chosen by the app's existing flag (personSession's inDesktopShell(): the
+ * preload bridge's apiBaseUrl). "The browser banner stays as I sent it."
  *
  * and the notice (PersonRequiredBanner) itself: "This tab isn't connected as
  * you, so Settings, proposals and chats are locked. Open the link Nebula
@@ -15,20 +27,22 @@
  * gate's), never by its words. The backend's own text, written for agents,
  * stays on the error (`detail`) for the Details toggle and the console.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const apiFetch = vi.hoisted(() => vi.fn());
 vi.mock('../src/lib/backend', () => ({ apiFetch, rewriteBackendAssetUrls: (value: unknown) => value }));
 
 import * as errorCopy from '../src/lib/errorCopy';
 import { ACCESS_LOST_COPY, RequestFailedError, failureCopy, requestError } from '../src/lib/errorCopy';
-import { personRequiredMessage } from '../src/lib/personSession';
+import { personCredential, personRequiredMessage, personUnavailableReason, resetPersonSessionForTests } from '../src/lib/personSession';
 import { ExecutionStartRejectedError, executeNode } from '../src/lib/api';
 import { connectKrea } from '../src/lib/kreaConnection';
 import { acceptProposal } from '../src/lib/canvasProposals';
 import { enhancePrompt } from '../src/lib/enhancePrompt';
 
-const GM_LINE = "This change needs your OK, and this tab isn't connected as you. Reconnect it with the link in the notice below, then try again.";
+const GM_LINE = "This change needs your OK, and this tab isn't connected as you. Open the link Nebula printed when it started, then try again.";
+const APP_LINE = "This change needs your OK, and this window isn't connected as you. Quit Nebula and open it again, then try again.";
+const APP_BANNER = "This window isn't connected as you, so Settings, proposals and chats are locked. Quit Nebula and open it again.";
 const BANNER = "This tab isn't connected as you, so Settings, proposals and chats are locked. Open the link Nebula printed when it started, or restart Nebula with --open.";
 const BILLING = "zz1: Changing how a Krea node is billed (_kreaAuth) is the person's call, so it needs their OK. Leave _kreaAuth as it is, and propose the change instead with propose_change (`nebula propose`); the person accepts it on the canvas.";
 const json = (body: unknown, status: number) =>
@@ -120,5 +134,69 @@ describe("GM's banner line", () => {
   it('keeps the desktop shell\'s own lines', () => {
     expect(personRequiredMessage('desktop-unavailable')).toBe(
       "Nebula couldn't confirm this window is yours, so Settings, proposals and chats are off. Restart the app.");
+  });
+});
+
+/** The preload bridge the desktop shell exposes (desktop/preload.cjs): its
+ * apiBaseUrl is what inDesktopShell() reads. */
+function inTheApp(person?: { token: () => Promise<unknown> }) {
+  Object.defineProperty(window, 'nebulaDesktop', {
+    value: { apiBaseUrl: 'http://127.0.0.1:56789', wsBaseUrl: 'ws://127.0.0.1:56789', ...(person ? { person } : {}) },
+    configurable: true, writable: true,
+  });
+}
+
+describe("GM's app lines (round 2), chosen by the desktop flag", () => {
+  beforeEach(() => resetPersonSessionForTests());
+  afterEach(() => {
+    delete (window as unknown as Record<string, unknown>).nebulaDesktop;
+    resetPersonSessionForTests();
+  });
+
+  it('line 3 in the app is the window line, with the agents\' text still behind Details', async () => {
+    inTheApp();
+    const error = await requestError("Couldn't recover the project.", personRequired());
+    expect(error.reason).toBe(APP_LINE);
+    expect(error.message).toBe(`Couldn't recover the project. ${APP_LINE}`);
+    expect(details(error)).toBe(BILLING);
+    const written = new RequestFailedError("Couldn't start the run.", 403,
+      { detail: BILLING, reason: BILLING, code: 'person_required' });
+    expect(written.reason).toBe(APP_LINE);
+  });
+
+  it('every path that read line 3 reads the app line in the app', async () => {
+    inTheApp();
+    apiFetch.mockImplementation(async () => personRequired());
+    const refused = await executeNode([], [], 'n1').catch((error: unknown) => error);
+    expect((refused as ExecutionStartRejectedError).reason).toBe(APP_LINE);
+    expect(details(refused)).toBe(BILLING);
+    await expect(connectKrea()).rejects.toThrow(`Couldn't update the Krea connection. ${APP_LINE}`);
+    await expect(enhancePrompt('x')).rejects.toThrow(APP_LINE);
+    expect(errorCopy.copyForAnswer(403, BILLING, 'person_required')).toBe(APP_LINE);
+    // Not a person-only refusal: unchanged in the app too.
+    expect(errorCopy.copyForAnswer(403, BILLING, null)).toBe(BILLING);
+  });
+
+  it('a browser tab keeps the browser line 3', () => {
+    expect(errorCopy.copyForAnswer(403, BILLING, 'person_required')).toBe(GM_LINE);
+  });
+
+  it("the app's banner, when the backend refuses the token the shell handed over", async () => {
+    inTheApp({ token: vi.fn().mockResolvedValue({ ok: true, token: 'p'.repeat(43) }) });
+    expect(await personCredential()).not.toBeNull();
+    // The shell gave a token, so there is no shell reason: only the backend's refusal.
+    expect(personUnavailableReason()).toBe('not-connected');
+    expect(personRequiredMessage()).toBe(APP_BANNER);
+    expect(personRequiredMessage('not-connected')).toBe(APP_BANNER);
+  });
+
+  it("the shell's own reasons keep their lines in the app, and the browser banner stays", async () => {
+    inTheApp({ token: vi.fn().mockResolvedValue({ ok: false, error: 'DEBUG_PORT' }) });
+    expect(await personCredential()).toBeNull();
+    expect(personRequiredMessage()).toMatch(/remote-debugging port/);
+    expect(personRequiredMessage('desktop-unavailable')).toBe(
+      "Nebula couldn't confirm this window is yours, so Settings, proposals and chats are off. Restart the app.");
+    delete (window as unknown as Record<string, unknown>).nebulaDesktop;
+    expect(personRequiredMessage('not-connected')).toBe(BANNER);
   });
 });

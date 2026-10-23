@@ -211,6 +211,56 @@ Isolated backend on 8782 through `iso.sh` (temp HOME, every NEBULA_* root in a t
 - `npx tsc -b`: clean. `npm run -s lint`: clean.
 - `npx vite build && node scripts/check-build-budget.mjs`: passed, **370,967 bytes raw** (111,292 gzip) against 512,000 (+2,568 bytes over the review build). `dist/` deleted afterwards.
 
+## GM's lines, round 2 (2026-10-23)
+
+GM - Design's reply, verbatim: "1. Yes, add app versions. Also, line 3 shouldn't depend on the notice being there, since it can be dismissed." Browser line 3: "This change needs your OK, and this tab isn't connected as you. Open the link Nebula printed when it started, then try again." App line 3: "This change needs your OK, and this window isn't connected as you. Quit Nebula and open it again, then try again." App banner: "This window isn't connected as you, so Settings, proposals and chats are locked. Quit Nebula and open it again." "The browser banner stays as I sent it." "2. No Details on one-line surfaces. The agents' text going to the console is right there." "3. Keep "Couldn't run the node." It's true, and the line under it says why." Items 2 and 3 needed no change.
+
+What changed:
+- `errorCopy.ts`: `PERSON_REQUIRED_COPY` is the new browser line 3. A new `PERSON_REQUIRED_APP_COPY` holds the app line 3. `personRequiredCopy(desktop = inDesktopShell())` picks one of them.
+  - `copyForAnswer` uses it. That covers every `RequestFailedError`, `ExecutionStartRejectedError`, the Krea, proposal, Enhance prompt and cinema paths, and every answer read by hand.
+  - `failureDetails` accepts either line, so Details keeps the agents' text in the app too.
+- `ChatPanel.tsx`: the chat's person line (the one place that used the constant directly) now calls `personRequiredCopy()`.
+- `personSession.ts`: in the app, `personRequiredMessage()`'s not-connected case is GM's app banner. That is the case where the shell gave a token and the backend refused it. The browser banner and the shell's own reasons (debug port, dev renderer, unconfirmed window) are unchanged. `PersonRequiredBanner.tsx` is untouched.
+- Classification is still by `code` only. Nothing else changed: Details stays where the first lane put it, and one-line surfaces still have none. No backend change, no desktop change, and no MCP or CLI change: this is copy on person surfaces, and agents still get their own words (`detail`).
+
+The desktop flag: `inDesktopShell()` in `personSession.ts`, which already existed. It is true when the preload bridge (`window.nebulaDesktop`, from `desktop/preload.cjs`) has an `apiBaseUrl`. It's the same check `personSession` uses to take the token from the shell instead of a link, and the one the Commons error copy already reads (`commonsSessionCopy(inDesktopShell())`). `errorCopy.ts` now imports it from `personSession.ts`. That makes no cycle: `personSession` imports only `devBackendPort`. Not used: `paperDesktop.isDesktopMode()` (it checks `shell === 'electron'`, for Paper links), a build constant, or the file: protocol.
+
+The answer to GM's question is in "For GM" below. The code behind it:
+- (a) `desktop/main.mjs` decides `person` once at launch (`decidePersonToken`). `sidecar.mjs` writes it to the backend's stdin right after the spawn. `person_session.initialize()` reads one line (5 s deadline). On any failure it leaves no session for the whole launch: `set` happens once, stdin is then closed, and there's no fallback token. A sidecar that exits mid-session is not restarted (`showDisconnectedState`), and a Dock reopen reuses the same sidecar. The renderer's `refreshPersonCredential()` asks the same shell again and gets the same token.
+  - Tests that pin it: `backend/tests/test_person_session.py` (`test_stdin_failure_leaves_no_person_at_all`, `test_stdin_eof_or_timeout_fails_closed`, `test_stdin_mode_never_falls_back_to_a_generated_token`; 31 passed here) and `desktop/tests/sidecar.test.mjs` "a real backend reads the stdin token: only it unlocks a person-only route" (a wrong token gets 403, the shell's gets 200). Not run here: it imports `ws`, and this worktree has no `desktop/node_modules`, which can't be installed. `desktop/tests/person-token.test.mjs` ran: 7 passed, with a temp HOME and key variables unset.
+- (b) In the app, `wantsPersonHeader` is true for every request. `apiFetch` awaits `personCredential()` (the shell lookup) before `fetch`, and `wsClient.sayHello` awaits `personTokenForSocket` before the hello. `desktopCredential()` sets `desktopReason` before its promise resolves. So no refusal can arrive before the reason is known. New guard test: `tests/lib/backend.test.ts` "sends nothing to its sidecar until a slow shell lookup lands, then sends the token". It passes on 01ad81d4 too, because it pins existing behaviour that the answer to GM relies on.
+
+Surprise: in case (a) the window believes it holds the person's token: the shell gave one, so `holdsPersonCredential()` is true. Its camera then counts as the project's view, and that save is refused like every other person-only one. The live screenshot's header reads "Unsaved changes" after a zoom. That's consistent with the window being locked, and it's left alone for the desktop pass.
+
+Tradeoff: in the app, line 3 is chosen by the flag alone, not by the shell's reason, as the spec asked. With a debug port open, line 3 says to quit and reopen while the banner names debug mode. Raised with GM in "For GM".
+
+### Tests (written first; red on 01ad81d4)
+
+- **21 failed, 70 passed** across 9 files (91 tests) before the build (`unsaved-edits-gm2/red-frontend.log`). Every failure was the copy: the old line 3 or the browser banner where the new line or app line was expected.
+  - New, 8 tests: `tests/personRequiredLines.test.ts` +5 (4 red; the guard that the shell's own reasons and the browser banner stay passed), `tests/components/PersonRequiredBanner.test.tsx` +1 (red), `tests/personRequiredCards.test.tsx` +1 (red), `tests/ChatPanel.commons.test.tsx` +1 (red). Each sets the preload's bridge on `window` the way the shell does.
+  - Updated to the new browser line 3 (red until the build), 14 tests: `personRequiredLines` (8), `personRequiredCards`, `ChatPanel.commons`, `canvasProposalsStore`, `enhancePrompt`, `graphStore.errorCopy`, `unsavedEdits.store` (1 each). `ProjectHome.unsavedEdits`'s fixture string was updated too. It passed either way, because that component renders the line it is handed.
+- Green after the build: 91 passed.
+- Plus the guard above in `tests/lib/backend.test.ts` (passes on both; 54 passed in that file).
+
+### Live check
+
+Builder ports, isolated: backend 8782 through `iso.sh` (temp HOME, every NEBULA_* root in a temp state dir, no keys, person token over stdin, outside network refused) and Vite 5782 with `VITE_NEBULA_BACKEND_PORT=8782`. The proxy was checked first (an empty project list). 8000-8010 and 5173 were blocked with CDP `Network.setBlockedURLs` plus the dead proxy, and the canary 8799 was unreachable. **0 blocked attempts.** No page errors, no dialogs, nothing paid, no Electron. **19 PASS, 0 FAIL** (`unsaved-edits-gm2/live/gm2-live.mjs`, `results.json`, `run.log`).
+- **Browser tab without the link.** An approved run of a free text node was refused 403 `person_required`. The card read "Couldn't run the node." plus the new browser line 3, with Details closed and holding the agents' text. The banner read GM's browser banner exactly.
+- **App mode.** No Electron. The bridge the preload would expose was defined before the page loaded (`evaluateOnNewDocument`), frozen, pointing at the isolated backend.
+  - Case (a), a well-formed token this backend doesn't know: the banner came up on its own when the socket's hello was refused, and read GM's app banner. All 23 requests carried the shell's token. The approved run was refused 403 `person_required`, and the card read GM's app line 3 with Details. 8 s later the banner was still there, and after a reload it came back.
+  - The same page with the token this backend knows (what a quit and reopen gives): no banner, and a person-only read (`/api/agent/spend`) answered as the person.
+  - Case (b), the shell's answer slowed to 4 s: none of the 20 requests reached the backend before it landed, all of them carried the token, and no banner showed.
+- Screenshots in `unsaved-edits-gm2/live/shots/`: `browser-line3-and-banner-1280.png` / `-1440.png`, `app-line3-and-banner-1280.png` / `-1440.png`, `app-banner-1280.png`.
+- Servers stopped by port (8782 and 5782 free). The state dir was deleted.
+
+### Gates (focused; CI runs the whole suites)
+
+- Vitest `--maxWorkers=3`: every test file that touches personSession, the banner, errorCopy, ChatPanel, `nebulaDesktop` or `person_required`. **60 files, 853 passed**, 0 failed.
+- Backend: no backend file changed. `tests/test_person_session.py` (cited above): **31 passed**.
+- Desktop: `tests/person-token.test.mjs`: **7 passed**.
+- `npx tsc -b`: clean. `npm run -s lint`: clean.
+- `npx vite build && node scripts/check-build-budget.mjs`: passed, **372,629 bytes raw** (111,846 gzip) against 512,000. `dist/` deleted afterwards.
+
 ## For GM
 
 The lines as built, verbatim:
@@ -222,16 +272,30 @@ The lines as built, verbatim:
 - After a download: "Your edits are saved as {filename}. Open it with “Load graph” under “Canvas actions” in a new project to bring them back." (approved by GM, 2026-10-23)
 - After a download Load graph can't open (GM's line 1, until Q118 is settled): "Your edits are saved as {filename}. Keep it somewhere safe. It's too large for “Load graph” to open right now, so Nebula can't bring the edits back yet."
 - A download that couldn't be written (GM's line 2), the body under the same heading, both buttons kept: "The download didn't save, so your edits are still only in this tab. Check that your disk has free space, then download them again, or continue without them."
-- A person-only refusal (GM's line 3), under "Couldn't recover the project." and wherever else one shows: "This change needs your OK, and this tab isn't connected as you. Reconnect it with the link in the notice below, then try again." The agents' text is behind Details where the surface has room for it.
-- The banner: "This tab isn't connected as you, so Settings, proposals and chats are locked. Open the link Nebula printed when it started, or restart Nebula with --open."
+- A person-only refusal (GM's line 3, round 2), under "Couldn't recover the project." and wherever else one shows. In a browser tab: "This change needs your OK, and this tab isn't connected as you. Open the link Nebula printed when it started, then try again." In the desktop app: "This change needs your OK, and this window isn't connected as you. Quit Nebula and open it again, then try again." The agents' text is behind Details where the surface has room for it; one-line surfaces have none (your answer, round 2).
+- The banner. In a browser tab, as you sent it: "This tab isn't connected as you, so Settings, proposals and chats are locked. Open the link Nebula printed when it started, or restart Nebula with --open." In the desktop app, when its backend refuses the window's token: "This window isn't connected as you, so Settings, proposals and chats are locked. Quit Nebula and open it again." The app's own cases keep their lines (a debug port, the dev renderer, "Nebula couldn't confirm this window is yours, so Settings, proposals and chats are off. Restart the app.").
+- Which one shows is decided by the app's existing desktop flag (the bridge its preload exposes), not by the words of the refusal.
 - File name: "{project name} - unsaved edits.nebula".
 - During an update stop, after a download, the tab doesn't reload by itself; the existing line "Nebula was updated while this tab was open. Reload the tab to use the update. Your saved work is kept." shows under the saved-as line (GM: right as it is).
 
-Still yours to decide (new since your lines):
-- **The banner in the desktop app.** It can show there: when the app's backend refuses the token the shell handed over (or answers before the shell's lookup finished), the banner falls to the browser line above, so the app reads "Open the link Nebula printed when it started, or restart Nebula with --open.", which doesn't apply to the app. The app's own cases (a debug port, the dev renderer, a window Nebula couldn't confirm) keep their lines, one of which ends "Restart the app." Line 3's "Reconnect it with the link in the notice below" then points at a notice that may not mention a link. An app line for both is yours.
-- **One-line surfaces have no Details.** Line 3 replaces the agents' text everywhere it showed. Projects, a node's card and the chat panel keep that text behind the collapsed Details toggle. Toasts, notices and the proposal bar are one line, so there it goes to the console only. Whether any of those should grow a Details toggle is yours.
-- **Line 3 on a node card** reads under the card's "Couldn't run the node." heading (the card's own heading for a person line), not "Couldn't start the run.".
+Your question (round 2): does quitting and reopening the app fix both cases where its window isn't connected as you? Read from the code (desktop/main.mjs, sidecar.mjs, person-token.mjs, backend/services/person_session.py, frontend/src/lib/personSession.ts and backend.ts) and checked live:
+- **The backend refuses the token the window was given.** The app makes one token per launch and hands it to its backend once, as the backend starts. If the backend fails to take it in (the hand-off is missing, garbled or late), the backend runs the whole launch with no token, so nothing counts as you, and it can't take one later.
+  - Quit and reopen: **yes, this fixes it.** A new launch makes a new token and a new backend that reads it.
+  - Does it fix itself? **No.** Reloading the window, or closing it and clicking the Dock icon, asks the same app for the same token, and the same backend refuses it again. Live: the banner was still there 8 s later and came back after a reload.
+  - Anything faster? **No**, not today. Only a new backend helps, and the app has no "restart the backend" action. That would be a desktop-app change, and the desktop pass is deferred.
+  - It should be rare. The app writes the token before the backend asks for it, so "late" can't really happen. A failure means that launch went wrong.
+- **The backend answers before the window has its token.** This can't happen in today's code. In the app, every request and the canvas connection wait for the app's answer before anything is sent. The reason a lookup failed (a debug port, say) is known before that wait ends. So no refusal can arrive while the lookup is still going, and the banner never shows from it, not even as a flash. Live: with the app's answer slowed to 4 s, none of the 20 requests went out before it, and no banner showed. Nothing for you to rewrite here.
+- Your app lines fit case (a) as written.
+
+Still yours to decide:
+- **Line 3 with a debug port open or the dev renderer.** In the app, line 3 always says "Quit Nebula and open it again". In those two cases the banner gives the real reason ("Debug mode: …", "Desktop dev mode: …"). Reopening normally, without the debug port, does fix the first. The second is a developer setup. Say if line 3 should differ there.
+- **"Restart the app." vs "Quit Nebula and open it again."** The app's own line for a window Nebula couldn't confirm still ends "Restart the app.". Your new app banner says "Quit Nebula and open it again.". Say if you want them to match.
+- **Line 3 on a node card** reads under the card's "Couldn't run the node." heading, as you confirmed (round 2: "It's true, and the line under it says why.").
 
 ## CI's focus-ring sweep (2026-10-23)
 
 The first CI run failed `tests/focusRingCss.test.ts`: four new `:focus:not(:focus-visible) { outline: none }` rules (the Details summaries on Projects and in chat, the saved line, the heading) cleared the outline without a token ring the sweep could pair. They were redundant: the browser draws its own ring on `:focus-visible` only, so a click or a programmatic focus after a click shows none anyway. Removed; the `:focus-visible` token rings stay. The same run's `DeferredSecondPass` failure (a ⌘K racing the palette chunk) didn't reproduce: it passes alone and in the focused run.
+
+## The palette's ⌘K race (CI, 2026-10-23)
+
+CI failed `DeferredSecondPass` twice on this branch ("a ⌘K that beats the chunk opens the palette once it lands": the second ⌘K left the palette open); it passed locally. The cause is in `CommandPalette.tsx`, not the test: `openPalette()` set `open`, but `openRef`, which the once-subscribed hotkey handler reads, only caught up in a later effect. A ⌘K landing between the palette's render and that effect read it as closed and opened it again. Now the handlers that open and close set the ref at once (the effect still keeps it in step). A new test fires the open and a ⌘K in one `act()`, before React commits: it failed on the old code and passes now. That file: 12 of 12.
