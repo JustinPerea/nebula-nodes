@@ -376,7 +376,7 @@ export interface CinemaShot {
    *  round 3c-2): the classifier's category and line, the handler's person
    *  line, and the full raw text for Details when `error` was cut. */
   output?: { imageUrl?: string; status: 'idle' | 'running' | 'done' | 'error'; error?: string; hash?: string;
-    errorCategory?: string; errorFriendly?: string; errorPerson?: string; errorRaw?: string };
+    errorCategory?: string; errorFriendly?: string; errorPerson?: string; errorProviderText?: boolean; errorRaw?: string };
   /** Candidate variations of this shot (one base-model run per distinct seed).
    *  The canonical image (output.imageUrl, the dynamic port, Send-to-motion) is
    *  the `selectedVariation`. Persists on the scene spec so save/load keeps them. */
@@ -800,6 +800,10 @@ export interface NodeData {
    *  or record names. `error` keeps the specific text for agents; the card
    *  never shows it beside this line (lib/nodeErrorCopy.ts). */
   errorPerson?: string;
+  /** That line was written for a provider's answer (round 3d, GM: "Raw
+   *  provider text stays behind Details in every case."): the card keeps
+   *  `error`, the provider's words, behind Details. */
+  errorProviderText?: boolean;
   /** UI-only: why the latest run skipped this node, e.g. "Jev Decide failed
    *  (answered no, 0.12)", and the gate node that caused it. */
   skipReason?: string;

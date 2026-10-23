@@ -40,7 +40,7 @@ from urllib.parse import quote
 import httpx
 
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import with_person_line
+from execution.person_line import as_job_failure, slow_job_line, with_api_status, with_person_line
 
 BYTEPLUS_KEY = "BYTEPLUS_API_KEY"
 BYTEPLUS_BASE_URL = "https://ark.ap-southeast.bytepluses.com/api/v3"
@@ -129,7 +129,9 @@ async def request(
     try:
         data = response.json()
     except ValueError as exc:
-        raise RuntimeError(f"BytePlus ModelArk returned non-JSON ({response.status_code})") from exc
+        raise with_api_status(
+            RuntimeError(f"BytePlus ModelArk returned non-JSON ({response.status_code})"),
+            response.status_code) from exc
     if not isinstance(data, dict):
         raise RuntimeError("BytePlus ModelArk returned an unexpected response")
     return data
@@ -256,7 +258,7 @@ async def run_video_task(
                     upstream.finished = True
                     error = task.get("error") if isinstance(task.get("error"), dict) else {}
                     code, message = str(error.get("code") or ""), str(error.get("message") or f"task {status}")
-                    raise BytePlusError(200, code, message, explain(200, code, message, model))
+                    raise as_job_failure(BytePlusError(200, code, message, explain(200, code, message, model)))
                 if emit is not None:
                     from models.events import ProgressEvent
 
@@ -268,4 +270,4 @@ async def run_video_task(
                         f"{int(timeout // 60)} minutes; Nebula stopped waiting and asked BytePlus to cancel it "
                         f"(a task that has started can't be cancelled; it expires {TASK_EXPIRES_AFTER // 60} minutes "
                         "after creation)."),
-                        f"BytePlus didn't finish this job in {int(timeout // 60)} minutes, so Nebula stopped waiting and asked BytePlus to cancel it. A job that has started can't be cancelled and may still be billed.")
+                        slow_job_line("BytePlus"))

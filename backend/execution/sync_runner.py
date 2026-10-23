@@ -26,7 +26,7 @@ from handlers.jev_decide import handle_jev_decide
 from handlers.jev_pick_best import handle_jev_pick_best
 from handlers.moodboard import handle_moodboard_node
 from handlers.paper_source import handle_paper_source
-from execution.person_line import as_person_line, with_person_line
+from execution.person_line import as_person_line, with_call_facts, with_person_line
 
 
 SYNC_HANDLERS: dict[
@@ -516,7 +516,7 @@ def get_handler_registry(
             try:
                 return await handle_fal_universal(routed_node, routed_inputs, api_keys, emit=emit)
             except RuntimeError as exc:
-                raise RuntimeError(with_vertex_hint(str(exc))) from exc
+                raise with_call_facts(RuntimeError(with_vertex_hint(str(exc))), exc) from exc
 
         async def _gemini_omni_flash_handler(
             node: GraphNode,
@@ -726,10 +726,11 @@ def get_handler_registry(
             if isinstance(prompt, PortValueDict) and isinstance(prompt.value, str):
                 prompt_length = len(prompt.value)
                 if prompt_length > HUNYUAN3D_PROMPT_MAX_CHARS:
-                    raise as_person_line(ValueError(
+                    raise with_person_line(ValueError(
                         "Hunyuan3D prompt exceeds FAL's 1024-character limit "
                         f"(received {prompt_length})."
-                    ))
+                    ), f"Hunyuan3D on fal.ai takes a prompt of up to {HUNYUAN3D_PROMPT_MAX_CHARS:,} characters, and this one "
+                        f"is {prompt_length:,}. Shorten it, then run the node again.")
             routed_node = _fal_wrapper_node(
                 node,
                 "fal-ai/hunyuan3d-v3/text-to-3d",
@@ -995,7 +996,7 @@ def get_handler_registry(
             try:
                 return await handle_fal_universal(routed_node, modified_inputs, api_keys, emit=emit)
             except RuntimeError as exc:
-                raise RuntimeError(with_vertex_hint(str(exc))) from exc
+                raise with_call_facts(RuntimeError(with_vertex_hint(str(exc))), exc) from exc
 
         async def _ltx_23_handler(
             node: GraphNode,
@@ -1338,9 +1339,9 @@ def get_handler_registry(
             if len(refs) > 10:
                 # Both supported edit routes silently use only the last ten.
                 # Reject before submission so explicit references cannot vanish.
-                raise as_person_line(ValueError(
+                raise with_person_line(ValueError(
                     f"Seedream accepts at most 10 reference images (received {len(refs)})"
-                ))
+                ), f"Seedream takes at most 10 reference images, and {len(refs)} are connected. Disconnect the extra ones, then run the node again.")
             operation = "edit" if refs else "text-to-image"
             if str(model) == "5.0-lite":
                 endpoint_id = f"fal-ai/bytedance/seedream/v5/lite/{operation}"
@@ -1522,10 +1523,11 @@ def get_handler_registry(
             raw_refs = refs.value if isinstance(refs.value, list) else [refs.value]
             reference_count = sum(1 for value in raw_refs if value)
             if reference_count != 1:
-                raise as_person_line(ValueError(
+                raise with_person_line(ValueError(
                     "Ideogram Character supports exactly one character reference image per request "
                     f"(received {reference_count})"
-                ))
+                ), f"Ideogram Character takes one character reference image per request, and {reference_count} are "
+                    "connected. Connect just one, then run the node again.")
             return await _ideogram_character_route(routed_node, expanded, api_keys)
 
         # Direct-only Ideogram capabilities (no FAL equivalents) — these require

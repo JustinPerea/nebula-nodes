@@ -12,7 +12,7 @@ from models.events import ExecutionEvent, ProgressEvent
 from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import as_person_line
+from execution.person_line import as_job_failure, as_person_line, slow_job_line, with_api_status, with_person_line
 
 
 def _log(msg: str) -> None:
@@ -106,7 +106,8 @@ async def handle_higgsfield(
         )
         _log(f"submit response: {resp.status_code}")
         if resp.status_code not in (200, 201, 202):
-            raise RuntimeError(f"Higgsfield submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Higgsfield submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         result = resp.json()
         # Submission returns {"request_id": "...", "status": "queued", ...}
@@ -135,7 +136,9 @@ async def handle_higgsfield(
                     )
                 raise
             if poll_resp.status_code != 200:
-                raise RuntimeError(f"Higgsfield poll failed ({poll_resp.status_code}): {poll_resp.text}")
+                raise with_api_status(
+                    RuntimeError(f"Higgsfield poll failed ({poll_resp.status_code}): {poll_resp.text}"),
+                    poll_resp.status_code)
 
             poll_data = poll_resp.json()
             status = poll_data.get("status", "")
@@ -156,11 +159,11 @@ async def handle_higgsfield(
                     return {"video": {"type": "Video", "value": str(file_path)}}
                 raise RuntimeError(f"Higgsfield completed but no video URL: {poll_data}")
             elif status in ("failed", "error"):
-                raise RuntimeError(f"Higgsfield failed: {poll_data.get('error', status)}")
+                raise as_job_failure(RuntimeError(f"Higgsfield failed: {poll_data.get('error', status)}"))
             elif status == "nsfw":
                 raise RuntimeError("Higgsfield rejected generation: content policy violation")
             elif status == "cancelled":
-                raise RuntimeError("Higgsfield generation was cancelled")
+                raise as_job_failure(RuntimeError("Higgsfield generation was cancelled"))
             # "queued" and "in_progress" → continue polling
 
-        raise RuntimeError("Higgsfield timed out")
+        raise with_person_line(RuntimeError("Higgsfield timed out"), slow_job_line("Higgsfield"))

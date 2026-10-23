@@ -8,6 +8,9 @@ interface NodeErrorProps {
   friendly?: string;
   /** The handler's line for the person (error copy round 3c). */
   person?: string;
+  /** That line was written for a provider's answer: its words go behind
+   * Details (round 3d). */
+  providerText?: boolean;
   raw?: string;
   /** Classes for the outer block (Create Studio's result card has its own). */
   className?: string;
@@ -23,8 +26,8 @@ interface NodeErrorProps {
  * no category and shows as it is. Safety/moderation blocks keep their calmer
  * treatment.
  */
-export function NodeError({ category, friendly, person, raw, className = 'model-node__error' }: NodeErrorProps) {
-  const copy = nodeErrorCopy({ raw, category, friendly, person });
+export function NodeError({ category, friendly, person, providerText, raw, className = 'model-node__error' }: NodeErrorProps) {
+  const copy = nodeErrorCopy({ raw, category, friendly, person, providerText });
   const blocked = category === 'blocked' && !person;
   const modifier = `${className.split(' ').at(-1)}--blocked`;
   return (
@@ -46,12 +49,12 @@ export function NodeError({ category, friendly, person, raw, className = 'model-
  * model-node__error, kept last so a block gets its calmer modifier.
  */
 export function NodeRunError({ data, className }: {
-  data: Pick<NodeData, 'state' | 'error' | 'errorCategory' | 'errorFriendly' | 'errorPerson'>;
+  data: Pick<NodeData, 'state' | 'error' | 'errorCategory' | 'errorFriendly' | 'errorPerson' | 'errorProviderText'>;
   className: string;
 }) {
   if (data.state !== 'error' || !data.error) return null;
   return (
     <NodeError className={`${className} model-node__error`} raw={data.error} category={data.errorCategory}
-      friendly={data.errorFriendly} person={data.errorPerson} />
+      friendly={data.errorFriendly} person={data.errorPerson} providerText={data.errorProviderText} />
   );
 }

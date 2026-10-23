@@ -38,7 +38,7 @@ from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
 from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir, save_video_from_url
-from execution.person_line import as_person_line
+from execution.person_line import as_job_failure, as_person_line, slow_job_line, with_api_status, with_person_line
 
 MAX_REFERENCE_IMAGES = 9
 MAX_REFERENCE_VIDEOS = 3
@@ -99,8 +99,9 @@ def build_content(inputs: dict[str, PortValueDict]) -> tuple[list[dict[str, Any]
     has_frames = any(values for _, values in frames)
     has_refs = any(values for _, _, values, _ in refs)
     if has_frames and has_refs:
-        raise as_person_line(ValueError("MiniMax H3 takes either a start/end image or references (images, videos, audio), "
-                         "not both in one run."))
+        raise with_person_line(ValueError("MiniMax H3 takes either a start/end image or references (images, videos, audio), "
+                         "not both in one run."), "MiniMax H3 takes either a start or end image or references, not both in one run. "
+                         "Disconnect one kind, then run the node again.")
     for role, values in frames:
         if len(values) > 1:
             raise as_person_line(ValueError(f"MiniMax H3 takes one {role.replace('_', ' ')} image"))
@@ -108,7 +109,8 @@ def build_content(inputs: dict[str, PortValueDict]) -> tuple[list[dict[str, Any]
             content.append({"type": "image_url", "image_url": {"url": media_url(value, "image")}, "role": role})
     for role, kind, values, limit in refs:
         if len(values) > limit:
-            raise as_person_line(ValueError(f"MiniMax H3 takes at most {limit} reference {kind}s (got {len(values)})"))
+            raise with_person_line(ValueError(f"MiniMax H3 takes at most {limit} reference {kind}s (got {len(values)})"), f"MiniMax H3 takes at most {limit} reference {'audio clips' if kind == 'audio' else kind + 's'}, and "
+                         f"{len(values)} are connected. Disconnect the extra ones, then run the node again.")
         for value in values:
             field = _MEDIA_KINDS[kind]
             content.append({"type": field, field: {"url": media_url(value, kind)}, "role": role})
@@ -154,8 +156,8 @@ async def handle_minimax_video_v2(
     content, scenario = build_content(inputs)
     ratio = str(params.get("ratio") or "")
     if scenario == "t2v" and ratio not in RATIOS:
-        raise as_person_line(ValueError("MiniMax H3 text-to-video needs a set aspect ratio (not adaptive). Pick one, or connect "
-                         "a start image."))
+        raise with_person_line(ValueError("MiniMax H3 text-to-video needs a set aspect ratio (not adaptive). Pick one, or connect "
+                         "a start image."), "MiniMax H3 text-to-video needs a set aspect ratio, not Adaptive. Pick one, or connect a start image.")
     body: dict[str, Any] = {"model": model, "content": content,
                             "resolution": str(params.get("resolution") or "2K"),
                             "duration": int(params.get("duration") or 5)}
@@ -172,7 +174,9 @@ async def handle_minimax_video_v2(
         if response.status_code not in (200, 201, 202):
             detail = _error_text(response)
             hint = f" {PLAN_HINT}" if response.status_code in (401, 402, 403) else ""
-            raise RuntimeError(f"MiniMax H3 submit failed ({response.status_code}): {detail}.{hint}")
+            raise with_api_status(
+                RuntimeError(f"MiniMax H3 submit failed ({response.status_code}): {detail}.{hint}"),
+                response.status_code)
         task_id = str((response.json() or {}).get("task_id") or "")
         if not task_id:
             raise RuntimeError(f"MiniMax H3 returned no task_id: {response.text}")
@@ -187,7 +191,9 @@ async def handle_minimax_video_v2(
                 await asyncio.sleep(POLL_INTERVAL)
                 polled = await poll_request(lambda: client.get(query, headers=poll_headers))
                 if polled.status_code != 200:
-                    raise RuntimeError(f"MiniMax H3 poll failed ({polled.status_code}): {_error_text(polled)}")
+                    raise with_api_status(
+                        RuntimeError(f"MiniMax H3 poll failed ({polled.status_code}): {_error_text(polled)}"),
+                        polled.status_code)
                 task = (polled.json() or {}).get("task") or {}
                 status = task.get("status")
                 await _emit(ProgressEvent(node_id=node.id, value=min(poll / MAX_POLLS, 0.99)))
@@ -202,5 +208,6 @@ async def handle_minimax_video_v2(
                     upstream.finished = True
                     error = task.get("error") or {}
                     code = f" ({error['code']})" if error.get("code") else ""
-                    raise RuntimeError(f"MiniMax H3 task {status}: {error.get('message') or 'no reason given'}{code}")
-            raise RuntimeError(f"MiniMax H3 task timed out after {MAX_POLLS} polls")
+                    raise as_job_failure(
+                        RuntimeError(f"MiniMax H3 task {status}: {error.get('message') or 'no reason given'}{code}"))
+            raise with_person_line(RuntimeError(f"MiniMax H3 task timed out after {MAX_POLLS} polls"), slow_job_line("MiniMax"))

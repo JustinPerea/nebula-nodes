@@ -16,6 +16,7 @@ and none of it changes: the tests assert the exact texts beside the lines.
 from __future__ import annotations
 
 import ast
+import json
 import re
 from pathlib import Path
 from typing import Any
@@ -164,7 +165,9 @@ def test_the_elevenlabs_dialogue_script_lines_are_the_persons_lines() -> None:
     assert str(exc) == person_line(exc) == ("The dialogue script is empty. Write one line per turn, "
                                             "e.g. 'Rachel: Hello.' then 'Adam: Hi!'")
     exc = _raised(parse_dialogue_script, "Rachel:")
-    assert str(exc) == person_line(exc) == "Dialogue line 1 (Rachel) has no text after the colon."
+    assert str(exc) == "Dialogue line 1 (Rachel) has no text after the colon."
+    # Round 3d: no parentheses in a person line (GM).
+    assert person_line(exc) == "Dialogue line 1 has no text after the colon. Add what Rachel says, then run the node again."
 
 
 def test_kreas_node_app_image_count_is_the_persons_line() -> None:
@@ -172,7 +175,9 @@ def test_kreas_node_app_image_count_is_the_persons_line() -> None:
 
     schema = {"properties": {"image": {"type": "string", "format": "uri"}}}
     exc = _raised(node_app_input, schema, {}, ["a.png", "b.png"], None)
-    assert str(exc) == person_line(exc) == "This node app takes 1 more image(s); 2 are wired"
+    assert str(exc) == "This node app takes 1 more image(s); 2 are wired"
+    # Round 3d: no parentheses in a person line (GM).
+    assert person_line(exc) == "This node app takes 1 more image, and 2 are wired. Disconnect the extra ones, then run the node again."
 
 
 def test_runways_duration_line_is_the_persons_line() -> None:
@@ -247,7 +252,21 @@ RUN_TIME_DIRS = ("handlers", "execution")
 RUN_TIME_SERVICES = ("media_input", "qc_common", "qc_jev", "typesafe_client", "vision_llm",
                      "google_vertex", "quiver_client", "krea_mcp_generation", "edit_masks", "ffmpeg", "krea_account",
                      "nous_auth")
-WRAPPERS = {"with_person_line", "as_person_line"}
+WRAPPERS = {"with_person_line", "as_person_line", "with_provider_line"}
+# Facts a raise attaches beside its text (round 3d, part 2): the guard reads
+# the exception inside them.
+MARKERS = {"with_api_status", "as_job_failure", "with_call_facts"}
+
+
+def _peel(exc: ast.AST | None) -> tuple[ast.AST | None, ast.Call | None]:
+    """(the exception call, its person-line wrapper) with the markers peeled off."""
+    wrapper = None
+    while isinstance(exc, ast.Call) and isinstance(exc.func, ast.Name) and exc.args and (
+            exc.func.id in MARKERS or (exc.func.id in WRAPPERS and wrapper is None)):
+        if exc.func.id in WRAPPERS:
+            wrapper = exc
+        exc = exc.args[0]
+    return exc, wrapper
 
 
 def _run_time_files() -> list[Path]:
@@ -276,9 +295,7 @@ def _raises(path: Path) -> list[tuple[bool, str, ast.Call, ast.Call | None]]:
             exc = node.value  # a helper that builds the exception it raises
         else:
             continue
-        wrapper = None
-        if isinstance(exc, ast.Call) and isinstance(exc.func, ast.Name) and exc.func.id in WRAPPERS and exc.args:
-            wrapper, exc = exc, exc.args[0]
+        exc, wrapper = _peel(exc)
         if not isinstance(exc, ast.Call) or not exc.args:
             continue
         name = exc.func.id if isinstance(exc.func, ast.Name) else getattr(exc.func, "attr", "")
@@ -300,16 +317,16 @@ def _raises(path: Path) -> list[tuple[bool, str, ast.Call, ast.Call | None]]:
 # down. A new raise in Nebula's own words gets a line instead.
 UNLINED_BASELINE: dict[str, int] = {
     "handlers/bfl.py": 8, "handlers/byteplus.py": 4, "handlers/cinema_scene.py": 6,
-    "handlers/elevenlabs.py": 21, "handlers/fal_universal.py": 11, "handlers/gemini_omni.py": 9,
-    "handlers/google_gemini.py": 9, "handlers/grok_video.py": 8, "handlers/higgsfield.py": 9,
-    "handlers/ideogram.py": 13, "handlers/jev_box.py": 1, "handlers/jev_decide.py": 2, "handlers/krea.py": 19,
-    "handlers/krea_export.py": 9, "handlers/krea_gateway.py": 28, "handlers/krea_workspace.py": 21,
-    "handlers/meshy.py": 27, "handlers/minimax.py": 8, "handlers/minimax_v2.py": 6,
+    "handlers/elevenlabs.py": 20, "handlers/fal_universal.py": 9, "handlers/gemini_omni.py": 8,
+    "handlers/google_gemini.py": 9, "handlers/grok_video.py": 7, "handlers/higgsfield.py": 8,
+    "handlers/ideogram.py": 12, "handlers/jev_box.py": 1, "handlers/jev_decide.py": 2, "handlers/krea.py": 18,
+    "handlers/krea_export.py": 9, "handlers/krea_gateway.py": 27, "handlers/krea_workspace.py": 19,
+    "handlers/meshy.py": 26, "handlers/minimax.py": 6, "handlers/minimax_v2.py": 5,
     "handlers/openai_audio.py": 3, "handlers/openai_image.py": 1, "handlers/openai_image_edit.py": 2,
     "handlers/openai_image_v2.py": 2, "handlers/openrouter.py": 1, "handlers/openrouter_media.py": 14,
     "handlers/qc_base.py": 1, "handlers/quiver.py": 6, "handlers/remotion_node.py": 5,
     "handlers/replicate_model.py": 12, "handlers/replicate_universal.py": 4, "handlers/runway.py": 11,
-    "handlers/spatial.py": 12, "handlers/style_reference.py": 3, "handlers/veo.py": 12,
+    "handlers/spatial.py": 12, "handlers/style_reference.py": 3, "handlers/veo.py": 10,
     "handlers/video_edit.py": 4, "handlers/worldlabs.py": 87, "handlers/xai_image.py": 2,
     "execution/async_poll_runner.py": 6, "execution/engine.py": 6, "execution/gating.py": 3,
     "execution/maker_routes.py": 5, "execution/maker_routes_byteplus.py": 4,
@@ -317,7 +334,7 @@ UNLINED_BASELINE: dict[str, int] = {
     "execution/maker_routes_google.py": 2, "execution/maker_routes_ideogram_runway.py": 3,
     "execution/maker_routes_minimax_meshy.py": 5, "execution/maker_routes_openai.py": 3,
     "execution/maker_routes_xai.py": 1, "execution/poll_retry.py": 1, "execution/route_clients.py": 4,
-    "execution/stream_runner.py": 6, "execution/sync_runner.py": 4, "services/media_input.py": 3,
+    "execution/stream_runner.py": 5, "execution/sync_runner.py": 4, "services/media_input.py": 3,
     "services/qc_common.py": 6, "services/qc_jev.py": 3, "services/typesafe_client.py": 23,
     "services/vision_llm.py": 8, "services/google_vertex.py": 2, "services/quiver_client.py": 9,
     # The 3c-2 review raised two by one: handlers/replicate_model.py's
@@ -332,7 +349,17 @@ UNLINED_BASELINE: dict[str, int] = {
     "services/ffmpeg.py": 6, "services/krea_account.py": 3, "services/nous_auth.py": 23,
     # krea_mcp_generation: Krea's MCP server contract (a tool or schema it
     # doesn't expose), malformed answers and job states.
-    "services/krea_mcp_generation.py": 19,
+    "services/krea_mcp_generation.py": 17,
+    # Round 3d lowered fourteen, mostly paid jobs Nebula stopped waiting on
+    # (GM's slow-job line) and Krea's lines 1-10.
+    # The 3d review lowered minimax.py by one: its missing task id now reads
+    # MiniMax's own code (a refused key or no balance gets the table's line),
+    # and the exception is built before the raise, so the guard can't read
+    # its text; tests/test_error_copy_round3d.py pins it.
+    # Round 3d, part 2 lowered stream_runner.py by one: the image stream's
+    # "ended without a final image event" is built before its raise, so the
+    # card can give a fal.ai job still running GM's slow-job line;
+    # tests/test_error_copy_round3d2.py pins its text.
 }
 
 
@@ -350,15 +377,69 @@ def test_no_run_time_raise_in_nebulas_own_words_goes_without_a_person_line() -> 
         "with_person_line(exc, line) with id-free words naming the node's field by its label. "
         "Provider text, developer-only states and moderation keep the fallback; only then raise "
         "UNLINED_BASELINE here, and say why in the PR.")
-    shrunk = {path: (count, base) for path, base in UNLINED_BASELINE.items()
+    shrunk = {path: (counts.get(path, 0), base) for path, base in UNLINED_BASELINE.items()
               if counts.get(path, 0) < base}
     assert not shrunk, f"Fewer unlined raises now (now, baseline): {shrunk}. Lower UNLINED_BASELINE to match."
 
 
 FORBIDDEN_IN_A_LINE = re.compile(
-    r"(?<![{\w])[a-z]+_[a-z0-9_]+(?![}\w])|[A-Z]{2,}_[A-Z_]+|/api/|nebula trash|\bGET\b|"
-    r"\{(?:path|file_path|image_value|img_str|audio_path|value|ref|raw|task_id|job_id|character_id|moodboard_id)\b"
+    # snake_case ids and keys, a digit before the underscore too ("gen4_turbo").
+    r"(?<![{\w])[a-z][a-z0-9]*_[a-z0-9_]+(?![}\w])|[A-Z]{2,}_[A-Z_]+|/api/|nebula trash|\bGET\b|"
+    r"\{(?:path|file_path|image_value|img_str|audio_path|value|ref|raw|task_id|job_id|character_id|moodboard_id)\b|"
+    # Round 3d (GM's rules: no ids, no parentheses in error copy): a provider's
+    # kebab-case model id with a digit in it ("gpt-image-2", "k2-large"), a
+    # dated one ("seedance-1-0-pro-250528"), one of the makers' id prefixes
+    # with none ("grok-imagine-video", "fal-ai/..."), and a parenthesis.
+    # English compounds ("speech-to-speech", "text-to-3D", "8-second") pass.
+    r"\b[a-z][a-z0-9.]*(?:-[a-z0-9.]+)*-[a-z]*\d[a-z0-9.]*(?:-[a-z0-9.]+)*(?![\w-])|"
+    r"\b[a-z]+\d[a-z0-9.]*(?:-[a-z0-9.]+)+(?![\w-])|\b[a-z0-9]+(?:-[a-z0-9]+)*-\d{6}\b|"
+    r"\b(?:grok|fal|dreamina|seedance|seedream|kling|hailuo|imagen|flux|gpt|dall|krea|ltx|hunyuan|stability|"
+    r"black|bytedance|minimax|veo|gemini|ideogram|recraft|luma|qwen|wan)-[a-z]|[()]|"
+    # Round 3d, part 2: a capitalised id with a numbered segment
+    # ("MiniMax-Hailuo-02", "MiniMax-Hailuo-2.3-Fast"; a maker's name and a
+    # hyphen, "Gen-4 Turbo", is a model's own spelling and passes), a digitless
+    # kebab id of three parts or more ("nano-banana-pro"; English compounds
+    # joined by -to-, -and-, -of- pass: "speech-to-speech",
+    # "first-and-last-frame"), and an owner/name id ("stability-ai/sdxl",
+    # "owner/name"). A URL is the one fact some lines need, so the guard
+    # reads a line with its URLs taken out (forbidden_in_a_line).
+    r"\b[A-Z][A-Za-z0-9]*-[A-Za-z0-9.]+-\d[\d.]*(?:-[A-Za-z0-9.]+)*\b|"
+    r"(?<![\w-])(?![a-z]+(?:-[a-z]+)*-(?:to|and|or|of|in|on|by|for|the)-)[a-z]+(?:-[a-z]+){2,}\b(?!-)|"
+    r"\b[\w.-]+/[\w.-]+"
 )
+
+_URL = re.compile(r"https?://\S+")
+
+
+def _labels_with_parentheses() -> list[str]:
+    """Field labels the nodes show that carry a parenthesis ("Duration (ms)"):
+    a line names a field by its label, so those may stand in one."""
+    found: set[str] = set()
+
+    def walk(value: Any) -> None:
+        if isinstance(value, dict):
+            label = value.get("label")
+            if isinstance(label, str) and "(" in label:
+                found.add(label)
+            for item in value.values():
+                walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+
+    walk(json.loads((BACKEND / "data" / "node_definitions.json").read_text()))
+    return sorted(found, key=len, reverse=True)
+
+
+_FIELD_LABELS = _labels_with_parentheses()
+
+
+def forbidden_in_a_line(line: str) -> re.Match[str] | None:
+    """What a person line may not carry (FORBIDDEN_IN_A_LINE), a field's own
+    label left aside."""
+    for label in _FIELD_LABELS:
+        line = line.replace(label, "")
+    return FORBIDDEN_IN_A_LINE.search(_URL.sub("", line))
 
 
 def test_no_person_line_names_an_id_a_path_a_parameter_key_or_an_env_var() -> None:
@@ -376,11 +457,11 @@ def test_no_person_line_names_an_id_a_path_a_parameter_key_or_an_env_var() -> No
                 line = ast.get_source_segment(source, second) if second is not None else ""
             assert line is not None
             if wrapper.func.id == "as_person_line":
-                assert not FORBIDDEN_IN_A_LINE.search(line), (path.name, line)
+                assert not forbidden_in_a_line(line), (path.name, line)
             else:
                 literal = _template(second) if second is not None else None
                 if literal is not None:
-                    assert not FORBIDDEN_IN_A_LINE.search(literal), (path.name, literal)
+                    assert not forbidden_in_a_line(literal), (path.name, literal)
 
 
 def test_no_person_line_goes_on_a_moderation_block() -> None:
@@ -391,27 +472,22 @@ def test_no_person_line_goes_on_a_moderation_block() -> None:
                 assert classify_error(text.replace("{}", "x"))[0] != "blocked", (path.name, text)
 
 
-# Nebula's own instruction around a provider's words: the person's line keeps
-# the instruction and leaves the provider's part to Details.
-OWN_WORDS_AROUND_PROVIDER_TEXT = {
-    "elevenlabs.py": ('f"Your ElevenLabs API key can\'t list your voices ({exc})',),
-    "typesafe_client.py": ('f"{label} is damaged or incomplete: {exc}"',),
-}
-
-
+# Nebula's own instruction around a provider's words: since round 3d the raise
+# says so with with_provider_line, so the card keeps the instruction and puts
+# the provider's words behind Details (GM: "Raw provider text stays behind
+# Details in every case.").
 def test_provider_text_keeps_gms_design() -> None:
     # A raise that carries the provider's own body or message keeps the
-    # classifier's line or GM's general line, the raw text behind Details.
+    # classifier's line or GM's general line, the raw text behind Details,
+    # unless its line is a with_provider_line, which keeps Details too.
     # (A status code isn't the provider's text: a line may leave it out.)
-    provider = re.compile(r"\{[^}]*(\.text\b|\bbody\b|_error_detail|error_body|\bdetail\b|\bexc\b|\.json\(\))[^}]*\}")
+    provider = re.compile(r"\{[^}]*(\.text\b|\bbody\b|_error_detail|error_body|\bdetail\b|\bexc\b|\.json\(\)|\.message\b)[^}]*\}")
     for path in _run_time_files():
         source = path.read_text()
         for _lined, _text, exc, wrapper in _raises(path):
-            if wrapper is None:
+            if wrapper is None or wrapper.func.id == "with_provider_line":
                 continue
             literal = ast.get_source_segment(source, exc.args[0]) or ""
-            if any(literal.startswith(start) for start in OWN_WORDS_AROUND_PROVIDER_TEXT.get(path.name, ())):
-                continue
             assert not provider.search(literal), (path.name, literal)
 
 
@@ -502,7 +578,12 @@ def test_the_recovery_warnings_say_world_labs_not_paid_provider() -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("make, person, category", [
-    (lambda: ValueError("FAL submit failed (500): upstream exploded"), None, "unknown"),
+    # Round 3d: a provider's 5xx reads the status table's line, naming the
+    # provider the shot's base called (tests/test_error_copy_round3d.py); the
+    # status is the one the raise attached (round 3d, part 2).
+    (lambda: __import__("execution.person_line", fromlist=["with_api_status"]).with_api_status(
+        ValueError("FAL submit failed (500): upstream exploded"), 500),
+     "fal.ai is having trouble right now. Try again in a few minutes.", "unknown"),
     (lambda: __import__("execution.person_line", fromlist=["as_person_line"]).as_person_line(
         ValueError("The prompt is empty. Write one, then run the node again.")),
      "The prompt is empty. Write one, then run the node again.", "unknown"),
@@ -699,7 +780,7 @@ def test_no_route_line_puts_the_raw_where_or_a_value_on_the_card() -> None:
         tail = call.args[2] if len(call.args) > 2 else call.args[1]
         template = _template(tail)
         assert template is not None, ast.get_source_segment(source, call)
-        assert not FORBIDDEN_IN_A_LINE.search(template), template
+        assert not forbidden_in_a_line(template), template
         for part in ast.walk(tail):
             if isinstance(part, ast.FormattedValue):
                 expression = ast.get_source_segment(source, part.value)

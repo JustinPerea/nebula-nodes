@@ -13,6 +13,7 @@ import httpx
 from models.events import ExecutionEvent, StreamDeltaEvent, StreamPartialImageEvent
 from services.http_errors import HTTP_ERRORS, describe
 from services.output import save_base64_image_named
+from execution.person_line import as_job_failure, slow_job_line, with_api_status, with_person_line
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,8 @@ async def stream_execute(
                 error_body = ""
                 async for chunk in response.aiter_text():
                     error_body += chunk
-                raise RuntimeError(f"Stream request failed ({response.status_code}): {error_body}")
+                raise with_api_status(
+                    RuntimeError(f"Stream request failed ({response.status_code}): {error_body}"), response.status_code)
 
             async for line in response.aiter_lines():
                 line = line.strip()
@@ -200,7 +202,7 @@ async def stream_execute_replicate(
                     detail = parsed.get("detail", raw)
             except (ValueError, TypeError):
                 pass
-            raise RuntimeError(f"Replicate stream error: {detail or '(no detail)'}")
+            raise as_job_failure(RuntimeError(f"Replicate stream error: {detail or '(no detail)'}"))
         elif current_event_type == "done":
             saw_done = True
 
@@ -210,7 +212,9 @@ async def stream_execute_replicate(
                 error_body = ""
                 async for chunk in response.aiter_text():
                     error_body += chunk
-                raise RuntimeError(f"Replicate stream failed ({response.status_code}): {error_body}")
+                raise with_api_status(
+                    RuntimeError(f"Replicate stream failed ({response.status_code}): {error_body}"),
+                    response.status_code)
 
             async for line in response.aiter_lines():
                 # A blank line OR a new `event:` line ends the previous event — flush first.
@@ -294,7 +298,9 @@ async def stream_execute_image(
                 error_body = ""
                 async for chunk in response.aiter_text():
                     error_body += chunk
-                raise RuntimeError(f"Image stream request failed ({response.status_code}): {error_body}")
+                raise with_api_status(
+                    RuntimeError(f"Image stream request failed ({response.status_code}): {error_body}"),
+                    response.status_code)
 
             if provider == "fal":
                 header_request_id = response.headers.get("x-fal-request-id")
@@ -349,8 +355,9 @@ async def stream_execute_image(
             return await _persist_final_image(client, final_ref, run_dir, node_id)
 
         recovery_note = ""
+        job_state = None
         if provider == "fal" and request_id:
-            recovered, note = await _recover_fal_image(
+            recovered, note, job_state = await _recover_fal_image(
                 client,
                 config,
                 request_id,
@@ -369,11 +376,19 @@ async def stream_execute_image(
             recovery_note = f" Retrieval by request ID failed: {note}."
 
         summary = "; ".join(raw_events) if raw_events else "(no events received)"
-        raise RuntimeError(
+        failure = RuntimeError(
             f"Image stream ended without a final image event "
             f"(provider={provider}, fal_request_id={request_id or 'unavailable'})."
             f"{recovery_note} Last {len(raw_events)} raw events: {summary}"
         )
+        if job_state == "running":
+            # fal.ai took the job and it is still queued or running when
+            # Nebula stops asking: it may still finish and bill (GM's slow-job
+            # line, round 3d part 2).
+            raise with_person_line(failure, slow_job_line("fal.ai"))
+        if job_state == "failed":
+            raise as_job_failure(failure)  # fal.ai ran the job and reported it failed
+        raise failure
 
 
 _OPENAI_PARTIAL_EVENTS = {"image_generation.partial_image", "image_edit.partial_image"}
@@ -585,15 +600,18 @@ async def _recover_fal_image(
     *,
     max_polls: int,
     poll_interval: float,
-) -> tuple[str | None, str]:
+) -> tuple[str | None, str, str | None]:
     """Retrieve a completed FAL result by request ID after the SSE stream ended
     without a recognized final event (dropped connection, schema drift, …).
 
     Polls ``GET {base}/requests/{request_id}/status`` (base = stream URL minus
     the ``/stream`` suffix) until COMPLETED/FAILED, then reads the image from
     the status payload itself or the canonical result URL. Returns
-    ``(image_ref, note)`` — ``image_ref`` is None when recovery failed, with
-    ``note`` describing the outcome for the caller's error message.
+    ``(image_ref, note, job_state)`` — ``image_ref`` is None when recovery
+    failed, with ``note`` describing the outcome for the caller's error
+    message; ``job_state`` is "running" when the job was still queued or in
+    progress after the last poll, "failed" when FAL reported it failed or
+    cancelled, else None.
     """
     base = config.url.rstrip("/")
     if base.endswith("/stream"):
@@ -605,21 +623,21 @@ async def _recover_fal_image(
         try:
             status_resp = await client.get(status_url, headers=config.headers)
         except HTTP_ERRORS as exc:
-            return None, f"status request error: {describe(exc)}"
+            return None, f"status request error: {describe(exc)}", None
         if status_resp.status_code == 404:
-            return None, f"no request found with ID {request_id} (404)"
+            return None, f"no request found with ID {request_id} (404)", None
         if status_resp.status_code not in (200, 202):
-            return None, f"status endpoint returned {status_resp.status_code}"
+            return None, f"status endpoint returned {status_resp.status_code}", None
         try:
             payload = status_resp.json()
         except ValueError:
-            return None, "status endpoint returned a non-JSON body"
+            return None, "status endpoint returned a non-JSON body", None
 
         status = payload.get("status")
         if isinstance(status, str) and status:
             last_status = status
         if status in ("FAILED", "CANCELLED"):
-            return None, f"job {status}: {payload.get('error', 'no error detail')}"
+            return None, f"job {status}: {payload.get('error', 'no error detail')}", "failed"
 
         if status is None or status == "COMPLETED":
             extracted = _extract_fal_image(payload)
@@ -628,26 +646,26 @@ async def _recover_fal_image(
                 try:
                     result_resp = await client.get(str(result_url), headers=config.headers)
                 except HTTP_ERRORS as exc:
-                    return None, f"result request error: {describe(exc)}"
+                    return None, f"result request error: {describe(exc)}", None
                 if result_resp.status_code != 200:
-                    return None, f"result endpoint returned {result_resp.status_code}"
+                    return None, f"result endpoint returned {result_resp.status_code}", None
                 try:
                     result_payload = result_resp.json()
                 except ValueError:
-                    return None, "result endpoint returned a non-JSON body"
+                    return None, "result endpoint returned a non-JSON body", None
                 extracted = _extract_fal_image(result_payload)
             if extracted is None:
-                return None, "job completed but no image found in the result payload"
+                return None, "job completed but no image found in the result payload", None
             b64, url = extracted
             if b64:
                 path = save_base64_image_named(b64, run_dir, name=f"{node_id}_final")
-                return str(path), "recovered from status/result payload"
+                return str(path), "recovered from status/result payload", None
             assert url is not None
             ref = await _persist_final_image(client, url, run_dir, node_id)
-            return ref, "recovered from status/result payload"
+            return ref, "recovered from status/result payload", None
 
         # IN_QUEUE / IN_PROGRESS — the stream dropped but the job is still running.
         if attempt < max_polls:
             await asyncio.sleep(poll_interval)
 
-    return None, f"job still {last_status} after {max_polls} status polls"
+    return None, f"job still {last_status} after {max_polls} status polls", "running"

@@ -76,7 +76,7 @@ def checked_local_file(value: str | Path, *, label: str, max_bytes: int) -> Path
 
     path = require_allowed_path(value)
     if not path.is_file():
-        raise with_person_line(ValueError(f"{label} not found: {value}"), missing_file_line())
+        raise with_person_line(ValueError(f"{label} not found: {value}"), missing_file_line(label, value))
     if path.stat().st_size > max_bytes:
         raise too_large(label, max_bytes)
     return path

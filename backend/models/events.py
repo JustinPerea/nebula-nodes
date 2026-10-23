@@ -116,6 +116,13 @@ class ErrorEvent(RunScopedEvent):
     # word for word for agents, the run record and MCP. Additive: None means
     # the card shows its fallback, with `error` behind "Details".
     person: str | None = None
+    # The exception text in `error` carries the provider's own words, so the
+    # card keeps it behind "Details" beside `person` (error copy round 3d,
+    # GM: "Raw provider text stays behind Details in every case."): the
+    # status table's lines, an empty answer's, and a handler's
+    # with_provider_line. False: a `person` in Nebula's own words, with no
+    # Details (the specific text is for agents).
+    provider_text: bool = False
 
 
 class ValidationErrorDetail(BaseModel):

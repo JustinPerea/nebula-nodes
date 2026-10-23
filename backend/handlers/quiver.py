@@ -29,7 +29,7 @@ from services.quiver_client import (
     QuiverServerError,
 )
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import as_person_line, key_line, with_person_line
+from execution.person_line import as_person_line, key_line, with_api_status, with_person_line
 
 
 _OUTPUTS_URL_PREFIX = "/api/outputs/"
@@ -153,17 +153,21 @@ def _wrap_provider_error(exc: QuiverError) -> ValueError:
     UI, so this keeps the failure surface clear instead of "RuntimeError:
     Quiver server error (502)".
     """
+    # The status Quiver's API answered goes with the new exception, so the
+    # card's table reads it from the call (round 3d, part 2), not the text.
+    status = exc.status_code
     if isinstance(exc, QuiverAuthError):
         # Names the env var for agents; the card asks for the key in Settings.
-        return with_person_line(ValueError("QuiverAI auth failed — check QUIVER_API_KEY"),
-                                key_line(["QUIVER_API_KEY"]) or "")
+        return with_api_status(with_person_line(ValueError("QuiverAI auth failed — check QUIVER_API_KEY"),
+                                                key_line(["QUIVER_API_KEY"]) or ""), status)
     if isinstance(exc, QuiverInsufficientCreditsError):
-        return as_person_line(ValueError("Insufficient QuiverAI credits — top up or upgrade plan"))
+        return with_api_status(as_person_line(ValueError("Insufficient QuiverAI credits — top up or upgrade plan")),
+                               status)
     if isinstance(exc, QuiverRateLimitError):
-        return ValueError("QuiverAI rate limit exceeded — retry in a moment")
+        return with_api_status(ValueError("QuiverAI rate limit exceeded — retry in a moment"), status)
     if isinstance(exc, QuiverServerError):
-        return ValueError(f"QuiverAI server error: {exc}")
-    return ValueError(f"QuiverAI request failed: {exc}")
+        return with_api_status(ValueError(f"QuiverAI server error: {exc}"), status)
+    return with_api_status(ValueError(f"QuiverAI request failed: {exc}"), status)
 
 
 async def _consume_quiver_stream(

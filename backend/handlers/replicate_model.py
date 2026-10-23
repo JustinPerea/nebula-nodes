@@ -44,7 +44,7 @@ import httpx
 from execution.async_poll_runner import AsyncPollConfig, poll_until_terminal
 from execution.missing_credential import MissingCredentialError
 from models.events import ExecutionEvent
-from execution.person_line import with_person_line
+from execution.person_line import with_api_status, with_person_line
 
 REPLICATE_KEY = "REPLICATE_API_TOKEN"
 REPLICATE_API_BASE = "https://api.replicate.com/v1"
@@ -95,15 +95,19 @@ def _error(response: httpx.Response, what: str) -> RuntimeError:
     said = str(detail or response.text.strip())[:400] or "no detail"
     status = response.status_code
     if status in (401, 403):
-        return RuntimeError(f"Replicate rejected the token ({status}): check {REPLICATE_KEY} in Settings.")
+        return with_api_status(
+            RuntimeError(f"Replicate rejected the token ({status}): check {REPLICATE_KEY} in Settings."), status)
     if status == 402:
-        return RuntimeError(f"Replicate needs billing set up or more credit ({status}: {said}). "
-                            "Add it at replicate.com/account/billing, then run again.")
+        return with_api_status(
+            RuntimeError(f"Replicate needs billing set up or more credit ({status}: {said}). "
+                         "Add it at replicate.com/account/billing, then run again."), status)
     if status == 404:
-        return RuntimeError(f"Replicate doesn't have that model ({status}: {said}).")
+        return with_api_status(RuntimeError(f"Replicate doesn't have that model ({status}: {said})."), status)
     if status == 429:
-        return RuntimeError(f"Replicate is rate-limiting this account ({status}: {said}). Wait a moment, then run again.")
-    return RuntimeError(f"Replicate {what} failed ({status}): {said}")
+        return with_api_status(
+            RuntimeError(f"Replicate is rate-limiting this account ({status}: {said}). Wait a moment, then run again."),
+            status)
+    return with_api_status(RuntimeError(f"Replicate {what} failed ({status}): {said}"), status)
 
 
 async def upload_file(client: httpx.AsyncClient, key: str, path: Path) -> str:
@@ -155,6 +159,7 @@ async def _save_output(client: httpx.AsyncClient, key: str, output: Any, media_t
     except httpx.TransportError as exc:
         raise RuntimeError(f"Couldn't download Replicate's result: {type(exc).__name__}: {exc}") from exc
     if response.status_code >= 400:
+        # no API status: a download of the result file, not Replicate's API.
         raise with_person_line(
             RuntimeError(f"Replicate's result download failed (HTTP {response.status_code}). Run again."),
             "Replicate's result couldn't be downloaded. Run the node again.")
@@ -205,6 +210,7 @@ async def run_model(
                 max_polls=MAX_POLLS,
                 cancel_url_template=f"{REPLICATE_API_BASE}/predictions/{{task_id}}/cancel",
                 cancel_method="POST",
+                provider="Replicate",
             )
             prediction = await poll_until_terminal(client, config, task_id, node_id, emit or _quiet)
         logging.getLogger(__name__).info("Replicate %s prediction %s: %s", model, task_id,

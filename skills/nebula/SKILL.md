@@ -276,12 +276,16 @@ Marble — unlock" and "Checked Marble — forget" refused while a job is still
 waiting keep their exact text for you. A node's run error works the same way:
 `error` (in `nebula result`, `nebula look` and the run record) is the specific
 text, ids and parameter names included; the card shows a written line (the
-graph's `errorPerson`, when the node's handler wrote one) that you shouldn't
-parse. A failed Cinema shot's `output` works the same: read its `error`; its
-`errorCategory`, `errorFriendly`, `errorPerson` and `errorRaw` are for the
-Cinema panel. A run the pre-run check refuses (a missing key, an
-unconnected input, a Batch over its cap) prints the same specific text as
-before ("Missing API key: OPENAI_API_KEY"); the card's line ("Add your
+graph's `errorPerson`, when the node's handler wrote one, or a line for the
+provider's answer such as "Meshy is busy. ..." with `errorProviderText`) that
+you shouldn't parse. A failed Cinema shot's `output` works the same: read its
+`error`; its `errorCategory`, `errorFriendly`, `errorPerson`,
+`errorProviderText` and `errorRaw` are for the Cinema panel. A job the
+provider ran and then reported failed is never `category: "auth"`, even when
+its text says "unauthorized" (the job's input, not the key): check the job at
+the provider rather than the key. A run the pre-run check refuses (a missing
+key, an unconnected input, a Batch over its cap) prints the same specific text
+as before ("Missing API key: OPENAI_API_KEY"); the card's line ("Add your
 OpenAI API key in Settings, then run the node again.") rides only on the
 canvas's own answer, so nothing you read changed.
 

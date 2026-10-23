@@ -16,7 +16,7 @@ from PIL import Image, ImageOps
 
 from execution.missing_credential import MissingCredentialError
 from services.http_errors import HTTP_ERRORS, describe
-from execution.person_line import as_person_line, with_person_line
+from execution.person_line import as_person_line, with_api_status, with_person_line
 
 VISION_TIMEOUT_SECONDS = 45.0
 MAX_VISION_IMAGES = 13  # 12 sampled frames plus one optional reference image.
@@ -246,10 +246,10 @@ async def call_vision_llm(
                 f"{VISION_TIMEOUT_SECONDS:g} seconds"
             ) from exc
         if response.status_code != 200:
-            raise VisionProviderError(
+            raise with_api_status(VisionProviderError(
                 f"{provider.name} vision request failed ({response.status_code}): "
                 f"{response.text[-1024:]}"
-            )
+            ), response.status_code)
         try:
             payload = response.json()
         except (json.JSONDecodeError, ValueError) as exc:

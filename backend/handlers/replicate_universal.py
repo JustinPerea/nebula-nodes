@@ -13,7 +13,7 @@ from services.cancellation import schedule_detached_cancel
 from execution.missing_credential import MissingCredentialError
 from services import universal_ports
 from services.media_types import MEDIA_PORT_IDS, media_of_value
-from execution.person_line import as_person_line, with_person_line
+from execution.person_line import as_person_line, field_label, with_api_status, with_person_line
 
 REPLICATE_API_BASE = "https://api.replicate.com/v1"
 
@@ -85,11 +85,16 @@ async def _resolve_version(owner: str, name: str, api_key: str) -> str:
             headers={"Authorization": f"Bearer {api_key}"},
         )
         if resp.status_code != 200:
-            raise RuntimeError(f"Failed to fetch Replicate model {owner}/{name}: {resp.status_code} {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Failed to fetch Replicate model {owner}/{name}: {resp.status_code} {resp.text}"),
+                resp.status_code)
         data = resp.json()
         version_id = data.get("latest_version", {}).get("id")
         if not version_id:
-            raise as_person_line(RuntimeError(f"No version found for {owner}/{name}"))
+            # The text names the model for agents; the card names the field (GM: no ids).
+            raise with_person_line(RuntimeError(f"No version found for {owner}/{name}"),
+                                   "Replicate has no version of the model in the node's Model ID field to run. "
+                                   "Check the model on Replicate, then run the node again.")
         return str(version_id)
 
 
@@ -215,7 +220,8 @@ async def handle_replicate_universal(
 
     model_id = node.params.get("model_id", "")
     if not model_id or "/" not in str(model_id):
-        raise as_person_line(ValueError("Model ID is required (format: owner/name, e.g. stability-ai/sdxl)"))
+        raise with_person_line(ValueError("Model ID is required (format: owner/name, e.g. stability-ai/sdxl)"), f"Enter a Replicate model in the node's {field_label(node.definition_id, 'model_id', 'Model ID')} field, "
+            "as its page on Replicate writes it, then run the node again.")
 
     owner, name = str(model_id).split("/", 1)
 
@@ -260,6 +266,7 @@ async def handle_replicate_universal(
         timeout=30.0,
         cancel_url_template=f"{REPLICATE_API_BASE}/predictions/{{task_id}}/cancel",
         cancel_method="POST",
+        provider="Replicate",
     )
 
     async def noop_emit(event: ExecutionEvent) -> None:
@@ -273,7 +280,9 @@ async def handle_replicate_universal(
     async with httpx.AsyncClient(timeout=config.timeout) as client:
         submit_resp = await client.post(config.submit_url, headers=config.headers, json=submit_body)
         if submit_resp.status_code not in (200, 201):
-            raise RuntimeError(f"Replicate submit failed ({submit_resp.status_code}): {submit_resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Replicate submit failed ({submit_resp.status_code}): {submit_resp.text}"),
+                submit_resp.status_code)
 
         submit_data = submit_resp.json()
         task_id = submit_data.get("id")

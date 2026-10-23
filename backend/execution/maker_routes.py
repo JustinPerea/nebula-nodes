@@ -35,7 +35,7 @@ from execution import maker_routes_elevenlabs
 from execution.missing_credential import MissingCredentialError
 from models.graph import GraphNode, PortValueDict
 from services import node_route
-from execution.person_line import as_person_line, key_phrase, with_person_line
+from execution.person_line import as_person_line, key_line, key_phrase, with_call_facts, with_person_line
 
 Handler = Callable[[GraphNode, dict[str, PortValueDict], dict[str, str]], Awaitable[dict[str, Any]]]
 Translate = Callable[
@@ -159,7 +159,14 @@ def multi_route(clients: Mapping[str, Handler]) -> Handler:
         route = node_route.select_route(definition, routed_params, api_keys)
         if route.kind == node_route.UNSET:
             unavailable = node_route.route_unavailable(definition, routed_params, api_keys) or {}
-            raise MissingCredentialError(str(unavailable.get("message") or "This node has no route it can run on"))
+            message = str(unavailable.get("message") or "This node has no route it can run on")
+            # The chosen route needs a key that isn't saved: GM's key line
+            # (error copy round 3d). A route its params block keeps the
+            # pre-run check's own words.
+            line = key_line(route.missing) if route.missing and route.block is None else None
+            if line:
+                raise with_person_line(MissingCredentialError(message), line)
+            raise MissingCredentialError(message)
         spec = node_route.route_by_id(definition, route.route_id) or {}
         client = clients.get(str(route.route_id))
         if client is None:
@@ -278,10 +285,10 @@ async def google_nano_banana(node: GraphNode, inputs: dict[str, PortValueDict], 
             result = await handle_nano_banana(call, inputs, api_keys)
         except RuntimeError as exc:
             if call.params.get("model") == GEMINI_25_FLASH_IMAGE and "404" in str(exc):
-                raise RuntimeError(
+                raise with_call_facts(RuntimeError(
                     f"{exc}. Google lists gemini-2.5-flash-image as deprecated; its named replacement is "
                     "gemini-3.1-flash-lite-image (https://ai.google.dev/gemini-api/docs/deprecations)."
-                ) from exc
+                ), exc) from exc
             raise
         if "image" not in result:
             raise RuntimeError("Gemini returned no image")

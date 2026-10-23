@@ -1081,4 +1081,6 @@ Two small fixes from the 3c-2 review's unverified list, also made by the coordin
 
 Moved to round 3d: the BytePlus Seedance lines that show the dated model id (`dreamina-seedance-2-5-260628`) on the card, the other `{model}` values that are provider ids, values in parentheses ("(got …)"), and pre-run validation lines that name keys. GM's 3d copy is in hand: missing keys, the provider status table, timeouts on paid jobs, empty answers, file not found, and the trimmed Krea account lines.
 
+Round 3d (the provider status table, paid-job timeouts, no ids or parentheses on the card, GM's Krea lines): docs/notes/2026-10-22-fix-error-copy-3d.md.
+
 Round 3e (every card shows its run error, pre-run checks in words, the raw-message guard) is in [2026-10-22-fix-error-copy-3e.md](2026-10-22-fix-error-copy-3e.md).

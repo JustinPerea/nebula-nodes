@@ -54,7 +54,7 @@ def resolve_local_media(value: str, *, label: str) -> Path:
         raise ValueError(f"{label} reference escapes Nebula's output directory")
     resolved = Path(resolved_ref).expanduser().resolve()
     if not resolved.is_file():
-        raise with_person_line(FileNotFoundError(f"{label} not found: {value}"), missing_file_line())
+        raise with_person_line(FileNotFoundError(f"{label} not found: {value}"), missing_file_line(label, value))
     if not any(_is_relative_to(resolved, root) for root in _allowed_roots()):
         raise ValueError(f"{label} must be contained by Nebula's output directory")
     return resolved

@@ -27,7 +27,7 @@ from typing import Any, Awaitable, Callable
 from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
 from services import node_route
-from execution.person_line import as_person_line, with_person_line
+from execution.person_line import as_person_line, it_was, model_name, with_person_line
 
 Emit = Callable[[ExecutionEvent], Awaitable[None]]
 Translate = Callable[
@@ -143,14 +143,14 @@ def krea_grok_image_to_xai(model: str) -> Translate:
         resolution = params.get("resolution")
         if _present(resolution):
             if resolution not in _KREA_RESOLUTION:
-                raise as_person_line(ValueError(f"xAI takes resolution 1K or 2K (received {resolution!r})"))
+                raise with_person_line(ValueError(f"xAI takes resolution 1K or 2K (received {resolution!r})"), f"Set Resolution to 1K or 2K, then run the node again. {it_was(resolution)}")
             out["resolution"] = _KREA_RESOLUTION[resolution]
         routed = _prompt(inputs, params)
         images = _list(_port_or_param(inputs, params, "image_urls"), "image_urls")
         if node.definition_id.endswith("-edit") and not images:
             raise as_person_line(ValueError("Grok Imagine 2.0 Edit needs at least one image in Image URLs"))
         if len(images) > KREA_EDIT_MAX_IMAGES:
-            raise as_person_line(ValueError(f"This node takes up to {KREA_EDIT_MAX_IMAGES} images (received {len(images)})"))
+            raise with_person_line(ValueError(f"This node takes up to {KREA_EDIT_MAX_IMAGES} images (received {len(images)})"), f"This node takes up to {KREA_EDIT_MAX_IMAGES} images, and {len(images)} are connected. Disconnect the extra ones, then run the node again.")
         if images:
             routed["images"] = PortValueDict(type="Image", value=images)
         return node.model_copy(update={"params": out}), routed
@@ -198,7 +198,7 @@ def _effective(node: GraphNode, key: str) -> Any:
 
 def _whole_seconds(value: Any) -> int:
     if isinstance(value, bool) or not isinstance(value, (int, float)) or float(value) != int(value):
-        raise as_person_line(ValueError(f"xAI takes a whole number of seconds (received duration {value!r})"))
+        raise with_person_line(ValueError(f"xAI takes a whole number of seconds (received duration {value!r})"), f"Set Duration to a whole number of seconds. {it_was(value)}")
     return int(value)
 
 
@@ -234,7 +234,8 @@ def krea_grok_video_to_xai(model: str) -> Translate:
         out: dict[str, Any] = {"model": model}
         if _present(edit_video):
             if model != GROK_VIDEO:
-                raise as_person_line(ValueError(f"xAI edits videos on {GROK_VIDEO} only, not {model}"))
+                raise with_person_line(ValueError(f"xAI edits videos on {GROK_VIDEO} only, not {model}"), f"xAI edits videos only on {model_name(GROK_VIDEO)}, not on {model_name(model)}. Disconnect the "
+                    "edit video, then run the node again.")
             extra = [name for name, value in (("start_image", start_image), ("reference_images", references))
                      if _present(value)]
             if extra:
@@ -248,18 +249,20 @@ def krea_grok_video_to_xai(model: str) -> Translate:
             return node.model_copy(update={"params": out}), routed
 
         if _present(start_image) and references:
-            raise as_person_line(ValueError("xAI's grok-imagine-video takes a start image or reference images, not both"))
+            raise with_person_line(ValueError("xAI's grok-imagine-video takes a start image or reference images, not both"), "xAI takes a start image or reference images, not both. Disconnect one, then run the node again.")
         seconds = _whole_seconds(_effective(node, "duration"))
         if not 1 <= seconds <= 15:
-            raise as_person_line(ValueError(f"xAI makes videos of 1 to 15 seconds (received {seconds})"))
+            raise with_person_line(ValueError(f"xAI makes videos of 1 to 15 seconds (received {seconds})"), f"xAI makes videos of 1 to 15 seconds. Set Duration in that range. {it_was(seconds)}")
         out.update(endpoint="generations", duration=seconds)
         if references:
             if len(references) > GROK_VIDEO_MAX_REFERENCES:
-                raise as_person_line(ValueError(f"{model} takes up to {GROK_VIDEO_MAX_REFERENCES} reference images "
-                                 f"(received {len(references)})"))
+                raise with_person_line(ValueError(f"{model} takes up to {GROK_VIDEO_MAX_REFERENCES} reference images "
+                                 f"(received {len(references)})"), f"{model_name(model)} takes up to {GROK_VIDEO_MAX_REFERENCES} reference images, and "
+                                 f"{len(references)} are connected. Disconnect the extra ones, then run the node again.")
             if seconds > GROK_VIDEO_R2V_MAX_SECONDS:
-                raise as_person_line(ValueError(f"Reference-to-video on {model} runs up to {GROK_VIDEO_R2V_MAX_SECONDS} seconds "
-                                 f"(received {seconds})"))
+                raise with_person_line(ValueError(f"Reference-to-video on {model} runs up to {GROK_VIDEO_R2V_MAX_SECONDS} seconds "
+                                 f"(received {seconds})"), f"Reference-to-video on {model_name(model)} runs up to {GROK_VIDEO_R2V_MAX_SECONDS} seconds. Set "
+                                 f"Duration to {GROK_VIDEO_R2V_MAX_SECONDS} or less. {it_was(seconds)}")
             routed["reference_images"] = PortValueDict(type="Image", value=references)
         if _present(start_image):
             routed["image"] = PortValueDict(type="Image", value=start_image)

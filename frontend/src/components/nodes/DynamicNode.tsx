@@ -263,6 +263,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
           category={nodeData.errorCategory}
           friendly={nodeData.errorFriendly}
           person={nodeData.errorPerson}
+          providerText={nodeData.errorProviderText}
           raw={nodeData.error}
         />
       )}

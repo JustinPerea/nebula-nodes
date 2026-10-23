@@ -8,7 +8,7 @@ from models.graph import GraphNode, PortValueDict
 from services.output import get_run_dir, save_base64_image
 from execution.missing_credential import MissingCredentialError
 from services.retired_nodes import GPT_IMAGE_1_SHUTDOWN, default_until
-from execution.person_line import as_person_line
+from execution.person_line import as_person_line, with_api_status
 
 OPENAI_API_URL = "https://api.openai.com/v1/images/generations"
 # gpt-image-1 shuts down 2026-10-23; OpenAI names gpt-image-2.5-sunburst or
@@ -81,7 +81,8 @@ async def handle_openai_image_generate(
         )
         if response.status_code != 200:
             error_detail = response.text
-            raise RuntimeError(f"OpenAI API error {response.status_code}: {error_detail}")
+            raise with_api_status(
+                RuntimeError(f"OpenAI API error {response.status_code}: {error_detail}"), response.status_code)
         response.raise_for_status()
 
     data = response.json()

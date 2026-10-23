@@ -342,6 +342,7 @@ function markNodesErrored(
         errorCategory: undefined,
         errorFriendly: undefined,
         errorPerson: undefined,
+        errorProviderText: undefined,
         progress: undefined,
         streamingText: undefined,
         streamingPartials: undefined,
@@ -375,6 +376,7 @@ function markNodesWithValidationErrors(
         errorCategory: reading.errorCategory,
         errorFriendly: undefined,
         errorPerson: reading.errorPerson,
+        errorProviderText: undefined,
         progress: undefined,
         streamingText: undefined,
         streamingPartials: undefined,
@@ -1127,7 +1129,7 @@ function shotOutputPorts(scene: CinemaSceneSpec): DynamicPortDefinition[] {
  *  show an earlier failure's person line or Details. */
 function withoutShotError(output: CinemaShot['output']): Omit<NonNullable<CinemaShot['output']>, 'status'> {
   const rest: Partial<NonNullable<CinemaShot['output']>> = { ...(output ?? {}) };
-  for (const key of ['status', 'error', 'errorCategory', 'errorFriendly', 'errorPerson', 'errorRaw'] as const) delete rest[key];
+  for (const key of ['status', 'error', 'errorCategory', 'errorFriendly', 'errorPerson', 'errorProviderText', 'errorRaw'] as const) delete rest[key];
   return rest;
 }
 
@@ -2961,7 +2963,7 @@ wsClient.subscribe((event) => {
             // category must not sit beside a newer message.
             ...(cliNode.data.state === 'error' ? {
               errorFriendly: cliNode.data.errorFriendly, errorCategory: cliNode.data.errorCategory,
-              errorPerson: cliNode.data.errorPerson,
+              errorPerson: cliNode.data.errorPerson, errorProviderText: cliNode.data.errorProviderText,
             } : {}),
             keyStatus,
             ...(changedOutput ? clearBatchPreview() : {}),
@@ -6033,6 +6035,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           errorCategory: event.category,
           errorFriendly: event.friendly,
           errorPerson: event.person ?? undefined,
+          errorProviderText: event.providerText || undefined,
           progress: undefined,
           streamingText: undefined,
           streamingPartials: undefined,
@@ -6048,7 +6051,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           if ((runId && ownsRun(runId)) || !scopeOverlaps([nodeId])) {
             get().updateNodeData(nodeId, {
               state: 'error', error: reading.error, errorCategory: reading.errorCategory, errorFriendly: undefined,
-              errorPerson: reading.errorPerson,
+              errorPerson: reading.errorPerson, errorProviderText: undefined,
             });
           }
         }

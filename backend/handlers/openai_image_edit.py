@@ -12,7 +12,7 @@ from services.output import get_run_dir, portable_output_ref, save_base64_image
 from execution.missing_credential import MissingCredentialError
 from services.retired_nodes import GPT_IMAGE_1_SHUTDOWN, default_until
 from handlers.openai_image import check_background
-from execution.person_line import as_person_line, missing_file_line, with_person_line
+from execution.person_line import as_person_line, missing_file_line, with_api_status, with_person_line
 
 OPENAI_IMAGE_EDIT_URL = "https://api.openai.com/v1/images/edits"
 # gpt-image-1 shuts down 2026-10-23; OpenAI names gpt-image-2.5-sunburst or
@@ -108,7 +108,8 @@ async def handle_openai_image_edit(
         )
         if response.status_code != 200:
             error_detail = response.text
-            raise RuntimeError(f"OpenAI API error {response.status_code}: {error_detail}")
+            raise with_api_status(
+                RuntimeError(f"OpenAI API error {response.status_code}: {error_detail}"), response.status_code)
         response.raise_for_status()
 
     data = response.json()

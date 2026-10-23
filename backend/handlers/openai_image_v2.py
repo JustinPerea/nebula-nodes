@@ -11,7 +11,7 @@ from services.edit_masks import image_size, openai_edit_mask
 from services.media_input import read_local_media
 from services.output import get_run_dir
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import as_person_line
+from execution.person_line import as_person_line, model_name, with_api_status, with_person_line
 
 OPENAI_GENERATIONS_URL = "https://api.openai.com/v1/images/generations"
 OPENAI_EDITS_URL = "https://api.openai.com/v1/images/edits"
@@ -35,10 +35,11 @@ def _is_org_verification_error(body: str) -> bool:
 
 
 def _raise_org_verification_error(model: str = "gpt-image-2") -> None:
-    raise as_person_line(RuntimeError(
+    raise with_person_line(RuntimeError(
         f"Your OpenAI org isn't verified for {model}. "
         "Visit https://platform.openai.com/settings/organization/general to verify."
-    ))
+    ), f"OpenAI needs your organization verified to use {model_name(model)}. Verify it at "
+        "https://platform.openai.com/settings/organization/general, then run the node again.")
 
 
 def build_generate_body(node: GraphNode, prompt_text: str, model: str = "gpt-image-2") -> dict[str, Any]:
@@ -70,7 +71,7 @@ def build_generate_body(node: GraphNode, prompt_text: str, model: str = "gpt-ima
 def gpt_image_25_model(node: GraphNode) -> str:
     model = (node.params or {}).get("model") or GPT_IMAGE_25_MODELS[0]
     if model not in GPT_IMAGE_25_MODELS:
-        raise as_person_line(ValueError(f"GPT Image 2.5 model must be Flare or Sunburst, not {model}"))
+        raise with_person_line(ValueError(f"GPT Image 2.5 model must be Flare or Sunburst, not {model}"), "Pick Flare or Sunburst in the node's Model field, then run the node again.")
     return model
 
 
@@ -245,7 +246,8 @@ async def handle_gpt_image_2_edit(
                     error_body += chunk
                 if _is_org_verification_error(error_body):
                     _raise_org_verification_error(body["model"])
-                raise RuntimeError(f"Image edit failed ({response.status_code}): {error_body}")
+                raise with_api_status(
+                    RuntimeError(f"Image edit failed ({response.status_code}): {error_body}"), response.status_code)
             async for line in response.aiter_lines():
                 line = line.strip()
                 if not line:

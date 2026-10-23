@@ -37,7 +37,7 @@ from models.graph import GraphNode, PortValueDict
 from services.image_input import is_remote_or_data_uri, load_local_image
 from services.media_input import owned_output_value
 from services.output import get_run_dir, save_base64_image
-from execution.person_line import as_person_line, with_person_line
+from execution.person_line import as_person_line, it_was, model_name, or_list, with_api_status, with_person_line
 
 XAI_API_BASE = "https://api.x.ai/v1"
 GENERATIONS_URL = f"{XAI_API_BASE}/images/generations"
@@ -102,7 +102,8 @@ def _count(value: Any) -> int:
     if value in (None, ""):
         return 1
     if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= MAX_IMAGES_PER_REQUEST:
-        raise as_person_line(ValueError(f"xAI makes 1 to {MAX_IMAGES_PER_REQUEST} images per request (received {value!r})"))
+        raise with_person_line(ValueError(f"xAI makes 1 to {MAX_IMAGES_PER_REQUEST} images per request (received {value!r})"), f"xAI makes 1 to {MAX_IMAGES_PER_REQUEST} images per request. Set the number of images in that range. "
+                         f"{it_was(value)}")
     return value
 
 
@@ -153,12 +154,13 @@ async def handle_xai_image(
             body[key] = str(params[key])
     if params.get("quality"):
         if model not in QUALITY_MODELS:
-            raise as_person_line(ValueError(f"xAI takes quality only on {', '.join(sorted(QUALITY_MODELS))}, not {model}"))
+            raise with_person_line(ValueError(f"xAI takes quality only on {', '.join(sorted(QUALITY_MODELS))}, not {model}"), f"xAI takes Quality only on {or_list(model_name(name) for name in sorted(QUALITY_MODELS))}. Clear the "
+                             "node's Quality field, then run the node again.")
         body["quality"] = str(params["quality"])
 
     sources = _image_values(inputs.get("images"))
     if len(sources) > MAX_EDIT_IMAGES:
-        raise as_person_line(ValueError(f"xAI edits take up to {MAX_EDIT_IMAGES} source images (received {len(sources)})"))
+        raise with_person_line(ValueError(f"xAI edits take up to {MAX_EDIT_IMAGES} source images (received {len(sources)})"), f"xAI edits take up to {MAX_EDIT_IMAGES} source images, and {len(sources)} are connected. Disconnect the extra ones, then run the node again.")
     urls = [xai_image_url(value) for value in sources]
     if len(urls) == 1:
         body["image"] = {"url": urls[0]}
@@ -174,7 +176,9 @@ async def handle_xai_image(
             json=body,
         )
     if response.status_code != 200:
-        raise RuntimeError(f"xAI image request failed ({response.status_code}): {_error_text(response)}")
+        raise with_api_status(
+            RuntimeError(f"xAI image request failed ({response.status_code}): {_error_text(response)}"),
+            response.status_code)
     items = (response.json() or {}).get("data") or []
     run_dir = get_run_dir()
     saved: list[str] = []

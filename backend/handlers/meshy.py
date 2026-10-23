@@ -14,7 +14,8 @@ from pathlib import Path
 
 import sys
 from execution.missing_credential import MissingCredentialError
-from execution.person_line import as_person_line, missing_file_line, with_person_line
+from execution.person_line import (as_job_failure, as_person_line, missing_file_line, slow_job_line, with_api_status,
+                                   with_person_line)
 
 MESHY_API_BASE = "https://api.meshy.ai/openapi"
 # "Maximum file size: 20 MB" for image_url and texture_image_url
@@ -138,7 +139,8 @@ async def handle_meshy_image_to_3d(
         )
         _log(f"submit response: {resp.status_code}")
         if resp.status_code not in (200, 201, 202):
-            raise RuntimeError(f"Meshy submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Meshy submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         task_data = resp.json()
         _log(f"task_data: {task_data}")
@@ -226,7 +228,8 @@ async def handle_meshy_text_to_3d(
             json=body,
         )
         if resp.status_code not in (200, 201, 202):
-            raise RuntimeError(f"Meshy submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Meshy submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         task_data = resp.json()
         task_id = task_data.get("result") or task_data.get("id") or task_data.get("task_id")
@@ -259,7 +262,8 @@ async def handle_meshy_text_to_3d(
                 json=refine_body,
             )
             if resp2.status_code not in (200, 201, 202):
-                raise RuntimeError(f"Meshy refine submit failed ({resp2.status_code}): {resp2.text}")
+                raise with_api_status(
+                    RuntimeError(f"Meshy refine submit failed ({resp2.status_code}): {resp2.text}"), resp2.status_code)
 
             refine_data = resp2.json()
             refine_id = refine_data.get("result") or refine_data.get("id") or refine_data.get("task_id")
@@ -302,7 +306,8 @@ async def _poll_meshy_task(
             schedule_detached_cancel(lambda: _cancel_meshy_task(poll_url, api_key))
             raise
         if resp.status_code != 200:
-            raise RuntimeError(f"Meshy poll failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Meshy poll failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         data = resp.json()
         status = data.get("status", "")
@@ -314,9 +319,9 @@ async def _poll_meshy_task(
             return data
         elif status in {"FAILED", "CANCELED"}:
             error = data.get("task_error", {}).get("message", "Unknown error")
-            raise RuntimeError(f"Meshy task {status.lower()}: {error}")
+            raise as_job_failure(RuntimeError(f"Meshy task {status.lower()}: {error}"))
 
-    raise RuntimeError(f"Meshy task timed out after {max_polls} polls")
+    raise with_person_line(RuntimeError(f"Meshy task timed out after {max_polls} polls"), slow_job_line("Meshy"))
 
 
 async def handle_meshy_multi_image_to_3d(
@@ -371,7 +376,8 @@ async def handle_meshy_multi_image_to_3d(
             json=body,
         )
         if resp.status_code not in (200, 201, 202):
-            raise RuntimeError(f"Meshy multi-image submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Meshy multi-image submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         task_data = resp.json()
         task_id = task_data.get("result") or task_data.get("id") or task_data.get("task_id")
@@ -437,7 +443,8 @@ async def handle_meshy_retexture(
             json=body,
         )
         if resp.status_code not in (200, 201, 202):
-            raise RuntimeError(f"Meshy retexture submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Meshy retexture submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         task_data = resp.json()
         task_id = task_data.get("result") or task_data.get("id") or task_data.get("task_id")
@@ -498,7 +505,8 @@ async def handle_meshy_rigging(
             json=body,
         )
         if resp.status_code not in (200, 201, 202):
-            raise RuntimeError(f"Meshy rigging submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Meshy rigging submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         task_data = resp.json()
         task_id = task_data.get("result") or task_data.get("id") or task_data.get("task_id")
@@ -571,7 +579,8 @@ async def handle_meshy_animate(
             json=body,
         )
         if resp.status_code not in (200, 201, 202):
-            raise RuntimeError(f"Meshy animation submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Meshy animation submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         task_data = resp.json()
         task_id = task_data.get("result") or task_data.get("id") or task_data.get("task_id")
@@ -636,7 +645,8 @@ async def handle_meshy_remesh(
             json=body,
         )
         if resp.status_code not in (200, 201, 202):
-            raise RuntimeError(f"Meshy remesh submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Meshy remesh submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         task_data = resp.json()
         task_id = task_data.get("result") or task_data.get("id") or task_data.get("task_id")
@@ -698,7 +708,8 @@ async def handle_meshy_text_to_image(
             json=body,
         )
         if resp.status_code not in (200, 201, 202):
-            raise RuntimeError(f"Meshy text-to-image submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Meshy text-to-image submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         task_data = resp.json()
         task_id = task_data.get("result") or task_data.get("id") or task_data.get("task_id")
@@ -786,7 +797,8 @@ async def handle_meshy_image_to_image(
             json=body,
         )
         if resp.status_code not in (200, 201, 202):
-            raise RuntimeError(f"Meshy image-to-image submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Meshy image-to-image submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         task_data = resp.json()
         task_id = task_data.get("result") or task_data.get("id") or task_data.get("task_id")
@@ -858,7 +870,8 @@ async def handle_meshy_3d_print(
             json=body,
         )
         if resp.status_code not in (200, 201, 202):
-            raise RuntimeError(f"Meshy 3D print submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Meshy 3D print submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         task_data = resp.json()
         task_id = task_data.get("result") or task_data.get("id") or task_data.get("task_id")

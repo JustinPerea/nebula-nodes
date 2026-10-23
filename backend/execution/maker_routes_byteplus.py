@@ -154,7 +154,8 @@ def seedream_fal_to_byteplus(
         raise ValueError(f"BytePlus has no size for Seedream image_size {size_value!r}; it runs on fal")
     refs = _port_values(inputs, "images", "image")
     if len(refs) > MAX_REFERENCES:
-        raise as_person_line(ValueError(f"Seedream accepts at most {MAX_REFERENCES} reference images (received {len(refs)})"))
+        raise with_person_line(ValueError(f"Seedream accepts at most {MAX_REFERENCES} reference images (received {len(refs)})"), f"Seedream on BytePlus takes at most {MAX_REFERENCES} reference images, and {len(refs)} are "
+                         f"connected. Disconnect the extra ones, then run the node again.")
     max_images = _count(params.get("max_images"), "max_images", 6)
     if len(refs) + max_images > MAX_IMAGES_PER_REQUEST:
         raise with_person_line(ValueError(
@@ -184,9 +185,10 @@ def krea_seedream_to_byteplus(model: str):
     def translate(node: GraphNode, inputs: dict[str, PortValueDict]) -> tuple[GraphNode, dict[str, PortValueDict]]:
         params = node.params
         if _port_values(inputs, "style_images"):
-            raise as_person_line(ValueError(
+            raise with_person_line(ValueError(
                 "Krea's style images (with their strength) have no BytePlus equivalent. Remove the style "
-                "images, or remove the BytePlus key to run this on Krea."))
+                "images, or remove the BytePlus key to run this on Krea."), "Krea's style images and their strength have no BytePlus equivalent. Remove the style images, or "
+                "remove the BytePlus key to run this on Krea.")
         width, height = params.get("width"), params.get("height")
         if width in (None, "") or height in (None, ""):
             raise as_person_line(ValueError("Seedream needs a width and a height"))

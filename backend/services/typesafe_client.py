@@ -40,7 +40,7 @@ import httpx
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from services.http_errors import TRANSPORT_ERRORS
-from execution.person_line import as_person_line, with_person_line
+from execution.person_line import as_person_line, with_person_line, with_provider_line
 
 API_URL = "https://api.typesafe.ai/v1/systemone"
 CREDENTIAL = "TYPESAFE_API_KEY"
@@ -304,9 +304,9 @@ def _open_first_frame(data: bytes, label: str) -> tuple[Image.Image, str, int, i
     except Image.DecompressionBombError as exc:
         raise as_person_line(ValueError(f"{label} is too large to decode safely")) from exc
     except UnidentifiedImageError as exc:
-        raise as_person_line(ValueError(f"{label} isn't an image Nebula can read (PNG, JPEG, WebP or GIF)")) from exc
+        raise with_person_line(ValueError(f"{label} isn't an image Nebula can read (PNG, JPEG, WebP or GIF)"), f"{label} isn't an image Nebula can read. Use a PNG, JPEG, WebP or GIF, then run the node again.") from exc
     except OSError as exc:
-        raise with_person_line(
+        raise with_provider_line(
             ValueError(f"{label} is damaged or incomplete: {exc}"),
             f"{label} is damaged or incomplete. Connect another image.") from exc
     return image, source_format, frames, width, height, orientation
