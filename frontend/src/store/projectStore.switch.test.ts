@@ -95,7 +95,7 @@ describe('following an agent’s project switch', () => {
     expect(state.activeProject?.id).toBe('p2');
     expect(getProjectContext()).toEqual({ id: 'p2', revision: 'r2' });
     expect(state.switchNotice).toMatchObject({ actorName: 'Claude Code', previousProjectId: 'p1', keptCopy: false });
-    expect(switchMessage(state.switchNotice!)).toBe('Claude Code made a new project, “Agent sketches”, and opened it.');
+    expect(switchMessage(state.switchNotice!)).toBe('Claude Code made and opened “Agent sketches”.');
   });
 
   it('offers the way back: Back reopens the previous project', async () => {
@@ -119,7 +119,27 @@ describe('following an agent’s project switch', () => {
     await vi.waitFor(() => expect(useProjectStore.getState().switchNotice).not.toBeNull());
     expect(api.recoverProject).toHaveBeenCalledTimes(1);
     expect(useProjectStore.getState().switchNotice?.keptCopy).toBe(true);
-    expect(switchMessage(useProjectStore.getState().switchNotice!)).toContain('kept as a copy in Projects');
+    // GM - Design, round 4b: "Claude Code made and opened “{name}”. Your edits are saved as a copy."
+    expect(switchMessage(useProjectStore.getState().switchNotice!))
+      .toBe('Claude Code made and opened “Agent sketches”. Your edits are saved as a copy.');
+  });
+
+  // GM - Design, round 4b ("there's room for about 58 characters"): three lines,
+  // verbatim. The opened-with-no-copy line and the agent's name are unchanged.
+  it.each([
+    [false, true, 'Claude Code opened “Agent sketches”. Your edits are saved as a copy.'],
+    [true, true, 'Claude Code made and opened “Agent sketches”. Your edits are saved as a copy.'],
+    [false, false, 'Claude Code opened “Agent sketches”.'],
+    [true, false, 'Claude Code made and opened “Agent sketches”.'],
+  ])('the toast for created=%s, keptCopy=%s reads GM\'s line', (created, keptCopy, line) => {
+    expect(switchMessage({ actorName: 'Claude Code', created, projectName: 'Agent sketches',
+      previousProjectId: 'p1', previousProjectName: 'Loop', keptCopy })).toBe(line);
+  });
+
+  it('an unnamed script keeps its own name in the kept-copy line', () => {
+    expect(switchMessage({ actorName: null, created: false, projectName: 'Agent sketches',
+      previousProjectId: 'p1', previousProjectName: 'Loop', keptCopy: true }))
+      .toBe('An outside app opened “Agent sketches”. Your edits are saved as a copy.');
   });
 
   it('an agent reopening this project saves the last edit into it and offers no way "back" to itself', async () => {
@@ -206,7 +226,7 @@ describe('Projects follows projects other writers make, rename and delete', () =
     expect(getProjectContext()).toEqual({ id: 'p3', revision: 'r1' });
     expect(saveProject).not.toHaveBeenCalled();
     expect(state.switchNotice).toMatchObject({ previousProjectId: null, created: true });
-    expect(switchMessage(state.switchNotice!)).toBe('Claude Code made a new project, “Summer campaign”, and opened it.');
+    expect(switchMessage(state.switchNotice!)).toBe('Claude Code made and opened “Summer campaign”.');
   });
 
   it('opens the canvas when Projects still had a project loaded', async () => {

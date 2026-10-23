@@ -6,7 +6,8 @@
    every screen's stacking context, on its own layer (slava-restraint.css
    --sr-layer-notice). It sits the notice gap above the bottom bar's measured
    top (--bottom-bar-clearance, written by the canvas bar, Creator Studio's
-   composer and the Remotion editor's timeline tray: lib/bottomBar.ts); with
+   composer, the Remotion editor's timeline tray and the trim editor's
+   timeline: lib/bottomBar.ts); with
    no bar, at the bar's own
    distance from the bottom edge. Only its items take clicks; the canvas,
    nodes and panels around them get the rest. In the startup entry, so a toast

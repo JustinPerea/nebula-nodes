@@ -1,16 +1,23 @@
 /**
  * A late restore count is never lost (GM - Design, 2026-10-23, answer 2):
  * "Yes, show it as a plain notice with no button, using the standard
- * timeout, under the newer notice: "1 proposal from the restored node
- * couldn't be reopened." / "{n} proposals from the restored nodes couldn't
- * be reopened." Losing that count silently is the one thing to avoid."
+ * timeout ... Losing that count silently is the one thing to avoid."
  *
- * Before: when the person moved on (a new step, a quick delete) before a
- * restore's answer arrived, the "Restored the node. 1 proposal couldn't be
- * reopened." line no longer applied (its Redo would do nothing), so it stayed
- * away and the count went with it. Now the count shows on its own line, in
- * its own slot under the canvas notice, with no Undo or Redo of its own, so
- * the store's rule for offers never touches it.
+ * Round 4 (GM - Design, replying to #180's "For GM"): "LATE LINES: drop the
+ * node word, which fixes the mismatch for good. "After the restore, 1
+ * proposal couldn't be reopened." / "…{n} proposals couldn't be reopened."
+ * "After the restore, 1 pin couldn't be re-attached." / "…{n} pins couldn't
+ * be re-attached." "After the restore, {p} pin(s) and {q} proposal(s)
+ * couldn't be restored." (each noun by its own count). Keep the × Dismiss.
+ * With two notices showing, put the late line above the newer one, so the
+ * notice with a button stays nearest the bar."
+ *
+ * Before round 3: when the person moved on (a new step, a quick delete)
+ * before a restore's answer arrived, the "Restored the node. 1 proposal
+ * couldn't be reopened." line no longer applied (its Redo would do nothing),
+ * so it stayed away and the count went with it. Now the count shows on its
+ * own line, in its own slot right above the canvas notice, with no Undo or
+ * Redo of its own, so the store's rule for offers never touches it.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen, within } from '@testing-library/react';
@@ -61,7 +68,7 @@ const LAZY = { timeout: 10_000 };
 const SLOW = 20_000;
 const CLAUDE = { kind: 'agent', id: 'claude-code', name: 'Claude Code', color: '#d97757' };
 const initialGraph = { ...useGraphStore.getState() };
-const ONE_LATE = "1 proposal from the restored node couldn't be reopened.";
+const ONE_LATE = "After the restore, 1 proposal couldn't be reopened.";
 
 function textNode(id: string): Node<NodeData> {
   return { id, type: 'model-node', position: { x: 0, y: 0 },
@@ -115,21 +122,21 @@ describe("GM's lines for a late count", () => {
     lateRestoreText?: (notReopened: number, notReattached: number) => string;
   }).lateRestoreText;
 
-  it('proposals, verbatim, singular and plural by the proposal count', () => {
+  it('proposals, verbatim (no node word), singular and plural by the proposal count', () => {
     expect(lateText?.(1, 0)).toBe(ONE_LATE);
-    expect(lateText?.(2, 0)).toBe("2 proposals from the restored nodes couldn't be reopened.");
-    expect(lateText?.(7, 0)).toBe("7 proposals from the restored nodes couldn't be reopened.");
+    expect(lateText?.(2, 0)).toBe("After the restore, 2 proposals couldn't be reopened.");
+    expect(lateText?.(7, 0)).toBe("After the restore, 7 proposals couldn't be reopened.");
   });
 
-  it("pins on another model, GM's follow-up lines verbatim", () => {
-    expect(lateText?.(0, 1)).toBe("1 pin from the restored node couldn't be re-attached.");
-    expect(lateText?.(0, 3)).toBe("3 pins from the restored nodes couldn't be re-attached.");
+  it("pins on another model, GM's round 4 lines verbatim", () => {
+    expect(lateText?.(0, 1)).toBe("After the restore, 1 pin couldn't be re-attached.");
+    expect(lateText?.(0, 3)).toBe("After the restore, 3 pins couldn't be re-attached.");
   });
 
   it("both counts on GM's one line when both apply, each noun following its count", () => {
-    expect(lateText?.(2, 1)).toBe("1 pin and 2 proposals from the restored nodes couldn't be restored.");
-    expect(lateText?.(1, 2)).toBe("2 pins and 1 proposal from the restored nodes couldn't be restored.");
-    expect(lateText?.(1, 1)).toBe("1 pin and 1 proposal from the restored nodes couldn't be restored.");
+    expect(lateText?.(2, 1)).toBe("After the restore, 1 pin and 2 proposals couldn't be restored.");
+    expect(lateText?.(1, 2)).toBe("After the restore, 2 pins and 1 proposal couldn't be restored.");
+    expect(lateText?.(1, 1)).toBe("After the restore, 1 pin and 1 proposal couldn't be restored.");
   });
 
   it('nothing missed, no line', () => {
@@ -138,7 +145,7 @@ describe("GM's lines for a late count", () => {
 });
 
 describe('a late restore count', () => {
-  it('restore, then a quick delete: the count shows as a plain line under "Deleted the node."', async () => {
+  it('restore, then a quick delete: the count shows as a plain line beside "Deleted the node."', async () => {
     await restoreWithAnswerHeld();
     useGraphStore.getState().deleteNode('n2');
     await settle();
@@ -162,7 +169,7 @@ describe('a late restore count', () => {
     await restoreWithAnswerHeld({ pinsLeft: [{ id: 'pin_1', code: 'another-model', reason: 'The node is another model now.' }] });
     useGraphStore.getState().beginUndoStep();
     await release();
-    expect(late()).toMatchObject({ text: "1 pin from the restored node couldn't be re-attached." });
+    expect(late()).toMatchObject({ text: "After the restore, 1 pin couldn't be re-attached." });
   });
 
   it('nothing missed: no line', async () => {
@@ -201,7 +208,7 @@ describe('a late restore count', () => {
     useGraphStore.getState().beginUndoStep();
     await release();
     await release();
-    expect(late()).toMatchObject({ text: "2 proposals from the restored nodes couldn't be reopened." });
+    expect(late()).toMatchObject({ text: "After the restore, 2 proposals couldn't be reopened." });
   });
 
   it("an agent's undo: the count shows on its own line once its notice is gone", async () => {
@@ -237,13 +244,21 @@ describe('a late restore count', () => {
 });
 
 describe('in the region', () => {
-  it('has its own slot right under the canvas notice', () => {
+  it('has its own slot right above the canvas notice, which stays nearest the bar', () => {
     const slots = NOTICE_SLOTS as readonly string[];
     expect(slots).toContain('late');
-    expect(slots.indexOf('late')).toBe(slots.indexOf('notice') + 1);
+    expect(slots.indexOf('late')).toBe(slots.indexOf('notice') - 1);
+    expect(slots[slots.length - 1]).toBe('notice');
   });
 
-  it('shows under the newer notice, as a plain line: no Undo or Redo, the standard timeout', async () => {
+  it('nothing else in the stack order moves (top to bottom)', () => {
+    expect([...NOTICE_SLOTS]).toEqual([
+      'proposal', 'run-later', 'person-required', 'project-switch', 'project-home',
+      'pin', 'board', 'asset-trash', 'late', 'notice',
+    ]);
+  });
+
+  it('shows above the newer notice, as a plain line: no Undo or Redo, only the Dismiss', async () => {
     await restoreWithAnswerHeld();
     useGraphStore.getState().deleteNode('n2');
     await settle();
@@ -255,10 +270,13 @@ describe('in the region', () => {
     const newerItem = newer.closest<HTMLElement>('[data-notice-slot] > *')!;
     expect(lateItem.parentElement).toHaveAttribute('data-notice-slot', 'late');
     expect(newerItem.parentElement).toHaveAttribute('data-notice-slot', 'notice');
-    // Under it in the column (the stack draws top to bottom).
-    expect(newerItem.compareDocumentPosition(lateItem) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Above it in the column (the stack draws top to bottom), so the notice
+    // with a button stays nearest the bar.
+    expect(newerItem.compareDocumentPosition(lateItem) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     expect(lateItem).toHaveAttribute('role', 'status');
     expect(within(lateItem).queryByRole('button', { name: /undo|redo/i })).toBeNull();
+    // GM: "Keep the × Dismiss."
+    expect(within(lateItem).getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['Dismiss']);
     // The newer notice keeps its Undo.
     expect(within(newerItem).getByRole('button', { name: 'Undo' })).toBeInTheDocument();
   }, SLOW);
