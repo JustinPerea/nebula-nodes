@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useReactFlow, useStore } from '@xyflow/react';
 import {
@@ -24,7 +24,8 @@ import { fetchCLIGraph } from '../../lib/api';
 import { apiRequest } from '../../lib/apiRequest';
 import { failureMessage, failureUnder } from '../../lib/errorCopy';
 import { showNotice } from '../../lib/canvasNotice';
-import { BOTTOM_BAR_ATTR, BOTTOM_BAR_PANEL, clearBottomBarClearance, publishBottomBarClearance } from '../../lib/bottomBar';
+import { BOTTOM_BAR_ATTR, BOTTOM_BAR_PANEL } from '../../lib/bottomBar';
+import { useBottomBarClearance } from '../../hooks/useBottomBarClearance';
 import { CANVAS_FIT_DURATION, CANVAS_ZOOM_DURATION, computeCanvasFitPadding } from '../../lib/canvasFit';
 import { displayKey } from '../../lib/keyboardShortcuts';
 import { describeRunScope, runChipLabel, summarizeRunScope } from '../../lib/runScope';
@@ -117,18 +118,7 @@ export function Toolbar() {
   // changes size.
   const barRoot = useRef<HTMLDivElement>(null);
   const actionsPanel = useRef<HTMLElement>(null);
-  useLayoutEffect(() => {
-    publishBottomBarClearance();
-    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(publishBottomBarClearance) : null;
-    if (barRoot.current) observer?.observe(barRoot.current);
-    if (actionsPanel.current) observer?.observe(actionsPanel.current);
-    window.addEventListener('resize', publishBottomBarClearance);
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener('resize', publishBottomBarClearance);
-    };
-  }, [actionsOpen]);
-  useLayoutEffect(() => clearBottomBarClearance, []);
+  useBottomBarClearance([barRoot, actionsPanel], actionsOpen);
 
   useEffect(() => {
     if (!actionsOpen) return;

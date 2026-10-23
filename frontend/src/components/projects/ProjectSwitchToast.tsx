@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { switchMessage, useProjectStore, type ProjectSwitchNotice } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
+import { InNoticeRegion } from '../InNoticeRegion';
 import './ProjectSwitchToast.css';
 
 const VISIBLE_MS = 15000;
@@ -39,19 +40,22 @@ export function ProjectSwitchToast() {
     return () => window.clearTimeout(timer);
   }, [notice, paused, held]);
   if (!notice) return null;
+  // In the app's notice region, like every toast (GM - Design, 2026-10-23).
   return (
-    <div className="project-switch-toast" role="status" aria-live="polite"
-      onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
-      onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
-      <span className="project-switch-toast__text">{switchMessage(notice)}</span>
-      {notice.previousProjectId && (
-        <button type="button" className="project-switch-toast__back" disabled={busy}
-          onClick={() => void useProjectStore.getState().switchBack()}>
-          Back to “{notice.previousProjectName ?? 'previous project'}”
-        </button>
-      )}
-      <button type="button" className="project-switch-toast__close" aria-label="Dismiss"
-        onClick={() => useProjectStore.getState().dismissSwitchNotice()}><X aria-hidden="true" /></button>
-    </div>
+    <InNoticeRegion slot="project-switch">
+      <div className="project-switch-toast" role="status" aria-live="polite"
+        onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
+        onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
+        <span className="project-switch-toast__text">{switchMessage(notice)}</span>
+        {notice.previousProjectId && (
+          <button type="button" className="project-switch-toast__back" disabled={busy}
+            onClick={() => void useProjectStore.getState().switchBack()}>
+            Back to “{notice.previousProjectName ?? 'previous project'}”
+          </button>
+        )}
+        <button type="button" className="project-switch-toast__close" aria-label="Dismiss"
+          onClick={() => useProjectStore.getState().dismissSwitchNotice()}><X aria-hidden="true" /></button>
+      </div>
+    </InNoticeRegion>
   );
 }

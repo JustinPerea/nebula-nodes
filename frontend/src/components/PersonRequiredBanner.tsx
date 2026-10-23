@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { onPersonConnected, onPersonRequired, personRequiredMessage } from '../lib/personSession';
+import { InNoticeRegion } from './InNoticeRegion';
 
 /**
  * Says why Settings, proposals and chats are locked in this tab: it isn't
@@ -20,12 +21,15 @@ export function PersonRequiredBanner() {
 
   if (!message) return null;
 
+  // In the app's notice region, like every toast (GM - Design, 2026-10-23).
   return (
-    <div className="person-required" role="status" aria-live="polite">
-      <span>{message}</span>
-      <button type="button" className="person-required__dismiss" aria-label="Dismiss" onClick={() => setMessage(null)}>
-        ×
-      </button>
-    </div>
+    <InNoticeRegion slot="person-required">
+      <div className="person-required" role="status" aria-live="polite">
+        <span>{message}</span>
+        <button type="button" className="person-required__dismiss" aria-label="Dismiss" onClick={() => setMessage(null)}>
+          ×
+        </button>
+      </div>
+    </InNoticeRegion>
   );
 }

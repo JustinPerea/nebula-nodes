@@ -46,15 +46,58 @@ export function bottomBarTop(span?: HorizontalSpan): number | null {
 }
 
 /**
+ * The notice region's reserved band (GM - Design, 2026-10-23: "Floating
+ * panels stop above a reserved notice band, whether or not a notice is
+ * showing. The band is the region's height for one notice plus its gap,
+ * measured like the bottom line."). The region always keeps an empty box
+ * marked `data-notice-band`, as tall as one notice plus its gap (both read
+ * the region's `--notice-h` and `--notice-gap`), its foot on the notices'
+ * bottom line. Its box, or null when no region is on screen.
+ */
+export const NOTICE_BAND_ATTR = 'data-notice-band';
+
+function noticeBand(): DOMRect | null {
+  if (typeof document === 'undefined') return null;
+  const band = document.querySelector<HTMLElement>(`[${NOTICE_BAND_ATTR}]`)?.getBoundingClientRect();
+  return band && band.height > 0 ? band : null;
+}
+
+/**
  * The lowest a floating panel's bottom edge may go: `gutter` above the
- * window's bottom edge, and above the bar (with its gap) when there is one.
- * Pass the panel's own `span` so the Canvas actions panel pushes it up only
- * when it would be over it.
+ * window's bottom edge, above the bar (with its gap) when there is one, and
+ * above the notice region's reserved band, shown or not, so a notice never
+ * covers a panel's foot row and a panel never moves when a notice comes or
+ * goes. Pass the panel's own `span` so the Canvas actions panel pushes it up
+ * only when it would be over it: the band then stands on the line the panel
+ * sees (the region itself lifts over the centred actions panel, which a panel
+ * off to the side never meets).
  */
 export function floatingBottomLimit(gutter: number, viewportHeight = window.innerHeight, span?: HorizontalSpan): number {
   const edge = viewportHeight - gutter;
   const bar = bottomBarTop(span);
-  return bar === null ? edge : Math.min(edge, bar - BOTTOM_BAR_GAP);
+  const band = noticeBand();
+  if (bar === null) return band ? Math.min(edge, band.top) : edge;
+  return Math.min(edge, bar - BOTTOM_BAR_GAP - (band?.height ?? 0));
+}
+
+/**
+ * The top line floating panels stop below (GM - Design, 2026-10-23: "Floating
+ * panels stop below the workspace header and the selection toolbar, whichever
+ * is lower, plus the same 8 px gap."). Each carries `data-top-bar`; measured
+ * when asked, so the toolbar appearing or going and a resize move the line.
+ * With neither on screen, the window's `gutter`.
+ */
+export const TOP_BAR_ATTR = 'data-top-bar';
+
+export function floatingTopLimit(gutter: number): number {
+  if (typeof document === 'undefined') return gutter;
+  let line = gutter;
+  for (const part of document.querySelectorAll<HTMLElement>(`[${TOP_BAR_ATTR}]`)) {
+    const box = part.getBoundingClientRect();
+    if (box.width <= 0 || box.height <= 0) continue;
+    line = Math.max(line, box.bottom + BOTTOM_BAR_GAP);
+  }
+  return line;
 }
 
 /** Writes the bar's clearance on the root (or clears it when no bar is on screen). */

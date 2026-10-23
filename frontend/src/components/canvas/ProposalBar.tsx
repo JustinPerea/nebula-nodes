@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import { Panel, useReactFlow } from '@xyflow/react';
+import { useReactFlow } from '@xyflow/react';
 import { ChevronDown, ChevronLeft, ChevronRight, Eye, X } from 'lucide-react';
 import {
   acceptLabel,
@@ -11,6 +11,7 @@ import {
 } from '../../lib/canvasProposals';
 import { useProposalNotReady } from '../../hooks/useProposalReadiness';
 import { useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasProposalsStore';
+import { InNoticeRegion } from '../InNoticeRegion';
 import '../../styles/canvasProposals.css';
 
 /** How long Accept/Reject ignore clicks after the shown proposal changes on its own. */
@@ -114,9 +115,11 @@ export function ProposalBar() {
     };
   }, [currentId]);
 
-  // The bar's notices (an accepted proposal waiting for the run, the canvas
-  // notice) are in the app's notice region (NoticeRegion, GM - Design
-  // 2026-10-23); the bar lifts above them in CSS (--notice-stack-h).
+  // The bar itself is in the app's notice region too, on top of its stack:
+  // above the canvas notice and the proposal's run-later notice (GM - Design,
+  // 2026-10-23: "Yes, move the proposal bar into the region, stacked above
+  // the notices. Accept / Reject are decisions and must never sit under a
+  // panel."). It still mounts with the canvas, so it shows only there.
   if (!current) return null;
 
   const page = (step: number) => {
@@ -158,7 +161,7 @@ export function ProposalBar() {
   };
 
   return (
-    <Panel position="bottom-center" className="proposal-bar-panel">
+    <InNoticeRegion slot="proposal">
       <div
         className="proposal-bar"
         tabIndex={-1}
@@ -306,6 +309,6 @@ export function ProposalBar() {
           </button>
         </div>
       </div>
-    </Panel>
+    </InNoticeRegion>
   );
 }

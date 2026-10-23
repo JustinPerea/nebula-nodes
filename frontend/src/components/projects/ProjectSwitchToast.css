@@ -1,17 +1,10 @@
 /* After an agent switches the open project (projectStore followProjectSwitch).
-   Same spring as the Projects screen's Undo toast. */
+   Same spring as the Projects screen's Undo toast. In the app's notice region
+   (NoticeRegion), which stacks it above the notices and the bar, so Run and a
+   notice's buttons stay reachable (GM - Design, 2026-10-23: "One region, one
+   stack, and nothing else draws toasts"). */
 .project-switch-toast {
   --project-switch-spring: linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1);
-  position: fixed;
-  z-index: 60;
-  left: 50%;
-  /* Above the canvas toolbar, so Run stays reachable, and above the app's
-     notices (NoticeRegion writes how tall they are, with their gap, as
-     --notice-stack-h): it is on raw z 60, over the notice layer, so at a fixed
-     96px it sat on a notice's buttons (review, 2026-10-23; GM - Design: "A
-     notice with an action never sits under anything"). With no bar measured
-     and no notice it keeps its old 96px. */
-  bottom: calc(var(--bottom-bar-clearance, 88px) + var(--sr-space-2, 8px) + var(--notice-stack-h, 0px));
   display: flex;
   align-items: center;
   gap: 4px;
@@ -24,10 +17,7 @@
   font-size: 13px;
   line-height: 1.4;
   box-shadow: 0 12px 32px rgb(0 0 0 / 0.35);
-  transform: translateX(-50%);
   animation: project-switch-toast-in 420ms var(--project-switch-spring) both;
-  /* Moves with a notice coming or going under it, and the bar growing. */
-  transition: bottom 420ms var(--project-switch-spring);
 }
 .project-switch-toast__text { min-width: 0; margin-right: 8px; }
 .project-switch-toast__back {
@@ -62,12 +52,12 @@
 .project-switch-toast__close:hover { background: var(--sr-surface-control-hover, rgb(255 255 255 / 0.08)); color: var(--sr-ink, #ecece9); }
 .project-switch-toast__close svg { width: 14px; height: 14px; }
 @keyframes project-switch-toast-in {
-  from { opacity: 0; transform: translate(-50%, 16px) scale(0.96); }
+  from { opacity: 0; transform: translateY(16px) scale(0.96); }
   30% { opacity: 1; }
-  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  to { opacity: 1; transform: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .project-switch-toast { animation: none; transition: none; }
+  .project-switch-toast { animation: none; }
 }
 /* Over the Commons (a switch held behind unsaved labels, commons-leave) it
  * stays clear of the labeling panels' form column, where Save is (at most

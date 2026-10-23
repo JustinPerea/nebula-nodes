@@ -3,7 +3,7 @@ import {
   DeferredPinLayer,
   DeferredProposalBar,
   DeferredProposalLayer,
-  DeferredNoticeRegion,
+  DeferredRegionNotices,
 } from '../../lib/deferredChunks';
 import { deferredAtOnce } from '../deferredAtOnce';
 // The agent cursors' store subscribes to the socket at import; it stays in
@@ -25,5 +25,5 @@ export const ProposalBar = deferredAtOnce(DeferredProposalBar, 'ProposalBar');
 export const ProposalLayer = deferredAtOnce(DeferredProposalLayer, 'ProposalLayer');
 export const PinLayer = deferredAtOnce(DeferredPinLayer, 'PinLayer');
 export const AgentCursorLayer = deferredAtOnce(DeferredAgentCursorLayer, 'AgentCursorLayer');
-/** The app's one notice region, on every screen (GM - Design, 2026-10-23). */
-export const NoticeRegion = deferredAtOnce(DeferredNoticeRegion, 'NoticeRegion');
+/** The notice region's own notices (components/NoticeRegion.tsx mounts them on every screen but Projects). */
+export const RegionNotices = deferredAtOnce(DeferredRegionNotices, 'RegionNotices');

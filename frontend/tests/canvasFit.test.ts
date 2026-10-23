@@ -22,7 +22,7 @@ function addChrome(className: string, rect: Partial<DOMRect>) {
 
 describe('computeCanvasFitPadding', () => {
   afterEach(() => {
-    document.querySelectorAll('.workspace-rail, .workspace-dock-panel, .chat-panel, .canvas-tabs, .canvas-tabs-wrap, .toolbar, .proposal-bar-panel').forEach((node) => node.remove());
+    document.querySelectorAll('.workspace-rail, .workspace-dock-panel, .chat-panel, .canvas-tabs, .canvas-tabs-wrap, .toolbar, .notice-region__stack').forEach((node) => node.remove());
     vi.unstubAllGlobals();
   });
 
@@ -67,7 +67,8 @@ describe('computeCanvasFitPadding', () => {
   it('keeps fitted nodes above an open proposal bar', () => {
     // The live check: at 1440x900 the bar sat 636-822 px and Fit view left a node under it.
     addChrome('toolbar', { left: 300, right: 700, top: window.innerHeight - 64, bottom: window.innerHeight - 16, width: 400, height: 48 });
-    addChrome('proposal-bar-panel', { left: 400, right: 1020, top: window.innerHeight - 264, bottom: window.innerHeight - 78, width: 620, height: 186 });
+    // Round 2: the bar is in the notice region's one stack, on top (GM - Design, 2026-10-23).
+    addChrome('notice-region__stack', { left: 400, right: 1020, top: window.innerHeight - 264, bottom: window.innerHeight - 78, width: 620, height: 186 });
     expect(computeCanvasFitPadding().bottom).toBe('288px');
   });
 

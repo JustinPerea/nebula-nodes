@@ -95,4 +95,24 @@ describe('the right-click menu near the edges', () => {
     fireEvent(window, new Event('resize'));
     expect(menuBox().bottom).toBeLessThanOrEqual(560 - 8);
   });
+  // GM - Design, 2026-10-23 (answer 1): floating panels stop above the
+  // reserved notice band (one notice plus its gap), shown or not.
+  it('opened just above the bottom bar, it stops above the reserved notice band', () => {
+    const band = document.createElement('div');
+    band.setAttribute('data-notice-band', '');
+    document.body.append(band);
+    const spy = vi.mocked(HTMLElement.prototype.getBoundingClientRect);
+    const base = spy.getMockImplementation()!;
+    spy.mockImplementation(function (this: HTMLElement) {
+      if (this === band) return new DOMRect(16, 721 - 54, 1248, 54);
+      return base.call(this);
+    });
+    try {
+      useUIStore.setState({ contextMenu: { visible: true, position: { x: 600, y: 650 }, nodeId: 'n1', flowPosition: null } });
+      render(<ContextMenu />);
+      expect(menuBox().bottom).toBeLessThanOrEqual(721 - 54);
+    } finally {
+      band.remove();
+    }
+  });
 });

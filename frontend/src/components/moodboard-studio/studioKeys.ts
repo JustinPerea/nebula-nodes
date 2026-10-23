@@ -17,8 +17,14 @@ export function isStudioShortcutTarget(target: EventTarget | null, action?: Stud
   if (target.closest(owns)) return false;
   // The Updates chip and its card sit outside the Studio's tree (App mounts
   // them on every screen, Q107 a) but take no keys but Escape: focus there
-  // leaves Cmd+Z the Studio's. Their open list is a dialog (above).
-  return target.closest('.moodboard-studio-view, .agent-notes-chip, .agent-note-card') !== null;
+  // leaves Cmd+Z the Studio's. Their open list is a dialog (above). The
+  // Studio's two toasts, the board toast and the asset trash toast, portal
+  // outside it too, into their slots in the app's notice region: focus on
+  // their Undo or Dismiss leaves the Studio its keys, as it did when they
+  // rendered inside it. Only those two slots: another screen's line in the
+  // region doesn't pick up the Studio's keys.
+  return target.closest('.moodboard-studio-view, .agent-notes-chip, .agent-note-card, '
+    + '[data-notice-slot="board"], [data-notice-slot="asset-trash"]') !== null;
 }
 
 // Inputs that take typing, so the browser keeps an undo for them.

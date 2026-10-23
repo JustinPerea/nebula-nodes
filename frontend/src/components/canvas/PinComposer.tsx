@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { PromptDialog, type PromptRequest } from '../PromptDialog';
 import { MAX_PIN_TEXT } from '../../lib/canvasPins';
 import { useCanvasPinsStore } from '../../store/canvasPinsStore';
+import { InNoticeRegion } from '../InNoticeRegion';
 import '../../styles/canvasPins.css';
 
 /** The "Note for agents" dialog, opened from the context menu or the selection toolbar. */
@@ -29,11 +30,14 @@ export function PinComposer() {
           }}
         />
       )}
+      {/* In the app's notice region, like every toast (GM - Design, 2026-10-23). */}
       {error && !composer && (
-        <div className="canvas-pin-toast" role="alert">
-          <span>{error}</span>
-          <button type="button" onClick={clearError} aria-label="Dismiss">×</button>
-        </div>
+        <InNoticeRegion slot="pin">
+          <div className="canvas-pin-toast" role="alert">
+            <span>{error}</span>
+            <button type="button" onClick={clearError} aria-label="Dismiss">×</button>
+          </div>
+        </InNoticeRegion>
       )}
     </>
   );
