@@ -158,6 +158,7 @@ from services import asset_trash
 from services.child_env import scrubbed_env
 from services.person_gate import (
     PERSON_HEADER,
+    PERSON_REQUIRED,
     PersonGateError,
     has_agent_marker,
     is_person,
@@ -647,8 +648,12 @@ def _storage_full(exc: BaseException) -> bool:
 def _storage_error_body(exc: ProjectStoreError) -> dict[str, Any]:
     """A storage refusal's JSON: ``detail`` as before (agents read it), and an
     additive ``storage: "full"`` when the disk is full, so the Projects view
-    can say the one cause a person can fix (GM, round 3f)."""
-    return {"detail": str(exc), **({"storage": "full"} if _storage_full(exc) else {})}
+    can say the one cause a person can fix (GM, round 3f). A store limit (413)
+    adds ``limit``: "projects" or "storage", so the Projects screen doesn't
+    call a full store "too large" when it can't keep a tab's unsaved edits
+    (Q116 a)."""
+    return {"detail": str(exc), **({"storage": "full"} if _storage_full(exc) else {}),
+            **({"limit": exc.limit} if isinstance(exc, ProjectLimitError) else {})}
 
 
 @app.exception_handler(ProjectStoreError)
@@ -12728,7 +12733,20 @@ def _refuse_agent_billing_in_project(candidate: CLIGraph, *before: Mapping[str, 
         prior = next((known.get("params") or {} for graph in before
                       if (known := graph.get(node_id)) and known.get("definitionId") == definition_id), None)
         changes.append((node_id, definition_id, prior, node.get("params") or {}))
-    _refuse_agent_billing_change(changes)
+    try:
+        _refuse_agent_billing_change(changes)
+    except HTTPException as exc:
+        # A canvas tab sends these snapshots (autosave, the handoff save, a
+        # stale tab's recovered copy). One that carries no agent marker was
+        # refused only because it isn't connected as the person (no person
+        # token, or one from an earlier launch): reconnecting fixes it. Say
+        # person_required, as require_person does, so the canvas shows its
+        # reconnect banner and keeps Try again instead of treating the copy
+        # as refused for good (Q116 a review). The detail stays word for word
+        # for the CLI and scripts; an agent's refusal is unchanged.
+        if exc.status_code == 403 and not has_agent_marker(current_request_headers()):
+            raise PersonGateError(403, str(exc.detail), PERSON_REQUIRED) from exc
+        raise
 
 
 def _overlay_live_project(project: dict[str, Any], exported: dict[str, Any]) -> bool:

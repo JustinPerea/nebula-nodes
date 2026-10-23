@@ -261,7 +261,10 @@ export default function App() {
       onRestore={(id) => void projects.restore(id)} onPurge={(id) => void projects.purge(id)}
       onEmptyTrash={() => void projects.emptyTrash()} onDismissUndo={projects.dismissUndo}
       onRetry={() => void projects.retry()} retry={projectRetryOffer(projects)} settingsOpen={homeSettings.open} onToggleSettings={homeSettings.toggle}
-      loadCoverChoices={listCoverChoices} onPinCover={(id, url) => void projects.pinCover(id, url)} />;
+      loadCoverChoices={listCoverChoices} onPinCover={(id, url) => void projects.pinCover(id, url)}
+      unsavedEdits={projects.unsavedEdits} editsSavedAs={projects.editsSavedAs}
+      onDownloadEdits={() => void projects.downloadUnsavedEdits()}
+      onContinueWithoutEdits={() => void projects.continueWithoutEdits()} />;
   } else if (isCanvas) {
     mainView = <Canvas />;
   } else if (isCommons) {

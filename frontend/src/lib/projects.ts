@@ -3,7 +3,7 @@ import type { NodeData } from '../types';
 import type { RunRecord } from './runHistory';
 import type { CreateDraft } from '../store/createDraftStore';
 import { apiRequest } from './apiRequest';
-import { RequestFailedError } from './errorCopy';
+import { RequestFailedError, type StorageLimit } from './errorCopy';
 
 /** The card's picture (backend services/project_cover.py): a pinned image,
  * the newest made image, or up to four input references for a mosaic. */
@@ -72,13 +72,17 @@ export interface ProjectDeletion {
  * 2), its reason is the backend's or GM's line for the status, and `status`
  * stays for the store's retry and conflict rules. */
 export class ProjectRequestError extends RequestFailedError {
-  constructor(reason: string, status: number, options: { heading?: string; detail?: unknown; storageFull?: boolean } = {}) {
-    super(options.heading ?? '', status, { reason, detail: options.detail, storageFull: options.storageFull });
+  constructor(reason: string, status: number,
+    options: { heading?: string; detail?: unknown; storageFull?: boolean; storageLimit?: StorageLimit | null;
+      code?: string | null } = {}) {
+    super(options.heading ?? '', status, { reason, detail: options.detail, storageFull: options.storageFull,
+      storageLimit: options.storageLimit, code: options.code });
     this.name = 'ProjectRequestError';
   }
 }
 const asProjectError = (error: RequestFailedError) => new ProjectRequestError(error.reason, error.status,
-  { heading: error.heading, detail: error.detail, storageFull: error.storageFull });
+  { heading: error.heading, detail: error.detail, storageFull: error.storageFull, storageLimit: error.storageLimit,
+    code: error.code });
 async function request<T>(heading: string, path: string, init?: RequestInit): Promise<T> {
   const response = await apiRequest(heading, path, init, { as: asProjectError });
   return response.json() as Promise<T>;

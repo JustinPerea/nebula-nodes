@@ -1,0 +1,89 @@
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
+import '../../styles/prompt-dialog.css';
+import { CONFIRM_LINE, UNSAVED_EDITS_HEADING } from './unsavedEditsCopy';
+
+/**
+ * Q116 a) (Justin, 2026-10-23): "a): "Download your edits" plus "Continue
+ * without them"." A stale tab's unsaved edits that Nebula refused for good
+ * as a recovered project (store/projectStore.ts holdRefusedEdits). GM -
+ * Design's copy, verbatim. Kept in the startup entry with Projects home: the
+ * screen shows up when Nebula was updated under the tab, exactly when an old
+ * build's deferred chunk may be gone.
+ *
+ * The held edits' screen: announced as the screen's errors are (an alert),
+ * "Download your edits" first and primary, "Continue without them" asks first. */
+export function UnsavedEditsNotice({ reason, busy, onDownload, onContinue }: {
+  reason: string; busy: boolean; onDownload: () => void; onContinue: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const continueButton = useRef<HTMLButtonElement>(null);
+  const downloadButton = useRef<HTMLButtonElement>(null);
+  // A cancelled save picker: Download was disabled while it waited, which
+  // drops focus from it. Give it back once the choices are live again, if
+  // focus went nowhere else (Q116 a review).
+  const wasBusy = useRef(busy);
+  useEffect(() => {
+    const was = wasBusy.current;
+    wasBusy.current = busy;
+    if (!was || busy) return;
+    const active = document.activeElement;
+    if (!active || active === document.body || !active.isConnected) downloadButton.current?.focus();
+  }, [busy]);
+  return (
+    <div className="project-home__error project-home__edits" role="alert">
+      <span className="project-home__edits-text">
+        <strong className="project-home__edits-heading">{UNSAVED_EDITS_HEADING}</strong>
+        <span>{reason}</span>
+      </span>
+      <span className="project-home__edits-actions">
+        <button type="button" ref={downloadButton} className="project-home__edits-primary" disabled={busy} onClick={onDownload}>Download your edits</button>
+        <button type="button" ref={continueButton} disabled={busy} onClick={() => setConfirming(true)}>Continue without them</button>
+      </span>
+      {confirming && <ContinueWithoutEditsConfirm
+        onCancel={() => { setConfirming(false); continueButton.current?.focus(); }}
+        onConfirm={() => { setConfirming(false); onContinue(); }} />}
+    </div>
+  );
+}
+
+/** GM's confirm, in the app's own dialog (never window.confirm): focus on
+ * Cancel, Escape is Cancel, Tab stays inside. */
+function ContinueWithoutEditsConfirm({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
+  const lineId = useId();
+  const card = useRef<HTMLDivElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  useEffect(() => { cancel.current?.focus(); }, []);
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      onCancel();
+    } else if (event.key === 'Tab') {
+      const buttons = card.current?.querySelectorAll<HTMLElement>('button');
+      if (!buttons?.length) return;
+      const first = buttons[0];
+      const last = buttons[buttons.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+  };
+  return createPortal(
+    <div className="prompt-dialog">
+      <div ref={card} className="prompt-dialog__card" role="alertdialog" aria-modal="true" aria-labelledby={lineId}
+        onKeyDown={onKeyDown}>
+        <p id={lineId} className="prompt-dialog__line">{CONFIRM_LINE}</p>
+        <div className="prompt-dialog__actions">
+          <button type="button" className="prompt-dialog__danger" onClick={onConfirm}>Continue without them</button>
+          <button type="button" ref={cancel} onClick={onCancel}>Cancel</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}

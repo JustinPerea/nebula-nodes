@@ -541,7 +541,7 @@ Two findings from the adversarial review, each checked by a refuter. Tests first
 
 ### Open items
 
-- A recovered copy that the backend refuses for good (for example too large) is sent again by every Try again at startup and refused again; the screen keeps the whole line and Try again, but the only way past it is a reload, which drops that unsaved copy. This is how it was before round 3b; dropping the copy without asking would be worse. Needs a decision (offer "Continue without the copy"?).
+- A recovered copy that the backend refuses for good (for example too large) is sent again by every Try again at startup and refused again; the screen keeps the whole line and Try again, but the only way past it is a reload, which drops that unsaved copy. This is how it was before round 3b; dropping the copy without asking would be worse. Needs a decision (offer "Continue without the copy"?). Decided 2026-10-23 (Q116 a): the Projects screen offers "Download your edits" and "Continue without them"; see `2026-10-23-fix-download-unsaved-edits.md`.
 - The status bar's "Paid start needs review." and the ambiguity/uncertain warnings (`AMBIGUITY_MESSAGE`, `WORLD_LABS_STATUS_UNCERTAIN_WARNING`) still use "paid start": status text, not refusals. For GM.
 - `handlers/worldlabs.py` run errors ("paid-start safety hold …") are a node's run error, outside this round.
 - `/api/quick` and `/api/execution-cancellations` 409s are agent-only; 5xx details stay (the person reads GM's no-response line).

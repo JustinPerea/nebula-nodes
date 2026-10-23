@@ -138,9 +138,19 @@ export class RequestFailedError extends Error {
    * additive `storage: "full"` beside `detail`, read from the answer, never
    * from its words. The one cause a person can fix (GM). */
   readonly storageFull: boolean;
+  /** Which of the project store's limits a 413 hit (the backend's additive
+   * `limit` beside `detail`): 'projects' (how many there may be) or
+   * 'storage' (how big the catalog may grow); null when it was the request
+   * itself that was too large. Read from the answer, never its words (Q116 a). */
+  readonly storageLimit: StorageLimit | null;
+  /** The answer's structured reason beside `detail`, when it has one (the
+   * person gate's `code`: 'person_required' when this tab isn't connected as
+   * the person, which reconnecting fixes). Null otherwise. */
+  readonly code: string | null;
 
   constructor(heading: string, status: number,
-    options: { detail?: unknown; reason?: string; cause?: unknown; storageFull?: boolean } = {}) {
+    options: { detail?: unknown; reason?: string; cause?: unknown; storageFull?: boolean;
+      storageLimit?: StorageLimit | null; code?: string | null } = {}) {
     const reason = options.reason ?? copyForStatus(status, options.detail);
     super(oneLine({ heading, reason }), 'cause' in options ? { cause: options.cause } : undefined);
     this.name = 'RequestFailedError';
@@ -149,12 +159,17 @@ export class RequestFailedError extends Error {
     this.heading = heading;
     this.reason = reason;
     this.storageFull = options.storageFull === true;
+    this.storageLimit = options.storageLimit ?? null;
+    this.code = options.code ?? null;
   }
 
   get kind(): FailureKind {
     return failureKind(this.status);
   }
 }
+
+/** The project store's limits a 413 can name (backend main._storage_error_body). */
+export type StorageLimit = 'projects' | 'storage';
 
 /** A refusal written in the browser, where no request was made (a check
  * the store makes before sending: a run still going, a record that's gone).
@@ -236,12 +251,15 @@ export async function readDetail(response: Response): Promise<unknown> {
 
 /** An answer's `detail`, and whether it says the disk is full (the backend's
  * storage refusal, main._storage_error_body), from one read of its body. */
-async function readFailureBody(response: Response): Promise<{ detail: unknown; storageFull: boolean }> {
+interface FailureBody { detail: unknown; storageFull: boolean; storageLimit: StorageLimit | null; code: string | null }
+async function readFailureBody(response: Response): Promise<FailureBody> {
   try {
-    const body = await response.json() as { detail?: unknown; storage?: unknown } | null;
-    return { detail: body?.detail, storageFull: body?.storage === 'full' };
+    const body = await response.json() as { detail?: unknown; storage?: unknown; limit?: unknown; code?: unknown } | null;
+    const limit = body?.limit === 'projects' || body?.limit === 'storage' ? body.limit : null;
+    const code = typeof body?.code === 'string' ? body.code : null;
+    return { detail: body?.detail, storageFull: body?.storage === 'full', storageLimit: limit, code };
   } catch {
-    return { detail: undefined, storageFull: false };
+    return { detail: undefined, storageFull: false, storageLimit: null, code: null };
   }
 }
 
@@ -337,8 +355,9 @@ export function resetFailureWarningsForTests(): void {
  * deleted). */
 export async function requestError(heading: string, response: Response,
   options: { detail?: unknown; reason?: string } = {}): Promise<RequestFailedError> {
-  const body = 'detail' in options ? { detail: options.detail, storageFull: false } : await readFailureBody(response);
+  const body: FailureBody = 'detail' in options ? { detail: options.detail, storageFull: false, storageLimit: null, code: null }
+    : await readFailureBody(response);
   warnFailure(heading, response.status, body.detail);
-  return new RequestFailedError(heading, response.status,
-    { detail: body.detail, reason: options.reason, storageFull: body.storageFull });
+  return new RequestFailedError(heading, response.status, { detail: body.detail, reason: options.reason,
+    storageFull: body.storageFull, storageLimit: body.storageLimit, code: body.code });
 }

@@ -1437,7 +1437,11 @@ How it works (`backend/services/agent_spend.py`):
     and `/api/graph/import`;
   - project snapshots: `PUT /api/projects/{id}` and `/api/projects/recover`
     (opening a project loads its snapshot onto the canvas), compared with the
-    live canvas and the project as saved;
+    live canvas and the project as saved. A snapshot refusal for a request
+    with no agent marker (a canvas tab not connected as the person, the CLI
+    without `NEBULA_AGENT_NAME`, curl) also carries `code: "person_required"`
+    beside the same `detail`, so a tab whose person token is from an earlier
+    launch shows "reconnect" and can send it again; an agent's has no `code`;
   - runs that take nodes in the request: `/api/execute`, `/api/execute-node`,
     `/api/cinema/generate-shot` and `/api/quick`. A node there may bill only
     the way the canvas node with its id and definition does (`_kreaAuth`, and

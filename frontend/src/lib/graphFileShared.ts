@@ -1,4 +1,9 @@
+import type { Edge, Node, Viewport } from '@xyflow/react';
+import type { NodeData, NodeState } from '../types';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
+import { GRAPH_PARAMS_VERSION } from './savedParamsUpgrades';
+import { FailureNotice } from './errorCopy';
+import type { ProjectSnapshot } from './projects';
 
 /**
  * The parts of lib/graphFile.ts that startup code uses: the project store
@@ -6,6 +11,10 @@ import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
  * graph bundle's byte limits. graphFile.ts itself (serialize, save, open) is
  * a deferred module loaded at the moment of use (lib/deferredChunks.ts), so
  * these live here, in the startup entry, and graphFile re-exports them.
+ * The .nebula writer is here too (serializeGraph, saveBlobWithPicker): a
+ * stale tab's unsaved edits that Nebula refused for good are downloaded with
+ * it (Q116 a), and that screen shows up when Nebula was updated under the
+ * tab, exactly when an old build's deferred chunk may be gone.
  */
 
 const RUNTIME_MEDIA_PARAM_KEYS = [
@@ -22,6 +31,109 @@ const RUNTIME_MEDIA_PARAM_KEYS = [
 export const GRAPH_BUNDLE_MAX_ASSET_BYTES = 256 * 1024 * 1024;
 export const GRAPH_BUNDLE_MAX_TOTAL_BYTES = 512 * 1024 * 1024;
 export const GRAPH_BUNDLE_MAX_IMPORT_BYTES = GRAPH_BUNDLE_MAX_TOTAL_BYTES + 16 * 1024 * 1024;
+
+// Load graph's limits for a graph (graphFile.ts re-exports them): a plain
+// JSON file's size, and the node, wire, depth and value counts the shape walk
+// (assertGraphComplexityWithinLimits) allows. They match the backend's
+// restore preflight.
+export const GRAPH_JSON_MAX_IMPORT_BYTES = 16 * 1024 * 1024;
+export const GRAPH_MAX_NODES = 10_000;
+export const GRAPH_MAX_EDGES = 50_000;
+export const GRAPH_MAX_DEPTH = 64;
+export const GRAPH_MAX_VALUES = 1_000_000;
+
+/** A graph past one of those limits (a written line: the save or load alert
+ * puts its own heading over it; error copy round 3e). */
+export class GraphStructureLimitError extends FailureNotice {
+  constructor(reason: string) {
+    super('', reason);
+    this.name = 'GraphStructureLimitError';
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function* jsonChildValues(value: object): Generator<unknown> {
+  if (Array.isArray(value)) {
+    // JSON.stringify materializes sparse slots as null, so count every index.
+    for (let index = 0; index < value.length; index += 1) yield value[index];
+    return;
+  }
+  for (const key in value as Record<string, unknown>) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
+      yield (value as Record<string, unknown>)[key];
+    }
+  }
+}
+
+/** Match the backend restore preflight without recursive JavaScript calls.
+ * The enter/exit frames preserve JSON-tree depth semantics and reject cycles
+ * in live state before JSON.stringify can throw after expensive asset work. */
+export function assertGraphComplexityWithinLimits(value: unknown): void {
+  if (isRecord(value)) {
+    if (Array.isArray(value.nodes) && value.nodes.length > GRAPH_MAX_NODES) {
+      throw new GraphStructureLimitError(`Graph contains more than ${GRAPH_MAX_NODES.toLocaleString()} nodes.`);
+    }
+    if (Array.isArray(value.edges) && value.edges.length > GRAPH_MAX_EDGES) {
+      throw new GraphStructureLimitError(`Graph contains more than ${GRAPH_MAX_EDGES.toLocaleString()} edges.`);
+    }
+  }
+
+  type Frame =
+    | { kind: 'value'; value: unknown; depth: number }
+    | { kind: 'children'; iterator: Iterator<unknown>; depth: number }
+    | { kind: 'exit'; value: object };
+  const stack: Frame[] = [{ kind: 'value', value, depth: 0 }];
+  const ancestors = new WeakSet<object>();
+  let valueCount = 0;
+
+  while (stack.length > 0) {
+    const frame = stack.pop() as Frame;
+    if (frame.kind === 'exit') {
+      ancestors.delete(frame.value);
+      continue;
+    }
+    if (frame.kind === 'children') {
+      const child = frame.iterator.next();
+      if (!child.done) {
+        // Resume this iterator after validating one child. Keeping iterators
+        // rather than pushing every sibling bounds traversal memory by depth,
+        // including for a sparse or million-value live array.
+        stack.push(frame);
+        stack.push({ kind: 'value', value: child.value, depth: frame.depth });
+      }
+      continue;
+    }
+
+    const current = frame.value;
+    valueCount += 1;
+    if (valueCount > GRAPH_MAX_VALUES) {
+      throw new GraphStructureLimitError(
+        `Graph contains more than ${GRAPH_MAX_VALUES.toLocaleString()} values.`,
+      );
+    }
+    if (frame.depth > GRAPH_MAX_DEPTH) {
+      throw new GraphStructureLimitError(`Graph is nested more than ${GRAPH_MAX_DEPTH} levels deep.`);
+    }
+    if (typeof current === 'number' && !Number.isFinite(current)) {
+      throw new GraphStructureLimitError('Graph contains a non-finite number.');
+    }
+    if (!current || typeof current !== 'object') continue;
+    if (ancestors.has(current)) {
+      throw new GraphStructureLimitError('Graph contains a circular value that cannot be saved.');
+    }
+
+    ancestors.add(current);
+    stack.push({ kind: 'exit', value: current });
+    stack.push({
+      kind: 'children',
+      iterator: jsonChildValues(current),
+      depth: frame.depth + 1,
+    });
+  }
+}
 
 /**
  * Media probing used to write runtime metadata into every video-producing
@@ -50,4 +162,192 @@ export function normalizeRuntimeMediaParams(
   }
 
   return normalized;
+}
+
+export interface NebulaFile {
+  version: 1 | 2 | 3;
+  /** See GRAPH_PARAMS_VERSION. Missing in files saved before 2026-10-17. */
+  paramsVersion?: number;
+  name: string;
+  createdAt: string;
+  nodes: NebulaNode[];
+  edges: NebulaEdge[];
+  viewport?: { x: number; y: number; zoom: number };
+}
+
+export interface NebulaNode {
+  id: string;
+  type: string;
+  position: { x: number; y: number };
+  data: {
+    label: string;
+    definitionId: string;
+    params: Record<string, unknown>;
+    outputs?: NodeData['outputs'];
+    state?: NodeState;
+  };
+}
+
+interface NebulaEdge {
+  id: string;
+  source: string;
+  sourceHandle: string | null | undefined;
+  target: string;
+  targetHandle: string | null | undefined;
+  type: string;
+  data?: Record<string, unknown>;
+}
+
+/**
+ * Serialize current graph state to .nebula format.
+ * Strips outputs, errors, progress, streaming state — only persists structure + params.
+ */
+export function serializeGraph(
+  nodes: Node<NodeData>[],
+  edges: Edge[],
+  viewport?: Viewport,
+  name?: string,
+): NebulaFile {
+  return {
+    version: 2,
+    paramsVersion: GRAPH_PARAMS_VERSION,
+    name: name ?? 'Untitled Graph',
+    createdAt: new Date().toISOString(),
+    nodes: nodes.map((n) => {
+      const hasOutputs = n.data.outputs && Object.keys(n.data.outputs).length > 0;
+      return {
+        id: n.id,
+        type: n.type ?? 'model-node',
+        position: { x: n.position.x, y: n.position.y },
+        data: {
+          label: n.data.label,
+          definitionId: n.data.definitionId,
+          params: normalizeRuntimeMediaParams(n.data.definitionId, n.data.params),
+          outputs: hasOutputs ? { ...n.data.outputs } : undefined,
+          state: hasOutputs ? 'complete' : 'idle',
+        },
+      };
+    }),
+    edges: edges.map((e) => ({
+      id: e.id,
+      source: e.source,
+      sourceHandle: e.sourceHandle,
+      target: e.target,
+      targetHandle: e.targetHandle,
+      type: e.type ?? 'typed-edge',
+      data: e.data ? { ...(e.data as Record<string, unknown>) } : undefined,
+    })),
+    viewport: viewport
+      ? { x: viewport.x, y: viewport.y, zoom: viewport.zoom }
+      : undefined,
+  };
+}
+
+/** What a save picker offers: its label and the type and extensions it saves. */
+export interface SaveFileType {
+  description: string;
+  accept: Record<string, string[]>;
+}
+
+/**
+ * Save `blob` as a file: through the save picker where there is one (Chrome,
+ * Edge, the desktop app), which says when the person cancelled, else as a
+ * download. Resolves to the file's name (the one the person chose in the
+ * picker) or null when they cancelled. A plain download can't report a
+ * cancel or where the file went: it resolves to `suggestedName`.
+ */
+export async function saveBlobWithPicker(blob: Blob, suggestedName: string, type: SaveFileType): Promise<string | null> {
+  if ('showSaveFilePicker' in window) {
+    try {
+      const handle = await (window as unknown as {
+        showSaveFilePicker: (opts: { suggestedName: string; types: SaveFileType[] }) => Promise<FileSystemFileHandle>;
+      }).showSaveFilePicker({ suggestedName, types: [type] });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return handle.name || suggestedName;
+    } catch (err) {
+      if ((err as DOMException).name === 'AbortError') return null;
+      console.warn('File System Access API failed, falling back to download:', err);
+    }
+  }
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = suggestedName;
+  try {
+    document.body.appendChild(a);
+    a.click();
+  } finally {
+    a.remove();
+    // Match World asset downloads: allow the browser to consume the URL
+    // before releasing its backing Blob, including asynchronous WebViews.
+    window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+  }
+  return suggestedName;
+}
+
+/** Characters no file name may hold on macOS, Windows or Linux. */
+// eslint-disable-next-line no-control-regex
+const UNSAFE_FILE_NAME = /[\u0000-\u001f\u007f/\\:*?"<>|]+/g;
+const FILE_NAME_MAX = 80;
+
+/** The unsaved edits file's name (Q116 a): the project's name made safe for a
+ * file name, then " - unsaved edits.nebula". */
+export function editsFileName(projectName: string): string {
+  const safe = projectName.normalize('NFC').replace(UNSAFE_FILE_NAME, ' ').replace(/\s+/g, ' ')
+    .replace(/^[.\s]+|[.\s]+$/g, '').slice(0, FILE_NAME_MAX).replace(/[.\s]+$/, '');
+  return `${safe || 'Untitled project'} - unsaved edits.nebula`;
+}
+
+/** A held recovered copy as a .nebula file: the graph file writer's own
+ * format (serializeGraph, version 2 JSON), which Load graph opens. It holds
+ * the canvas (nodes, wires, params, outputs, the view); a .nebula file has no
+ * run history or Create draft, so those stay out. Written compact, as the
+ * backend measured the copy, so indenting can't push it past Load graph's
+ * 16 MiB. */
+export function editsFileText(snapshot: Pick<ProjectSnapshot, 'nodes' | 'edges' | 'viewport'>, projectName: string): string {
+  return JSON.stringify(editsFile(snapshot, projectName));
+}
+
+function editsFile(snapshot: Pick<ProjectSnapshot, 'nodes' | 'edges' | 'viewport'>, projectName: string): NebulaFile {
+  return serializeGraph(snapshot.nodes, snapshot.edges, snapshot.viewport ?? undefined, projectName);
+}
+
+/** Whether Load graph opens this edits file: within its JSON size and its
+ * shape walk's limits, checked the way the reader checks a plain .nebula
+ * (inspectGraphFileWithinLimit, then the walk over the parsed file). The
+ * backend refuses a recovered copy past its own versions of those limits
+ * (413), so a held copy can be one Load graph won't open (Q116 a review).
+ * `file` is `text` parsed, the form the reader walks. */
+export function editsFileReopens(text: string, file: unknown): boolean {
+  if (new Blob([text]).size > GRAPH_JSON_MAX_IMPORT_BYTES) return false;
+  try {
+    assertGraphComplexityWithinLimits(file);
+    return true;
+  } catch (error) {
+    if (error instanceof GraphStructureLimitError) return false;
+    throw error;
+  }
+}
+
+/** Where a held recovered copy went: the saved file's name (the person may
+ * rename it in the save picker), and whether Load graph will open it. */
+export interface SavedEditsFile { name: string; reopens: boolean }
+
+/** Download a held recovered copy (Q116 a "Download your edits"). The file is
+ * written whatever its size, so nothing is lost; `reopens` says whether Load
+ * graph can open it. Resolves to null when the person cancelled the save
+ * picker. */
+export async function saveEditsToFile(snapshot: Pick<ProjectSnapshot, 'nodes' | 'edges' | 'viewport'>,
+  projectName: string): Promise<SavedEditsFile | null> {
+  const text = JSON.stringify(editsFile(snapshot, projectName));
+  // Parsed only when the size allows a reopen at all: past 16 MiB, the
+  // answer is already no.
+  const reopens = new Blob([text]).size <= GRAPH_JSON_MAX_IMPORT_BYTES && editsFileReopens(text, JSON.parse(text));
+  const blob = new Blob([text], { type: 'application/json' });
+  const name = await saveBlobWithPicker(blob, editsFileName(projectName),
+    { description: 'Nebula Node Graph', accept: { 'application/json': ['.nebula'] } });
+  return name === null ? null : { name, reopens };
 }
