@@ -54,6 +54,7 @@ vi.mock('./BoardCanvas', () => ({
 
 import { MoodboardStudioView } from './MoodboardStudioView';
 import { GraphFileActions } from '../GraphFileActions';
+import { NoticeRegion } from '../NoticeRegion';
 import { MoodboardVersionConflict, type MoodboardOp } from '../../lib/moodboardEdits';
 import { setOpenProject } from '../../test/projectState';
 import { useUIStore } from '../../store/uiStore';
@@ -169,13 +170,15 @@ beforeEach(() => {
 });
 afterEach(() => cleanup());
 
-async function openStudio({ view = 'list' as 'list' | 'board', withGraphActions = false } = {}) {
+async function openStudio({ view = 'list' as 'list' | 'board', withGraphActions = false, withRegion = false } = {}) {
   useBoardCanvasStore.setState({ view });
   act(() => { useUIStore.getState().enterMoodboardEditor('g1', 'global'); });
   render(
     <ReactFlowProvider>
       {withGraphActions && <GraphFileActions />}
       <MoodboardStudioView />
+      {/* App mounts the notice region beside the screens, outside the Studio's tree. */}
+      {withRegion && <NoticeRegion screen="studio" />}
     </ReactFlowProvider>,
   );
   await screen.findByDisplayValue('Global board');
@@ -529,6 +532,25 @@ describe("the Studio's keys", () => {
     await waitFor(() => expect(server.edits[1]).toEqual([{ op: 'restore', slices: [{ part: 'tag', tag: 'u1' }] }]));
     expect(await screen.findByText('card #1 at 0,0')).toBeTruthy();
     expect(server.board.images.map((img) => img.id)).toEqual(['i1', 'i2']);
+  });
+
+  // The toast portals into the app's notice region, outside the Studio's tree
+  // (round 2). It holds while focus is in it, and the Studio's keys still work
+  // from there, as they did when it rendered inside the Studio.
+  it('with focus on the toast in the notice region, Cmd+Z is still the Studio\'s', async () => {
+    await openStudio({ view: 'board', withRegion: true });
+    select('c-i1');
+    press('Delete');
+    await waitFor(() => expect(server.edits).toEqual([[{ op: 'remove', images: ['i1'] }]]), { timeout: 400 });
+    const toast = await screen.findByRole('status', { name: 'Board undo' });
+    expect(toast.closest('[data-notice-slot="board"]')).not.toBeNull();
+    expect(toast.closest('.moodboard-studio-view')).toBeNull();
+    const dismiss = within(toast).getByRole('button', { name: 'Dismiss' });
+    act(() => dismiss.focus());
+    const undo = press('z', { metaKey: true }, dismiss);
+    expect(undo.defaultPrevented).toBe(true);
+    await waitFor(() => expect(server.edits[1]).toEqual([{ op: 'restore', slices: [{ part: 'tag', tag: 'u1' }] }]));
+    expect(await screen.findByText('card #1 at 0,0')).toBeTruthy();
   });
 
   it('keys typed in a text field stay the field\'s: Delete edits the note, Cmd+Z is the field\'s own', async () => {

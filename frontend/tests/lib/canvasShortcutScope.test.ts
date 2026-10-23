@@ -19,6 +19,23 @@ describe('canvas shortcut scope', () => {
     expect(isCanvasShortcutTarget(document.body)).toBe(true);
   });
 
+  // The proposal bar and the pin error toast left .canvas-wrapper for the app's
+  // notice region (round 2): focus on the bar (Review focuses it) or on a
+  // toast's button still leaves Cmd+Z, Shift+1 and Cmd+Enter the canvas's.
+  it('accepts the notice region, which keeps no keys of its own, but not a field in it', () => {
+    const $ = mount(`
+      <div class="notice-region"><div class="notice-region__stack">
+        <div class="notice-region__slot" data-notice-slot="proposal">
+          <div class="proposal-bar" tabindex="-1" id="bar"><button id="accept">Accept</button></div>
+        </div>
+        <div class="notice-region__slot" data-notice-slot="pin">
+          <div class="canvas-pin-toast" role="alert"><button id="dismiss">Dismiss</button><input id="field" /></div>
+        </div>
+      </div></div>`);
+    for (const id of ['#bar', '#accept', '#dismiss']) expect(isCanvasShortcutTarget($(id))).toBe(true);
+    expect(isCanvasShortcutTarget($('#field'))).toBe(false);
+  });
+
   it('yields to text fields, dialogs and other panels', () => {
     const $ = mount(`
       <div class="canvas-wrapper"><textarea id="prompt"></textarea><div id="rich" contenteditable="true"></div></div>

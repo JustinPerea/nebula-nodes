@@ -136,10 +136,7 @@ body.app-slava-restraint .asset-trash__confirm-prompt { width: 100%; color: var(
 
 body.app-slava-restraint .asset-trash__toast {
   --asset-trash-spring: linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1);
-  position: fixed;
-  z-index: 60;
-  left: 50%;
-  bottom: 24px;
+  /* Placed by the app's notice region (NoticeRegion). */
   display: flex;
   align-items: center;
   gap: 4px;
@@ -151,7 +148,6 @@ body.app-slava-restraint .asset-trash__toast {
   color: var(--sr-ink);
   font-size: 13px;
   box-shadow: 0 12px 32px rgb(0 0 0 / 0.35);
-  transform: translateX(-50%);
   animation: asset-trash-toast-in 420ms var(--asset-trash-spring) both;
 }
 
@@ -198,8 +194,8 @@ body.app-slava-restraint .character-node__open-error {
 }
 
 @keyframes asset-trash-toast-in {
-  from { opacity: 0; transform: translate(-50%, 12px) scale(0.98); }
-  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

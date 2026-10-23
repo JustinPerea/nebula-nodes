@@ -5,6 +5,8 @@ import { writtenLine } from './errorCopy';
 /** How long the bar's review ring shows (canvasProposals.css `proposal-bar-review`). */
 const RING_MS = 1600;
 let ringTimer: ReturnType<typeof setTimeout> | null = null;
+/** The decision bar, never the run-later notice that shares its look and its stack (NoticeRegion). */
+const PROPOSAL_BAR = '.proposal-bar:not(.proposal-bar--notice)';
 
 /**
  * Review on a canvas proposal's Update (Justin's Q112 a, 2026-10-21: "with
@@ -31,14 +33,14 @@ export async function reviewCanvasProposal(
     return entry && !entry.closing ? entry : null;
   };
   const ready = await whenReady(() => onCanvas() && waiting() !== null
-    && document.querySelector('.proposal-bar') !== null);
+    && document.querySelector(PROPOSAL_BAR) !== null);
   const entry = waiting();
   if (!ready || !entry) {
     if (store.getState().focusedId === id) store.getState().focus(null);
     throw writtenLine('This proposal is no longer waiting for you.');
   }
   frame?.(entry);
-  const bar = document.querySelector<HTMLElement>('.proposal-bar');
+  const bar = document.querySelector<HTMLElement>(PROPOSAL_BAR);
   if (!bar) return;
   bar.focus({ preventScroll: true });
   bar.dataset.review = 'true';

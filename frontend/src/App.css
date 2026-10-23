@@ -52,17 +52,13 @@ a {
   pointer-events: none;
 }
 
+/* Placed by the app's notice region (NoticeRegion), like every toast. */
 .person-required {
-  position: fixed;
-  z-index: 10000;
-  bottom: 16px;
-  left: 50%;
   display: flex;
   align-items: center;
   gap: 10px;
   width: max-content;
   max-width: min(92vw, 620px);
-  transform: translateX(-50%);
   padding: 8px 8px 8px 14px;
   border: 1px solid rgb(255 255 255 / 14%);
   border-radius: 12px;

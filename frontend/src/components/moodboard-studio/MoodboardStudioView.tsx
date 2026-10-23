@@ -1308,7 +1308,7 @@ export function MoodboardStudioView() {
           </>
         )}
       </main>
-      {shownToast && <BoardUndoToast key={shownToast.id} toast={shownToast} onDismiss={dismissToast} inWindow />}
+      {shownToast && <BoardUndoToast key={shownToast.id} toast={shownToast} onDismiss={dismissToast} />}
       {trashToast}
     </div>
   );

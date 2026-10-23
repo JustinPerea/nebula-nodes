@@ -212,18 +212,10 @@
   text-overflow: ellipsis;
 }
 
-/* The decision bar: same surface as the selection toolbar. */
-.proposal-bar-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  /* Clear of the canvas's own bottom toolbar (Run / Canvas actions), and of
-     the app's notices just above it (NoticeRegion writes how tall they are,
-     with their gap): the bar stays above them, as when they shared this panel. */
-  margin-bottom: calc(78px + var(--notice-stack-h, 0px));
-  pointer-events: none;
-}
-
+/* The decision bar: same surface as the selection toolbar. It sits in the
+   app's notice region, above the notices (NoticeRegion; GM - Design,
+   2026-10-23: "The order from the bottom up is notices, then the proposal
+   bar."), so it keeps no spacing of its own over them. */
 .proposal-bar {
   --agent-color: #5b9dff;
   display: flex;
@@ -638,47 +630,6 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 
   .proposal-bar__actions {
     justify-content: flex-end;
-  }
-}
-
-/* The app's one notice region (NoticeRegion; GM - Design, 2026-10-23: "one
-   app-level region above every panel (above layer 10), bottom-centre,
-   sitting just above the bottom bar ... the region never takes pointer events
-   outside its notices"). Mounted by App beside the screens, outside
-   .react-flow and every screen's stacking context, on its own layer
-   (slava-restraint.css --sr-layer-notice). On the canvas it sits the notice
-   gap above the bar's measured top (--bottom-bar-clearance, written by the
-   bar: lib/bottomBar.ts); with no bar, at the bar's own distance from the
-   bottom edge. Only the notices take clicks; the canvas, nodes and panels
-   around them get the rest. */
-.notice-region {
-  --notice-gap: var(--sr-space-2, 8px);
-  position: fixed;
-  left: var(--page-gutter, 16px);
-  right: var(--page-gutter, 16px);
-  bottom: calc(var(--bottom-bar-clearance, calc(var(--sr-space-6, 24px) - var(--notice-gap))) + var(--notice-gap));
-  z-index: var(--sr-layer-notice, 58);
-  display: flex;
-  justify-content: center;
-  pointer-events: none;
-  /* Follows the bar when it grows (its Canvas actions panel opens) on the
-     undo notice's spring. */
-  transition: bottom 420ms var(--agent-log-spring);
-}
-
-.notice-region__stack {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--notice-gap);
-  min-width: 0;
-  max-width: 100%;
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .notice-region {
-    transition: none;
   }
 }
 

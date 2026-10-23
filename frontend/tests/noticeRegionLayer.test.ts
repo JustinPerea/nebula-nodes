@@ -11,6 +11,8 @@ import { describe, expect, it } from 'vitest';
  */
 const tokens = readFileSync(join(__dirname, '../src/styles/slava-restraint.css'), 'utf8');
 const notices = readFileSync(join(__dirname, '../src/styles/canvasProposals.css'), 'utf8');
+// Round 2: the region's own rules are in the startup entry, beside the region.
+const regionCss = readFileSync(join(__dirname, '../src/styles/noticeRegion.css'), 'utf8');
 const switchToast = readFileSync(join(__dirname, '../src/components/projects/ProjectSwitchToast.css'), 'utf8');
 
 function layer(name: string): number {
@@ -40,7 +42,7 @@ describe('the notice layer', () => {
   });
 
   it('the region is fixed on that layer and takes no pointer events itself', () => {
-    const region = rule(notices, '.notice-region');
+    const region = rule(regionCss, '.notice-region');
     expect(region).toMatch(/position:\s*fixed/);
     expect(region).toMatch(/z-index:\s*var\(--sr-layer-notice/);
     expect(region).toMatch(/pointer-events:\s*none/);
@@ -57,17 +59,18 @@ describe('the notice layer', () => {
     expect(notices).not.toMatch(/\n\.studio-notice\s*\{/);
   });
 
-  it('the project-switch toast (raw z 60, not a modal) stacks above the notices instead of covering them', () => {
-    // Review, 2026-10-23: at a fixed bottom 96px it sat over a notice's buttons.
+  it('the project-switch toast (raw z 60, not a modal) no longer places itself: it is in the stack', () => {
+    // Review, 2026-10-23: at a fixed bottom 96px it sat over a notice's
+    // buttons; round 2 (GM: "One region, one stack, and nothing else draws
+    // toasts") puts it in the region's stack (tests/noticeRegionStack.test.tsx).
     const toast = rule(switchToast, '.project-switch-toast');
-    expect(toast).not.toMatch(/bottom:\s*96px/);
-    expect(toast).toMatch(/bottom:[^;]*var\(--bottom-bar-clearance/);
-    expect(toast).toMatch(/bottom:[^;]*var\(--notice-stack-h/);
+    expect(toast).not.toMatch(/position:\s*fixed/);
+    expect(toast).not.toMatch(/z-index/);
+    expect(toast).not.toMatch(/\bbottom:/);
   });
 
-  it('the proposal bar keeps clear of the notices instead of sharing a panel with them', () => {
-    const panel = rule(notices, '.proposal-bar-panel');
-    expect(panel).not.toMatch(/\bgap:/);
-    expect(panel).toMatch(/margin-bottom:[^;]*var\(--notice-stack-h/);
+  it('the proposal bar has no panel of its own: it is in the stack, above the notices', () => {
+    // Round 2 (GM: "move the proposal bar into the region, stacked above the notices").
+    expect(notices).not.toMatch(/\n\.proposal-bar-panel\s*\{/);
   });
 });

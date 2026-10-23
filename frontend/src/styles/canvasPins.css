@@ -135,12 +135,9 @@
   color: #f44336;
 }
 
-/* Shown when a note couldn't be saved or deleted. */
+/* Shown when a note couldn't be saved or deleted, in the app's notice region
+   (NoticeRegion), which places it. */
 .canvas-pin-toast {
-  position: fixed;
-  left: 50%;
-  bottom: 24px;
-  z-index: 30;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -153,7 +150,6 @@
   color: #f2b8b2;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 12px;
-  transform: translateX(-50%);
 }
 
 .canvas-pin-toast button {

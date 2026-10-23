@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronRight, RotateCcw, X } from 'lucide-react';
 import { storedImageView } from '../../lib/storedImage';
 import { OutsideImageNote } from '../OutsideImageNote';
+import { InNoticeRegion } from '../InNoticeRegion';
 import {
   deletedByLabel, emptyTrash, fetchTrash, purgeTrashed, restoreTrashed,
   type TrashedItem,
@@ -212,13 +213,16 @@ export function UndoDeleteToast({ name, busy = false, error = null, onUndo, onDi
     const timer = window.setTimeout(onDismiss, UNDO_VISIBLE_MS);
     return () => window.clearTimeout(timer);
   }, [paused, busy, error, onDismiss]);
+  // In the app's notice region, like every toast (GM - Design, 2026-10-23).
   return (
-    <div className="asset-trash__toast" role="status" aria-live="polite"
-      onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
-      onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
-      <span className="asset-trash__toast-text">{error ? (typeof error === 'string' ? error : oneLine({ ...error, reason: shortReason(error.reason) })) : `Moved “${name || 'Untitled'}” to Recently deleted`}</span>
-      <button type="button" className="asset-trash__toast-undo" disabled={busy} onClick={onUndo}>Undo</button>
-      <button type="button" className="asset-trash__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
-    </div>
+    <InNoticeRegion slot="asset-trash">
+      <div className="asset-trash__toast" role="status" aria-live="polite"
+        onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
+        onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
+        <span className="asset-trash__toast-text">{error ? (typeof error === 'string' ? error : oneLine({ ...error, reason: shortReason(error.reason) })) : `Moved “${name || 'Untitled'}” to Recently deleted`}</span>
+        <button type="button" className="asset-trash__toast-undo" disabled={busy} onClick={onUndo}>Undo</button>
+        <button type="button" className="asset-trash__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
+      </div>
+    </InNoticeRegion>
   );
 }

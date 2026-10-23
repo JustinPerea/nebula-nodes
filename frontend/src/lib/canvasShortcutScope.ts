@@ -14,6 +14,11 @@ const CANVAS_OWNED = [
   // their own but Escape; their open list is a dialog, which does.
   '.agent-notes-chip',
   '.agent-note-card',
+  // The app's notice region (NoticeRegion): the proposal bar, the canvas
+  // notices and every toast portal in there, outside .canvas-wrapper. They
+  // keep no keys of their own (Review focuses the bar), so focus there leaves
+  // Cmd+Z, Shift+1 and Cmd+Enter the canvas's. A field in it still yields (above).
+  '.notice-region',
 ].join(', ');
 
 export function isCanvasShortcutTarget(target: EventTarget | null): boolean {

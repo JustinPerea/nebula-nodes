@@ -6,7 +6,7 @@ import { useUIStore } from '../../store/uiStore';
 import { Inspector } from './Inspector';
 import { InspectorFootContext } from './inspectorFootContext';
 import { ScrollFade } from '../ScrollFade';
-import { floatingBottomLimit } from '../../lib/bottomBar';
+import { floatingBottomLimit, floatingTopLimit } from '../../lib/bottomBar';
 
 const POPOVER_GAP = 10;
 const POPOVER_WIDTH = 260;
@@ -57,16 +57,19 @@ function frameEquals(a: PopoverFrame | null, b: PopoverFrame) {
  * else under it, flipped above it when under would cross the bottom (GM -
  * Design, 2026-10-23: "When there's no room below the node, flip it up or
  * shift it, so its foot row is always whole"). Every placement then stays
- * inside the window and ends above the canvas's bottom bar, measured where it
- * really starts (lib/bottomBar.ts), so its foot row is never cut off or under
- * the bar. Runs every frame while open, so a resize, a pan or the bar growing
- * moves it at once.
+ * between two measured lines (lib/bottomBar.ts): below the workspace header
+ * and the selection toolbar, whichever is lower, and above the notice
+ * region's reserved band over the bottom bar, so a notice never covers its
+ * foot row and it never moves when a notice comes or goes (GM, round 2).
+ * When the room between them is shorter than the panel, the panel gets
+ * shorter and its body scrolls. Runs every frame while open, so a resize, a
+ * pan, the toolbar coming or going, or the bar growing moves it at once.
  */
 function measurePopoverFrame(nodeId: string, anchor: HTMLElement): PopoverFrame {
   const rect = anchor.getBoundingClientRect();
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
-  const topLimit = VIEWPORT_GUTTER;
+  const topLimit = floatingTopLimit(VIEWPORT_GUTTER);
   const rightSpace = viewportWidth - rect.right - POPOVER_GAP - VIEWPORT_GUTTER;
   const leftSpace = rect.left - POPOVER_GAP - VIEWPORT_GUTTER;
 
@@ -141,18 +144,21 @@ function measurePinnedFrame(nodeId: string, preference: PinnedPreference | null)
   const maxWidth = Math.min(520, availableWidth);
   const width = clamp(preference?.width ?? PINNED_WIDTH, minWidth, maxWidth);
   const left = clamp(preference?.left ?? leftBound, leftBound, rightBound - width);
-  // Above the canvas's bottom bar, measured (lib/bottomBar.ts), as the
-  // floating Inspector, and above the Canvas actions panel only where it is
-  // over it; in a window too short for that, the bar gives way so the
-  // Inspector keeps its smallest size.
+  // Between the same measured lines as the floating Inspector
+  // (lib/bottomBar.ts): below the header and the selection toolbar, above
+  // the notice band over the bottom bar, and above the Canvas actions panel
+  // only where it is over it. In a window too short for that, the lines give
+  // way (the bottom one first) so the Inspector keeps its smallest size.
+  const topBound = Math.min(floatingTopLimit(VIEWPORT_GUTTER),
+    Math.max(VIEWPORT_GUTTER, viewportHeight - VIEWPORT_GUTTER - PINNED_RESIZE_MIN_HEIGHT));
   const bottomBound = Math.max(
     floatingBottomLimit(VIEWPORT_GUTTER, viewportHeight, { left, right: left + width }),
-    Math.min(viewportHeight - VIEWPORT_GUTTER, VIEWPORT_GUTTER + PINNED_RESIZE_MIN_HEIGHT),
+    Math.min(viewportHeight - VIEWPORT_GUTTER, topBound + PINNED_RESIZE_MIN_HEIGHT),
   );
-  const availableHeight = Math.max(0, bottomBound - VIEWPORT_GUTTER);
+  const availableHeight = Math.max(0, bottomBound - topBound);
   const minHeight = Math.min(PINNED_RESIZE_MIN_HEIGHT, availableHeight);
   const height = clamp(preference?.height ?? PINNED_MAX_HEIGHT, minHeight, availableHeight);
-  const top = clamp(preference?.top ?? bottomBound - height, VIEWPORT_GUTTER, bottomBound - height);
+  const top = clamp(preference?.top ?? bottomBound - height, topBound, bottomBound - height);
 
   return {
     nodeId,

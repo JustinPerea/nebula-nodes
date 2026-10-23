@@ -142,12 +142,13 @@ export const DeferredAgentCursorLayer = lazyWithPreload(
   (module) => module.AgentCursorLayer,
 );
 
-// The app's one notice region (NoticeRegion, GM - Design 2026-10-23): a
-// notice arrives only after an edit, an undo or a failure, never at the
-// first paint. App mounts it at once on every screen but Projects.
-export const DeferredNoticeRegion = lazyWithPreload(
-  () => import('../components/NoticeRegion'),
-  (module) => module.NoticeRegion,
+// The notice region's own notices (RegionNotices; the region itself,
+// components/NoticeRegion.tsx, is a few boxes in the entry so a toast always
+// has its slot): a notice arrives only after an edit, an undo or a failure,
+// never at the first paint.
+export const DeferredRegionNotices = lazyWithPreload(
+  () => import('../components/RegionNotices'),
+  (module) => module.RegionNotices,
 );
 
 // Graph save / open (lib/graphFile.ts): used only inside those two actions,
@@ -174,7 +175,7 @@ export const DEFERRED_PRELOADS: readonly (() => Promise<unknown>)[] = [
   DeferredProposalLayer.preload,
   DeferredPinLayer.preload,
   DeferredAgentCursorLayer.preload,
-  DeferredNoticeRegion.preload,
+  DeferredRegionNotices.preload,
   graphFileModule.preload,
 ];
 
@@ -240,7 +241,7 @@ export const DEFERRED_MODULES: readonly string[] = [
   'components/canvas/CanvasUndoNotice.tsx',
   'components/canvas/StudioNotice.tsx',
   'components/canvas/DeferredRunNotice.tsx',
-  'components/NoticeRegion.tsx',
+  'components/RegionNotices.tsx',
   'hooks/useProposalReadiness.ts',
   'components/canvas/PinLayer.tsx',
   'components/canvas/AgentCursorLayer.tsx',

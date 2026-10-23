@@ -1,8 +1,9 @@
 /* Mask the viewport contents without adding an overlay or intercepting input.
-   The narrow second mask keeps the scrollbar fully visible. */
+   The narrow second mask keeps the scrollbar fully visible. The cue is 28 px
+   unless the viewport sets --scroll-fade-size (the Inspector's body: 12 px). */
 body.app-slava-restraint .panel-scroll-fade[data-scroll-more="true"] {
-  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent), linear-gradient(#000, #000);
-  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent), linear-gradient(#000, #000);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - var(--scroll-fade-size, 28px)), transparent), linear-gradient(#000, #000);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--scroll-fade-size, 28px)), transparent), linear-gradient(#000, #000);
   -webkit-mask-size: calc(100% - 8px) 100%, 8px 100%;
   mask-size: calc(100% - 8px) 100%, 8px 100%;
   -webkit-mask-position: 0 0, 100% 0;

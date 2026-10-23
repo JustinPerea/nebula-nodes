@@ -52,7 +52,8 @@ export function CanvasTabs() {
   if (viewMode !== 'canvas' && !(viewMode === 'commons' && !commonsEnabled)) return null;
 
   return (
-    <div className="canvas-tabs-wrap">
+    // The workspace header: floating panels stop below it (lib/bottomBar.ts floatingTopLimit).
+    <div className="canvas-tabs-wrap" data-top-bar="">
       <WorkspaceHeader title="Canvas" className="workspace-header--canvas"
         navigation={<WorkspaceModeNavigation />} updatesSlot={false} />
     </div>

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
 import type { DragEvent as ReactDragEvent, ReactNode } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { X } from 'lucide-react';
@@ -373,13 +372,11 @@ export function AssetsPanel() {
           )}
         </ScrollFade>
       </ScrollFade>
-      {/* On the page, not in the panel: the dock panel is a containing block
-          for fixed children, which would pin the toast to the panel's edge. */}
-      {deleting.lastDeleted && createPortal(
+      {/* The toast draws in the app's notice region (UndoDeleteToast), never in the panel. */}
+      {deleting.lastDeleted && (
         <UndoDeleteToast key={deleting.lastDeleted.id} name={deleting.lastDeleted.name} busy={deleting.busy}
           error={deleting.undoError} onDismiss={deleting.dismiss}
-          onUndo={() => { void deleting.undo().then((asset) => { if (asset) relist(); }); }} />,
-        document.body,
+          onUndo={() => { void deleting.undo().then((asset) => { if (asset) relist(); }); }} />
       )}
     </div>
   );

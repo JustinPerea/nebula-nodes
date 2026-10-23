@@ -1,65 +1,49 @@
-import { useLayoutEffect, useRef } from 'react';
-import { CanvasUndoNotice } from './canvas/CanvasUndoNotice';
-import { DeferredRunNotice } from './canvas/DeferredRunNotice';
-import { StudioNotice } from './canvas/StudioNotice';
-import '../styles/canvasProposals.css';
+import { useMemo } from 'react';
+import { RegionNotices } from './canvas/DeferredCanvasOverlays';
+import { NOTICE_SLOTS, setNoticeSlot, type NoticeSlot } from '../lib/noticeSlots';
+import '../styles/noticeRegion.css';
 
-/** How tall the notices are, with their gap, for the proposal bar to stay above (canvasProposals.css). */
-const NOTICE_STACK_VAR = '--notice-stack-h';
-const NOTICE_GAP = 8;
+/** What a screen shows in the region besides the toasts. */
+export type NoticeRegionScreen = 'canvas' | 'studio' | 'home';
 
 /**
  * The app's one notice region (GM - Design, 2026-10-23): "Put notices in one
  * app-level region above every panel (above layer 10), bottom-centre,
- * sitting just above the bottom bar. Proposal-bar notices and every 3g canvas
- * notice go there ... A notice with an action never sits under anything, and
- * the region never takes pointer events outside its notices."
+ * sitting just above the bottom bar ... A notice with an action never sits
+ * under anything, and the region never takes pointer events outside its
+ * notices." Round 2: the proposal bar stacks above the notices, and "One
+ * region, one stack, and nothing else draws toasts."
  *
- * App mounts it once, beside the screens: outside `.react-flow` (a z-index 0
- * stacking context, where a floating panel covered the notice) and outside
- * every Studio's own layer. On the canvas it holds the proposal bar's notice
- * (an accepted proposal waiting for the run to finish) and the canvas notice
- * with its Undo or Redo; on the other screens the canvas notice's written
- * lines (StudioNotice). Each notice keeps its own role, buttons and hold.
+ * App mounts it once, on every screen, beside the screens: outside
+ * `.react-flow` and every Studio's own layer. It is in the startup entry (a
+ * few boxes), so a toast that shows at once already has its slot; its own
+ * notices are a deferred chunk (RegionNotices). Its stack has a slot per kind
+ * of item (lib/noticeSlots.ts), and each item portals into its slot from
+ * wherever its state lives (InNoticeRegion). `screen`: the canvas shows the
+ * canvas notice and the proposal's run-later notice, the Studios the canvas
+ * notice's written lines, Projects (and the brand demo) only toasts, so a
+ * canvas notice set there waits for the workspace, as before.
+ *
+ * The band: an empty box one notice plus its gap tall, on the notices' bottom
+ * line, always there. Floating panels stop above it whether or not a notice
+ * shows (lib/bottomBar.ts floatingBottomLimit; GM: "The panels never move
+ * when a notice comes or goes, and a notice never covers Run / Duplicate /
+ * Delete").
  */
-export function NoticeRegion({ canvas }: { canvas: boolean }) {
-  const stack = useRef<HTMLDivElement>(null);
-
-  // The proposal bar sits above the notices, as it did when they shared its
-  // panel: publish how much room they take, so it lifts by exactly that.
-  useLayoutEffect(() => {
-    const element = stack.current;
-    const root = document.documentElement;
-    if (!element) return;
-    const publish = () => {
-      const height = element.getBoundingClientRect().height;
-      if (height > 0) root.style.setProperty(NOTICE_STACK_VAR, `${Math.ceil(height) + NOTICE_GAP}px`);
-      else root.style.removeProperty(NOTICE_STACK_VAR);
-    };
-    publish();
-    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(publish) : null;
-    observer?.observe(element);
-    const children = typeof MutationObserver === 'function' ? new MutationObserver(publish) : null;
-    children?.observe(element, { childList: true });
-    return () => {
-      observer?.disconnect();
-      children?.disconnect();
-      root.style.removeProperty(NOTICE_STACK_VAR);
-    };
-  }, []);
+export function NoticeRegion({ screen }: { screen: NoticeRegionScreen }) {
+  const refs = useMemo(() => Object.fromEntries(NOTICE_SLOTS.map((name) => [
+    name, (element: HTMLDivElement | null) => setNoticeSlot(name, element),
+  ])) as Record<NoticeSlot, (element: HTMLDivElement | null) => void>, []);
 
   return (
     <div className="notice-region" data-notice-region="">
-      <div ref={stack} className="notice-region__stack">
-        {canvas ? (
-          <>
-            <DeferredRunNotice />
-            <CanvasUndoNotice />
-          </>
-        ) : (
-          <StudioNotice />
-        )}
+      <div className="notice-region__band" data-notice-band="" aria-hidden="true" />
+      <div className="notice-region__stack">
+        {NOTICE_SLOTS.map((name) => (
+          <div key={name} ref={refs[name]} className="notice-region__slot" data-notice-slot={name} />
+        ))}
       </div>
+      {screen !== 'home' && <RegionNotices canvas={screen === 'canvas'} />}
     </div>
   );
 }
