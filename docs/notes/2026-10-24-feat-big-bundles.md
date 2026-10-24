@@ -31,6 +31,6 @@ Justin, Q121 (option a), verbatim: "Bundles work like plain files: Load graph op
 
 ## Open items
 
-- Agents can't open a `.nebula.zip` (above). Ask Justin before building it.
+- Agents can't open a `.nebula.zip` (above). Ask Justin before building it. Done in Q123 a (Justin: "Yes: `nebula load` and an MCP tool open a bundle, restoring its files, as Load graph does. A big one opens as a new project."): docs/notes/2026-10-24-feat-agent-open-bundle.md.
 - **The browser's real ceiling is about 512 MiB, not 528.** Chrome caps a string at 536,870,888 characters, so `JSON.stringify` of a graph past that fails with the generic save line, not the "up to 528 MB" one; reading a restore answer or a plain file that large hits the same cap (since Q118). The ceiling's copy would need GM.
 - Each save and reopen nests the restored files one folder deeper (`restored-x/.../restored-y/...`), toward the 1,024-byte path limit. Older than this change.

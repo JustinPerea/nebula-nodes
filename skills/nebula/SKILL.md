@@ -635,12 +635,19 @@ shows now (null when the project has none).
 ```bash
 nebula save graph.json
 nebula load graph.json         # replaces the canvas: open a new project first
+nebula load "Big campaign.nebula.zip"   # a bundle: its files are restored too
 ```
 
 `nebula save` replaces only an earlier saved graph; it won't write over any
-other file (an image or clip, say). `nebula load` reads plain `.nebula` (JSON)
-files; a `.nebula.zip` bundle (a graph plus its files) opens from Load graph
-on the canvas, so ask the person to open one.
+other file (an image or clip, say). `nebula load` (MCP `load_graph_file`)
+opens a file as Load graph on the canvas does: a plain `.nebula` or `.json`,
+or a `.nebula.zip` bundle (a graph plus its files), whose files it restores
+into Nebula's output folder with the graph's links pointing at them. Under
+the 16 MB save limit it replaces the open project's canvas. A file over the
+limit opens as a new project named after the file, and the open project is
+left as it was; the new project's saving is paused until it's trimmed under
+16 MB (`nebula project size` shows what's large), and `nebula load` prints
+the `nebula project open <id>` that goes back.
 
 ## Port types
 

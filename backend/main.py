@@ -33,7 +33,7 @@ from functools import wraps
 from pathlib import Path
 from pathlib import PurePosixPath
 from typing import Any, BinaryIO, Callable, Iterable, Mapping, NoReturn
-from urllib.parse import quote, unquote_to_bytes, urlsplit
+from urllib.parse import quote, urlsplit
 
 from uuid import uuid4
 
@@ -90,7 +90,7 @@ from services import output_thumbnail
 from services import refusal_copy
 from services.node_errors import NodeErrors
 from services import project_cover
-from services import project_size
+from services import graph_file_links, project_size
 from services.cli_graph import SHORT_ID_RE, CLIGraph
 from services.retired_nodes import folded_entry, migrate_graph, migrate_node, migrate_param_update, migrate_params, retired_message
 from services.saved_graph_upgrades import PARAMS_VERSION, request_version, upgrade_flat_nodes, upgrade_project
@@ -670,15 +670,19 @@ class ProjectSizeRefusal(HTTPException):
     canvas can pause saving from the answer, never its words. A tab's save
     keeps its old detail word for word; an agent's refusal has its own text."""
 
-    def __init__(self, size: int, detail: str = "Project snapshot exceeds the 16 MiB limit") -> None:
+    def __init__(self, size: int, detail: str = "Project snapshot exceeds the 16 MiB limit",
+                 scope: str | None = None) -> None:
         super().__init__(status_code=413, detail=detail)
         self.size = size
+        self.scope = scope
 
 
 @app.exception_handler(ProjectSizeRefusal)
 async def project_size_refusal(request, exc: ProjectSizeRefusal):
-    return JSONResponse(status_code=413, content={"detail": exc.detail, "limit": "size", "sizeBytes": exc.size,
-                                                  "limitBytes": MAX_PROJECT_BYTES})
+    content = {"detail": exc.detail, "limit": "size", "sizeBytes": exc.size, "limitBytes": MAX_PROJECT_BYTES}
+    if exc.scope:
+        content["scope"] = exc.scope
+    return JSONResponse(status_code=413, content=content)
 
 
 def _workspace_context() -> dict[str, Any]:
@@ -911,11 +915,6 @@ RESTORE_MAX_GRAPH_EDGES = 50_000
 RESTORE_MAX_GRAPH_DEPTH = 64
 RESTORE_MAX_GRAPH_VALUES = 1_000_000
 RESTORE_CONTENT_TYPE = "application/zip"
-_PORTABLE_COMPONENT_FORBIDDEN = re.compile(r'[<>:"|?#*\\\x00-\x1f\x7f]')
-_WINDOWS_DEVICE_NAME = re.compile(
-    r"^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$", re.IGNORECASE
-)
-_PROTOTYPE_COMPONENTS = {"__proto__", "prototype", "constructor"}
 
 
 def _zip_member_kind(member: zipfile.ZipInfo) -> str:
@@ -973,66 +972,13 @@ def _safe_zip_parts(member_name: str) -> tuple[str, ...]:
 
 
 def _decoded_portable_component(raw_part: str) -> tuple[str, str]:
-    """Return once-decoded NFC text and its browser-compatible identity."""
-    if re.search(r"%(?![0-9A-Fa-f]{2})", raw_part):
-        raise HTTPException(status_code=400, detail="Zip bundle path has invalid percent encoding")
+    """Return once-decoded NFC text and its browser-compatible identity: the
+    one component rule (services/graph_file_links.py), which agents' link
+    rewrite shares, refused here as the restore's 400."""
     try:
-        decoded = unquote_to_bytes(raw_part).decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise HTTPException(
-            status_code=400, detail="Zip bundle path is not valid UTF-8"
-        ) from exc
-    decoded = unicodedata.normalize("NFC", decoded)
-
-    def reject_unsafe(value: str) -> None:
-        if (
-            not value
-            or value in {".", ".."}
-            or "/" in value
-            or "\\" in value
-            or _PORTABLE_COMPONENT_FORBIDDEN.search(value)
-            or value.endswith((" ", "."))
-            or _WINDOWS_DEVICE_NAME.fullmatch(value)
-            or value.casefold() in _PROTOTYPE_COMPONENTS
-        ):
-            raise HTTPException(
-                status_code=400, detail="Zip bundle contains a non-portable path"
-            )
-
-    reject_unsafe(decoded)
-    probe = decoded
-    for _decode_pass in range(4):
-        if "%" not in probe:
-            break
-        if re.search(r"%(?![0-9A-Fa-f]{2})", probe):
-            raise HTTPException(
-                status_code=400, detail="Zip bundle path has invalid percent encoding"
-            )
-        try:
-            nested = unquote_to_bytes(probe).decode("utf-8")
-        except UnicodeDecodeError as exc:
-            raise HTTPException(
-                status_code=400, detail="Zip bundle path is not valid UTF-8"
-            ) from exc
-        nested = unicodedata.normalize("NFC", nested)
-        if nested == probe:
-            break
-        reject_unsafe(nested)
-        probe = nested
-    if "%" in probe:
-        # The frontend applies the same bounded nested-decode policy. Reject
-        # residual encoding instead of extracting a path the browser will
-        # subsequently refuse (which would orphan a restore directory).
-        raise HTTPException(
-            status_code=400, detail="Zip bundle path has excessive percent encoding"
-        )
-
-    # JavaScript encodeURIComponent's unescaped set, minus '*' which the
-    # portability policy rejects above.
-    canonical = quote(decoded, safe="-_.!~'()")
-    if len(canonical.encode("utf-8")) > 255:
-        raise HTTPException(status_code=400, detail="Zip bundle path component is too long")
-    return decoded, canonical
+        return graph_file_links.decoded_portable_component(raw_part)
+    except graph_file_links.PortablePathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _canonical_zip_parts(parts: tuple[str, ...]) -> tuple[str, ...]:
@@ -2459,19 +2405,40 @@ async def archive_outputs(older_than_days: int = 30) -> dict:
     return {"archived": archived, "archive_dir": str(archive_root)}
 
 
+def _restore_with_rewritten_links(zip_file: BinaryIO) -> dict[str, Any]:
+    """The restore, then the link rewrite the canvas's Load graph does next
+    (services/graph_file_links.py): the graph's local output links point at
+    the restored files (or are null, with the canvas's warnings), and World
+    and spatial outputs are checked."""
+    restored = _restore_zip_bundle(zip_file)
+    graph = restored["graph"]
+    try:
+        mapping = graph_file_links.validated_restore_mapping(restored["urlMapping"])
+    except graph_file_links.GraphFileLinkError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    warnings = graph_file_links.rewrite_asset_urls(graph["nodes"], mapping)
+    warnings += graph_file_links.sanitize_imported_spatial_outputs(graph["nodes"])
+    return {**restored, "warnings": warnings}
+
+
 @app.post("/api/outputs/restore")
-async def restore_outputs(request: Request) -> dict:
+async def restore_outputs(request: Request, rewriteLinks: bool = False) -> dict:
     """Bound, validate, and restore a complete .nebula.zip atomically.
 
     The browser does not inflate graph.json. This endpoint returns the parsed
     graph with the old-path → served-URL mapping only after both graph
     validation and asset extraction succeed.
+
+    ``?rewriteLinks=true`` (agents: graph_file_client.py, Q123 a) also
+    rewrites the graph's links to the restored files as the canvas does
+    after this answer, and adds the canvas's ``warnings``: a graph ready for
+    POST /api/graph/import. The person's tab doesn't ask for it.
     """
     _reject_graph_replacement_during_paid_start("restore a graph bundle")
     _validate_restore_request_headers(request)
     spool = await _spool_restore_request(request)
     try:
-        return await asyncio.to_thread(_restore_zip_bundle, spool)
+        return await asyncio.to_thread(_restore_with_rewritten_links if rewriteLinks else _restore_zip_bundle, spool)
     finally:
         spool.close()
 
@@ -12322,8 +12289,14 @@ async def import_graph(body: dict[str, Any]) -> dict:
     if body.get("refuseOverSaveLimit") is True:
         _refuse_graph_over_save_limit_on_its_own(candidate)
     # The person's Load graph opens a file of any size (Q118); anyone else's
-    # import can't leave the project over the save limit.
-    _refuse_agent_growth_past_save_limit(candidate)
+    # import can't leave the project over the save limit, except a graph file
+    # an agent opens in the empty project it just made for it (Q123 a, Justin:
+    # "A big one opens as a new project."; graph_file_client.py). Saving that
+    # project pauses on the canvas, as after the person's own Load graph.
+    if body.get("newProjectForFile") is True:
+        _require_empty_canvas_for_a_new_project_file()
+    else:
+        _refuse_agent_growth_past_save_limit(candidate)
     with _paid_graph_mutation("replace the graph"):
         _reject_graph_replacement_during_paid_start("replace the graph")
         if execution_runs.has_active() or _synchronous_workspace_runs:
@@ -12896,6 +12869,16 @@ def _open_project_with(graph: CLIGraph) -> tuple[dict[str, Any], dict[str, Any]]
     return project, _overlaid_snapshot(project, _graph_canvas_export(graph))
 
 
+def _require_empty_canvas_for_a_new_project_file() -> None:
+    """``newProjectForFile`` loads a graph file only into an empty canvas: the
+    project an agent just made for a file over the save limit (Q123 a). It
+    never replaces nodes."""
+    if cli_graph.nodes or cli_graph.edges:
+        raise HTTPException(status_code=409, detail=(
+            "newProjectForFile loads a graph file only into an empty project (make one with new_project, "
+            "`nebula project new`), and the open project has nodes. Nothing changed."))
+
+
 def _refuse_graph_over_save_limit_on_its_own(candidate: CLIGraph) -> None:
     """Refuse, before anything changes, a graph that would be over the save
     limit as a project of its own, measured as the save check measures a
@@ -12919,7 +12902,9 @@ def _refuse_graph_over_save_limit_on_its_own(candidate: CLIGraph) -> None:
         refusal = _person_only_refusal(detail)
         if isinstance(refusal, PersonGateError):
             raise refusal
-    raise ProjectSizeRefusal(size, detail)
+    # scope "graph": the file alone is over, not the open project with it
+    # (agents word their answer from it: graph_file_client.py).
+    raise ProjectSizeRefusal(size, detail, scope="graph")
 
 
 def _refuse_agent_growth_past_save_limit(candidate: CLIGraph) -> None:

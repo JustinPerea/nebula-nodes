@@ -6,7 +6,7 @@ import sys
 from typing import Any
 from uuid import uuid4
 
-from services.file_access import ProtectedPathError, require_allowed_path, validate_file_references
+from services.file_access import ProtectedPathError, require_allowed_path
 
 from ..client import NebulaClient
 from ..formatter import format_graph
@@ -94,42 +94,22 @@ def run_save(client: NebulaClient, filepath: str) -> None:
 
 
 def run_load(client: NebulaClient, filepath: str) -> None:
+    """Open a .nebula, .json or .nebula.zip as the canvas's Load graph does
+    (MCP load_graph_file; graph_file_client.py): a bundle's files are
+    restored, and a file over the save limit opens as a new project named
+    after it (Q123 a). Under the limit it replaces the open project's canvas."""
+    import graph_file_client
+
     try:
-        path = require_allowed_path(filepath)
-    except ProtectedPathError as exc:
+        # The module adds this agent's name ($NEBULA_AGENT_NAME) as the
+        # client does; nothing is sent before the file and its path are checked.
+        result = graph_file_client.load(client.api, filepath, via="cli")
+    except graph_file_client.GraphFileError as exc:
         print(f"error: {exc}", file=sys.stderr)
         sys.exit(1)
-    if not path.exists():
-        print(f"error: file not found: {filepath}", file=sys.stderr)
-        sys.exit(1)
-
-    with path.open("rb") as handle:
-        signature = handle.read(4)
-    if signature == b"PK\x03\x04":
-        # A .nebula.zip bundle (Save graph's graph plus its files). Its files
-        # are restored by the canvas's Load graph, which then opens the graph
-        # (as a new project when it's over the save limit, Q120/Q121 a).
-        print(f"error: {filepath} is a .nebula.zip bundle, and `nebula load` reads plain .nebula files. "
-              "Ask the person to open it with Load graph on the canvas.", file=sys.stderr)
-        sys.exit(1)
-
-    data = json.loads(path.read_text())
-    try:
-        validate_file_references(data)
-    except ProtectedPathError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-    # One atomic replace through the route the canvas uses for .nebula files:
-    # the saved params (the canvas's own _ bookkeeping included) arrive as
-    # saved, retired nodes are migrated, and a refusal leaves the graph as it was.
-    body: dict[str, Any] = {"nodes": data.get("nodes", []), "edges": data.get("edges", [])}
-    if "paramsVersion" in data:
-        body["paramsVersion"] = data["paramsVersion"]
-    result = client.import_graph(body)
     for warning in result.get("warnings") or []:
         print(f"note: {warning}", file=sys.stderr)
-    print(f"Loaded graph ({result.get('nodeCount', 0)} nodes, {result.get('edgeCount', 0)} connections) from {filepath}")
+    print(result["note"])
 
 
 def run_clear(client: NebulaClient, force: bool = False) -> None:

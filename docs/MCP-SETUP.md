@@ -161,6 +161,28 @@ The server exposes these tools for building and running (see
   before running a node priced from its input's size on a file of yours
   (see [Spending limits](#spending-limits)). An in-app chat's turn reads
   only its own workspace, and the read follows no links.
+- `load_graph_file`: opens a graph file (`path`) as the person's Load graph
+  does (`nebula load <file>`, Q123 a): a plain `.nebula` or `.json`, or a
+  `.nebula.zip` bundle (a graph plus its files). A bundle streams to `POST
+  /api/outputs/restore?rewriteLinks=true` with your own headers: its files
+  are restored into Nebula's output folder and the graph comes back with its
+  links pointing at them, checked as the canvas checks them
+  (`services/graph_file_links.py`; a link to a file the bundle lacks becomes
+  empty, with a warning). Under the 16 MB save limit the file replaces the
+  open project's canvas (make a new project first, `new_project`, unless the
+  person asked for that). A file over the limit opens as a new project named
+  after the file, as the person's Load graph does (Q120): the import is
+  first asked to refuse it (`refuseOverSaveLimit`), the project is made as
+  `new_project` makes one, and the file loads there (`newProjectForFile`,
+  which loads only into an empty project); the project that was open is left
+  as it was. Returns `loaded`, `project`, `openedAsNewProject`,
+  `previousProject` (and `open_project` in the `note` goes back),
+  `nodeCount`, `edgeCount`, `idMap`, `filesRestored`, `warnings`,
+  `savingPaused`, `size` and `note`; the new project's saving stays paused
+  until it is under the limit, and `project_size` shows what's large. The
+  path follows `upload_file`'s rules (an in-app chat's turn reads only its
+  own workspace, protected files are refused, the read follows no links),
+  files up to 528 MB.
 - `remove_from_canvas`: deletes nodes or single wires, all or nothing. Its
   result has `undo` too, which puts the nodes back with their params,
   outputs, names and wires, the person's pins on them, and the proposals
@@ -276,7 +298,9 @@ The server exposes these tools for building and running (see
   `/api/graph/connect`, `/api/graph/import`, `/node-and-connect`,
   `/cluster`) that would leave the open project over the limit, or larger
   while it is over, is refused 413 with `limit: "size"`, `sizeBytes`,
-  `limitBytes` and its own `detail` naming `project_size`; nothing changes. An
+  `limitBytes` and its own `detail` naming `project_size`; nothing changes.
+  The one exception is `load_graph_file`'s import into the empty project it
+  made for a file over the limit (`newProjectForFile`). An
   edit that makes it smaller goes through, and the person's own edits and
   Load graph are never refused for size. A tab's save over the limit gets
   the same 413 fields with its `detail` unchanged ("Project snapshot exceeds
@@ -2395,6 +2419,7 @@ nebula project new "Logo ideas"     # start a new, empty project and open it
 nebula project rename current "Logo ideas, round 2"   # prints the command that renames it back
 nebula project show <id>            # a saved project unopened: nodes, wires, cover, runs (get_project)
 nebula project size                 # its size against the 16 MB save limit, largest parts first (project_size)
+nebula load "Big campaign.nebula.zip"  # a .nebula, .json or bundle, as Load graph opens it (load_graph_file)
 nebula clear                        # refused when the canvas has nodes
 nebula clear --force                # clears it anyway; the person can undo it
 nebula trash list                   # Recently deleted boards, characters, Styles, projects
@@ -2409,6 +2434,13 @@ Opening or starting a project keeps the one that was open as it is. When an
 agent (or any script that isn't the person's own canvas) does it, the
 person's canvas follows, says who switched it, and offers a button back.
 The project's history names the agent.
+
+`nebula load` opens a file as `load_graph_file` does, through the same
+module (`backend/graph_file_client.py`): a bundle's files are restored, a
+file under the save limit replaces the open project's canvas, and one over
+it opens as a new project named after the file, the open one left as it
+was; it prints what happened and how to go back (`nebula project open
+<id>`).
 
 `rename`, `show`, `size`, `trash list`, `keys` and `providers` are the CLI
 twins of `rename_project`, `get_project`, `project_size`, `list_trash`,

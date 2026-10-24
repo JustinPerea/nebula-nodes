@@ -60,6 +60,8 @@ NEBULA_MCP_TOOLS = (
     "rename_project", "get_project", "get_settings", "provider_status",
     # A project's size and what takes it, read-only (Q118).
     "project_size",
+    # A graph file or bundle opened as Load graph does (Q123 a).
+    "load_graph_file",
 )
 # In-app Codex may wait this long for one tool call (run_nodes/get_run wait up
 # to 45 s by default and 300 s at most); Codex's own default is 60 s.

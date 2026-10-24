@@ -936,6 +936,18 @@ function validatedRestoreMapping(value: unknown): Map<string, string> {
   return mapping;
 }
 
+/** The link reading Load graph does, for the shared parity test with the
+ * backend's port (services/graph_file_links.py, Q123 a): agents open a bundle
+ * there, and tests/graphFileLinksParity.test.ts runs these on the same cases.
+ * Nothing else calls them through here. */
+export const graphFileLinksForTests = {
+  canonicalPortableOutputRelativePath,
+  parseLocalOutputReference,
+  rewriteAssetUrls,
+  sanitizeImportedSpatialOutputs,
+  validatedRestoreMapping,
+};
+
 /** GM's heading for the bundle restore (error-copy round 2). */
 const RESTORE_ASSETS = "Couldn't restore the asset.";
 
