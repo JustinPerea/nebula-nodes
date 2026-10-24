@@ -58,7 +58,8 @@ TWO = {
 @pytest.fixture
 def asked(api, monkeypatch):
     """The canvas app with its own question book and Updates service."""
-    book = QuestionBook(api.clock)
+    # Kept on the project store, as main's is (test_agent_questions_persist.py).
+    book = QuestionBook(api.clock, store=lambda: api.main.project_store)
     monkeypatch.setattr(api.main, "agent_questions", book)
     monkeypatch.setattr(api.main, "agent_notes", AgentNotes(lambda: api.main.project_store))
     api.questions = book
@@ -439,18 +440,6 @@ def test_only_the_asker_withdraws(asked):
     (note,) = _question_updates(asked)
     assert note["outcome"] == "Withdrawn by Claude Code."
     assert _answer(asked, set_id, GOOD_ANSWERS).status_code == 409
-
-
-def test_a_restart_closes_the_update_and_get_answers_says_ask_again(asked, monkeypatch):
-    set_id = _ask(asked).json()["questions"]["id"]
-    # Nebula restarted: the book is new and empty; the Update is on the project.
-    monkeypatch.setattr(asked.main, "agent_questions", QuestionBook(asked.clock))
-    listing = asked.client.get("/api/canvas/agent-notes", headers=PERSON).json()
-    (note,) = [n for n in listing["notes"] if n.get("about") == "question"]
-    assert note["outcome"] == "Closed when Nebula restarted."
-    gone = asked.client.get(f"/api/canvas/questions/{set_id}", headers=CLAUDE)
-    assert gone.status_code == 404
-    assert "ask again" in gone.json()["detail"]
 
 
 def test_proposals_keep_their_own_restart_line(asked):

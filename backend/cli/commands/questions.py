@@ -3,7 +3,9 @@
 An agent asks the person 1-5 questions only they can answer (Q125 item 1);
 the person answers or dismisses them in Nebula's Updates. There is
 deliberately no answer or dismiss command here: that is the person's alone.
-The MCP twins are ask_person, get_answers and withdraw_questions.
+Sets are kept with the project, so they survive a Nebula restart: `nebula
+answers <id>` under the same agent name still reads one afterwards. The MCP
+twins are ask_person, get_answers and withdraw_questions.
 """
 from __future__ import annotations
 

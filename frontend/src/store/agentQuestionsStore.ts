@@ -19,7 +19,10 @@ import { failureMessage } from '../lib/errorCopy';
  * (App.tsx) so no question is missed before the Updates corner's chunk lands.
  *
  * The person's answers are drafts kept per set until Send or Dismiss, so a
- * closed popover loses nothing; not across a reload.
+ * closed popover loses nothing; not across a reload. Sets are kept with the
+ * project on the backend, so a backend restart keeps them: the resync after
+ * the socket reconnects brings the same set under a new key, and `synced`
+ * keeps its draft and an open form.
  */
 
 export interface QuestionSetEntry {

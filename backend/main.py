@@ -199,9 +199,9 @@ from services.canvas_proposals import update_outcome as canvas_outcome_line, upd
 from services.agent_questions import (
     RESTART_OUTCOME as QUESTIONS_RESTART_OUTCOME,
     WITHDRAW_HTTP as QUESTIONS_WITHDRAW_HTTP,
+    QuestionBook,
     QuestionError,
     QuestionSet,
-    agent_questions,
     parse_answers as parse_question_answers,
     parse_questions,
     still_open_rows,
@@ -285,6 +285,9 @@ node_removals = RemovalLedger()
 # Updates (plan section 5.9): the agent's and the reader's notices, kept with
 # the project (main canvas) or beside each board. Same getter as pins.
 agent_notes = AgentNotes(lambda: project_store)
+# Questions agents ask the person (Q125 item 1), kept on the project record
+# like pins and Updates (services/agent_questions.py). Same getter.
+agent_questions = QuestionBook(store=lambda: project_store)
 _request_workspace_revision: ContextVar[str | None] = ContextVar("workspace_revision", default=None)
 _execution_workspace_context: ContextVar[dict[str, Any] | None] = ContextVar("execution_workspace", default=None)
 _synchronous_workspace_runs: set[str] = set()
@@ -3256,7 +3259,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 await websocket.send_text(json.dumps(_proposal_sync_message()))
                 await websocket.send_text(json.dumps(await _asset_proposal_sync_message()))
                 # Open question sets with their answer keys (Q125 item 1), same rule.
-                await websocket.send_text(json.dumps(_questions_sync_message()))
+                await _send_questions_sync(websocket)
             else:
                 await websocket.send_text(json.dumps({
                     "type": "personRequired",
@@ -6647,11 +6650,13 @@ async def release_run_approval(approval_id: str) -> dict[str, Any]:
 # ---------- Questions: agents ask, the person answers (Q125 item 1) ----------
 #
 # Justin, 2026-10-24: "Yes, all four, in that order"; then "go with your
-# suggestions". Modelled on the canvas proposals above: memory only, open
-# caps, the same two-layer person gate (require_person, then a per-set key
-# only the person's browser sockets get, in the proposal key's header), and
-# an Update that settles when the set closes. Every surface (MCP ask_person,
-# `nebula ask`, HTTP) asks through create_agent_questions.
+# suggestions". Modelled on the canvas proposals above: open caps, the same
+# two-layer person gate (require_person, then a per-set key only the
+# person's browser sockets get, in the proposal key's header), and an Update
+# that settles when the set closes. Unlike proposals, sets are kept on the
+# project record (services/agent_questions.py), so a restart keeps them open
+# with their answers to come; the key is new each launch. Every surface (MCP
+# ask_person, `nebula ask`, HTTP) asks through create_agent_questions.
 
 def _question_view(question_set: QuestionSet) -> dict[str, Any]:
     return agent_questions.view(question_set)
@@ -6670,6 +6675,16 @@ def _questions_sync_message() -> dict[str, Any]:
         "sets": [{**_question_view(s), "answerKey": s.answer_key} for s in agent_questions.open_list()]
         + [_question_view(s) for s in agent_questions.closed_list()],
     }
+
+
+async def _send_questions_sync(websocket: WebSocket) -> None:
+    """The person's socket after hello. Not sent when the sets can't be read
+    (the catalog is unavailable): an empty sync would drop the tab's drafts."""
+    try:
+        message = _questions_sync_message()
+    except ProjectStoreError:
+        return
+    await websocket.send_text(json.dumps(message))
 
 
 def _journal_question(question_set: QuestionSet, *, actor: dict[str, Any] | None = None) -> None:
@@ -6691,9 +6706,10 @@ def _journal_question(question_set: QuestionSet, *, actor: dict[str, Any] | None
 
 def _gone_question_detail(set_id: str) -> str:
     """A set Nebula doesn't have for this agent: another agent's, closed too
-    long ago, or open when Nebula restarted (they live in memory)."""
-    return (f"No question set {set_id[:20]} of yours (answered ones are kept for 30 minutes, and a restart of "
-            "Nebula closes open ones: ask again if you still need to know)")
+    long ago, or gone with its project (deleted for good). Open sets survive
+    a restart: they are kept with the project."""
+    return (f"No question set {set_id[:20]} of yours (closed ones are kept for 30 minutes, and a project deleted "
+            "for good takes its sets with it): ask again if you still need to know")
 
 
 def _questions_owner(set_id: str) -> tuple[AgentIdentity, QuestionSet]:
@@ -6708,16 +6724,24 @@ def _questions_owner(set_id: str) -> tuple[AgentIdentity, QuestionSet]:
 
 
 async def _post_question_update(question_set: QuestionSet) -> bool:
-    """Its Update on the project's list, with Answer: where the person answers it."""
+    """Its Update on the project's list, with Answer: where the person answers
+    it. The set is saved on the project's record in the same commit."""
+    book = agent_questions
+
+    def save_set(catalog: dict[str, Any], project_id: str, note_id: str) -> bool:
+        question_set.project_id = project_id
+        question_set.update = {"id": note_id, "projectId": project_id}
+        return book.write_into(catalog, [project_id])
+
     try:
         result = await asyncio.to_thread(
             agent_notes.post_questions, author={"kind": "agent", **question_set.agent.as_dict()},
             text=question_update_text(question_set), questions={"id": question_set.id},
-            refs=list(question_set.spec.node_ids), project_id=question_set.project_id)
+            refs=list(question_set.spec.node_ids), project_id=question_set.project_id, save_set=save_set)
     except (NoteError, ProjectStoreError):
+        question_set.update = None  # never committed: no later save may keep it
         return False
     note = result["note"]
-    question_set.update = {"id": note["id"], "projectId": result["projectId"]}
     await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"], note=note,
                                                 unread=result["unread"], removed=result["removed"]))
     _journal_note(note, "canvas")
@@ -6844,7 +6868,7 @@ async def withdraw_agent_questions(set_id: str) -> dict[str, Any]:
     """The asking agent takes its questions back."""
     _identity, question_set = _questions_owner(set_id)
     try:
-        agent_questions.close(question_set.id, "withdrawn")
+        await asyncio.to_thread(agent_questions.close, question_set.id, "withdrawn")
     except QuestionError as exc:
         raise _question_http_error(exc) from exc
     await _announce_closed_questions([question_set])
@@ -6889,7 +6913,11 @@ async def answer_agent_questions(set_id: str, request: Request) -> dict[str, Any
         answers = parse_question_answers(question_set.spec, body)
     except QuestionError as exc:
         raise _question_http_error(exc) from exc
-    agent_questions.close(question_set.id, "answered", answers=answers)
+    # Saved before the answer is acknowledged; a failed save leaves it open.
+    try:
+        await asyncio.to_thread(agent_questions.close, question_set.id, "answered", answers=answers)
+    except QuestionError as exc:
+        raise _question_http_error(exc) from exc
     await _announce_closed_questions([question_set], actor=dict(_PERSON_ACTOR))
     return {"status": "answered", "questionId": question_set.id}
 
@@ -6898,7 +6926,10 @@ async def answer_agent_questions(set_id: str, request: Request) -> dict[str, Any
 async def dismiss_agent_questions(set_id: str) -> dict[str, Any]:
     """The person closes the questions without answering."""
     question_set = _answerable_questions(set_id)
-    agent_questions.close(question_set.id, "dismissed")
+    try:
+        await asyncio.to_thread(agent_questions.close, question_set.id, "dismissed")
+    except QuestionError as exc:
+        raise _question_http_error(exc) from exc
     await _announce_closed_questions([question_set], actor=dict(_PERSON_ACTOR))
     return {"status": "dismissed", "questionId": question_set.id}
 
@@ -7182,8 +7213,10 @@ async def _settle_proposal_updates() -> None:
 
 async def _settle_question_update(project_id: str | None, note: Mapping[str, Any]) -> None:
     """A question set's Update whose set can't be answered any more: closed
-    (its outcome), or not in memory because Nebula restarted while it was
-    open ("Closed when Nebula restarted.", GM's line for questions)."""
+    (its outcome), or not there at all ("Closed when Nebula restarted.",
+    GM's line for questions). Sets are kept with the project, so a restart
+    alone never gets here; a set whose record couldn't be read back does
+    (damaged, or from a build that didn't keep sets)."""
     ref = note.get("questions")
     if note.get("source") != "nebula" or note.get("resolvedAt") or not isinstance(ref, Mapping):
         return
@@ -13425,10 +13458,11 @@ async def list_projects() -> dict[str, Any]:
             if needs_cover(project):  # saved before covers existed
                 refresh_metadata(project, touch=False)
                 changed = True
-        changed = purge_expired_trash(catalog) or changed
+        expired = purge_expired_trash(catalog)
+        changed = expired or changed
         if changed:
             project_store.commit(catalog)
-        return {
+        listing = {
             "projects": sorted((project_metadata(project) for project in catalog["projects"].values()), key=lambda project: project["updatedAt"], reverse=True),
             "trash": _trash_listing(catalog),
             "activeProjectId": catalog["activeProjectId"], "workspaceRevision": catalog["workspaceRevision"],
@@ -13437,6 +13471,11 @@ async def list_projects() -> dict[str, Any]:
             "paramsVersion": PARAMS_VERSION,
             **({"migratedProjectId": catalog["migratedProjectId"]} if catalog.get("migratedProjectId") else {}),
         }
+        kept = set(catalog["projects"]) | set(catalog.get("trash") or {})
+    if expired:
+        # Trash past its 30 days took its question sets with it.
+        agent_questions.keep_projects(kept)
+    return listing
 
 
 @app.get("/api/projects/{project_id}")
@@ -14085,11 +14124,14 @@ def _trashed_or_404(project_id: str, catalog: dict[str, Any]) -> dict[str, Any]:
 @app.post("/api/projects/{project_id}/restore")
 async def restore_saved_project(project_id: str) -> dict[str, Any]:
     with project_store.transaction() as catalog:
-        purge_expired_trash(catalog)
+        expired = purge_expired_trash(catalog)
         _trashed_or_404(project_id, catalog)
         project = restore_from_trash(catalog, project_id)
         project_store.commit(catalog)
         result = {"project": project_metadata(project), "workspaceRevision": catalog["workspaceRevision"]}
+        kept = set(catalog["projects"]) | set(catalog.get("trash") or {})
+    if expired:
+        agent_questions.keep_projects(kept)
     await _broadcast_projects_changed("restored", project_id)
     _journal_project_change("project.restored", result["project"])
     return result
@@ -14104,7 +14146,10 @@ async def purge_trashed_project(project_id: str) -> dict[str, Any]:
         del catalog["trash"][project_id]
         project_store.commit(catalog)
         node_errors.keep_projects(set(catalog["projects"]) | set(catalog.get("trash") or {}))
+        kept = set(catalog["projects"]) | set(catalog.get("trash") or {})
         result = {"trash": _trash_listing(catalog)}
+    # Its question sets went with its record; the book forgets them too.
+    agent_questions.keep_projects(kept)
     await _broadcast_projects_changed("purged", project_id)
     return result
 
@@ -14124,8 +14169,10 @@ async def empty_project_trash(body: dict[str, Any] | None = None) -> dict[str, A
         if doomed:
             project_store.commit(catalog)
             node_errors.keep_projects(set(catalog["projects"]) | set(trash))
+        kept = set(catalog["projects"]) | set(trash)
         result = {"trash": _trash_listing(catalog)}
     if doomed:
+        agent_questions.keep_projects(kept)
         await _broadcast_projects_changed("purged")
     return result
 
@@ -16161,9 +16208,15 @@ def _trash_scope(scope: str | None, project_id: str | None) -> None:
 
 def _project_trash_items() -> list[dict[str, Any]]:
     with project_store.transaction() as catalog:
-        if purge_expired_trash(catalog):
+        expired = purge_expired_trash(catalog)
+        if expired:
             project_store.commit(catalog)
-        return [{"kind": "project", **entry} for entry in _trash_listing(catalog)]
+        items = [{"kind": "project", **entry} for entry in _trash_listing(catalog)]
+        kept = set(catalog["projects"]) | set(catalog.get("trash") or {})
+    if expired:
+        # Trash past its 30 days took its question sets with it.
+        agent_questions.keep_projects(kept)
+    return items
 
 
 @app.get("/api/trash")
@@ -16279,7 +16332,11 @@ async def empty_trash(kind: str | None = None, scope: str | None = None,
             if doomed:
                 purged += len(doomed)
                 project_store.commit(catalog)
+                node_errors.keep_projects(set(catalog["projects"]) | set(trash))
+            kept = set(catalog["projects"]) | set(trash)
         if doomed:
+            # Their question sets went with their records; the book forgets them too.
+            agent_questions.keep_projects(kept)
             await _broadcast_projects_changed("purged")
     return {"purged": purged}
 

@@ -159,6 +159,44 @@ describe('agentQuestionsStore', () => {
     expect(state.drafts.qs_00000001).toBeUndefined();
   });
 
+  it('keeps an open set, its draft and the open form across a backend restart, with the new key', async () => {
+    // Sets are kept with the project now: a restarted Nebula still has this
+    // one (same id) and sends it again after hello, under a new key.
+    emit({ type: 'questionsOpened', set: view(), answerKey: 'k1' });
+    const store = useAgentQuestionsStore.getState();
+    store.openForm('qs_00000001');
+    store.toggleChoice('qs_00000001', 'q1', 'Wide');
+    store.setText('qs_00000001', 'q3', 'No orange');
+    emit({ type: 'socketReconnected' });
+    emit({ type: 'questionsSync', sets: [{ ...view(), answerKey: 'k2' }] });
+    let state = useAgentQuestionsStore.getState();
+    expect(state.sets.qs_00000001.answerKey).toBe('k2');
+    expect(state.sets.qs_00000001.view.status).toBe('open');
+    expect(state.formId).toBe('qs_00000001');
+    expect(state.drafts.qs_00000001.q1.choices).toEqual(['Wide']);
+    expect(state.drafts.qs_00000001.q3.text).toBe('No orange');
+    await expect(useAgentQuestionsStore.getState().send('qs_00000001')).resolves.toBe(true);
+    expect(api.answerQuestions).toHaveBeenCalledWith('qs_00000001', 'k2', [
+      { questionId: 'q1', choices: ['Wide'] },
+      { questionId: 'q3', text: 'No orange' },
+    ]);
+    state = useAgentQuestionsStore.getState();
+    expect(state.sets.qs_00000001.view.status).toBe('answered');
+  });
+
+  it('keeps the draft when Send fails on the old key before the resync lands', async () => {
+    api.answerQuestions.mockRejectedValueOnce(new Error('These questions can only be answered from the Nebula canvas.'));
+    emit({ type: 'questionsOpened', set: view(), answerKey: 'k1' });
+    useAgentQuestionsStore.getState().setText('qs_00000001', 'q3', 'No orange');
+    await expect(useAgentQuestionsStore.getState().send('qs_00000001')).resolves.toBe(false);
+    emit({ type: 'questionsSync', sets: [{ ...view(), answerKey: 'k2' }] });
+    const state = useAgentQuestionsStore.getState();
+    expect(state.drafts.qs_00000001.q3.text).toBe('No orange');
+    expect(state.sets.qs_00000001.answerKey).toBe('k2');
+    await expect(useAgentQuestionsStore.getState().send('qs_00000001')).resolves.toBe(true);
+    expect(api.answerQuestions).toHaveBeenLastCalledWith('qs_00000001', 'k2', [{ questionId: 'q3', text: 'No orange' }]);
+  });
+
   it('drops the draft and closes the form when the set closes elsewhere', () => {
     const store = useAgentQuestionsStore.getState();
     store.opened(view(), 'k1');

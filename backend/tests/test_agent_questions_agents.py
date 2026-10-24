@@ -264,7 +264,26 @@ def test_the_docs_cover_the_tools_and_the_cli():
     for name in (*TOOLS, "nebula ask", "nebula answers", "nebula questions withdraw"):
         assert name in setup, name
         assert name in skill, name
-    assert "Closed when Nebula restarted." in setup
+
+
+def test_the_docs_say_sets_survive_a_restart():
+    # Follow-up (same PR): sets are kept with the project, so nothing may
+    # still tell an agent that a restart loses them.
+    setup = (REPO / "docs/MCP-SETUP.md").read_text(encoding="utf-8")
+    setup = setup[setup.index("### Questions for the person"):]
+    setup = setup[: setup.index("\n### ", 10)]
+    skill = (REPO / "skills/nebula/SKILL.md").read_text(encoding="utf-8")
+    skill = skill[skill.index("## Ask the person"):]
+    skill = skill[: skill.index("\n## ", 10)]
+    texts = {"MCP-SETUP.md": setup, "SKILL.md": skill,
+             "get_answers": inspect.getdoc(mcp_server.get_answers) or "",
+             "ask_person": inspect.getdoc(mcp_server.ask_person) or ""}
+    for name, text in texts.items():
+        flat = " ".join(text.split()).lower()
+        for stale in ("memory only", "live in memory", "restart loses", "restart closes", "a restart of nebula"):
+            assert stale not in flat, (name, stale)
+    for name in ("MCP-SETUP.md", "SKILL.md", "get_answers"):
+        assert "survive" in " ".join(texts[name].split()).lower(), name
 
 
 def test_the_docs_tie_the_answers_exit_codes_to_wait():

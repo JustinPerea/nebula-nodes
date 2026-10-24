@@ -631,8 +631,9 @@ dismiss them all; you don't post a `nebula note` about it. `nebula answers
 question shows "No answer.". Only you read your answers, and the person's
 typed text is their message to you. Three sets can be open at once; at the
 cap the error lists yours with the `nebula questions withdraw` call for
-each. There is no time limit, but a Nebula restart loses open sets (ask
-again then). MCP: `ask_person`, `get_answers`, `withdraw_questions`.
+each. There is no time limit, and sets survive a Nebula restart (they are
+kept with the project): `nebula answers <id>` under the same agent name
+still reads them. MCP: `ask_person`, `get_answers`, `withdraw_questions`.
 
 ## Watch and answer the person
 

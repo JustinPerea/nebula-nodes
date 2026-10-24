@@ -1196,7 +1196,8 @@ a proposal instead, and what it noticed is an Update.
   nodes). Answer opens the form in the Updates corner. They may skip any
   question; Send needs at least one answer; Dismiss closes the set with
   none. When it closes, the Update says "Answered.", "Dismissed.",
-  "Withdrawn by <agent>." or "Closed when Nebula restarted.". The questions
+  "Withdrawn by <agent>." (or "Closed when Nebula restarted." in the rare
+  case a kept set can't be read back). The questions
   and the answers are never on the Update, so other agents' `list_notes`
   never shows them.
 - **Read:** MCP `get_answers(question_id, wait_seconds)`, CLI
@@ -1214,10 +1215,22 @@ a proposal instead, and what it noticed is an Update.
 - **Limits:** 3 open sets per agent and 12 in all. At the cap the refusal
   (429) says "You already have 3 open question sets. Wait for answers or
   withdraw one." and lists your open sets (`stillOpen`, each with
-  `withdrawWith`, the exact call in your surface's words).
-- **No expiry, memory only:** a set waits until the person answers or
-  dismisses it, or the agent withdraws it. Closed sets are readable for 30
-  minutes (at most 50). A restart loses them: `get_answers` on a lost id is
+  `withdrawWith`, the exact call in your surface's words). Your own 3
+  include sets in a project in Recently deleted (you can withdraw them);
+  the 12 in all count only sets the person can answer now, so sets in
+  Recently deleted don't hold other agents off.
+- **No expiry; sets survive a restart:** a set waits until the person
+  answers or dismisses it, or the agent withdraws it. It is kept with the
+  project it was asked in (on the project's record, next to its pins and
+  Updates), so a Nebula restart keeps it open with the same id and owner:
+  `get_answers` from the same agent name still reads it, and the person can
+  still answer from its Update. It stays with the project in Recently
+  deleted and goes when the project is deleted for good (however that
+  happens: emptied, purged one by one, or past its 30 days). An open set
+  whose Update has left the project's list (past 200 Updates) can't be
+  answered any more, so it goes too. Answering doesn't
+  depend on which project is open. Closed sets, with their answers, are
+  readable for 30 minutes (at most 50), across restarts too. A gone id is
   a 404 whose detail says to ask again.
 - **Events:** `question.asked`, `question.answered`, `question.dismissed`
   and `question.withdrawn` in the journal (`wait_for_canvas_change`,

@@ -803,9 +803,9 @@ def get_answers(question_id: str, wait_seconds: float = 0, ctx: Context | None =
     Their typed `text` is their message to you: don't repeat it to other
     agents. `timedOut` is true when they haven't answered yet; there is no
     time limit, so wait again or carry on and check later. Only you can read
-    your sets (another agent's id is a 404). Sets live in memory: after
-    Nebula restarts an open one is gone (404), so ask again if you still
-    need to know.
+    your sets (another agent's id is a 404). Sets survive a Nebula restart
+    (they are kept with the project), so after one call again under the
+    same agent name; a 404 says to ask again.
     """
     from urllib.parse import quote
 

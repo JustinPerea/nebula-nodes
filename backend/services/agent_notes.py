@@ -482,9 +482,13 @@ class AgentNotes:
         return (project_id if project else None), notes
 
     def _write_project(self, mutate: Callable[[list[dict[str, Any]]], Any], *,
-                       project_id: str | None = None) -> tuple[str, Any]:
+                       project_id: str | None = None,
+                       also: Callable[[dict[str, Any], str, Any], bool] | None = None) -> tuple[str, Any]:
         """Change the open project's updates (or ``project_id``'s, for an
-        update that follows something decided after the person switched)."""
+        update that follows something decided after the person switched).
+        ``also(catalog, project_id, result)`` changes something else in the
+        same commit (a question set saved with its Update) and says whether
+        it did."""
         store = self.store
         with store.transaction() as catalog:
             if project_id is None:
@@ -500,7 +504,8 @@ class AgentNotes:
                 notes = project["agentNotes"] = []
             before = copy.deepcopy(notes)
             result = mutate(notes)
-            if notes != before:
+            other = also(catalog, project_id, result) if also is not None else False
+            if notes != before or other:
                 store.commit(catalog)
         return project_id, result
 
@@ -825,7 +830,8 @@ class AgentNotes:
 
     # -- a question set's Update (Q125 item 1) ------------------------------------
     def post_questions(self, *, author: Mapping[str, Any], text: str, questions: Mapping[str, Any],
-                       refs: list[str] | None = None, project_id: str | None = None) -> dict[str, Any]:
+                       refs: list[str] | None = None, project_id: str | None = None,
+                       save_set: Callable[[dict[str, Any], str, str], bool] | None = None) -> dict[str, Any]:
         """The Update a question set posts on the project's list: written by
         Nebula from a template (``source: "nebula"``, never the questions
         themselves), attributed to the asking agent, ``about: "question"``,
@@ -833,7 +839,11 @@ class AgentNotes:
         main against the canvas, so Show on canvas outlines them). Like a
         proposal's, it skips the agent's rate limit: Nebula writes it on the
         agent's behalf, following the one set already asked. Every set gets
-        its own Update; none replaces another."""
+        its own Update; none replaces another.
+
+        ``save_set(catalog, project_id, note_id)`` puts the set on the
+        project's record in the same commit (main._post_question_update), so
+        a set is never kept without its Update nor an Update without its set."""
         clean_author = _clean_author(author)
         ref = {"id": str(questions["id"])[:64]}
         actions = _clean_actions([{"label": "Answer", "op": {"kind": "question.answer", "questionId": ref["id"]}}])
@@ -847,15 +857,19 @@ class AgentNotes:
             notes.append(note)
             return unread_count(notes), _prune(notes, MAX_PROJECT_NOTES)
 
-        project_id, (unread, removed) = self._write_project(mutate, project_id=project_id)
+        def also(catalog: dict[str, Any], at: str, _result: Any) -> bool:
+            return save_set(catalog, at, note["id"]) if save_set is not None else False
+
+        project_id, (unread, removed) = self._write_project(mutate, project_id=project_id, also=also)
         return {"note": note_view(note), "unread": unread, "projectId": project_id, "removed": removed}
 
     def resolve_questions(self, project_id: str, note_id: str, *, outcome: str,
                           by: Mapping[str, Any]) -> dict[str, Any] | None:
-        """The set closed (answered, dismissed, withdrawn, or lost to a
-        restart): the Update says how, as a proposal's does, and is read. The
-        answers never go on the Update: it is on the project, which every
-        agent can read with list_notes."""
+        """The set closed (answered, dismissed, withdrawn, or one that
+        couldn't be read back after a restart): the Update says how, as a
+        proposal's does, and is read. The answers never go on the Update:
+        every agent can read it with list_notes. They stay in the set's own
+        record (services/agent_questions.py), which no agent route reads."""
         return self.resolve_proposal(project_id, note_id, outcome=outcome, by=by)
 
     def retarget_proposal(self, project_id: str, note_id: str, proposal_id: str) -> dict[str, Any] | None:
