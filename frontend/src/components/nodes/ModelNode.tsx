@@ -38,6 +38,7 @@ import '../../styles/nodes.css';
 import { NodeLabel } from './NodeLabel';
 import { NodeRunStatus } from './NodeRunStatus';
 import { MoodboardAdapterRow } from './MoodboardAdapterRow';
+import { inputFileName, middleTruncate } from '../../lib/fileName';
 import { OverviewImage, OverviewVideoStill } from './OverviewImage';
 import { StructuredOutputs } from './StructuredValuePreview';
 import { JevResultView, type JevResultInputs } from './JevResult';
@@ -46,6 +47,9 @@ import { isJevNode, jevBrandStyle, parseJevOutputs, JEV_BOX, JEV_BRAND, JEV_DECI
 import { JEV_CARD_FIELDS, jevCardText, jevResultKey, upstreamPortValues } from '../../lib/jevView';
 import { failureMessage } from '../../lib/errorCopy';
 import { showNotice } from '../../lib/canvasNotice';
+
+// Input cards that name the file they hold, under the picture for an image.
+const INPUT_FILE_CARDS = new Set(['image-input', 'video-input', 'audio-input', 'document-input']);
 
 // Trigger a browser download for a URL produced by the backend. We fetch the
 // blob ourselves so the `download` attribute is honoured even across localhost
@@ -275,6 +279,11 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const isImageInput = nodeData.definitionId === 'image-input';
   const isMaskPainter = nodeData.definitionId === 'mask-painter';
   const imageInputPreview = isImageInput && nodeData.params._previewUrl ? String(nodeData.params._previewUrl) : null;
+  // Every input card names the file it holds, an image under its picture
+  // (GM - Design, 2026-10-24: similar images are hard to tell apart).
+  const inputFile = INPUT_FILE_CARDS.has(nodeData.definitionId)
+    ? inputFileName(nodeData.params)
+    : null;
   const maskOverlayData = isMaskPainter && typeof nodeData.params._maskData === 'string'
     ? nodeData.params._maskData
     : null;
@@ -600,6 +609,10 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
             onDragStart={isSlavaSkin ? undefined : startImageDrag(imageInputPreview)}
           />
         </div>
+      )}
+
+      {inputFile && (
+        <div className="model-node__file-name" title={inputFile}>{middleTruncate(inputFile)}</div>
       )}
 
       {showMaskComposite && maskSourcePreview && maskOverlayData && (

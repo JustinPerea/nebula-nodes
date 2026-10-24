@@ -175,7 +175,11 @@ NOT_PROVIDER_CALLS = {
     # the credential checks for those two providers).
     "services.settings": {"httpx", "services.google_vertex", "services.nous_auth"},
     # Path rules for local files; it imports the agent/workspace stack, never a provider.
-    "services.file_access": {"services.agent_profiles", "services.agent_workspaces", "services.output"},
+    # services.input_file_name is the kept upload name's param key (re and typing
+    # only; no network, no backend import), skipped by validate_file_references
+    # (2026-10-24).
+    "services.file_access": {"services.agent_profiles", "services.agent_workspaces", "services.output",
+                             "services.input_file_name"},
 }
 # Modules that spawn a process the walk can't see into, but whose program is
 # known and calls no paid API, each with why. Only their own spawn is excused;

@@ -37,6 +37,9 @@ export const DROP_GRID_STEP_X = 300;
 export const DROP_CARD_WIDTH = 240;
 export const DROP_PREVIEW_PAD_TOP = 70;
 export const DROP_CARD_HEIGHT = 380;
+/** The file-name line under a picture or clip (`.model-node__file-name`:
+ * 11px at 1.35 plus 6px below). */
+export const DROP_NAME_LINE = 22;
 export const DROP_ROW_GAP = 40;
 /** How long a dropped image or clip gets to give its size before it counts
  * as a plain card. */
@@ -82,7 +85,7 @@ export type MediaSize = { width: number; height: number };
  * the card's width, never under a plain card. */
 export function dropCardHeight(size: MediaSize | null): number {
   if (!size || !(size.width > 0) || !(size.height > 0)) return DROP_CARD_HEIGHT;
-  return Math.max(DROP_CARD_HEIGHT, Math.ceil(DROP_PREVIEW_PAD_TOP + (DROP_CARD_WIDTH * size.height) / size.width));
+  return Math.max(DROP_CARD_HEIGHT, Math.ceil(DROP_PREVIEW_PAD_TOP + (DROP_CARD_WIDTH * size.height) / size.width + DROP_NAME_LINE));
 }
 
 /** Where each accepted file of a drop goes, given its card's height: the drop

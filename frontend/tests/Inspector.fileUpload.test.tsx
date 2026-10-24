@@ -67,6 +67,17 @@ describe("the Inspector's file control", () => {
     await waitFor(() => expect(useGraphStore.getState().nodes[0].data.params.filePath).toBe('/out/chat-uploads/abc.wav'));
   });
 
+  it('keeps the name the file was picked with, for the card and the button', async () => {
+    answer(() => new Response(JSON.stringify({
+      filePath: '/out/chat-uploads/abc.pdf', url: '/api/outputs/chat-uploads/abc.pdf' }), { status: 200 }));
+    const { container } = show(inputNode('document-input'));
+    await choose(container, new File([new Uint8Array(8)], 'quarterly-report-final-version-2026.pdf', { type: 'application/pdf' }));
+    await waitFor(() => expect(useGraphStore.getState().nodes[0].data.params._fileName)
+      .toEqual({ file: 'abc.pdf', name: 'quarterly-report-final-version-2026.pdf' }));
+    expect(container.querySelector('.inspector__file-button span')?.textContent)
+      .toBe('quarterly-report-final-version-2026.pdf');
+  });
+
   it('says so when the upload fails', async () => {
     answer(() => new Response('', { status: 503 }));
     const { container } = show(inputNode('audio-input'));

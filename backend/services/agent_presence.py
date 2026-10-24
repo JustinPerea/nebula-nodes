@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Iterator, Mapping
 
 from services import universal_ports
+from services.input_file_name import input_file_name
 from services.selection_context import _safe_value as safe_value
 
 PRESENCE_TTL_SECONDS = 120.0
@@ -476,8 +477,9 @@ def output_availability(outputs: Any) -> dict[str, Any]:
 def redacted_node(node_id: str, node: Mapping[str, Any], definition: Mapping[str, Any],
                   inputs_from: list[str]) -> dict[str, Any]:
     """One node as agents read it (look_at_canvas, and get_project for a saved
-    project): its name, redacted params, which outputs exist, its wires in, and
-    a universal node's `ports` (from its model).
+    project): its name, redacted params, which outputs exist, its wires in, an
+    input's `fileName` (the name its file was uploaded with), and a universal
+    node's `ports` (from its model).
     `node` is a canvas node: definitionId, params, outputs and the label the
     person or an agent gave it (none when it goes by the model's name)."""
     definition_id = str(node.get("definitionId", ""))
@@ -492,6 +494,12 @@ def redacted_node(node_id: str, node: Mapping[str, Any], definition: Mapping[str
     }
     if node.get("label"):
         entry["model"] = definition.get("displayName") or definition_id
+    # The name the file was uploaded with: params keep only its stored
+    # (hashed) path, and the private `_fileName` isn't copied above.
+    params = node.get("params")
+    file_name = input_file_name(params) if isinstance(params, Mapping) else None
+    if file_name:
+        entry["fileName"] = file_name
     # A universal node's ports come from its model: say which, once
     # (its `_model_ports` record isn't repeated in params).
     model_ports = universal_ports.stored_ports(definition_id, node.get("params"))
