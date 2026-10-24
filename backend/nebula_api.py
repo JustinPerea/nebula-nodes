@@ -19,7 +19,7 @@ class NebulaAPIError(RuntimeError):
     """A request Nebula refused (`status` set) or never answered (`kind` connect/timeout)."""
 
     def __init__(self, detail: str, *, status: int | None = None, kind: str = "http",
-                 headers: Any = None) -> None:
+                 headers: Any = None, payload: Any = None) -> None:
         super().__init__(detail)
         self.detail = detail
         self.status = status
@@ -27,6 +27,16 @@ class NebulaAPIError(RuntimeError):
         # The refusal's response headers (case-insensitive), e.g. a preview's
         # X-Nebula-Last-Run-Error; empty when Nebula never answered.
         self.headers = headers if headers is not None else {}
+        # The refusal's JSON body when it had one (a size 413's `limit` and
+        # `scope`, a person gate's `code`); None otherwise.
+        self.payload = payload
+
+
+def _payload(response: httpx.Response) -> Any:
+    try:
+        return response.json()
+    except ValueError:
+        return None
 
 
 def with_identity(headers: dict[str, str] | None = None) -> dict[str, str]:
@@ -90,7 +100,8 @@ class NebulaAPI:
         except httpx.HTTPError as exc:
             raise NebulaAPIError(f"{method} {path} failed: {exc}", kind="connect") from exc
         if response.status_code >= 400:
-            raise NebulaAPIError(error_detail(response), status=response.status_code, headers=response.headers)
+            raise NebulaAPIError(error_detail(response), status=response.status_code, headers=response.headers,
+                                 payload=_payload(response))
         return response
 
     def stream_lines(self, method: str, path: str, *, headers: dict[str, str] | None = None,

@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from typing import Any
 
 MIB = 1024 * 1024
@@ -148,3 +149,23 @@ def limit_text(limit: int) -> str:
     """The limit as GM writes it: "16 MB"."""
     whole = limit / MIB
     return f"{whole:g} MB" if whole >= 1 else f"{limit:,} bytes"
+
+
+# The longest project name (services/project_store.project_name).
+PROJECT_NAME_MAX = 120
+_GRAPH_FILE_SUFFIX = re.compile(r"\.(nebula\.zip|nebula|json|zip)\Z", re.IGNORECASE | re.ASCII)
+_CONTROL = re.compile(r"[\x00-\x1f]")
+
+
+def project_name_for_file(file_name: str | None) -> str:
+    """The canvas's projectNameForFile (frontend/src/lib/projectSize.ts): the
+    name a graph file over the save limit opens as (Q120), so an agent's load
+    names the new project as the person's Load graph would. The file's name
+    without .nebula.zip, .nebula, .json or .zip, control characters as
+    spaces, at most 120 code points, or "Untitled project" when nothing is
+    left. tests/fixtures/graph_file_links_cases.json pins both."""
+    from services.graph_file_links import js_trim
+
+    base = _CONTROL.sub(" ", _GRAPH_FILE_SUFFIX.sub("", js_trim(file_name or "")))
+    name = js_trim(js_trim(base)[:PROJECT_NAME_MAX])
+    return name or "Untitled project"
