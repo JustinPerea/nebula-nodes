@@ -2468,6 +2468,60 @@ def _sniff_image_type(data: bytes) -> tuple[str, str] | None:
     return None
 
 
+# ISO base media brands that mean sound only (an .m4a/.m4b), not a clip.
+_AUDIO_FTYP_BRANDS = {b"M4A ", b"M4B "}
+
+
+def _iso_sound_only(data: bytes) -> bool:
+    """Whether an ISO base media file (ftyp) holds sound tracks and no video
+    track, read from its tracks' handler boxes: size(4) 'hdlr' version and
+    flags(4) pre_defined(4) handler_type(4), 'soun' or 'vide'. The brand
+    alone doesn't say: ffmpeg's `-f mp4`, Android recorders and many
+    exporters write an audio-only file as isom/mp42. Needs the whole file,
+    since the moov box sits at the end of one that isn't faststart."""
+    handlers: set[bytes] = set()
+    index = data.find(b"hdlr")
+    while index != -1 and index + 16 <= len(data):
+        handlers.add(bytes(data[index + 12:index + 16]))
+        index = data.find(b"hdlr", index + 4)
+    return b"soun" in handlers and b"vide" not in handlers
+
+
+def _sniff_audio_type(data: bytes) -> tuple[str, str] | None:
+    """Return (mime, ext) if *data* starts like a supported audio file, else None.
+
+    Checked by signature, like images, clips and PDFs: WAV (RIFF....WAVE),
+    MP3 (an ID3 tag, or an MPEG audio frame sync), AAC (ADTS frame sync),
+    M4A (ftyp with an M4A/M4B brand, or any ftyp file whose tracks are all
+    sound: pass the whole file for that), FLAC (fLaC) and Ogg (OggS: Vorbis or
+    Opus). These are what the Audio Input's consumers read (speech to text,
+    lip sync, audio-driven video). Run after the image sniff, so a JPEG
+    (FF D8) never reads as a frame sync.
+    """
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WAVE":
+        return ("audio/wav", ".wav")
+    if data[:3] == b"ID3":
+        return ("audio/mpeg", ".mp3")
+    if len(data) >= 12 and data[4:8] == b"ftyp" and (
+        data[8:12] in _AUDIO_FTYP_BRANDS or _iso_sound_only(data)
+    ):
+        return ("audio/mp4", ".m4a")
+    if data[:4] == b"fLaC":
+        return ("audio/flac", ".flac")
+    if data[:4] == b"OggS":
+        return ("audio/ogg", ".ogg")
+    if len(data) >= 2 and data[0] == 0xFF and (data[1] & 0xE0) == 0xE0:
+        # The frame sync. ADTS (AAC) has a 12-bit sync and layer bits 00;
+        # MPEG audio's layer 00 and version 01 are reserved, so no real MP3
+        # starts that way.
+        layer, version = data[1] & 0x06, data[1] & 0x18
+        if (data[1] & 0xF6) == 0xF0:
+            return ("audio/aac", ".aac")
+        if layer != 0 and version != 0x08:
+            return ("audio/mpeg", ".mp3")
+    return None
+
+
 def _sniff_video_type(data: bytes) -> tuple[str, str] | None:
     """Return (mime, ext) if *data* matches a supported video container.
 
@@ -2654,22 +2708,47 @@ async def _commons_startup() -> None:
                                                              downloader=commons_runtime.get_downloader()))
 
 
+def _upload_position(x: str | None, y: str | None) -> dict[str, float] | None:
+    """The spot /api/uploads puts a created node at: both of `x` and `y` as
+    finite numbers, or neither (None: today's placement). Anything else is
+    a 422 before a byte is stored."""
+    if x is None and y is None:
+        return None
+    if x is None or y is None:
+        raise HTTPException(status_code=422, detail="Send both x and y for where the node goes, or neither")
+    try:
+        spot = {"x": float(x), "y": float(y)}
+    except ValueError:
+        raise HTTPException(status_code=422, detail="x and y must be numbers") from None
+    if not all(math.isfinite(value) for value in spot.values()):
+        raise HTTPException(status_code=422, detail="x and y must be finite numbers")
+    return spot
+
+
 @app.post("/api/uploads")
 async def upload_file_consolidated(
     file: UploadFile,
     create_node: str = Form("false"),
+    x: str | None = Form(None),
+    y: str | None = Form(None),
 ) -> dict:
-    """Accept an image or video upload with strict validation and content-hash dedup.
+    """Accept an image, video, audio or document upload with strict validation
+    and content-hash dedup.
 
-    Routes by magic bytes: PNG/JPEG/GIF/WebP → image-input node; MP4/MOV/WebM
-    → video-input node (with ffprobe-derived private source metadata stored on
-    the node's params so the editor surface can read source metadata
-    without waiting for the edit handler to run).
+    Routes by magic bytes: PNG/JPEG/GIF/WebP → image-input node; WAV/MP3/AAC/
+    M4A/FLAC/Ogg → audio-input node; MP4/MOV/WebM → video-input node (with
+    ffprobe-derived private source metadata stored on the node's params so
+    the editor surface can read source metadata without waiting for the edit
+    handler to run); PDF or a text file → document-input node.
 
     When `create_node` is truthy, atomically creates the routed node in
     cli_graph and broadcasts graphSync. When absent or falsy, returns only
     the upload metadata so callers can handle node creation themselves (or
-    use the URL for an existing node).
+    use the URL for an existing node). `x` and `y` (both or neither, finite
+    flow coordinates) put the created node there: the canvas sends the drop
+    point, an agent its own spot. Without them the node goes right of the
+    rightmost node, as before. The export keeps a stored position
+    (_display_positions), so the spot is where the canvas draws it.
 
     Probe failure on a video that passed the magic-byte sniff deletes the
     just-written file (unless it pre-existed via content-hash dedup) and
@@ -2680,6 +2759,7 @@ async def upload_file_consolidated(
     Supersedes the deprecated /api/upload and /api/chat/uploads endpoints;
     both shapes of caller can migrate to this one.
     """
+    requested_position = _upload_position(x, y)
     content = await file.read()
     # Reject anything that cannot possibly be an accepted file before sniffing.
     # Images are capped at MAX_CHAT_UPLOAD_BYTES; videos at MAX_VIDEO_UPLOAD_BYTES.
@@ -2693,13 +2773,24 @@ async def upload_file_consolidated(
         raise HTTPException(status_code=415, detail="File is too small to be a valid media file")
 
     image_sniffed = _sniff_image_type(content[:16])
-    video_sniffed = _sniff_video_type(content[:16]) if image_sniffed is None else None
+    # A text name wins over a bare audio guess: a .txt saved as UTF-16 starts
+    # FF FE (an MPEG frame sync) and one can start "ID3"; both stay documents.
+    is_text_name = Path(file.filename or "").suffix.lower() in _DOC_TEXT_EXTS
+    audio_sniffed = (_sniff_audio_type(content)
+                     if image_sniffed is None and not is_text_name else None)
+    video_sniffed = (_sniff_video_type(content[:16])
+                     if image_sniffed is None and audio_sniffed is None else None)
 
     if image_sniffed is not None:
         if len(content) > MAX_CHAT_UPLOAD_BYTES:
             raise HTTPException(status_code=413, detail="Image exceeds 20 MB limit")
         _, ext = image_sniffed
         node_type = "image-input"
+    elif audio_sniffed is not None:
+        # Sound shares the clip cap (MAX_VIDEO_UPLOAD_BYTES, checked above):
+        # an hour of WAV is far past the 20 MB image cap.
+        _, ext = audio_sniffed
+        node_type = "audio-input"
     elif video_sniffed is not None:
         # Size already validated against MAX_VIDEO_UPLOAD_BYTES above.
         _, ext = video_sniffed
@@ -2714,7 +2805,7 @@ async def upload_file_consolidated(
         # the image cap for a better error, else reject.
         if len(content) > MAX_CHAT_UPLOAD_BYTES:
             raise HTTPException(status_code=413, detail="Image exceeds 20 MB limit")
-        raise HTTPException(status_code=415, detail="Only image, video, or document (PDF/text) files are accepted")
+        raise HTTPException(status_code=415, detail="Only image, video, audio or document (PDF/text) files are accepted")
 
     digest = hashlib.sha256(content).hexdigest()
     saved_path = require_allowed_path(CHAT_UPLOADS_DIR / f"{digest}{ext}")
@@ -2744,14 +2835,18 @@ async def upload_file_consolidated(
     # Opt-in node creation: parse create_node laxly so any reasonable truthy
     # string works (supports callers composing forms in different tools).
     if create_node.strip().lower() in ("true", "1", "yes"):
-        positions = [n.get("position", {}) for n in cli_graph.nodes.values()]
-        max_x = max((p.get("x", 0) for p in positions), default=-300)
-        new_position = {"x": float(max_x) + 300.0, "y": 100.0}
+        if requested_position is not None:
+            new_position = requested_position
+        else:
+            positions = [n.get("position", {}) for n in cli_graph.nodes.values()]
+            max_x = max((p.get("x", 0) for p in positions), default=-300)
+            new_position = {"x": float(max_x) + 300.0, "y": 100.0}
 
-        if node_type in ("image-input", "document-input"):
-            # filePath is the absolute local path (handlers open() this), _previewUrl
-            # is the served URL. Document Input ignores the preview (no <img>) but
-            # the shape is harmless and matches the Inspector upload.
+        if node_type in ("image-input", "audio-input", "document-input"):
+            # filePath is the absolute local path (handlers open() this; the
+            # engine's audio-input branch reads it), _previewUrl is the served
+            # URL. Only Image Input draws the preview; the shape matches the
+            # Inspector's own upload for each of them.
             node_params = {"filePath": str(saved_path.resolve()), "_previewUrl": url}
         else:
             # video-input: probe at upload so the source owns its own
@@ -14406,7 +14501,7 @@ async def quick_execute(body: dict[str, Any]) -> dict:
         elif isinstance(value, str) and value.endswith(('.mp4', '.mov', '.webm')):
             input_type = "video-input"
             port_type = "Video"
-        elif isinstance(value, str) and value.endswith(('.mp3', '.wav', '.m4a')):
+        elif isinstance(value, str) and value.endswith(('.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg')):
             input_type = "audio-input"
             port_type = "Audio"
         else:

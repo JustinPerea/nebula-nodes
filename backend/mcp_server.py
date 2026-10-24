@@ -917,23 +917,28 @@ def describe_node(definition_id: str, ctx: Context | None = None) -> dict[str, A
 
 
 @_tool(annotations=_EDIT, waits=True)
-def upload_file(path: str, ctx: Context | None = None) -> dict[str, Any]:
-    """Add a local image or video to Nebula (`nebula upload <file>`): Nebula
-    copies it into its output folder and puts an Image Input or Video Input
-    holding the copy on the canvas. Returns `nodeId` (wire it into a node with
-    edit_canvas), `kind`, `url` ("/api/outputs/...") and `filePath`.
+def upload_file(path: str, position: dict[str, float] | None = None,
+                ctx: Context | None = None) -> dict[str, Any]:
+    """Add a local image, video, audio or document to Nebula (`nebula upload
+    <file>`): Nebula copies it into its output folder and puts an Image
+    Input, Video Input, Audio Input or Document Input holding the copy on the
+    canvas, at `position` ({"x", "y"} in canvas coordinates, as edit_canvas
+    takes) or, without one, right of the other nodes. Returns `nodeId` (wire
+    it into a node with edit_canvas), `kind`, `url` ("/api/outputs/...") and
+    `filePath`.
 
     Do this before running a node priced from its input's size (SeedVR2,
     FLUX Video Upscale) on a file of yours: the spending check measures only
     files in Nebula's output folder, since one anywhere else could change
     after the check, so a run from it is refused. PNG, JPEG, GIF, WebP, MP4,
-    MOV, WebM, PDF or text; 20 MB for an image, 500 MB for a clip. An in-app
-    chat's turn reads only its own workspace; a relative path means that
-    workspace. Download a web file first; this takes local files only."""
+    MOV, WebM, WAV, MP3, M4A, AAC, FLAC, Ogg, PDF or text, checked by their
+    bytes; 20 MB for an image or document, 500 MB for a clip or sound. An
+    in-app chat's turn reads only its own workspace; a relative path means
+    that workspace. Download a web file first; this takes local files only."""
     import upload_client
 
     try:
-        return upload_client.upload(_api(), path, headers=_board_headers(ctx))
+        return upload_client.upload(_api(), path, headers=_board_headers(ctx), position=position)
     except upload_client.UploadError as exc:
         raise RuntimeError(str(exc)) from exc
 

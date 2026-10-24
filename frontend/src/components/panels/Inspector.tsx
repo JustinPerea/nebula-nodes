@@ -12,6 +12,8 @@ import { PORT_COLORS } from '../../lib/portCompatibility';
 import type { NodeData, DynamicNodeData, DynamicParamDefinition, ParamDefinition } from '../../types';
 import { fetchOpenRouterModels, fetchNousModels, fetchQuiverModels, getSettings, updateSettings, type OpenRouterModel, type QuiverModel } from '../../lib/api';
 import { apiFetch, backendAssetUrlSync } from '../../lib/backend';
+import { apiRequest } from '../../lib/apiRequest';
+import { quoted } from '../../lib/canvasFileDrop';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { MaskPainterModal } from '../DeferredPanels';
 import { DeferredMaskPainterModal } from '../../lib/deferredChunks';
@@ -890,18 +892,21 @@ export function Inspector({ embedded = false }: InspectorProps) {
                 if (!file) return;
                 const formData = new FormData();
                 formData.append('file', file);
-                apiFetch('/api/uploads', { method: 'POST', body: formData })
+                // GM, error-copy round 2: "Couldn't upload {filename}." then the
+                // reason, in the canvas notice (as a canvas drop says it).
+                const heading = `Couldn't upload ${quoted(file.name)}.`;
+                apiRequest(heading, '/api/uploads', { method: 'POST', body: formData })
                   .then((r) => r.json())
                   .then((data: { filePath: string; url: string }) => {
                     updateNodeData(activeNode.id, {
                       params: { ...activeNodeData.params, [param.key]: data.filePath, _previewUrl: backendAssetUrlSync(data.url) },
                     });
                   })
-                  .catch((err) => console.error('Upload failed:', err));
+                  .catch((err) => useGraphStore.getState().notify(failureMessage(err, heading), 'error'));
               }}
             />
           </label>
-          {!isDocNode && typeof activeNodeData.params._previewUrl === 'string' && (
+          {!isDocNode && !isVideoNode && typeof activeNodeData.params._previewUrl === 'string' && (
             <img
               src={String(activeNodeData.params._previewUrl)}
               alt="Preview"
