@@ -255,11 +255,12 @@ const isAbort = (error: unknown) => error instanceof DOMException && error.name 
  * caller didn't ask for. The caller's own abort (`signal` aborted) is not:
  * the caller stopped waiting, and it comes back as it was thrown.
  *
- * Only for fetch's own rejection (or its body read), at the call: any other
- * code can throw a TypeError too (JSON.stringify of a BigInt, a property of
- * undefined, a bad argument to a DOM API). apiFetch and fetchUrl
- * (lib/backend.ts) apply it and throw a ConnectionLostError; everything
- * downstream asks isNoAnswer (typeerror, 2026-10-24).
+ * Only for fetch's own rejection, at the call: any other code can throw a
+ * TypeError too (JSON.stringify of a BigInt, a property of undefined, a bad
+ * argument to a DOM API). fetchUrl (lib/backend.ts, and so apiFetch) applies
+ * it and throws a ConnectionLostError; the Response it hands out classifies
+ * its own body reads the same way (typeerror2). Everything downstream asks
+ * isNoAnswer (typeerror, 2026-10-24).
  */
 export function isConnectionFailure(error: unknown, signal?: AbortSignal | null): boolean {
   if (signal?.aborted) return false;
@@ -277,6 +278,23 @@ export function isConnectionFailure(error: unknown, signal?: AbortSignal | null)
 export function isNoAnswer(error: unknown, signal?: AbortSignal | null): boolean {
   if (signal?.aborted) return false;
   return error instanceof ConnectionLostError || isAbort(error);
+}
+
+/** A gateway's "couldn't reach the server behind me": the Vite dev proxy
+ * answers 502 for a backend that isn't there; 503 and 504 are the same from
+ * any other proxy in front of it. */
+const GATEWAY_STATUSES = new Set([502, 503, 504]);
+
+/**
+ * Whether Nebula's backend itself is unreachable, from the error's kind and
+ * status, never its words (typeerror2, 2026-10-24): no answer at all
+ * (isNoAnswer), or a gateway status with no reason of the backend's (the
+ * backend's own 503 always carries a written `detail`). A refusal whose
+ * reason says "network" is the backend answering.
+ */
+export function isBackendUnreachable(error: unknown, signal?: AbortSignal | null): boolean {
+  if (isNoAnswer(error, signal)) return true;
+  return error instanceof RequestFailedError && GATEWAY_STATUSES.has(error.status) && !detailText(error.detail);
 }
 
 /** The backend's `detail` when it is words (its 4xx reasons are written

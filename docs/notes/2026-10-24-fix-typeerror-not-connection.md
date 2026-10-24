@@ -63,3 +63,50 @@ No question went to Justin: this is a bug found during the GM copy batch, fixed 
 - A body read that fails after the answer, through apiFetch: see Tradeoffs.
 - ChatPanel's `isBackendUnavailableError` message checks are mostly dead now. The status calls go through apiRequest, so their errors never carry "Failed to fetch" or "status failed: 50x". The "network" substring could flag a 4xx whose written reason contains that word. Worth replacing with `kind`/`status` in a follow-up. A 502 from the Vite proxy (`RequestFailedError` status 502) isn't read as offline today.
 - Dev only: Vite's proxy hangs the page's response when the backend drops mid-body (see Review). Not this bug, and the desktop shell doesn't use the proxy.
+
+## 2026-10-24 — Second pass: body reads after the answer, and Chat's "backend offline"
+
+On top of 2246aad6, same branch. It closes the first two open items above. Justin's standing rule: complete fixes as soon as we run into them; correct over easy. No copy and no agent-facing string changed.
+
+### What changed and why
+
+- **A body that drops after apiFetch answered.** `fetchUrl` (lib/backend.ts), and so `apiFetch`, now hands out the Response with its whole-body reads classified (`classifyBodyReads`). When `json()`, `text()`, `blob()`, `arrayBuffer()` or `bytes()` rejects with fetch's own TypeError, it becomes a `ConnectionLostError` with that TypeError as its cause. For apiFetch it has no heading: apiRequest's callers and the failure helpers add theirs. A fetchUrl caller's heading is used. Before this, the first pass had made such a read say GM's general line. On main it said the connection line, but only because any TypeError did.
+- **What stays as it was:** reading a body that is already used or locked is a bug, so it keeps its plain TypeError (checked with `bodyUsed` and `body.locked` before the read). A JSON SyntaxError, an AbortError and anything the caller throws while handling the body also keep their class, and all of them say the general line.
+- **Narrow mechanism:** it is the same Response object. Only the body-read methods and `clone()` are shadowed on that instance, and `clone()` returns a classified clone, so `notePersonRequired`, `noteParamsOutdated` and api.ts's `clone().json()` reads are covered too. Status, headers, url, `bodyUsed`, `instanceof Response` and identity don't change. An answer that isn't a real Response (a test double) is handed out untouched. A plain object's `json()` can throw any TypeError, so it can't be classified safely.
+- **Commons call:** its body-read catch asked `isConnectionFailure` (any TypeError). It now asks `isNoAnswer`, so a used body no longer reads as "Nebula's server isn't answering". `isConnectionFailure` is now called only in fetchUrl, on fetch()'s own rejection.
+- **Chat's "backend offline":** `isBackendUnavailableError` (ChatPanel.tsx) no longer reads the message. It now checks `isBackendUnreachable` (new, in errorCopy.ts), plus any error that carries the no-answer status (a Commons call's). `isBackendUnreachable` is true for no answer (`isNoAnswer`), or for a gateway's 502/503/504 with no written reason from the backend. The checks for "failed to fetch", "load failed", "network" and "status failed: 50x" are gone. A 4xx whose reason says "network" is now the backend answering.
+
+### Decisions not in the spec
+
+- **Which statuses mean the backend is unreachable:** 502, 503 and 504, and only with no `detail`. Vite's dev proxy answers an empty `502` for a stopped backend (checked in node_modules/vite: `res.writeHead(502)` in its proxy error handler), and other proxies use 503 and 504. The backend's own 503s (HTTPException) always carry a written `detail`, so they count as the backend answering. A 500 is the backend answering too. The old message check named `status failed: 500`, but nothing produces that text any more. apiFetch's own `TRANSIENT_PROXY_STATUSES` still includes 500, because that set only decides whether to rediscover, which is safe to do more often.
+- **Where the body reads are classified:** in fetchUrl, not only in apiFetch. The asset sites go through fetchUrl as well, so every Response that Nebula's own fetch hands out behaves the same. readBoundedAssetResponse still classifies its own stream reads. When the error is already a ConnectionLostError, it only adds its heading.
+- **Not wrapped:** `formData()`, because it rejects with a TypeError for a body that isn't form data, and nothing calls it on an apiFetch answer. `response.body` stream readers aren't wrapped either. Their one consumer, readBoundedAssetResponse, already classifies its own reads. Wrapping the stream would change its identity and buffering for every caller. Audit: no apiFetch caller reads `response.body`, and there is no SSE or EventSource consumer. The two WebSockets don't go through fetch.
+
+### Tradeoffs
+
+- The classification goes by "a TypeError from a real Response's body read on a body that wasn't used or locked". For whole-body reads, browsers only reject with a TypeError for a network failure or a used or locked body. Text decoding substitutes bad bytes rather than throwing.
+- The patch puts own properties on the Response instance. A subclass would have needed `new Response(body, init)`, which loses `url`, `redirected` and `type`. A Proxy would break `instanceof` checks and private-slot calls (`Response.prototype.json.call(proxy)` throws).
+
+### Surprises
+
+- Chrome words the body-read rejection exactly like fetch()'s own: `TypeError: Failed to fetch`, not "network error". Only the stage tells them apart. The live check confirmed that apiFetch had answered 200 before `json()` rejected.
+
+### Tests
+
+- Tests first. On 2246aad6, 14 new tests failed across 3 files:
+  - tests/lib/apiFetch.bodyDrop.test.ts (new), 8 failures: `json()`, `text()`, `blob()` and `arrayBuffer()` on a body that drops mid-read gave a plain TypeError (4). A clone's read did the same. fetchClaudeStatus gave the general line. fetchUrl's read had no heading. Seven guards passed before and after: a used body, a locked body, a JSON SyntaxError, the caller's own abort, a TypeError the caller throws, a test double handed out untouched, and the same object/status/headers/clone/bodyUsed.
+  - tests/ChatPanel.offline.test.tsx, 6 failures: a 400 whose reason says "network" read as offline. A plain `Error('Failed to fetch')` read as offline. Empty 502, 503 and 504 answers didn't read as offline (3). An AbortError nobody asked for didn't either. Two guards passed before and after: the backend's own 500, and a 503 with the backend's written reason.
+  - tests/commonsApi.errorCopy.test.ts, 1 failure: a used body read as a lost connection. The mid-body drop test passed before and after; the Commons call already classified that case.
+- After the change, all 44 tests in those three files pass. The focused run covers every test file that stubs global fetch (and so runs the real apiFetch/fetchUrl) plus the ChatPanel, Commons and errorCopy files: 43 files, 876 tests passed.
+- Agent support: browser-only error classification. No MCP tool, `nebula` CLI text, INSTRUCTIONS paragraph, docs/MCP-SETUP.md or skills/nebula/SKILL.md text changes.
+
+### Live check
+
+- Setup: backend on 8793 (iso.sh: temp HOME and NEBULA_* roots, no keys) and Vite on 5793 with `VITE_NEBULA_BACKEND_PORT=8793`. Puppeteer ran at 1280x800 and 1440x900. CDP blocked 8000-8010 and 5173, and the dead-proxy layer was on (a canary on 8798 couldn't be reached). **Blocked request attempts: 0.** 15/15 checks passed.
+- In-page answers for `/api/agents/claude/status` only, never sent to the backend. A 400 whose reason said "network" read "Claude status unavailable", titled "Couldn't check Claude status. The network policy on this machine blocks the Claude CLI.", with no "Backend offline". An empty 502 read "Nebula backend offline", titled "…Nebula didn't respond. Try again.".
+- With the real answer back, the panel read "Claude not installed". With the backend stopped, it read "Nebula backend offline", titled "…Nebula's backend isn't running. Start it, then reload.", with the start-backend hint.
+- A stand-in server on 8793 sent 200 headers and part of the JSON, then dropped the socket. The page sent the status call straight to 8793, as the desktop shell reaches the backend. Through the Vite proxy the page's response hangs instead (first pass). apiFetch answered 200, then `json()` rejected with a ConnectionLostError whose cause was Chrome's TypeError. As a control, the raw fetch's `json()` rejected with a plain TypeError, which is what apiFetch handed out before. `fetchClaudeStatus` and the Chat panel's title both said "Couldn't check Claude status. Nebula's server isn't answering. Make sure it's running, then try again."
+
+### Open items
+
+- First pass's items 1 and 2: closed. Item 3 (Vite's proxy hanging on a mid-body drop) is unchanged and dev only.

@@ -330,9 +330,65 @@ function notePersonRequired(response: Response): void {
  * answering (typeerror, 2026-10-24).
  */
 export function fetchUrl(url: string, init: RequestInit = {}, heading = ''): Promise<Response> {
-  return fetch(url, init).catch((error: unknown) => {
-    throw isConnectionFailure(error, init.signal) ? new ConnectionLostError(error, { heading }) : error;
-  });
+  return fetch(url, init).then(
+    (response) => classifyBodyReads(response, heading),
+    (error: unknown) => {
+      throw isConnectionFailure(error, init.signal) ? new ConnectionLostError(error, { heading }) : error;
+    },
+  );
+}
+
+/** The Response methods that read the whole body. formData() is left out:
+ * it also rejects with a TypeError for a body that isn't form data. */
+const BODY_READS = ['json', 'text', 'blob', 'arrayBuffer', 'bytes'] as const;
+
+/**
+ * The answer came, then the connection dropped while the caller read the
+ * body: the read rejects with fetch's own TypeError, a no-answer like
+ * fetch()'s rejection. It is classified here, on the Response fetchUrl (and
+ * so apiFetch) hands out, as a ConnectionLostError under `heading` (none
+ * for apiFetch: apiRequest's caller and the failure helpers add theirs),
+ * with fetch's error as its cause (typeerror2, 2026-10-24).
+ *
+ * Narrow on purpose: the same Response object (status, headers, url,
+ * instanceof, bodyUsed unchanged), with only its whole-body reads (and
+ * clone(), so a clone's read is classified too) shadowed on the instance. A
+ * read of a body that is already used or locked is a bug and keeps its
+ * plain TypeError; a JSON SyntaxError and an AbortError come back as
+ * thrown. A test double that isn't a real Response is handed out untouched.
+ * A stream reader (`response.body`) isn't wrapped: the one consumer,
+ * readBoundedAssetResponse (lib/boundedAsset.ts), classifies its own reads.
+ */
+function classifyBodyReads(response: Response, heading: string): Response {
+  if (!(response instanceof Response) || !Object.isExtensible(response)) return response;
+  for (const name of BODY_READS) {
+    const read = (response as unknown as Record<string, unknown>)[name];
+    if (typeof read !== 'function') continue;
+    Object.defineProperty(response, name, {
+      configurable: true,
+      writable: true,
+      value: function classifiedRead(this: Response, ...args: unknown[]) {
+        const target = this ?? response;
+        // Used or locked before this read: the read's TypeError is a bug.
+        if (target.bodyUsed || target.body?.locked) return read.apply(target, args);
+        return (read.apply(target, args) as Promise<unknown>).catch((error: unknown) => {
+          if (error instanceof ConnectionLostError) throw error;
+          throw error instanceof TypeError ? new ConnectionLostError(error, { heading }) : error;
+        });
+      },
+    });
+  }
+  const clone = response.clone;
+  if (typeof clone === 'function') {
+    Object.defineProperty(response, 'clone', {
+      configurable: true,
+      writable: true,
+      value: function classifiedClone(this: Response) {
+        return classifyBodyReads(clone.call(this ?? response), heading);
+      },
+    });
+  }
+  return response;
 }
 
 export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
