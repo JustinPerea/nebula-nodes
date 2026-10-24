@@ -54,6 +54,7 @@ vi.mock('../src/lib/canvasSelection', () => ({
 import { Canvas } from '../src/components/Canvas';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
+import { ConnectionLostError } from '../src/lib/errorCopy';
 
 const TYPES = 'Nebula takes images, video, audio, PDFs and text files.';
 const initialUI = useUIStore.getState();
@@ -223,7 +224,8 @@ describe('Canvas file drop', () => {
   });
 
   it('says so when the server does not answer', async () => {
-    api.fetch.mockImplementation(async () => { throw new TypeError('Failed to fetch'); });
+    // As apiFetch throws no answer (typeerror, 2026-10-24: a bare TypeError isn't one).
+    api.fetch.mockImplementation(async () => { throw new ConnectionLostError(new TypeError('Failed to fetch')); });
     await drop([file('tone.wav', 'audio/wav')]);
     expect(notice()).toBe(
       "Couldn't upload “tone.wav”. Nebula's server isn't answering. Make sure it's running, then try again.");

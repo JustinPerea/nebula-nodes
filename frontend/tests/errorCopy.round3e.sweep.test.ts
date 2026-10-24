@@ -72,7 +72,6 @@ const OLD_WORDING = /\b[Cc]ould not\b|[A-Za-z] failed: |\bFailed to\b/;
 /** file (relative to src/) -> matching lines allowed, and why. */
 const ALLOWED: Record<string, { count: number; why: string }> = {
   // isBackendUnavailableError matches a dev proxy's "status failed: 50x" text; not shown.
-  'components/panels/ChatPanel.tsx': { count: 4, why: 'classifies a status-check failure, not shown' },
   // The health probe's throw only turns the dot offline; its text is never read.
   'components/BackendConnectionStatus.tsx': { count: 1, why: 'thrown and swallowed by the health probe' },
   // CanvasViewReporter logs it to the console only.

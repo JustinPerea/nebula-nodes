@@ -100,6 +100,57 @@ describe('MeshPreview', () => {
     expect(copy).not.toMatch(/HTTP|503/);
   });
 
+  it('typeerror (2026-10-24): a browser TypeError after the answer reads GM\'s general line, not "isn\'t answering"', async () => {
+    const webglContext = { getExtension: vi.fn().mockReturnValue(null) } as unknown as WebGLRenderingContext;
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(webglContext);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(new Uint8Array([1, 2, 3]), {
+      headers: { 'Content-Type': 'model/gltf-binary' },
+    })));
+    const original = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: () => { throw new TypeError("Failed to execute 'createObjectURL' on 'URL': Overload resolution failed."); },
+    });
+    try {
+      render(<MeshPreview src="/api/outputs/run/b.glb" />);
+      const preview = screen.getByRole('button', { name: /open glb model preview/i });
+      fireEvent.click(preview);
+      await waitFor(() => expect(preview.getAttribute('data-status')).toBe('error'));
+      expect(document.querySelector('.mesh-modal__fallback-copy')?.textContent)
+        .toBe("Couldn't load the 3D preview. Try again, or reload if it keeps happening.");
+    } finally {
+      if (original) Object.defineProperty(URL, 'createObjectURL', original);
+      else delete (URL as unknown as Record<string, unknown>).createObjectURL;
+    }
+  });
+
+  it('typeerror (2026-10-24): a preview that can\'t reach Nebula still says the connection line', async () => {
+    const webglContext = { getExtension: vi.fn().mockReturnValue(null) } as unknown as WebGLRenderingContext;
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(webglContext);
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    render(<MeshPreview src="/api/outputs/run/c.glb" />);
+    const preview = screen.getByRole('button', { name: /open glb model preview/i });
+    fireEvent.click(preview);
+    await waitFor(() => expect(preview.getAttribute('data-status')).toBe('error'));
+    expect(document.querySelector('.mesh-modal__fallback-copy')?.textContent)
+      .toBe("Couldn't load the 3D preview. Nebula's server isn't answering. Make sure it's running, then try again.");
+  });
+
+  it('typeerror review (2026-10-24): a connection that drops while the model streams still says the connection line', async () => {
+    const webglContext = { getExtension: vi.fn().mockReturnValue(null) } as unknown as WebGLRenderingContext;
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(webglContext);
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new Uint8Array([1, 2])); },
+      pull(controller) { controller.error(new TypeError('network error')); },
+    }), { headers: { 'Content-Type': 'model/gltf-binary' } })));
+    render(<MeshPreview src="/api/outputs/run/d.glb" />);
+    const preview = screen.getByRole('button', { name: /open glb model preview/i });
+    fireEvent.click(preview);
+    await waitFor(() => expect(preview.getAttribute('data-status')).toBe('error'));
+    expect(document.querySelector('.mesh-modal__fallback-copy')?.textContent)
+      .toBe("Couldn't load the 3D preview. Nebula's server isn't answering. Make sure it's running, then try again.");
+  });
+
   it('error-copy round 2: a download that can\'t reach Nebula says "Couldn\'t download the 3D model."', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
     render(<MeshPreview src="/api/outputs/run/world.ply" />);

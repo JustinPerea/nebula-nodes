@@ -8,10 +8,10 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { Download, X } from 'lucide-react';
-import { backendAssetUrlSync } from '../../lib/backend';
+import { backendAssetUrlSync, fetchUrl } from '../../lib/backend';
 import { AssetByteLimitError, readBoundedAssetResponse } from '../../lib/boundedAsset';
 import { downloadWorldAsset, worldAssetFilename } from '../../lib/worldDownload';
-import { ConnectionLostError, oneLine, requestError, requestSucceeded, FailureNotice, failureMessage } from '../../lib/errorCopy';
+import { oneLine, requestError, requestSucceeded, FailureNotice, failureMessage } from '../../lib/errorCopy';
 import { isSafeWorldUrl } from '../../lib/worldValue';
 import { isSplatExport, meshFormatLabel } from '../../lib/meshFormat';
 
@@ -171,22 +171,18 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
       const failed = (reason: string) => new FailureNotice(heading, reason);
       try {
         if (!isSafeWorldUrl(src)) throw failed('The mesh URL is not safe to preview.');
-        let response: Response;
-        try {
-          response = await fetch(backendAssetUrlSync(src), {
-            cache: 'no-store',
-            signal: controller.signal,
-          });
-        } catch (error) {
-          if (error instanceof DOMException && error.name === 'AbortError') throw error;
-          throw new ConnectionLostError(error, { heading });
-        }
+        // No answer is a ConnectionLostError (fetchUrl); a TypeError after
+        // the answer is GM's general line, not "isn't answering".
+        const response = await fetchUrl(backendAssetUrlSync(src), {
+          cache: 'no-store',
+          signal: controller.signal,
+        }, heading);
         if (!response.ok) throw await requestError(heading, response);
         requestSucceeded(heading);
         if (!isLikelyMeshResponse(src, response.headers.get('content-type'))) {
           throw failed('The mesh URL returned an unsupported file type.');
         }
-        const bytes = await readBoundedAssetResponse(response, MESH_PREVIEW_MAX_BYTES);
+        const bytes = await readBoundedAssetResponse(response, MESH_PREVIEW_MAX_BYTES, { heading });
         const contentType = response.headers.get('content-type') || 'model/gltf-binary';
         objectUrl = URL.createObjectURL(new Blob([bytes], { type: contentType }));
         await ensureModelViewerElement();

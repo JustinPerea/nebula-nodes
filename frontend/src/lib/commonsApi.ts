@@ -2,7 +2,7 @@ import { apiFetch } from './backend';
 import { CommonsRequestError } from './commonsRequestError';
 import {
   CONNECTION_LOST_COPY, ConnectionLostError, NO_ANSWER_STATUS,
-  REFUSED_FALLBACK_COPY, commonsSessionCopy, copyForStatus, isConnectionFailure, readDetail, requestSucceeded,
+  REFUSED_FALLBACK_COPY, commonsSessionCopy, copyForStatus, isNoAnswer, readDetail, requestSucceeded,
   warnFailure, type FailureCopy,
 } from './errorCopy';
 import {
@@ -99,8 +99,10 @@ async function call<T>(heading: string, path: string, init: RequestInit = {}): P
   try {
     return await (type.includes('application/json') ? response.json() : response.blob()) as T;
   } catch (error) {
-    // The connection dropped while the body was arriving.
-    if (isConnectionFailure(error, init.signal)) throw lostConnection(heading, error);
+    // The connection dropped while the body was arriving: apiFetch's Response
+    // classifies the read (a ConnectionLostError), so a used body or a bug is
+    // not read as one (typeerror2, 2026-10-24).
+    if (isNoAnswer(error, init.signal)) throw lostConnection(heading, error);
     throw error;
   }
 }

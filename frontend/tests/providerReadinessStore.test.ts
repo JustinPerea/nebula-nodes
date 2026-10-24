@@ -6,6 +6,7 @@ vi.mock('../src/lib/backend', async (original) => ({
 import { useProviderReadinessStore } from '../src/store/providerReadinessStore';
 import { useUIStore } from '../src/store/uiStore';
 import { PROVIDER_HEALTH_TTL_MS } from '../src/lib/providerReadiness';
+import { ConnectionLostError } from '../src/lib/errorCopy';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -83,6 +84,17 @@ describe('explicit provider connection checks', () => {
     fetch.mockResolvedValue(response('OpenAI', 'surprise-status'));
     await useProviderReadinessStore.getState().checkConnections();
     expect(useProviderReadinessStore.getState()).toMatchObject({ providers: {}, checkedAt: null, loading: false });
+    expect(useProviderReadinessStore.getState().error).toBe(CHECK_FAILED);
+  });
+
+  // typeerror (2026-10-24): only apiFetch's ConnectionLostError means no answer.
+  it('no answer reads the connection line; a TypeError after the answer reads the general line', async () => {
+    fetch.mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch')));
+    await useProviderReadinessStore.getState().checkConnections();
+    expect(useProviderReadinessStore.getState().error)
+      .toBe("Couldn't check the connections. Nebula's server isn't answering. Make sure it's running, then try again.");
+    fetch.mockResolvedValueOnce({ ok: true, json: async () => JSON.parse(JSON.stringify({ a: 1n })) });
+    await useProviderReadinessStore.getState().checkConnections();
     expect(useProviderReadinessStore.getState().error).toBe(CHECK_FAILED);
   });
 });

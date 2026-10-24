@@ -1,14 +1,14 @@
 import JSZip from 'jszip';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../types';
-import { backendAssetUrlSync } from './backend';
+import { backendAssetUrlSync, fetchUrl } from './backend';
 import { apiRequest } from './apiRequest';
 import {
   GRAPH_BUNDLE_MAX_ASSET_BYTES,
   GRAPH_BUNDLE_MAX_TOTAL_BYTES,
 } from './graphFileShared';
-import { readBoundedAssetResponse } from './boundedAsset';
-import { ConnectionLostError, copyForStatus, FailureNotice, isConnectionFailure, requestError, requestSucceeded } from './errorCopy';
+import { AssetByteLimitError, readBoundedAssetResponse } from './boundedAsset';
+import { copyForStatus, FailureNotice, requestError, requestSucceeded } from './errorCopy';
 import { isSafeWorldUrl, parseWorldValue } from './worldValue';
 
 
@@ -134,13 +134,10 @@ export async function downloadSelectedOutputs(nodes: Node<NodeData>[]): Promise<
     const remainingBytes = GRAPH_BUNDLE_MAX_TOTAL_BYTES - totalBytes;
     if (remainingBytes <= 0) throw new FailureNotice('', SELECTION_TOO_LARGE_COPY);
     // An asset URL, not an API path, so apiFetch can't make this request;
-    // turn its failures into copy the same way (error-copy review): the
-    // selection toolbar shows this error as the Download button's title, one
-    // line: "Couldn't download the outputs. <reason>".
-    const response = await fetch(backendAssetUrlSync(output.url), { cache: 'no-store' })
-      .catch((error: unknown) => {
-        throw isConnectionFailure(error) ? new ConnectionLostError(error, { heading: DOWNLOAD_OUTPUTS }) : error;
-      });
+    // fetchUrl turns its no-answer into copy the same way (error-copy
+    // review): the selection toolbar shows this error as the Download
+    // button's title, one line: "Couldn't download the outputs. <reason>".
+    const response = await fetchUrl(backendAssetUrlSync(output.url), { cache: 'no-store' }, DOWNLOAD_OUTPUTS);
     if (!response.ok) {
       // The ids stay for the console, not the title.
       throw await requestError(DOWNLOAD_OUTPUTS, response,
@@ -152,8 +149,13 @@ export async function downloadSelectedOutputs(nodes: Node<NodeData>[]): Promise<
       bytes = await readBoundedAssetResponse(
         response,
         Math.min(GRAPH_BUNDLE_MAX_ASSET_BYTES, remainingBytes),
+        { heading: DOWNLOAD_OUTPUTS },
       );
-    } catch {
+    } catch (error) {
+      // A body that dropped mid-stream is a no-answer, not "too large"
+      // (typeerror review, 2026-10-24); anything but the byte limit goes up
+      // to the toolbar's failureMessage as it is.
+      if (!(error instanceof AssetByteLimitError)) throw error;
       // Too large for what's left of the ZIP: the whole selection when other
       // outputs already filled it, else this one.
       // Written lines (GM, round 2), thrown as a FailureNotice so the toolbar
