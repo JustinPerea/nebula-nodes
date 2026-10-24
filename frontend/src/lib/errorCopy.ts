@@ -134,10 +134,11 @@ export function oneLine(copy: FailureCopy): string {
 }
 
 /**
- * A request that got no answer, as apiFetch throws it. Still a TypeError (as
- * fetch's own is), so code that tells "no answer" from a refusal keeps
- * working; its message is the line to show, and `cause` is the browser's
- * own error. `withHeading` names the action once the caller knows it.
+ * A request that got no answer, as apiFetch and fetchUrl throw it. Still a
+ * TypeError (as fetch's own is); but a TypeError is not one of these, and
+ * only this class means no answer downstream (isNoAnswer). Its message is
+ * the line to show, and `cause` is the browser's own error. `withHeading`
+ * names the action once the caller knows it.
  */
 export class ConnectionLostError extends TypeError {
   readonly status = NO_ANSWER_STATUS;
@@ -253,10 +254,29 @@ const isAbort = (error: unknown) => error instanceof DOMException && error.name 
  * "NetworkError when attempting to fetch resource."), or an AbortError the
  * caller didn't ask for. The caller's own abort (`signal` aborted) is not:
  * the caller stopped waiting, and it comes back as it was thrown.
+ *
+ * Only for fetch's own rejection (or its body read), at the call: any other
+ * code can throw a TypeError too (JSON.stringify of a BigInt, a property of
+ * undefined, a bad argument to a DOM API). apiFetch and fetchUrl
+ * (lib/backend.ts) apply it and throw a ConnectionLostError; everything
+ * downstream asks isNoAnswer (typeerror, 2026-10-24).
  */
 export function isConnectionFailure(error: unknown, signal?: AbortSignal | null): boolean {
   if (signal?.aborted) return false;
   return error instanceof TypeError || isAbort(error);
+}
+
+/**
+ * Whether an error caught anywhere downstream of a request means there was
+ * no answer: a ConnectionLostError (fetch's no-answer, classified where
+ * fetch was called), or an AbortError the caller didn't ask for. Never a
+ * TypeError as such: a bug or a data problem in the browser is a TypeError
+ * too, and "Nebula's server isn't answering" would send the person to the
+ * wrong fix. The caller's own abort (`signal` aborted) is not either.
+ */
+export function isNoAnswer(error: unknown, signal?: AbortSignal | null): boolean {
+  if (signal?.aborted) return false;
+  return error instanceof ConnectionLostError || isAbort(error);
 }
 
 /** The backend's `detail` when it is words (its 4xx reasons are written
@@ -307,10 +327,11 @@ export function failureDetails(error: unknown): string | null {
 }
 
 /** The line for a thrown error that isn't a request's answer: the
- * connection line when fetch got no answer, else GM's general line, never
+ * connection line when a request got no answer (isNoAnswer: a
+ * ConnectionLostError, never any TypeError), else GM's general line, never
  * the error's own message. */
 export function copyForError(error: unknown, signal?: AbortSignal | null): string {
-  return isConnectionFailure(error, signal) ? CONNECTION_LOST_COPY : REFUSED_FALLBACK_COPY;
+  return isNoAnswer(error, signal) ? CONNECTION_LOST_COPY : REFUSED_FALLBACK_COPY;
 }
 
 /** An answer's `detail`, read from a JSON body; undefined when there is none. */

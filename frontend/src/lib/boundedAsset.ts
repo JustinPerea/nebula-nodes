@@ -1,4 +1,18 @@
+import { ConnectionLostError } from './errorCopy';
+
 export class AssetByteLimitError extends Error {}
+
+/** A body read that rejects with a TypeError is fetch's own no-answer: the
+ * headers came, then the connection dropped mid-stream. It is classified here,
+ * at the read, as fetchUrl classifies fetch()'s rejection (typeerror review,
+ * 2026-10-24). Only the read itself is wrapped, so a locked or used body (a
+ * bug) stays a plain TypeError; an AbortError (the caller's own abort) comes
+ * back unchanged. */
+function bodyDropped(error: unknown, heading: string): unknown {
+  if (!(error instanceof TypeError)) return error;
+  if (error instanceof ConnectionLostError) return heading && !error.heading ? error.withHeading(heading) : error;
+  return new ConnectionLostError(error, { heading });
+}
 
 function declaredResponseLength(response: Response): number | null {
   const raw = response.headers.get('content-length');
@@ -12,7 +26,9 @@ function declaredResponseLength(response: Response): number | null {
 export async function readBoundedAssetResponse(
   response: Response,
   maxBytes: number,
+  options: { heading?: string } = {},
 ): Promise<Uint8Array<ArrayBuffer>> {
+  const heading = options.heading ?? '';
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
     throw new AssetByteLimitError('No asset capacity remains.');
   }
@@ -24,7 +40,9 @@ export async function readBoundedAssetResponse(
   }
 
   if (!response.body) {
-    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (response.bodyUsed) throw new TypeError('The asset response body was already read.');
+    const buffer = await response.arrayBuffer().catch((error: unknown) => { throw bodyDropped(error, heading); });
+    const bytes = new Uint8Array(buffer);
     if (bytes.byteLength > maxBytes) {
       throw new AssetByteLimitError(
         `Asset contains ${bytes.byteLength} bytes, above the ${maxBytes}-byte allowance.`,
@@ -38,7 +56,8 @@ export async function readBoundedAssetResponse(
   let byteLength = 0;
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      const { done, value } = await reader.read()
+        .catch((error: unknown) => { throw bodyDropped(error, heading); });
       if (done) break;
       if (!value) continue;
       if (byteLength + value.byteLength > maxBytes) {

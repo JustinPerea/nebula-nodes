@@ -8,7 +8,7 @@ import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { cinemaMotionSource, cinemaMotionTarget, useCinemaMotionStore, type CinemaMotionHandoff } from '../store/cinemaMotionStore';
 import type { NodeData } from '../types';
-import { NO_RESPONSE_SHORT_COPY, copyForAnswer, isConnectionFailure, readRefusal, shortReason } from './errorCopy';
+import { NO_RESPONSE_SHORT_COPY, copyForAnswer, isNoAnswer, readRefusal, shortReason } from './errorCopy';
 
 /** A refused handoff's reason: a person-only refusal says GM's line, by its
  * code (Q116 a); else the backend's reason or GM's line for the status. */
@@ -122,7 +122,7 @@ export async function sendCinemaShotToMotion(nodeId: string, shotId: string): Pr
     replace({ ...handoff, status: 'error', error: error instanceof HandoffError ? error.message
       // GM, round 3f: "don't stack two "Couldn't"s, and Nebula is local, so →
       // "Couldn't confirm the video connection. Nebula didn't respond."".
-      : isConnectionFailure(error, controller.signal) ? `${UNCONFIRMED} ${NO_RESPONSE_SHORT_COPY}` : UNCONFIRMED });
+      : isNoAnswer(error, controller.signal) ? `${UNCONFIRMED} ${NO_RESPONSE_SHORT_COPY}` : UNCONFIRMED });
   } finally { controllers.delete(handoff.attempt); }
 }
 

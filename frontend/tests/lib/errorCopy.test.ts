@@ -34,8 +34,11 @@ describe('error kind -> line', () => {
   const caller = new AbortController();
   caller.abort();
   const thrown: Array<[string, unknown, AbortSignal | undefined, string]> = [
-    ['a fetch TypeError (no answer at all)', new TypeError('Failed to fetch'), undefined, LOST],
-    ['Safari\'s fetch TypeError', new TypeError('Load failed'), undefined, LOST],
+    // typeerror (2026-10-24): fetch's no-answer is classified where fetch is
+    // called (apiFetch, fetchUrl); a TypeError that reaches here unclassified
+    // is the browser's own failure, so GM's general line.
+    ['a TypeError nothing classified, even with fetch\'s words', new TypeError('Failed to fetch'), undefined, REFUSED],
+    ['Safari\'s words, unclassified', new TypeError('Load failed'), undefined, REFUSED],
     ['an AbortError the caller didn\'t ask for', new DOMException('The operation was aborted.', 'AbortError'), undefined, LOST],
     ['a ConnectionLostError from apiFetch', new ConnectionLostError(new TypeError('Failed to fetch')), undefined, LOST],
     ['anything else says GM\'s general line, never its own message', new Error('Unexpected token < in JSON'), undefined, REFUSED],
@@ -167,7 +170,7 @@ describe('round 2: heading + reason + kind', async () => {
 
   it('a failure that isn\'t a request\'s says GM\'s general line under the heading the screen gives it', () => {
     expect(copy.failureCopy(new Error('Unexpected token <'), { heading: HEADING })).toEqual({ heading: HEADING, reason: REFUSED });
-    expect(copy.failureCopy(new TypeError('Failed to fetch'), { heading: HEADING, short: true }))
+    expect(copy.failureCopy(new copy.ConnectionLostError(new TypeError('Failed to fetch')), { heading: HEADING, short: true }))
       .toEqual({ heading: HEADING, reason: LOST_SHORT });
     expect(copy.failureMessage(new Error('boom'), HEADING)).toBe(`${HEADING} ${REFUSED}`);
     expect(copy.failureMessage(new copy.RequestFailedError(HEADING, 503), "Couldn't do it.")).toBe(`${HEADING} ${NO_ANSWER}`);

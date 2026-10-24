@@ -76,7 +76,9 @@ describe('GM\'s general line under any other heading', () => {
 
   it('a request with no answer says the server on this computer isn\'t answering', () => {
     expect(errorCopy.CONNECTION_LOST_COPY).toBe(SERVER);
-    expect(errorCopy.copyForError(new TypeError('Failed to fetch'))).toBe(SERVER);
+    expect(errorCopy.copyForError(new errorCopy.ConnectionLostError(new TypeError('Failed to fetch')))).toBe(SERVER);
+    // typeerror (2026-10-24): a TypeError nothing classified is a browser-side failure, not no answer.
+    expect(errorCopy.copyForError(new TypeError('Failed to fetch'))).toBe(ELSEWHERE);
     // GM's WRAP rule: beside a Try again button, the line drops its "try again".
     expect(errorCopy.shortReason(SERVER)).toBe("Nebula's server isn't answering. Make sure it's running.");
     expect(errorCopy.shortLine(`Couldn't load the board. ${SERVER}`))
@@ -193,7 +195,7 @@ describe('the Cinema shot panel', () => {
   });
 
   it('the motion handoff with no answer says Nebula didn\'t respond, without a second "Couldn\'t"', async () => {
-    mocks.fetch.mockImplementationOnce(async () => { throw new TypeError('Failed to fetch'); });
+    mocks.fetch.mockImplementationOnce(async () => { throw new errorCopy.ConnectionLostError(new TypeError('Failed to fetch')); });
     shotPanel({ status: 'done', imageUrl: '/api/outputs/a.png' });
     useGraphStore.setState((state) => ({ nodes: state.nodes.map((node) => ({ ...node, data: { ...node.data,
       state: 'complete', outputs: { shot_a: { type: 'Image', value: '/api/outputs/a.png' } } } })) }));

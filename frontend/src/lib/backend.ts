@@ -319,6 +319,22 @@ function notePersonRequired(response: Response): void {
     .catch(() => { /* not JSON: not a person-gate refusal */ });
 }
 
+/**
+ * fetch for a URL that apiFetch doesn't make (an asset link from
+ * backendAssetUrlSync, a public URL): no Nebula headers, no person token, no
+ * discovery replay. Its no-answer is classified here, at the call, as
+ * apiFetch's is: a ConnectionLostError under `heading`, with fetch's own
+ * error as its cause. The caller's own abort comes back as fetch threw it.
+ * Downstream code reads that class (isNoAnswer), never `instanceof
+ * TypeError`, so a bug in the browser isn't told as a server that isn't
+ * answering (typeerror, 2026-10-24).
+ */
+export function fetchUrl(url: string, init: RequestInit = {}, heading = ''): Promise<Response> {
+  return fetch(url, init).catch((error: unknown) => {
+    throw isConnectionFailure(error, init.signal) ? new ConnectionLostError(error, { heading }) : error;
+  });
+}
+
 export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   // Capture at admission, before discovery can await a later project switch.
   const project = getProjectContext();
@@ -353,9 +369,7 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
   // no screen shows the browser's "Failed to fetch" (error-copy, GM): a
   // ConnectionLostError, still a TypeError, with fetch's own as its cause.
   // The caller's own abort comes back as fetch threw it.
-  const send = (url: string) => fetch(url, requestInit).catch((error: unknown) => {
-    throw isConnectionFailure(error, init?.signal) ? new ConnectionLostError(error) : error;
-  });
+  const send = (url: string) => fetchUrl(url, requestInit);
   // Replaying a mutation against another discovered backend is not a retry: it
   // is a second side effect in a different process. This is especially
   // dangerous for paid provider starts, whose public APIs have no idempotency

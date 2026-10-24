@@ -90,4 +90,16 @@ describe('ChatPanel with the Nebula backend unreachable', () => {
     await waitFor(expectBackendOfflineHint);
     expect(screen.queryByText('Codex status unavailable')).toBeNull();
   });
+
+  // typeerror (2026-10-24): a TypeError that isn't fetch's no-answer (a bug or
+  // a data problem in the browser) is not "the backend is down".
+  it('a browser TypeError is not read as the backend being offline', async () => {
+    apiMocks.fetchClaudeStatus.mockImplementation(() => Promise.reject(new TypeError("Cannot read properties of undefined (reading 'installed')")));
+    render(<ChatPanel />);
+    await waitFor(() => expect(apiMocks.fetchClaudeStatus).toHaveBeenCalled());
+    const [label] = await screen.findAllByText('Claude status unavailable');
+    expect(label).toHaveAttribute('title', "Couldn't check Claude status. Try again, or reload if it keeps happening.");
+    expect(screen.queryByText('Nebula backend offline')).toBeNull();
+    expect(document.querySelector('[data-chat-agent-connect]')?.textContent ?? '').not.toContain('Backend offline');
+  });
 });

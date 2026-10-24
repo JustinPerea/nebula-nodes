@@ -5,7 +5,7 @@ import {
   isKreaAuthorizationUrl, isSafeKreaBillingUrl, startKreaTrial, kreaModeFor, nodeKeyStatus, supportsKreaAccount,
   usesKreaAccount, withNewKreaMode,
 } from '../../src/lib/kreaConnection';
-import { FailureNotice } from '../../src/lib/errorCopy';
+import { ConnectionLostError, FailureNotice } from '../../src/lib/errorCopy';
 
 const apiFetchMock = vi.hoisted(() => vi.fn());
 vi.mock('../../src/lib/backend', () => ({ apiFetch: apiFetchMock }));
@@ -81,8 +81,12 @@ describe('Krea connection contract', () => {
     const HEADING = "Couldn't update the Krea connection.";
     apiFetchMock.mockRejectedValueOnce(new Error('https://private.test/?token=fixture-secret'));
     await expect(connectKrea()).rejects.toThrow(`${HEADING} ${GENERAL}`);
-    apiFetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch https://private.test/?token=fixture-secret'));
+    // No answer, as apiFetch throws it: the connection line (typeerror, 2026-10-24).
+    apiFetchMock.mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch https://private.test/?token=fixture-secret')));
     await expect(connectKrea()).rejects.toThrow(`${HEADING} Nebula's server isn't answering. Make sure it's running, then try again.`);
+    // A TypeError that isn't fetch's no-answer (a bug in the browser) is GM's general line, not "isn't answering".
+    apiFetchMock.mockRejectedValueOnce(new TypeError('Do not know how to serialize a BigInt https://private.test/?token=fixture-secret'));
+    await expect(connectKrea()).rejects.toThrow(`${HEADING} ${GENERAL}`);
     apiFetchMock.mockResolvedValueOnce({ ok: false, status: 503, json: vi.fn() });
     await expect(checkKreaConnection()).rejects.toThrow(`${HEADING} Nebula didn't respond. Try again.`);
     apiFetchMock.mockResolvedValueOnce({ ok: true, json: async () => { throw new Error('token=fixture'); } });

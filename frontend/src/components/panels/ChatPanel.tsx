@@ -99,11 +99,13 @@ const CHAT_PANEL_RESIZE_CURSORS: Record<string, string> = {
 /** Whether a failed status check means the Nebula backend itself is down.
  * Read from the error's kind, not its words: apiFetch throws a
  * ConnectionLostError (status 0, message GM's connection line) when no
- * answer comes back (error-copy review, 2026-10-22). The message checks stay
- * for a dev proxy answering 50x and for errors thrown outside apiFetch. */
+ * answer comes back (error-copy review, 2026-10-22). Not any TypeError: a
+ * bug or a data problem in the browser is one too (typeerror, 2026-10-24).
+ * The message checks stay for a dev proxy answering 50x and for errors
+ * thrown outside apiFetch. */
 function isBackendUnavailableError(error: unknown): boolean {
   if (!error) return false;
-  if (error instanceof ConnectionLostError || error instanceof TypeError) return true;
+  if (error instanceof ConnectionLostError) return true;
   if ((error as { status?: unknown }).status === NO_ANSWER_STATUS) return true;
   const message = error instanceof Error ? error.message : String(error);
   const lower = message.toLowerCase();

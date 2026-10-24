@@ -30,7 +30,7 @@ vi.spyOn(console, 'warn').mockImplementation(() => {});
 
 import { resetProjectStoreForTests, useProjectStore } from '../src/store/projectStore';
 import { useProviderReadinessStore } from '../src/store/providerReadinessStore';
-import { RequestFailedError, requestError } from '../src/lib/errorCopy';
+import { ConnectionLostError, RequestFailedError, requestError } from '../src/lib/errorCopy';
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body),
   { status, headers: { 'content-type': 'application/json' } });
@@ -77,7 +77,7 @@ describe('the Projects startup line', () => {
   });
 
   it('no answer: the server on this computer', async () => {
-    fetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    fetch.mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch')));
     await useProjectStore.getState().initialize();
     expect(useProjectStore.getState().error)
       .toBe("Couldn't load your projects. Nebula's server isn't answering. Make sure it's running, then try again.");
@@ -86,7 +86,7 @@ describe('the Projects startup line', () => {
 
 describe('the provider-readiness line', () => {
   it('no answer: GM\'s line', async () => {
-    fetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    fetch.mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch')));
     await useProviderReadinessStore.getState().checkConnections();
     expect(useProviderReadinessStore.getState().error)
       .toBe("Couldn't check the connections. Nebula's server isn't answering. Make sure it's running, then try again.");
