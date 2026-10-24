@@ -55,8 +55,10 @@ export function GraphFileActions() {
 
   /** The file's graph into the open project's canvas, replacing it. With
    * `refuseOverLimit`, 'over' when the backend refused it, before anything
-   * changed, for being over the save limit as a project of its own (Q120). */
-  const importGraph = useCallback(async (result: LoadedGraph, refuseOverLimit = false): Promise<'over' | void> => {
+   * changed, for being over the save limit as a project of its own (Q120).
+   * `asNewProject`: the project was just made for it, which its line says. */
+  const importGraph = useCallback(async (result: LoadedGraph, refuseOverLimit = false,
+    asNewProject = false): Promise<'over' | void> => {
     if (!canLoadGraph(useGraphStore.getState())) return;
     let importReserved = false;
     try {
@@ -100,7 +102,7 @@ export function GraphFileActions() {
       useGraphStore.getState().loadGraph(imported.nodes, imported.edges);
       // A file over the save limit opens (Q118): the project store says so
       // with GM's Load graph line and pauses saving until it is trimmed.
-      useProjectStore.getState().noteLoadedGraph(result.fileName ?? 'the graph');
+      useProjectStore.getState().noteLoadedGraph(result.fileName ?? 'the graph', asNewProject);
       // The old focused target may no longer exist after replacement. Clear
       // its UI state without running exit cleanup against the newly loaded IDs.
       useUIStore.setState({
@@ -162,7 +164,7 @@ export function GraphFileActions() {
       let loading = false;
       await useProjectStore.getState().createProject(projectNameForFile(result.fileName), async () => {
         loading = true;
-        await importGraph(result);
+        await importGraph(result, false, true);
       });
       // Neither opened, nor waiting behind #178's screen, nor turned away with
       // its own line on Projects: say the file didn't open.

@@ -196,7 +196,7 @@ describe('workspace-independent graph file actions', () => {
       render(<GraphFileActions />);
       await act(async () => { requestGraphLoad(); });
       expect(useGraphStore.getState().nodes[0].id).toBe('n8');
-      expect(noteLoadedGraph).toHaveBeenCalledWith('Big campaign.nebula');
+      expect(noteLoadedGraph).toHaveBeenCalledWith('Big campaign.nebula', false);
       // A refused import opens nothing, so there is nothing to note.
       noteLoadedGraph.mockClear();
       mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Fixture import rejected' }), { status: 400 }));
@@ -251,7 +251,8 @@ describe('workspace-independent graph file actions', () => {
       expect(createProject.mock.calls[0][0]).toBe('Big campaign');
       expect(order).toEqual(['create with existing, 1 imports']);
       expect(useGraphStore.getState().nodes[0].id).toBe('n8');
-      expect(useProjectStore.getState().noteLoadedGraph).toHaveBeenCalledWith('Big campaign.nebula');
+      // The line says it opened as a new project (GM, Q120 batch).
+      expect(useProjectStore.getState().noteLoadedGraph).toHaveBeenCalledWith('Big campaign.nebula', true);
       expect(notices).toEqual([]);
     });
 

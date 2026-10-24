@@ -15,9 +15,13 @@ export const HEADER_TOOLTIP = "This project is over the 16 MB save limit. Click 
 export const headerLine = (bytes: number) => `Saving paused · ${displaySize(bytes)} MB`;
 /** The one notice on entering the state. */
 export const pausedNotice = (bytes: number) => `Saving paused. This project is ${displaySize(bytes)} MB, over the 16 MB limit.`;
-/** The notice after Load graph opened a file over the limit. */
-export const loadedNotice = (fileName: string, bytes: number) =>
-  `Opened ${fileName}. It's ${displaySize(bytes)} MB, over the save limit.`;
+/** The notice after Load graph opened a file over the limit. As a new
+ * project (Q120), GM's shorter line: the header already shows the project's
+ * name, taken from the file, and its size, so one line fits beside the
+ * button. */
+export const loadedNotice = (fileName: string, bytes: number, asNewProject = false) => (asNewProject
+  ? "Opened as a new project. It's over the save limit."
+  : `Opened ${fileName}. It's ${displaySize(bytes)} MB, over the save limit.`);
 /** The panel's live line. */
 export const panelLine = (bytes: number) =>
   `This project is ${displaySize(bytes)} MB. Make it ${overBy(bytes)} MB smaller and it saves again by itself. Until then, changes stay only in this tab.`;

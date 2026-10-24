@@ -182,6 +182,15 @@ describe('entering the paused state', () => {
     expect(projects.saveProject).not.toHaveBeenCalled();
   });
 
+  it("a file over the limit opened as a new project (Q120): GM's line says so", async () => {
+    editCanvas(BIG);
+    (state().noteLoadedGraph as (fileName: string, asNewProject?: boolean) => void)('Big campaign.nebula', true);
+    expect(state().saveStatus).toBe('paused');
+    // The header shows the name (from the file) and the size, so the line
+    // doesn't repeat them and fits on one line beside its button (GM).
+    expect(state().sizeNotice?.text).toBe("Opened as a new project. It's over the save limit.");
+  });
+
   it("a Load graph whose own sync lands first and fires an autosave shows only the Load graph line (live check)", async () => {
     useGraphStore.setState({ isImportingGraph: true });
     editCanvas(BIG);

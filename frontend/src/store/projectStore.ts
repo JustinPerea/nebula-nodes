@@ -125,7 +125,7 @@ interface ProjectState {
   dismissSizeNotice: () => void;
   /** Load graph opened `fileName`: over the limit, GM's Load graph line and
    * the paused state. */
-  noteLoadedGraph: (fileName: string) => void;
+  noteLoadedGraph: (fileName: string, asNewProject?: boolean) => void;
   /** The panel's "Download a copy": the open project's canvas as a plain
    * .nebula file, so nothing is lost while saving is paused. */
   downloadProjectCopy: () => Promise<void>;
@@ -1229,11 +1229,11 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
   openSizePanel: () => { if (get().savePaused) set({ sizePanelOpen: true }); },
   closeSizePanel: () => set({ sizePanelOpen: false }),
   dismissSizeNotice: () => set({ sizeNotice: null }),
-  noteLoadedGraph: (fileName) => {
+  noteLoadedGraph: (fileName, asNewProject = false) => {
     const state = get();
     if (!state.initialized || !state.activeProject || !getProjectContext()) return;
     const bytes = measured(JSON.stringify(captureProjectSnapshot()));
-    if (bytes > PROJECT_SAVE_LIMIT_BYTES) pauseSaving(bytes, true, loadedNotice(fileName, bytes));
+    if (bytes > PROJECT_SAVE_LIMIT_BYTES) pauseSaving(bytes, true, loadedNotice(fileName, bytes, asNewProject));
   },
   downloadProjectCopy: async () => {
     const project = get().activeProject;
