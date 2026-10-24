@@ -28,3 +28,10 @@ export function editsSavedLine(filename: string): string {
  * picker). The heading and both choices stay. */
 export const EDITS_NOT_WRITTEN = "The download didn't save, so your edits are still only in this tab. "
   + 'Check that your disk has free space, then download them again, or continue without them.';
+
+/** GM - Design (2026-10-24), verbatim: the line above the held edits' screen
+ * when an agent's switch is what left the project ("Claude Code is opening
+ * “Moodboard v2”."). The agent's name is whatever the switch carries. */
+export function agentOpeningLine(agent: string, projectName: string): string {
+  return `${agent} is opening “${projectName}”.`;
+}

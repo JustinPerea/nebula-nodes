@@ -25,6 +25,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * several held, the unlock line is GM's newest: "Couldn't delete them. One
  * is waiting on World Labs. Check Marble, then unlock it." (it replaces the
  * counted "Couldn't delete {n} nodes. One is waiting …").
+ * 2026-10-24 (GM): with every node held, the forget form ends "Check Marble
+ * and Run History." ("Couldn't delete them. They're waiting on World Labs.
+ * Check Marble and Run History."); the other forget forms keep the tail.
  *
  * The backend's delete refusal says its own, longer line to the person
  * (backend/main.py _paid_state_person, pinned equal to lib/worldLabsWaiting.ts
@@ -55,7 +58,8 @@ const ONE_FORGET = "Couldn't delete it. It's waiting on World Labs. Check Marble
 const SOME_UNLOCK = "Couldn't delete them. One is waiting on World Labs. Check Marble, then unlock it.";
 const SOME_FORGET = "Couldn't delete them. One is waiting on World Labs. Check Marble, then use Run History.";
 const ALL_UNLOCK = "Couldn't delete them. They're waiting on World Labs. Check Marble, then unlock them.";
-const ALL_FORGET = "Couldn't delete them. They're waiting on World Labs. Check Marble, then use Run History.";
+// GM - Design, 2026-10-24: every node held, forget form.
+const ALL_FORGET = "Couldn't delete them. They're waiting on World Labs. Check Marble and Run History.";
 const MANY_UNLOCK = (held: number) => `Couldn't delete them. ${held} are waiting on World Labs. Check Marble, then unlock them.`;
 const MANY_FORGET = (held: number) => `Couldn't delete them. ${held} are waiting on World Labs. Check Marble, then use Run History.`;
 

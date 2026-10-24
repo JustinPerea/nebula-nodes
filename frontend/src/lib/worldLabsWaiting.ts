@@ -34,9 +34,11 @@ export const SOME_NODE_WAITING_FORGET = "A node is still waiting on World Labs. 
  * - one of them held: "One is waiting on World Labs. Check Marble, then
  *   unlock it." (GM's newest line; it replaces round 4's counted "Couldn't
  *   delete {n} nodes. One is waiting …").
- * - every forget form ends "Check Marble, then use Run History." (GM: "Use
- *   the same tail on every forget form that wraps, so the single-node one
- *   stays as it is.").
+ * - the forget forms with some held end "Check Marble, then use Run
+ *   History." (GM: "Use the same tail on every forget form that wraps, so
+ *   the single-node one stays as it is.").
+ * - every one held, forget (GM, 2026-10-24): "Couldn't delete them. They're
+ *   waiting on World Labs. Check Marble and Run History."
  *
  * `unlock`: a held node has an unconfirmed start (the status bar's "Checked
  * Marble — unlock"); else a recovery record (Run History's "Checked Marble —
@@ -46,6 +48,9 @@ export function heldDeleteText(count: number, unlock: boolean, held = 1): string
   if (count === 1) {
     return unlock ? "Couldn't delete the node. It's waiting on World Labs. Check Marble, then unlock it."
       : "Couldn't delete it. It's waiting on World Labs. Check Marble, then forget it in Run History.";
+  }
+  if (!unlock && held >= count) {
+    return "Couldn't delete them. They're waiting on World Labs. Check Marble and Run History.";
   }
   const waiting = held <= 1 ? 'One is' : held >= count ? "They're" : `${held} are`;
   const then = unlock ? `unlock ${held <= 1 ? 'it' : 'them'}.` : 'use Run History.';

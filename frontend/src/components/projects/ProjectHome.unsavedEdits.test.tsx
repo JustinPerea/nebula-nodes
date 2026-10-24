@@ -20,7 +20,7 @@ vi.mock('../../lib/backend', () => ({ backendAssetUrlSync: (url: string) => `htt
 
 const TOO_LARGE = 'These edits are too large for Nebula to save. Download them so nothing is lost, or continue without them.';
 type Props = ProjectHomeProps & {
-  unsavedEdits?: { reason: string; keptIn?: string } | null; editsSavedAs?: { name: string; reopens: boolean } | null;
+  unsavedEdits?: { reason: string; keptIn?: string; agentOpening?: { agent: string; projectName: string } } | null; editsSavedAs?: { name: string; reopens: boolean } | null;
   onDownloadEdits?: () => void; onContinueWithoutEdits?: () => void;
 };
 const props = (overrides: Partial<Props> = {}): Props => ({
@@ -33,6 +33,25 @@ const Home = ProjectHome as unknown as (props: Props) => ReturnType<typeof Proje
 afterEach(() => vi.restoreAllMocks());
 
 describe("Projects: Couldn't save your edits.", () => {
+  // GM - Design, 2026-10-24: when an agent's switch is what left the project,
+  // "{agent} is opening “{name}”." goes above the screen's lines.
+  it("an agent's switch: the agent and the project it opens, above the heading; the rest unchanged", () => {
+    render(<Home {...props({ unsavedEdits: { reason: TOO_LARGE, keptIn: 'Glass campaign',
+      agentOpening: { agent: 'Claude Code', projectName: 'Moodboard v2' } } })} />);
+    const alert = screen.getByRole('alert');
+    const opening = within(alert).getByText('Claude Code is opening “Moodboard v2”.');
+    const heading = within(alert).getByText("Couldn't save your edits.");
+    expect(opening.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(alert).getByText(TOO_LARGE)).toBeTruthy();
+    expect(within(alert).getAllByRole('button').map((button) => button.textContent))
+      .toEqual(['Download your edits', 'Continue without them']);
+  });
+
+  it('any other cause: no opening line', () => {
+    render(<Home {...props({ unsavedEdits: { reason: TOO_LARGE, keptIn: 'Glass campaign' } })} />);
+    expect(screen.getByRole('alert').textContent).not.toContain('is opening');
+  });
+
   it("held from the open project's own canvas: the confirm says its nodes, wires and settings stay in that project (review)", () => {
     const actions = props({ unsavedEdits: { reason: TOO_LARGE, keptIn: 'Glass campaign' } });
     render(<Home {...actions} />);
