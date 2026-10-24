@@ -103,6 +103,16 @@ def run_load(client: NebulaClient, filepath: str) -> None:
         print(f"error: file not found: {filepath}", file=sys.stderr)
         sys.exit(1)
 
+    with path.open("rb") as handle:
+        signature = handle.read(4)
+    if signature == b"PK\x03\x04":
+        # A .nebula.zip bundle (Save graph's graph plus its files). Its files
+        # are restored by the canvas's Load graph, which then opens the graph
+        # (as a new project when it's over the save limit, Q120/Q121 a).
+        print(f"error: {filepath} is a .nebula.zip bundle, and `nebula load` reads plain .nebula files. "
+              "Ask the person to open it with Load graph on the canvas.", file=sys.stderr)
+        sys.exit(1)
+
     data = json.loads(path.read_text())
     try:
         validate_file_references(data)

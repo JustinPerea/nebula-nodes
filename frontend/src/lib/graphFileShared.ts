@@ -32,13 +32,12 @@ export const GRAPH_BUNDLE_MAX_ASSET_BYTES = 256 * 1024 * 1024;
 export const GRAPH_BUNDLE_MAX_TOTAL_BYTES = 512 * 1024 * 1024;
 export const GRAPH_BUNDLE_MAX_IMPORT_BYTES = GRAPH_BUNDLE_MAX_TOTAL_BYTES + 16 * 1024 * 1024;
 
-// A graph's limits (graphFile.ts re-exports them): the graph.json a Save
-// graph bundle may hold (the backend's restore preflight, RESTORE_MAX_GRAPH_BYTES),
-// and the node, wire, depth and value counts the shape walk
-// (assertGraphComplexityWithinLimits) allows. A plain .nebula file opens up to
-// GRAPH_BUNDLE_MAX_IMPORT_BYTES since Q118; the 16 MiB here is no longer
-// Load graph's limit for one.
-export const GRAPH_JSON_MAX_IMPORT_BYTES = 16 * 1024 * 1024;
+// A graph's limits (graphFile.ts re-exports them): the node, wire, depth and
+// value counts the shape walk (assertGraphComplexityWithinLimits) allows. Its
+// size has no limit of its own: a plain .nebula (Q118) and a bundle's
+// graph.json (Q121 a; the backend's RESTORE_MAX_GRAPH_BYTES) both open up to
+// GRAPH_BUNDLE_MAX_IMPORT_BYTES, and a graph over the 16 MiB save limit opens
+// with saving paused.
 export const GRAPH_MAX_NODES = 10_000;
 export const GRAPH_MAX_EDGES = 50_000;
 export const GRAPH_MAX_DEPTH = 64;
@@ -329,8 +328,7 @@ export function editsFileName(projectName: string): string {
  * format (serializeGraph, version 2 JSON), which Load graph opens. It holds
  * the canvas (nodes, wires, params, outputs, the view); a .nebula file has no
  * run history or Create draft, so those stay out. Written compact, as the
- * backend measured the copy, so indenting can't push it past Load graph's
- * 16 MiB. */
+ * backend measured the copy, so the size the backend reports is the file's. */
 export function editsFileText(snapshot: Pick<ProjectSnapshot, 'nodes' | 'edges' | 'viewport'>, projectName: string): string {
   return JSON.stringify(editsFile(snapshot, projectName));
 }

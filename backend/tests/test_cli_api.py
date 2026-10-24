@@ -1187,6 +1187,37 @@ class TestOutputsRestore:
         assert "graph.json is too large" in resp.json()["detail"]
         assert list(tmp_path.rglob("*")) == []
 
+    def test_restore_opens_a_bundle_whose_graph_is_over_the_save_limit(
+        self, client, tmp_path, monkeypatch
+    ):
+        # Q121 a (Justin, 2026-10-24): "Bundles work like plain files: Load
+        # graph opens a bundle whose graph is over 16 MiB as a new project, up
+        # to the bundle limit". The restore returns the graph; the import that
+        # follows decides about the save limit (Q120), as for a plain .nebula.
+        import zipfile
+
+        main_module = self._use_isolated_output_root(monkeypatch, tmp_path)
+        graph = self._valid_graph()
+        value = "x" * (16 * 1024 * 1024 + 1)
+        graph["nodes"] = [{"id": "n1", "type": "text-input", "position": {"x": 0, "y": 0},
+                           "data": {"label": "Text", "definitionId": "text-input",
+                                    "params": {"value": value}, "outputs": {}}}]
+        zip_bytes = self._make_zip_entries(
+            [("graph.json", json.dumps(graph).encode("utf-8")), ("assets/world.spz", b"provider-asset")],
+            compression=zipfile.ZIP_STORED,
+        )
+
+        resp = client.post("/api/outputs/restore", content=zip_bytes,
+                           headers={"content-type": "application/zip"})
+
+        assert resp.status_code == 200, resp.text[:300]
+        body = resp.json()
+        assert body["graph"]["nodes"][0]["data"]["params"]["value"] == value
+        assert "world.spz" in body["urlMapping"]
+        # The bundle's graph limit is the bundle's own ceiling (the frontend's
+        # GRAPH_BUNDLE_MAX_IMPORT_BYTES), the size a plain .nebula opens up to.
+        assert main_module.RESTORE_MAX_GRAPH_BYTES == 528 * 1024 * 1024
+
     def test_restore_rejects_malformed_node_shape_before_extracting_assets(
         self, client, tmp_path, monkeypatch
     ):

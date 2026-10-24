@@ -12,7 +12,6 @@ import {
   GRAPH_MAX_DEPTH,
   GRAPH_MAX_NODES,
   GRAPH_MAX_VALUES,
-  GRAPH_JSON_MAX_IMPORT_BYTES,
   inspectGraphFileWithinLimit,
   loadFromFile,
   loadViaInput,
@@ -23,6 +22,7 @@ import {
   type NebulaFile,
 } from '../src/lib/graphFile';
 import { readBoundedAssetResponse } from '../src/lib/boundedAsset';
+import { PROJECT_SAVE_LIMIT_BYTES } from '../src/lib/projectSize';
 import { CANVAS_NOTICE_EVENT, type CanvasNoticeDetail } from '../src/lib/canvasNotice';
 import {
   spatialFixtureByType,
@@ -422,10 +422,15 @@ describe('portable graph asset bounds', () => {
     expect(revoke).toHaveBeenCalledWith('blob:spatial-save');
   });
 
-  it('refuses an oversized graph.json before asset fetch or compression', async () => {
+  // Q121 a (Justin, 2026-10-24): "Save graph can write a bundle for a
+  // project over the limit." The graph inside a bundle may be as large as the
+  // bundle itself; only the bundle's ceiling refuses it.
+  it('saves a bundle whose graph is over the 16 MiB save limit', async () => {
+    Reflect.deleteProperty(window, 'showSaveFilePicker');
     const alertSpy = noticeSpy();
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:big-graph');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
     const generateSpy = vi.spyOn(JSZip.prototype, 'generateAsync');
     const node = {
       id: 'large-graph',
@@ -434,16 +439,56 @@ describe('portable graph asset bounds', () => {
       data: {
         label: 'Large graph',
         definitionId: 'text-input',
-        params: { text: 'x'.repeat(GRAPH_JSON_MAX_IMPORT_BYTES) },
+        params: { text: 'x'.repeat(PROJECT_SAVE_LIMIT_BYTES) },
         outputs: {},
         state: 'idle',
       },
     } as Node<NodeData>;
 
+    await expect(saveToFile([node], [])).resolves.toMatchObject({ included: 0, skipped: 0 });
+    expect(generateSpy).toHaveBeenCalledOnce();
+    expect(click).toHaveBeenCalledOnce();
+    expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  it("names the bundle and its graph after the project", async () => {
+    Reflect.deleteProperty(window, 'showSaveFilePicker');
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:named-graph');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    const names: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      names.push(this.download);
+    });
+    const files: string[] = [];
+    const fileSpy = vi.spyOn(JSZip.prototype, 'file');
+    await saveToFile([], [], undefined, 'Glass: campaign');
+    for (const call of fileSpy.mock.calls) if (call[0] === 'graph.json') files.push(String(call[1]));
+    expect(names).toEqual(['Glass campaign.nebula.zip']);
+    expect(JSON.parse(files[0]).name).toBe('Glass: campaign');
+    names.length = 0;
+    await saveToFile([], []);
+    expect(names).toEqual(['Untitled Graph.nebula.zip']);
+  });
+
+  it('refuses a graph past the bundle ceiling before asset fetch or compression', async () => {
+    const alertSpy = noticeSpy();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const generateSpy = vi.spyOn(JSZip.prototype, 'generateAsync');
+    // A graph.json past the ceiling is too big to build in a test; the save
+    // measures the graph's UTF-8 bytes, so that measure stands in for it.
+    vi.spyOn(TextEncoder.prototype, 'encode').mockReturnValue({ byteLength: GRAPH_BUNDLE_MAX_IMPORT_BYTES + 1 } as Uint8Array);
+    const node = {
+      id: 'large-graph',
+      type: 'model-node',
+      position: { x: 0, y: 0 },
+      data: { label: 'Large graph', definitionId: 'text-input', params: { text: 'x' }, outputs: {}, state: 'idle' },
+    } as Node<NodeData>;
+
     await expect(saveToFile([node], [])).resolves.toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
     expect(generateSpy).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Couldn't save the graph\. This graph is [\d.]+ MB\. Nebula opens graphs up to 16 MB\.$/));
+    expect(alertSpy).toHaveBeenCalledWith("Couldn't save the graph. This graph is 528.0 MB. Nebula opens graphs up to 528 MB.");
   });
 
   it('refuses too many live nodes before mapping or compression', async () => {
@@ -568,14 +613,14 @@ describe('graph import memory ceiling', () => {
   it('reads a plain JSON file over 16 MiB, up to the bundle ceiling', async () => {
     const text = JSON.stringify({ version: 2, name: 'Big', createdAt: '2026-10-23T00:00:00.000Z', nodes: [{
       id: 'n1', type: 'model-node', position: { x: 0, y: 0 },
-      data: { label: 'Brief', definitionId: 'text-input', params: { value: 'x'.repeat(GRAPH_JSON_MAX_IMPORT_BYTES) } },
+      data: { label: 'Brief', definitionId: 'text-input', params: { value: 'x'.repeat(PROJECT_SAVE_LIMIT_BYTES) } },
     }], edges: [] });
     const file = new File([text], 'Big campaign.nebula', { type: 'application/json' });
-    expect(file.size).toBeGreaterThan(GRAPH_JSON_MAX_IMPORT_BYTES);
+    expect(file.size).toBeGreaterThan(PROJECT_SAVE_LIMIT_BYTES);
     const selection = await inspectGraphFileWithinLimit(file);
     expect(selection).toMatchObject({ isZip: false, name: 'Big campaign.nebula' });
     const loaded = await readGraphSelection(selection);
-    expect(loaded.nodes[0].data.params.value).toHaveLength(GRAPH_JSON_MAX_IMPORT_BYTES);
+    expect(loaded.nodes[0].data.params.value).toHaveLength(PROJECT_SAVE_LIMIT_BYTES);
     expect(loaded.fileName).toBe('Big campaign.nebula');
   });
 

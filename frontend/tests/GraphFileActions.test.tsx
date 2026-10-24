@@ -114,8 +114,20 @@ describe('workspace-independent graph file actions', () => {
     rendered.rerender(<><GraphFileActions /><CommandPalette /></>);
     paletteCommand('Save graph');
     await waitFor(() => expect(mocks.saveToFile).toHaveBeenCalledOnce());
-    expect(mocks.saveToFile).toHaveBeenCalledWith([node('existing')], [], { x: 10, y: 20, zoom: 0.75 });
+    expect(mocks.saveToFile).toHaveBeenCalledWith([node('existing')], [], { x: 10, y: 20, zoom: 0.75 }, undefined);
     expect(useUIStore.getState().viewMode).toBe(viewMode);
+  });
+
+  it("names the saved file after the open project, so Load graph names its project after it again", async () => {
+    const before = useProjectStore.getState();
+    useProjectStore.setState({ initialized: true, activeProject: { id: 'alpha', name: 'Glass campaign' } } as never);
+    try {
+      render(<GraphFileActions />);
+      await act(async () => { requestGraphSave(); });
+      expect(mocks.saveToFile).toHaveBeenCalledWith([node('existing')], [], expect.anything(), 'Glass campaign');
+    } finally {
+      useProjectStore.setState(before, true);
+    }
   });
 
   it('saves the live Canvas camera when disabled Commons falls back to Canvas', async () => {
@@ -123,7 +135,7 @@ describe('workspace-independent graph file actions', () => {
     useUIStore.getState().setCanvasViewport({ x: -50, y: 40, zoom: 0.5 });
     render(<GraphFileActions />);
     await act(async () => { requestGraphSave(); });
-    expect(mocks.saveToFile).toHaveBeenCalledWith([node('existing')], [], { x: 10, y: 20, zoom: 0.75 });
+    expect(mocks.saveToFile).toHaveBeenCalledWith([node('existing')], [], { x: 10, y: 20, zoom: 0.75 }, undefined);
   });
 
   it.each(['create', 'cinema-editor'] as const)('loads from %s only after atomic backend confirmation', async (viewMode) => {

@@ -900,7 +900,12 @@ RESTORE_MAX_TOTAL_UNCOMPRESSED_BYTES = 8 * 1024 * 1024 * 1024  # 8 GiB bundle
 RESTORE_MAX_COMPRESSION_RATIO = 250.0
 RESTORE_MAX_PATH_BYTES = 1024
 RESTORE_COPY_CHUNK_BYTES = 1024 * 1024
-RESTORE_MAX_GRAPH_BYTES = 16 * 1024 * 1024
+# A bundle's graph.json may be as large as the bundle Load graph accepts (the
+# frontend's GRAPH_BUNDLE_MAX_IMPORT_BYTES, 512 MiB of files + 16 MiB), the
+# size a plain .nebula opens up to (Q121 a, Justin 2026-10-24: "Bundles work
+# like plain files"). The save limit is the import's to check, not this one:
+# a graph over 16 MiB opens as a new project with saving paused (Q118/Q120).
+RESTORE_MAX_GRAPH_BYTES = 528 * 1024 * 1024
 RESTORE_MAX_GRAPH_NODES = 10_000
 RESTORE_MAX_GRAPH_EDGES = 50_000
 RESTORE_MAX_GRAPH_DEPTH = 64
