@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import '../../styles/prompt-dialog.css';
-import { CONFIRM_LINE, EDITS_NOT_WRITTEN, UNSAVED_EDITS_HEADING, keptConfirmLine } from './unsavedEditsCopy';
+import { CONFIRM_LINE, EDITS_NOT_WRITTEN, UNSAVED_EDITS_HEADING, agentOpeningLine, keptConfirmLine } from './unsavedEditsCopy';
 
 /**
  * Q116 a) (Justin, 2026-10-23): "a): "Download your edits" plus "Continue
@@ -16,9 +16,12 @@ import { CONFIRM_LINE, EDITS_NOT_WRITTEN, UNSAVED_EDITS_HEADING, keptConfirmLine
  * After a download that couldn't be written (`downloadFailed`), GM's line 2
  * is the body in place of the reason; the heading and both choices stay.
  * `keptIn`: the edits are the open project's own canvas, kept in that
- * project by the backend's switch, and the confirm says so (Q118 review). */
-export function UnsavedEditsNotice({ reason, downloadFailed = false, keptIn, busy, onDownload, onContinue }: {
-  reason: string; downloadFailed?: boolean; keptIn?: string; busy: boolean; onDownload: () => void; onContinue: () => void;
+ * project by the backend's switch, and the confirm says so (Q118 review).
+ * `agentOpening`: an agent's switch is what left the project; GM's line
+ * (2026-10-24) names it and the project it opens, above the rest. */
+export function UnsavedEditsNotice({ reason, downloadFailed = false, keptIn, agentOpening, busy, onDownload, onContinue }: {
+  reason: string; downloadFailed?: boolean; keptIn?: string; agentOpening?: { agent: string; projectName: string };
+  busy: boolean; onDownload: () => void; onContinue: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
   const continueButton = useRef<HTMLButtonElement>(null);
@@ -37,6 +40,7 @@ export function UnsavedEditsNotice({ reason, downloadFailed = false, keptIn, bus
   return (
     <div className="project-home__error project-home__edits" role="alert">
       <span className="project-home__edits-text">
+        {agentOpening && <span>{agentOpeningLine(agentOpening.agent, agentOpening.projectName)}</span>}
         <strong className="project-home__edits-heading">{UNSAVED_EDITS_HEADING}</strong>
         <span>{downloadFailed ? EDITS_NOT_WRITTEN : reason}</span>
       </span>

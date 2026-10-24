@@ -141,7 +141,10 @@ interface ProjectState {
    * agent's switch, while saving was paused), and the backend's switch keeps
    * its nodes, wires and settings in that project, named here, so "Continue
    * without them" loses only what only this tab had; the confirm says so. */
-  unsavedEdits: { reason: string; downloadFailed?: true; keptIn?: string } | null;
+  /** `agentOpening`: an agent's switch left the project (GM, 2026-10-24:
+   * "{agent} is opening “{name}”." above the screen's lines). */
+  unsavedEdits: { reason: string; downloadFailed?: true; keptIn?: string;
+    agentOpening?: { agent: string; projectName: string } } | null;
   /** The file those edits were downloaded as, for GM's line after it, and
    * whether Load graph can open it (a copy past its limits can't). */
   editsSavedAs: SavedEditsFile | null;
@@ -1117,17 +1120,29 @@ async function loadWorkspace(): Promise<void> {
 }
 
 /** What the toast says when an agent (or a script) switched the open project.
- * GM's lines (round 4b, "there's room for about 58 characters"): "Claude Code
- * opened “{name}”. Your edits are saved as a copy." / "Claude Code made and
- * opened “{name}”. Your edits are saved as a copy." / made with no copy:
- * "Claude Code made and opened “{name}”." ("A long name can still wrap.
- * That's fine for a toast."). Opened with no copy is unchanged ("Claude Code
- * opened “{name}”."). The agent's name is whatever the switch carries. */
+ * GM's lines (2026-10-24; the project is on screen, so "made" already says it
+ * opened): "Claude Code opened “{name}”. Edits saved as a copy." / "Claude
+ * Code made “{name}”. Edits saved as a copy." / made with no copy: "Claude
+ * Code made “{name}”." Opened with no copy is unchanged ("Claude Code opened
+ * “{name}”."); round 4b: "A long name can still wrap. That's fine for a
+ * toast." The agent's name is whatever the switch carries. */
 export function switchMessage(notice: ProjectSwitchNotice): string {
   const who = notice.actorName ?? 'An outside app';
   const name = `“${notice.projectName}”`;
-  const what = notice.created ? `made and opened ${name}` : `opened ${name}`;
-  return notice.keptCopy ? `${who} ${what}. Your edits are saved as a copy.` : `${who} ${what}.`;
+  const what = notice.created ? `made ${name}` : `opened ${name}`;
+  return notice.keptCopy ? `${who} ${what}. Edits saved as a copy.` : `${who} ${what}.`;
+}
+
+/** The held edits' screen came up because an agent's switch left the project
+ * (followProjectSwitch): GM's line above it names the agent and the project
+ * it opens (2026-10-24). A switch with no agent's name (a script) adds
+ * nothing, and neither does one that found the screen already up for another
+ * cause (the copy it held then is still the one on screen). */
+function noteAgentOpening(notice: ProjectSwitch, alreadyHeld: boolean): void {
+  const agent = notice.actor?.kind === 'agent' && typeof notice.actor.name === 'string' ? notice.actor.name : null;
+  const held = useProjectStore.getState().unsavedEdits;
+  if (!agent || !held || alreadyHeld) return;
+  useProjectStore.setState({ unsavedEdits: { ...held, agentOpening: { agent, projectName: notice.projectName } } });
 }
 
 /** True when a graphSync's projectSwitch is the switch away from the project
@@ -1152,6 +1167,9 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
   cancelPendingSaves();
   // Nothing else may save under the old project from here on.
   setProjectContext(null);
+  // The held edits' screen already up (the person's own switch, say) keeps
+  // its cause: this switch adds no agent line to it.
+  const alreadyHeld = Boolean(useProjectStore.getState().unsavedEdits);
   useProjectStore.setState({ busy: true, error: null, errorRetry: null });
   let keptCopy = false;
   try {
@@ -1161,6 +1179,7 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     if (unsaved && context && snapshot && projectSizeBytes(snapshot) + sizeOffset > PROJECT_SAVE_LIMIT_BYTES) {
       // The backend's switch already kept its live canvas in the project left.
       holdOverLimitEdits(context.id, snapshot, true);
+      noteAgentOpening(notice, alreadyHeld);
       return;
     }
     if (unsaved && context && snapshot) {
@@ -1187,7 +1206,7 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     } });
   } catch (error) {
     // Refused for good: the held edits' screen says it (holdRefusedEdits).
-    if (error instanceof EditsRefused) return;
+    if (error instanceof EditsRefused) { noteAgentOpening(notice, alreadyHeld); return; }
     const who = notice.actor?.name ?? 'Another app';
     // Try again loads what is open now (initialize), as the line says.
     const line = sentences(`${who} opened “${notice.projectName}”, but this window couldn't follow it.`,
@@ -1574,8 +1593,10 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
       // the two choices with no line. Nothing is lost either way.
       const held = get().unsavedEdits;
       if (pendingRecovery === recovery && held) {
-        const keptIn = held.keptIn ? { keptIn: held.keptIn } : {};
-        set({ unsavedEdits: failed ? { reason: held.reason, downloadFailed: true, ...keptIn } : { reason: held.reason, ...keptIn } });
+        // Everything else on the screen stays (the confirm's project, the agent's line).
+        const { downloadFailed: _was, ...kept } = held;
+        void _was;
+        set({ unsavedEdits: failed ? { ...kept, downloadFailed: true } : kept });
       }
       return;
     }

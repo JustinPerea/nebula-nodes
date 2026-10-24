@@ -511,6 +511,42 @@ describe('portable graph asset bounds', () => {
     expect(alertSpy).toHaveBeenCalledWith("Couldn't save the graph. This graph is 528.0 MB. Nebula opens graphs up to 528 MB.");
   });
 
+  // GM - Design, 2026-10-24: a graph Nebula would open (up to 528 MB) but the
+  // browser can't write. Chromium (the desktop app's engine too) caps a
+  // string at 2^29 - 24 = 536,870,888 characters, just under 512 MiB, so
+  // JSON.stringify of a graph.json past that throws RangeError("Invalid
+  // string length") before the 528 MB check can measure it.
+  it("a graph too big for the browser's string limit: GM's line, before any asset fetch", async () => {
+    const alertSpy = noticeSpy();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const generateSpy = vi.spyOn(JSZip.prototype, 'generateAsync');
+    const stringify = JSON.stringify;
+    vi.spyOn(JSON, 'stringify').mockImplementation(((value: unknown, replacer?: never, space?: string | number) => {
+      if (space === 2) throw new RangeError('Invalid string length');
+      return stringify(value, replacer, space);
+    }) as typeof JSON.stringify);
+
+    await expect(saveToFile([], [])).resolves.toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(generateSpy).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith("Couldn't save the graph. It's too big to save in a browser.");
+  });
+
+  it('another failure building graph.json (a stack overflow) keeps the generic line', async () => {
+    const alertSpy = noticeSpy();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const stringify = JSON.stringify;
+    vi.spyOn(JSON, 'stringify').mockImplementation(((value: unknown, replacer?: never, space?: string | number) => {
+      if (space === 2) throw new RangeError('Maximum call stack size exceeded');
+      return stringify(value, replacer, space);
+    }) as typeof JSON.stringify);
+
+    await expect(saveToFile([], [])).resolves.toBeNull();
+    expect(alertSpy).toHaveBeenCalledWith("Couldn't save the graph. Try again, or reload if it keeps happening.");
+  });
+
   it('refuses too many live nodes before mapping or compression', async () => {
     const alertSpy = noticeSpy();
     const generateSpy = vi.spyOn(JSZip.prototype, 'generateAsync');

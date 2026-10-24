@@ -294,7 +294,9 @@ describe('every path that sends the held copy', () => {
     emit({ type: 'graphSync', workspaceRevision: 'rev-b', paramsVersion: GRAPH_PARAMS_VERSION, nodes: [], edges: [], empty: true,
       projectSwitch: { projectId: 'beta', projectName: 'beta', previousProjectId: 'alpha', previousProjectName: 'Glass campaign',
         previousRevision: 'rev-a', actor: { kind: 'agent', name: 'Claude' } } });
-    await vi.waitFor(() => expect(state().unsavedEdits).toEqual({ reason: TOO_LARGE }));
+    // GM, 2026-10-24: the screen names the agent and the project it opens.
+    await vi.waitFor(() => expect(state().unsavedEdits).toEqual({ reason: TOO_LARGE,
+      agentOpening: { agent: 'Claude', projectName: 'beta' } }));
     expect(state().error).toBeNull();
     expect(state().busy).toBe(false);
     expect(projects.recoverProject).toHaveBeenCalledTimes(1);

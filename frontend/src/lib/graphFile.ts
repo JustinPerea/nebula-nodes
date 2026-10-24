@@ -35,6 +35,20 @@ import {
 /** The Toolbar's "Save graph" / "Load graph", as GM's headings (round 2). */
 const SAVE_GRAPH = "Couldn't save the graph.";
 const LOAD_GRAPH = "Couldn't load the graph.";
+/** GM - Design, 2026-10-24: "Couldn't save the graph. It's too big to save in
+ * a browser." (under SAVE_GRAPH). */
+const TOO_BIG_FOR_THE_BROWSER = "It's too big to save in a browser.";
+
+/** True when JSON.stringify failed because the text is longer than the engine
+ * lets a string be. Chromium (V8, the desktop app's engine too) caps a string
+ * at 2^29 - 24 = 536,870,888 characters, 24 short of 512 MiB, and throws
+ * RangeError("Invalid string length"); Nebula opens a graph.json up to
+ * GRAPH_BUNDLE_MAX_IMPORT_BYTES (528 MiB), so a graph between the two can't be
+ * written here at all. The other RangeError stringify can throw (a stack
+ * overflow) is not this. */
+function isStringLengthLimit(error: unknown): boolean {
+  return error instanceof RangeError && !/call stack/i.test(error.message);
+}
 
 /**
  * .nebula.zip / .nebula file format — graph persistence.
@@ -617,7 +631,12 @@ export async function saveToFile(
     file = serializeGraph(nodes, edges, viewport, projectName);
     file.version = 3;
     assertGraphComplexityWithinLimits(file);
-    graphJson = JSON.stringify(file, null, 2);
+    try {
+      graphJson = JSON.stringify(file, null, 2);
+    } catch (error) {
+      if (isStringLengthLimit(error)) throw new GraphStructureLimitError(TOO_BIG_FOR_THE_BROWSER);
+      throw error;
+    }
     // Q121 a: a graph over the 16 MiB save limit still saves as a bundle; one
     // past the bundle's ceiling never fits, so it's refused before any asset
     // is fetched.

@@ -66,7 +66,7 @@ export interface ProjectHomeProps {
   /** A stale tab's unsaved edits Nebula refused for good (Q116 a): GM's
    * "Couldn't save your edits." with this reason, in place of the error line
    * and its Try again, until the person downloads them or continues without. */
-  unsavedEdits?: { reason: string; downloadFailed?: boolean; keptIn?: string } | null;
+  unsavedEdits?: { reason: string; downloadFailed?: boolean; keptIn?: string; agentOpening?: { agent: string; projectName: string } } | null;
   /** The file the held edits were downloaded as, for GM's line after it, and
    * whether Load graph can open it. */
   editsSavedAs?: SavedEditsFile | null;
@@ -411,7 +411,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
         {/* GM's WRAP rule: where "Try again" redoes the failure it is the retry, so the
             reason drops its own; where it only reloads, or can't help, the line stays whole. */}
         {unsavedEdits ? <UnsavedEditsNotice reason={unsavedEdits.reason} downloadFailed={unsavedEdits.downloadFailed}
-          keptIn={unsavedEdits.keptIn} busy={busy}
+          keptIn={unsavedEdits.keptIn} agentOpening={unsavedEdits.agentOpening} busy={busy}
           onDownload={onDownloadEdits} onContinue={onContinueWithoutEdits} />
           : editsSavedAs && <div ref={savedLine} tabIndex={-1} className="project-home__notice" role="status">
             {editsSavedLine(editsSavedAs.name)}</div>}

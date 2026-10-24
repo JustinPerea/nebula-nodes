@@ -309,7 +309,25 @@ describe('nothing is lost without asking', () => {
     expect(projects.saveProject).not.toHaveBeenCalled();
     expect(projects.recoverProject).not.toHaveBeenCalled();
     // The backend's switch kept its live canvas (the nodes, wires and
-    // settings) in the project it left: the confirm says so (review).
+    // settings) in the project it left: the confirm says so (review). GM,
+    // 2026-10-24: the screen names the agent and the project it opens.
+    expect(state().unsavedEdits).toEqual({ reason: TOO_LARGE, keptIn: 'Glass campaign',
+      agentOpening: { agent: 'Claude', projectName: 'beta' } });
+    // A download that couldn't be written keeps the line.
+    vi.mocked(saveEditsToFile).mockRejectedValueOnce(new Error('disk full'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    await state().downloadUnsavedEdits!();
+    expect(state().unsavedEdits).toEqual({ reason: TOO_LARGE, downloadFailed: true, keptIn: 'Glass campaign',
+      agentOpening: { agent: 'Claude', projectName: 'beta' } });
+  });
+
+  it("an unnamed script's switch while paused: the same screen, with no opening line", async () => {
+    editCanvas(BIG);
+    await useProjectStore.getState().flush();
+    emit({ type: 'graphSync', workspaceRevision: 'rev-b', paramsVersion: GRAPH_PARAMS_VERSION, nodes: [], edges: [], empty: true,
+      projectSwitch: { projectId: 'beta', projectName: 'beta', previousProjectId: 'alpha', previousProjectName: 'Glass campaign',
+        previousRevision: 'rev-a', created: false } });
+    await tick(); await tick();
     expect(state().unsavedEdits).toEqual({ reason: TOO_LARGE, keptIn: 'Glass campaign' });
   });
 
@@ -423,6 +441,8 @@ describe('a file over the limit opens as a new project (Q120)', () => {
       projectSwitch: { projectId: 'beta', projectName: 'beta', previousProjectId: 'alpha', previousProjectName: 'Glass campaign',
         previousRevision: 'rev-a', actor: { kind: 'agent', name: 'Claude' }, created: false } });
     await tick(); await tick();
+    // The person's own create brought the screen up: no agent line.
+    expect(state().unsavedEdits).toEqual({ reason: TOO_LARGE, keptIn: 'Glass campaign' });
     vi.mocked(projects.listProjects).mockResolvedValue(listing({ activeProjectId: 'beta', workspaceRevision: 'rev-b' }));
     await state().downloadUnsavedEdits!();
     expect(projects.createProject).toHaveBeenCalledOnce();
