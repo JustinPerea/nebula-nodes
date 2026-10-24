@@ -751,7 +751,9 @@ body.app-slava-restraint .agent-notes-root {
     transform var(--spring-pop-ms) var(--spring-pop);
 }
 
-.agent-questions-form__option:hover:not(:disabled) {
+/* Only an unpicked option dims on hover: a picked one keeps its full ring, or
+   hovering would read as un-picking it (GM). */
+.agent-questions-form__option:hover:not(:disabled):not([aria-pressed='true']) {
   background: var(--an-hover);
   border-color: color-mix(in srgb, var(--an-ink) 30%, transparent);
 }

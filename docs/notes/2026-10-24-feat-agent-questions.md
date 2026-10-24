@@ -219,3 +219,4 @@ Same branch (`feat/agent-questions`), on top of 9f9fc459.
 ### Open items
 
 - None new. The picked-option question for GM is settled (neutral ring); the earlier "pruned Update" open item is closed by this pass, as is the restart-mid-wait one.
+- **GM's hover ruling (coordinator, 2026-10-24).** A picked option keeps its full ring when hovered ("if it dims, it reads as if hovering un-picks it"): the hover dim now applies only to unpicked options (`:not([aria-pressed='true'])`). Test: `agentQuestionsPickCss` "keeps its full border on hover", which failed first.

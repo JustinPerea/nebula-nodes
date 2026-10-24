@@ -33,6 +33,14 @@ describe('a picked option in the answer form', () => {
     expect(percent).toBeLessThanOrEqual(12);
   });
 
+  // GM: "a picked option keeps its full border when hovered. If it dims, it
+  // reads as if hovering un-picks it." The hover dim is for unpicked options.
+  it('keeps its full border on hover; only unpicked options dim', () => {
+    const hovers = [...css.matchAll(/([^{}]*\.agent-questions-form__option[^{}]*:hover[^{}]*)\{/g)].map((m) => m[1].trim());
+    expect(hovers.length).toBeGreaterThan(0);
+    for (const selector of hovers) expect(selector).toMatch(/:not\(\[aria-pressed='true'\]\)/);
+  });
+
   it('leaves the agent colour on the form\'s left edge', () => {
     expect(rule('.agent-questions-form__head')).toMatch(/inset 4px 0 0 color-mix\(in srgb, var\(--an-author\)/);
   });
