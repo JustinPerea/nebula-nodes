@@ -606,8 +606,9 @@ def _brief(value: Any, limit: int = 70) -> str:
 
 def _node_lines(node: dict[str, Any], *, open_on_canvas: bool = True) -> list[str]:
     """One node as look_at_canvas and get_project give it (`nebula look`,
-    `nebula project show`): its line, then its error, params, a universal
-    node's ports (from its model) and which outputs exist."""
+    `nebula project show`): its line, then its error, an input's file name,
+    params, a universal node's ports (from its model) and which outputs
+    exist."""
     lines: list[str] = []
     pos = node.get("position")
     size = node.get("size")
@@ -623,6 +624,9 @@ def _node_lines(node: dict[str, Any], *, open_on_canvas: bool = True) -> list[st
         # Why its last run failed, as the card says it.
         hint = f" ({node['errorHint']})" if node.get("errorHint") else ""
         lines.append(f"        error: {_brief(node['error'], 300)}{hint}")
+    if node.get("fileName"):
+        # The name its file was uploaded with (filePath is the stored copy).
+        lines.append(f"        file: {json.dumps(str(node['fileName']), ensure_ascii=False)}")
     params = {k: v for k, v in (node.get("params") or {}).items() if v not in (None, "", {}, [])}
     if params:
         lines.append(f"        params: {_brief(params, 110)}")

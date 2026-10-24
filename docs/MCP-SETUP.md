@@ -156,7 +156,11 @@ The server exposes these tools for building and running (see
   Nebula (`nebula upload <file>`): Nebula copies it into its output folder
   through `POST /api/uploads` and puts an Image Input, Video Input,
   Audio Input or Document Input holding the copy on the canvas; it returns
-  `nodeId`, `kind`, `url` and `filePath`. It takes PNG, JPEG, GIF, WebP,
+  `nodeId`, `kind`, `url`, `filePath` and `filename`. The copy is stored
+  under a hashed name, so the node keeps the name the file was sent with:
+  an Audio or Document Input's card shows it (cut in the middle when long,
+  "quarterly-rep….pdf"), and `look_at_canvas` gives it as the node's
+  `fileName`. It takes PNG, JPEG, GIF, WebP,
   MP4, MOV, WebM, WAV, MP3, M4A, AAC, FLAC, Ogg, PDF or text, checked by
   their bytes (20 MB for an image or document, 500 MB for a clip or sound).
   An optional `position` ({"x", "y"} in canvas coordinates, `nebula upload
@@ -389,6 +393,8 @@ And these canvas tools:
   screenshot. It returns the browser's viewport and visible area, every node
   with its run state, position, size and whether it is on screen, redacted
   parameters, output availability, wires, the selection, and agent cursors.
+  An input holding an uploaded file has `fileName`, the name it was uploaded
+  with (`nebula look` prints it as `file:`).
   A node whose last run failed has `state: "error"` with the message in
   `error` (and the plain-language `errorHint`, when there is one). Where a
   provider quoted a key in that message (OpenAI's 401 shows its first and

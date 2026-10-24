@@ -38,6 +38,7 @@ import '../../styles/nodes.css';
 import { NodeLabel } from './NodeLabel';
 import { NodeRunStatus } from './NodeRunStatus';
 import { MoodboardAdapterRow } from './MoodboardAdapterRow';
+import { inputFileName, middleTruncate } from '../../lib/fileName';
 import { OverviewImage, OverviewVideoStill } from './OverviewImage';
 import { StructuredOutputs } from './StructuredValuePreview';
 import { JevResultView, type JevResultInputs } from './JevResult';
@@ -275,6 +276,11 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const isImageInput = nodeData.definitionId === 'image-input';
   const isMaskPainter = nodeData.definitionId === 'mask-painter';
   const imageInputPreview = isImageInput && nodeData.params._previewUrl ? String(nodeData.params._previewUrl) : null;
+  // Audio and Document Inputs name the file they hold (GM - Design,
+  // 2026-10-24); Image Input shows the picture instead.
+  const inputFile = nodeData.definitionId === 'audio-input' || nodeData.definitionId === 'document-input'
+    ? inputFileName(nodeData.params)
+    : null;
   const maskOverlayData = isMaskPainter && typeof nodeData.params._maskData === 'string'
     ? nodeData.params._maskData
     : null;
@@ -587,6 +593,10 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
             </button>
           )}
         </div>
+      )}
+
+      {inputFile && (
+        <div className="model-node__file-name" title={inputFile}>{middleTruncate(inputFile)}</div>
       )}
 
       {imageInputPreview && (

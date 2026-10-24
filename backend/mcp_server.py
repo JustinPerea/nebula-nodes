@@ -345,7 +345,9 @@ def look_at_canvas(ctx: Context | None = None) -> dict[str, Any]:
     Returns the browser's viewport and visible area (flow coordinates), every
     node with its name, run state (idle/queued/executing/complete/error),
     position, size, whether it is on screen, redacted params and outputs, the
-    wires, the user's selection, and other agents' cursors. `view.stale` is
+    wires, the user's selection, and other agents' cursors. An input node
+    holding an uploaded file has `fileName`, the name it was uploaded with
+    (its `filePath` is a stored, hashed name). `view.stale` is
     true when no browser has reported recently (the canvas may be closed).
     A node whose last run failed has `error`, the message its card shows
     (and `errorHint` when Nebula has a plainer reading of it). An OpenRouter,
@@ -924,8 +926,8 @@ def upload_file(path: str, position: dict[str, float] | None = None,
     Input, Video Input, Audio Input or Document Input holding the copy on the
     canvas, at `position` ({"x", "y"} in canvas coordinates, as edit_canvas
     takes) or, without one, right of the other nodes. Returns `nodeId` (wire
-    it into a node with edit_canvas), `kind`, `url` ("/api/outputs/...") and
-    `filePath`.
+    it into a node with edit_canvas), `kind`, `url` ("/api/outputs/..."),
+    `filePath` and `filename` (the file's own name, which the card shows).
 
     Do this before running a node priced from its input's size (SeedVR2,
     FLUX Video Upscale) on a file of yours: the spending check measures only

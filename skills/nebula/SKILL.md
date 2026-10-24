@@ -213,7 +213,10 @@ nebula run n8              # checked against the limits at the clip's real size
 `nebula upload` takes images (PNG, JPEG, GIF, WebP), clips (MP4, MOV,
 WebM), audio (WAV, MP3, M4A, AAC, FLAC, Ogg: an Audio Input, port `audio`)
 and documents (PDF or text: a Document Input, port `text`), checked by their
-bytes. Without `--at` the node goes right of the other nodes.
+bytes. Without `--at` the node goes right of the other nodes. The node
+keeps the file's own name (its stored copy has a hashed name): the card
+shows it, and `nebula look` prints it as `file:` (`fileName` in
+look_at_canvas).
 
 `nebula quick seedvr2-upscale --input image=photo.png` works too for an
 image (quick copies a local image into Nebula first, not a clip). An image

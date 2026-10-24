@@ -84,6 +84,7 @@ from services.settings import (
 )
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
+from services.input_file_name import PARAM as INPUT_FILE_NAME_PARAM, file_name_param
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
 from services import agent_start, input_sizes, node_categories, node_lookup
 from services import output_thumbnail
@@ -2805,7 +2806,7 @@ async def upload_file_consolidated(
         # the image cap for a better error, else reject.
         if len(content) > MAX_CHAT_UPLOAD_BYTES:
             raise HTTPException(status_code=413, detail="Image exceeds 20 MB limit")
-        raise HTTPException(status_code=415, detail="Only image, video, audio or document (PDF/text) files are accepted")
+        raise HTTPException(status_code=415, detail="Nebula takes images, video, audio, PDFs and text files.")
 
     digest = hashlib.sha256(content).hexdigest()
     saved_path = require_allowed_path(CHAT_UPLOADS_DIR / f"{digest}{ext}")
@@ -2881,6 +2882,10 @@ async def upload_file_consolidated(
             response["sourceFps"] = probe.fps
             response["sourceIsVfr"] = probe.is_vfr
 
+        # The name it was sent with, for the card (the stored name is a hash).
+        kept_name = file_name_param(node_params["filePath"], file.filename)
+        if kept_name is not None:
+            node_params[INPUT_FILE_NAME_PARAM] = kept_name
         node_id = cli_graph.add_node(node_type, node_params, position=new_position)
         try:
             await _broadcast_graph_sync(edit=True)
