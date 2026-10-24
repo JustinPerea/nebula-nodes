@@ -25,6 +25,7 @@ import {
   GraphStructureLimitError,
   assertGraphComplexityWithinLimits,
   normalizeRuntimeMediaParams,
+  projectFileName,
   saveBlobWithPicker,
   serializeGraph,
   type NebulaFile,
@@ -602,6 +603,7 @@ export async function saveToFile(
   nodes: Node<NodeData>[],
   edges: Edge[],
   viewport?: Viewport,
+  projectName?: string,
 ): Promise<GraphBundleAssetSummary | null> {
   let file: NebulaFile;
   let graphJson: string;
@@ -612,7 +614,7 @@ export async function saveToFile(
     if (edges.length > GRAPH_MAX_EDGES) {
       throw new GraphStructureLimitError(`Graph contains more than ${GRAPH_MAX_EDGES.toLocaleString()} edges.`);
     }
-    file = serializeGraph(nodes, edges, viewport);
+    file = serializeGraph(nodes, edges, viewport, projectName);
     file.version = 3;
     assertGraphComplexityWithinLimits(file);
     graphJson = JSON.stringify(file, null, 2);
@@ -650,7 +652,11 @@ export async function saveToFile(
     showNotice(`${SAVE_GRAPH} ${graphSizeLine(blob.size, GRAPH_BUNDLE_MAX_IMPORT_BYTES)}`);
     return null;
   }
-  const suggestedName = `${file.name.replace(/[^a-zA-Z0-9-_ ]/g, '')}.nebula.zip`;
+  // Named after the open project, as "Download a copy" is, so Load graph
+  // names the project it opens after it again (Q120).
+  const suggestedName = projectName
+    ? `${projectFileName(projectName)}.zip`
+    : `${file.name.replace(/[^a-zA-Z0-9-_ ]/g, '')}.nebula.zip`;
   const saved = await saveBlobWithPicker(blob, suggestedName,
     { description: 'Nebula Node Graph Bundle', accept: { 'application/zip': ['.nebula.zip', '.zip'] } });
   if (saved === null) return null;

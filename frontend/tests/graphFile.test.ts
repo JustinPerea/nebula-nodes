@@ -451,6 +451,25 @@ describe('portable graph asset bounds', () => {
     expect(alertSpy).not.toHaveBeenCalled();
   });
 
+  it("names the bundle and its graph after the project", async () => {
+    Reflect.deleteProperty(window, 'showSaveFilePicker');
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:named-graph');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    const names: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      names.push(this.download);
+    });
+    const files: string[] = [];
+    const fileSpy = vi.spyOn(JSZip.prototype, 'file');
+    await saveToFile([], [], undefined, 'Glass: campaign');
+    for (const call of fileSpy.mock.calls) if (call[0] === 'graph.json') files.push(String(call[1]));
+    expect(names).toEqual(['Glass campaign.nebula.zip']);
+    expect(JSON.parse(files[0]).name).toBe('Glass: campaign');
+    names.length = 0;
+    await saveToFile([], []);
+    expect(names).toEqual(['Untitled Graph.nebula.zip']);
+  });
+
   it('refuses a graph past the bundle ceiling before asset fetch or compression', async () => {
     const alertSpy = noticeSpy();
     const fetchMock = vi.fn();

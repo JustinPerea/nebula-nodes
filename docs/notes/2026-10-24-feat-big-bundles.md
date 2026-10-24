@@ -23,6 +23,14 @@ Justin, Q121 (option a), verbatim: "Bundles work like plain files: Load graph op
 - frontend/tests/graphFile.test.ts: "saves a bundle whose graph is over the 16 MiB save limit" (failed first: null) and "refuses a graph past the bundle ceiling before asset fetch or compression" (failed first: the old "up to 16 MB" line). The plain-file Q118 tests now build their 16 MiB values from `PROJECT_SAVE_LIMIT_BYTES`.
 - frontend/tests/graphFile.unsavedEdits.test.ts: the re-export check names `GRAPH_BUNDLE_MAX_IMPORT_BYTES`.
 
+## Review and live check
+
+- One adversarial review with a live check (isolated backend 8796 and Vite 5796, person link, 1280x800; one blocked request, the reviewer's own probe of 8000): PASS, no high or medium findings. Live: an 18 MB bundle opened as a new project "Big bundle" with "Saving paused · 17.3 MB" and GM's line, its picture restored (200), and "Open one" kept only its Text node. Save graph wrote an 18 MB stored bundle with the picture, and Load graph opened that as another new project.
+- **Fixed from the review: Save graph named every bundle "Untitled Graph.nebula.zip".** With Q120 naming the new project after the file, a save and reopen came back as "Untitled Graph". `saveToFile` takes the open project's name now: the file is `projectFileName(name)` + `.zip` (the same safe name "Download a copy" uses) and graph.json's `name` is the project's. With no project open it's "Untitled Graph", as before. Tests in graphFile.test.ts and GraphFileActions.test.tsx failed first.
+- Memory measured by the reviewer: a 256 MiB graph grew the backend by about 550 MiB through the restore and its answer (about 2.1 times the graph), so about 1.1 GiB at the ceiling. A bundle parses the graph twice (restore, then import); a plain file once.
+
 ## Open items
 
 - Agents can't open a `.nebula.zip` (above). Ask Justin before building it.
+- **The browser's real ceiling is about 512 MiB, not 528.** Chrome caps a string at 536,870,888 characters, so `JSON.stringify` of a graph past that fails with the generic save line, not the "up to 528 MB" one; reading a restore answer or a plain file that large hits the same cap (since Q118). The ceiling's copy would need GM.
+- Each save and reopen nests the restored files one folder deeper (`restored-x/.../restored-y/...`), toward the 1,024-byte path limit. Older than this change.

@@ -44,7 +44,9 @@ export function GraphFileActions() {
       const canvasActive = ui.viewMode === 'canvas' || (ui.viewMode === 'commons' && !ui.commonsEnabled);
       const viewport = canvasActive ? getViewport() : ui.canvasViewport ?? getViewport();
       const { saveToFile } = await graphFileModule.load();
-      await saveToFile(state.nodes, state.edges, viewport);
+      const projects = useProjectStore.getState();
+      await saveToFile(state.nodes, state.edges, viewport,
+        projects.initialized ? projects.activeProject?.name : undefined);
     } catch (error) {
       console.error('Graph save failed:', error);
       showNotice(failureMessage(error, "Couldn't save the graph."));
