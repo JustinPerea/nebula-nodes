@@ -4,7 +4,8 @@ An agent asks the person 1-5 questions only they can answer (Q125 item 1);
 the person answers or dismisses them in Nebula's Updates. There is
 deliberately no answer or dismiss command here: that is the person's alone.
 Sets are kept with the project, so they survive a Nebula restart: `nebula
-answers <id>` under the same agent name still reads one afterwards. The MCP
+answers <id>` under the same agent name still reads one afterwards, and a
+`--wait` rides through one (it retries until Nebula is back). The MCP
 twins are ask_person, get_answers and withdraw_questions.
 """
 from __future__ import annotations
@@ -17,9 +18,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, TextIO
 
-import httpx
-
-from nebula_api import NebulaAPIError
+from nebula_api import NebulaAPIError, next_backoff, unanswered
 from services.agent_questions import WITHDRAW_CLI, cap_message, still_open_rows
 
 from ..client import NebulaClient
@@ -103,18 +102,37 @@ def wait_for_answers(
     timeout: float,
     agent_name: str | None = None,
     clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> tuple[dict[str, Any], bool]:
-    """Poll until the person answers, dismisses, or the agent withdraws. Returns (view, timed_out)."""
+    """Poll until the person answers, dismisses, or the agent withdraws. Returns (view, timed_out).
+
+    The wait rides through a Nebula restart (sets are kept with the project):
+    a poll Nebula never answered (refused, reset, no answer) is tried again
+    after a short backoff while the wait has time left, as MCP get_answers
+    does. A real answer (a 404 that says to ask again, a 403, a 5xx) is
+    printed and exits 1 as before, and so is Nebula still down at the end of
+    the wait. Ctrl-C ends it at once, in the backoff too."""
     deadline = clock() + max(0.0, timeout)
+    backoff: float | None = None  # set while Nebula isn't answering
+    path = f"GET /api/canvas/questions/{view.get('id')}"
     while view.get("status") == "open":
         remaining = deadline - clock()
-        if remaining <= 0:
+        # Out of time: timed out, unless the last poll went unanswered (then
+        # one last try, so a stale "open" is never reported as the state).
+        if remaining <= 0 and backoff is None:
             return view, True
         try:
-            view = client.get_questions(view["id"], wait=min(POLL_SECONDS, remaining),
-                                        agent_name=agent_name).get("questions") or view
-        except httpx.TimeoutException:
+            view = client.get_questions(view["id"], wait=max(0.0, min(POLL_SECONDS, remaining)),
+                                        agent_name=agent_name, raise_errors=True).get("questions") or view
+        except NebulaAPIError as exc:
+            remaining = deadline - clock()
+            if not unanswered(exc) or remaining <= 0:
+                client._fail(exc, path)  # noqa: SLF001 - the CLI's one way to print a refusal
+                raise  # _fail exits
+            backoff = next_backoff(backoff)
+            sleep(min(backoff, remaining))
             continue
+        backoff = None
     return view, False
 
 
@@ -146,7 +164,7 @@ def _withdraw_form(agent_name: str | None) -> str:
 # -- the commands -----------------------------------------------------------------
 
 def run_ask(client: NebulaClient, args: argparse.Namespace, *, out: TextIO | None = None,
-            clock: Callable[[], float] = time.monotonic) -> int:
+            clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep) -> int:
     out = out or sys.stdout
     try:
         body = body_from_args(args)
@@ -178,18 +196,20 @@ def run_ask(client: NebulaClient, args: argparse.Namespace, *, out: TextIO | Non
         if not args.wait:
             print(f"Check: nebula answers {view.get('id')} --wait 300", file=out)
             return 0
-    view, timed_out = wait_for_answers(client, view, timeout=args.wait, agent_name=args.agent_name, clock=clock)
+    view, timed_out = wait_for_answers(client, view, timeout=args.wait, agent_name=args.agent_name, clock=clock,
+                                       sleep=sleep)
     return _report(view, timed_out, args.wait, as_json=args.json, out=out)
 
 
 def run_answers(client: NebulaClient, args: argparse.Namespace, *, out: TextIO | None = None,
-                clock: Callable[[], float] = time.monotonic) -> int:
+                clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep) -> int:
     out = out or sys.stdout
     view = client.get_questions(args.question_id, agent_name=args.agent_name).get("questions") or {}
     if not args.wait:
         _report(view, False, 0.0, as_json=args.json, out=out)
         return 0
-    view, timed_out = wait_for_answers(client, view, timeout=args.wait, agent_name=args.agent_name, clock=clock)
+    view, timed_out = wait_for_answers(client, view, timeout=args.wait, agent_name=args.agent_name, clock=clock,
+                                       sleep=sleep)
     return _report(view, timed_out, args.wait, as_json=args.json, out=out)
 
 

@@ -441,7 +441,7 @@ def test_recently_deleted_expiring_when_its_list_opens_forgets_its_sets(kept):
 # -- review: a set is kept only while the person can reach it ---------------------------------
 
 def _drop_update(api, set_id: str) -> None:
-    """Take a set's Update off its project's list, as the 200-Update prune does."""
+    """Take a set's Update off its project's list (a hand-edited or damaged record)."""
     store = api.main.project_store
     with store.transaction() as catalog:
         record = catalog["projects"][api.project_id]
@@ -461,29 +461,16 @@ def test_an_open_set_whose_update_is_gone_is_not_kept_after_a_restart(kept):
     assert [s["id"] for s in _stored(kept)] == [still]
 
 
-def test_an_open_set_whose_update_was_pruned_stops_counting_at_once(kept):
-    from services.agent_notes import MAX_PROJECT_NOTES
-
+def test_an_open_set_whose_update_left_the_list_stops_counting_at_once(kept):
+    # The 200-Update prune never takes an open set's Update any more
+    # (tests/test_agent_questions_final.py), so only a hand-edited or damaged
+    # record gets here; the book still forgets such a set without a restart.
     ids = [_ask(kept).json()["questions"]["id"] for _ in range(MAX_OPEN_PER_AGENT)]
-    first_note = _stored(kept)[0]["update"]["id"]
-    store = kept.main.project_store
-    with store.transaction() as catalog:
-        notes = catalog["projects"][kept.project_id]["agentNotes"]
-        template = next(n for n in notes if n["id"] == first_note)
-        # The person saw the first set's Update; then the list filled up with
-        # newer read Updates, so the next Update prunes the first one.
-        template["readAt"] = template["at"]
-        for i in range(MAX_PROJECT_NOTES - len(notes)):
-            notes.append({**template, "id": f"filler{i:04d}", "about": None, "actions": [],
-                          "at": "2999-01-01T00:00:00+00:00", "readAt": "2999-01-01T00:00:00+00:00"})
-        store.commit(catalog)
-    # Withdraw one so the agent has room, then ask: that post prunes the first Update.
+    _drop_update(kept, ids[0])
+    # Withdraw one so the agent has room, then ask: the ask sees the first set can't be reached.
     assert kept.client.delete(f"/api/canvas/questions/{ids[2]}", headers=CLAUDE).status_code == 200
     asked = _ask(kept)
     assert asked.status_code == 201, asked.text
-    notes = kept.main.project_store.read()["projects"][kept.project_id]["agentNotes"]
-    assert first_note not in {n["id"] for n in notes}
-    # Without a restart: the unreachable set is gone from the book and the disk.
     assert ids[0] not in {s.id for s in kept.questions.open_list()}
     assert ids[0] not in {s["id"] for s in _stored(kept)}
     assert _read(kept, ids[0]).status_code == 404

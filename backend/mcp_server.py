@@ -17,7 +17,7 @@ import anyio.lowlevel
 import anyio.to_thread
 import httpx  # noqa: F401 - tests patch httpx.request through this module
 from commons.client_paths import asset_path
-from nebula_api import NebulaAPI, NebulaAPIError
+from nebula_api import NebulaAPI, NebulaAPIError, dropped_mid_request, next_backoff, unanswered
 from services.file_access import require_allowed_path
 from services.canvas_proposals import READY_NODES_MCP, WITHDRAW_MCP, agent_wording
 from services import universal_ports as _universal_ports
@@ -234,6 +234,18 @@ def _stop_if_cancelled() -> None:
         anyio.from_thread.check_cancelled()
     except RuntimeError:  # anyio.NoEventLoopError in newer anyio; mcp only needs anyio>=4.5
         pass
+
+
+def _sleep_unless_cancelled(seconds: float) -> None:
+    """Pause a wait (get_answers' backoff while Nebula restarts) in short
+    slices, so a cancelled call ends within one slice, not after the pause."""
+    end = _time.monotonic() + max(0.0, seconds)
+    while True:
+        _stop_if_cancelled()
+        left = end - _time.monotonic()
+        if left <= 0:
+            return
+        _time.sleep(min(0.05, left))
 
 
 def _tool(*, annotations: ToolAnnotations, waits: bool = False, structured_output: bool | None = None):
@@ -804,20 +816,38 @@ def get_answers(question_id: str, wait_seconds: float = 0, ctx: Context | None =
     agents. `timedOut` is true when they haven't answered yet; there is no
     time limit, so wait again or carry on and check later. Only you can read
     your sets (another agent's id is a 404). Sets survive a Nebula restart
-    (they are kept with the project), so after one call again under the
-    same agent name; a 404 says to ask again.
+    (they are kept with the project): a wait rides through one, retrying
+    until Nebula is back within `wait_seconds`; after one, call again under
+    the same agent name. A 404 says to ask again.
     """
     from urllib.parse import quote
 
     path = f"/api/canvas/questions/{quote(question_id, safe='')}"
     budget = max(0.0, min(float(wait_seconds), MAX_WAIT_SECONDS))
     deadline = _time.monotonic() + budget
+    reached = False  # a restart mid-wait, not a Nebula that was never there
+    backoff: float | None = None
     while True:
         _stop_if_cancelled()
         remaining = max(0.0, deadline - _time.monotonic())
         wait = min(_POLL_SECONDS, remaining)
-        response = _canvas_call("GET", path, ctx, timeout=wait + 10,
-                                params={"wait": round(wait, 1)} if wait > 0 else None)
+        try:
+            response = _canvas_call("GET", path, ctx, timeout=wait + 10,
+                                    params={"wait": round(wait, 1)} if wait > 0 else None)
+        except NebulaAPIError as exc:
+            # A read, so trying again repeats nothing. Only while Nebula is
+            # down (no answer at all) and within the wait's own budget.
+            # Nebula dropping a request it took (a crash, a SIGKILL, the
+            # desktop sidecar's 5 s grace mid long-poll) shows it was there,
+            # even on the first poll; a refused first connect still fails at once.
+            reached = reached or dropped_mid_request(exc)
+            remaining = deadline - _time.monotonic()
+            if not (reached and unanswered(exc)) or remaining <= 0:
+                raise
+            backoff = next_backoff(backoff)
+            _sleep_unless_cancelled(min(backoff, remaining))
+            continue
+        reached, backoff = True, None
         status = (response.get("questions") or {}).get("status")
         if status != "open":
             return response

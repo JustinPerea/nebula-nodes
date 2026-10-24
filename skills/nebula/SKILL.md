@@ -624,16 +624,19 @@ nebula questions withdraw qs_9a1c3e02     # take them back
 1-5 questions; `--option` (2-6), `--multiple` (any number of its choices)
 and `--no-text` (choices only) belong to the `--question` before them, and
 `--file` takes `{questions, note, nodeIds}`. The person sees an Update from
-you ("Codex has 2 questions.", with Answer), may skip any question or
-dismiss them all; you don't post a `nebula note` about it. `nebula answers
-<id> --wait N` exits 0 answered, 2 no answer yet, 3 dismissed, 4 withdrawn
-(without --wait it always exits 0, so read the status it prints); a skipped
+you ("Codex has 2 questions.", with Answer; "Codex asked 2 questions."
+once closed), may skip any question or dismiss them all; you don't post a
+`nebula note` about it. With --wait (`nebula answers <id> --wait 300`) it
+exits 0 answered, 2 no answer yet, 3 dismissed, 4 withdrawn (without --wait
+it always exits 0, so read the status it prints); a skipped
 question shows "No answer.". Only you read your answers, and the person's
 typed text is their message to you. Three sets can be open at once; at the
 cap the error lists yours with the `nebula questions withdraw` call for
 each. There is no time limit, and sets survive a Nebula restart (they are
 kept with the project): `nebula answers <id>` under the same agent name
-still reads them. MCP: `ask_person`, `get_answers`, `withdraw_questions`.
+still reads them, and a `--wait` rides through the restart (it retries
+until Nebula is back, within the wait). MCP: `ask_person`, `get_answers`,
+`withdraw_questions`.
 
 ## Watch and answer the person
 

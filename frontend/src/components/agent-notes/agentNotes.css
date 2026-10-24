@@ -728,8 +728,11 @@ body.app-slava-restraint .agent-notes-root {
   margin-top: 10px;
 }
 
-/* An option: the list's button, and once picked the proposal review's
- * selection (the agent's colour ring), never the orange accent. */
+/* An option: the list's button. Once picked, GM - Design's neutral ring for
+ * every agent (2026-10-24): "the light ink ring with a faint fill, the same
+ * weight as now, just not the agent's color. The pick is the person's
+ * choice, not the agent's." The agent's colour stays on the form's left edge
+ * and its dot; never the orange accent. */
 .agent-questions-form__option {
   max-width: 100%;
   padding: 7px 11px;
@@ -758,9 +761,9 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 .agent-questions-form__option[aria-pressed='true'] {
-  border-color: var(--an-author);
-  background: color-mix(in srgb, var(--an-author) 14%, transparent);
-  box-shadow: 0 0 0 1px var(--an-author);
+  border-color: var(--an-ink);
+  background: color-mix(in srgb, var(--an-ink) 8%, transparent);
+  box-shadow: 0 0 0 1px var(--an-ink);
   color: var(--an-ink-bold);
 }
 

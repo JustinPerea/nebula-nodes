@@ -250,12 +250,18 @@ class NebulaClient:
         headers = self._identity_headers({"X-Nebula-Agent": agent_name} if agent_name else None)
         return self.api.request("POST", "/api/canvas/questions", json=body, headers=headers)
 
-    def get_questions(self, set_id: str, wait: float = 0.0, agent_name: str | None = None) -> dict[str, Any]:
-        """GET your question set; `wait` (≤25 s) blocks until the person answers."""
+    def get_questions(self, set_id: str, wait: float = 0.0, agent_name: str | None = None, *,
+                      raise_errors: bool = False) -> dict[str, Any]:
+        """GET your question set; `wait` (≤25 s) blocks until the person answers.
+        With `raise_errors` a failure raises NebulaAPIError (the wait loop
+        retries one Nebula never answered) instead of printing and exiting."""
         headers = {"X-Nebula-Agent": agent_name} if agent_name else None
         params = {"wait": round(wait, 1)} if wait > 0 else None
-        return self._request("GET", f"/api/canvas/questions/{quote(set_id, safe='')}",
-                             params=params, headers=headers, timeout=wait + 15)
+        path = f"/api/canvas/questions/{quote(set_id, safe='')}"
+        if raise_errors:
+            return self.api.request("GET", path, params=params, headers=self._identity_headers(headers),
+                                    timeout=wait + 15)
+        return self._request("GET", path, params=params, headers=headers, timeout=wait + 15)
 
     def withdraw_questions(self, set_id: str, agent_name: str | None = None) -> dict[str, Any]:
         headers = {"X-Nebula-Agent": agent_name} if agent_name else None

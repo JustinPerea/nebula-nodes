@@ -472,7 +472,8 @@ And these canvas tools:
   person answers from an Update with Answer. See
   [Questions for the person](#questions-for-the-person).
 - `get_answers`: reads your question set; `wait_seconds` (up to 300) waits
-  for the person. Only the agent that asked reads it.
+  for the person, through a Nebula restart too. Only the agent that asked
+  reads it.
 - `withdraw_questions`: takes back one of your open question sets.
 
 There is no accept tool. Only the person accepts, in Nebula.
@@ -1195,16 +1196,26 @@ a proposal instead, and what it noticed is an Update.
   Code has 2 questions.", with Answer, and Show on canvas when it names
   nodes). Answer opens the form in the Updates corner. They may skip any
   question; Send needs at least one answer; Dismiss closes the set with
-  none. When it closes, the Update says "Answered.", "Dismissed.",
+  none. When it closes, its line goes past tense ("Claude Code asked 2
+  questions." / "asked a question.", on the stored Update, so `list_notes`
+  shows it too) and it says "Answered.", "Dismissed.",
   "Withdrawn by <agent>." (or "Closed when Nebula restarted." in the rare
-  case a kept set can't be read back). The questions
+  case a kept set can't be read back). The 200-Update cap never prunes the
+  Update of an open set (at most 12 are open, so the cap holds); once the
+  set closes its Update is pruned like any other. The questions
   and the answers are never on the Update, so other agents' `list_notes`
   never shows them.
 - **Read:** MCP `get_answers(question_id, wait_seconds)`, CLI
   `nebula answers <id> [--wait N]` (with --wait: exit 0 answered, 2 no answer yet, 3
   dismissed, 4 withdrawn; without --wait it always exits 0, so read the status
   it prints), HTTP `GET /api/canvas/questions/{id}?wait=<seconds>` (25 at
-  most per request). Status is `open`, `answered`, `dismissed` or
+  most per request). A wait (`wait_seconds`, `--wait`) rides through a
+  Nebula restart: while Nebula isn't answering at all (refused, reset, no
+  answer) it retries with a short backoff (0.25 s doubling to 2 s) within
+  the wait, then keeps waiting; a real answer (404, 403, a 5xx) ends it as
+  before, and so does Nebula still down when the wait runs out. A cancelled
+  MCP call or Ctrl-C ends it at once. `get_proposal` doesn't retry
+  (proposals don't survive a restart). Status is `open`, `answered`, `dismissed` or
   `withdrawn`; `answers` has `{questionId, answered, choices, text}` per
   question (`answered: false` for one the person skipped). Only the agent
   that asked reads its set: anyone else gets 404. The person's typed text is
@@ -1227,8 +1238,9 @@ a proposal instead, and what it noticed is an Update.
   still answer from its Update. It stays with the project in Recently
   deleted and goes when the project is deleted for good (however that
   happens: emptied, purged one by one, or past its 30 days). An open set
-  whose Update has left the project's list (past 200 Updates) can't be
-  answered any more, so it goes too. Answering doesn't
+  whose Update has left the project's list (only a hand-edited or damaged
+  record: the 200-Update cap skips open sets' Updates) can't be answered
+  any more, so it goes too. Answering doesn't
   depend on which project is open. Closed sets, with their answers, are
   readable for 30 minutes (at most 50), across restarts too. A gone id is
   a 404 whose detail says to ask again.

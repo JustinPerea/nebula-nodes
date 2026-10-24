@@ -421,6 +421,25 @@ def from_record(raw: Any, project_id: str) -> QuestionSet | None:
         return None
 
 
+def open_update_ids(record: Mapping[str, Any]) -> frozenset[str]:
+    """The ids of the Updates whose sets are open on this project record: the
+    200-Update cap never prunes them (agent_notes._prune), since the Update
+    is the person's only way into an open set and losing it would silently
+    forget the set. Read from the record in the same transaction as the
+    prune, never from the book (whose loader would take the catalog's lock
+    again). Bounded: an ask goes to the open project and the 12-in-all cap
+    counts every open set in live projects (and those still being posted),
+    so no record holds more than MAX_OPEN_TOTAL open sets; a set in Recently
+    deleted comes back with its project but can't be added to there."""
+    rows = record.get(RECORD_KEY)
+    if not isinstance(rows, list):
+        return frozenset()
+    return frozenset(
+        row["update"]["id"] for row in rows
+        if isinstance(row, dict) and row.get("status") == OPEN and isinstance(row.get("update"), dict)
+        and isinstance(row["update"].get("id"), str))
+
+
 def _note_ids(record: Mapping[str, Any]) -> set[str]:
     notes = record.get("agentNotes")
     return {str(n.get("id")) for n in notes if isinstance(n, dict)} if isinstance(notes, list) else set()
@@ -729,7 +748,8 @@ def cap_message(detail: str, rows: Iterable[Mapping[str, Any]]) -> str:
 # -- the Update each set posts -------------------------------------------------------
 #
 # GM - Design's copy, verbatim: "{agent} has a question." / "{agent} has {n}
-# questions.", one Answer button, and once it closes: "Answered."
+# questions.", one Answer button, and once it closes the line says "{agent}
+# asked a question." / "{agent} asked {n} questions." with: "Answered."
 # "Dismissed." "Withdrawn by {agent}." "Closed when Nebula restarted."
 # (Proposals keep "Closed: Nebula restarted".) Sets are kept with the
 # project now, so a restart closes nothing by itself: the restart line is
@@ -741,10 +761,25 @@ _OUTCOMES = {"answered": "Answered.", "dismissed": "Dismissed."}
 
 
 def update_text(question_set: QuestionSet) -> str:
-    """The Update's line, from a fixed template: never the questions (they are the form's)."""
+    """The Update's line while the set is open, from a fixed template: never
+    the questions (they are the form's)."""
     agent = question_set.agent.name
     count = len(question_set.spec.questions)
     return f"{agent} has a question." if count == 1 else f"{agent} has {count} questions."
+
+
+# GM - Design, 2026-10-24: once a set closes, the line is past tense for every
+# closed outcome: "{agent} asked a question." / "{agent} asked {n} questions."
+_OPEN_LINE = re.compile(r"^(?P<agent>.*) has (?P<count>a question|\d+ questions)\.$", re.DOTALL)
+
+
+def closed_update_text(text: str) -> str:
+    """The Update's line once its set has closed (agent_notes.resolve_questions
+    stores it; note_view applies it to an Update closed before this rule).
+    Only update_text's own end changes, whatever the agent is called; any
+    other line is left as it is."""
+    match = _OPEN_LINE.match(text)
+    return f"{match['agent']} asked {match['count']}." if match else text
 
 
 def update_outcome(question_set: QuestionSet) -> str:
