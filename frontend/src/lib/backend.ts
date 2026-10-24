@@ -336,6 +336,10 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
   // from edits made elsewhere (lib/tabId.ts).
   if (method !== 'GET' && method !== 'HEAD') headers.set(TAB_HEADER, TAB_ID);
   let requestInit: RequestInit = { ...init, headers };
+  // The graph goes back with the relative asset links the backend gave it,
+  // whatever this tab shows (canonicalBackendAssetUrls).
+  const body = canonicalGraphBody(path, method, init?.body);
+  if (body !== init?.body) requestInit = { ...requestInit, body };
   if (wantsPersonHeader(path, method)) {
     const person = await personCredential();
     // Only to the exact backend that issued the token.
@@ -435,15 +439,104 @@ export function backendAssetUrlSync(value: string): string {
   return value;
 }
 
+// Versioned spatial values (backend/models/spatial.py, lib/spatialValue.ts),
+// by their own `kind`, so one on an Any port counts too.
+const SPATIAL_VALUE_KINDS = new Set([
+  'coordinate-system', 'camera-pose', 'camera-path', 'spatial-context', 'depth-map', 'depth-sequence',
+  'point-cloud', 'sensor-rig', 'sensor-stream', 'spatial-session', 'world',
+]);
+
+/** A versioned spatial value keeps the relative /api/outputs links the
+ * backend gave it, in the tab too: its contract allows nothing else, the
+ * card's strict parser (lib/spatialValue.ts) refuses an absolute one ("World
+ * unavailable"), and every viewer resolves each link when it draws or fetches
+ * it (RepresentationViewer, worldSplat, worldDownload, canvasSelection). The
+ * display rewrites below leave it as it is. */
+function isVersionedSpatialValue(value: object): boolean {
+  const candidate = value as { schemaVersion?: unknown; kind?: unknown };
+  return typeof candidate.schemaVersion === 'number' && typeof candidate.kind === 'string'
+    && SPATIAL_VALUE_KINDS.has(candidate.kind);
+}
+
 export function rewriteBackendAssetUrls<T>(value: T): T {
   if (typeof value === 'string') return backendAssetUrlSync(value) as T;
   if (Array.isArray(value)) return value.map((item) => rewriteBackendAssetUrls(item)) as T;
   if (value && typeof value === 'object') {
+    if (isVersionedSpatialValue(value)) return value;
     return Object.fromEntries(
       Object.entries(value).map(([key, entry]) => [key, rewriteBackendAssetUrls(entry)]),
     ) as T;
   }
   return value;
+}
+
+/** Whether `url` is on this backend's origin: a loopback host (any port, as
+ * isLocalBackendAssetUrl reads it on the way in) or the resolved base. */
+function isThisBackendOrigin(url: URL): boolean {
+  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return true;
+  if (!cachedBaseUrl) return false;
+  try {
+    return url.origin === new URL(cachedBaseUrl).origin;
+  } catch {
+    return false;
+  }
+}
+
+/** The backend-relative link an absolute asset link was made from, or null.
+ * The path is kept as written (not as URL parsing re-encodes it), so a link
+ * goes back out exactly as the backend gave it. */
+function relativeBackendAssetUrl(value: string): string | null {
+  if (!value.startsWith('http://') && !value.startsWith('https://')) return null;
+  const pathStart = value.indexOf('/', value.indexOf('://') + 3);
+  if (pathStart < 0) return null;
+  const raw = value.slice(pathStart);
+  if (!hasBackendAssetPrefix(raw)) return null;
+  try {
+    const url = new URL(value);
+    return isThisBackendOrigin(url) && hasBackendAssetPrefix(url.pathname) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The inverse of the display rewrites (rewriteBackendAssetUrls,
+ * rewriteExecutionAssetUrls, backendAssetUrlSync): every string that is one
+ * of this backend's asset links made absolute for display goes back to the
+ * relative /api/... link the backend gave. The tab shows absolute links; what
+ * leaves it (project saves, graph edits, runs, Save graph) carries relative
+ * ones, so a structured value the backend checks strictly (a World's asset
+ * uris must be relative /api/outputs paths) passes, and a saved project
+ * never holds the port this tab happened to reach the backend on. Whole
+ * string values only, as the display rewrite: text that mentions a link and
+ * links to anywhere else are left as they are. */
+export function canonicalBackendAssetUrls<T>(value: T): T {
+  if (typeof value === 'string') return (relativeBackendAssetUrl(value) ?? value) as T;
+  if (Array.isArray(value)) return value.map((item) => canonicalBackendAssetUrls(item)) as T;
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, canonicalBackendAssetUrls(entry)]),
+    ) as T;
+  }
+  return value;
+}
+
+// Requests that carry graph content (nodes, params, outputs, project
+// snapshots): the backend's params-gated prefixes (_PARAMS_GATED_PREFIXES).
+// apiFetch sends their JSON bodies through canonicalBackendAssetUrls.
+const GRAPH_BODY_PREFIXES = ['/api/graph', '/api/execute', '/api/cinema', '/api/quick', '/api/projects', '/api/presets'];
+
+function canonicalGraphBody(path: string, method: string, body: BodyInit | null | undefined): BodyInit | null | undefined {
+  if (method === 'GET' || method === 'HEAD' || typeof body !== 'string') return body;
+  if (!GRAPH_BODY_PREFIXES.some((prefix) => path.startsWith(prefix))) return body;
+  // Cheap test first: autosaves send the whole project on every edit.
+  if (!body.includes('://')) return body;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return body;
+  }
+  return JSON.stringify(canonicalBackendAssetUrls(parsed));
 }
 
 /** Normalize an asset-bearing execution value, including structured World
@@ -468,6 +561,9 @@ export function rewriteExecutionAssetUrls<T>(value: T): T {
   }
   if (Array.isArray(value)) return value.map((entry) => rewriteExecutionAssetUrls(entry)) as T;
   if (value && typeof value === 'object') {
+    // The backend checked it against its contract before sending it, so its
+    // links are already relative /api/outputs paths (isVersionedSpatialValue).
+    if (isVersionedSpatialValue(value)) return value;
     return Object.fromEntries(
       Object.entries(value).map(([key, entry]) => [key, rewriteExecutionAssetUrls(entry)]),
     ) as T;

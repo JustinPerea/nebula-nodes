@@ -166,6 +166,26 @@ describe('portable graph asset bounds', () => {
     expect(result?.warnings).toEqual([]);
   });
 
+  // A .nebula written by Save graph before the world-save fix carried the
+  // tab's display links (http://127.0.0.1:<port>/api/outputs/...). Load graph
+  // reads them back as this backend's relative links, so the World survives.
+  it('keeps a World whose file holds loopback display links from an older Save graph', async () => {
+    const graph = worldFile({});
+    graph.version = 2;
+    graph.nodes[0].data.outputs = {
+      world: { type: 'World', value: worldV2Fixture as unknown as Record<string, unknown> },
+      thumbnail: { type: 'Image', value: '/api/outputs/run-w/thumb.png' },
+    };
+    const text = JSON.stringify(graph).replaceAll('"/api/outputs/', '"http://127.0.0.1:8000/api/outputs/');
+    expect(text).toContain('http://127.0.0.1:8000/api/outputs/');
+
+    const result = await readGraphSelection({ file: new Blob([text]) as File, isZip: false });
+
+    expect(result.warnings).toEqual([]);
+    expect(result.nodes[0].data.outputs.world.value).toEqual(worldV2Fixture);
+    expect(result.nodes[0].data.outputs.thumbnail.value).toBe('/api/outputs/run-w/thumb.png');
+  });
+
   it('preserves every non-World spatial port through save and plain graph load', async () => {
     const entries = Object.entries(spatialFixtureByType)
       .filter(([type]) => type !== 'World');

@@ -4,7 +4,7 @@ import { useUIStore } from './uiStore';
 import { readDraft, useCreateDraftStore } from './createDraftStore';
 import { useArrangeStore } from './arrangeStore';
 import { fetchCLIGraph } from '../lib/api';
-import { rewriteBackendAssetUrls } from '../lib/backend';
+import { canonicalBackendAssetUrls, rewriteBackendAssetUrls } from '../lib/backend';
 import { normalizeRuntimeMediaParams, saveEditsToFile, saveProjectCopyToFile, type SavedEditsFile } from '../lib/graphFileShared';
 import { PROJECT_SAVE_LIMIT_BYTES, projectSizeBytes } from '../lib/projectSize';
 import { loadedNotice, pausedNotice, savingAgainNotice } from '../lib/savePausedCopy';
@@ -291,7 +291,9 @@ function relistIfStale(): void {
 
 /** Persist authoring and results, excluding React Flow measurements/selection
  * and transient credential/progress presentation. JSON gives each save its
- * own immutable copy, including nested Paper recipes and run history. */
+ * own immutable copy, including nested Paper recipes and run history. Asset
+ * links go back to the relative ones the backend gave (applyProject and run
+ * results make them absolute for display): a World's are refused otherwise. */
 export function captureProjectSnapshot(): ProjectSnapshot {
   const graph = useGraphStore.getState();
   const ui = useUIStore.getState();
@@ -316,7 +318,7 @@ export function captureProjectSnapshot(): ProjectSnapshot {
     createSessionId: ui.createSessionId,
     createDraft: draft ?? null,
   };
-  return JSON.parse(JSON.stringify(snapshot)) as ProjectSnapshot;
+  return canonicalBackendAssetUrls(JSON.parse(JSON.stringify(snapshot)) as ProjectSnapshot);
 }
 
 function summary(project: SavedProject): ProjectSummary {

@@ -3,7 +3,7 @@ import type { Node, Edge, Viewport } from '@xyflow/react';
 import type { DynamicNodeData, NodeData } from '../types';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { shotPortId } from '../constants/ports';
-import { backendAssetUrlSync, getCachedBackendBaseUrl } from './backend';
+import { backendAssetUrlSync, canonicalBackendAssetUrls, getCachedBackendBaseUrl } from './backend';
 import { AssetByteLimitError, readBoundedAssetResponse } from './boundedAsset';
 import { apiRequest } from './apiRequest';
 import { FailureNotice, failureMessage, oneLine } from './errorCopy';
@@ -995,6 +995,11 @@ export async function readGraphSelection(selection: GraphFileSelection): Promise
     parsed = JSON.parse(text) as unknown;
     assertGraphComplexityWithinLimits(parsed);
     assertValidNebulaEnvelope(parsed);
+    // A file from an older Save graph can carry the tab's display links
+    // (http://127.0.0.1:<port>/api/outputs/...). Read them as this backend's
+    // relative links, as the bundle path's restore mapping does, before the
+    // strict World check below.
+    parsed.nodes = canonicalBackendAssetUrls(parsed.nodes);
   }
 
   const worldWarnings = sanitizeImportedSpatialOutputs(parsed.nodes);
