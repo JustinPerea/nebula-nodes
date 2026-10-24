@@ -6,6 +6,7 @@ import {
   clockTime,
   cornerRight,
   noteControls,
+  noteDone,
   noteLabel,
   noteText,
   offersNotNow,
@@ -176,6 +177,19 @@ describe('buttons: edit actions first, then Show, two at most', () => {
     });
     expect(noteControls(run, { showLabel: 'Show #37' }).buttons.map((b) => b.label)).toEqual(['Undo the sort', 'Show #37']);
     expect(offersNotNow(run)).toBe(false);
+  });
+
+  it("keeps a question Update's Answer after its card is dismissed; only the set's close greys it", () => {
+    const asking = note({
+      source: 'nebula', about: 'question', refs: [], dismissedAt: '2026-10-24T12:14:10.000Z',
+      actions: [{ label: 'Answer', op: { kind: 'question.answer', questionId: 'qs_1' } }],
+    });
+    expect(noteDone(asking)).toBe(false);
+    expect(noteControls(asking, { showLabel: 'Show' })).toEqual({
+      state: null, buttons: [{ kind: 'action', label: 'Answer', action: asking.actions[0], primary: false }] });
+    const closed = { ...asking, resolvedAt: '2026-10-24T12:15:00.000Z', outcome: 'Dismissed.' };
+    expect(noteDone(closed)).toBe(true);
+    expect(noteControls(closed, { showLabel: 'Show' }).state).toBe('Dismissed.');
   });
 
   it('greys a dismissed or acted update: its edit actions give way to its state, Show stays', () => {

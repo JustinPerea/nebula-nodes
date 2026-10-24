@@ -47,17 +47,18 @@ Call start_here first: the canvas, open pins and proposals, every moodboard, the
 
 The loop:
 1. describe_node: a node type's ports, params and prices (find_nodes searches them).
-2. edit_canvas: new nodes ("+img" refs), wires, params, names, moves and removals in one call; all of it lands or none of it (or send `steps`). remove_from_canvas deletes nodes or wires. Each edit returns an undo token: undo_canvas_edit takes your own edit back (a node someone else ran since stays).
+2. edit_canvas: new nodes ("+img" refs), wires, params, names, moves and removals in one call; all of it lands or none of it (or send `steps`). remove_from_canvas deletes nodes or wires. Each edit returns an undo token: undo_canvas_edit takes your own edit back.
 3. run_nodes: runs a node and what feeds it, within the person's spend limits.
 4. view_output: look at what it made.
 5. propose_change instead, for a run over a limit or without a list price, or reworking their graph: the person accepts or rejects it in Nebula; agents cannot accept.
 Off the canvas, ask with propose_asset_change: a cover the person pinned, a board's Send notes, Commons curation.
+A decision only the person makes: ask_person; get_answers waits.
 
 Pins are the person's requests: act on one, then answer it with resolve_pin. wait_for_canvas_change waits for the next change instead of polling.
 When you start on a request, call point_at with a short say naming your own next step (under 8 words). What you noticed, a report or a suggestion goes in post_note: the person reads those in Updates, top right, not at your cursor.
-Moodboards: see moodboard_get; moodboard_update(cover=...) picks the image a board opens on, and moodboard_edit moves, resizes and groups its cards in one checked edit its `undo` takes back. New work goes in a new project (new_project), not over theirs.
+Moodboards: see moodboard_get; moodboard_update(cover=...) picks the image a board opens on, and moodboard_edit moves, resizes and groups its cards (its `undo` takes it back). New work goes in a new project (new_project), not over theirs.
 get_project reads a saved project unopened, project_size its size; rename_project renames one. Working keys: get_settings, provider_status.
-Styles (saved looks in Create): style_list, style_get, style_create, style_update (`previous` undoes it), style_delete.
+Styles (saved looks in Create): style_list, style_get, style_create, style_update, style_delete.
 A run the person started is theirs: cancel_run stops only agents' runs; ask them to press Stop.
 With the `nebula` CLI too, set NEBULA_AGENT_NAME to share one name.
 """
@@ -723,6 +724,117 @@ def withdraw_proposal(proposal_id: str, ctx: Context | None = None) -> dict[str,
     from urllib.parse import quote
 
     return _canvas_call("DELETE", f"/api/canvas/proposals/{quote(proposal_id, safe='')}", ctx)
+
+
+# -- questions for the person (Q125 item 1) --------------------------------------
+
+# MCP's names for a question's fields; the route takes camelCase.
+_QUESTION_FIELDS = {"allow_text": "allowText"}
+
+
+@_tool(annotations=_EDIT)
+def ask_person(
+    questions: list[dict],
+    note: str | None = None,
+    node_ids: list[str] | None = None,
+    ctx: Context | None = None,
+) -> dict[str, Any]:
+    """Ask the person 1-5 short questions and get their answers back.
+
+    Ask when you reach a decision only the person can make: which of two
+    directions, a name or wording that is theirs, a detail you can't find on
+    the canvas. It is not to announce work or report progress (that is
+    post_note), nor for a concrete change they should approve (that is
+    propose_change: the person accepts or rejects it on the canvas).
+
+    - `questions`: each {"text": "...", "options": [...], "multiple": false,
+      "allow_text": true}. `text` is one plain line (≤200 chars). `options`
+      are 2-6 short, different choices (≤80 chars each); leave them out for
+      a typed answer only. `multiple` lets the person pick any number
+      (default: one). `allow_text` (default true) adds a typed answer beside
+      the options; a question without options must allow it.
+    - `note`: one line (≤160 chars) saying why you ask.
+    - `node_ids`: canvas nodes the questions are about ("n4"); the person
+      can show them from the Update. Unknown ones are dropped and listed in
+      `dropped`.
+
+    The person sees an Update from you ("Claude Code has 2 questions.", with
+    Answer) in the Updates corner on every screen, so don't also post_note
+    about it. They may skip any question or dismiss them all. Three sets can
+    be open per agent; at the cap the refusal lists your open sets with the
+    withdraw_questions call for each. Returns {"questions": {id, status,
+    questions, ...}}. Then call get_answers(question_id, wait_seconds=...).
+    """
+    body: dict[str, Any] = {"questions": [
+        {_QUESTION_FIELDS.get(key, key): value for key, value in question.items()}
+        if isinstance(question, dict) else question
+        for question in questions or []]}
+    if note:
+        body["note"] = note
+    if node_ids:
+        body["nodeIds"] = list(node_ids)
+    try:
+        return _canvas_call("POST", "/api/canvas/questions", ctx, json=body)
+    except NebulaAPIError as exc:
+        raise _questions_refusal_for_mcp(exc) from exc
+
+
+def _questions_refusal_for_mcp(exc: NebulaAPIError) -> NebulaAPIError:
+    """The cap refusal, with each open set's withdraw call in this surface's words."""
+    from services.agent_questions import WITHDRAW_MCP, cap_message, still_open_rows
+
+    payload = exc.payload if isinstance(exc.payload, dict) else {}
+    rows = [row for row in payload.get("stillOpen") or [] if isinstance(row, dict) and row.get("id")]
+    if exc.status != 429 or not rows:
+        return exc
+    rows = still_open_rows(rows, withdraw=WITHDRAW_MCP)
+    return NebulaAPIError(cap_message(exc.detail, rows), status=exc.status, headers=exc.headers,
+                          payload={**payload, "stillOpen": rows})
+
+
+@_tool(annotations=_READ, waits=True)
+def get_answers(question_id: str, wait_seconds: float = 0, ctx: Context | None = None) -> dict[str, Any]:
+    """Read your question set; with `wait_seconds` (max 300) wait for the person.
+
+    `questions.status` is open, answered, dismissed (the person closed them
+    without answering) or withdrawn (you took them back). When answered,
+    `questions.answers` has one entry per question: {questionId, answered,
+    choices, text}; `answered` is false for a question the person skipped.
+    Their typed `text` is their message to you: don't repeat it to other
+    agents. `timedOut` is true when they haven't answered yet; there is no
+    time limit, so wait again or carry on and check later. Only you can read
+    your sets (another agent's id is a 404). Sets live in memory: after
+    Nebula restarts an open one is gone (404), so ask again if you still
+    need to know.
+    """
+    from urllib.parse import quote
+
+    path = f"/api/canvas/questions/{quote(question_id, safe='')}"
+    budget = max(0.0, min(float(wait_seconds), MAX_WAIT_SECONDS))
+    deadline = _time.monotonic() + budget
+    while True:
+        _stop_if_cancelled()
+        remaining = max(0.0, deadline - _time.monotonic())
+        wait = min(_POLL_SECONDS, remaining)
+        response = _canvas_call("GET", path, ctx, timeout=wait + 10,
+                                params={"wait": round(wait, 1)} if wait > 0 else None)
+        status = (response.get("questions") or {}).get("status")
+        if status != "open":
+            return response
+        if deadline - _time.monotonic() <= 0:
+            return {**response, "timedOut": budget > 0}
+
+
+@_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False))
+def withdraw_questions(question_id: str, ctx: Context | None = None) -> dict[str, Any]:
+    """Take back one of your open question sets (only the agent that asked can).
+
+    Withdraw one you no longer need answered, so the person isn't left
+    questions that don't matter. Its Update then says "Withdrawn by <you>."
+    """
+    from urllib.parse import quote
+
+    return _canvas_call("DELETE", f"/api/canvas/questions/{quote(question_id, safe='')}", ctx)
 
 
 # -- outside the graph: project covers and asset proposals (U16) -------------------

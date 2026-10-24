@@ -82,6 +82,13 @@ EVENT_KINDS = frozenset({
     # The undo of a node's delete put back what an invalidated proposal needs,
     # and it still fits, so it is open again (same id, same expiry).
     "proposal.reopened",
+    # Questions an agent asked the person (services/agent_questions.py; Q125
+    # item 1): data {questionId, agentId, count}. Never the questions' text
+    # and never the person's answers: those reach only the agent that asked.
+    "question.asked",
+    "question.answered",
+    "question.dismissed",
+    "question.withdrawn",
     # Moodboards (services/moodboard_edits.py): one event per board edit
     # batch or PUT that changed its images, cards or frames, with data
     # {boardId, boardName, scope, refs, kinds}, and one board.fields event

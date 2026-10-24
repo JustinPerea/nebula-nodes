@@ -187,6 +187,8 @@ export const DEFERRED_MODULES: readonly string[] = [
   'components/agent-notes/AgentNotesList.tsx',
   'components/agent-notes/AgentNoteParts.tsx',
   'components/agent-notes/AgentNoteOutlineLayer.tsx',
+  'components/agent-notes/AgentQuestionsForm.tsx',
+  'components/agent-notes/AgentQuestionsAnswers.tsx',
   'lib/agentNotesView.ts',
   'lib/agentNotesBoard.ts',
   'lib/unreadRing.ts',

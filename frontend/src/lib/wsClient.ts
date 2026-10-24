@@ -9,6 +9,7 @@ import type {
   ProviderStartKind,
 } from './runHistory';
 import type { AssetProposalClosedEvent, AssetProposalOpenedEvent, AssetProposalSyncEvent } from './assetProposals';
+import type { QuestionsClosedEvent, QuestionsOpenedEvent, QuestionsSyncEvent } from './agentQuestions';
 
 export type ErrorCategory =
   | 'blocked'
@@ -304,6 +305,9 @@ export type ExecutionEvent = (
   | AssetProposalOpenedEvent
   | AssetProposalSyncEvent
   | AssetProposalClosedEvent
+  | QuestionsOpenedEvent
+  | QuestionsSyncEvent
+  | QuestionsClosedEvent
   | SocketReconnectedEvent
 ) & { runId?: string };
 

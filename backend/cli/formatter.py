@@ -1160,3 +1160,44 @@ def format_project(view: dict[str, Any]) -> str:
     else:
         lines.append(f"`nebula project open {project_id}` opens it; outputs' files (`nebula path`) are read once it is open.")
     return "\n".join(lines)
+
+
+# -- questions for the person (Q125 item 1) -----------------------------------------
+
+_QUESTION_STATUS = {
+    "open": "waiting for the person",
+    "answered": "answered",
+    "dismissed": "dismissed by the person (no answers)",
+    "withdrawn": "withdrawn",
+}
+
+
+def format_questions(view: dict[str, Any]) -> str:
+    """A question set and, once answered, each answer (or "No answer.")."""
+    set_id = view.get("id", "?")
+    status = str(view.get("status") or "open")
+    questions = [q for q in view.get("questions") or [] if isinstance(q, dict)]
+    count = len(questions)
+    lines = [f"{set_id} [{_QUESTION_STATUS.get(status, status)}]: {count} question{'' if count == 1 else 's'}"]
+    if view.get("note"):
+        lines[0] += f" ({json.dumps(str(view['note']), ensure_ascii=False)})"
+    answers = {str(a.get("questionId")): a for a in view.get("answers") or [] if isinstance(a, dict)}
+    for question in questions:
+        options = question.get("options") or []
+        how = []
+        if options:
+            how.append(("any of: " if question.get("multiple") else "one of: ") + " / ".join(map(str, options)))
+        if question.get("allowText", True):
+            how.append("or typed" if options else "typed")
+        lines.append(f"  {question.get('id')}. {question.get('text')}  [{', '.join(how)}]")
+        if status == "answered":
+            answer = answers.get(str(question.get("id"))) or {}
+            if not answer.get("answered"):
+                lines.append("     → No answer.")
+                continue
+            if answer.get("choices"):
+                lines.append(f"     → {', '.join(map(str, answer['choices']))}")
+            if answer.get("text"):
+                text = str(answer["text"]).replace("\n", "\n       ")
+                lines.append(f"     → \"{text}\"")
+    return "\n".join(lines)

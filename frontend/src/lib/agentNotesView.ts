@@ -16,6 +16,8 @@ export function aboutLabel(about: AgentNoteAbout): string {
     case 'removedLook':
     case 'changedWords': return 'Restore';
     case 'proposal': return 'waiting for your OK';
+    // "{agent} has a question." says it already (GM, Q125 item 1).
+    case 'question': return '';
     default: return '';
   }
 }
@@ -25,9 +27,18 @@ export function noteLabel(note: Pick<AgentNote, 'about' | 'resolvedAt'>): string
   return note.resolvedAt ? '' : aboutLabel(note.about);
 }
 
-/** Whether the update is greyed: dismissed, acted on, or its proposal closed. */
-export function noteDone(note: Pick<AgentNote, 'dismissedAt' | 'actedAt' | 'resolvedAt'>): boolean {
-  return Boolean(note.dismissedAt || note.actedAt || note.resolvedAt);
+/**
+ * Whether a dismiss greys the update. A question Update's x only drops its
+ * card: the Update is the person's one way into an open set (no expiry, no
+ * canvas bar), so it greys when the set closes (resolvedAt), not on dismiss.
+ */
+function dismissGreys(note: Pick<AgentNote, 'about' | 'dismissedAt'>): boolean {
+  return Boolean(note.dismissedAt) && note.about !== 'question';
+}
+
+/** Whether the update is greyed: dismissed, acted on, or its proposal or question set closed. */
+export function noteDone(note: Pick<AgentNote, 'about' | 'dismissedAt' | 'actedAt' | 'resolvedAt'>): boolean {
+  return Boolean(dismissGreys(note) || note.actedAt || note.resolvedAt);
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -114,7 +125,7 @@ export function stateLabel(note: AgentNote, actionState?: (action: AgentNoteActi
   if (note.outcome) return note.outcome;
   if (note.resolvedAt) return 'Done';
   if (note.actedAt) return (note.actedWith && ACTED_STATE[note.actedWith]) || 'Done';
-  if (note.dismissedAt) return 'Not now';
+  if (dismissGreys(note)) return 'Not now';
   if (actionState) {
     for (const action of note.actions) {
       const stale = actionState(action);
@@ -140,6 +151,14 @@ export function noteControls(
   }
   if (note.refs.length > 0 && buttons.length < MAX_NOTE_BUTTONS) buttons.push({ kind: 'show', label: options.showLabel });
   return { buttons, state };
+}
+
+/** The question set an Update asks (Q125 item 1), or null for any other update. */
+export function questionSetId(note: Pick<AgentNote, 'about' | 'actions' | 'questionsId'>): string | null {
+  if (note.about !== 'question') return null;
+  if (note.questionsId) return note.questionsId;
+  const op = note.actions.find((action) => action.op.kind === 'question.answer')?.op;
+  return op && typeof op.questionId === 'string' && op.questionId ? op.questionId : null;
 }
 
 /** Whether the update still offers "Not now" (the list's footer explains it). */

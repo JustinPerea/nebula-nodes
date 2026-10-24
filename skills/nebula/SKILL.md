@@ -607,6 +607,33 @@ nebula trash restore style <id>         # bring it back, same id
   leave those out. Internal `_` params are refused.
 - Deleting for good is the person's, in the app.
 
+## Ask the person
+
+When you reach a decision only the person can make (which of two
+directions, a name that is theirs, a detail you can't find on the canvas),
+ask, then wait for the answers. Don't ask to announce work (that is
+`nebula note`), and send a concrete change to approve as `nebula propose`.
+
+```bash
+nebula ask --question "Which crop for the hero?" --option Square --option Wide --option Tall \
+  --question "Anything to avoid?" --note "Picking the hero crop" --node n4 --wait 300
+nebula answers qs_9a1c3e02 --wait 300     # read (or keep waiting for) the answers
+nebula questions withdraw qs_9a1c3e02     # take them back
+```
+
+1-5 questions; `--option` (2-6), `--multiple` (any number of its choices)
+and `--no-text` (choices only) belong to the `--question` before them, and
+`--file` takes `{questions, note, nodeIds}`. The person sees an Update from
+you ("Codex has 2 questions.", with Answer), may skip any question or
+dismiss them all; you don't post a `nebula note` about it. `nebula answers
+<id> --wait N` exits 0 answered, 2 no answer yet, 3 dismissed, 4 withdrawn
+(without --wait it always exits 0, so read the status it prints); a skipped
+question shows "No answer.". Only you read your answers, and the person's
+typed text is their message to you. Three sets can be open at once; at the
+cap the error lists yours with the `nebula questions withdraw` call for
+each. There is no time limit, but a Nebula restart loses open sets (ask
+again then). MCP: `ask_person`, `get_answers`, `withdraw_questions`.
+
 ## Watch and answer the person
 
 ```bash

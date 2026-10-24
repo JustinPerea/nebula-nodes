@@ -1,6 +1,8 @@
 import { type CSSProperties, type KeyboardEvent, type Ref } from 'react';
 import type { AgentNote, AgentNoteAction } from '../../lib/agentNotes';
-import { clockTime, noteDone, noteLabel, noteText, offersNotNow } from '../../lib/agentNotesView';
+import { clockTime, noteDone, noteLabel, noteText, offersNotNow, questionSetId } from '../../lib/agentNotesView';
+import { useAgentQuestionsStore } from '../../store/agentQuestionsStore';
+import { AgentQuestionsAnswers } from './AgentQuestionsAnswers';
 import { ScrollFade } from '../ScrollFade';
 import { AuthorDot, BusyButton, NoteButtons, type AgentNotesAdapter } from './AgentNoteParts';
 
@@ -82,6 +84,7 @@ export function AgentNotesList({
     return (
       <li
         key={note.id}
+        data-note-id={note.id}
         className="agent-notes-entry"
         data-kind={note.author.kind}
         data-state={done ? 'done' : undefined}
@@ -102,6 +105,7 @@ export function AgentNotesList({
           <time className="agent-notes-entry__time" dateTime={note.at}>{clockTime(note.at, today)}</time>
         </div>
         <p className="agent-notes-entry__text">{noteText(note, adapter.numberFor)}</p>
+        <QuestionAnswersFor note={note} />
         <NoteButtons
           note={note}
           adapter={adapter}
@@ -168,4 +172,11 @@ export function AgentNotesList({
       </div>
     </div>
   );
+}
+
+/** Under a question set's Update, once answered: each question and its answer. */
+function QuestionAnswersFor({ note }: { note: AgentNote }) {
+  const setId = questionSetId(note);
+  const view = useAgentQuestionsStore((s) => (setId ? s.sets[setId]?.view : undefined));
+  return view ? <AgentQuestionsAnswers view={view} /> : null;
 }

@@ -28,6 +28,7 @@ import zipfile
 from collections import OrderedDict, deque
 from contextlib import ExitStack, aclosing, contextmanager, nullcontext
 from contextvars import ContextVar
+import dataclasses
 from dataclasses import dataclass
 from functools import wraps
 from pathlib import Path
@@ -194,6 +195,19 @@ from services.asset_proposals import parse_change as parse_asset_change, summary
 from services.asset_proposals import RESTART_OUTCOME, outcome_line as asset_outcome_line, update_text as asset_update_text
 # Each canvas proposal's Update too (Justin's Q112 a).
 from services.canvas_proposals import update_outcome as canvas_outcome_line, update_text as canvas_update_text
+# Questions an agent asks the person (Q125 item 1), modelled on proposals.
+from services.agent_questions import (
+    RESTART_OUTCOME as QUESTIONS_RESTART_OUTCOME,
+    WITHDRAW_HTTP as QUESTIONS_WITHDRAW_HTTP,
+    QuestionError,
+    QuestionSet,
+    agent_questions,
+    parse_answers as parse_question_answers,
+    parse_questions,
+    still_open_rows,
+    update_outcome as question_outcome_line,
+    update_text as question_update_text,
+)
 from services.agent_presence import request_headers_scope
 from services.local_guard import host_allowed
 from services import run_approvals as approvals
@@ -3241,6 +3255,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 # Accept keys travel only to the person's canvas sockets.
                 await websocket.send_text(json.dumps(_proposal_sync_message()))
                 await websocket.send_text(json.dumps(await _asset_proposal_sync_message()))
+                # Open question sets with their answer keys (Q125 item 1), same rule.
+                await websocket.send_text(json.dumps(_questions_sync_message()))
             else:
                 await websocket.send_text(json.dumps({
                     "type": "personRequired",
@@ -6628,6 +6644,265 @@ async def release_run_approval(approval_id: str) -> dict[str, Any]:
     return {"status": "released" if run_approvals.drop(approval_id) else "not_found"}
 
 
+# ---------- Questions: agents ask, the person answers (Q125 item 1) ----------
+#
+# Justin, 2026-10-24: "Yes, all four, in that order"; then "go with your
+# suggestions". Modelled on the canvas proposals above: memory only, open
+# caps, the same two-layer person gate (require_person, then a per-set key
+# only the person's browser sockets get, in the proposal key's header), and
+# an Update that settles when the set closes. Every surface (MCP ask_person,
+# `nebula ask`, HTTP) asks through create_agent_questions.
+
+def _question_view(question_set: QuestionSet) -> dict[str, Any]:
+    return agent_questions.view(question_set)
+
+
+def _question_http_error(exc: QuestionError) -> HTTPException:
+    return HTTPException(status_code=exc.status, detail=exc.detail)
+
+
+def _questions_sync_message() -> dict[str, Any]:
+    """For the person's sockets only, after hello: every open set with its
+    key, and the recently closed ones (their answers included, for the
+    closed view; the person wrote them)."""
+    return {
+        "type": "questionsSync",
+        "sets": [{**_question_view(s), "answerKey": s.answer_key} for s in agent_questions.open_list()]
+        + [_question_view(s) for s in agent_questions.closed_list()],
+    }
+
+
+def _journal_question(question_set: QuestionSet, *, actor: dict[str, Any] | None = None) -> None:
+    """One journal event per step. Never the questions' text nor the
+    answers: every agent on the canvas reads the journal."""
+    kind = "asked" if question_set.is_open else question_set.status
+    count = len(question_set.spec.questions)
+    noun = "question" if count == 1 else "questions"
+    summaries = {
+        "asked": f"asked the person {count} {noun} ({question_set.id})",
+        "answered": f"answered {question_set.agent.name}'s {noun} ({question_set.id})",
+        "dismissed": f"dismissed {question_set.agent.name}'s {noun} ({question_set.id})",
+        "withdrawn": f"withdrew its {noun} ({question_set.id})",
+    }
+    _journal(f"question.{kind}", node_id=next(iter(question_set.spec.node_ids), None),
+             data={"questionId": question_set.id, "agentId": question_set.agent.id, "count": count},
+             summary=summaries[kind], actor=actor)
+
+
+def _gone_question_detail(set_id: str) -> str:
+    """A set Nebula doesn't have for this agent: another agent's, closed too
+    long ago, or open when Nebula restarted (they live in memory)."""
+    return (f"No question set {set_id[:20]} of yours (answered ones are kept for 30 minutes, and a restart of "
+            "Nebula closes open ones: ask again if you still need to know)")
+
+
+def _questions_owner(set_id: str) -> tuple[AgentIdentity, QuestionSet]:
+    """The asking agent's own set, or 404 (another agent's set is not there for it)."""
+    identity = identify_agent(current_request_headers())
+    if identity is None:
+        raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
+    question_set = agent_questions.get(set_id)
+    if question_set is None or question_set.agent.id != identity.id:
+        raise refusal_copy.not_found(_gone_question_detail(set_id), "question", "questions")
+    return identity, question_set
+
+
+async def _post_question_update(question_set: QuestionSet) -> bool:
+    """Its Update on the project's list, with Answer: where the person answers it."""
+    try:
+        result = await asyncio.to_thread(
+            agent_notes.post_questions, author={"kind": "agent", **question_set.agent.as_dict()},
+            text=question_update_text(question_set), questions={"id": question_set.id},
+            refs=list(question_set.spec.node_ids), project_id=question_set.project_id)
+    except (NoteError, ProjectStoreError):
+        return False
+    note = result["note"]
+    question_set.update = {"id": note["id"], "projectId": result["projectId"]}
+    await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"], note=note,
+                                                unread=result["unread"], removed=result["removed"]))
+    _journal_note(note, "canvas")
+    return True
+
+
+def _question_resolved_by(question_set: QuestionSet) -> dict[str, Any]:
+    if question_set.status == "withdrawn":
+        return {"kind": "agent", "name": question_set.agent.name}
+    return {"kind": "person"}
+
+
+async def _follow_question_updates(sets: list[QuestionSet]) -> None:
+    """Closed sets: each one's Update says how it ended and is read, so its Answer goes."""
+    for question_set in sets:
+        ref = question_set.update
+        if not ref or question_set.is_open:
+            continue
+        try:
+            result = await asyncio.to_thread(agent_notes.resolve_questions, ref["projectId"], ref["id"],
+                                             outcome=question_outcome_line(question_set),
+                                             by=_question_resolved_by(question_set))
+        except (NoteError, ProjectStoreError):
+            continue
+        if result is None:
+            continue
+        if result["projectId"] == project_store.read().get("activeProjectId"):
+            await _broadcast_raw_quietly(_notes_message("canvas", "resolved", project_id=result["projectId"],
+                                                        ids=[ref["id"]], note=result["note"], unread=result["unread"]))
+
+
+async def _announce_closed_questions(sets: list[QuestionSet], *, actor: dict[str, Any] | None = None) -> None:
+    """Journal each, tell the person's sockets (only theirs: the message
+    carries their answers back to them), then settle each one's Update."""
+    for question_set in sets:
+        _journal_question(question_set, actor=actor)
+        try:
+            await manager.broadcast_browser({"type": "questionsClosed", "questionId": question_set.id,
+                                             "status": question_set.status, "agentId": question_set.agent.id,
+                                             "set": _question_view(question_set)})
+        except Exception:  # noqa: BLE001 - a browser that missed it gets questionsSync on reconnect
+            pass
+    await _follow_question_updates(sets)
+
+
+@app.post("/api/canvas/questions", status_code=201)
+async def create_agent_questions(body: dict[str, Any]) -> Any:
+    """An agent asks the person 1-5 questions; they answer in Nebula's Updates.
+
+    Body: {questions: [{text, options?, multiple?, allowText?}], note?,
+    nodeIds?}. Posts an Update with Answer on the open project's list.
+    Answers come back only to this agent (GET /api/canvas/questions/{id})."""
+    headers = current_request_headers()
+    identity = identify_agent(headers)
+    if identity is None:
+        if is_person(headers):
+            raise HTTPException(status_code=403, detail="The person doesn't need to ask: these questions are for them")
+        raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
+    try:
+        spec = parse_questions(body)
+    except QuestionError as exc:
+        raise _question_http_error(exc) from exc
+    # Like an Update's refs: unknown ones are dropped and listed, never guessed.
+    kept = [node_id for node_id in spec.node_ids if node_id in cli_graph.nodes]
+    dropped = [node_id for node_id in spec.node_ids if node_id not in kept]
+    spec = dataclasses.replace(spec, node_ids=tuple(kept))
+    project_id = _workspace_context()["activeProjectId"]
+    if not project_id:
+        raise HTTPException(status_code=409, detail=(
+            "Open or create a project first: the person answers questions from its Updates, which are kept "
+            "with a project"))
+    try:
+        question_set = agent_questions.create(agent=identity, project_id=project_id, spec=spec)
+    except QuestionError as exc:
+        if exc.status == 429:
+            return JSONResponse(status_code=429, content={
+                "detail": exc.detail, "code": "questions_open_limit",
+                "stillOpen": still_open_rows(exc.still_open, withdraw=QUESTIONS_WITHDRAW_HTTP)})
+        raise _question_http_error(exc) from exc
+    if not await _post_question_update(question_set):
+        # No Update, no Answer: the person couldn't reach it, so it isn't kept.
+        agent_questions.drop(question_set.id)
+        raise HTTPException(status_code=409, detail=(
+            "Couldn't post the questions' Update on the open project, so nothing was asked; try again"))
+    _journal_question(question_set)
+    if not question_set.is_open:
+        # Withdrawn while its Update was being written: settle that now.
+        await _follow_question_updates([question_set])
+    else:
+        try:
+            await manager.broadcast_browser({"type": "questionsOpened", "set": _question_view(question_set),
+                                             "answerKey": question_set.answer_key})
+        except Exception:  # noqa: BLE001 - a browser that missed it gets questionsSync on reconnect
+            pass
+    return {"questions": _question_view(question_set), **({"dropped": dropped} if dropped else {})}
+
+
+@app.get("/api/canvas/questions/{set_id}")
+async def get_agent_questions(set_id: str, request: Request) -> dict[str, Any]:
+    """Your own question set; with ?wait=<seconds> (≤25) wait for the person."""
+    wait = _query_number(request.query_params.get("wait"), "wait", integer=False, low=0, high=None) or 0.0
+    wait = min(wait, 25.0)
+    _identity, question_set = _questions_owner(set_id)
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + wait
+    cursor = canvas_events.latest
+    while question_set.is_open:
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            break
+        try:
+            result = await canvas_events.wait(after=cursor, journal=canvas_events.journal_id,
+                                              wait=remaining, kinds={"question"})
+        except TooManyWaiters as exc:
+            raise HTTPException(status_code=429, detail=str(exc)) from exc
+        cursor = result.get("cursor", cursor)
+        if result.get("timedOut") and deadline - loop.time() <= 0:
+            break
+    return {"questions": _question_view(question_set)}
+
+
+@app.delete("/api/canvas/questions/{set_id}")
+async def withdraw_agent_questions(set_id: str) -> dict[str, Any]:
+    """The asking agent takes its questions back."""
+    _identity, question_set = _questions_owner(set_id)
+    try:
+        agent_questions.close(question_set.id, "withdrawn")
+    except QuestionError as exc:
+        raise _question_http_error(exc) from exc
+    await _announce_closed_questions([question_set])
+    return {"questions": _question_view(question_set)}
+
+
+def _answerable_questions(set_id: str) -> QuestionSet:
+    """The person-only checks shared by answer and dismiss, in order, as
+    accepting a proposal (_decidable_proposal):
+
+    1. No agent markers and this launch's person token.
+    2. The set's answer key, which only sockets that said hello with the
+       person token ever received (sent in the proposal key's header).
+    3. Still open."""
+    headers = current_request_headers()
+    require_person(headers)
+    lower = {k.lower(): v for k, v in (headers or {}).items()}
+    supplied = lower.get(_PROPOSAL_KEY_HEADER) or ""
+    question_set = agent_questions.get(set_id)
+    if question_set is None:
+        raise refusal_copy.not_found("These questions are no longer available", "question", "questions")
+    if not supplied or not secrets.compare_digest(supplied.encode(), question_set.answer_key.encode()):
+        raise HTTPException(status_code=403, detail="These questions can only be answered from the Nebula canvas.")
+    _ensure_questions_open(question_set)
+    return question_set
+
+
+def _ensure_questions_open(question_set: QuestionSet) -> None:
+    if not question_set.is_open:
+        raise HTTPException(status_code=409, detail=f"These questions are already {question_set.status}")
+
+
+@app.post("/api/canvas/questions/{set_id}/answer")
+async def answer_agent_questions(set_id: str, request: Request) -> dict[str, Any]:
+    """The person answers. Body: {answers: [{questionId, choices?, text?}]};
+    a question left out is blank, and at least one must be answered."""
+    question_set = _answerable_questions(set_id)
+    body = await _proposal_body(request)
+    # Reading the body can yield: the agent may have withdrawn meanwhile.
+    _ensure_questions_open(question_set)
+    try:
+        answers = parse_question_answers(question_set.spec, body)
+    except QuestionError as exc:
+        raise _question_http_error(exc) from exc
+    agent_questions.close(question_set.id, "answered", answers=answers)
+    await _announce_closed_questions([question_set], actor=dict(_PERSON_ACTOR))
+    return {"status": "answered", "questionId": question_set.id}
+
+
+@app.post("/api/canvas/questions/{set_id}/dismiss")
+async def dismiss_agent_questions(set_id: str) -> dict[str, Any]:
+    """The person closes the questions without answering."""
+    question_set = _answerable_questions(set_id)
+    agent_questions.close(question_set.id, "dismissed")
+    await _announce_closed_questions([question_set], actor=dict(_PERSON_ACTOR))
+    return {"status": "dismissed", "questionId": question_set.id}
+
+
 # ---------- Asset proposals: changes outside the graph (U16) ----------
 #
 # The canvas proposals' life cycle and accept gate for a project's cover and
@@ -6870,6 +7145,10 @@ async def _settle_proposal_updates() -> None:
         return
     project_id = listing.get("projectId")
     for note in listing.get("notes") or []:
+        if note.get("about") == "question":
+            # A question set's Update (Q125 item 1): the same rule, with GM's line for a restart.
+            await _settle_question_update(project_id, note)
+            continue
         ref = note.get("proposal")
         if (note.get("about") != "proposal" or note.get("source") != "nebula" or note.get("resolvedAt")
                 or not isinstance(ref, Mapping)):
@@ -6899,6 +7178,27 @@ async def _settle_proposal_updates() -> None:
             await _broadcast_raw_quietly(_notes_message("canvas", "resolved", project_id=project_id,
                                                         ids=[note["id"]], note=result["note"],
                                                         unread=result["unread"]))
+
+
+async def _settle_question_update(project_id: str | None, note: Mapping[str, Any]) -> None:
+    """A question set's Update whose set can't be answered any more: closed
+    (its outcome), or not in memory because Nebula restarted while it was
+    open ("Closed when Nebula restarted.", GM's line for questions)."""
+    ref = note.get("questions")
+    if note.get("source") != "nebula" or note.get("resolvedAt") or not isinstance(ref, Mapping):
+        return
+    question_set = agent_questions.get(str(ref.get("id") or ""))
+    if isinstance(question_set, QuestionSet) and question_set.is_open:
+        return
+    outcome = question_outcome_line(question_set) if isinstance(question_set, QuestionSet) else QUESTIONS_RESTART_OUTCOME
+    try:
+        result = await asyncio.to_thread(agent_notes.resolve_questions, project_id, note["id"],
+                                         outcome=outcome, by={"kind": "system"})
+    except (NoteError, ProjectStoreError):
+        return
+    if result is not None:
+        await _broadcast_raw_quietly(_notes_message("canvas", "resolved", project_id=project_id, ids=[note["id"]],
+                                                    note=result["note"], unread=result["unread"]))
 
 
 # ---- the Update each canvas proposal posts (Justin's Q112 a, 2026-10-21) ----

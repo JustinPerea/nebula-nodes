@@ -111,7 +111,7 @@ HINTS: dict[str, dict[str, str]] = {
                   "the new ids; then `nebula run <node-id>`."),
         "propose": ("`nebula propose --note \"...\" --add +g=<id> --set nX.key=value --run +g` takes apply's "
                     "--add, --param and --wire too, for a paid run over a limit or reworking their graph; the "
-                    "person accepts in Nebula."),
+                    "person accepts in Nebula. A decision only they can make: `nebula ask`."),
         "point": ("`nebula point n2 --say \"...\"` points at what you work on; `nebula point --say \"...\"` "
                   "alone shows the line where your cursor is."),
         "pin": ("Answer a pin with `nebula pin resolve <pin-id> --say \"...\"` once you've acted on it; "

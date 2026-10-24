@@ -65,7 +65,8 @@ RATE_WINDOW_SECONDS = 60.0
 
 NOTES_DIR = ".notes"
 
-ABOUT_VALUES = ("sinceLastTurn", "analyze", "suggestion", "removedLook", "changedWords", "proposal", "other")
+ABOUT_VALUES = ("sinceLastTurn", "analyze", "suggestion", "removedLook", "changedWords", "proposal", "question",
+                "other")
 AGENT_ABOUT = ("sinceLastTurn", "other")
 
 # Edit actions: a closed set, each with its fixed labels and the keys its op
@@ -81,6 +82,9 @@ ACTIONS: dict[str, dict[str, Any]] = {
     # it (``target`` is the proposal's kind: project, moodboard, commons, or
     # canvas for a canvas proposal, whose ``targetId`` is its project).
     "proposal.review": {"labels": ("Review",), "keys": {"proposalId": str, "target": str, "targetId": str}},
+    # A question set's Update (Q125 item 1): opens the answer form in the
+    # Updates corner. Only the person's canvas answers (services/agent_questions.py).
+    "question.answer": {"labels": ("Answer",), "keys": {"questionId": str}},
 }
 
 # A board image ref inside saved text: private-use characters, which
@@ -818,6 +822,41 @@ class AgentNotes:
 
         project_id, (unread, removed) = self._write_project(mutate, project_id=project_id)
         return {"note": note_view(note), "unread": unread, "projectId": project_id, "removed": removed}
+
+    # -- a question set's Update (Q125 item 1) ------------------------------------
+    def post_questions(self, *, author: Mapping[str, Any], text: str, questions: Mapping[str, Any],
+                       refs: list[str] | None = None, project_id: str | None = None) -> dict[str, Any]:
+        """The Update a question set posts on the project's list: written by
+        Nebula from a template (``source: "nebula"``, never the questions
+        themselves), attributed to the asking agent, ``about: "question"``,
+        with one Answer action, and ``refs`` the set's node ids (checked by
+        main against the canvas, so Show on canvas outlines them). Like a
+        proposal's, it skips the agent's rate limit: Nebula writes it on the
+        agent's behalf, following the one set already asked. Every set gets
+        its own Update; none replaces another."""
+        clean_author = _clean_author(author)
+        ref = {"id": str(questions["id"])[:64]}
+        actions = _clean_actions([{"label": "Answer", "op": {"kind": "question.answer", "questionId": ref["id"]}}])
+        asked = _ref_list(refs)
+        _check_ref_count(asked)
+        note = self._new_note(author=clean_author, source="nebula", about="question", text=clean_note_text(text),
+                              refs=asked, actions=actions)
+        note["questions"] = ref
+
+        def mutate(notes: list[dict[str, Any]]) -> tuple[int, list[str]]:
+            notes.append(note)
+            return unread_count(notes), _prune(notes, MAX_PROJECT_NOTES)
+
+        project_id, (unread, removed) = self._write_project(mutate, project_id=project_id)
+        return {"note": note_view(note), "unread": unread, "projectId": project_id, "removed": removed}
+
+    def resolve_questions(self, project_id: str, note_id: str, *, outcome: str,
+                          by: Mapping[str, Any]) -> dict[str, Any] | None:
+        """The set closed (answered, dismissed, withdrawn, or lost to a
+        restart): the Update says how, as a proposal's does, and is read. The
+        answers never go on the Update: it is on the project, which every
+        agent can read with list_notes."""
+        return self.resolve_proposal(project_id, note_id, outcome=outcome, by=by)
 
     def retarget_proposal(self, project_id: str, note_id: str, proposal_id: str) -> dict[str, Any] | None:
         """The agent's other proposal on the same target is still open: the

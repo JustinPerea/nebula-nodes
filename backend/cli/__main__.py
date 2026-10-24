@@ -379,6 +379,36 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("proposals", help="List proposals waiting for the person")
 
+    # Questions for the person (Q125 item 1): agents ask, only the person answers, in Nebula.
+    from .commands.questions import add_ask_arguments
+
+    ask_p = sub.add_parser(
+        "ask",
+        help="Ask the person 1-5 questions only they can answer, and wait for the answers",
+        description=(
+            "Builder: nebula ask --question \"Which crop for the hero?\" --option Square --option Wide "
+            "--question \"Anything to avoid?\" --note \"Picking the hero crop\" --wait 300. "
+            "--option, --multiple and --no-text belong to the --question before them. Ask for a decision only "
+            "the person can make (a direction, a name, a detail you can't find), never to announce work (that "
+            "is `nebula note`); a concrete change to approve is `nebula propose`. The person sees an Update "
+            "from you with Answer, may skip any question or dismiss them all. Three sets can be open per "
+            "agent. Exit codes with --wait: 0 answered, 2 no answer yet, 3 dismissed, 4 withdrawn."
+        ),
+    )
+    add_ask_arguments(ask_p)
+
+    answers_p = sub.add_parser("answers", help="Read (or wait for) the person's answers to your questions")
+    answers_p.add_argument("question_id", help="The question set's id (qs_9a1c3e02) `nebula ask` printed")
+    answers_p.add_argument("--wait", type=float, metavar="SECONDS", default=0.0,
+                           help="Wait this many seconds for the answers (exit 2 if none yet)")
+    answers_p.add_argument("--json", action="store_true", help="Print the raw JSON")
+    answers_p.add_argument("--as", dest="agent_name", help="Your agent name (only the asker reads its answers)")
+
+    questions_p = sub.add_parser("questions", help="Withdraw one of your open question sets")
+    questions_p.add_argument("action", choices=["withdraw"], help="withdraw")
+    questions_p.add_argument("question_id", help="The question set's id")
+    questions_p.add_argument("--as", dest="agent_name", help="Your agent name (needed to withdraw)")
+
     save_p = sub.add_parser("save", help="Save graph to file")
     save_p.add_argument("file", help="Output file path (JSON)")
 
@@ -644,6 +674,7 @@ def main() -> None:
         projects, proposals, providers, selection, spend, trash, upload,
     )
     from .commands import notes as notes_cmd
+    from .commands import questions as questions_cmd
     from .commands import style
 
     dispatch = {
@@ -687,6 +718,9 @@ def main() -> None:
         "undo": lambda: apply.run_undo(client, args),
         "proposal": lambda: proposals.run_proposal(client, args),
         "proposals": lambda: proposals.run_list(client),
+        "ask": lambda: questions_cmd.run_ask(client, args),
+        "answers": lambda: questions_cmd.run_answers(client, args),
+        "questions": lambda: questions_cmd.run_questions(client, args),
         "save": lambda: graph.run_save(client, args.file),
         "load": lambda: graph.run_load(client, args.file),
         "clear": lambda: graph.run_clear(client, force=args.force),
