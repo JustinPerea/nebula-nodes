@@ -59,6 +59,9 @@ export function whenReady(ready: () => boolean, timeoutMs = 3000): Promise<boole
     const start = Date.now();
     let held = 0;
     const step = () => {
+      // The page is gone (a test's teardown while a poll was queued): there is
+      // nothing left to wait for, and nothing should run after it.
+      if (typeof window === 'undefined' || !window) return;
       held = ready() ? held + 1 : 0;
       if (held >= 2) { resolve(true); return; }
       if (Date.now() - start > timeoutMs) { resolve(false); return; }
