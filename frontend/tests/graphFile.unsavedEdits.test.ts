@@ -15,11 +15,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as shared from '../src/lib/graphFileShared';
 import { editsFileName, editsFileText, saveEditsToFile } from '../src/lib/graphFileShared';
 import {
-  GRAPH_JSON_MAX_IMPORT_BYTES, GRAPH_MAX_EDGES, GRAPH_MAX_NODES, GRAPH_MAX_VALUES, inspectGraphFileWithinLimit,
+  GRAPH_BUNDLE_MAX_IMPORT_BYTES, GRAPH_MAX_EDGES, GRAPH_MAX_NODES, GRAPH_MAX_VALUES, inspectGraphFileWithinLimit,
   readGraphSelection,
 } from '../src/lib/graphFile';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 import type { ProjectSnapshot } from '../src/lib/projects';
+import { PROJECT_SAVE_LIMIT_BYTES } from '../src/lib/projectSize';
 
 const snapshot: ProjectSnapshot = {
   nodes: [
@@ -125,7 +126,7 @@ describe('an edits file Load graph cannot open', () => {
     expect(limits.GRAPH_MAX_NODES).toBe(GRAPH_MAX_NODES);
     expect(limits.GRAPH_MAX_EDGES).toBe(GRAPH_MAX_EDGES);
     expect(limits.GRAPH_MAX_VALUES).toBe(GRAPH_MAX_VALUES);
-    expect(limits.GRAPH_JSON_MAX_IMPORT_BYTES).toBe(GRAPH_JSON_MAX_IMPORT_BYTES);
+    expect(limits.GRAPH_BUNDLE_MAX_IMPORT_BYTES).toBe(GRAPH_BUNDLE_MAX_IMPORT_BYTES);
   });
 
   it('reopens within every limit, and not past one', () => {
@@ -139,7 +140,7 @@ describe('an edits file Load graph cannot open', () => {
     expect(check({ ...snapshot, nodes: [values] })).toBe(false);
     // Q118: past 16 MiB alone it still reopens (Load graph opens files up to
     // the bundle ceiling, then pauses saving until the project is trimmed).
-    const big = { ...node, data: { ...node.data, params: { value: 'x'.repeat(GRAPH_JSON_MAX_IMPORT_BYTES) } } };
+    const big = { ...node, data: { ...node.data, params: { value: 'x'.repeat(PROJECT_SAVE_LIMIT_BYTES) } } };
     expect(check({ ...snapshot, nodes: [big] })).toBe(true);
   });
 

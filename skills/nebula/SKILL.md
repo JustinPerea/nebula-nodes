@@ -638,7 +638,9 @@ nebula load graph.json         # replaces the canvas: open a new project first
 ```
 
 `nebula save` replaces only an earlier saved graph; it won't write over any
-other file (an image or clip, say).
+other file (an image or clip, say). `nebula load` reads plain `.nebula` (JSON)
+files; a `.nebula.zip` bundle (a graph plus its files) opens from Load graph
+on the canvas, so ask the person to open one.
 
 ## Port types
 

@@ -28,7 +28,7 @@ GM - Design's layout and lines, verbatim. Header: "Saving paused · {size} MB", 
   - Esc closes the panel and focus goes back to where it came from. If that element is gone, focus goes to the header status.
   - It springs in on the region's tuned `linear()` spring, and has no motion under reduced motion.
 - **#178's too-large line is gone.** `editsSavedTooLargeLine` was removed, and every download now reads the Load graph line. `editsFileReopens` fails on size only past the bundle ceiling (the addendum is in #178's notes).
-- **"Download a copy"** (`saveProjectCopyToFile`) uses the same plain `.nebula` writer as the edits download and names the file "{project}.nebula". Save graph's bundle still refuses a graph.json over 16 MiB, so it can't be used here.
+- **"Download a copy"** (`saveProjectCopyToFile`) uses the same plain `.nebula` writer as the edits download and names the file "{project}.nebula". (Until Q121 a, Save graph's bundle refused a graph.json over 16 MiB. It writes one now, and "Download a copy" stays the plain file: docs/notes/2026-10-24-feat-big-bundles.md.)
 
 ## Decisions
 
@@ -118,7 +118,7 @@ Screenshots for GM: `gm-panel-1280.png`, `gm-header-1280.png`, `gm-loadgraph-not
 
 ## Open items
 
-- **Bundles over 16 MiB**: the `.nebula.zip` restore still refuses a graph.json over 16 MiB (`RESTORE_MAX_GRAPH_BYTES`), and Save graph's bundle refuses to write one. Only plain `.nebula` files over the limit open. Raising the bundle's graph limit wasn't asked.
+- **Bundles over 16 MiB**: done in Q121 a (docs/notes/2026-10-24-feat-big-bundles.md). Until then the `.nebula.zip` restore refused a graph.json over 16 MiB and Save graph refused to write one; I logged it here instead of asking, and a side agent caught it.
 - **Download a copy** holds the canvas only: a `.nebula` has no run history or Create draft.
 - **Not covered for agent growth**: proposal accept and the model route (both the person's), and layout moves (above).
 

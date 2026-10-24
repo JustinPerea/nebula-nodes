@@ -116,6 +116,29 @@ def test_cli_ordinary_export_and_import_roundtrip(tmp_path):
     assert list(tmp_path.iterdir()) == [path]
 
 
+def test_cli_load_of_a_bundle_says_where_bundles_open(tmp_path, capsys):
+    # A .nebula.zip is a zip, not JSON: `nebula load` used to stop with a
+    # UnicodeDecodeError traceback. Agents read plain .nebula files; a bundle
+    # (graph plus its files) opens from Load graph on the canvas.
+    import io
+    import zipfile
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as bundle:
+        bundle.writestr("graph.json", json.dumps({"nodes": [], "edges": []}))
+    path = tmp_path / "Big campaign.nebula.zip"
+    path.write_bytes(buffer.getvalue())
+    client = Mock()
+
+    with pytest.raises(SystemExit) as exc:
+        run_load(client, str(path))
+
+    assert exc.value.code == 1
+    err = capsys.readouterr().err
+    assert err.startswith("error: ") and "Load graph" in err and "Traceback" not in err
+    assert client.mock_calls == []
+
+
 def test_cli_export_failure_preserves_existing_file_and_cleans_temporary(
     tmp_path, monkeypatch
 ):

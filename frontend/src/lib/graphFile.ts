@@ -18,7 +18,6 @@ import {
   GRAPH_BUNDLE_MAX_ASSET_BYTES,
   GRAPH_BUNDLE_MAX_IMPORT_BYTES,
   GRAPH_BUNDLE_MAX_TOTAL_BYTES,
-  GRAPH_JSON_MAX_IMPORT_BYTES,
   GRAPH_MAX_DEPTH,
   GRAPH_MAX_EDGES,
   GRAPH_MAX_NODES,
@@ -70,7 +69,7 @@ export type { NebulaFile };
 // edits download can tell whether Load graph will open its file
 // (editsFileReopens), from the same numbers (Q116 a review).
 export {
-  GRAPH_JSON_MAX_IMPORT_BYTES, GRAPH_MAX_DEPTH, GRAPH_MAX_EDGES, GRAPH_MAX_NODES, GRAPH_MAX_VALUES,
+  GRAPH_MAX_DEPTH, GRAPH_MAX_EDGES, GRAPH_MAX_NODES, GRAPH_MAX_VALUES,
   GraphStructureLimitError, assertGraphComplexityWithinLimits,
 };
 
@@ -148,7 +147,8 @@ export interface GraphFileSelection {
  * JavaScript memory. A plain JSON file is read up to the same ceiling as a
  * bundle (Q118, Justin: "Let Load graph open bigger .nebula files (up to the
  * 512 MiB it already allows for a bundle)"); one over the 16 MiB save limit
- * opens, and the canvas pauses saving until it is trimmed. The shape walk's
+ * opens, and the canvas pauses saving until it is trimmed. A bundle's graph
+ * opens the same way (Q121 a). The shape walk's
  * limits still apply once it is parsed. */
 export async function inspectGraphFileWithinLimit(file: Blob): Promise<GraphFileSelection> {
   if (file.size > GRAPH_BUNDLE_MAX_IMPORT_BYTES) {
@@ -616,9 +616,12 @@ export async function saveToFile(
     file.version = 3;
     assertGraphComplexityWithinLimits(file);
     graphJson = JSON.stringify(file, null, 2);
+    // Q121 a: a graph over the 16 MiB save limit still saves as a bundle; one
+    // past the bundle's ceiling never fits, so it's refused before any asset
+    // is fetched.
     const graphBytes = new TextEncoder().encode(graphJson).byteLength;
-    if (graphBytes > GRAPH_JSON_MAX_IMPORT_BYTES) {
-      throw new GraphStructureLimitError(graphSizeLine(graphBytes, GRAPH_JSON_MAX_IMPORT_BYTES));
+    if (graphBytes > GRAPH_BUNDLE_MAX_IMPORT_BYTES) {
+      throw new GraphStructureLimitError(graphSizeLine(graphBytes, GRAPH_BUNDLE_MAX_IMPORT_BYTES));
     }
   } catch (error) {
     console.error('[nebula] graph save', error);
