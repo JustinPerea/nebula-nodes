@@ -938,6 +938,32 @@ def upload_file(path: str, ctx: Context | None = None) -> dict[str, Any]:
         raise RuntimeError(str(exc)) from exc
 
 
+@_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=False), waits=True)
+def load_graph_file(path: str, ctx: Context | None = None) -> dict[str, Any]:
+    """Open a graph file (`nebula load <file>`) as the person's Load graph
+    does: a .nebula or .json, or a .nebula.zip bundle, whose files Nebula
+    restores into its output folder, with the graph's links pointing at them.
+
+    Under the 16 MB save limit it replaces the open project's canvas, so make
+    a new project first (new_project) unless the person asked for that. A
+    file over the limit opens as a new project named after the file, and the
+    open project is left as it was: `previousProject` and the `note` say how
+    to go back (open_project). Saving the new project is paused until it is
+    under the limit (`savingPaused`); project_size shows what's large.
+
+    Returns `loaded`, `project`, `openedAsNewProject`, `nodeCount`,
+    `edgeCount`, `idMap` (the file's node ids to the canvas's), `filesRestored`,
+    `warnings` (files a bundle lacked, links left out), `savingPaused`, `size`
+    and `note`. An in-app chat's turn reads only its own workspace; a relative
+    path means that workspace."""
+    import graph_file_client
+
+    try:
+        return graph_file_client.load(_api(), path, headers=_agent_headers(ctx), via="mcp")
+    except graph_file_client.GraphFileError as exc:
+        raise RuntimeError(str(exc)) from exc
+
+
 @_tool(annotations=_EDIT)
 def edit_canvas(
     note: str = "",

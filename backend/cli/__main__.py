@@ -382,8 +382,13 @@ def build_parser() -> argparse.ArgumentParser:
     save_p = sub.add_parser("save", help="Save graph to file")
     save_p.add_argument("file", help="Output file path (JSON)")
 
-    load_p = sub.add_parser("load", help="Load graph from file")
-    load_p.add_argument("file", help="Input file path (JSON)")
+    load_p = sub.add_parser(
+        "load", help="Open a graph file (.nebula, .json or .nebula.zip) as Load graph does",
+        description="Open a graph file as the canvas's Load graph does: a .nebula.zip's files are restored. "
+                    "Under the 16 MB save limit it replaces the open project's canvas (make a new project first "
+                    "to keep it); over the limit it opens as a new project named after the file (MCP: "
+                    "load_graph_file).")
+    load_p.add_argument("file", help="Input file path (.nebula, .json or .nebula.zip)")
 
     clear_p = sub.add_parser(
         "clear", help="Remove every node from the open project (needs --force when it has nodes)",

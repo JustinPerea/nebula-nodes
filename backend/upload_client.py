@@ -36,20 +36,22 @@ class UploadError(RuntimeError):
     """A file that wasn't added, in words an agent can act on."""
 
 
-def _local_path(source: str) -> Path:
+def _local_path(source: str, *, error: type[Exception] = UploadError) -> Path:
+    """The local file `source` names, under `nebula upload`'s rules, which
+    `nebula load` shares (graph_file_client.py): refused with `error`."""
     from services.agent_workspaces import active_workspace
     from services.file_access import ProtectedPathError, require_allowed_path
 
     if not isinstance(source, str) or not source.strip():
-        raise UploadError("Name a local file to add")
+        raise error("Name a local file to add")
     if source.startswith(("http://", "https://", "data:")):
-        raise UploadError(f"{source[:80]}: not a local file. Download it first, then add the local copy.")
+        raise error(f"{source[:80]}: not a local file. Download it first, then add the local copy.")
     workspace = active_workspace()
     raw = source
     if raw.lower().startswith("file:"):
         parts = urlsplit(raw)
         if parts.netloc not in ("", "localhost") or parts.query or parts.fragment:
-            raise UploadError(f"{source}: not a local file link")
+            raise error(f"{source}: not a local file link")
         raw = unquote(parts.path)
     path = Path(raw).expanduser()
     if workspace is not None and not path.is_absolute():
@@ -58,10 +60,10 @@ def _local_path(source: str) -> Path:
     try:
         resolved = require_allowed_path(path)
     except ProtectedPathError as exc:
-        raise UploadError(f"{source}: {exc}") from exc
+        raise error(f"{source}: {exc}") from exc
     if workspace is not None and not resolved.is_relative_to(workspace.resolve()):
         # Same rule as Commons and moodboards: a chat's turn reads only its own files.
-        raise UploadError(f"{source}: outside this chat's workspace. Copy the file there first.")
+        raise error(f"{source}: outside this chat's workspace. Copy the file there first.")
     return resolved
 
 
