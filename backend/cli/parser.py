@@ -46,7 +46,7 @@ class NebulaArgumentParser(argparse.ArgumentParser):
         argv = list(sys.argv[1:] if args is None else args)
         token = _chain.set([])
         try:
-            parsed, extras = self.parse_known_args(_resolve_aliases(argv, self), namespace)
+            parsed, extras = self.parse_known_args(_resolve_aliases(_join_negative_spots(argv), self), namespace)
             chain = list(_chain.get() or [])
         finally:
             _chain.reset(token)
@@ -124,6 +124,28 @@ def _either(words: Sequence[str]) -> str:
 
 def _root_prog(parser: argparse.ArgumentParser) -> str:
     return parser.prog.split()[0]
+
+
+_NEGATIVE_SPOT = re.compile(r"^-(?:\d+\.?\d*|\.\d+),\s*-?(?:\d+\.?\d*|\.\d+)$")
+
+
+def _join_negative_spots(argv: list[str]) -> list[str]:
+    """`--at -200,140` as `--at=-200,140`. argparse reads a dash-led word as an
+    option unless it is a plain negative number, so a spot left of x=0 would
+    leave `--at` with no value (`nebula upload`, 2026-10-24 review)."""
+    out: list[str] = []
+    index = 0
+    while index < len(argv):
+        word = argv[index]
+        if word == "--":
+            return [*out, *argv[index:]]
+        if word == "--at" and index + 1 < len(argv) and _NEGATIVE_SPOT.match(argv[index + 1]):
+            out.append(f"--at={argv[index + 1]}")
+            index += 2
+            continue
+        out.append(word)
+        index += 1
+    return out
 
 
 def _resolve_aliases(argv: list[str], parser: argparse.ArgumentParser) -> list[str]:

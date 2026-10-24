@@ -554,10 +554,11 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 }
 
 /* A written line with no button (a refusal) wraps, so the step it names is
-   never cut off by the ellipsis (error copy round 3b). */
+   never cut off by the ellipsis (error copy round 3b). A file drop's
+   failures each take a line of their own (lib/canvasFileDrop.ts). */
 .canvas-undo-notice--message .canvas-undo-notice__text {
   overflow: visible;
-  white-space: normal;
+  white-space: pre-line;
   overflow-wrap: anywhere;
   line-height: 1.4;
 }

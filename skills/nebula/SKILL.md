@@ -204,9 +204,16 @@ is refused. Add your file first:
 
 ```bash
 nebula upload clip.mp4     # copies it into Nebula; prints the Video Input it made (MCP: upload_file)
+nebula upload voice.wav --at 820,140   # an Audio Input, placed at 820,140 (MCP: position={"x": 820, "y": 140})
+nebula upload notes.pdf --at -200,140  # a negative x works too
 nebula connect n7:video n8:video
 nebula run n8              # checked against the limits at the clip's real size
 ```
+
+`nebula upload` takes images (PNG, JPEG, GIF, WebP), clips (MP4, MOV,
+WebM), audio (WAV, MP3, M4A, AAC, FLAC, Ogg: an Audio Input, port `audio`)
+and documents (PDF or text: a Document Input, port `text`), checked by their
+bytes. Without `--at` the node goes right of the other nodes.
 
 `nebula quick seedvr2-upscale --input image=photo.png` works too for an
 image (quick copies a local image into Nebula first, not a clip). An image

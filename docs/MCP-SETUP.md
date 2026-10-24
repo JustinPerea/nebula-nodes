@@ -152,10 +152,17 @@ The server exposes these tools for building and running (see
   (`propose_change`) takes the same nodes, wires and params, but not moves,
   removals, unwires, `arrange`, `steps` or renames of nodes already on the
   canvas; it can name its own new nodes (`rename`).
-- `upload_file`: adds a local image or video to Nebula (`nebula upload
-  <file>`): Nebula copies it into its output folder through `POST
-  /api/uploads` and puts an Image Input or Video Input holding the copy on
-  the canvas; it returns `nodeId`, `kind`, `url` and `filePath`. The new
+- `upload_file`: adds a local image, video, audio file or document to
+  Nebula (`nebula upload <file>`): Nebula copies it into its output folder
+  through `POST /api/uploads` and puts an Image Input, Video Input,
+  Audio Input or Document Input holding the copy on the canvas; it returns
+  `nodeId`, `kind`, `url` and `filePath`. It takes PNG, JPEG, GIF, WebP,
+  MP4, MOV, WebM, WAV, MP3, M4A, AAC, FLAC, Ogg, PDF or text, checked by
+  their bytes (20 MB for an image or document, 500 MB for a clip or sound).
+  An optional `position` ({"x", "y"} in canvas coordinates, `nebula upload
+  --at x,y`) puts the node there; without one it goes right of the other
+  nodes. A file the person drops on the canvas goes the same way, at the
+  drop point. The new
   node is credited to you in the history, `nebula watch` and
   `wait_for_canvas_change`, like any node you add. Do this
   before running a node priced from its input's size on a file of yours

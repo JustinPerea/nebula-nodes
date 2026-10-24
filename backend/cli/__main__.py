@@ -433,9 +433,14 @@ def build_parser() -> argparse.ArgumentParser:
                          help="Params (e.g. --param aspect_ratio=9:16)")
 
     upload_p = sub.add_parser(
-        "upload", help="Add a local image or video to Nebula: a copy in its output folder, held by an Image "
-                       "or Video Input on the canvas (do this before a size-priced run on your own file)")
-    upload_p.add_argument("file", help="The local file (PNG, JPEG, GIF, WebP, MP4, MOV, WebM, PDF or text)")
+        "upload", help="Add a local image, video, audio or document to Nebula: a copy in its output folder, "
+                       "held by an Image, Video, Audio or Document Input on the canvas (do this before a "
+                       "size-priced run on your own file)")
+    upload_p.add_argument("file", help="The local file (PNG, JPEG, GIF, WebP, MP4, MOV, WebM, WAV, MP3, M4A, "
+                                       "AAC, FLAC, Ogg, PDF or text)")
+    upload_p.add_argument("--at", default=None, metavar="x,y",
+                          help="Where the new node goes on the canvas, e.g. --at 820,140 or --at -200,140 "
+                               "(default: right of the other nodes)")
 
     # -- Commons --
     commons_p = sub.add_parser("commons", help="Search, read, add to and borrow from the commons")
@@ -694,7 +699,7 @@ def main() -> None:
         "status": lambda: execute.run_status(client),
         "quick": lambda: quick.run(client, args.node_id,
                                    parse_kv_list(args.input), parse_kv_list(args.param)),
-        "upload": lambda: upload.run(client, args.file),
+        "upload": lambda: upload.run(client, args.file, at=args.at),
     }
 
     handler = dispatch.get(args.command)

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
   Background,
@@ -30,7 +30,7 @@ import { ArrangeController } from './canvas/ArrangeController';
 import { selectMeasuring, useArrangeStore } from '../store/arrangeStore';
 import { CrabMarkAnimated } from './brand/CrabMarkAnimated';
 import { CHARACTER_DRAG_MIME, MOODBOARD_DRAG_MIME } from '../lib/dragMime';
-import { apiFetch } from '../lib/backend';
+import { addDroppedFiles, fileDropInFlight } from '../lib/canvasFileDrop';
 import { CANVAS_INTERACTION_PROPS } from '../lib/canvasNavigation';
 import { CANVAS_FIT_DURATION, CANVAS_ZOOM_DURATION, computeCanvasFitPadding } from '../lib/canvasFit';
 import { useFitCanvasView } from '../hooks/useFitCanvasView';
@@ -287,6 +287,11 @@ export function Canvas() {
   // The fitView prop's fit waits for nodes: on a canvas that mounted empty it
   // runs when a followed project's graph arrives, and is still the canvas's own.
   const initialFit = useRef(initialCanvasState.fitEnabled);
+  // React Flow's own first fit (the fitView prop) waits for nodes. A drop
+  // places them where the person chose, so it cancels that waiting fit:
+  // otherwise the first file dropped on an empty canvas is zoomed to 400%
+  // and away from the drop point (fix/canvas-drop-files).
+  const [fitFirstNodes, setFitFirstNodes] = useState(initialCanvasState.fitEnabled);
   const rememberViewport = useCallback((viewport: Viewport, options?: { initial?: boolean; byCanvas?: boolean }) => {
     const ui = useUIStore.getState();
     const canvasActive = ui.viewMode === 'canvas' || (ui.viewMode === 'commons' && !ui.commonsEnabled);
@@ -409,6 +414,9 @@ export function Canvas() {
         typeof window !== 'undefined' &&
         (window as unknown as { __nebulaSuppressFitView?: boolean }).__nebulaSuppressFitView;
       if (suppressed) return;
+      // The person's own file drop: its nodes land where they dropped them,
+      // so the camera stays put (lib/canvasFileDrop.ts).
+      if (fileDropInFlight()) return;
       const focusState = useUIStore.getState();
       if (focusState.canvasFocusRequest) return;
       const scheduledRevision = focusState.canvasFocusRevision;
@@ -498,41 +506,19 @@ export function Canvas() {
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
+      setFitFirstNodes(false);
 
-      // Check for image or video file drops first
-      const files = event.dataTransfer.files;
+      // Files from the desktop: every one is handled (lib/canvasFileDrop.ts).
+      // Images, video, audio, PDF and text upload with create_node at the
+      // drop point, in flow coordinates; the backend keeps that position
+      // (main._display_positions) and its graphSync draws the input nodes
+      // there, several fanned out from it. Anything else, and a failed
+      // upload, gets a written line in the canvas notice.
+      const files = Array.from(event.dataTransfer.files ?? []);
       if (files.length > 0) {
-        const mediaFiles = Array.from(files).filter(
-          (f) => f.type.startsWith('image/') || f.type.startsWith('video/'),
-        );
-        if (mediaFiles.length > 0) {
-          const reactFlowBounds = (event.target as HTMLElement)
-            .closest('.react-flow')
-            ?.getBoundingClientRect();
-          if (!reactFlowBounds) return;
-
-          mediaFiles.forEach((file) => {
-            // Upload then register the node in cli_graph so Claude's `nebula graph`
-            // sees it with a short ID. graphSync will push it back to the canvas.
-            // Position from the drop event is discarded — cli_graph export auto-lays-out.
-            // Backend routes image → image-input node, video → video-input node.
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('create_node', 'true');
-            // One undo step per dropped file, taken before its graphSync lands.
-            const undoStep = useGraphStore.getState().beginUndoStep();
-            apiFetch('/api/uploads', { method: 'POST', body: formData })
-              .then((r) => {
-                if (!r.ok) useGraphStore.getState().cancelUndoStep(undoStep);
-                return r.json();
-              })
-              .catch((err) => {
-                useGraphStore.getState().cancelUndoStep(undoStep);
-                console.error('Upload/create failed:', err);
-              });
-          });
-          return;
-        }
+        const origin = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+        void addDroppedFiles(files, origin);
+        return;
       }
 
       // Character palette drag → drop a `character` node referencing that asset.
@@ -753,7 +739,7 @@ export function Canvas() {
         onNodeContextMenu={onNodeContextMenu}
         onPaneClick={onPaneClick}
         onPaneContextMenu={onPaneContextMenu}
-        fitView={initialCanvasState.fitEnabled}
+        fitView={fitFirstNodes}
         defaultViewport={initialCanvasState.viewport ?? undefined}
         onInit={onViewportInitialized}
         onMoveStart={cameraMoveStarted}
