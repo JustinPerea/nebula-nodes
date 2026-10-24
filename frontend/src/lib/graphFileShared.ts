@@ -4,6 +4,7 @@ import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { GRAPH_PARAMS_VERSION } from './savedParamsUpgrades';
 import { FailureNotice } from './errorCopy';
 import type { ProjectSnapshot } from './projects';
+import { canonicalBackendAssetUrls } from './backend';
 
 /**
  * The parts of lib/graphFile.ts that startup code uses: the project store
@@ -223,8 +224,9 @@ export function serializeGraph(
         data: {
           label: n.data.label,
           definitionId: n.data.definitionId,
-          params: normalizeRuntimeMediaParams(n.data.definitionId, n.data.params),
-          outputs: hasOutputs ? { ...n.data.outputs } : undefined,
+          // The relative asset links the backend gave, not the ones shown.
+          params: canonicalBackendAssetUrls(normalizeRuntimeMediaParams(n.data.definitionId, n.data.params)),
+          outputs: hasOutputs ? canonicalBackendAssetUrls({ ...n.data.outputs }) : undefined,
           state: hasOutputs ? 'complete' : 'idle',
         },
       };
@@ -236,7 +238,7 @@ export function serializeGraph(
       target: e.target,
       targetHandle: e.targetHandle,
       type: e.type ?? 'typed-edge',
-      data: e.data ? { ...(e.data as Record<string, unknown>) } : undefined,
+      data: e.data ? canonicalBackendAssetUrls({ ...(e.data as Record<string, unknown>) }) : undefined,
     })),
     viewport: viewport
       ? { x: viewport.x, y: viewport.y, zoom: viewport.zoom }

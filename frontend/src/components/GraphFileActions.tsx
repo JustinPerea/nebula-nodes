@@ -7,6 +7,7 @@ import { useProjectStore } from '../store/projectStore';
 import { graphFileModule } from '../lib/deferredChunks';
 import { canLoadGraph, canSaveGraph, GRAPH_LOAD_EVENT, GRAPH_SAVE_EVENT } from '../lib/graphFileActions';
 import { apiRequest } from '../lib/apiRequest';
+import { rewriteBackendAssetUrls } from '../lib/backend';
 import { failureMessage, RequestFailedError } from '../lib/errorCopy';
 import { showNotice } from '../lib/canvasNotice';
 import { computeCanvasFitPadding } from '../lib/canvasFit';
@@ -101,7 +102,10 @@ export function GraphFileActions() {
       // ownership through WebSocket reconciliation. Preserve its workspace.
       const state = useGraphStore.getState();
       if (state.isExecuting || state.createLaunchingIds.length > 0) return;
-      useGraphStore.getState().loadGraph(imported.nodes, imported.edges);
+      // Shown like every other read of the graph (applyProject, fetchCLIGraph):
+      // this backend's links resolved, so a file:// desktop tab can draw them.
+      // A World keeps its relative links; saves canonicalize the rest again.
+      useGraphStore.getState().loadGraph(rewriteBackendAssetUrls(imported.nodes), rewriteBackendAssetUrls(imported.edges));
       // A file over the save limit opens (Q118): the project store says so
       // with GM's Load graph line and pauses saving until it is trimmed.
       useProjectStore.getState().noteLoadedGraph(result.fileName ?? 'the graph', asNewProject);
