@@ -27,7 +27,7 @@ vi.mock('../src/lib/backend', async (importOriginal) => ({
 }));
 
 import { ChatPanel } from '../src/components/panels/ChatPanel';
-import { ConnectionLostError } from '../src/lib/errorCopy';
+import { ConnectionLostError, RequestFailedError } from '../src/lib/errorCopy';
 import { useUIStore } from '../src/store/uiStore';
 
 const initialUI = useUIStore.getState();
@@ -89,5 +89,71 @@ describe('ChatPanel with the Nebula backend unreachable', () => {
     await waitFor(() => expect(apiMocks.fetchCodexStatus).toHaveBeenCalled());
     await waitFor(expectBackendOfflineHint);
     expect(screen.queryByText('Codex status unavailable')).toBeNull();
+  });
+
+  // typeerror (2026-10-24): a TypeError that isn't fetch's no-answer (a bug or
+  // a data problem in the browser) is not "the backend is down".
+  it('a browser TypeError is not read as the backend being offline', async () => {
+    apiMocks.fetchClaudeStatus.mockImplementation(() => Promise.reject(new TypeError("Cannot read properties of undefined (reading 'installed')")));
+    render(<ChatPanel />);
+    await waitFor(() => expect(apiMocks.fetchClaudeStatus).toHaveBeenCalled());
+    const [label] = await screen.findAllByText('Claude status unavailable');
+    expect(label).toHaveAttribute('title', "Couldn't check Claude status. Try again, or reload if it keeps happening.");
+    expect(screen.queryByText('Nebula backend offline')).toBeNull();
+    expect(document.querySelector('[data-chat-agent-connect]')?.textContent ?? '').not.toContain('Backend offline');
+  });
+});
+
+// typeerror2 (2026-10-24): "backend offline" is decided by the error's kind
+// and status, never its words. No answer (isNoAnswer), or a gateway status
+// (502/503/504) with no reason of the backend's: the Vite proxy (or another
+// gateway) answering for a backend it couldn't reach. A refusal whose reason
+// happens to say "network" is the backend answering.
+describe('ChatPanel decides "backend offline" from kind and status', () => {
+  const HEADING = "Couldn't check Claude status.";
+
+  async function expectNotOffline() {
+    render(<ChatPanel />);
+    await waitFor(() => expect(apiMocks.fetchClaudeStatus).toHaveBeenCalled());
+    await screen.findAllByText('Claude status unavailable');
+    expect(screen.queryByText('Nebula backend offline')).toBeNull();
+    expect(document.querySelector('[data-chat-agent-connect]')?.textContent ?? '').not.toContain('Backend offline');
+  }
+
+  it('a 4xx whose reason says "network" is not offline', async () => {
+    apiMocks.fetchClaudeStatus.mockImplementation(() => Promise.reject(
+      new RequestFailedError(HEADING, 400, { detail: 'The network policy on this machine blocks the Claude CLI.' })));
+    await expectNotOffline();
+  });
+
+  it('a plain Error with fetch\'s words that nothing classified is not offline', async () => {
+    apiMocks.fetchClaudeStatus.mockImplementation(() => Promise.reject(new Error('Failed to fetch')));
+    await expectNotOffline();
+  });
+
+  it('the backend\'s own 500 is the backend answering, not offline', async () => {
+    apiMocks.fetchClaudeStatus.mockImplementation(() => Promise.reject(new RequestFailedError(HEADING, 500)));
+    await expectNotOffline();
+  });
+
+  it('a 503 with the backend\'s own written reason is the backend answering, not offline', async () => {
+    apiMocks.fetchClaudeStatus.mockImplementation(() => Promise.reject(
+      new RequestFailedError(HEADING, 503, { detail: 'Claude CLI is busy.' })));
+    await expectNotOffline();
+  });
+
+  it.each([502, 503, 504])('a %i with no reason (the proxy could not reach the backend) is offline', async (status) => {
+    apiMocks.fetchClaudeStatus.mockImplementation(() => Promise.reject(new RequestFailedError(HEADING, status)));
+    render(<ChatPanel />);
+    await waitFor(() => expect(apiMocks.fetchClaudeStatus).toHaveBeenCalled());
+    await waitFor(expectBackendOfflineHint);
+    expect((await screen.findAllByText('Nebula backend offline')).length).toBeGreaterThan(0);
+  });
+
+  it('an AbortError nobody asked for (no answer) is offline', async () => {
+    apiMocks.fetchClaudeStatus.mockImplementation(() => Promise.reject(new DOMException('The operation was aborted.', 'AbortError')));
+    render(<ChatPanel />);
+    await waitFor(() => expect(apiMocks.fetchClaudeStatus).toHaveBeenCalled());
+    await waitFor(expectBackendOfflineHint);
   });
 });

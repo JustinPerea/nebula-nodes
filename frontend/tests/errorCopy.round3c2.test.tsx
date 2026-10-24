@@ -31,6 +31,7 @@ import { CinemaShotPanel } from '../src/components/cinema-studio/CinemaShotPanel
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useCinemaMotionStore } from '../src/store/cinemaMotionStore';
+import { ConnectionLostError } from '../src/lib/errorCopy';
 
 const HEADING = "Couldn't run the node.";
 // Round 3f (GM): "The Cinema shot panel heading: yes, "Couldn't generate the shot."".
@@ -168,9 +169,15 @@ describe('the motion handoff says "Couldn\'t …" and leaves the retry to its bu
   });
 
   it('a request with no answer', async () => {
-    const alert = await send(async () => { throw new TypeError('Failed to fetch'); });
+    // As apiFetch throws it (typeerror, 2026-10-24: a bare TypeError is not no-answer).
+    const alert = await send(async () => { throw new ConnectionLostError(new TypeError('Failed to fetch')); });
     // Round 3f (GM): "don't stack two "Couldn't"s, and Nebula is local".
     expect(alert.textContent).toBe("Couldn't confirm the video connection. Nebula didn't respond.");
+  });
+
+  it('typeerror (2026-10-24): a browser TypeError after the answer is unconfirmed, not "didn\'t respond"', async () => {
+    const alert = await send(async () => ({ ok: true, json: async () => JSON.parse(JSON.stringify({ a: 1n })) }));
+    expect(alert.textContent).toBe("Couldn't confirm the video connection.");
   });
 
   it('a refused request', async () => {

@@ -319,6 +319,78 @@ function notePersonRequired(response: Response): void {
     .catch(() => { /* not JSON: not a person-gate refusal */ });
 }
 
+/**
+ * fetch for a URL that apiFetch doesn't make (an asset link from
+ * backendAssetUrlSync, a public URL): no Nebula headers, no person token, no
+ * discovery replay. Its no-answer is classified here, at the call, as
+ * apiFetch's is: a ConnectionLostError under `heading`, with fetch's own
+ * error as its cause. The caller's own abort comes back as fetch threw it.
+ * Downstream code reads that class (isNoAnswer), never `instanceof
+ * TypeError`, so a bug in the browser isn't told as a server that isn't
+ * answering (typeerror, 2026-10-24).
+ */
+export function fetchUrl(url: string, init: RequestInit = {}, heading = ''): Promise<Response> {
+  return fetch(url, init).then(
+    (response) => classifyBodyReads(response, heading),
+    (error: unknown) => {
+      throw isConnectionFailure(error, init.signal) ? new ConnectionLostError(error, { heading }) : error;
+    },
+  );
+}
+
+/** The Response methods that read the whole body. formData() is left out:
+ * it also rejects with a TypeError for a body that isn't form data. */
+const BODY_READS = ['json', 'text', 'blob', 'arrayBuffer', 'bytes'] as const;
+
+/**
+ * The answer came, then the connection dropped while the caller read the
+ * body: the read rejects with fetch's own TypeError, a no-answer like
+ * fetch()'s rejection. It is classified here, on the Response fetchUrl (and
+ * so apiFetch) hands out, as a ConnectionLostError under `heading` (none
+ * for apiFetch: apiRequest's caller and the failure helpers add theirs),
+ * with fetch's error as its cause (typeerror2, 2026-10-24).
+ *
+ * Narrow on purpose: the same Response object (status, headers, url,
+ * instanceof, bodyUsed unchanged), with only its whole-body reads (and
+ * clone(), so a clone's read is classified too) shadowed on the instance. A
+ * read of a body that is already used or locked is a bug and keeps its
+ * plain TypeError; a JSON SyntaxError and an AbortError come back as
+ * thrown. A test double that isn't a real Response is handed out untouched.
+ * A stream reader (`response.body`) isn't wrapped: the one consumer,
+ * readBoundedAssetResponse (lib/boundedAsset.ts), classifies its own reads.
+ */
+function classifyBodyReads(response: Response, heading: string): Response {
+  if (!(response instanceof Response) || !Object.isExtensible(response)) return response;
+  for (const name of BODY_READS) {
+    const read = (response as unknown as Record<string, unknown>)[name];
+    if (typeof read !== 'function') continue;
+    Object.defineProperty(response, name, {
+      configurable: true,
+      writable: true,
+      value: function classifiedRead(this: Response, ...args: unknown[]) {
+        const target = this ?? response;
+        // Used or locked before this read: the read's TypeError is a bug.
+        if (target.bodyUsed || target.body?.locked) return read.apply(target, args);
+        return (read.apply(target, args) as Promise<unknown>).catch((error: unknown) => {
+          if (error instanceof ConnectionLostError) throw error;
+          throw error instanceof TypeError ? new ConnectionLostError(error, { heading }) : error;
+        });
+      },
+    });
+  }
+  const clone = response.clone;
+  if (typeof clone === 'function') {
+    Object.defineProperty(response, 'clone', {
+      configurable: true,
+      writable: true,
+      value: function classifiedClone(this: Response) {
+        return classifyBodyReads(clone.call(this ?? response), heading);
+      },
+    });
+  }
+  return response;
+}
+
 export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   // Capture at admission, before discovery can await a later project switch.
   const project = getProjectContext();
@@ -353,9 +425,7 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
   // no screen shows the browser's "Failed to fetch" (error-copy, GM): a
   // ConnectionLostError, still a TypeError, with fetch's own as its cause.
   // The caller's own abort comes back as fetch threw it.
-  const send = (url: string) => fetch(url, requestInit).catch((error: unknown) => {
-    throw isConnectionFailure(error, init?.signal) ? new ConnectionLostError(error) : error;
-  });
+  const send = (url: string) => fetchUrl(url, requestInit);
   // Replaying a mutation against another discovered backend is not a retry: it
   // is a second side effect in a different process. This is especially
   // dangerous for paid provider starts, whose public APIs have no idempotency

@@ -1,7 +1,7 @@
-import { backendAssetUrlSync } from './backend';
+import { backendAssetUrlSync, fetchUrl } from './backend';
 import { AssetByteLimitError, readBoundedAssetResponse } from './boundedAsset';
 import { isSafeWorldUrl } from './worldValue';
-import { ConnectionLostError, FailureNotice, requestError, requestSucceeded } from './errorCopy';
+import { FailureNotice, requestError, requestSucceeded } from './errorCopy';
 
 // Blob fallback intentionally stays below graph-bundle totals: the browser
 // briefly holds both the byte array and Blob/object URL. Larger exports should
@@ -43,13 +43,8 @@ export async function downloadWorldAsset(
   const failed = (reason: string) => new FailureNotice(heading, reason);
   if (!isSafeWorldUrl(url)) throw failed('The asset URL is not safe to download.');
 
-  let response: Response;
-  try {
-    response = await fetch(backendAssetUrlSync(url), { signal: options.signal, cache: 'no-store' });
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') throw error;
-    throw new ConnectionLostError(error, { heading });
-  }
+  // No answer is a ConnectionLostError under the heading (fetchUrl).
+  const response = await fetchUrl(backendAssetUrlSync(url), { signal: options.signal, cache: 'no-store' }, heading);
   if (!response.ok) throw await requestError(heading, response);
   requestSucceeded(heading);
 
@@ -58,6 +53,7 @@ export async function downloadWorldAsset(
     bytes = await readBoundedAssetResponse(
       response,
       options.maxBlobBytes ?? WORLD_DOWNLOAD_MAX_BLOB_BYTES,
+      { heading },
     );
   } catch (error) {
     if (error instanceof AssetByteLimitError) {

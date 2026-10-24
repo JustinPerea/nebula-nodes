@@ -105,6 +105,31 @@ describe('Commons request failures carry copy and keep their status', () => {
     expect((await failure(() => commonsApi.blob('/api/commons/blobs/abc'))).reason).toBe(NO_ANSWER);
   });
 
+  // typeerror2 (2026-10-24): the body read is classified where apiFetch hands
+  // out the Response, so the Commons call's catch asks isNoAnswer, not
+  // "any TypeError".
+  it('a connection that drops while the body arrives says the connection line', async () => {
+    answer = () => new Response(new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new TextEncoder().encode('{"label')); },
+      pull(controller) { controller.error(new TypeError('network error')); },
+    }), { headers: { 'content-type': 'application/json' } });
+    const error = await failure(() => commonsApi.status());
+    expect(error.reason).toBe(LOST);
+    expect(error.status).toBe(0);
+    expect(error.heading).toBe("Couldn't check the Commons status.");
+  });
+
+  it('a used body (a bug, not a dropped connection) is not read as a lost connection', async () => {
+    answer = () => {
+      const used = json({ ok: true });
+      void used.text();
+      return used;
+    };
+    const error = await commonsApi.status().then(() => null, (e: unknown) => e);
+    expect(error).toBeInstanceOf(TypeError);
+    expect(error).not.toBeInstanceOf(CommonsRequestError);
+  });
+
   it('the caller\'s own abort of an image comes back as an abort, not as copy', async () => {
     const controller = new AbortController();
     const abort = new DOMException('The operation was aborted.', 'AbortError');

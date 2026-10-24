@@ -47,7 +47,6 @@ const ALLOWED: Record<string, { count: number; why: string }> = {
   'lib/lazyWithPreload.ts': { count: 1, why: 'classifies a chunk-load failure, not shown' },
   // isBackendUnavailableError reads a failed status check's message to tell
   // a backend that is down from other failures; the panel shows its own line.
-  'components/panels/ChatPanel.tsx': { count: 1, why: 'classifies a status-check failure, not shown' },
   // `{e.message}` there is an agent-log entry's message (the backend's
   // publish_action line, written for the person), not an Error.
   'components/panels/AgentLog.tsx': { count: 1, why: "an agent-log entry's message, not an Error" },

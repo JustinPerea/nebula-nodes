@@ -44,6 +44,7 @@ import { useUIStore } from '../src/store/uiStore';
 import { usePricingStore } from '../src/store/pricingStore';
 import { useProviderReadinessStore } from '../src/store/providerReadinessStore';
 import type { PricingTable } from '../src/lib/pricing';
+import { ConnectionLostError } from '../src/lib/errorCopy';
 
 const initialGraph = { ...useGraphStore.getState() };
 const initialUi = { ...useUIStore.getState() };
@@ -192,7 +193,7 @@ describe('the readiness line when something answered', () => {
   });
 
   it('no answer keeps the server line', async () => {
-    mocks.fetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    mocks.fetch.mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch')));
     await useProviderReadinessStore.getState().checkConnections();
     expect(useProviderReadinessStore.getState().error)
       .toBe("Couldn't check the connections. Nebula's server isn't answering. Make sure it's running, then try again.");

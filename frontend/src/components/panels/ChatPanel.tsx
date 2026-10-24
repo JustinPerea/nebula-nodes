@@ -34,7 +34,7 @@ import { claimIntent } from '../../lib/heldIntents';
 import '../../styles/personal-agents.css';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl, personTokenForSocket } from '../../lib/backend';
 import { DEFAULT_BACKEND_PORT, devProxyPort } from '../../lib/devBackendPort';
-import { CONNECTION_LOST_COPY, ConnectionLostError, NO_ANSWER_STATUS, PERSON_REQUIRED_CODE, personRequiredCopy, readDetail, warnFailure, failureMessage, failureCopy, oneLine } from '../../lib/errorCopy';
+import { CONNECTION_LOST_COPY, NO_ANSWER_STATUS, PERSON_REQUIRED_CODE, isBackendUnreachable, personRequiredCopy, readDetail, warnFailure, failureMessage, failureCopy, oneLine } from '../../lib/errorCopy';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import { chatUploadChipError } from '../../lib/chatUploadCopy';
 import { chatAuthority } from '../../lib/commonsChatAuthority';
@@ -97,25 +97,16 @@ const CHAT_PANEL_RESIZE_CURSORS: Record<string, string> = {
 };
 
 /** Whether a failed status check means the Nebula backend itself is down.
- * Read from the error's kind, not its words: apiFetch throws a
- * ConnectionLostError (status 0, message GM's connection line) when no
- * answer comes back (error-copy review, 2026-10-22). The message checks stay
- * for a dev proxy answering 50x and for errors thrown outside apiFetch. */
+ * Read from the error's kind and status, never its words (typeerror2,
+ * 2026-10-24): no answer (isBackendUnreachable: a ConnectionLostError or an
+ * AbortError nobody asked for), any error that carries the no-answer status
+ * (a Commons call's), or a gateway's 502/503/504 with no reason of the
+ * backend's (the Vite proxy for a stopped backend). A refusal whose reason
+ * says "network" is the backend answering. */
 function isBackendUnavailableError(error: unknown): boolean {
   if (!error) return false;
-  if (error instanceof ConnectionLostError || error instanceof TypeError) return true;
-  if ((error as { status?: unknown }).status === NO_ANSWER_STATUS) return true;
-  const message = error instanceof Error ? error.message : String(error);
-  const lower = message.toLowerCase();
-  return (
-    lower.includes('failed to fetch') ||
-    lower.includes('load failed') ||
-    lower.includes('network') ||
-    lower.includes('status failed: 500') ||
-    lower.includes('status failed: 502') ||
-    lower.includes('status failed: 503') ||
-    lower.includes('status failed: 504')
-  );
+  if (isBackendUnreachable(error)) return true;
+  return (error as { status?: unknown }).status === NO_ANSWER_STATUS;
 }
 
 type ToolCall = {
