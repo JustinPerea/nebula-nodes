@@ -110,3 +110,4 @@ On top of 2246aad6, same branch. It closes the first two open items above. Justi
 ### Open items
 
 - First pass's items 1 and 2: closed. Item 3 (Vite's proxy hanging on a mid-body drop) is unchanged and dev only.
+- **CI (coordinator, 2026-10-24).** The two error-copy ratchets (`errorCopy.rawMessageGuard`, `errorCopy.round3e.sweep`) failed because ChatPanel no longer reads error-message text: its allowed counts (1 and 4) are now 0. The entries are removed. The lanes' focused runs hadn't included these sweeps; they cover every file, so run them whenever a change touches error handling.
