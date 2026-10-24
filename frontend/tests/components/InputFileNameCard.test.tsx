@@ -6,8 +6,8 @@ import { ModelNode } from '../../src/components/nodes/ModelNode';
 import { useGraphStore } from '../../src/store/graphStore';
 import { useUIStore } from '../../src/store/uiStore';
 
-// GM - Design, drop follow-ups (2026-10-24): Audio Input and Document Input
-// cards name the file they hold, cut in the middle when long so the
+// GM - Design, drop follow-ups (2026-10-24): every input card (Image, Video,
+// Audio, Document) names the file it holds, an image under its picture, cut in the middle when long so the
 // extension stays.
 
 vi.mock('../../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn(), disconnect: vi.fn() } }));
@@ -39,10 +39,21 @@ describe("an input card's file name", () => {
   it.each([
     ['audio-input', 'wav', 'tone.wav'],
     ['document-input', 'pdf', 'brief.pdf'],
+    ['image-input', 'png', 'moodboard-ref.png'],
+    ['video-input', 'mp4', 'take-03.mp4'],
   ])('%s shows the name of the file it holds', (definitionId, ext, name) => {
     const { container } = renderNode(inputNode(definitionId, ext, name));
     const line = container.querySelector('.model-node__file-name');
     expect(line?.textContent).toBe(name);
+  });
+
+  it('names an image under its picture (GM: every input card names its file)', () => {
+    const { container } = renderNode(inputNode('image-input', 'png', 'moodboard-ref.png'));
+    const picture = container.querySelector('.model-node__preview');
+    const line = container.querySelector('.model-node__file-name');
+    expect(picture).not.toBeNull();
+    expect(line?.getAttribute('title')).toBe('moodboard-ref.png');
+    expect(picture!.compareDocumentPosition(line!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('cuts a long name in the middle and keeps the whole name in the title', () => {
@@ -61,8 +72,4 @@ describe("an input card's file name", () => {
     expect(renderNode(inputNode('audio-input', 'wav', null)).container.querySelector('.model-node__file-name')).toBeNull();
   });
 
-  it('leaves the Image Input card as it is (it shows the picture)', () => {
-    const { container } = renderNode(inputNode('image-input', 'png', 'mood.png'));
-    expect(container.querySelector('.model-node__file-name')).toBeNull();
-  });
 });
