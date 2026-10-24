@@ -249,6 +249,46 @@ def test_the_persons_own_load_graph_and_edits_are_never_refused_for_size(api):
     assert changed.status_code == 200, changed.text
 
 
+def test_load_graph_can_ask_to_be_refused_when_the_file_is_over_the_limit_on_its_own(api):
+    # Q120 (Justin): "Files over the limit open as a new project named after
+    # the file. The open project is left as it was." The person's Load graph
+    # first asks the import to refuse a graph that would be over the limit as
+    # a project of its own, measured as the save check measures it; on that
+    # 413 the tab makes the new project and imports there without the flag.
+    node = api.graph.add_node("text-input", {"value": "kept"})
+    over = api.client.post("/api/graph/import", headers=PERSON, json={
+        "refuseOverSaveLimit": True,
+        "nodes": [{"id": "x1", "definitionId": "text-input", "params": {"value": "d" * (LIMIT + 1)}}], "edges": []})
+    assert over.status_code == 413, over.text
+    body = over.json()
+    assert body["limit"] == "size" and body["limitBytes"] == LIMIT and body["sizeBytes"] > LIMIT
+    assert api.graph.nodes[node]["params"]["value"] == "kept" and set(api.graph.nodes) == {node}
+    # Measured on its own, as the backend stores it: a graph whose text alone
+    # is under the limit but whose project isn't is refused too.
+    near = api.client.post("/api/graph/import", headers=PERSON, json={
+        "refuseOverSaveLimit": True,
+        "nodes": [{"id": f"x{i}", "definitionId": "text-input", "params": {"value": "n" * ((LIMIT - 200) // 4)}} for i in range(4)],
+        "edges": []})
+    assert near.status_code == 413, near.text
+    assert set(api.graph.nodes) == {node}
+    under = api.client.post("/api/graph/import", headers=PERSON, json={
+        "refuseOverSaveLimit": True,
+        "nodes": [{"id": "x1", "definitionId": "text-input", "params": {"value": "small"}}], "edges": []})
+    assert under.status_code == 200, under.text
+    assert [entry["params"]["value"] for entry in api.graph.nodes.values()] == ["small"]
+    # A tab whose person token is stale is asked to reconnect, not sent off to
+    # make a new project it then couldn't load into; an agent reads the size.
+    stale = api.client.post("/api/graph/import", json={
+        "refuseOverSaveLimit": True,
+        "nodes": [{"id": "x1", "definitionId": "text-input", "params": {"value": "d" * (LIMIT + 1)}}], "edges": []})
+    assert stale.status_code == 403 and stale.json()["code"] == "person_required", stale.text
+    by_agent = api.client.post("/api/graph/import", headers=AGENT, json={
+        "refuseOverSaveLimit": True,
+        "nodes": [{"id": "x1", "definitionId": "text-input", "params": {"value": "d" * (LIMIT + 1)}}], "edges": []})
+    assert by_agent.status_code == 413 and by_agent.json()["limit"] == "size"
+    assert [entry["params"]["value"] for entry in api.graph.nodes.values()] == ["small"]
+
+
 def test_a_tab_without_the_persons_token_is_asked_to_reconnect_not_shown_the_agents_text(api):
     # A canvas tab whose person token is from before Nebula restarted carries
     # no agent marker and no current token: the person gate's refusal, so the

@@ -18,8 +18,8 @@
 import { describe, expect, it } from 'vitest';
 import shared from '../../backend/tests/fixtures/project_size_cases.json';
 import {
-  PROJECT_SAVE_LIMIT_BYTES, TOP_ROWS, displaySize, jsonBytes, listedRowCount, overBy, projectSizeBreakdown, projectSizeBytes,
-  rowSize,
+  PROJECT_SAVE_LIMIT_BYTES, TOP_ROWS, displaySize, jsonBytes, listedRowCount, overBy, projectNameForFile, projectSizeBreakdown,
+  projectSizeBytes, rowSize,
 } from '../src/lib/projectSize';
 import { smallerLine } from '../src/lib/savePausedCopy';
 
@@ -122,5 +122,27 @@ describe('the smaller line', () => {
     expect(smallerLine(5, '1.3')).toBe('5 smaller items, 1.3 MB in all');
     expect(smallerLine(1, '0.2')).toBe('1 smaller item, 0.2 MB in all');
     expect(smallerLine(14, '0.0')).toBe('14 smaller items');
+  });
+});
+
+describe("the new project's name for a file over the limit (Q120)", () => {
+  it('is the file name without its graph extension', () => {
+    expect(projectNameForFile('Big campaign.nebula')).toBe('Big campaign');
+    expect(projectNameForFile('Big campaign.nebula.zip')).toBe('Big campaign');
+    expect(projectNameForFile('export.JSON')).toBe('export');
+    expect(projectNameForFile('bundle.zip')).toBe('bundle');
+    expect(projectNameForFile('  spaced.nebula  ')).toBe('spaced');
+    expect(projectNameForFile('notes.v2.nebula')).toBe('notes.v2');
+  });
+
+  it("fits the backend's name rule: 1 to 120 characters, no control characters", () => {
+    expect(projectNameForFile(`${'a'.repeat(200)}.nebula`)).toBe('a'.repeat(120));
+    expect(projectNameForFile('tab\there.nebula')).toBe('tab here');
+  });
+
+  it('is the default name when the file gives none', () => {
+    expect(projectNameForFile(undefined)).toBe('Untitled project');
+    expect(projectNameForFile('.nebula')).toBe('Untitled project');
+    expect(projectNameForFile('   ')).toBe('Untitled project');
   });
 });

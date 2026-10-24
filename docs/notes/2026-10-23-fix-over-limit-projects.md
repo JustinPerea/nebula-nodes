@@ -54,7 +54,7 @@ GM - Design's layout and lines, verbatim. Header: "Saving paused · {size} MB", 
 - **Leaving.** The unload prompt was already armed while `dirty`, and paused-with-edits is dirty, so the browser prompt fires there. Paused with nothing unsaved doesn't prompt, because there is nothing to lose. No other state got a new prompt.
 - **Load graph during its own import.** Found in the live check: the import's graphSync can reach the tab before the HTTP answer. That fires an autosave, which paused with GM's generic line a moment before the Load graph line replaced it. Now a pause entered while a graph import is still in flight stays quiet, and `noteLoadedGraph` says it with the file name.
 - **Backend opening.** The open route skips the size check (`size_checked=False`), so a project stored over the limit opens and the canvas pauses. Every save path still checks.
-- **"As a new project".** Load graph still replaces the open project's canvas, as before. #178's line already tells the person to use a new project. I didn't add an automatic new project; see open items.
+- **"As a new project".** As first built, Load graph replaced the open project's canvas for every file. Justin settled it in Q120 (a); see "Q120" below.
 
 ## The agent tool
 
@@ -118,7 +118,6 @@ Screenshots for GM: `gm-panel-1280.png`, `gm-header-1280.png`, `gm-loadgraph-not
 
 ## Open items
 
-- **"As a new project"**: Load graph replaces the open project's canvas. Should it make a new project itself? That's a product call.
 - **Bundles over 16 MiB**: the `.nebula.zip` restore still refuses a graph.json over 16 MiB (`RESTORE_MAX_GRAPH_BYTES`), and Save graph's bundle refuses to write one. Only plain `.nebula` files over the limit open. Raising the bundle's graph limit wasn't asked.
 - **Download a copy** holds the canvas only: a `.nebula` has no run history or Create draft.
 - **Not covered for agent growth**: proposal accept and the model route (both the person's), and layout moves (above).
@@ -153,6 +152,34 @@ Screenshots for GM: `gm-panel-1280.png`, `gm-header-1280.png`, `gm-loadgraph-not
 - **A save that fails some other way while paused**: no change. A new test pins GM's check that Save failed's Retry on a project over the limit again goes back to paused by itself and sends nothing. It passed on the code as built.
 - Every other panel choice was approved as built. MiB stays labelled "MB".
 - When the folded rows' total rounds to 0.0, the line drops its size: "14 smaller items" (GM's (b)). `project_size` keeps its `smaller.size` for agents.
+
+## Q120 (2026-10-23)
+
+Justin, Q120 (option a), verbatim: "Files over the limit open as a new project named after the file. The open project is left as it was. Files under the limit still replace the canvas, as today."
+
+- **Which files: the backend's save check decides.** Load graph imports into the open project with `refuseOverSaveLimit: true`. `/api/graph/import` then measures the candidate graph as a project of its own (`_refuse_graph_over_save_limit_on_its_own`: the canvas export, as `project_size.snapshot_bytes` measures a stored project, with no run history) and, if it is over the limit, answers 413 `limit: "size"` before anything changes. On that 413 the tab makes the new project and imports there without the flag. The tab doesn't decide with its own measure: the import adds fields to dynamic nodes and changes ids, so it can be off by tens of KB either way (both reviews). A first build skipped the flagged try when the tab measured over, sparing a big file its second upload; the second review showed that could open a file just under the limit as a new project, so it was dropped. A file really over the limit is uploaded twice (about 10 s each for 17 MB through the dev proxy). The open project's run history doesn't count: a file under the limit whose load still takes the open project over it replaces the canvas and pauses, as before.
+- **The name.** `projectNameForFile` (lib/projectSize): the file name without `.nebula.zip`, `.nebula`, `.json` or `.zip`, control characters as spaces, at most 120 code points (the backend's `project_name` rule), or "Untitled project" when nothing is left. The backend allows two projects with one name, so a second load of the same file makes a second "Big campaign".
+- **Order.** Load graph reads and checks the file first. Then `createProject(name, then)` creates the project, and `then` imports the file into it. The create flushes the open project's own edits first, as any switch does, so the open project keeps what it had and nothing of the file. A bundle's assets are restored before the create; they go to `output/<timestamp>/restored-*` either way, which isn't per project.
+- **Paused with unsaved edits.** When the open project is itself paused with edits only in this tab, the create waits behind #178's screen, as New project does. `then` waits with it (`heldEditsCreate.then`), so after the person's choice the new project opens and the file loads. It never runs when the create doesn't land (refused, a run still going, a params version change).
+- **No project open** (Projects not loaded): the file replaces the canvas, as before.
+- **Review fixes.**
+  - Try again after a create that was turned away (a run still going, a WorldLabs hold, a save that failed first) kept only the name, so it would have made an empty project and dropped the file. The create retry now carries `then`.
+  - When an agent's switch brought #178's screen back while the create waited behind it, `holdRefusedEdits` cleared the person's create. A create that loads a file now survives that; after the choice it still runs.
+  - When Projects was busy (a rename, a save's answer), the create returned without a word. Load graph now waits for Projects to be idle before it creates. If the create still returns without opening, without #178's screen and without its own line on Projects (Projects not loaded, say, after an agent's switch it couldn't follow), the canvas says "Couldn't load the graph. Try again, or reload if it keeps happening." (the general line under Load graph's heading, GM's).
+  - A tab whose person token is from before Nebula restarted: the flag's refusal is the person gate's 403 `person_required` for it (an agent still reads the 413), so it doesn't make an empty project it then can't load into.
+  - Hardening: a create waiting behind #178's screen is cleared when a project opens, and a waiting create and a waiting open replace each other (the latest ask wins), so a stale create can't run later in place of an open.
+  - Left as it is: when a create's answer is lost (the network drops after the backend commits), Try again reloads the projects and the new project opens empty. "Couldn't confirm the project change." says so, and Load graph opens the file again.
+- **Agents.** No agent tool loads a file: agents make a project with `new_project` and build with `nebula apply`, and their growth past the limit is refused (`_refuse_agent_growth_past_save_limit`). Nothing to add for MCP.
+
+Backend test: `test_load_graph_can_ask_to_be_refused_when_the_file_is_over_the_limit_on_its_own` (over, near the limit as stored, and under; red without the flag's handling).
+
+Tests, each red before its change except the regression guards (a refused create, a small file): `projectSize.test.ts` (the name, 3); `savePaused.store.test.ts` (then after the switch; a refused create loads nothing; held edits then the load; Try again keeps the load; an agent's switch keeps it); `GraphFileActions.test.tsx` (the 413 then a new project, the canvas never replaced first; the line when a create returns silently; no line when it waits or has its own; waits for Projects; a small file replaces, flagged; no project open, unflagged). The backend test also covers the stale tab and an agent.
+
+Live check (`q120-live/live.mjs`, isolated backend 8783 + Vite 5783, no keys, 8000-8010 and 5173 blocked; 20 passed):
+- From "Glass campaign" (one node), Load graph on a 17 MB `Big campaign.nebula`: "Big campaign" opens with the file, GM's line "Opened Big campaign.nebula. It's 17.1 MB, over the save limit.", the header "Saving paused · 17.1 MB", the backend lists it as active, and Glass campaign's stored snapshot is still its one node. Nothing is saved to the new project.
+- In that project, an edit and then Load graph on the big file again: #178's screen; after "Download your edits", a second "Big campaign" opens with the file, about 12 s later (a 17 MB upload through the dev proxy).
+- Back in Glass campaign, a 308-byte file replaces its canvas, no project is made, and Glass saves it, as before.
+- A first run timed out at the second project. It shared the machine with a build and the full suite; alone it passed.
 
 ## For GM
 

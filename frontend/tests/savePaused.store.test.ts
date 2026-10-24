@@ -358,3 +358,81 @@ describe("#178's recovery copy and the open project's own save", () => {
     expect(state().unsavedEdits).toEqual({ reason: TOO_LARGE });
   });
 });
+
+/** Q120 (Justin, 2026-10-23, option a, verbatim): "Files over the limit open
+ * as a new project named after the file. The open project is left as it was.
+ * Files under the limit still replace the canvas, as today." */
+describe('a file over the limit opens as a new project (Q120)', () => {
+  const created = (): SavedProject => ({ ...project('gamma'), name: 'Big campaign',
+    snapshot: { nodes: [], edges: [], runHistory: [], viewport: null, createSessionId: null } });
+  const createdActivation = () => ({ project: created(), workspaceRevision: 'rev-c', paramsVersion: GRAPH_PARAMS_VERSION });
+
+  it('the load runs once the new project is open, and the project that was open is left as it was', async () => {
+    vi.mocked(projects.createProject).mockResolvedValue(createdActivation());
+    const seen: Array<string | undefined> = [];
+    const then = vi.fn(async () => { seen.push(useProjectStore.getState().activeProject?.id); });
+    await useProjectStore.getState().createProject('Big campaign', then);
+    expect(projects.createProject).toHaveBeenCalledWith('Big campaign', 'rev-a');
+    expect(then).toHaveBeenCalledOnce();
+    expect(seen).toEqual(['gamma']);
+    expect(state().screen).toBe('workspace');
+    // Nothing was written to the project that was open: it had no edits.
+    expect(projects.saveProject).not.toHaveBeenCalled();
+  });
+
+  it("a create that doesn't land loads nothing", async () => {
+    vi.mocked(projects.createProject).mockRejectedValue(new projects.ProjectRequestError('Bad name', 400));
+    const then = vi.fn(async () => {});
+    await useProjectStore.getState().createProject('Big campaign', then);
+    expect(then).not.toHaveBeenCalled();
+    expect(state().activeProject?.id).toBe('alpha');
+  });
+
+  it("a create turned away keeps the load: Try again makes the project and loads the file", async () => {
+    // A run still going turns the switch away, with Try again.
+    useGraphStore.setState({ isExecuting: true });
+    const then = vi.fn(async () => {});
+    await useProjectStore.getState().createProject('Big campaign', then);
+    expect(then).not.toHaveBeenCalled();
+    expect(projects.createProject).not.toHaveBeenCalled();
+    expect(state().errorRetry).toMatchObject({ action: 'create', name: 'Big campaign' });
+    useGraphStore.setState({ isExecuting: false });
+    vi.mocked(projects.createProject).mockResolvedValueOnce(createdActivation());
+    await useProjectStore.getState().retry();
+    expect(then).toHaveBeenCalledOnce();
+    expect(state().activeProject?.id).toBe('gamma');
+  });
+
+  it("an agent's switch while #178's screen waits keeps the person's new project and its load", async () => {
+    vi.mocked(projects.createProject).mockResolvedValue(createdActivation());
+    editCanvas(BIG);
+    await useProjectStore.getState().flush();
+    const then = vi.fn(async () => {});
+    await useProjectStore.getState().createProject('Big campaign', then);
+    expect(state().unsavedEdits).toEqual({ reason: TOO_LARGE, keptIn: 'Glass campaign' });
+    emit({ type: 'graphSync', workspaceRevision: 'rev-b', paramsVersion: GRAPH_PARAMS_VERSION, nodes: [], edges: [], empty: true,
+      projectSwitch: { projectId: 'beta', projectName: 'beta', previousProjectId: 'alpha', previousProjectName: 'Glass campaign',
+        previousRevision: 'rev-a', actor: { kind: 'agent', name: 'Claude' }, created: false } });
+    await tick(); await tick();
+    vi.mocked(projects.listProjects).mockResolvedValue(listing({ activeProjectId: 'beta', workspaceRevision: 'rev-b' }));
+    await state().downloadUnsavedEdits!();
+    expect(projects.createProject).toHaveBeenCalledOnce();
+    expect(then).toHaveBeenCalledOnce();
+    expect(state().activeProject?.id).toBe('gamma');
+  });
+
+  it("the open project paused with unsaved edits: #178's screen first, then the new project and the load after the choice", async () => {
+    vi.mocked(projects.createProject).mockResolvedValue(createdActivation());
+    editCanvas(BIG);
+    await useProjectStore.getState().flush();
+    const then = vi.fn(async () => {});
+    await useProjectStore.getState().createProject('Big campaign', then);
+    expect(projects.createProject).not.toHaveBeenCalled();
+    expect(then).not.toHaveBeenCalled();
+    expect(state().unsavedEdits).toEqual({ reason: TOO_LARGE, keptIn: 'Glass campaign' });
+    await state().downloadUnsavedEdits!();
+    expect(projects.createProject).toHaveBeenCalledOnce();
+    expect(then).toHaveBeenCalledOnce();
+    expect(state().activeProject?.id).toBe('gamma');
+  });
+});

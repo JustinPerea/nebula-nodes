@@ -12314,6 +12314,8 @@ async def import_graph(body: dict[str, Any]) -> dict:
         (node_id, str(candidate.nodes[node_id].get("definitionId") or ""), _folded_billing_baseline(ref, folded),
          candidate.nodes[node_id].get("params") or {}) for ref, node_id in id_map.items())
     _stage_graph_edges(candidate, raw_edges, id_map, saved=True)
+    if body.get("refuseOverSaveLimit") is True:
+        _refuse_graph_over_save_limit_on_its_own(candidate)
     # The person's Load graph opens a file of any size (Q118); anyone else's
     # import can't leave the project over the save limit.
     _refuse_agent_growth_past_save_limit(candidate)
@@ -12887,6 +12889,32 @@ def _open_project_with(graph: CLIGraph) -> tuple[dict[str, Any], dict[str, Any]]
     if project is None:
         return None
     return project, _overlaid_snapshot(project, _graph_canvas_export(graph))
+
+
+def _refuse_graph_over_save_limit_on_its_own(candidate: CLIGraph) -> None:
+    """Refuse, before anything changes, a graph that would be over the save
+    limit as a project of its own, measured as the save check measures a
+    project (Q120). The person's Load graph asks for this (the body's
+    ``refuseOverSaveLimit``): on the 413 it opens the file as a new project
+    instead of replacing the open one, since Justin chose "Files over the
+    limit open as a new project named after the file. The open project is
+    left as it was." The tab's own measure can't decide alone: the export
+    adds fields to dynamic nodes and remaps ids."""
+    exported = _graph_canvas_export(candidate)
+    size = project_size.snapshot_bytes({**empty_snapshot(), "nodes": exported["nodes"], "edges": exported["edges"]})
+    if size <= MAX_PROJECT_BYTES:
+        return
+    limit = f"{MAX_PROJECT_BYTES / (1024 * 1024):g} MiB ({MAX_PROJECT_BYTES:,} bytes)"
+    detail = (f"This graph would be {size:,} bytes as a project of its own, over Nebula's save limit of {limit}. "
+              "Nothing changed (refuseOverSaveLimit).")
+    # A canvas tab with a person token from before Nebula restarted gets the
+    # person gate's refusal (GM's reconnect line), as its unflagged import
+    # would, so it doesn't make a new project it can't then load into.
+    if not _is_person_request():
+        refusal = _person_only_refusal(detail)
+        if isinstance(refusal, PersonGateError):
+            raise refusal
+    raise ProjectSizeRefusal(size, detail)
 
 
 def _refuse_agent_growth_past_save_limit(candidate: CLIGraph) -> None:

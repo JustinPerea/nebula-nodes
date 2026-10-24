@@ -189,3 +189,18 @@ export function listedRowCount(rows: ReadonlyArray<{ bytes: number }>): number {
 export function rowSize(bytes: number): string {
   return (Math.round((bytes / MIB) * 10) / 10).toFixed(1);
 }
+
+/** The longest project name the backend takes (services/project_store.py
+ * project_name, in code points). */
+const PROJECT_NAME_MAX = 120;
+
+/** The new project's name for a Load graph file over the limit (Q120,
+ * Justin: "Files over the limit open as a new project named after the
+ * file."): the file's name without its graph extension, fitted to the
+ * backend's name rule, or the default name when that leaves nothing. */
+export function projectNameForFile(fileName: string | undefined): string {
+  // eslint-disable-next-line no-control-regex
+  const base = (fileName ?? '').trim().replace(/\.(nebula\.zip|nebula|json|zip)$/i, '').replace(/[\u0000-\u001f]/g, ' ');
+  const name = Array.from(base.trim()).slice(0, PROJECT_NAME_MAX).join('').trim();
+  return name || 'Untitled project';
+}

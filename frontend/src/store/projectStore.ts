@@ -57,7 +57,7 @@ export type ProjectRetry =
   | { action: 'list' }
   | { action: 'save' }
   | { action: 'open'; id: string }
-  | { action: 'create'; name?: string }
+  | { action: 'create'; name?: string; then?: () => Promise<void> }
   | { action: 'rename'; id: string; name: string }
   | { action: 'delete'; id: string }
   | { action: 'restore'; id: string }
@@ -158,7 +158,10 @@ interface ProjectState {
   pinCover: (id: string, url: string | null) => Promise<void>;
   initialize: () => Promise<void>;
   open: (id: string) => Promise<void>;
-  createProject: (name?: string) => Promise<void>;
+  /** `then` runs once the new project is open (Q120: a Load graph file over
+   * the limit loads into it), after #178's screen when saving was paused with
+   * unsaved edits; never when the create doesn't land. */
+  createProject: (name?: string, then?: () => Promise<void>) => Promise<void>;
   rename: (id: string, name: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
   restore: (id: string) => Promise<void>;
@@ -229,7 +232,7 @@ let pendingRecovery: PendingRecovery | null = null;
  * saving was paused: done once the person has chosen. */
 let heldEditsReopen: string | undefined;
 /** The person's New project while saving was paused, done the same way. */
-let heldEditsCreate: { name?: string } | undefined;
+let heldEditsCreate: { name?: string; then?: () => Promise<void> } | undefined;
 /** How many bytes more the backend counted than this tab did, from its last
  * 413 for the size (Q118). The two measures are the same by test, so this
  * is 0 unless they ever differ; then the canvas pauses on the backend's
@@ -443,6 +446,7 @@ function applyProject(project: SavedProject, revision: string, bootstrap = false
     // agent's switch gets here while they show, after saving the canvas.
     pendingRecovery = null;
     heldEditsReopen = undefined;
+    heldEditsCreate = undefined;
     editsDownloaded = false;
     if (useProjectStore.getState().unsavedEdits) useProjectStore.setState({ unsavedEdits: null });
     const sessionId = snapshot.createSessionId ?? `project:${project.id}:create`;
@@ -583,7 +587,9 @@ function holdRefusedEdits(recovery: PendingRecovery, error: unknown, reason = he
   keptIn?: string): void {
   recovery.held = true;
   heldEditsReopen = undefined;
-  heldEditsCreate = undefined;
+  // A create that loads a file (Q120) is the person's own ask: it still
+  // runs after their choice when an agent's switch brings the screen back.
+  if (!heldEditsCreate?.then) heldEditsCreate = undefined;
   useProjectStore.setState({ screen: 'home', initialized: false, loading: false, dirty: true, error: null,
     errorRetry: null, unsavedEdits: { reason, ...(keptIn ? { keptIn } : {}) }, editsSavedAs: null, sizePanelOpen: false });
 }
@@ -625,7 +631,7 @@ async function loadAfterHeldEdits(): Promise<void> {
   await store.initialize();
   const state = useProjectStore.getState();
   if (state.error || !state.initialized || state.unsavedEdits) return;
-  if (create) { await state.createProject(create.name); return; }
+  if (create) { await state.createProject(create.name, create.then); return; }
   if (!reopen) return;
   if (state.activeProject?.id === reopen && getProjectContext()) useProjectStore.setState({ screen: 'workspace' });
   else await state.open(reopen);
@@ -905,15 +911,20 @@ function adoptCanvasCamera(before: ProjectSnapshot['viewport']): void {
 
 /** `retry` is what Try again redoes when this fails before an answer could
  * have changed anything: the same open or create. */
-async function activate(action: () => Promise<api.ProjectActivation>, retry: { action: 'open'; id: string } | { action: 'create'; name?: string }): Promise<void> {
+/** True once the project is open; `then` (a create's) waits with the held
+ * edits when saving is paused with unsaved edits. */
+async function activate(action: () => Promise<api.ProjectActivation>, retry: { action: 'open'; id: string } | { action: 'create'; name?: string },
+  then?: () => Promise<void>): Promise<boolean> {
   const state = useProjectStore.getState();
-  if (!state.initialized || state.busy) return;
+  if (!state.initialized || state.busy) return false;
   const heading = retry.action === 'open' ? "Couldn't open the project." : "Couldn't create the project.";
+  // A create's Try again keeps what was to follow it (Q120: the file loads).
+  const offered: ProjectRetry = retry.action === 'create' && then ? { ...retry, then } : retry;
   const held = worldLabsHold(heading);
-  if (held) { showError(held, retry); return; }
+  if (held) { showError(held, offered); return false; }
   if (!useGraphStore.getState().canSwitchProject()) {
-    showError(runStillGoing(heading), retry);
-    return;
+    showError(runStillGoing(heading), offered);
+    return false;
   }
   useProjectStore.setState({ busy: true, error: null, errorRetry: null, editsSavedAs: null });
   let reserved = false;
@@ -926,9 +937,10 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
     const context = getProjectContext();
     if (useProjectStore.getState().savePaused && useProjectStore.getState().dirty && context) {
       holdOverLimitEdits(context.id, captureProjectSnapshot(), true);
-      if (retry.action === 'open') heldEditsReopen = retry.id;
-      else heldEditsCreate = { name: retry.name };
-      return;
+      // One action waits behind the screen: the latest the person asked for.
+      if (retry.action === 'open') { heldEditsReopen = retry.id; heldEditsCreate = undefined; }
+      else { heldEditsCreate = { name: retry.name, then }; heldEditsReopen = undefined; }
+      return false;
     }
     const heldNow = worldLabsHold(heading);
     if (heldNow) throw heldNow;
@@ -945,13 +957,14 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
       // Not loaded: its values may be from before an upgrade (a backend that
       // sends no version predates the gate). The flush above saved the canvas.
       void handleParamsVersionChange(backendVersion);
-      return;
+      return false;
     }
     applyProject(result.project, result.workspaceRevision, false, heading);
     updateSummary(result.project);
     useProjectStore.setState({ screen: 'workspace' });
     // A canvas notice, not a window.alert (round 3f).
     if (result.warnings?.length) showNotice(`Opened.\n${result.warnings.map((line) => `• ${line}`).join('\n')}`, 'info');
+    return true;
   } catch (error) {
     // A lost activation reply can follow a successful server commit. Re-read
     // on Retry instead of sending a second create/open or saving under an old
@@ -968,7 +981,8 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
           { action: 'load', reopen: retry.id });
       } else preserveWorkspaceConflict(sentences("Couldn't confirm the project change.", reasonSentence(error, true),
         TRY_AGAIN_CHECKS));
-    } else showError(error, retry);
+    } else showError(error, offered);
+    return false;
   }
   finally {
     if (reserved) useGraphStore.getState().releaseGraphImport();
@@ -1295,7 +1309,10 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
     }
     await activate(() => api.openProject(id, get().workspaceRevision), { action: 'open', id });
   },
-  createProject: async (name) => activate(() => api.createProject(name, get().workspaceRevision), { action: 'create', name }),
+  createProject: async (name, then) => {
+    // After activate's finally, so the load sees the project idle (not busy).
+    if (await activate(() => api.createProject(name, get().workspaceRevision), { action: 'create', name }, then) && then) await then();
+  },
   rename: async (id, name) => {
     if (get().busy) return;
     set({ busy: true, error: null, errorRetry: null });
@@ -1489,7 +1506,7 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
     switch (failed?.action) {
       case 'save': return get().retrySave();
       case 'open': return get().open(failed.id);
-      case 'create': return get().createProject(failed.name);
+      case 'create': return get().createProject(failed.name, failed.then);
       case 'rename': return get().rename(failed.id, failed.name);
       case 'cover': return get().pinCover(failed.id, failed.url);
       case 'delete': case 'restore': case 'purge': case 'emptyTrash': {
