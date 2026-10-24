@@ -3,6 +3,8 @@ import { DeferredRunNotice } from './canvas/DeferredRunNotice';
 import { StudioNotice } from './canvas/StudioNotice';
 import { CanvasLateNotice } from './canvas/CanvasLateNotice';
 import { InNoticeRegion } from './InNoticeRegion';
+import { SavePausedNotice } from './projects/SavePausedNotice';
+import { ProjectSizePanel } from './projects/ProjectSizePanel';
 import '../styles/canvasProposals.css';
 
 /**
@@ -13,6 +15,8 @@ import '../styles/canvasProposals.css';
  * the canvas notice's written lines (StudioNotice). On every screen, right
  * above the canvas notice, a restore's late count (CanvasLateNotice), a
  * written line with no Undo or Redo (its slot's place: lib/noticeSlots.ts).
+ * A project over the save limit (Q118): its one notice, and the "what's
+ * large" panel it and the header open.
  */
 export function RegionNotices({ canvas }: { canvas: boolean }) {
   return (
@@ -20,6 +24,8 @@ export function RegionNotices({ canvas }: { canvas: boolean }) {
       {canvas && <InNoticeRegion slot="run-later"><DeferredRunNotice /></InNoticeRegion>}
       <InNoticeRegion slot="notice">{canvas ? <CanvasUndoNotice /> : <StudioNotice />}</InNoticeRegion>
       <InNoticeRegion slot="late"><CanvasLateNotice /></InNoticeRegion>
+      <InNoticeRegion slot="save-paused"><SavePausedNotice /></InNoticeRegion>
+      <ProjectSizePanel />
     </>
   );
 }

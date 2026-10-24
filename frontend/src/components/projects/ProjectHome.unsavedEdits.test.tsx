@@ -20,7 +20,7 @@ vi.mock('../../lib/backend', () => ({ backendAssetUrlSync: (url: string) => `htt
 
 const TOO_LARGE = 'These edits are too large for Nebula to save. Download them so nothing is lost, or continue without them.';
 type Props = ProjectHomeProps & {
-  unsavedEdits?: { reason: string } | null; editsSavedAs?: { name: string; reopens: boolean } | null;
+  unsavedEdits?: { reason: string; keptIn?: string } | null; editsSavedAs?: { name: string; reopens: boolean } | null;
   onDownloadEdits?: () => void; onContinueWithoutEdits?: () => void;
 };
 const props = (overrides: Partial<Props> = {}): Props => ({
@@ -33,6 +33,19 @@ const Home = ProjectHome as unknown as (props: Props) => ReturnType<typeof Proje
 afterEach(() => vi.restoreAllMocks());
 
 describe("Projects: Couldn't save your edits.", () => {
+  it("held from the open project's own canvas: the confirm says its nodes, wires and settings stay in that project (review)", () => {
+    const actions = props({ unsavedEdits: { reason: TOO_LARGE, keptIn: 'Glass campaign' } });
+    render(<Home {...actions} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Continue without them' }));
+    const dialog = screen.getByRole('alertdialog');
+    const line = dialog.getAttribute('aria-labelledby') ? document.getElementById(dialog.getAttribute('aria-labelledby')!)?.textContent : '';
+    expect(line).toBe("Continue without them? “Glass campaign” keeps its nodes, wires and settings. "
+      + 'Run history since the last save, and anything else only this tab has, will be lost.');
+    expect(line).not.toContain("Continue without your edits? They can't be recovered after this.");
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Continue without them' }));
+    expect(actions.onContinueWithoutEdits).toHaveBeenCalledTimes(1);
+  });
+
   it("shows GM's heading, the reason and the two choices, announced as an alert, with no Try again", () => {
     render(<Home {...props()} />);
     const alert = screen.getByRole('alert');
@@ -117,12 +130,12 @@ const SAVED = 'Glass campaign - unsaved edits.nebula';
 const REOPEN_LINE = `Your edits are saved as ${SAVED}. Open it with “Load graph” under “Canvas actions” in a new project to bring them back.`;
 
 describe('review: the line after a download, and where focus goes', () => {
-  it("a file Load graph can't open doesn't say Load graph brings the edits back", () => {
+  // Q118 (GM, 2026-10-23: "#178's TOO-LARGE LINE: yes, it goes. The Load
+  // graph line covers every case now"): every download reads the Load graph line.
+  it('every download reads the Load graph line, even one past a reader limit', () => {
     render(<Home {...props({ unsavedEdits: null, editsSavedAs: { name: SAVED, reopens: false } })} />);
-    expect(screen.queryByText(REOPEN_LINE)).toBeNull();
-    const line = screen.getByRole('status');
-    expect(line.textContent).toContain(`Your edits are saved as ${SAVED}.`);
-    expect(line.textContent).toContain('too large for “Load graph” to open');
+    expect(screen.getByRole('status').textContent).toBe(REOPEN_LINE);
+    expect(screen.queryByText(/too large for “Load graph”/)).toBeNull();
   });
 
   it('after a download, focus moves to the line that says where the file went', async () => {
@@ -172,9 +185,9 @@ describe("GM's lines", () => {
   const PERSON_LINE = "Couldn't recover the project. This change needs your OK, and this tab isn't connected as you. Open the link Nebula printed when it started, then try again.";
   const NOT_WRITTEN = "The download didn't save, so your edits are still only in this tab. Check that your disk has free space, then download them again, or continue without them.";
 
-  it("too large for Load graph: GM's line 1", () => {
+  it("GM's line 1 is gone (Q118): a big file opens with Load graph now", () => {
     render(<Home {...props({ unsavedEdits: null, editsSavedAs: { name: SAVED, reopens: false } })} />);
-    expect(screen.getByRole('status').textContent).toBe(`Your edits are saved as ${SAVED}. Keep it somewhere safe. It's too large for “Load graph” to open right now, so Nebula can't bring the edits back yet.`);
+    expect(screen.getByRole('status').textContent).toBe(REOPEN_LINE);
   });
 
   it("a download that couldn't be written: the heading and both buttons stay, GM's line 2 is the body", () => {

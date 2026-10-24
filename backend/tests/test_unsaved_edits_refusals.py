@@ -75,7 +75,10 @@ def test_a_copy_too_large_to_save_is_a_413_with_no_store_limit(workspace, monkey
     assert response.status_code == 413
     # Word for word, as agents and the CLI read it.
     assert response.json()["detail"] == "Project snapshot exceeds the 16 MiB limit"
-    assert "limit" not in response.json()
+    # Q118: it says the copy's own size was the limit (not the store's
+    # "projects" or "storage"), and how big it was.
+    assert response.json()["limit"] == "size"
+    assert response.json()["limitBytes"] == 256 and response.json()["sizeBytes"] > 256
 
 
 def test_the_project_count_limit_says_which_limit(workspace, monkeypatch):

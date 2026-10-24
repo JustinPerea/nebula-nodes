@@ -121,7 +121,7 @@ def build_parser() -> argparse.ArgumentParser:
     projects_p = sub.add_parser("projects", help="List saved projects")
     projects_p.add_argument("--json", action="store_true", help="Print it as JSON, as MCP list_projects returns it")
     project_p = sub.add_parser(
-        "project", help="Start a new project or open a saved one on the canvas; rename or read a saved one")
+        "project", help="Start a new project or open a saved one on the canvas; rename, read or size a saved one")
     project_sub = project_p.add_subparsers(dest="project_command", required=True)
     project_new_p = project_sub.add_parser(
         "new", help="Start a new, empty project and open it on the canvas",
@@ -148,6 +148,15 @@ def build_parser() -> argparse.ArgumentParser:
                     "quoted hidden. Then the wires, the cover and the newest 20 runs: what each ran and made.")
     project_show_p.add_argument("project_id", help="Project id (from `nebula projects`), or current: the open one")
     project_show_p.add_argument("--json", action="store_true", help="Print it as JSON, as MCP get_project returns it")
+    project_size_p = project_sub.add_parser(
+        "size", help="How big a project is against the 16 MB save limit, and what takes the space",
+        description="A project's size as a save measures it (MCP project_size): the save limit, whether the "
+                    "person's canvas has paused saving it (over the limit), and the ten largest parts, largest "
+                    "first, with node ids. Read-only: trim with `nebula apply` (shorter params, removals), and "
+                    "ask the person before deleting their work.")
+    project_size_p.add_argument("project_id", nargs="?", default="current",
+                                help="Project id (from `nebula projects`), or current (the default): the open one")
+    project_size_p.add_argument("--json", action="store_true", help="Print it as JSON, as MCP project_size returns it")
 
     trash_p = sub.add_parser(
         "trash", help="Recently deleted moodboards, characters, Styles and projects: list them or restore one")
@@ -575,6 +584,8 @@ def _project_command(client: NebulaClient, args: argparse.Namespace) -> None:
         return projects.run_open(client, args.project_id)
     if args.project_command == "rename":
         return projects.run_rename(client, args.project_id, " ".join(args.name), as_json=args.json)
+    if args.project_command == "size":
+        return projects.run_size(client, args.project_id, as_json=args.json)
     return projects.run_show(client, args.project_id, as_json=args.json)
 
 

@@ -137,8 +137,10 @@ describe('an edits file Load graph cannot open', () => {
       .toBe(false);
     const values = { ...node, data: { ...node.data, params: { list: new Array(GRAPH_MAX_VALUES).fill(0) } } };
     expect(check({ ...snapshot, nodes: [values] })).toBe(false);
+    // Q118: past 16 MiB alone it still reopens (Load graph opens files up to
+    // the bundle ceiling, then pauses saving until the project is trimmed).
     const big = { ...node, data: { ...node.data, params: { value: 'x'.repeat(GRAPH_JSON_MAX_IMPORT_BYTES) } } };
-    expect(check({ ...snapshot, nodes: [big] })).toBe(false);
+    expect(check({ ...snapshot, nodes: [big] })).toBe(true);
   });
 
   it('agrees with the reader at the byte limit: the file is written compact', async () => {

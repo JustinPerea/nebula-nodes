@@ -32,10 +32,12 @@ export const GRAPH_BUNDLE_MAX_ASSET_BYTES = 256 * 1024 * 1024;
 export const GRAPH_BUNDLE_MAX_TOTAL_BYTES = 512 * 1024 * 1024;
 export const GRAPH_BUNDLE_MAX_IMPORT_BYTES = GRAPH_BUNDLE_MAX_TOTAL_BYTES + 16 * 1024 * 1024;
 
-// Load graph's limits for a graph (graphFile.ts re-exports them): a plain
-// JSON file's size, and the node, wire, depth and value counts the shape walk
-// (assertGraphComplexityWithinLimits) allows. They match the backend's
-// restore preflight.
+// A graph's limits (graphFile.ts re-exports them): the graph.json a Save
+// graph bundle may hold (the backend's restore preflight, RESTORE_MAX_GRAPH_BYTES),
+// and the node, wire, depth and value counts the shape walk
+// (assertGraphComplexityWithinLimits) allows. A plain .nebula file opens up to
+// GRAPH_BUNDLE_MAX_IMPORT_BYTES since Q118; the 16 MiB here is no longer
+// Load graph's limit for one.
 export const GRAPH_JSON_MAX_IMPORT_BYTES = 16 * 1024 * 1024;
 export const GRAPH_MAX_NODES = 10_000;
 export const GRAPH_MAX_EDGES = 50_000;
@@ -337,14 +339,16 @@ function editsFile(snapshot: Pick<ProjectSnapshot, 'nodes' | 'edges' | 'viewport
   return serializeGraph(snapshot.nodes, snapshot.edges, snapshot.viewport ?? undefined, projectName);
 }
 
-/** Whether Load graph opens this edits file: within its JSON size and its
+/** Whether Load graph opens this edits file: within its file ceiling and its
  * shape walk's limits, checked the way the reader checks a plain .nebula
  * (inspectGraphFileWithinLimit, then the walk over the parsed file). The
  * backend refuses a recovered copy past its own versions of those limits
  * (413), so a held copy can be one Load graph won't open (Q116 a review).
+ * Since Q118 a copy over the 16 MiB save limit opens (and the canvas pauses
+ * saving it), so size alone fails only past the bundle ceiling.
  * `file` is `text` parsed, the form the reader walks. */
 export function editsFileReopens(text: string, file: unknown): boolean {
-  if (new Blob([text]).size > GRAPH_JSON_MAX_IMPORT_BYTES) return false;
+  if (new Blob([text]).size > GRAPH_BUNDLE_MAX_IMPORT_BYTES) return false;
   try {
     assertGraphComplexityWithinLimits(file);
     return true;
@@ -364,12 +368,28 @@ export interface SavedEditsFile { name: string; reopens: boolean }
  * picker; rejects when the file couldn't be written. */
 export async function saveEditsToFile(snapshot: Pick<ProjectSnapshot, 'nodes' | 'edges' | 'viewport'>,
   projectName: string): Promise<SavedEditsFile | null> {
-  const text = JSON.stringify(editsFile(snapshot, projectName));
-  // Parsed only when the size allows a reopen at all: past 16 MiB, the
-  // answer is already no.
-  const reopens = new Blob([text]).size <= GRAPH_JSON_MAX_IMPORT_BYTES && editsFileReopens(text, JSON.parse(text));
+  return writeGraphText(JSON.stringify(editsFile(snapshot, projectName)), editsFileName(projectName));
+}
+
+/** "Download a copy" in the over-the-limit panel (Q118): the whole open
+ * project's canvas as a plain .nebula, "{project}.nebula", the same writer and
+ * format as the edits download, so Load graph opens it again. A .nebula holds
+ * no run history or Create draft. */
+export async function saveProjectCopyToFile(snapshot: Pick<ProjectSnapshot, 'nodes' | 'edges' | 'viewport'>,
+  projectName: string): Promise<SavedEditsFile | null> {
+  return writeGraphText(JSON.stringify(editsFile(snapshot, projectName)), projectFileName(projectName));
+}
+
+/** The project's name made safe for a file name, then ".nebula". */
+export function projectFileName(projectName: string): string {
+  return editsFileName(projectName).replace(/ - unsaved edits\.nebula$/, '.nebula');
+}
+
+async function writeGraphText(text: string, suggestedName: string): Promise<SavedEditsFile | null> {
+  // Parsed only when the size allows a reopen at all.
+  const reopens = new Blob([text]).size <= GRAPH_BUNDLE_MAX_IMPORT_BYTES && editsFileReopens(text, JSON.parse(text));
   const blob = new Blob([text], { type: 'application/json' });
-  const name = await saveBlobWithPicker(blob, editsFileName(projectName),
+  const name = await saveBlobWithPicker(blob, suggestedName,
     { description: 'Nebula Node Graph', accept: { 'application/json': ['.nebula'] } }, { reportWriteFailure: true });
   return name === null ? null : { name, reopens };
 }

@@ -253,6 +253,35 @@ The server exposes these tools for building and running (see
   answers as before (the canvas loads it). Deleting a project over MCP waits
   on a decision about the open project. CLI: `nebula project show
   <id|current>` (`--json` prints this result).
+- `project_size`: a project's size against the save limit and what takes the
+  space (`project_id`, default `"current"`), through
+  `GET /api/projects/{id}/size` (Q118). Read-only. The size is what a save
+  measures (`services/project_size.py`: the snapshot as `json.dumps` writes
+  it, UTF-8); for the open project, its stored snapshot with the live canvas
+  overlaid. Returns `sizeBytes`, `limitBytes` (16 MiB, shown as "16 MB"),
+  `size` and `limit` as the canvas words them, `overLimit`, `savingPaused`
+  (the open project is over, so the person's canvas has paused saving it
+  until it is smaller), `overByBytes`, `largest` (the largest rows of
+  0.1 MiB and up, at most ten, largest first: a node's `nodeId`, `name`, `definitionId` and the `part`
+  that takes most of it, "Text" for its params, "Stored outputs", "Embedded
+  files" for data: URLs in params, "Node data"; or the project's own "Run
+  history", "Wires", "Create draft", "Project settings"), `smaller` (`count`
+  and `bytes` of the rest) and a `note`. Each row's `size` (and `smaller`'s)
+  is to the nearest tenth of a MB, halves up, as the person's panel shows it;
+  the project's own `size` rounds up while over the limit. Agents get no trim tool: they trim
+  with `edit_canvas` and `remove_from_canvas`, under the person's existing
+  approvals. An agent's edit (`POST /api/graph/apply`, `/api/graph/apply/undo`
+  (`undo_canvas_edit`), `/api/graph/restore`, `/api/graph/node`,
+  `PUT /api/graph/node/{id}`, `PUT /api/graph/node/{id}/label`,
+  `/api/graph/connect`, `/api/graph/import`, `/node-and-connect`,
+  `/cluster`) that would leave the open project over the limit, or larger
+  while it is over, is refused 413 with `limit: "size"`, `sizeBytes`,
+  `limitBytes` and its own `detail` naming `project_size`; nothing changes. An
+  edit that makes it smaller goes through, and the person's own edits and
+  Load graph are never refused for size. A tab's save over the limit gets
+  the same 413 fields with its `detail` unchanged ("Project snapshot exceeds
+  the 16 MiB limit"). CLI: `nebula project size [<id>|current]` (`--json`
+  prints this result).
 - `moodboard_list`, `moodboard_get`, `moodboard_create`, `moodboard_add`,
   `moodboard_update`, `moodboard_edit`, `moodboard_analyze`, `moodboard_move`, `moodboard_delete`: the boards in
   Moodboard Studio, with their brief (Direction, Avoid, pinned colours, a
@@ -1456,7 +1485,8 @@ How it works (`backend/services/agent_spend.py`):
 - Which refusals carry a `code`: every 403 that refuses a request only
   because it isn't the person's (a billing change on any route above, a
   run the person approved started by someone else, a run or a Moodboard read
-  over the spending limits) answers a request with no agent marker (a canvas
+  over the spending limits, an edit that would leave the open project over
+  the save limit) answers a request with no agent marker (a canvas
   tab not connected as the person, the CLI without `NEBULA_AGENT_NAME`, curl)
   with `code: "person_required"` beside the same `detail`, as the person-only
   routes do. The canvas reads the code and asks the person to reconnect; a tab
@@ -2364,6 +2394,7 @@ nebula project open <id>            # switch the canvas (not while a run is goin
 nebula project new "Logo ideas"     # start a new, empty project and open it
 nebula project rename current "Logo ideas, round 2"   # prints the command that renames it back
 nebula project show <id>            # a saved project unopened: nodes, wires, cover, runs (get_project)
+nebula project size                 # its size against the 16 MB save limit, largest parts first (project_size)
 nebula clear                        # refused when the canvas has nodes
 nebula clear --force                # clears it anyway; the person can undo it
 nebula trash list                   # Recently deleted boards, characters, Styles, projects
@@ -2379,9 +2410,9 @@ agent (or any script that isn't the person's own canvas) does it, the
 person's canvas follows, says who switched it, and offers a button back.
 The project's history names the agent.
 
-`rename`, `show`, `trash list`, `keys` and `providers` are the CLI twins of
-`rename_project`, `get_project`, `list_trash`, `get_settings` and
-`provider_status`. Each goes through the same route and the same shaping
+`rename`, `show`, `size`, `trash list`, `keys` and `providers` are the CLI
+twins of `rename_project`, `get_project`, `project_size`, `list_trash`,
+`get_settings` and `provider_status`. Each goes through the same route and the same shaping
 (`backend/project_client.py`), so its `--json` prints the tool's result, with
 hints worded as `nebula` commands. A rename is journaled as `project.renamed`
 under `$NEBULA_AGENT_NAME` (unnamed without it). The CLI is an agent surface

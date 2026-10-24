@@ -319,3 +319,11 @@ GM, after #180's copy check: "Person-required banners. These stay up, so a two-l
 The shell's line for a window it couldn't confirm, which GM's first list missed, is GM's too (asked and answered): "Nebula couldn't confirm this window is yours. Quit Nebula and open it again." (2 tests red first, then 19 of 19.)
 
 Tests first: `personRequiredLines` and `PersonRequiredBanner` pinned the old banners; with GM's lines expected, 4 failed in `personRequiredLines` (then the component test's 2 once its expectations moved too), then all pass. The 6 related files: 52 of 52.
+
+## Addendum: GM's line 1 goes with Q118 (2026-10-23)
+
+Q118 (Justin: "Let Load graph open bigger .nebula files (up to the 512 MiB it already allows for a bundle) as a new project.") made Load graph read a plain .nebula up to the bundle ceiling, so a held copy over 16 MiB opens again: the canvas pauses saving it until it is trimmed (docs/notes/2026-10-23-fix-over-limit-projects.md). GM: "#178's TOO-LARGE LINE: yes, it goes. The Load graph line covers every case now." So:
+- `editsSavedTooLargeLine` ("… It's too large for “Load graph” to open right now …") is removed from `unsavedEditsCopy.ts`, and ProjectHome always shows `editsSavedLine` after a download.
+- `editsFileReopens` no longer fails on 16 MiB alone; it fails past the bundle ceiling (`GRAPH_BUNDLE_MAX_IMPORT_BYTES`) or on the shape walk's limits (10,000 nodes, 50,000 wires, depth 64, 1,000,000 values), as before. `SavedEditsFile.reopens` stays for those.
+- Tests changed with it: ProjectHome.unsavedEdits ("every download reads the Load graph line, even one past a reader limit"; "GM's line 1 is gone (Q118)") and graphFile.unsavedEdits ("reopens within every limit, and not past one": a 16 MiB value now reopens). They failed on the old code (3 red), then pass.
+- A recovered copy that is itself over the save limit is now held on this screen without being sent (recoverPendingWork measures it first); one the backend still refuses for its size (`limit: "size"`) gets the same "These edits are too large for Nebula to save." reason, as before.

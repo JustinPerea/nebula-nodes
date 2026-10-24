@@ -13,9 +13,11 @@ import {
   GRAPH_MAX_NODES,
   GRAPH_MAX_VALUES,
   GRAPH_JSON_MAX_IMPORT_BYTES,
+  inspectGraphFileWithinLimit,
   loadFromFile,
   loadViaInput,
   normalizeRuntimeMediaParams,
+  readGraphSelection,
   saveToFile,
   serializeGraph,
   type NebulaFile,
@@ -559,23 +561,42 @@ describe('graph import memory ceiling', () => {
     expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Couldn't load the graph\. This graph is [\d.]+ MB\. Nebula opens graphs up to \d+ MB\.$/));
   });
 
-  it('applies a smaller parse-memory ceiling to plain JSON after signature inspection', async () => {
+  // Q118 (Justin, 2026-10-23): "Let Load graph open bigger .nebula files (up
+  // to the 512 MiB it already allows for a bundle)". A plain JSON file past
+  // the 16 MiB save limit is read now; only the bundle's ceiling refuses it
+  // before reading, and the shape walk's limits still apply.
+  it('reads a plain JSON file over 16 MiB, up to the bundle ceiling', async () => {
+    const text = JSON.stringify({ version: 2, name: 'Big', createdAt: '2026-10-23T00:00:00.000Z', nodes: [{
+      id: 'n1', type: 'model-node', position: { x: 0, y: 0 },
+      data: { label: 'Brief', definitionId: 'text-input', params: { value: 'x'.repeat(GRAPH_JSON_MAX_IMPORT_BYTES) } },
+    }], edges: [] });
+    const file = new File([text], 'Big campaign.nebula', { type: 'application/json' });
+    expect(file.size).toBeGreaterThan(GRAPH_JSON_MAX_IMPORT_BYTES);
+    const selection = await inspectGraphFileWithinLimit(file);
+    expect(selection).toMatchObject({ isZip: false, name: 'Big campaign.nebula' });
+    const loaded = await readGraphSelection(selection);
+    expect(loaded.nodes[0].data.params.value).toHaveLength(GRAPH_JSON_MAX_IMPORT_BYTES);
+    expect(loaded.fileName).toBe('Big campaign.nebula');
+  });
+
+  it('refuses a plain JSON file past the bundle ceiling before reading it', async () => {
     const fullRead = vi.fn();
     const file = {
-      size: GRAPH_JSON_MAX_IMPORT_BYTES + 1,
+      size: GRAPH_BUNDLE_MAX_IMPORT_BYTES + 1,
       slice: vi.fn().mockReturnValue(new Blob([new Uint8Array([0x7b, 0x22, 0x76, 0x65])])),
       arrayBuffer: fullRead,
     } as unknown as File;
-    const alertSpy = noticeSpy();
-    Object.defineProperty(window, 'showOpenFilePicker', {
-      configurable: true,
-      value: vi.fn().mockResolvedValue([{ getFile: vi.fn().mockResolvedValue(file) }]),
-    });
-
-    await expect(loadFromFile()).resolves.toBeNull();
-    expect(file.slice).toHaveBeenCalledWith(0, 4);
+    await expect(inspectGraphFileWithinLimit(file)).rejects.toThrow(/Nebula opens graphs up to 528 MB\./);
     expect(fullRead).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Couldn't load the graph\. This graph is [\d.]+ MB\. Nebula opens graphs up to 16 MB\.$/));
+  });
+
+  it('keeps the shape limits for a big plain JSON file', async () => {
+    const node = { id: 'n', type: 'model-node', position: { x: 0, y: 0 },
+      data: { label: 'n', definitionId: 'text-input', params: {} } };
+    const text = JSON.stringify({ version: 2, name: 'Many', createdAt: '2026-10-23T00:00:00.000Z',
+      nodes: Array.from({ length: 10_001 }, (_, index) => ({ ...node, id: `n${index}` })), edges: [] });
+    const selection = await inspectGraphFileWithinLimit(new File([text], 'Many.nebula'));
+    await expect(readGraphSelection(selection)).rejects.toThrow(/more than 10,000 nodes/);
   });
 
   function zipSelection(): File {

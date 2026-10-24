@@ -187,10 +187,15 @@ export class RequestFailedError extends Error {
    * person gate's `code`: 'person_required' when this tab isn't connected as
    * the person, which reconnecting fixes). Null otherwise. */
   readonly code: string | null;
+  /** A 413 for the project's own size (Q118: the backend's `limit: "size"`,
+   * with the `sizeBytes` it measured): the canvas pauses saving instead of
+   * failing. storageLimit stays null for it, as for any too-large request. */
+  readonly overSaveLimit: boolean;
+  readonly sizeBytes: number | null;
 
   constructor(heading: string, status: number,
     options: { detail?: unknown; reason?: string; cause?: unknown; storageFull?: boolean;
-      storageLimit?: StorageLimit | null; code?: string | null } = {}) {
+      storageLimit?: StorageLimit | null; code?: string | null; overSaveLimit?: boolean; sizeBytes?: number | null } = {}) {
     const reason = copyForAnswer(status, options.detail, options.code ?? null, options.reason);
     super(oneLine({ heading, reason }), 'cause' in options ? { cause: options.cause } : undefined);
     this.name = 'RequestFailedError';
@@ -201,6 +206,8 @@ export class RequestFailedError extends Error {
     this.storageFull = options.storageFull === true;
     this.storageLimit = options.storageLimit ?? null;
     this.code = options.code ?? null;
+    this.overSaveLimit = options.overSaveLimit === true;
+    this.sizeBytes = options.sizeBytes ?? null;
   }
 
   get kind(): FailureKind {
@@ -321,15 +328,22 @@ export async function readRefusal(response: Response): Promise<{ detail: unknown
 
 /** An answer's `detail`, and whether it says the disk is full (the backend's
  * storage refusal, main._storage_error_body), from one read of its body. */
-interface FailureBody { detail: unknown; storageFull: boolean; storageLimit: StorageLimit | null; code: string | null }
+interface FailureBody {
+  detail: unknown; storageFull: boolean; storageLimit: StorageLimit | null; code: string | null;
+  overSaveLimit: boolean; sizeBytes: number | null;
+}
 async function readFailureBody(response: Response): Promise<FailureBody> {
   try {
-    const body = await response.json() as { detail?: unknown; storage?: unknown; limit?: unknown; code?: unknown } | null;
+    const body = await response.json() as {
+      detail?: unknown; storage?: unknown; limit?: unknown; code?: unknown; sizeBytes?: unknown;
+    } | null;
     const limit = body?.limit === 'projects' || body?.limit === 'storage' ? body.limit : null;
     const code = typeof body?.code === 'string' ? body.code : null;
-    return { detail: body?.detail, storageFull: body?.storage === 'full', storageLimit: limit, code };
+    const overSaveLimit = response.status === 413 && body?.limit === 'size';
+    const sizeBytes = overSaveLimit && typeof body?.sizeBytes === 'number' && Number.isFinite(body.sizeBytes) ? body.sizeBytes : null;
+    return { detail: body?.detail, storageFull: body?.storage === 'full', storageLimit: limit, code, overSaveLimit, sizeBytes };
   } catch {
-    return { detail: undefined, storageFull: false, storageLimit: null, code: null };
+    return { detail: undefined, storageFull: false, storageLimit: null, code: null, overSaveLimit: false, sizeBytes: null };
   }
 }
 
@@ -425,9 +439,11 @@ export function resetFailureWarningsForTests(): void {
  * deleted). */
 export async function requestError(heading: string, response: Response,
   options: { detail?: unknown; reason?: string } = {}): Promise<RequestFailedError> {
-  const body: FailureBody = 'detail' in options ? { detail: options.detail, storageFull: false, storageLimit: null, code: null }
+  const body: FailureBody = 'detail' in options
+    ? { detail: options.detail, storageFull: false, storageLimit: null, code: null, overSaveLimit: false, sizeBytes: null }
     : await readFailureBody(response);
   warnFailure(heading, response.status, body.detail);
   return new RequestFailedError(heading, response.status, { detail: body.detail, reason: options.reason,
-    storageFull: body.storageFull, storageLimit: body.storageLimit, code: body.code });
+    storageFull: body.storageFull, storageLimit: body.storageLimit, code: body.code,
+    overSaveLimit: body.overSaveLimit, sizeBytes: body.sizeBytes });
 }
