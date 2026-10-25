@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useReactFlow, useStoreApi, type Node, type ReactFlowState } from '@xyflow/react';
 import type { NodeData } from '../../types';
 import {
@@ -35,6 +35,12 @@ import { askBeforeLeavingCommons } from '../../lib/commonsUnsaved';
 import { unreadRingColor } from '../../lib/unreadRing';
 import './agentNotes.css';
 import { failureMessage, writtenLine } from '../../lib/errorCopy';
+import { reportPersonRequired } from '../../lib/personSession';
+import { useAgentQuestionsStore } from '../../store/agentQuestionsStore';
+
+/** The answer form (Q125 item 1): its own chunk, loaded once a question is open. */
+const loadQuestionsForm = () => import('./AgentQuestionsForm');
+const AgentQuestionsForm = lazy(() => loadQuestionsForm().then((module) => ({ default: module.AgentQuestionsForm })));
 
 /** A card stays about 4 s (GM's v5.2 holds 2.6 to 3.8 s), longer while hovered or focused. */
 const CARD_HOLD_MS = 4000;
@@ -183,9 +189,11 @@ function setDropLine(top: number | null) {
  * rect would meet them (a chat dragged up to this corner; the docked chat
  * starts below the chip, layouts.css). A chip pushed onto the header pill
  * drops below the pill's row, and the card and list follow it. The card and
- * the list stop above what sits below them in the same columns.
+ * the list stop above what sits below them in the same columns. The answer
+ * form (Q125 item 1) is a popover over the list: same place, same width.
  */
-function placeCorner(chip: HTMLElement | null, card: HTMLElement | null, list: HTMLElement | null) {
+function placeCorner(chip: HTMLElement | null, card: HTMLElement | null, list: HTMLElement | null,
+  form: HTMLElement | null = null) {
   if (!chip) return;
   const chat = chatBox();
   const viewport = { width: window.innerWidth, height: window.innerHeight };
@@ -213,7 +221,7 @@ function placeCorner(chip: HTMLElement | null, card: HTMLElement | null, list: H
     // starts below this line (layouts.css), so it never sits under the chip.
     setDropLine(dropTop);
     const below = obstacles();
-    for (const el of [card, list]) {
+    for (const el of [card, list, form]) {
       if (!el) continue;
       el.style.setProperty('--an-drop-top', `${dropTop}px`);
       const box = { top: dropTop, height: el.offsetHeight, width: el.offsetWidth };
@@ -244,7 +252,7 @@ function placeCorner(chip: HTMLElement | null, card: HTMLElement | null, list: H
   else chip.style.setProperty('--an-chip-top', `${chipTop}px`);
   const dropTop = chipTop + size.height + gap;
   const below = obstacles();
-  for (const el of [card, list]) {
+  for (const el of [card, list, form]) {
     if (!el) continue;
     if (chipTop === homeTop) el.style.removeProperty('--an-drop-top');
     else el.style.setProperty('--an-drop-top', `${dropTop}px`);
@@ -382,6 +390,10 @@ export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSecti
   const chipRef = useRef<HTMLButtonElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
+  const formRef = useRef<HTMLDivElement | null>(null);
+  /** The question set whose form is open (Q125 item 1), over the list. */
+  const formId = useAgentQuestionsStore((s) => s.formId);
+  const anyOpenQuestion = useAgentQuestionsStore((s) => Object.values(s.sets).some((e) => e.answerKey && e.view.status === 'open'));
   // The lists as last rendered, for the socket's and the timers' callbacks.
   const sectionsRef = useRef(sections);
   useLayoutEffect(() => {
@@ -514,10 +526,12 @@ export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSecti
 
   // The open list takes focus, so Escape and Tab start there.
   useEffect(() => {
-    if (open) listRef.current?.focus({ preventScroll: true });
+    // Answer from a card opens the list with the form over it: the form keeps focus.
+    if (open && !useAgentQuestionsStore.getState().formId) listRef.current?.focus({ preventScroll: true });
   }, [open]);
 
   function closeList(returnFocus: boolean) {
+    useAgentQuestionsStore.getState().closeForm();
     setOpen(false);
     setNewCount(0);
     setOutline('hover', null);
@@ -545,19 +559,22 @@ export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSecti
     if (!open) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as globalThis.Node | null;
-      if (target && (listRef.current?.contains(target) || chipRef.current?.contains(target))) return;
+      if (target && (listRef.current?.contains(target) || chipRef.current?.contains(target)
+        || formRef.current?.contains(target))) return;
       // The Commons' leave popover asks about a step from this list: it stays.
       if (target instanceof Element && target.closest('[data-leave-popover]')) return;
       setOpen(false);
       setNewCount(0);
       setOutline('hover', null);
+      // The form goes with the list; what the person typed stays (the store's draft).
+      useAgentQuestionsStore.getState().closeForm();
     };
     document.addEventListener('pointerdown', onPointerDown, true);
     return () => document.removeEventListener('pointerdown', onPointerDown, true);
   }, [open, setOutline]);
 
   useLayoutEffect(() => {
-    placeCorner(chipRef.current, cardRef.current, listRef.current);
+    placeCorner(chipRef.current, cardRef.current, listRef.current, formRef.current);
   });
   // Gone (no project open): the chat docks as before. A layout cleanup, so on
   // a project switch (which remounts the corner) it runs before the new
@@ -575,7 +592,7 @@ export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSecti
       if (frame) return;
       frame = window.requestAnimationFrame(() => {
         frame = 0;
-        placeCorner(chipRef.current, cardRef.current, listRef.current);
+        placeCorner(chipRef.current, cardRef.current, listRef.current, formRef.current);
       });
     };
     document.addEventListener('scroll', replace, { capture: true, passive: true });
@@ -593,7 +610,7 @@ export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSecti
   // arrives, the Agent log opens): place them again a few times a second.
   useEffect(() => {
     if (!open && !card) return;
-    const timer = window.setInterval(() => placeCorner(chipRef.current, cardRef.current, listRef.current), 400);
+    const timer = window.setInterval(() => placeCorner(chipRef.current, cardRef.current, listRef.current, formRef.current), 400);
     return () => window.clearInterval(timer);
   }, [open, card]);
 
@@ -620,6 +637,10 @@ export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSecti
   function runAction(note: AgentNote, action: AgentNoteAction, anchor?: HTMLElement) {
     const section = sectionHolding(sectionsRef.current, note.id);
     if (!section) return;
+    if (action.op.kind === 'question.answer') {
+      answer(note, action);
+      return;
+    }
     // Review leaves for where the proposal is decided; a Commons ask opens
     // in the Commons, another of its sections, which isn't leaving.
     if (action.op.kind === 'proposal.review' && action.op.target !== 'commons'
@@ -634,6 +655,55 @@ export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSecti
       })
       .catch(fail);
   }
+
+  /** The Update the open form answers, for focus to go back to its Answer. */
+  const formNoteRef = useRef<string | null>(null);
+
+  /**
+   * Answer (Q125 item 1): the form, as a popover over the list. From a
+   * dropped card the list opens under it, so Escape leaves the person on the
+   * Update they came from. Only a tab the socket gave the set's key to can
+   * answer (the person's canvas); any other says so.
+   */
+  function answer(note: AgentNote, action: AgentNoteAction) {
+    const setId = typeof action.op.questionId === 'string' ? action.op.questionId : '';
+    const questions = useAgentQuestionsStore.getState();
+    useAgentNotesStore.getState().clearError();
+    const entry = questions.sets[setId];
+    if (!entry?.answerKey || entry.view.status !== 'open') {
+      reportPersonRequired();
+      fail(writtenLine('These questions can only be answered from the Nebula canvas.'));
+      return;
+    }
+    formNoteRef.current = note.id;
+    if (!openRef.current) openList();
+    questions.openForm(setId);
+  }
+
+  /** Close the form (Escape, Send, Dismiss): focus goes back to the Update's Answer, or the list. */
+  function closeForm() {
+    useAgentQuestionsStore.getState().closeForm();
+    const noteId = formNoteRef.current;
+    formNoteRef.current = null;
+    window.requestAnimationFrame(() => {
+      const list = listRef.current;
+      if (!list) return;
+      const row = noteId ? list.querySelector<HTMLElement>(`[data-note-id="${CSS.escape(noteId)}"]`) : null;
+      const target = row?.querySelector<HTMLElement>('[data-op="question.answer"]') ?? row ?? list;
+      target.focus({ preventScroll: true });
+    });
+  }
+
+  // The set closed elsewhere (the agent withdrew it, another tab answered):
+  // the form went with it, and focus goes back as after Escape.
+  useEffect(() => {
+    if (!formId && formNoteRef.current) closeForm();
+  });
+
+  // Load the form's chunk once a question waits, so Answer opens it at once.
+  useEffect(() => {
+    if (anyOpenQuestion) void loadQuestionsForm();
+  }, [anyOpenQuestion]);
 
   function show(note: AgentNote, anchor?: HTMLElement) {
     if (note.refs.length === 0) return;
@@ -761,6 +831,11 @@ export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSecti
           onShow={show}
           onHover={hover}
         />
+      )}
+      {open && formId && (
+        <Suspense fallback={null}>
+          <AgentQuestionsForm key={formId} setId={formId} formRef={formRef} onClose={closeForm} />
+        </Suspense>
       )}
     </div>
     </LeaveBusyContext.Provider>

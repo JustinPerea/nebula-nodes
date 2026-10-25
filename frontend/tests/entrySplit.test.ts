@@ -69,6 +69,7 @@ function startupGraph(entry: string): Map<string, string[]> {
 const STARTUP_STATE = [
   'store/agentLogStore.ts',
   'store/agentNotesStore.ts',
+  'store/agentQuestionsStore.ts',
   'store/agentPresenceStore.ts',
   'store/canvasProposalsStore.ts',
   'store/canvasPinsStore.ts',

@@ -19,6 +19,9 @@ import './store/agentLogStore';
 // The same for Updates (store/agentNotesStore.ts): the corner is deferred,
 // its store counts from the first socket message.
 import './store/agentNotesStore';
+// Questions agents asked (store/agentQuestionsStore.ts): the form is deferred
+// with the corner; the store keeps every set and its key from hello on.
+import './store/agentQuestionsStore';
 import { KeyboardShortcuts } from './components/KeyboardShortcuts';
 import { BackendConnectionStatus } from './components/BackendConnectionStatus';
 import { PersonRequiredBanner } from './components/PersonRequiredBanner';

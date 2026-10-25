@@ -464,7 +464,20 @@ And these canvas tools:
   `withdraw_proposal` take its id. See
   [Proposals outside the canvas](#proposals-outside-the-canvas).
 
+- `ask_person`: asks the person 1-5 short questions, for a decision only
+  they can make (a direction, a name, a detail the agent can't find), not to
+  announce work (that's `post_note`) or for a change to approve (that's
+  `propose_change`). Each question has `text`, optional `options` (2-6),
+  `multiple` and `allow_text`; the set takes a `note` and `node_ids`. The
+  person answers from an Update with Answer. See
+  [Questions for the person](#questions-for-the-person).
+- `get_answers`: reads your question set; `wait_seconds` (up to 300) waits
+  for the person, through a Nebula restart too. Only the agent that asked
+  reads it.
+- `withdraw_questions`: takes back one of your open question sets.
+
 There is no accept tool. Only the person accepts, in Nebula.
+There is no answer or dismiss tool either: only the person answers questions.
 
 Selection is ephemeral. It is not written into `.nebula` graph files or
 `~/.nebula/state.json`. Unknown or deleted node IDs are reported only as stale
@@ -1159,6 +1172,92 @@ shell can read the person token (see "Who counts as the person"), say hello
 on `/ws`, receive the keys and accept. These layers stop an agent from
 approving its own proposal through Nebula's tools and API; they are not a
 sandbox against hostile local code.
+
+### Questions for the person
+
+When an agent reaches a decision only the person can make (which of two
+directions, a name or wording that is theirs, a detail it can't find on the
+canvas), it asks (Q125 item 1, 2026-10-24). A concrete change to approve is
+a proposal instead, and what it noticed is an Update.
+
+- **Ask:** MCP `ask_person(questions, note?, node_ids?)`, CLI
+  `nebula ask --question "..." --option A --option B --question "..."` (`--multiple`
+  and `--no-text` belong to the question before them; `--file` takes JSON),
+  HTTP `POST /api/canvas/questions` with `{questions: [{text, options?,
+  multiple?, allowText?}], note?, nodeIds?}`. 1-5 questions; `text` is one
+  plain line (200 characters); `options` are 2-6 different choices (80
+  characters each); `multiple` (default false) takes any number of them;
+  `allowText` (default true) adds a typed answer, and a question with no
+  options must allow it. `note` (160 characters) says why. `nodeIds` are
+  checked like an Update's refs: unknown ones are dropped and listed in
+  `dropped`. Needs an open project (the Update is kept with it). The answer
+  is `{questions: {id, status, questions, answers, ...}}`.
+- **The person answers:** the set posts one Update from the agent ("Claude
+  Code has 2 questions.", with Answer, and Show on canvas when it names
+  nodes). Answer opens the form in the Updates corner. They may skip any
+  question; Send needs at least one answer; Dismiss closes the set with
+  none. When it closes, its line goes past tense ("Claude Code asked 2
+  questions." / "asked a question.", on the stored Update, so `list_notes`
+  shows it too) and it says "Answered.", "Dismissed.",
+  "Withdrawn by <agent>." (or "Closed when Nebula restarted." in the rare
+  case a kept set can't be read back). The 200-Update cap never prunes the
+  Update of an open set (at most 12 are open, so the cap holds); once the
+  set closes its Update is pruned like any other. The questions
+  and the answers are never on the Update, so other agents' `list_notes`
+  never shows them.
+- **Read:** MCP `get_answers(question_id, wait_seconds)`, CLI
+  `nebula answers <id> [--wait N]` (with --wait: exit 0 answered, 2 no answer yet, 3
+  dismissed, 4 withdrawn; without --wait it always exits 0, so read the status
+  it prints), HTTP `GET /api/canvas/questions/{id}?wait=<seconds>` (25 at
+  most per request). A wait (`wait_seconds`, `--wait`) rides through a
+  Nebula restart: while Nebula isn't answering at all (refused, reset, no
+  answer) it retries with a short backoff (0.25 s doubling to 2 s) within
+  the wait, then keeps waiting; a real answer (404, 403, a 5xx) ends it as
+  before, and so does Nebula still down when the wait runs out. A cancelled
+  MCP call or Ctrl-C ends it at once. `get_proposal` doesn't retry
+  (proposals don't survive a restart). Status is `open`, `answered`, `dismissed` or
+  `withdrawn`; `answers` has `{questionId, answered, choices, text}` per
+  question (`answered: false` for one the person skipped). Only the agent
+  that asked reads its set: anyone else gets 404. The person's typed text is
+  their message to that agent: it is never journaled or logged, and no
+  socket but the person's own gets it.
+- **Withdraw:** MCP `withdraw_questions(question_id)`, CLI
+  `nebula questions withdraw <id>`, HTTP `DELETE /api/canvas/questions/{id}`. Only the asker.
+- **Limits:** 3 open sets per agent and 12 in all. At the cap the refusal
+  (429) says "You already have 3 open question sets. Wait for answers or
+  withdraw one." and lists your open sets (`stillOpen`, each with
+  `withdrawWith`, the exact call in your surface's words). Your own 3
+  include sets in a project in Recently deleted (you can withdraw them);
+  the 12 in all count only sets the person can answer now, so sets in
+  Recently deleted don't hold other agents off.
+- **No expiry; sets survive a restart:** a set waits until the person
+  answers or dismisses it, or the agent withdraws it. It is kept with the
+  project it was asked in (on the project's record, next to its pins and
+  Updates), so a Nebula restart keeps it open with the same id and owner:
+  `get_answers` from the same agent name still reads it, and the person can
+  still answer from its Update. It stays with the project in Recently
+  deleted and goes when the project is deleted for good (however that
+  happens: emptied, purged one by one, or past its 30 days). An open set
+  whose Update has left the project's list (only a hand-edited or damaged
+  record: the 200-Update cap skips open sets' Updates) can't be answered
+  any more, so it goes too. Answering doesn't
+  depend on which project is open. Closed sets, with their answers, are
+  readable for 30 minutes (at most 50), across restarts too. A gone id is
+  a 404 whose detail says to ask again.
+- **Events:** `question.asked`, `question.answered`, `question.dismissed`
+  and `question.withdrawn` in the journal (`wait_for_canvas_change`,
+  `nebula watch`) carry `{questionId, agentId, count}` only.
+
+Who may answer: only the person, checked the way accepting a proposal is.
+`POST /api/canvas/questions/{id}/answer` (`{answers: [{questionId,
+choices?, text?}]}`) and `/dismiss` refuse any agent marker and need this
+launch's person token (`require_person`), and also the set's answer key in
+`X-Nebula-Proposal-Key` (the proposal key's header). The key goes only to
+the person's browser sockets (`questionsOpened`, and `questionsSync` after
+hello); `questionsClosed` goes only to them too, since it carries the
+answers back. There is no answer tool or command for agents. The remaining
+risk is the proposals' one (a program with its own unsandboxed shell as the
+same user).
 
 ### Proposals outside the canvas
 

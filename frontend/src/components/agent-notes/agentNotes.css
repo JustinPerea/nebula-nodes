@@ -636,6 +636,235 @@ body.app-slava-restraint .agent-notes-root {
   border-color: var(--an-ink-bold);
 }
 
+/* =============== Questions (Q125 item 1) =============== */
+
+/* The answer form: a popover over the list, at its place and width (the
+ * panel's rules above), one layer up. The agent's dot and colour lead it. */
+.agent-questions-form {
+  z-index: 47;
+}
+
+.agent-questions-form__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 0 0 auto;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--an-edge);
+  box-shadow: inset 4px 0 0 color-mix(in srgb, var(--an-author) 70%, transparent);
+}
+
+.agent-questions-form__head .agent-notes-dot {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  font-size: 9px;
+}
+
+.agent-questions-form__titles {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.agent-questions-form__heading {
+  margin: 0;
+  color: var(--an-ink-bold);
+  font: 600 15px/1.2 var(--an-ui);
+  overflow-wrap: anywhere;
+}
+
+.agent-questions-form__skip {
+  margin: 0;
+  color: var(--an-muted);
+  font: 400 12px/1.3 var(--an-ui);
+}
+
+.agent-questions-form__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 16px 4px;
+}
+
+.agent-questions-form__note {
+  margin: 0;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--an-edge);
+  color: var(--an-muted);
+  font: 400 12.5px/1.4 var(--an-ui);
+  overflow-wrap: anywhere;
+}
+
+.agent-questions-form__question {
+  min-width: 0;
+  padding: 12px 0 14px;
+  border-bottom: 1px solid var(--an-edge);
+}
+
+.agent-questions-form__question:last-child {
+  border-bottom: 0;
+}
+
+.agent-questions-form__text {
+  margin: 0;
+  color: var(--an-ink);
+  font: 500 13.5px/1.42 var(--an-ui);
+  overflow-wrap: anywhere;
+}
+
+.agent-questions-form__hint {
+  margin: 3px 0 0;
+  color: var(--an-muted);
+  font: 400 12px/1.3 var(--an-ui);
+}
+
+.agent-questions-form__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+/* An option: the list's button. Once picked, GM - Design's neutral ring for
+ * every agent (2026-10-24): "the light ink ring with a faint fill, the same
+ * weight as now, just not the agent's color. The pick is the person's
+ * choice, not the agent's." The agent's colour stays on the form's left edge
+ * and its dot; never the orange accent. */
+.agent-questions-form__option {
+  max-width: 100%;
+  padding: 7px 11px;
+  border: 1px solid var(--an-edge-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--an-ink);
+  font: 500 12.5px/1.2 var(--an-ui);
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  transition:
+    background-color 160ms var(--spring-soft),
+    border-color 160ms var(--spring-soft),
+    box-shadow var(--spring-soft-ms) var(--spring-soft),
+    transform var(--spring-pop-ms) var(--spring-pop);
+}
+
+/* Only an unpicked option dims on hover: a picked one keeps its full ring, or
+   hovering would read as un-picking it (GM). */
+.agent-questions-form__option:hover:not(:disabled):not([aria-pressed='true']) {
+  background: var(--an-hover);
+  border-color: color-mix(in srgb, var(--an-ink) 30%, transparent);
+}
+
+.agent-questions-form__option:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.agent-questions-form__option[aria-pressed='true'] {
+  border-color: var(--an-ink);
+  background: color-mix(in srgb, var(--an-ink) 8%, transparent);
+  box-shadow: 0 0 0 1px var(--an-ink);
+  color: var(--an-ink-bold);
+}
+
+.agent-questions-form__option:focus-visible,
+.agent-questions-form__input:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid var(--an-ink));
+  outline-offset: 1px;
+}
+
+.agent-questions-form__typed {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.agent-questions-form__other {
+  color: var(--an-muted);
+  font: 400 11px/1 var(--an-mono);
+}
+
+.agent-questions-form__input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 34px;
+  padding: 8px 10px;
+  border: 1px solid var(--an-edge-strong);
+  border-radius: 8px;
+  background: var(--an-raised);
+  color: var(--an-ink);
+  font: 400 13px/1.4 var(--an-ui);
+  resize: vertical;
+}
+
+.agent-questions-form__input::placeholder {
+  color: var(--an-faint);
+}
+
+.agent-questions-form__input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--an-ink) 40%, transparent);
+}
+
+.agent-questions-form__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 11px 16px 12px;
+  border-top: 1px solid var(--an-edge);
+}
+
+.agent-questions-form__foot .agent-notes-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.agent-questions-form__foot .agent-notes-btn--primary:disabled:hover {
+  background: var(--an-ink);
+  border-color: var(--an-ink);
+}
+
+/* The closed view, under an answered set's Update: each question, then its answer. */
+.agent-questions-answers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-questions-answers__row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.agent-questions-answers__question {
+  color: var(--an-muted);
+  font: 400 12px/1.35 var(--an-ui);
+  overflow-wrap: anywhere;
+}
+
+.agent-questions-answers__answer {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--an-ink);
+  font: 400 13px/1.4 var(--an-ui);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.agent-questions-answers__answer[data-blank='true'] {
+  color: var(--an-faint);
+}
+
 /* =============== Node outlines (inside React Flow's viewport) =============== */
 
 .agent-note-outlines {
@@ -721,6 +950,14 @@ body.app-slava-restraint .agent-notes-root {
   }
 
   .agent-notes-btn:active {
+    transform: none;
+  }
+
+  .agent-questions-form__option {
+    transition: none;
+  }
+
+  .agent-questions-form__option:active:not(:disabled) {
     transform: none;
   }
 

@@ -8,7 +8,7 @@ import { apiRequest } from './apiRequest';
  */
 
 export type AgentNoteAbout =
-  | 'sinceLastTurn' | 'analyze' | 'suggestion' | 'removedLook' | 'changedWords' | 'proposal' | 'other';
+  | 'sinceLastTurn' | 'analyze' | 'suggestion' | 'removedLook' | 'changedWords' | 'proposal' | 'question' | 'other';
 
 export interface AgentNoteAuthor {
   kind: 'agent' | 'reader';
@@ -45,6 +45,9 @@ export interface AgentNote {
    * how it ended in one short line ("Accepted: the cover changed"). */
   resolvedAt?: string | null;
   outcome?: string | null;
+  /** A question set's Update (Q125 item 1): the set it asks. Its questions
+   * and answers are never on the Update (store/agentQuestionsStore.ts). */
+  questionsId?: string | null;
 }
 
 export type AgentNotesSurface = { kind: 'canvas' } | { kind: 'board'; boardId: string };
@@ -80,7 +83,7 @@ export const MAX_NOTE_BUTTONS = 2;
 
 const SAFE_COLOR = /^#[0-9a-fA-F]{6}$/;
 const ABOUT: readonly AgentNoteAbout[] = [
-  'sinceLastTurn', 'analyze', 'suggestion', 'removedLook', 'changedWords', 'proposal', 'other',
+  'sinceLastTurn', 'analyze', 'suggestion', 'removedLook', 'changedWords', 'proposal', 'question', 'other',
 ];
 
 function str(value: unknown): string | null {
@@ -154,6 +157,8 @@ export function sanitizeNote(raw: unknown): AgentNote | null {
     actedWith: str(note.actedWith),
     resolvedAt: str(note.resolvedAt),
     outcome: typeof note.outcome === 'string' && note.outcome ? note.outcome.slice(0, 80) : null,
+    questionsId: note.questions && typeof note.questions === 'object'
+      ? str((note.questions as Record<string, unknown>).id) : null,
   };
 }
 

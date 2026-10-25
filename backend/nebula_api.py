@@ -32,6 +32,38 @@ class NebulaAPIError(RuntimeError):
         self.payload = payload
 
 
+# A wait for the person's answers (MCP get_answers, `nebula answers --wait`)
+# rides through a Nebula restart: question sets are kept with the project, so
+# within the wait's own budget a request Nebula never answered is tried again
+# after a short backoff (doubling from RETRY_FIRST_SECONDS to RETRY_MAX_SECONDS).
+RETRY_FIRST_SECONDS = 0.25
+RETRY_MAX_SECONDS = 2.0
+
+
+def unanswered(exc: BaseException) -> bool:
+    """Whether Nebula never answered: refused, reset, closed mid-request or no
+    answer in time (`kind` connect/timeout, no status). A real HTTP answer
+    (a 404, 403, or a 5xx with a body) has a status and is never retried."""
+    return isinstance(exc, NebulaAPIError) and exc.status is None and exc.kind in ("connect", "timeout")
+
+
+def dropped_mid_request(exc: BaseException) -> bool:
+    """Whether Nebula took the request, then went away before answering it
+    (closed, reset, or no answer in time after the connect). Nebula was there,
+    so this is a restart, not a Nebula that was never running: a refused or
+    timed-out connect (httpx.ConnectError, ConnectTimeout) is not this."""
+    return unanswered(exc) and isinstance(
+        exc.__cause__, (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError,
+                        httpx.ReadTimeout, httpx.WriteTimeout))
+
+
+def next_backoff(previous: float | None) -> float:
+    """The next pause before retrying: RETRY_FIRST_SECONDS, then doubling up to RETRY_MAX_SECONDS."""
+    if previous is None:
+        return RETRY_FIRST_SECONDS
+    return min(previous * 2, RETRY_MAX_SECONDS)
+
+
 def _payload(response: httpx.Response) -> Any:
     try:
         return response.json()
