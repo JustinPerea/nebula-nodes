@@ -1,7 +1,10 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import '../../styles/prompt-dialog.css';
-import { CONFIRM_LINE, EDITS_NOT_WRITTEN, UNSAVED_EDITS_HEADING, agentOpeningLine, keptConfirmLine } from './unsavedEditsCopy';
+import {
+  CONFIRM_LINE, EDITS_DOWNLOAD_HEADING, EDITS_NOT_WRITTEN, UNSAVED_EDITS_HEADING, agentOpeningLine, keptConfirmLine,
+} from './unsavedEditsCopy';
+import { TOO_BIG_TO_DOWNLOAD } from '../../lib/graphFileShared';
 
 /**
  * Q116 a) (Justin, 2026-10-23): "a): "Download your edits" plus "Continue
@@ -15,12 +18,15 @@ import { CONFIRM_LINE, EDITS_NOT_WRITTEN, UNSAVED_EDITS_HEADING, agentOpeningLin
  * "Download your edits" first and primary, "Continue without them" asks first.
  * After a download that couldn't be written (`downloadFailed`), GM's line 2
  * is the body in place of the reason; the heading and both choices stay.
+ * After a download past the browser's string cap (`downloadTooBig`), GM's
+ * pair (2026-10-25): "Couldn't download your edits." over "It's too big to
+ * download in a browser."; both choices stay.
  * `keptIn`: the edits are the open project's own canvas, kept in that
  * project by the backend's switch, and the confirm says so (Q118 review).
  * `agentOpening`: an agent's switch is what left the project; GM's line
  * (2026-10-24) names it and the project it opens, above the rest. */
-export function UnsavedEditsNotice({ reason, downloadFailed = false, keptIn, agentOpening, busy, onDownload, onContinue }: {
-  reason: string; downloadFailed?: boolean; keptIn?: string; agentOpening?: { agent: string; projectName: string };
+export function UnsavedEditsNotice({ reason, downloadFailed = false, downloadTooBig = false, keptIn, agentOpening, busy, onDownload, onContinue }: {
+  reason: string; downloadFailed?: boolean; downloadTooBig?: boolean; keptIn?: string; agentOpening?: { agent: string; projectName: string };
   busy: boolean; onDownload: () => void; onContinue: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
@@ -41,8 +47,8 @@ export function UnsavedEditsNotice({ reason, downloadFailed = false, keptIn, age
     <div className="project-home__error project-home__edits" role="alert">
       <span className="project-home__edits-text">
         {agentOpening && <span>{agentOpeningLine(agentOpening.agent, agentOpening.projectName)}</span>}
-        <strong className="project-home__edits-heading">{UNSAVED_EDITS_HEADING}</strong>
-        <span>{downloadFailed ? EDITS_NOT_WRITTEN : reason}</span>
+        <strong className="project-home__edits-heading">{downloadTooBig ? EDITS_DOWNLOAD_HEADING : UNSAVED_EDITS_HEADING}</strong>
+        <span>{downloadTooBig ? TOO_BIG_TO_DOWNLOAD : downloadFailed ? EDITS_NOT_WRITTEN : reason}</span>
       </span>
       <span className="project-home__edits-actions">
         <button type="button" ref={downloadButton} className="project-home__edits-primary" disabled={busy} onClick={onDownload}>Download your edits</button>

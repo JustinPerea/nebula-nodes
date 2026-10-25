@@ -39,7 +39,7 @@ from urllib.parse import quote, urlsplit
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, JSONResponse
 
@@ -209,6 +209,8 @@ from services.agent_questions import (
     update_text as question_update_text,
 )
 from services.agent_presence import request_headers_scope
+# The Agents panel (Q125 item 2): each agent's status line and the roster.
+from services.agent_status import AgentStatusBook, StatusError, Waiting, build_roster, clean_status_text
 from services.local_guard import host_allowed
 from services import run_approvals as approvals
 from services.run_approvals import RunApprovals
@@ -288,6 +290,16 @@ agent_notes = AgentNotes(lambda: project_store)
 # Questions agents ask the person (Q125 item 1), kept on the project record
 # like pins and Updates (services/agent_questions.py). Same getter.
 agent_questions = QuestionBook(store=lambda: project_store)
+# Each agent's status line (Q125 item 2): in memory only, like cursors.
+agent_status = AgentStatusBook()
+
+
+def _agent_sign(identity: AgentIdentity) -> None:
+    """Any identified request (RequestHeadersContext): the agent is still
+    there, so its status line lasts another STATUS_IDLE_SECONDS."""
+    agent_status.saw(identity)
+
+
 _request_workspace_revision: ContextVar[str | None] = ContextVar("workspace_revision", default=None)
 _execution_workspace_context: ContextVar[dict[str, Any] | None] = ContextVar("execution_workspace", default=None)
 _synchronous_workspace_runs: set[str] = set()
@@ -856,7 +868,9 @@ app.add_middleware(
 # earlier ones): foreign Hosts and Origins never reach CORS or the routes.
 app.add_middleware(AgentWorkspaceContext)
 # Lets graph routes see who is calling, so agent edits move that agent's cursor.
-app.add_middleware(RequestHeadersContext)
+# Every identified request is also a sign that the agent is still there,
+# which keeps its status line alive (Q125 item 2, services/agent_status.py).
+app.add_middleware(RequestHeadersContext, on_agent=lambda identity: _agent_sign(identity))
 app.add_middleware(LocalRequestGuard)
 
 
@@ -2926,7 +2940,7 @@ async def upload_file_consolidated(
         # (an agent's `nebula upload` / upload_file, or the person's drop).
         publish_action(f"Added {node_type} ({node_id})")
         _journal_node_added(node_id)
-        await _show_agent({"nodeId": node_id}, say=f"Added {_node_label(node_id)}")
+        await _show_agent({"nodeId": node_id}, say=f"Added {_node_label(node_id)}", did=_did("Added", node_id))
         response["nodeId"] = node_id
         if node_type == "image-input":
             response["thumbUrl"] = url
@@ -4547,23 +4561,44 @@ async def set_canvas_selection(body: dict[str, Any]) -> dict[str, Any]:
     return snapshot
 
 
+def _did(verb: str, node_id: str | None = None, label: str | None = None) -> dict[str, Any]:
+    """What an agent's action was, for the Agents panel's line when it has no
+    status (Q125 item 2, GM: Moved “Hero shots” · 2 min ago): a past-tense
+    verb and the node it names, by the node's label (else its model's name)."""
+    if node_id is not None and label is None and node_id in cli_graph.nodes:
+        label = _node_label(node_id)
+    return {"verb": verb, "nodeId": node_id if node_id in cli_graph.nodes else None, "label": label}
+
+
+def _point(identity: AgentIdentity, **kwargs: Any) -> dict[str, Any]:
+    """agent_presence.point for the open project: every cursor event says
+    which project it happened in (the roster lists a cursor only there)."""
+    try:
+        project_id = _workspace_context()["activeProjectId"]
+    except Exception:  # noqa: BLE001 - the catalog unreadable: the cursor still moves
+        project_id = None
+    return agent_presence.point(identity, project_id=project_id, **kwargs)
+
+
 async def _show_agent(
     target: dict[str, Any],
     *,
     action: str = "click",
     say: str = "",
     origin: dict[str, Any] | None = None,
+    did: dict[str, Any] | None = None,
 ) -> None:
     """Move the calling agent's cursor; a no-op for the browser's own requests.
 
-    Never fails the route that called it: presence is decoration on top of
-    an edit that already succeeded.
+    ``did`` (_did) is what the action was, for the Agents panel. Never fails
+    the route that called it: presence is decoration on top of an edit that
+    already succeeded.
     """
     identity = identify_agent(current_request_headers())
     if identity is None:
         return
     try:
-        event = agent_presence.point(identity, target=target, origin=origin, action=action, say=say)
+        event = _point(identity, target=target, origin=origin, action=action, say=say, did=did)
         await manager.broadcast_raw(event)
     except Exception:  # noqa: BLE001 - decoration must not break graph edits
         pass
@@ -4581,7 +4616,7 @@ async def _say_agent_action(say: str) -> None:
     if identity is None:
         return
     try:
-        await manager.broadcast_raw(agent_presence.point(identity, target=None, action="click", say=say))
+        await manager.broadcast_raw(_point(identity, target=None, action="click", say=say))
     except Exception:  # noqa: BLE001 - decoration must not break a saved write
         pass
 
@@ -4730,6 +4765,22 @@ def _node_label(node_id: str) -> str:
     return str(definition.get("displayName") or node.get("definitionId") or node_id)
 
 
+# The Agents panel's verb for a point_at with nothing else behind it (Q125
+# item 2): at a node, then at a spot on the canvas. Not GM's yet (listed for
+# GM in docs/notes/2026-10-25-feat-agents-panel.md).
+_POINTED_AT_NODE = {"move": "Pointed at", "click": "Clicked", "drag": "Dragged to", "look": "Looked at"}
+_POINTED_AT_SPOT = {"move": "Moved", "click": "Clicked", "drag": "Dragged", "look": "Looked around"}
+
+
+def _pointed(action: str, target: Mapping[str, Any]) -> dict[str, Any] | None:
+    node_id = target.get("nodeId") if isinstance(target, Mapping) else None
+    if isinstance(node_id, str):
+        verb = _POINTED_AT_NODE.get(action)
+        return _did(verb, node_id) if verb else None
+    verb = _POINTED_AT_SPOT.get(action)
+    return {"verb": verb, "nodeId": None, "label": None} if verb else None
+
+
 @app.post("/api/canvas/cursor")
 async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
     """Point the calling agent's cursor at a node, a port, or a canvas spot.
@@ -4761,18 +4812,153 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
         else:
             target = parse_target(body.get("target"), cli_graph.nodes)
         origin = parse_target(body["from"], cli_graph.nodes, "from") if body.get("from") is not None else None
-        event = agent_presence.point(
+        action = body.get("action") or "move"
+        event = _point(
             identity,
             target=target,
             origin=origin,
-            action=body.get("action") or "move",
+            action=action,
             say=body.get("say"),
+            # A line said in place keeps the cursor's last action.
+            did=None if placed == "cursor" else _pointed(action, target),
         )
     except PresenceError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     await manager.broadcast_raw(event)
     return {"agent": identity.as_dict(), "target": target, "action": event["action"], "say": event["say"],
             "placed": placed}
+
+
+# ---------- The Agents panel: status lines and the roster (Q125 item 2) ----------
+#
+# Justin, 2026-10-24 ("Yes, all four, in that order"), item 2: "An Agents
+# panel: Needs you / Working ... MCP: set_status(text, node_id). Proposals
+# and questions feed 'Needs you' on their own." Every surface sets a status
+# through set_agent_status (MCP set_status, `nebula status`) and reads the
+# roster through list_canvas_agents (the panel, MCP list_agents, `nebula
+# agents`). services/agent_status.py has the rules.
+
+_STATUS_KEYS = frozenset({"text", "nodeId"})
+_status_expiry: asyncio.TimerHandle | None = None
+_status_sweeps: set[asyncio.Task[Any]] = set()
+
+
+async def _broadcast_status_events(events: list[dict[str, Any]]) -> None:
+    for event in events:
+        try:
+            await manager.broadcast_raw(event)
+        except Exception:  # noqa: BLE001 - a canvas that missed it reads the roster on reconnect
+            pass
+
+
+def _schedule_status_expiry() -> None:
+    """Check again just after the next status would run out. A sign that
+    came meanwhile moves that out, and the check schedules itself again."""
+    global _status_expiry
+    if _status_expiry is not None:
+        _status_expiry.cancel()
+        _status_expiry = None
+    deadline = agent_status.next_deadline()
+    if deadline is None:
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:  # no running loop (a script): the next roster read sweeps
+        return
+    _status_expiry = loop.call_later(max(0.0, deadline - agent_status.now()) + 0.5, _start_status_sweep)
+
+
+def _start_status_sweep() -> None:
+    task = asyncio.get_running_loop().create_task(_sweep_agent_statuses())
+    _status_sweeps.add(task)
+    task.add_done_callback(_status_sweeps.discard)
+
+
+async def _sweep_agent_statuses() -> None:
+    """Drop the statuses whose agent went quiet, and tell every canvas."""
+    await _broadcast_status_events(agent_status.sweep())
+    _schedule_status_expiry()
+
+
+async def _forget_status_anchors(*, node_id: str | None = None) -> None:
+    """A node deleted (``node_id``) or the graph cleared or replaced: the
+    lines on those nodes stay, without them (as cursors re-anchor)."""
+    events = agent_status.forget_node(node_id) if node_id is not None else agent_status.forget_graph()
+    await _broadcast_status_events(events)
+
+
+@app.post("/api/canvas/status")
+async def set_agent_status(body: Any = Body(None)) -> dict[str, Any]:
+    """Set the calling agent's status: one line about what it is working on,
+    optionally on a node. Body: {text, nodeId?}; empty text clears it. It
+    lasts until replaced or cleared, or until the agent has made no request
+    for 10 minutes. The caller must identify itself (agent token or
+    X-Nebula-Agent); it sets only its own."""
+    headers = current_request_headers()
+    identity = identify_agent(headers)
+    if identity is None:
+        if is_person(headers):
+            raise HTTPException(status_code=403, detail=(
+                "A status says what an agent is working on: the person doesn't set one"))
+        raise HTTPException(status_code=400, detail=(
+            "Name yourself with NEBULA_AGENT_NAME or --as (an X-Nebula-Agent header) to set your status"))
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="The body must be an object: {text, nodeId?}")
+    unknown = sorted(set(body) - _STATUS_KEYS)
+    if unknown:
+        raise HTTPException(status_code=422, detail=(
+            f"unknown field '{unknown[0]}': a status takes text and nodeId, and it is always your own"))
+    if "text" not in body:
+        raise HTTPException(status_code=422, detail="text is required: one line about what you're working on "
+                                                    "(\"\" clears it)")
+    node_id = body.get("nodeId")
+    try:
+        text = clean_status_text(body.get("text"))
+        if text and node_id is not None:
+            # Checked as a cursor target is: a node on the open canvas.
+            node_id = parse_target({"nodeId": node_id}, cli_graph.nodes, "nodeId")["nodeId"]
+        events = agent_status.set(identity, text, node_id=node_id if text else None,
+                                  project_id=_workspace_context()["activeProjectId"])
+    except (StatusError, PresenceError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc).replace("nodeId.nodeId", "nodeId")) from exc
+    await _broadcast_status_events(events)
+    _schedule_status_expiry()
+    status = agent_status.get(identity.id)
+    return {"agent": identity.as_dict(), "status": agent_status.view(status) if status is not None else None}
+
+
+def _waiting_in(project_id: str | None) -> list[Waiting]:
+    """The open project's open question sets and proposals (canvas and
+    asset), by agent and age: what "Needs you" counts. Nothing else of them."""
+    waiting = [Waiting(agent=s.agent, kind="question", created_at=s.created_at, count=len(s.spec.questions))
+               for s in agent_questions.open_list() if s.project_id == project_id]
+    waiting += [Waiting(agent=p.agent, kind="proposal", created_at=p.created_at)
+                for p in canvas_proposals.open_list() if p.project_id == project_id]
+    for proposal in asset_proposals.open_list():
+        # Kept with the project whose Updates hold it; one with no Update (made
+        # with no project open) waits wherever the person is, as the panel
+        # counts it (agentRosterModel), so the two reads agree.
+        ref = getattr(proposal, "update", None) or {}
+        where = ref.get("projectId") or project_id
+        if where == project_id:
+            waiting.append(Waiting(agent=proposal.agent, kind="proposal", created_at=proposal.created_at))
+    return waiting
+
+
+@app.get("/api/canvas/agents")
+async def list_canvas_agents() -> dict[str, Any]:
+    """The agents around in the open project: each one's status, its
+    cursor's last action, and how many questions and proposals wait for the
+    person (counts only, never their content). Needs you first (longest
+    wait first), then Working (most recent first)."""
+    await _sweep_agent_statuses()
+    await _sweep_proposals()
+    await _sweep_asset_proposals()
+    project_id = _workspace_context()["activeProjectId"]
+    agents = build_roster(project_id=project_id, now=agent_status.now(), cursors=agent_presence.active(),
+                          statuses=agent_status.for_project(project_id), waiting=_waiting_in(project_id),
+                          status_view=agent_status.view)
+    return {"projectId": project_id, "agents": agents, "rev": agent_status.revision}
 
 
 @app.post("/api/canvas/view")
@@ -5131,6 +5317,7 @@ async def _announce_removed_nodes(entries: list[dict[str, Any]], *, note: str, p
         await _journal_detached_pins(entry["detached"], pin_reason(gone))
         await _announce_closed_proposals(entry["closed"])
         agent_presence.forget_node(gone["id"])
+        await _forget_status_anchors(node_id=gone["id"])
 
 
 def _restore_removals(raw: Any) -> list[dict[str, Any]]:
@@ -5508,7 +5695,9 @@ async def resolve_canvas_pin(pin_id: str, body: dict[str, Any]) -> dict[str, Any
             pin.get("position") or {"x": anchor.get("x", 0.0), "y": anchor.get("y", 0.0)}
         )
         target = {"nodeId": target["nodeId"]} if "nodeId" in target else {"x": target["x"], "y": target["y"]}
-        await manager.broadcast_raw(agent_presence.point(identity, target=target, action="click", say=reply))
+        node = target.get("nodeId")
+        await manager.broadcast_raw(_point(identity, target=target, action="click", say=reply,
+                                           did=_did("Replied on", node) if node else {"verb": "Replied"}))
     except Exception:  # noqa: BLE001 - the cursor is decoration on a saved reply
         pass
     return {"pin": pin}
@@ -6353,7 +6542,8 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
     else:
         target = None
     if target is not None:
-        await _show_agent(target, action="click", say=spec.note)
+        await _show_agent(target, action="click", say=spec.note,
+                          did=_did("Proposed", target.get("nodeId")))
     # Nodes of the run that can't run here, so the agent can say so or pick
     # another model before the person accepts (the canvas shows it too), and
     # the call that withdraws this one or an earlier one this replaces.
@@ -6600,7 +6790,8 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
     focus = next(iter(id_map.values()), None) or next(iter(sorted(proposal.references, key=_node_order)), None)
     if focus is not None:
         try:
-            event = agent_presence.point(proposal.agent, target={"nodeId": focus}, action="click", say="Accepted")
+            event = _point(proposal.agent, target={"nodeId": focus}, action="click", say="Accepted",
+                           did=_did("Proposed", focus))
             await manager.broadcast_raw(event)
         except Exception:  # noqa: BLE001 - the cursor is decoration on a committed change
             pass
@@ -9515,6 +9706,7 @@ async def _broadcast_graph_sync(
     await _follow_cover_proposals(export)
     if graph_replaced:
         agent_presence.forget_graph()
+        await _forget_status_anchors()
     moved_ids = sorted({str(node_id) for node_id in moved if node_id in cli_graph.nodes})
     await manager.broadcast_raw({"type": "graphSync", **export,
                                  **({"graphReplaced": True} if graph_replaced else {}),
@@ -10215,7 +10407,7 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
     await _broadcast_graph_sync(edit=True)
     publish_action(f"Added {definition_id} ({short_id})")
     _journal_node_added(short_id)
-    await _show_agent({"nodeId": short_id}, say=f"Added {_node_label(short_id)}")
+    await _show_agent({"nodeId": short_id}, say=f"Added {_node_label(short_id)}", did=_did("Added", short_id))
     return cli_graph.nodes[short_id]
 
 
@@ -10252,6 +10444,7 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
         origin={"nodeId": edge["source"], "handle": edge["sourceHandle"]},
         action="drag",
         say=f"Wiring {edge['source']} → {edge['target']}",
+        did=_did("Wired", edge["target"]),
     )
     return {"connection": f"{edge['source']}:{edge['sourceHandle']} -> {edge['target']}:{edge['targetHandle']}"}
 
@@ -10374,9 +10567,10 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
             origin={"nodeId": src, "handle": connect_spec.get("sourceHandle", "")},
             action="drag",
             say=f"Added {_node_label(short_id)} and wired it",
+            did=_did("Added", short_id),
         )
     else:
-        await _show_agent({"nodeId": short_id}, say=f"Added {_node_label(short_id)}")
+        await _show_agent({"nodeId": short_id}, say=f"Added {_node_label(short_id)}", did=_did("Added", short_id))
     return response
 
 
@@ -10680,7 +10874,8 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
             summary=f"set {_listed(changes['keys'], 4)} on {_node_label(node_id)} ({node_id})",
         )
     changed = ", ".join(sorted(str(key) for key in params)[:4])
-    await _show_agent({"nodeId": node_id}, say=f"Set {changed}" if changed else f"Updated {node_id}")
+    await _show_agent({"nodeId": node_id}, say=f"Set {changed}" if changed else f"Updated {node_id}",
+                      did=_did("Changed", node_id))
     return cli_graph.nodes[node_id]
 
 
@@ -10809,6 +11004,9 @@ async def rename_graph_node(node_id: str, body: dict[str, Any]) -> dict:
             data={"from": previous, "to": current},
             summary=f"renamed {previous} ({node_id}) to {current}",
         )
+        # An agent's rename is an action like any edit (the Agents panel's
+        # line, Q125 item 2); a no-op for the person's own.
+        await _show_agent({"nodeId": node_id}, say=f"Renamed {current}", did=_did("Renamed", node_id))
     return {"id": node_id, "label": current}
 
 
@@ -10909,6 +11107,11 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
             # itself, so it can't put its positions under another agent's name.
             actor=arrange.actor if arrange is not None and not has_agent_marker(current_request_headers()) else None,
         )
+        if arrange is None:
+            # An agent's move (`nebula move`) is an action too (the Agents
+            # panel's line, Q125 item 2); a no-op for the person's drags.
+            await _show_agent({"nodeId": moved[0]}, action="move", say=f"Moved {_node_label(moved[0])}",
+                              did=_did("Moved", moved[0]))
     if arrange is not None:
         return {"status": "arranged", "count": len(normalized), "positions": normalized}
     return {"status": "updated", "count": len(normalized)}
@@ -10949,6 +11152,7 @@ async def clear_graph(force: bool = False) -> dict:
         # Ids start again at n1: no node now is one a restore brought back.
         node_removals.forget_project(_workspace_context()["activeProjectId"])
     agent_presence.forget_graph()
+    await _forget_status_anchors()
     _forget_canvas_undo("the canvas was cleared since")
     await _broadcast_graph_sync(edit=True)
     publish_action("Cleared the canvas")
@@ -11168,7 +11372,7 @@ async def delete_graph_node(node_id: str) -> dict:
     last_point = agent_presence.last_point(node_id)
     await _announce_removed_nodes(entries, note="", pin_reason=lambda gone: f"{gone['name']} was deleted")
     if last_point is not None:
-        await _show_agent(last_point, say=f"Removed {label}")
+        await _show_agent(last_point, say=f"Removed {label}", did={"verb": "Removed", "nodeId": None, "label": label})
     # What the delete removed, for its undo (POST /api/graph/restore `removals`).
     return {"status": "deleted", "id": node_id, "removal": removals[0]}
 
@@ -11543,7 +11747,9 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     publish_action(f"{identity.name} edited the canvas: {summary}")
     focus = next(iter(added), None) or next(iter(changed or list(renamed) or list(moves)), None)
     if focus is not None and focus in cli_graph.nodes:
-        await _show_agent({"nodeId": focus}, say=additions.note if note else summary)
+        verb = ("Added" if focus in added else "Changed" if focus in (changed or ())
+                else "Renamed" if focus in renamed else "Moved")
+        await _show_agent({"nodeId": focus}, say=additions.note if note else summary, did=_did(verb, focus))
     wanted = set(edge_ids)
     undo = _canvas_undo_keep(identity, undo_after)
     _canvas_edit_link.reset(edit_link)
@@ -12355,6 +12561,7 @@ async def delete_graph_edge(body: dict[str, Any]) -> dict:
             await _show_agent(
                 {"nodeId": body["target"]},
                 say=f"Unwired {body.get('source', '')} → {body.get('target', '')}",
+                did=_did("Unwired", body["target"]),
             )
     return {"status": "deleted" if removed else "not_found"}
 
@@ -14376,7 +14583,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         f"Running {target}..." if target else f"Running {len(sub_nodes)} node(s)..."
     )
     if target:
-        await _show_agent({"nodeId": target}, say=f"Running {_node_label(target)}")
+        await _show_agent({"nodeId": target}, say=f"Running {_node_label(target)}", did=_did("Ran", target))
     else:
         # The whole canvas has no one node to point at: the Agent log only.
         await _say_agent_action(f"Running {len(sub_nodes)} node{'' if len(sub_nodes) == 1 else 's'}")
@@ -14420,7 +14627,7 @@ async def _refused_cli_run(run_id: str, target: str | None, errors: list[Validat
                    + (" ".join(said.values()) or person.get("") or "Couldn't run the canvas."))
     first = next(iter(per_node), None)
     if first is not None:
-        await _show_agent({"nodeId": first}, say=said[first])
+        await _show_agent({"nodeId": first}, say=said[first], did=_did("Tried to run", first))
     response = {
         "runId": run_id,
         "targetNodeId": target,

@@ -189,6 +189,11 @@ export const DEFERRED_MODULES: readonly string[] = [
   'components/agent-notes/AgentNoteOutlineLayer.tsx',
   'components/agent-notes/AgentQuestionsForm.tsx',
   'components/agent-notes/AgentQuestionsAnswers.tsx',
+  // The Agents panel (Q125 item 2): its own chunk inside the corner's.
+  'components/agent-notes/AgentRoster.tsx',
+  'components/agent-notes/agentRosterModel.ts',
+  'components/agent-notes/agentRosterStore.ts',
+  'lib/agentRoster.ts',
   'lib/agentNotesView.ts',
   'lib/agentNotesBoard.ts',
   'lib/unreadRing.ts',

@@ -29,6 +29,8 @@ const api = vi.hoisted(() => ({
   dismissAgentNote: vi.fn(),
 }));
 
+// The Agents panel's roster read (Q125 item 2): nobody around in these tests.
+vi.mock('../src/lib/agentRoster', () => ({ fetchAgentRoster: async () => ({ projectId: null, agents: [], rev: 0 }) }));
 vi.mock('@xyflow/react', () => ({
   useStore: (selector: (state: typeof flow.state) => unknown) => selector(flow.state),
   useStoreApi: () => ({ getState: () => flow.state, subscribe: () => () => {} }),

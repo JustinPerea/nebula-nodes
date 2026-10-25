@@ -452,7 +452,29 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("spend", help="Show the spending limits agents work under, and what this session used")
 
-    sub.add_parser("status", help="Show execution state of graph nodes")
+    status_p = sub.add_parser(
+        "status",
+        help='Set your status line ("<text>" [--node nX], or --clear); with nothing, show the nodes\' run state',
+        description=('With a line: say what you are working on, as MCP set_status does. The person sees it under '
+                     'your name in the Agents panel (top of Updates), and other agents in `nebula agents`. It '
+                     'lasts until you change or clear it, or until you make no call to Nebula for 10 minutes. '
+                     '--node puts it on a node. A status is what you are working on and lasts; `nebula point '
+                     '--say` is a passing remark at your cursor, and `nebula note` a report for the person. '
+                     'Clear it when you finish (--clear). With nothing: the run state of the canvas\'s nodes.'))
+    status_p.add_argument("text", nargs="?", default=None,
+                          help="One line about what you're working on (140 characters at most)")
+    status_p.add_argument("--node", default=None, metavar="nX", help="The node it is about (on the open canvas)")
+    status_p.add_argument("--clear", action="store_true", help="Clear your status")
+    status_p.add_argument("--json", action="store_true", help="Print the raw JSON")
+    status_p.add_argument("--as", dest="agent_name",
+                          help="Your agent name (default: $NEBULA_AGENT_NAME; in-app agents are named automatically)")
+
+    agents_p = sub.add_parser(
+        "agents", help="The agents working in the open project: status, last action, what waits for the person",
+        description=("The roster the person's Agents panel shows (MCP list_agents): each agent's status line, its "
+                     "cursor's last action, and how many of its questions and proposals wait for the person "
+                     "(counts only). Needs you first, then Working."))
+    agents_p.add_argument("--json", action="store_true", help="Print it as JSON, as MCP list_agents returns it")
 
     # -- Quick --
     quick_p = sub.add_parser("quick", help="One-shot: create, execute, output")
@@ -675,6 +697,7 @@ def main() -> None:
     )
     from .commands import notes as notes_cmd
     from .commands import questions as questions_cmd
+    from .commands import agents as agents_cmd
     from .commands import style
 
     dispatch = {
@@ -730,7 +753,9 @@ def main() -> None:
         "result": lambda: execute.run_result(client, args.run_id, wait=args.wait),
         "cancel": lambda: execute.run_cancel(client, args.run_id),
         "spend": lambda: spend.run(client),
-        "status": lambda: execute.run_status(client),
+        "status": lambda: (agents_cmd.run_status(client, args) if agents_cmd.wants_status_line(args)
+                           else execute.run_status(client)),
+        "agents": lambda: agents_cmd.run_agents(client, args),
         "quick": lambda: quick.run(client, args.node_id,
                                    parse_kv_list(args.input), parse_kv_list(args.param)),
         "upload": lambda: upload.run(client, args.file, at=args.at),

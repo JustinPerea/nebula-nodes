@@ -267,6 +267,16 @@ class NebulaClient:
         headers = {"X-Nebula-Agent": agent_name} if agent_name else None
         return self._request("DELETE", f"/api/canvas/questions/{quote(set_id, safe='')}", headers=headers)
 
+    # -- the Agents panel (Q125 item 2) --
+    def set_status(self, body: dict[str, Any], agent_name: str | None = None) -> dict[str, Any]:
+        """POST your status line ({text, nodeId?}; empty text clears it)."""
+        headers = {"X-Nebula-Agent": agent_name} if agent_name else None
+        return self._request("POST", "/api/canvas/status", json=body, headers=headers)
+
+    def get_agents(self) -> dict[str, Any]:
+        """The roster: the agents around in the open project (MCP list_agents)."""
+        return self._request("GET", "/api/canvas/agents")
+
     def point_cursor(self, body: dict[str, Any], agent_name: str | None = None) -> dict[str, Any]:
         headers = {"X-Nebula-Agent": agent_name} if agent_name else None
         return self._request("POST", "/api/canvas/cursor", json=body, headers=headers)

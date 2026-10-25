@@ -5,7 +5,9 @@ import { readDraft, useCreateDraftStore } from './createDraftStore';
 import { useArrangeStore } from './arrangeStore';
 import { fetchCLIGraph } from '../lib/api';
 import { canonicalBackendAssetUrls, rewriteBackendAssetUrls } from '../lib/backend';
-import { normalizeRuntimeMediaParams, saveEditsToFile, saveProjectCopyToFile, type SavedEditsFile } from '../lib/graphFileShared';
+import {
+  BrowserStringLimitError, normalizeRuntimeMediaParams, saveEditsToFile, saveProjectCopyToFile, type SavedEditsFile,
+} from '../lib/graphFileShared';
 import { PROJECT_SAVE_LIMIT_BYTES, projectSizeBytes } from '../lib/projectSize';
 import { loadedNotice, pausedNotice, savingAgainNotice } from '../lib/savePausedCopy';
 import { GRAPH_PARAMS_VERSION } from '../lib/savedParamsUpgrades';
@@ -143,7 +145,10 @@ interface ProjectState {
    * without them" loses only what only this tab had; the confirm says so. */
   /** `agentOpening`: an agent's switch left the project (GM, 2026-10-24:
    * "{agent} is opening “{name}”." above the screen's lines). */
-  unsavedEdits: { reason: string; downloadFailed?: true; keptIn?: string;
+  /** `downloadTooBig`: the last download was past the browser's string cap
+   * (GM, 2026-10-25: "Couldn't download your edits." / "It's too big to
+   * download in a browser."), not a write that failed. */
+  unsavedEdits: { reason: string; downloadFailed?: true; downloadTooBig?: true; keptIn?: string;
     agentOpening?: { agent: string; projectName: string } } | null;
   /** The file those edits were downloaded as, for GM's line after it, and
    * whether Load graph can open it (a copy past its limits can't). */
@@ -1263,7 +1268,9 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
       await saveProjectCopyToFile(captureProjectSnapshot(), project.name);
     } catch (error) {
       console.error('[nebula] project copy download', error);
-      showNotice(failureMessage(error, "Couldn't download the copy."));
+      // GM's heading (2026-10-25), the button's own words; past the string
+      // cap the error carries "It's too big to download in a browser."
+      showNotice(failureMessage(error, "Couldn't download a copy."));
     }
   },
   dismissSwitchNotice: () => set({ switchNotice: null }),
@@ -1578,9 +1585,13 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
     set({ busy: true });
     let savedAs: SavedEditsFile | null = null;
     let failed = false;
+    let tooBig = false;
     try {
       savedAs = await saveEditsToFile(recovery.snapshot, recovery.projectName);
     } catch (error) {
+      // Past the browser's string cap (#190's case): nothing was written, and
+      // trying again can't help; GM's line says why (2026-10-25).
+      tooBig = error instanceof BrowserStringLimitError;
       // A file that couldn't be written at all (a full disk, a write the
       // browser refused; the writer only falls back to a plain download when
       // the picker itself fails, before a file was chosen). GM's line 2 says
@@ -1594,9 +1605,10 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
       const held = get().unsavedEdits;
       if (pendingRecovery === recovery && held) {
         // Everything else on the screen stays (the confirm's project, the agent's line).
-        const { downloadFailed: _was, ...kept } = held;
+        const { downloadFailed: _was, downloadTooBig: _big, ...kept } = held;
         void _was;
-        set({ unsavedEdits: failed ? { ...kept, downloadFailed: true } : kept });
+        void _big;
+        set({ unsavedEdits: tooBig ? { ...kept, downloadTooBig: true } : failed ? { ...kept, downloadFailed: true } : kept });
       }
       return;
     }

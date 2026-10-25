@@ -20,6 +20,16 @@ export interface AgentCursor {
   receivedAt: number;
   /** Increments per event so the same target can replay a gesture. */
   seq: number;
+  /** What the last action was, for the Agents panel (Q125 item 2). */
+  did: AgentCursorDid | null;
+  /** The project open when it happened. */
+  projectId: string | null;
+}
+
+export interface AgentCursorDid {
+  verb: string;
+  nodeId: string | null;
+  label: string | null;
 }
 
 interface AgentPresenceState {
@@ -32,6 +42,17 @@ interface AgentPresenceState {
 }
 
 const SAFE_COLOR = /^#[0-9a-fA-F]{6}$/;
+
+function cleanDid(raw: unknown): AgentCursorDid | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const did = raw as Record<string, unknown>;
+  if (typeof did.verb !== 'string' || !did.verb) return null;
+  return {
+    verb: did.verb,
+    nodeId: typeof did.nodeId === 'string' ? did.nodeId : null,
+    label: typeof did.label === 'string' && did.label ? did.label : null,
+  };
+}
 
 function isAnchor(value: unknown): value is AgentCursorAnchor {
   if (!value || typeof value !== 'object') return false;
@@ -63,6 +84,8 @@ export const useAgentPresenceStore = create<AgentPresenceState>((set) => ({
             say: typeof event.say === 'string' ? event.say : '',
             receivedAt: now,
             seq: (previous?.seq ?? 0) + 1,
+            did: cleanDid(event.did),
+            projectId: typeof event.projectId === 'string' ? event.projectId : null,
           },
         },
       };
@@ -78,7 +101,9 @@ export const useAgentPresenceStore = create<AgentPresenceState>((set) => ({
     const kept: Record<string, AgentCursor> = {};
     for (const [id, cursor] of Object.entries(state.agents)) {
       if ('nodeId' in cursor.target) continue;
-      kept[id] = cursor.from && 'nodeId' in cursor.from ? { ...cursor, from: undefined } : cursor;
+      const unpinned = cursor.from && 'nodeId' in cursor.from ? { ...cursor, from: undefined } : cursor;
+      // Its last action keeps the node's name, not the node (ids restart per graph).
+      kept[id] = unpinned.did?.nodeId ? { ...unpinned, did: { ...unpinned.did, nodeId: null } } : unpinned;
     }
     return { agents: kept };
   }),

@@ -638,6 +638,34 @@ still reads them, and a `--wait` rides through the restart (it retries
 until Nebula is back, within the wait). MCP: `ask_person`, `get_answers`,
 `withdraw_questions`.
 
+## Say what you're working on
+
+```bash
+nebula status "Rendering three hero crops" --node n4   # your line in the person's Agents panel
+nebula status --clear                                  # when you finish
+nebula agents                                          # who else is working, on what
+nebula status                                          # with nothing: the nodes' run state, as before
+```
+
+Set a status when you start a piece of work and replace it when the work
+changes. The person sees it under your name in the Agents panel (the top
+of Updates), and other agents in `nebula agents`. It lasts until you change
+or clear it, or until you make no call to Nebula for 10 minutes; clear it
+when you finish. One line, 140 characters at most; `--node` puts it on a
+node on the open canvas (deleting that node, or switching projects, drops
+the node and keeps the line). A status is what you are working on and
+lasts; `nebula point --say "..."` is a passing remark at your cursor; what you
+noticed goes in `nebula note`. You set only your own, it belongs to the
+open project, and a Nebula restart clears it.
+
+`nebula agents` (`--json` for the raw read) lists the agents around in the
+open project: Needs you first (an agent whose questions or proposals wait
+for the person, longest wait first, with counts such as "1 question, 1
+proposal"), then Working (most recent first), each with its status or its
+cursor's last action ("Added “Text Input” · 2 min ago"). Counts only: you
+never see another agent's questions, the person's answers or another
+agent's proposal notes. MCP: `set_status`, `list_agents`.
+
 ## Watch and answer the person
 
 ```bash

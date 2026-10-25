@@ -1,4 +1,4 @@
-import { type CSSProperties, type KeyboardEvent, type Ref } from 'react';
+import { type CSSProperties, type KeyboardEvent, type ReactNode, type Ref } from 'react';
 import type { AgentNote, AgentNoteAction } from '../../lib/agentNotes';
 import { clockTime, noteDone, noteLabel, noteText, offersNotNow, questionSetId } from '../../lib/agentNotesView';
 import { useAgentQuestionsStore } from '../../store/agentQuestionsStore';
@@ -40,6 +40,7 @@ export function AgentNotesList({
   onShow,
   onHover,
   error,
+  top,
 }: {
   listRef: Ref<HTMLDivElement>;
   sections: AgentNotesListSection[];
@@ -55,6 +56,8 @@ export function AgentNotesList({
   onHover: (note: AgentNote | null) => void;
   /** The last thing that failed (a dismiss the server refused), if any. */
   error: string | null;
+  /** What sits above the updates, under the header: the Agents panel (Q125 item 2). */
+  top?: ReactNode;
 }) {
   const today = new Date(now);
   const state = newCount > 0 ? `${newCount} new` : 'all read';
@@ -130,6 +133,7 @@ export function AgentNotesList({
         <span className="agent-notes-panel__count">{`${total} · ${state}`}</span>
         {single && <span className="agent-notes-panel__kept">{single.adapter.keptWith}</span>}
       </div>
+      {top}
       {single ? (
         single.notes.length === 0 ? (
           <div className="agent-notes-panel__empty">

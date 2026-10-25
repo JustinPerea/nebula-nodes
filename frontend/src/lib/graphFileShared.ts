@@ -53,6 +53,42 @@ export class GraphStructureLimitError extends FailureNotice {
   }
 }
 
+/** True when JSON.stringify failed because the text is longer than the engine
+ * lets a string be (#190). Chromium (V8, the desktop app's engine too) caps a
+ * string at 2^29 - 24 = 536,870,888 characters, 24 short of 512 MiB, and
+ * throws RangeError("Invalid string length"); Nebula opens a graph.json up to
+ * GRAPH_BUNDLE_MAX_IMPORT_BYTES (528 MiB), so a graph between the two can't be
+ * written here at all. The other RangeError stringify can throw (a stack
+ * overflow) is not this. Save graph (lib/graphFile.ts) and the two downloads
+ * below read it. */
+export function isStringLengthLimit(error: unknown): boolean {
+  return error instanceof RangeError && !/call stack/i.test(error.message);
+}
+
+/** GM - Design, 2026-10-25: the line under "Couldn't download your edits." and
+ * "Couldn't download a copy." for that case. It matches Save graph's "It's too
+ * big to save in a browser.", so the two read as a pair with only the verb
+ * changed. */
+export const TOO_BIG_TO_DOWNLOAD = "It's too big to download in a browser.";
+
+/** A download whose .nebula text is past the browser's string cap. */
+export class BrowserStringLimitError extends GraphStructureLimitError {
+  constructor() {
+    super(TOO_BIG_TO_DOWNLOAD);
+    this.name = 'BrowserStringLimitError';
+  }
+}
+
+/** The download's text, or BrowserStringLimitError past the string cap. */
+function downloadText(file: NebulaFile): string {
+  try {
+    return JSON.stringify(file);
+  } catch (error) {
+    if (isStringLengthLimit(error)) throw new BrowserStringLimitError();
+    throw error;
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -368,7 +404,7 @@ export interface SavedEditsFile { name: string; reopens: boolean }
  * picker; rejects when the file couldn't be written. */
 export async function saveEditsToFile(snapshot: Pick<ProjectSnapshot, 'nodes' | 'edges' | 'viewport'>,
   projectName: string): Promise<SavedEditsFile | null> {
-  return writeGraphText(JSON.stringify(editsFile(snapshot, projectName)), editsFileName(projectName));
+  return writeGraphText(downloadText(editsFile(snapshot, projectName)), editsFileName(projectName));
 }
 
 /** "Download a copy" in the over-the-limit panel (Q118): the whole open
@@ -377,7 +413,7 @@ export async function saveEditsToFile(snapshot: Pick<ProjectSnapshot, 'nodes' | 
  * no run history or Create draft. */
 export async function saveProjectCopyToFile(snapshot: Pick<ProjectSnapshot, 'nodes' | 'edges' | 'viewport'>,
   projectName: string): Promise<SavedEditsFile | null> {
-  return writeGraphText(JSON.stringify(editsFile(snapshot, projectName)), projectFileName(projectName));
+  return writeGraphText(downloadText(editsFile(snapshot, projectName)), projectFileName(projectName));
 }
 
 /** The project's name made safe for a file name, then ".nebula". */

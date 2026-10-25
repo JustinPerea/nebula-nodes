@@ -75,10 +75,17 @@ class RequestHeadersContext:
 
     Graph endpoints keep their existing signatures (tests call several of
     them directly); presence reads the headers from this request-local value.
+
+    It sees every HTTP request, so it is also where an agent shows it is
+    still there (Q125 item 2): ``on_agent`` gets the identity of every
+    identified request, whatever the route (main passes the status book's
+    ``saw``, which keeps that agent's status line alive). Never fails the
+    request.
     """
 
-    def __init__(self, app):
+    def __init__(self, app, on_agent: Callable[["AgentIdentity"], None] | None = None):
         self.app = app
+        self.on_agent = on_agent
 
     async def __call__(self, scope, receive, send):
         if scope.get("type") != "http":
@@ -88,6 +95,14 @@ class RequestHeadersContext:
             key.decode("latin-1").lower(): value.decode("latin-1")
             for key, value in scope.get("headers", [])
         }
+        if self.on_agent is not None and (headers.get("authorization", "").startswith("Agent ")
+                                          or headers.get("x-nebula-agent")):
+            try:
+                identity = identify(headers)
+                if identity is not None:
+                    self.on_agent(identity)
+            except Exception:  # noqa: BLE001 - a sign is bookkeeping; the request goes on
+                pass
         token = _request_headers.set(headers)
         try:
             await self.app(scope, receive, send)
@@ -209,6 +224,19 @@ def parse_target(raw: Any, graph_nodes: Mapping[str, Any], label: str = "target"
     raise PresenceError(f"{label} must include nodeId or x and y")
 
 
+def _clean_did(raw: Mapping[str, Any]) -> dict[str, Any]:
+    """What an action was, for the Agents panel: a past-tense verb, and the
+    node it names (its id while it is on the canvas, and its name)."""
+    verb = " ".join(str(raw.get("verb") or "").split())[:40]
+    node_id = raw.get("nodeId")
+    label = raw.get("label")
+    return {
+        "verb": verb,
+        "nodeId": node_id if isinstance(node_id, str) and _NODE_ID_RE.fullmatch(node_id) else None,
+        "label": " ".join(label.split())[:80] if isinstance(label, str) and label.strip() else None,
+    }
+
+
 def _clean_say(raw: Any) -> str:
     if raw is None:
         return ""
@@ -236,6 +264,8 @@ class AgentPresence:
         origin: dict[str, Any] | None = None,
         action: str = "move",
         say: Any = None,
+        did: Mapping[str, Any] | None = None,
+        project_id: str | None = None,
     ) -> dict[str, Any]:
         """The broadcast event for one agent action.
 
@@ -243,6 +273,13 @@ class AgentPresence:
         write): the event carries no ``target``, so the browser lists it in
         the Agent log and moves no cursor, and the agent's cursor here keeps
         its last place.
+
+        ``did`` names what the action was in the Agents panel's words (Q125
+        item 2): ``{"verb": "Added", "nodeId", "label"}``, the verb past
+        tense, the node's name when it has one. With none, a cursor that
+        stays where it was keeps the last one (a line said in place).
+        ``project_id`` is the project open when it happened: the roster
+        lists a cursor only in its own project.
         """
         if action not in ACTIONS:
             raise PresenceError(f"action must be one of {', '.join(ACTIONS)}")
@@ -253,12 +290,18 @@ class AgentPresence:
             "action": action,
             "say": _clean_say(say),
             "at": int(now * 1000),
+            "projectId": project_id,
         }
         if target is None:
             return event
         event["target"] = target
         if origin is not None:
             event["from"] = origin
+        previous = self._agents.get(identity.id)
+        if did is None and previous is not None and previous.get("target") == target and previous.get("did"):
+            did = previous["did"]
+        if did is not None:
+            event["did"] = _clean_did(did)
         self._agents[identity.id] = {**event, "_t": now}
         return event
 
@@ -291,6 +334,8 @@ class AgentPresence:
                 "action": value["action"],
                 "say": value["say"],
                 "secondsAgo": round(now - value["_t"], 1),
+                "projectId": value.get("projectId"),
+                **({"did": dict(value["did"])} if value.get("did") else {}),
             }
             for value in sorted(self._agents.values(), key=lambda v: -v["_t"])
         ]
@@ -312,6 +357,9 @@ class AgentPresence:
             origin = value.get("from")
             if isinstance(origin, dict) and origin.get("nodeId") == node_id:
                 value.pop("from")
+            did = value.get("did")
+            if isinstance(did, dict) and did.get("nodeId") == node_id:
+                value["did"] = {**did, "nodeId": None}  # its name stays: "Removed “Hero”"
             if value["target"].get("nodeId") == node_id:
                 if fallback is None:
                     del self._agents[key]
@@ -328,6 +376,9 @@ class AgentPresence:
             origin = value.get("from")
             if isinstance(origin, dict) and "nodeId" in origin:
                 value.pop("from")
+            did = value.get("did")
+            if isinstance(did, dict) and did.get("nodeId"):
+                value["did"] = {**did, "nodeId": None}
             if "nodeId" in value["target"]:
                 del self._agents[key]
 

@@ -50,6 +50,22 @@ export interface AgentPresenceEvent {
   say: string;
   /** Backend wall-clock milliseconds. */
   at: number;
+  /** The project open when it happened (the Agents panel lists it only there). */
+  projectId?: string | null;
+  /** What the action was, for the Agents panel (Q125 item 2): a past-tense
+   * verb and the node it names. Absent on a cursor move with nothing behind it. */
+  did?: { verb: string; nodeId: string | null; label: string | null };
+}
+
+/** An agent's status line changed (backend services/agent_status.py, Q125 item 2). */
+export interface AgentStatusEvent {
+  type: 'agentStatus';
+  agent: { id: string; name: string; color: string; verified: boolean };
+  /** Null once cleared or expired. */
+  status: { text: string; nodeId: string | null; projectId: string | null; at: number; secondsAgo: number } | null;
+  change: 'set' | 'cleared' | 'expired' | 'unanchored';
+  /** Rises with every change; a roster read says the one it saw. */
+  rev: number;
 }
 
 /** A short note the person pinned for agents (backend services/canvas_pins.py). */
@@ -295,6 +311,7 @@ export type ExecutionEvent = (
       executionStatuses?: ExecutionStatusResult[];
     }
   | AgentPresenceEvent
+  | AgentStatusEvent
   | CanvasPinsEvent
   | AgentNotesEvent
   | StoredAssetChangedEvent
