@@ -24,6 +24,8 @@ import {
   GRAPH_MAX_VALUES,
   GraphStructureLimitError,
   assertGraphComplexityWithinLimits,
+  // The string cap's check (#190), shared with the two downloads (graphFileShared).
+  isStringLengthLimit,
   normalizeRuntimeMediaParams,
   projectFileName,
   saveBlobWithPicker,
@@ -39,16 +41,6 @@ const LOAD_GRAPH = "Couldn't load the graph.";
  * a browser." (under SAVE_GRAPH). */
 const TOO_BIG_FOR_THE_BROWSER = "It's too big to save in a browser.";
 
-/** True when JSON.stringify failed because the text is longer than the engine
- * lets a string be. Chromium (V8, the desktop app's engine too) caps a string
- * at 2^29 - 24 = 536,870,888 characters, 24 short of 512 MiB, and throws
- * RangeError("Invalid string length"); Nebula opens a graph.json up to
- * GRAPH_BUNDLE_MAX_IMPORT_BYTES (528 MiB), so a graph between the two can't be
- * written here at all. The other RangeError stringify can throw (a stack
- * overflow) is not this. */
-function isStringLengthLimit(error: unknown): boolean {
-  return error instanceof RangeError && !/call stack/i.test(error.message);
-}
 
 /**
  * .nebula.zip / .nebula file format — graph persistence.

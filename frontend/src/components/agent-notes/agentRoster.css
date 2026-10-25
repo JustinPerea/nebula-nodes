@@ -1,0 +1,187 @@
+/* The Agents panel (Q125 item 2), at the top of the opened Updates list.
+ * Uses the corner's tokens (--an-*, agentNotes.css) and the repo's tuned
+ * springs (springCssVars on .agent-notes-root). */
+
+.agent-roster {
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--an-edge);
+}
+
+.agent-roster__heading {
+  margin: 0;
+  font: inherit;
+}
+
+.agent-roster__toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 0;
+  background: transparent;
+  color: var(--an-ink);
+  font: 500 12px/1 var(--an-ui);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--spring-soft-ms) var(--spring-soft);
+}
+
+.agent-roster__toggle:hover {
+  background: var(--an-hover);
+}
+
+/* The neutral focus ring (#161's sweep), inside the list's edge. */
+.agent-roster__toggle:focus-visible,
+.agent-roster__row:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid var(--an-ink));
+  outline-offset: -2px;
+}
+
+.agent-roster__title {
+  color: var(--an-ink-bold);
+  font: 600 12px/1 var(--an-ui);
+}
+
+.agent-roster__group-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--an-muted);
+  white-space: nowrap;
+}
+
+.agent-roster__badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border: 1px solid var(--an-edge-strong);
+  border-radius: 999px;
+  color: var(--an-ink);
+  font: 600 11px/1 var(--an-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Needs you: the filled light pill (.agent-notes-needs-badge, agentNotes.css),
+ * the inverse of this outlined one, shared with the Updates chip. */
+
+/* Closed it points down, open it points up (GM's review of PR #193). It
+ * turns by a vertical mirror, never a rotation: the old rotate(45deg) to
+ * rotate(-135deg) passed through -45deg, pointing right, halfway (caught
+ * mid-spring in the review's screenshot). The mirror only flattens on its
+ * way, so it never points sideways. Hover may change its colour, never this. */
+.agent-roster__chevron {
+  width: 6px;
+  height: 6px;
+  margin-left: auto;
+  border-right: 1.5px solid var(--an-muted);
+  border-bottom: 1.5px solid var(--an-muted);
+  transform: translateY(-2px) scaleY(1) rotate(45deg);
+  transition: transform var(--spring-pop-ms) var(--spring-pop);
+}
+
+.agent-roster__toggle[aria-expanded='true'] .agent-roster__chevron {
+  transform: translateY(1px) scaleY(-1) rotate(45deg);
+}
+
+.agent-roster__body {
+  padding: 0 0 8px;
+  animation: agent-roster-open var(--spring-pop-ms) var(--spring-pop) both;
+}
+
+@keyframes agent-roster-open {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.agent-roster__empty {
+  margin: 0;
+  padding: 4px 16px 6px;
+  color: var(--an-muted);
+  font: 400 12px/1.4 var(--an-ui);
+}
+
+.agent-roster__group-title {
+  margin: 0;
+  padding: 8px 16px 4px;
+  color: var(--an-faint);
+  font: 600 11px/1 var(--an-ui);
+}
+
+.agent-roster__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-roster__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 16px;
+  box-sizing: border-box;
+  border: 0;
+  background: transparent;
+  color: var(--an-ink);
+  font: inherit;
+  text-align: left;
+}
+
+button.agent-roster__row {
+  cursor: pointer;
+  transition: background-color var(--spring-soft-ms) var(--spring-soft);
+}
+
+button.agent-roster__row:hover {
+  background: var(--an-hover);
+}
+
+/* The same dot as the question form's author dot (18 px), level with the name. */
+.agent-roster__row .agent-notes-dot {
+  width: 18px;
+  height: 18px;
+  margin-top: -1px;
+  font-size: 9px;
+}
+
+.agent-roster__text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.agent-roster__name {
+  color: var(--an-ink-bold);
+  font: 600 13px/1.3 var(--an-ui);
+}
+
+.agent-roster__count {
+  color: var(--an-ink);
+  font: 400 12px/1.3 var(--an-ui);
+}
+
+/* One line, cut with an ellipsis; the whole line is its tooltip. */
+.agent-roster__line {
+  overflow: hidden;
+  color: var(--an-muted);
+  font: 400 12px/1.3 var(--an-ui);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-roster__body {
+    animation: none;
+  }
+
+  .agent-roster__chevron {
+    transition: none;
+  }
+}

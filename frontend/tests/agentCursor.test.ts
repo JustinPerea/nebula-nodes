@@ -154,3 +154,23 @@ describe('canvas view report', () => {
     ]);
   });
 });
+
+describe("a cursor's last action keeps its own time (GM's review of PR #193)", () => {
+  beforeEach(() => useAgentPresenceStore.getState().clear());
+
+  it('places the action secondsAgo before the event, in this tab\'s clock', () => {
+    const now = 1_800_000_000_000;
+    useAgentPresenceStore.getState().apply(presenceEvent({
+      action: 'click', did: { verb: 'Renamed', nodeId: 'n1', label: 'Hero', secondsAgo: 60 },
+    }), now);
+    const cursor = useAgentPresenceStore.getState().agents['ext:claude-code'];
+    expect(cursor.receivedAt).toBe(now);
+    expect(cursor.did).toEqual({ verb: 'Renamed', nodeId: 'n1', label: 'Hero', at: now - 60_000 });
+  });
+
+  it('an action with no secondsAgo happened when the event came', () => {
+    const now = 1_800_000_000_000;
+    useAgentPresenceStore.getState().apply(presenceEvent({ did: { verb: 'Added', nodeId: 'n1', label: 'Hero' } }), now);
+    expect(useAgentPresenceStore.getState().agents['ext:claude-code'].did?.at).toBe(now);
+  });
+});

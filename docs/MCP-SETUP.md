@@ -475,6 +475,15 @@ And these canvas tools:
   for the person, through a Nebula restart too. Only the agent that asked
   reads it.
 - `withdraw_questions`: takes back one of your open question sets.
+- `set_status`: says what you are working on, one line (with `node_id` on a
+  node) that the person sees under your name in the Agents panel at the top
+  of Updates; empty text clears it. It lasts until you replace or clear it,
+  or until you make no call to Nebula for 10 minutes. A status is what you
+  are working on; `point_at`'s `say` is a passing remark, and `post_note` a
+  report. See [The Agents panel](#the-agents-panel).
+- `list_agents`: the agents around in the open project, as the person's
+  panel lists them: status, the cursor's last action, and how many
+  questions and proposals of each wait for the person (counts only).
 
 There is no accept tool. Only the person accepts, in Nebula.
 There is no answer or dismiss tool either: only the person answers questions.
@@ -1258,6 +1267,60 @@ hello); `questionsClosed` goes only to them too, since it carries the
 answers back. There is no answer tool or command for agents. The remaining
 risk is the proposals' one (a program with its own unsandboxed shell as the
 same user).
+
+### The Agents panel
+
+Q125 item 2 (Justin, 2026-10-24: "Yes, all four, in that order"). The top of
+the Updates corner lists the agents working in the open project in two
+groups: **Needs you** (an agent with open questions or proposals there,
+longest wait first) and **Working** (everyone else around, most recent
+first). Clicking a Working row shows its node on the canvas; clicking a
+Needs-you row opens its oldest question set or proposal.
+
+- **Set your status:** MCP `set_status(text, node_id?)`, CLI
+  `nebula status "<text>" [--node nX]`, HTTP `POST /api/canvas/status` with
+  `{text, nodeId?}`. One line, cleaned like a cursor's `say` (whitespace
+  collapsed, 140 characters at most); `nodeId` must be a node on the open
+  canvas. Empty text clears it (`set_status("")`, `nebula status --clear`).
+  Only an identified agent sets one, and only its own: the browser gets 403,
+  an unnamed caller 400, and the body takes no agent name. A bare
+  `nebula status` still prints the nodes' run state.
+- **How long it lasts:** until you replace or clear it, or until 10 minutes
+  pass with no sign of you. Any request that names you counts (a status,
+  a cursor move, an edit, a run, a question, a proposal, a read), checked
+  once for every request (`RequestHeadersContext` in
+  `services/agent_presence.py`). Statuses live in memory, like cursors: a
+  restart clears them (open questions are kept with the project). Each
+  belongs to the project open when it was set, and no other project's
+  roster shows it. A node delete drops the node from a status on it, and so
+  does any graph replace (a clear, a load, a project switch): the line
+  stays.
+- **Live:** every change is an `agentStatus` event on the socket
+  (`change`: `set`, `cleared`, `expired` or `unanchored`, with the agent,
+  the status or null, and a rising `rev`). Cursor events (`agentPresence`)
+  carry `projectId` and, for actions the panel names, `did`: `{verb,
+  nodeId, label, secondsAgo}` ("Added", "Connected", "Disconnected",
+  "Changed", "Renamed", "Moved", "Removed", "Ran", ...; `secondsAgo` is how
+  long ago that action was). Of a bare `point_at`, only pointing at a node
+  ("Pointed at"), looking at a node ("Looked at") and looking at a spot
+  ("Looked around") name an action; a click, a drag or a move to a spot
+  keeps your last action. "Moved" is only a real node move. A single
+  `nebula rename` or `nebula move` (the label and layout routes) now moves
+  your cursor to that node too, like any other edit.
+- **The roster:** MCP `list_agents()`, CLI `nebula agents [--json]`, HTTP
+  `GET /api/canvas/agents`: `{projectId, agents, rev}`. One entry per agent
+  around in the open project (a live cursor there, a live status there, or
+  an open question set or proposal there, canvas or asset): `agent` (id,
+  name, color, verified), `group` (`needsYou` or `working`), `status`
+  (`{text, nodeId, secondsAgo}` or null), `lastAction` (`{verb, nodeId,
+  label, secondsAgo}` from the cursor, `secondsAgo` the action's own, or null), `cursor` (`{nodeId, action,
+  secondsAgo}` or null), `needsYou` (`{questions, proposals}`: the
+  questions in its open sets, not the sets, and its open proposals; an
+  asset proposal made with no project open, so with no Update, counts in
+  whichever project is open), `waitingSeconds` (the oldest open item's
+  age) and `activeSecondsAgo`.
+  Counts only: never the text of another agent's questions, the person's
+  answers, a proposal's note, or a cursor's `say`.
 
 ### Proposals outside the canvas
 

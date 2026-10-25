@@ -20,6 +20,7 @@ import { hydrateBoard, selectBoardList, setBoardInView } from '../../lib/agentNo
 import { wsClient } from '../../lib/wsClient';
 import { useBoardCanvasStore } from '../../store/boardCanvasStore';
 import { useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasProposalsStore';
+import { useAssetProposalsStore } from '../../store/assetProposalsStore';
 import { reviewAssetProposal } from '../../lib/assetProposalReview';
 import { reviewCanvasProposal } from '../../lib/canvasProposalReview';
 import { ghostBoxes } from '../../lib/canvasProposals';
@@ -30,6 +31,8 @@ import { AgentNoteCard, AgentNotesSummaryCard } from './AgentNoteCard';
 import { AgentNotesList, type AgentNotesListSection } from './AgentNotesList';
 import { AuthorDot, type AgentNotesAdapter } from './AgentNoteParts';
 import { UPDATES_SLOT_EVENT } from './UpdatesSlot';
+import type { RosterNext } from './agentRosterModel';
+import { answerableQuestions, needsYouCount, openViews } from './agentNeedsYou';
 import { LeaveBusyContext } from './leaveBusy';
 import { askBeforeLeavingCommons } from '../../lib/commonsUnsaved';
 import { unreadRingColor } from '../../lib/unreadRing';
@@ -41,6 +44,34 @@ import { useAgentQuestionsStore } from '../../store/agentQuestionsStore';
 /** The answer form (Q125 item 1): its own chunk, loaded once a question is open. */
 const loadQuestionsForm = () => import('./AgentQuestionsForm');
 const AgentQuestionsForm = lazy(() => loadQuestionsForm().then((module) => ({ default: module.AgentQuestionsForm })));
+/** The Agents panel (Q125 item 2): its own chunk, loaded when the corner mounts. */
+const loadAgentRoster = () => import('./AgentRoster');
+const AgentRoster = lazy(() => loadAgentRoster().then((module) => ({ default: module.AgentRoster })));
+
+/**
+ * How many agents need the person in the open project: the Agents panel's
+ * Needs-you group, by the same rule (agentNeedsYou), without loading the
+ * panel's chunk. 0 when the corner shows no panel.
+ */
+function useNeedsYouCount(projectId: string | null, enabled: boolean): number {
+  const sets = useAgentQuestionsStore((s) => s.sets);
+  const canvasProposals = useCanvasProposalsStore((s) => s.proposals);
+  const assetProposals = useAssetProposalsStore((s) => s.proposals);
+  return useMemo(() => (enabled ? needsYouCount({
+    projectId,
+    questions: answerableQuestions(sets),
+    canvasProposals: openViews(canvasProposals),
+    assetProposals: openViews(assetProposals),
+  }) : 0), [enabled, projectId, sets, canvasProposals, assetProposals]);
+}
+
+/** The chip's name (GM's review of PR #193): the unread count, then how many agents need the person. */
+function chipLabel(unread: number, needsYou: number): string {
+  if (needsYou > 0) {
+    return `Updates, ${unread} unread, ${needsYou} ${needsYou === 1 ? 'agent needs you' : 'agents need you'}`;
+  }
+  return unread > 0 ? `Updates, ${unread} unread` : 'Updates';
+}
 
 /** A card stays about 4 s (GM's v5.2 holds 2.6 to 3.8 s), longer while hovered or focused. */
 const CARD_HOLD_MS = 4000;
@@ -363,7 +394,12 @@ function mergeNewestFirst(lists: AgentNote[][]): AgentNote[] {
  * shows the open board's Updates above the project's (Q113 c): one chip,
  * one count, and opening the list reads both.
  */
-export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSection[] }) {
+export function AgentNotesCorner({ sections, agents = null }: {
+  sections: AgentNotesCornerSection[];
+  /** The Agents panel at the top of the list (Q125 item 2): the open
+   *  project's agents, and the adapter its rows act through. */
+  agents?: { projectId: string | null; adapter: AgentNotesAdapter } | null;
+}) {
   const markRead = useAgentNotesStore((s) => s.markRead);
   const markReadIds = useAgentNotesStore((s) => s.markReadIds);
   const dismiss = useAgentNotesStore((s) => s.dismiss);
@@ -680,14 +716,23 @@ export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSecti
     questions.openForm(setId);
   }
 
+  /** The Agents panel's row that opened the form, for focus to go back to it. */
+  const formReturnRef = useRef<HTMLElement | null>(null);
+
   /** Close the form (Escape, Send, Dismiss): focus goes back to the Update's Answer, or the list. */
   function closeForm() {
     useAgentQuestionsStore.getState().closeForm();
     const noteId = formNoteRef.current;
+    const back = formReturnRef.current;
     formNoteRef.current = null;
+    formReturnRef.current = null;
     window.requestAnimationFrame(() => {
       const list = listRef.current;
       if (!list) return;
+      if (back?.isConnected && list.contains(back)) {
+        back.focus({ preventScroll: true });
+        return;
+      }
       const row = noteId ? list.querySelector<HTMLElement>(`[data-note-id="${CSS.escape(noteId)}"]`) : null;
       const target = row?.querySelector<HTMLElement>('[data-op="question.answer"]') ?? row ?? list;
       target.focus({ preventScroll: true });
@@ -697,8 +742,48 @@ export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSecti
   // The set closed elsewhere (the agent withdrew it, another tab answered):
   // the form went with it, and focus goes back as after Escape.
   useEffect(() => {
-    if (!formId && formNoteRef.current) closeForm();
+    if (!formId && (formNoteRef.current || formReturnRef.current)) closeForm();
   });
+
+  // The Agents panel's chunk, ready by the time the list opens.
+  const hasAgents = agents !== null;
+  useEffect(() => {
+    if (hasAgents) void loadAgentRoster();
+  }, [hasAgents]);
+
+  /** A Working row: its node in view and outlined, the way Show does it. */
+  function flyTo(nodeId: string, color: string, anchor: HTMLElement) {
+    const showNodes = agents?.adapter.showNodes;
+    if (!showNodes) return;
+    if (!onCanvas() && askingFirst(anchor, () => flyTo(nodeId, color, anchor))) return;
+    if (!onCanvas()) useAgentNotesStore.getState().clearError();
+    const going = showNodes([nodeId], color);
+    if (going) void going.then(() => { if (openRef.current) closeList(false); }, fail);
+  }
+
+  /** A Needs-you row: its oldest question set (the form over the list) or proposal (where it is decided). */
+  function openNext(next: RosterNext, anchor: HTMLElement) {
+    useAgentNotesStore.getState().clearError();
+    if (next.kind === 'questions') {
+      const questions = useAgentQuestionsStore.getState();
+      const entry = questions.sets[next.setId];
+      if (!entry?.answerKey || entry.view.status !== 'open') {
+        reportPersonRequired();
+        fail(writtenLine('These questions can only be answered from the Nebula canvas.'));
+        return;
+      }
+      formNoteRef.current = entry.view.update?.id ?? null;
+      formReturnRef.current = anchor;
+      questions.openForm(next.setId);
+      return;
+    }
+    const review = agents?.adapter.reviewProposal;
+    if (!review) return;
+    if (next.target !== 'commons' && askingFirst(anchor, () => openNext(next, anchor))) return;
+    void review({ proposalId: next.proposalId, target: next.target, targetId: next.targetId })
+      .then(() => { if (openRef.current) closeList(false); })
+      .catch(fail);
+  }
 
   // Load the form's chunk once a question waits, so Answer opens it at once.
   useEffect(() => {
@@ -754,6 +839,8 @@ export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSecti
   // only while a card was up, so a lone unread was left to a white figure).
   const ringed = count > 0;
   const rootStyle = springCssVars() as CSSProperties;
+  // GM: "A waiting question blocks an agent, so 'Updates 0' mustn't hide it."
+  const needsYou = useNeedsYouCount(agents?.projectId ?? null, agents !== null);
 
   return (
     <LeaveBusyContext.Provider value={leaveBusy}>
@@ -762,7 +849,7 @@ export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSecti
         ref={chipRef}
         type="button"
         className={`agent-notes-chip${ringed ? ' agent-notes-chip--ringed' : ''}`}
-        aria-label={count > 0 ? `Updates, ${count} unread` : 'Updates'}
+        aria-label={chipLabel(count, needsYou)}
         aria-expanded={open}
         aria-haspopup="dialog"
         style={{ '--an-newest': newest, '--an-ring': unreadRingColor(newest) } as CSSProperties}
@@ -787,6 +874,7 @@ export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSecti
         >
           {count}
         </span>
+        {needsYou > 0 && <span className="agent-notes-needs-badge" aria-hidden="true">{needsYou}</span>}
       </button>
 
       {card && !open && cardNote && cardSection && (
@@ -830,6 +918,11 @@ export function AgentNotesCorner({ sections }: { sections: AgentNotesCornerSecti
           onAction={runAction}
           onShow={show}
           onHover={hover}
+          top={agents ? (
+            <Suspense fallback={null}>
+              <AgentRoster projectId={agents.projectId} onFlyTo={flyTo} onOpen={openNext} />
+            </Suspense>
+          ) : null}
         />
       )}
       {open && formId && (
@@ -871,9 +964,9 @@ function useAppAdapter(keptWith: string): AgentNotesAdapter {
   }, []);
 
   return useMemo<AgentNotesAdapter>(() => {
-    function outline(note: AgentNote) {
+    function outline(refs: string[], color: string) {
       const { setOutline } = useAgentNotesStore.getState();
-      setOutline('show', { refs: note.refs, color: note.author.color, delayMs: 0, staggerMs: 0 });
+      setOutline('show', { refs, color, delayMs: 0, staggerMs: 0 });
       if (showTimer.current !== null) window.clearTimeout(showTimer.current);
       showTimer.current = window.setTimeout(() => {
         showTimer.current = null;
@@ -881,11 +974,11 @@ function useAppAdapter(keptWith: string): AgentNotesAdapter {
       }, SHOW_OUTLINE_MS);
     }
 
-    function frame(note: AgentNote) {
+    function frame(refs: string[]) {
       // Show writes nothing: it frames and outlines, and leaves the selection
       // (which agents read, and the journal records) as it is.
       const state = store.getState();
-      reveal(note.refs.map((id) => nodeRect(state.nodeLookup, id)).filter((r): r is FlowBoxRect => r !== null));
+      reveal(refs.map((id) => nodeRect(state.nodeLookup, id)).filter((r): r is FlowBoxRect => r !== null));
     }
 
     /** A canvas proposal's Review (Q112 a): its ghosts and the nodes it touches, in view. */
@@ -917,32 +1010,41 @@ function useAppAdapter(keptWith: string): AgentNotesAdapter {
       stopReveal.current = springViewport(viewport, target, (next) => { void setViewport(next); });
     }
 
-    /** The canvas is on screen with what the note names measured. */
-    function canvasReady(note: AgentNote): boolean {
+    /** The canvas is on screen with what these refs name measured. */
+    function canvasReady(refs: string[]): boolean {
       if (!onCanvas() || !document.querySelector('.react-flow__renderer')) return false;
       const state = store.getState();
-      return note.refs.some((id) => nodeRect(state.nodeLookup, id) !== null);
+      return refs.some((id) => nodeRect(state.nodeLookup, id) !== null);
+    }
+
+    function showRefs(refs: string[], color: string): void | Promise<void> {
+      const request = ++showRequest.current;
+      if (onCanvas()) {
+        outline(refs, color);
+        frame(refs);
+        return;
+      }
+      // Resolves once on the canvas (the corner's list steps aside then);
+      // the framing follows when what the refs name has measured.
+      return goToCanvas().then(() => {
+        void whenReady(() => canvasReady(refs)).then((ready) => {
+          if (request !== showRequest.current || !onCanvas()) return;
+          outline(refs, color);
+          if (ready) frame(refs);
+        });
+      });
     }
 
     return {
       keptWith,
       showLabel: () => 'Show on canvas',
-      show: (note) => {
-        const request = ++showRequest.current;
-        if (onCanvas()) {
-          outline(note);
-          frame(note);
-          return;
-        }
-        // Resolves once on the canvas (the corner's list steps aside then);
-        // the framing follows when what the note names has measured.
-        return goToCanvas().then(() => {
-          void whenReady(() => canvasReady(note)).then((ready) => {
-            if (request !== showRequest.current || !onCanvas()) return;
-            outline(note);
-            if (ready) frame(note);
-          });
-        });
+      show: (note) => showRefs(note.refs, note.author.color),
+      showNodes: showRefs,
+      // The Agents panel's Needs-you row: the same Review an Update's button runs.
+      reviewProposal: async (proposal) => {
+        const op = { kind: 'proposal.review', ...proposal };
+        if (proposal.target === 'canvas') return reviewCanvasProposal(op, frameProposal);
+        return reviewAssetProposal(op);
       },
       runAction: async (_note, action) => {
         // A canvas proposal's Update (Q112 a): the canvas, with it in the bar.
@@ -1088,6 +1190,9 @@ export function AppAgentNotes() {
     return result;
   }, [boardShown, boardId, boardList, boardAdapter, projectShown, projectId, list, adapter]);
 
+  // The Agents panel (Q125 item 2): the open project's agents, wherever the corner shows it.
+  const agents = useMemo(() => (projectShown ? { projectId, adapter } : null), [projectShown, projectId, adapter]);
+
   if (!shown) return null;
-  return <AgentNotesCorner key={projectId ?? ''} sections={sections} />;
+  return <AgentNotesCorner key={projectId ?? ''} sections={sections} agents={agents} />;
 }

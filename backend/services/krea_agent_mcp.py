@@ -44,6 +44,8 @@ NEBULA_MCP_TOOLS = (
     "propose_change", "get_proposal", "withdraw_proposal",
     # Questions for the person (Q125 item 1); only the person answers, in Nebula.
     "ask_person", "get_answers", "withdraw_questions",
+    # The Agents panel (Q125 item 2): your status line, and who else is working.
+    "set_status", "list_agents",
     "find_nodes", "describe_node", "edit_canvas", "remove_from_canvas", "undo_canvas_edit", "upload_file",
     "run_nodes", "get_run", "cancel_run", "view_output", "get_spend_limits",
     "list_projects", "open_project", "new_project",

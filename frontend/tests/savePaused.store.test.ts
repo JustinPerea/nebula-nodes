@@ -46,7 +46,7 @@ import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useCreateDraftStore } from '../src/store/createDraftStore';
 import { setProjectContext } from '../src/lib/projectContext';
-import { saveEditsToFile } from '../src/lib/graphFileShared';
+import { BrowserStringLimitError, saveEditsToFile } from '../src/lib/graphFileShared';
 import * as projects from '../src/lib/projects';
 import * as execution from '../src/lib/api';
 import { PROJECT_SAVE_LIMIT_BYTES, displaySize, projectSizeBytes } from '../src/lib/projectSize';
@@ -348,6 +348,18 @@ describe('nothing is lost without asking', () => {
     expect(vi.mocked(saveEditsToFile).mock.calls[1][0].nodes[0].data.params).toEqual({ value: BIG });
     expect(projects.openProject).toHaveBeenCalledTimes(1);
     expect(state().activeProject?.id).toBe('beta');
+  });
+
+  it("a download past the browser's string cap says it's too big to download (GM batch, 2026-10-25)", async () => {
+    editCanvas(BIG);
+    await useProjectStore.getState().flush();
+    await useProjectStore.getState().open('beta');
+    vi.mocked(saveEditsToFile).mockRejectedValueOnce(new BrowserStringLimitError());
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    await state().downloadUnsavedEdits!();
+    // Not the disk line: GM's "Couldn't download your edits. It's too big to download in a browser."
+    expect(state().unsavedEdits).toEqual({ reason: TOO_LARGE, downloadTooBig: true, keptIn: 'Glass campaign' });
+    expect(projects.openProject).not.toHaveBeenCalled();
   });
 
   it('switching while paused with nothing unsaved just switches', async () => {

@@ -1201,3 +1201,61 @@ def format_questions(view: dict[str, Any]) -> str:
                 text = str(answer["text"]).replace("\n", "\n       ")
                 lines.append(f"     → \"{text}\"")
     return "\n".join(lines)
+
+
+def _seconds_ago(seconds: Any) -> str:
+    if not isinstance(seconds, (int, float)):
+        return ""
+    if seconds < 60:
+        return "just now"
+    minutes = int(seconds // 60)
+    if minutes < 60:
+        return f"{minutes} min ago"
+    return f"{minutes // 60} h ago"
+
+
+def needs_you_line(counts: dict[str, Any]) -> str:
+    """'1 question', '2 proposals', '1 question, 1 proposal' (GM's count line)."""
+    parts = []
+    for key, one, many in (("questions", "question", "questions"), ("proposals", "proposal", "proposals")):
+        count = int(counts.get(key) or 0)
+        if count:
+            parts.append(f"{count} {one if count == 1 else many}")
+    return ", ".join(parts)
+
+
+def format_agents(roster: dict[str, Any]) -> str:
+    """`nebula agents`: the roster as the Agents panel groups it (MCP list_agents)."""
+    agents = roster.get("agents") or []
+    if not agents:
+        return "No agents are around in the open project."
+    lines: list[str] = []
+    for group, heading in (("needsYou", "Needs you"), ("working", "Working")):
+        rows = [entry for entry in agents if entry.get("group") == group]
+        if not rows:
+            continue
+        lines.append(heading)
+        for entry in rows:
+            agent = entry.get("agent") or {}
+            name = str(agent.get("name") or "Agent") + ("" if agent.get("verified") else " (named itself)")
+            status = entry.get("status")
+            action = entry.get("lastAction")
+            if status:
+                detail = str(status.get("text") or "") + (f" ({status['nodeId']})" if status.get("nodeId") else "")
+            elif action:
+                label = f" “{action['label']}”" if action.get("label") else ""
+                node = f" ({action['nodeId']})" if action.get("nodeId") else ""
+                detail = f"{action.get('verb')}{label}{node} · {_seconds_ago(action.get('secondsAgo'))}"
+            else:
+                detail = ""
+            parts = [name]
+            if group == "needsYou":
+                parts.append(needs_you_line(entry.get("needsYou") or {}))
+                if entry.get("waitingSeconds") is not None:
+                    parts.append(f"waiting since {_seconds_ago(entry['waitingSeconds'])}".replace("since just now", "just now"))
+            elif detail:
+                parts.append(detail)
+            lines.append("  " + " · ".join(part for part in parts if part))
+            if group == "needsYou" and detail:
+                lines.append(f"    {detail}")
+    return "\n".join(lines)

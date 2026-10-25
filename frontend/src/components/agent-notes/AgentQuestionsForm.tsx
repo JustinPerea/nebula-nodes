@@ -125,7 +125,8 @@ export function AgentQuestionsForm({
       onKeyDown={onKeyDown}
     >
       <div className="agent-questions-form__head">
-        <AuthorDot author={{ kind: 'agent', name: view.agent.name, color: view.agent.color }} />
+        <AuthorDot author={{ kind: 'agent', name: view.agent.name, color: view.agent.color }}
+          verified={Boolean(view.agent.verified)} />
         <div className="agent-questions-form__titles">
           <h2 id={headingId} className="agent-questions-form__heading">{heading}</h2>
           {many && <p className="agent-questions-form__skip">You can skip any question.</p>}

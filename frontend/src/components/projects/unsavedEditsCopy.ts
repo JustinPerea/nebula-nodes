@@ -35,3 +35,9 @@ export const EDITS_NOT_WRITTEN = "The download didn't save, so your edits are st
 export function agentOpeningLine(agent: string, projectName: string): string {
   return `${agent} is opening “${projectName}”.`;
 }
+
+/** GM - Design (2026-10-25), verbatim: the held edits' screen after a
+ * download past the browser's string cap. The heading is the download's
+ * ("Couldn't download your edits.") and the line is graphFileShared's
+ * TOO_BIG_TO_DOWNLOAD; both choices stay. */
+export const EDITS_DOWNLOAD_HEADING = "Couldn't download your edits.";

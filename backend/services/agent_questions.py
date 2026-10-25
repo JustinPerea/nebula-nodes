@@ -82,6 +82,11 @@ CLOSED_STATUSES = frozenset({"answered", "dismissed", "withdrawn"})
 
 # Where a project's sets are kept on its record (next to pins and agentNotes).
 RECORD_KEY = "agentQuestions"
+# The Updates of sets that closed and were pruned before their Update heard
+# how (a note or project store error at the time): note ids only, kept while
+# that Update is on the record and unresolved, so it can say "Closed." and
+# not the restart line (GM - Design, PR #193 review, item 6).
+CLOSED_UPDATES_KEY = "agentQuestionsClosed"
 _SET_ID = re.compile(r"^qs_[0-9a-f]{8}$")
 
 # GM - Design's agent-facing line at the cap, verbatim.
@@ -445,6 +450,13 @@ def _note_ids(record: Mapping[str, Any]) -> set[str]:
     return {str(n.get("id")) for n in notes if isinstance(n, dict)} if isinstance(notes, list) else set()
 
 
+def _unresolved_note_ids(record: Mapping[str, Any]) -> set[str]:
+    notes = record.get("agentNotes")
+    if not isinstance(notes, list):
+        return set()
+    return {str(n.get("id")) for n in notes if isinstance(n, dict) and not n.get("resolvedAt")}
+
+
 def _has_update(question_set: QuestionSet, note_ids: set[str]) -> bool:
     """Whether the set may be kept: an open one only while its Update (where
     the person answers it) is still on the project's list. A closed one is
@@ -473,6 +485,8 @@ class QuestionBook:
         self._items: OrderedDict[str, QuestionSet] = OrderedDict()
         # Projects whose stored sets differ from these (written on the next save).
         self._dirty: set[str] = set()
+        # Per project: Updates whose set closed and was pruned (CLOSED_UPDATES_KEY).
+        self._closed_updates: dict[str, set[str]] = {}
         self._loaded_from: Any = None
         self._lock = threading.RLock()
 
@@ -504,8 +518,19 @@ class QuestionBook:
         found: list[QuestionSet] = []
         self._items = OrderedDict()
         self._dirty = set()
+        self._closed_updates = {}
         for group in ("projects", "trash"):
             for project_id, record in (catalog.get(group) or {}).items():
+                closed = record.get(CLOSED_UPDATES_KEY) if isinstance(record, dict) else None
+                if isinstance(closed, list):
+                    ids = {note_id for note_id in closed if isinstance(note_id, str)}
+                    # Kept only while that Update is unresolved: one resolved
+                    # since (it said "Closed.") leaves the record now.
+                    unresolved = ids & _unresolved_note_ids(record)
+                    if unresolved != set(closed):
+                        self._dirty.add(project_id)
+                    if unresolved:
+                        self._closed_updates[project_id] = unresolved
                 stored = record.get(RECORD_KEY) if isinstance(record, dict) else None
                 if stored is None:
                     continue
@@ -550,8 +575,21 @@ class QuestionBook:
             if record is None:
                 for question_set in [s for s in self._items.values() if s.project_id == project_id]:
                     self._items.pop(question_set.id, None)
+                self._closed_updates.pop(project_id, None)
                 continue
             notes = _note_ids(record)
+            # A pruned set's Update matters only while it is there and unresolved.
+            closed = self._closed_updates.get(project_id, set()) & _unresolved_note_ids(record)
+            if closed:
+                self._closed_updates[project_id] = closed
+                if record.get(CLOSED_UPDATES_KEY) != sorted(closed):
+                    record[CLOSED_UPDATES_KEY] = sorted(closed)
+                    changed = True
+            else:
+                self._closed_updates.pop(project_id, None)
+                if CLOSED_UPDATES_KEY in record:
+                    del record[CLOSED_UPDATES_KEY]
+                    changed = True
             for question_set in [s for s in self._items.values() if s.project_id == project_id
                                  and s.update and not _has_update(s, notes)]:
                 # Its Update was pruned, or never committed (a failed post a
@@ -586,6 +624,8 @@ class QuestionBook:
                 if question_set.project_id and question_set.project_id not in project_ids:
                     self._items.pop(question_set.id, None)
                     self._dirty.discard(question_set.project_id)
+            for project_id in [p for p in self._closed_updates if p not in project_ids]:
+                del self._closed_updates[project_id]
 
     # -- the sets ---------------------------------------------------------------------
     def create(self, *, agent: AgentIdentity, project_id: str | None, spec: QuestionSpec) -> QuestionSet:
@@ -693,16 +733,40 @@ class QuestionBook:
 
     def _prune(self) -> None:
         """Closed sets past CLOSED_KEEP_SECONDS, then the oldest past
-        MAX_CLOSED; their projects are rewritten on the next save."""
+        MAX_CLOSED; their projects are rewritten on the next save. Each one's
+        Update is remembered as closed (closed_before) until it is resolved."""
         now = self._clock()
         for question_set in [s for s in self._items.values() if not s.is_open]:
             if question_set.closed_at is not None and now - question_set.closed_at > CLOSED_KEEP_SECONDS:
-                self._items.pop(question_set.id, None)
-                self._dirty.add(question_set.project_id or "")
+                self._forget_closed(question_set)
         closed = [s for s in self._items.values() if not s.is_open]
         for question_set in closed[: max(0, len(closed) - MAX_CLOSED)]:
-            self._items.pop(question_set.id, None)
-            self._dirty.add(question_set.project_id or "")
+            self._forget_closed(question_set)
+
+    def _forget_closed(self, question_set: QuestionSet) -> None:
+        self._items.pop(question_set.id, None)
+        self._dirty.add(question_set.project_id or "")
+        note_id = (question_set.update or {}).get("id")
+        if question_set.project_id and isinstance(note_id, str):
+            self._closed_updates.setdefault(question_set.project_id, set()).add(note_id)
+
+    def forget_closed_update(self, project_id: str | None, note_id: str) -> None:
+        """That Update has resolved ("Closed."): stop remembering it. The
+        record drops it on its next write or load."""
+        with self._lock:
+            ids = self._closed_updates.get(project_id or "")
+            if ids is not None and note_id in ids:
+                ids.discard(note_id)
+                if not ids:
+                    del self._closed_updates[project_id or ""]
+                self._dirty.add(project_id or "")
+
+    def closed_before(self, project_id: str | None, note_id: str) -> bool:
+        """Whether this Update's set closed and was pruned here (GM: its
+        Update then says "Closed.", not the restart line)."""
+        self._ensure_loaded()
+        with self._lock:
+            return bool(project_id) and note_id in self._closed_updates.get(project_id or "", set())
 
     # -- what the asking agent and the person's canvas see (never the key) -----
     def view(self, question_set: QuestionSet) -> dict[str, Any]:
@@ -757,6 +821,10 @@ def cap_message(detail: str, rows: Iterable[Mapping[str, Any]]) -> str:
 # record, or a set from a build that didn't keep them).
 
 RESTART_OUTCOME = "Closed when Nebula restarted."
+# GM - Design (PR #193 review, item 6): a set that closed, whose Update
+# couldn't hear it then (a note or project store error), and that was pruned
+# after its 30 minutes. No restart happened, so not the restart line.
+CLOSED_OUTCOME = "Closed."
 _OUTCOMES = {"answered": "Answered.", "dismissed": "Dismissed."}
 
 

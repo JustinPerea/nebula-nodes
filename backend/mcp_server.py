@@ -51,15 +51,16 @@ The loop:
 3. run_nodes: runs a node and what feeds it, within the person's spend limits.
 4. view_output: look at what it made.
 5. propose_change instead, for a run over a limit or without a list price, or reworking their graph: the person accepts or rejects it in Nebula; agents cannot accept.
-Off the canvas, ask with propose_asset_change: a cover the person pinned, a board's Send notes, Commons curation.
+Off the canvas (a pinned cover, a board's Send notes, Commons curation): propose_asset_change.
 A decision only the person makes: ask_person; get_answers waits.
 
 Pins are the person's requests: act on one, then answer it with resolve_pin. wait_for_canvas_change waits for the next change instead of polling.
 When you start on a request, call point_at with a short say naming your own next step (under 8 words). What you noticed, a report or a suggestion goes in post_note: the person reads those in Updates, top right, not at your cursor.
-Moodboards: see moodboard_get; moodboard_update(cover=...) picks the image a board opens on, and moodboard_edit moves, resizes and groups its cards (its `undo` takes it back). New work goes in a new project (new_project), not over theirs.
-get_project reads a saved project unopened, project_size its size; rename_project renames one. Working keys: get_settings, provider_status.
-Styles (saved looks in Create): style_list, style_get, style_create, style_update, style_delete.
-A run the person started is theirs: cancel_run stops only agents' runs; ask them to press Stop.
+set_status: your current work (clear it when done). list_agents: who else is working, on what.
+Moodboards: moodboard_get; moodboard_update(cover=...) picks the image a board opens on; moodboard_edit moves, resizes and groups cards (with `undo`). New work goes in a new project (new_project), not over theirs.
+get_project reads a project unopened, project_size its size, rename_project renames it. Working keys: get_settings, provider_status.
+Styles: style_list, style_get, style_create, style_update, style_delete.
+cancel_run stops agents' runs only; a run the person started is theirs to Stop.
 With the `nebula` CLI too, set NEBULA_AGENT_NAME to share one name.
 """
 
@@ -529,6 +530,44 @@ def point_at(
     if from_node_id:
         body["from"] = anchor(from_node_id, from_port, None, None)
     return _canvas_call("POST", "/api/canvas/cursor", ctx, json=body)
+
+
+# -- the Agents panel (Q125 item 2) ------------------------------------------------
+
+@_tool(annotations=_EDIT)
+def set_status(text: str, node_id: str | None = None, ctx: Context | None = None) -> dict[str, Any]:
+    """Say what you are working on: one line the person sees under your name
+    in the Agents panel (top of Updates), and other agents in list_agents.
+
+    Set it when you start a piece of work ("Rendering three hero crops"),
+    with `node_id` when it is about one node (the panel's row then shows the
+    canvas there); replace it when the work changes. It lasts until you
+    replace or clear it, or until you make no call to Nebula for 10 minutes.
+    Clear it when you finish: set_status("") (empty text clears it).
+
+    A status is what you are working on, and it lasts. point_at's `say` is a
+    passing remark at your cursor, gone in seconds; a report, something you
+    noticed or a suggestion for the person goes in post_note. One line, at
+    most 140 characters (whitespace is collapsed). You set only your own; it
+    belongs to the open project and isn't kept across a Nebula restart.
+    """
+    body: dict[str, Any] = {"text": text}
+    if node_id:
+        body["nodeId"] = node_id
+    return _canvas_call("POST", "/api/canvas/status", ctx, json=body)
+
+
+@_tool(annotations=_READ)
+def list_agents(ctx: Context | None = None) -> dict[str, Any]:
+    """The agents working in the open project, as the person's Agents panel
+    lists them: each one's name and colour, its status line (set_status)
+    and node, its cursor's last action and how long ago, and how many of its
+    questions and proposals wait for the person (`needsYou`: counts only,
+    never their text). `group` is "needsYou" (first, longest wait first) or
+    "working" (most recent first). Read it to see what the others are on
+    before you start on the same thing.
+    """
+    return _canvas_call("GET", "/api/canvas/agents", ctx)
 
 
 MAX_WAIT_SECONDS = 300.0

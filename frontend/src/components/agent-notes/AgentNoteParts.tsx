@@ -27,21 +27,35 @@ export interface AgentNotesAdapter {
   /** Whether hovering an entry or a card outlines its refs (the canvas's
    *  outline layer draws nodes only; a board's refs are images). */
   outlines?: boolean;
+  /** The Agents panel's Working row (Q125 item 2): these nodes in view and
+   *  outlined, as Show does; from another screen, the canvas first. */
+  showNodes?: (nodeIds: string[], color: string) => void | Promise<void>;
+  /** The Agents panel's Needs-you row: open a proposal where it is decided, as Review does. */
+  reviewProposal?: (proposal: { proposalId: string; target: string; targetId: string | null }) => Promise<void>;
 }
+
+/** The hollow ring's tooltip (Q125 item 2, GM): an agent that named itself, with no token. */
+export const NAMED_ITSELF = 'This agent named itself.';
 
 export function AuthorDot({
   author,
   lit,
+  verified,
 }: {
   author: Pick<AgentNoteAuthor, 'kind' | 'name' | 'color'>;
   /** The chip's dots brighten while their author has unread updates. */
   lit?: boolean;
+  /** False draws a hollow ring in the agent's colour (the Agents panel and
+   *  the question form): it named itself. Left out, the dot is as before. */
+  verified?: boolean;
 }) {
+  const unverified = verified === false;
   return (
     <span
-      className={`agent-notes-dot agent-notes-dot--${author.kind}`}
+      className={`agent-notes-dot agent-notes-dot--${author.kind}${unverified ? ' agent-notes-dot--unverified' : ''}`}
       data-lit={lit === undefined ? undefined : String(lit)}
       style={{ '--an-dot': author.color } as CSSProperties}
+      title={unverified ? NAMED_ITSELF : undefined}
       aria-hidden="true"
     >
       {authorInitials(author)}
