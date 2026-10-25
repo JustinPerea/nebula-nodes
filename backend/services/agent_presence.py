@@ -304,7 +304,8 @@ class AgentPresence:
         if previous is not None and now - previous["_t"] > PRESENCE_TTL_SECONDS:
             previous = None  # expired: its action went with it
         did_at = now
-        if did is None and previous is not None and previous.get("did"):
+        # Carried only within its own project: a rename in A never shows in B.
+        if did is None and previous is not None and previous.get("did") and previous.get("projectId") == project_id:
             did = previous["did"]
             did_at = previous.get("_did_t", previous["_t"])
         stored: dict[str, Any] = {**event, "_t": now}

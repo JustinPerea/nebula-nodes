@@ -524,8 +524,13 @@ class QuestionBook:
                 closed = record.get(CLOSED_UPDATES_KEY) if isinstance(record, dict) else None
                 if isinstance(closed, list):
                     ids = {note_id for note_id in closed if isinstance(note_id, str)}
-                    if ids:
-                        self._closed_updates[project_id] = ids
+                    # Kept only while that Update is unresolved: one resolved
+                    # since (it said "Closed.") leaves the record now.
+                    unresolved = ids & _unresolved_note_ids(record)
+                    if unresolved != set(closed):
+                        self._dirty.add(project_id)
+                    if unresolved:
+                        self._closed_updates[project_id] = unresolved
                 stored = record.get(RECORD_KEY) if isinstance(record, dict) else None
                 if stored is None:
                     continue
@@ -744,6 +749,17 @@ class QuestionBook:
         note_id = (question_set.update or {}).get("id")
         if question_set.project_id and isinstance(note_id, str):
             self._closed_updates.setdefault(question_set.project_id, set()).add(note_id)
+
+    def forget_closed_update(self, project_id: str | None, note_id: str) -> None:
+        """That Update has resolved ("Closed."): stop remembering it. The
+        record drops it on its next write or load."""
+        with self._lock:
+            ids = self._closed_updates.get(project_id or "")
+            if ids is not None and note_id in ids:
+                ids.discard(note_id)
+                if not ids:
+                    del self._closed_updates[project_id or ""]
+                self._dirty.add(project_id or "")
 
     def closed_before(self, project_id: str | None, note_id: str) -> bool:
         """Whether this Update's set closed and was pruned here (GM: its

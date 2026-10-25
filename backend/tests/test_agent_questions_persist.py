@@ -345,6 +345,21 @@ def test_a_closed_set_pruned_at_a_restart_before_its_update_resolved_says_closed
     assert SECRET_BIT not in kept.main.project_store.path.read_text(encoding="utf-8")
 
 
+def test_a_resolved_closed_update_leaves_the_record_at_the_next_load(kept, monkeypatch):
+    """The #193 review: once "Closed." resolved the Update, its id leaves
+    agentQuestionsClosed (kept only while that Update is unresolved), in
+    memory at once and on disk at the next load, with no new ask needed."""
+    set_id, note = _answer_with_update_unresolved(kept, monkeypatch)
+    kept.clock.now += CLOSED_KEEP_SECONDS + 1
+    kept.restart()  # the load prunes the set; listing the notes settles its Update
+    (settled,) = [n for n in _notes_listing(kept) if n.get("about") == "question"]
+    assert settled["outcome"] == "Closed."
+    assert not kept.questions.closed_before(kept.project_id, note["id"])
+    kept.restart()
+    kept.questions.closed_before(kept.project_id, "an_load")  # loads
+    assert note["id"] not in (_record(kept).get("agentQuestionsClosed") or [])
+
+
 # -- the person's words: only the project record and the asker's read ---------------------------
 
 AGENT_ROUTES = (

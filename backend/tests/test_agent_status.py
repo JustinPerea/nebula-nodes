@@ -524,6 +524,24 @@ def test_a_cut_gesture_with_nothing_before_it_names_no_action(roster, target, ac
     assert "did" not in event
 
 
+def test_a_carried_action_stays_in_its_own_project():
+    """A cut gesture carries the agent's last action only within the project
+    it happened in (the #193 review): a rename in A never shows in B's panel."""
+    now = [1000.0]
+    presence = AgentPresence(clock=lambda: now[0])
+    codex = AgentIdentity(id="codex", name="Codex", color="#5B9DFF", verified=True)
+    presence.point(codex, target={"nodeId": "n3"}, did={"verb": "Renamed", "nodeId": "n3", "label": "Hero"},
+                   project_id="A")
+    now[0] += 5
+    same = presence.point(codex, target={"x": 1.0, "y": 2.0}, action="click", project_id="A")
+    assert same["did"]["verb"] == "Renamed" and same["did"]["secondsAgo"] == pytest.approx(5)
+    other = presence.point(codex, target={"x": 1.0, "y": 2.0}, action="click", project_id="B")
+    assert "did" not in other
+    # Nor does it come back on a later gesture in B.
+    again = presence.point(codex, target={"x": 3.0, "y": 4.0}, action="drag", project_id="B")
+    assert "did" not in again
+
+
 def test_no_cut_verb_is_ever_sent(roster):
     other = roster.graph.add_node("text-input", {"value": "dusk"})
     for target, action in CUT_GESTURES:

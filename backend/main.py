@@ -7433,6 +7433,8 @@ async def _settle_question_update(project_id: str | None, note: Mapping[str, Any
                                          outcome=outcome, by={"kind": "system"})
     except (NoteError, ProjectStoreError):
         return
+    if outcome == QUESTIONS_CLOSED_OUTCOME:
+        agent_questions.forget_closed_update(project_id, str(note.get("id") or ""))
     if result is not None:
         await _broadcast_raw_quietly(_notes_message("canvas", "resolved", project_id=project_id, ids=[note["id"]],
                                                     note=result["note"], unread=result["unread"]))

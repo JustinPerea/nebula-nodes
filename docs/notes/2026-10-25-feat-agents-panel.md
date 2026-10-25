@@ -90,3 +90,17 @@ GM-review gates: backend 10771 passed, 71 skipped. Frontend full run 5600 passed
 
 - GM: the old cursor `say` and Agent log lines that still say wired ("Wiring n1 → n2", "Added X and wired it", "Unwired n1 → n2", "Wired a:b → c:d"): they need GM's words ("Connecting"? "and connected it"?) before they change.
 - The canvas still draws a cursor the browser heard before a backend restart until it expires (2 minutes); the panel no longer lists it. Pre-existing.
+
+## Second review (the GM-fix commit bd0eae74)
+
+An independent read-only review of the GM-fix commit found two defects. Both are fixed, each with a test that failed first:
+- **A carried action followed the agent into another project.** After renaming a node in project A, a click in project B carried "Renamed “Hero”" into B's panel and `list_agents`. Now an action carries only within the project it happened in (`AgentPresence.point`). Test: `test_a_carried_action_stays_in_its_own_project`.
+- **`agentQuestionsClosed` kept an Update's id after "Closed." resolved it.** Nothing grew without bound: every write trimmed it, and a resolved Update never settles again. But it contradicted the key's own rule. Now the settle forgets the id in memory (`QuestionBook.forget_closed_update`), and a load drops any id whose Update is resolved, rewriting the record. Test: `test_a_resolved_closed_update_leaves_the_record_at_the_next_load`.
+
+The review also checked and cleared:
+- whether the chip and the panel can disagree on the count;
+- the purge and trash routes;
+- carried actions across node deletes;
+- leaks of another agent's questions or answers.
+
+Gates: the touched backend files passed 151, and CI runs the full suites.
