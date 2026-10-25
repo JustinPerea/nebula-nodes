@@ -139,10 +139,12 @@ describe('the Agents panel', () => {
 
     emit({ type: 'questionsOpened', set: SET, answerKey: 'k1' });
     expect(toggle.textContent).toContain('Needs you');
-    const badges = toggle.querySelectorAll('.agent-roster__badge');
+    const badges = toggle.querySelectorAll('.agent-notes-needs-badge, .agent-roster__badge');
     expect([...badges].map((b) => b.textContent)).toEqual(['1', '1']);
-    expect(badges[0].classList.contains('agent-roster__badge--attention')).toBe(true);
-    expect(badges[1].classList.contains('agent-roster__badge--attention')).toBe(false);
+    // GM: the Needs-you badge is the filled pill (the chip's too), never an agent's colour.
+    expect(badges[0].classList.contains('agent-notes-needs-badge')).toBe(true);
+    expect(badges[1].classList.contains('agent-notes-needs-badge')).toBe(false);
+    expect(toggle.closest('section')?.getAttribute('style') ?? '').not.toMatch(/attention/);
   });
 
   it('opens to two groups; a Working row flies the canvas to its node', async () => {
@@ -249,5 +251,61 @@ describe('the Agents panel', () => {
     emit({ type: 'socketReconnected' });
     await waitFor(() => expect(within(list).queryByText('From before')).toBeNull());
     expect(within(list).queryByText('Looked around · just now')).toBeNull();
+  });
+});
+
+// GM - Design's review of PR #193, item 3: "A waiting question blocks an
+// agent, so 'Updates 0' mustn't hide it."
+describe('the closed Updates chip marks agents that need the person', () => {
+  const chip = () => screen.getByRole('button', { name: /^Updates/ });
+
+  it('shows the Needs-you badge after the unread count, with the count in its name', async () => {
+    render(<AppAgentNotes />);
+    syncProject();
+    expect(chip().getAttribute('aria-label')).toBe('Updates');
+    expect(chip().querySelector('.agent-notes-needs-badge')).toBeNull();
+
+    emit({ type: 'questionsOpened', set: SET, answerKey: 'k1' });
+    expect(chip().getAttribute('aria-label')).toBe('Updates, 0 unread, 1 agent needs you');
+    const badge = chip().querySelector('.agent-notes-needs-badge');
+    expect(badge?.textContent).toBe('1');
+    // After the unread count.
+    const count = chip().querySelector('.agent-notes-chip__count');
+    expect(count && badge && (count.compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING)).toBeTruthy();
+
+    const view = { id: 'p_1', status: 'open', agent: CODEX, note: 'n', projectId: 'p1', createdAt: Date.now() - 1_000,
+      expiresAt: Date.now() + 600_000, nodes: [], edges: [], params: [], run: [], references: [], cost: {} };
+    emit({ type: 'proposalOpened', proposal: view, acceptKey: 'k' });
+    expect(chip().getAttribute('aria-label')).toBe('Updates, 0 unread, 2 agents need you');
+    expect(chip().querySelector('.agent-notes-needs-badge')?.textContent).toBe('2');
+
+    // The same number as the panel's Needs-you group.
+    const list = await openList();
+    const toggle = await rosterToggle(list);
+    expect(toggle.querySelector('.agent-notes-needs-badge')?.textContent).toBe('2');
+  });
+
+  it('says the unread count too, and goes away when nothing waits', async () => {
+    render(<AppAgentNotes />);
+    emit({ type: 'agentNotes', surface: 'canvas', op: 'sync', projectId: 'p1', unread: 2, at: 1, notes: [
+      { id: 'u1', source: 'agent', author: { kind: 'agent', name: 'Codex', color: '#5B9DFF' }, text: 'One', refs: [],
+        createdAt: Date.now() - 2_000 },
+      { id: 'u2', source: 'agent', author: { kind: 'agent', name: 'Codex', color: '#5B9DFF' }, text: 'Two', refs: [],
+        createdAt: Date.now() - 1_000 },
+    ] });
+    emit({ type: 'questionsOpened', set: SET, answerKey: 'k1' });
+    expect(chip().getAttribute('aria-label')).toBe('Updates, 2 unread, 1 agent needs you');
+    emit({ type: 'questionsClosed', questionId: SET.id, status: 'answered', agentId: CLAUDE.id,
+      set: { ...SET, status: 'answered', closedAt: Date.now() } });
+    expect(chip().getAttribute('aria-label')).toBe('Updates, 2 unread');
+    expect(chip().querySelector('.agent-notes-needs-badge')).toBeNull();
+  });
+
+  it('counts only what this tab can answer, as the panel does', () => {
+    render(<AppAgentNotes />);
+    syncProject();
+    // A set heard without its answer key (a tab not connected as the person): Working, not Needs you.
+    emit({ type: 'questionsOpened', set: SET });
+    expect(chip().getAttribute('aria-label')).toBe('Updates');
   });
 });

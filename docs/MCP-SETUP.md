@@ -1299,17 +1299,21 @@ Needs-you row opens its oldest question set or proposal.
   (`change`: `set`, `cleared`, `expired` or `unanchored`, with the agent,
   the status or null, and a rising `rev`). Cursor events (`agentPresence`)
   carry `projectId` and, for actions the panel names, `did`: `{verb,
-  nodeId, label}` ("Added", "Wired", "Changed", "Renamed", "Moved",
-  "Removed", "Ran", ...). A single `nebula rename` or `nebula move` (the
-  label and layout routes) now moves your cursor to that node too, like
-  any other edit.
+  nodeId, label, secondsAgo}` ("Added", "Connected", "Disconnected",
+  "Changed", "Renamed", "Moved", "Removed", "Ran", ...; `secondsAgo` is how
+  long ago that action was). Of a bare `point_at`, only pointing at a node
+  ("Pointed at"), looking at a node ("Looked at") and looking at a spot
+  ("Looked around") name an action; a click, a drag or a move to a spot
+  keeps your last action. "Moved" is only a real node move. A single
+  `nebula rename` or `nebula move` (the label and layout routes) now moves
+  your cursor to that node too, like any other edit.
 - **The roster:** MCP `list_agents()`, CLI `nebula agents [--json]`, HTTP
   `GET /api/canvas/agents`: `{projectId, agents, rev}`. One entry per agent
   around in the open project (a live cursor there, a live status there, or
   an open question set or proposal there, canvas or asset): `agent` (id,
   name, color, verified), `group` (`needsYou` or `working`), `status`
   (`{text, nodeId, secondsAgo}` or null), `lastAction` (`{verb, nodeId,
-  label, secondsAgo}` from the cursor, or null), `cursor` (`{nodeId, action,
+  label, secondsAgo}` from the cursor, `secondsAgo` the action's own, or null), `cursor` (`{nodeId, action,
   secondsAgo}` or null), `needsYou` (`{questions, proposals}`: the
   questions in its open sets, not the sets, and its open proposals; an
   asset proposal made with no project open, so with no Update, counts in

@@ -20,6 +20,7 @@ import { hydrateBoard, selectBoardList, setBoardInView } from '../../lib/agentNo
 import { wsClient } from '../../lib/wsClient';
 import { useBoardCanvasStore } from '../../store/boardCanvasStore';
 import { useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasProposalsStore';
+import { useAssetProposalsStore } from '../../store/assetProposalsStore';
 import { reviewAssetProposal } from '../../lib/assetProposalReview';
 import { reviewCanvasProposal } from '../../lib/canvasProposalReview';
 import { ghostBoxes } from '../../lib/canvasProposals';
@@ -31,6 +32,7 @@ import { AgentNotesList, type AgentNotesListSection } from './AgentNotesList';
 import { AuthorDot, type AgentNotesAdapter } from './AgentNoteParts';
 import { UPDATES_SLOT_EVENT } from './UpdatesSlot';
 import type { RosterNext } from './agentRosterModel';
+import { answerableQuestions, needsYouCount, openViews } from './agentNeedsYou';
 import { LeaveBusyContext } from './leaveBusy';
 import { askBeforeLeavingCommons } from '../../lib/commonsUnsaved';
 import { unreadRingColor } from '../../lib/unreadRing';
@@ -45,6 +47,31 @@ const AgentQuestionsForm = lazy(() => loadQuestionsForm().then((module) => ({ de
 /** The Agents panel (Q125 item 2): its own chunk, loaded when the corner mounts. */
 const loadAgentRoster = () => import('./AgentRoster');
 const AgentRoster = lazy(() => loadAgentRoster().then((module) => ({ default: module.AgentRoster })));
+
+/**
+ * How many agents need the person in the open project: the Agents panel's
+ * Needs-you group, by the same rule (agentNeedsYou), without loading the
+ * panel's chunk. 0 when the corner shows no panel.
+ */
+function useNeedsYouCount(projectId: string | null, enabled: boolean): number {
+  const sets = useAgentQuestionsStore((s) => s.sets);
+  const canvasProposals = useCanvasProposalsStore((s) => s.proposals);
+  const assetProposals = useAssetProposalsStore((s) => s.proposals);
+  return useMemo(() => (enabled ? needsYouCount({
+    projectId,
+    questions: answerableQuestions(sets),
+    canvasProposals: openViews(canvasProposals),
+    assetProposals: openViews(assetProposals),
+  }) : 0), [enabled, projectId, sets, canvasProposals, assetProposals]);
+}
+
+/** The chip's name (GM's review of PR #193): the unread count, then how many agents need the person. */
+function chipLabel(unread: number, needsYou: number): string {
+  if (needsYou > 0) {
+    return `Updates, ${unread} unread, ${needsYou} ${needsYou === 1 ? 'agent needs you' : 'agents need you'}`;
+  }
+  return unread > 0 ? `Updates, ${unread} unread` : 'Updates';
+}
 
 /** A card stays about 4 s (GM's v5.2 holds 2.6 to 3.8 s), longer while hovered or focused. */
 const CARD_HOLD_MS = 4000;
@@ -812,6 +839,8 @@ export function AgentNotesCorner({ sections, agents = null }: {
   // only while a card was up, so a lone unread was left to a white figure).
   const ringed = count > 0;
   const rootStyle = springCssVars() as CSSProperties;
+  // GM: "A waiting question blocks an agent, so 'Updates 0' mustn't hide it."
+  const needsYou = useNeedsYouCount(agents?.projectId ?? null, agents !== null);
 
   return (
     <LeaveBusyContext.Provider value={leaveBusy}>
@@ -820,7 +849,7 @@ export function AgentNotesCorner({ sections, agents = null }: {
         ref={chipRef}
         type="button"
         className={`agent-notes-chip${ringed ? ' agent-notes-chip--ringed' : ''}`}
-        aria-label={count > 0 ? `Updates, ${count} unread` : 'Updates'}
+        aria-label={chipLabel(count, needsYou)}
         aria-expanded={open}
         aria-haspopup="dialog"
         style={{ '--an-newest': newest, '--an-ring': unreadRingColor(newest) } as CSSProperties}
@@ -845,6 +874,7 @@ export function AgentNotesCorner({ sections, agents = null }: {
         >
           {count}
         </span>
+        {needsYou > 0 && <span className="agent-notes-needs-badge" aria-hidden="true">{needsYou}</span>}
       </button>
 
       {card && !open && cardNote && cardSection && (

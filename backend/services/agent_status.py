@@ -211,8 +211,10 @@ def build_roster(*, project_id: str | None, now: float, cursors: Iterable[Mappin
         entry["cursor"] = {"nodeId": target.get("nodeId"), "action": cursor.get("action"), "secondsAgo": seconds_ago}
         did = cursor.get("did")
         if isinstance(did, Mapping) and did.get("verb"):
+            # The action's own time: a gesture since then kept it (GM's review).
+            did_ago = did.get("secondsAgo")
             entry["lastAction"] = {"verb": did["verb"], "nodeId": did.get("nodeId"), "label": did.get("label"),
-                                   "secondsAgo": seconds_ago}
+                                   "secondsAgo": float(did_ago) if isinstance(did_ago, (int, float)) else seconds_ago}
         active(entry, seconds_ago)
 
     for status in statuses:

@@ -302,6 +302,49 @@ def test_a_record_that_cannot_be_read_closes_its_update_with_gm_line(kept):
     assert gone.status_code == 404 and "ask again" in gone.json()["detail"]
 
 
+# GM - Design (PR #193 review, item 6): a set that closed, whose Update then
+# couldn't be resolved (a note or project store error), and that was pruned
+# after its 30 minutes, says just "Closed." The real restart path above keeps
+# "Closed when Nebula restarted."
+
+def _answer_with_update_unresolved(api, monkeypatch) -> tuple[str, dict]:
+    set_id = _ask(api).json()["questions"]["id"]
+    from services.agent_notes import NoteError
+
+    real = api.main.agent_notes.resolve_questions
+
+    def broken(*_args, **_kwargs):
+        raise NoteError(500, "the note store is down")
+
+    monkeypatch.setattr(api.main.agent_notes, "resolve_questions", broken)
+    assert _answer(api, set_id, GOOD_ANSWERS).status_code == 200
+    (note,) = _question_updates(api)
+    assert "outcome" not in note  # the Update didn't hear it closed
+    monkeypatch.setattr(api.main.agent_notes, "resolve_questions", real)
+    return set_id, note
+
+
+def test_a_closed_set_pruned_before_its_update_resolved_says_closed(kept, monkeypatch):
+    set_id, _ = _answer_with_update_unresolved(kept, monkeypatch)
+    kept.clock.now += CLOSED_KEEP_SECONDS + 1
+    # Anything that prunes (another ask does), with no restart.
+    assert _ask(kept, headers=CODEX).status_code == 201
+    assert _read(kept, set_id).status_code == 404
+    (note,) = [n for n in _notes_listing(kept) if n.get("about") == "question" and n.get("outcome")]
+    assert note["outcome"] == "Closed."
+
+
+def test_a_closed_set_pruned_at_a_restart_before_its_update_resolved_says_closed(kept, monkeypatch):
+    set_id, _ = _answer_with_update_unresolved(kept, monkeypatch)
+    kept.clock.now += CLOSED_KEEP_SECONDS + 1
+    kept.restart()  # the load prunes it
+    assert _read(kept, set_id).status_code == 404
+    (note,) = [n for n in _notes_listing(kept) if n.get("about") == "question"]
+    assert note["outcome"] == "Closed."
+    # The person's words still left the disk.
+    assert SECRET_BIT not in kept.main.project_store.path.read_text(encoding="utf-8")
+
+
 # -- the person's words: only the project record and the asker's read ---------------------------
 
 AGENT_ROUTES = (

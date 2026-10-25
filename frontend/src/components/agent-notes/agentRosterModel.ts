@@ -1,6 +1,7 @@
 import type { QuestionSetView } from '../../lib/agentQuestions';
 import type { AssetProposalKind, AssetProposalView } from '../../lib/assetProposals';
 import type { ProposalView } from '../../lib/wsClient';
+import { isWaiting, questionCount, waitingByAgent, type WaitingProposal } from './agentNeedsYou';
 
 /**
  * The Agents panel's rows (Q125 item 2, Justin 2026-10-24: "Yes, all four, in
@@ -18,7 +19,8 @@ export const SHOW_ON_CANVAS = 'Show on canvas';
 export const OPEN_QUESTIONS = 'Open questions';
 export const OPEN_PROPOSAL = 'Open proposal';
 export const OPEN_NEXT = 'Open next';
-/** Needs you after a restart (no status, no recent action). */
+/** A Needs-you row's third line with no status (GM's review of PR #193: never a
+ *  pointer action, live cursor or not): questions, or questions and proposals. */
 export const WAITING_ANSWER = 'Waiting for your answer.';
 export const WAITING_OK = 'Waiting for your OK.';
 /** Only when the panel is open as the last agent leaves. */
@@ -48,6 +50,9 @@ export interface RosterDid {
   verb: string;
   nodeId: string | null;
   label: string | null;
+  /** When it happened, in this tab's clock; left out, when the cursor last moved.
+   *  A pointer gesture GM cut keeps the action before it, with its own time. */
+  at?: number;
 }
 
 /** One agent's cursor, `at` in this tab's clock. */
@@ -119,7 +124,7 @@ export function agoLine(ms: number): string {
 export function actionLine(did: RosterDid, at: number, now: number, nodeLabel: (id: string) => string | null): string {
   const live = did.nodeId ? nodeLabel(did.nodeId) : null;
   const label = live ?? did.label;
-  const ago = agoLine(Math.max(0, now - at));
+  const ago = agoLine(Math.max(0, now - (did.at ?? at)));
   return label ? `${did.verb} “${label}” · ${ago}` : `${did.verb} · ${ago}`;
 }
 
@@ -128,11 +133,7 @@ interface Gathered {
   status: RosterStatus | null;
   cursor: RosterCursor | null;
   questions: QuestionSetView[];
-  proposals: Array<{ id: string; target: 'canvas' | AssetProposalKind; targetId: string | null; createdAt: number }>;
-}
-
-function agentOf(raw: { id: string; name: string; color: string; verified?: boolean }): RosterAgent {
-  return { id: raw.id, name: raw.name, color: raw.color, verified: Boolean(raw.verified) };
+  proposals: WaitingProposal[];
 }
 
 export function buildRosterRows(input: RosterInput): RosterRow[] {
@@ -156,22 +157,11 @@ export function buildRosterRows(input: RosterInput): RosterRow[] {
     const entry = gather(cursor.agent);
     if (!entry.cursor || entry.cursor.at < cursor.at) entry.cursor = cursor;
   }
-  for (const set of input.questions) {
-    if (set.status !== 'open' || set.projectId !== projectId) continue;
-    gather(agentOf(set.agent)).questions.push(set);
-  }
-  for (const proposal of input.canvasProposals) {
-    if (proposal.status !== 'open' || proposal.projectId !== projectId) continue;
-    gather(agentOf(proposal.agent)).proposals.push({ id: proposal.id, target: 'canvas', targetId: null,
-      createdAt: proposal.createdAt });
-  }
-  for (const proposal of input.assetProposals) {
-    // Kept with the project its Update went to; one with no Update (made with no
-    // project open) counts where the person is now, as the roster read does (main._waiting_in).
-    const where = proposal.update?.projectId ?? projectId;
-    if (proposal.status !== 'open' || where !== projectId) continue;
-    gather(agentOf(proposal.agent)).proposals.push({ id: proposal.id, target: proposal.target.kind,
-      targetId: proposal.target.id, createdAt: proposal.createdAt });
+  // The same rule as the chip's badge (agentNeedsYou), so the two counts match.
+  for (const waiting of waitingByAgent(input).values()) {
+    const entry = gather(waiting.agent);
+    entry.questions.push(...waiting.questions);
+    entry.proposals.push(...waiting.proposals);
   }
 
   const rows: RosterRow[] = [];
@@ -187,9 +177,8 @@ export function buildRosterRows(input: RosterInput): RosterRow[] {
 function rowFor(entry: Gathered, now: number, nodeLabel: (id: string) => string | null): RosterRow {
   const { agent, status, cursor } = entry;
   // Questions, not sets: a set of two reads "2 questions", as its Update does.
-  const counts = { questions: entry.questions.reduce((n, set) => n + set.questions.length, 0),
-    proposals: entry.proposals.length };
-  const needsYou = counts.questions + counts.proposals > 0;
+  const counts = { questions: questionCount(entry), proposals: entry.proposals.length };
+  const needsYou = isWaiting(entry);
   const statusText = status?.text ?? null;
   const action = cursor?.did?.verb ? actionLine(cursor.did, cursor.at, now, nodeLabel) : null;
   const onCanvas = (id: string | null | undefined) => (id && nodeLabel(id) !== null ? id : null);
@@ -208,7 +197,8 @@ function rowFor(entry: Gathered, now: number, nodeLabel: (id: string) => string 
     const counted = countLine(counts);
     return {
       agent, group: 'needsYou', counts, countLine: counted, statusText,
-      line: statusText ?? action ?? (counts.questions > 0 ? WAITING_ANSWER : WAITING_OK),
+      // GM: "A blocked agent 'looking at' a node tells the person nothing."
+      line: statusText ?? (counts.questions > 0 ? WAITING_ANSWER : WAITING_OK),
       flyTo, next, tooltip, ariaLabel: `${who}, ${counted}. ${tooltip}`, sortAt: next.createdAt,
     };
   }

@@ -191,6 +191,8 @@ export const DEFERRED_MODULES: readonly string[] = [
   'components/agent-notes/AgentQuestionsAnswers.tsx',
   // The Agents panel (Q125 item 2): its own chunk inside the corner's.
   'components/agent-notes/AgentRoster.tsx',
+  // The Needs-you rule the chip's badge shares with the panel (in the corner's chunk).
+  'components/agent-notes/agentNeedsYou.ts',
   'components/agent-notes/agentRosterModel.ts',
   'components/agent-notes/agentRosterStore.ts',
   'lib/agentRoster.ts',

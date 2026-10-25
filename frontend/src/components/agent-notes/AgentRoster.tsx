@@ -1,12 +1,12 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useState, type CSSProperties, type MouseEvent } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useState, type MouseEvent } from 'react';
 import { getNodeDefinition } from '../../constants/nodeDefinitions';
-import { unreadRingColor } from '../../lib/unreadRing';
 import { useAgentPresenceStore } from '../../store/agentPresenceStore';
 import { useAgentQuestionsStore } from '../../store/agentQuestionsStore';
 import { useAssetProposalsStore } from '../../store/assetProposalsStore';
 import { useCanvasProposalsStore } from '../../store/canvasProposalsStore';
 import { useGraphStore } from '../../store/graphStore';
 import { AuthorDot } from './AgentNoteParts';
+import { answerableQuestions, openViews } from './agentNeedsYou';
 import {
   AGENTS_HEADING,
   buildRosterRows,
@@ -70,7 +70,7 @@ export function AgentRoster({
       const cursor: RosterCursor = {
         agent: { id: live.id, name: live.name, color: live.color, verified: live.verified },
         nodeId: 'nodeId' in live.target ? live.target.nodeId : null,
-        did: live.did,
+        did: live.did,  // with its own time (a cut pointer gesture kept it)
         projectId: live.projectId,
         at: live.receivedAt,
       };
@@ -106,9 +106,10 @@ export function AgentRoster({
       now,
       statuses: Object.values(statuses),
       cursors,
-      questions: Object.values(sets).filter((entry) => entry.answerKey).map((entry) => entry.view),
-      canvasProposals: Object.values(canvasProposals).filter((entry) => !entry.closing).map((entry) => entry.view),
-      assetProposals: Object.values(assetProposals).filter((entry) => !entry.closing).map((entry) => entry.view),
+      // The same selection as the chip's badge (AgentNotesCorner's useNeedsYouCount).
+      questions: answerableQuestions(sets),
+      canvasProposals: openViews(canvasProposals),
+      assetProposals: openViews(assetProposals),
       nodeLabel: (id) => byId.get(id) || null,
     });
   }, [projectId, now, statuses, cursors, sets, canvasProposals, assetProposals, named, labels]);
@@ -125,12 +126,9 @@ export function AgentRoster({
 
   const needsYou = rows.filter((row) => row.group === 'needsYou');
   const working = rows.filter((row) => row.group === 'working');
-  // The attention colour the chip's unread ring uses, in the longest-waiting agent's colour.
-  const attention = needsYou[0] ? unreadRingColor(needsYou[0].agent.color) : undefined;
 
   return (
-    <section className="agent-roster" aria-labelledby={headingId}
-      style={attention ? ({ '--ar-attention': attention } as CSSProperties) : undefined}>
+    <section className="agent-roster" aria-labelledby={headingId}>
       <h3 id={headingId} className="agent-roster__heading">
         <button type="button" className="agent-roster__toggle" aria-expanded={expanded}
           onClick={() => setExpanded(!expanded)}>
@@ -138,7 +136,8 @@ export function AgentRoster({
           {needsYou.length > 0 && (
             <span className="agent-roster__group-count">
               {NEEDS_YOU}
-              <span className="agent-roster__badge agent-roster__badge--attention">{needsYou.length}</span>
+              {/* GM: the filled pill, the chip's too; one badge counts several agents, so no agent's colour. */}
+              <span className="agent-notes-needs-badge">{needsYou.length}</span>
             </span>
           )}
           {working.length > 0 && (

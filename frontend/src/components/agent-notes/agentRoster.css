@@ -66,24 +66,26 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Needs you: the attention colour the chip's unread ring uses (lib/unreadRing). */
-.agent-roster__badge--attention {
-  border: 2px solid var(--ar-attention, var(--an-ink));
-  color: var(--an-ink-bold);
-}
+/* Needs you: the filled light pill (.agent-notes-needs-badge, agentNotes.css),
+ * the inverse of this outlined one, shared with the Updates chip. */
 
+/* Closed it points down, open it points up (GM's review of PR #193). It
+ * turns by a vertical mirror, never a rotation: the old rotate(45deg) to
+ * rotate(-135deg) passed through -45deg, pointing right, halfway (caught
+ * mid-spring in the review's screenshot). The mirror only flattens on its
+ * way, so it never points sideways. Hover may change its colour, never this. */
 .agent-roster__chevron {
   width: 6px;
   height: 6px;
   margin-left: auto;
   border-right: 1.5px solid var(--an-muted);
   border-bottom: 1.5px solid var(--an-muted);
-  transform: translateY(-2px) rotate(45deg);
+  transform: translateY(-2px) scaleY(1) rotate(45deg);
   transition: transform var(--spring-pop-ms) var(--spring-pop);
 }
 
 .agent-roster__toggle[aria-expanded='true'] .agent-roster__chevron {
-  transform: translateY(1px) rotate(-135deg);
+  transform: translateY(1px) scaleY(-1) rotate(45deg);
 }
 
 .agent-roster__body {

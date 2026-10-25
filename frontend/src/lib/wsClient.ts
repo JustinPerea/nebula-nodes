@@ -53,8 +53,9 @@ export interface AgentPresenceEvent {
   /** The project open when it happened (the Agents panel lists it only there). */
   projectId?: string | null;
   /** What the action was, for the Agents panel (Q125 item 2): a past-tense
-   * verb and the node it names. Absent on a cursor move with nothing behind it. */
-  did?: { verb: string; nodeId: string | null; label: string | null };
+   * verb and the node it names, and how long ago it was (a click or a drag
+   * keeps the agent's last action). Absent when the agent has none. */
+  did?: { verb: string; nodeId: string | null; label: string | null; secondsAgo?: number };
 }
 
 /** An agent's status line changed (backend services/agent_status.py, Q125 item 2). */

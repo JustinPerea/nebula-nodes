@@ -30,6 +30,9 @@ export interface AgentCursorDid {
   verb: string;
   nodeId: string | null;
   label: string | null;
+  /** When the action happened, in this tab's clock: a pointer gesture GM cut
+   *  (a click, a drag) keeps the action before it, with its own time. */
+  at: number;
 }
 
 interface AgentPresenceState {
@@ -43,14 +46,16 @@ interface AgentPresenceState {
 
 const SAFE_COLOR = /^#[0-9a-fA-F]{6}$/;
 
-function cleanDid(raw: unknown): AgentCursorDid | null {
+function cleanDid(raw: unknown, now: number): AgentCursorDid | null {
   if (!raw || typeof raw !== 'object') return null;
   const did = raw as Record<string, unknown>;
   if (typeof did.verb !== 'string' || !did.verb) return null;
+  const ago = typeof did.secondsAgo === 'number' && Number.isFinite(did.secondsAgo) ? Math.max(0, did.secondsAgo) : 0;
   return {
     verb: did.verb,
     nodeId: typeof did.nodeId === 'string' ? did.nodeId : null,
     label: typeof did.label === 'string' && did.label ? did.label : null,
+    at: now - ago * 1000,
   };
 }
 
@@ -84,7 +89,7 @@ export const useAgentPresenceStore = create<AgentPresenceState>((set) => ({
             say: typeof event.say === 'string' ? event.say : '',
             receivedAt: now,
             seq: (previous?.seq ?? 0) + 1,
-            did: cleanDid(event.did),
+            did: cleanDid(event.did, now),
             projectId: typeof event.projectId === 'string' ? event.projectId : null,
           },
         },

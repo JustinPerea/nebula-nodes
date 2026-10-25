@@ -197,6 +197,7 @@ from services.asset_proposals import RESTART_OUTCOME, outcome_line as asset_outc
 from services.canvas_proposals import update_outcome as canvas_outcome_line, update_text as canvas_update_text
 # Questions an agent asks the person (Q125 item 1), modelled on proposals.
 from services.agent_questions import (
+    CLOSED_OUTCOME as QUESTIONS_CLOSED_OUTCOME,
     RESTART_OUTCOME as QUESTIONS_RESTART_OUTCOME,
     WITHDRAW_HTTP as QUESTIONS_WITHDRAW_HTTP,
     QuestionBook,
@@ -4766,10 +4767,14 @@ def _node_label(node_id: str) -> str:
 
 
 # The Agents panel's verb for a point_at with nothing else behind it (Q125
-# item 2): at a node, then at a spot on the canvas. Not GM's yet (listed for
-# GM in docs/notes/2026-10-25-feat-agents-panel.md).
-_POINTED_AT_NODE = {"move": "Pointed at", "click": "Clicked", "drag": "Dragged to", "look": "Looked at"}
-_POINTED_AT_SPOT = {"move": "Moved", "click": "Clicked", "drag": "Dragged", "look": "Looked around"}
+# item 2). GM - Design's review of PR #193: keep only "Pointed at “X”" and
+# "Looked at “X”" on a node and "Looked around" at a spot; "Clicked",
+# "Dragged to" and a bare "Moved", "Clicked" or "Dragged" at a spot are cut
+# ("'Moved · just now' reads like the agent moved a node, and the rest is
+# noise"). A cut gesture names nothing: the cursor keeps the agent's previous
+# action, with that action's own time (agent_presence.point).
+_POINTED_AT_NODE = {"move": "Pointed at", "look": "Looked at"}
+_POINTED_AT_SPOT = {"look": "Looked around"}
 
 
 def _pointed(action: str, target: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -4819,7 +4824,8 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
             origin=origin,
             action=action,
             say=body.get("say"),
-            # A line said in place keeps the cursor's last action.
+            # A line said in place, or a cut gesture (_pointed gives None),
+            # keeps the agent's last action and its time.
             did=None if placed == "cursor" else _pointed(action, target),
         )
     except PresenceError as exc:
@@ -7404,17 +7410,24 @@ async def _settle_proposal_updates() -> None:
 
 async def _settle_question_update(project_id: str | None, note: Mapping[str, Any]) -> None:
     """A question set's Update whose set can't be answered any more: closed
-    (its outcome), or not there at all ("Closed when Nebula restarted.",
-    GM's line for questions). Sets are kept with the project, so a restart
-    alone never gets here; a set whose record couldn't be read back does
-    (damaged, or from a build that didn't keep sets)."""
+    (its outcome); closed and since pruned before this Update heard ("Closed.",
+    GM's PR #193 review); or not there at all ("Closed when Nebula
+    restarted.", GM's line for questions). Sets are kept with the project, so
+    a restart alone never gets there; a set whose record couldn't be read
+    back does (damaged, or from a build that didn't keep sets)."""
     ref = note.get("questions")
     if note.get("source") != "nebula" or note.get("resolvedAt") or not isinstance(ref, Mapping):
         return
     question_set = agent_questions.get(str(ref.get("id") or ""))
     if isinstance(question_set, QuestionSet) and question_set.is_open:
         return
-    outcome = question_outcome_line(question_set) if isinstance(question_set, QuestionSet) else QUESTIONS_RESTART_OUTCOME
+    if isinstance(question_set, QuestionSet):
+        outcome = question_outcome_line(question_set)
+    elif agent_questions.closed_before(project_id, str(note.get("id") or "")):
+        # Closed, then pruned before its Update heard (GM's review, item 6).
+        outcome = QUESTIONS_CLOSED_OUTCOME
+    else:
+        outcome = QUESTIONS_RESTART_OUTCOME
     try:
         result = await asyncio.to_thread(agent_notes.resolve_questions, project_id, note["id"],
                                          outcome=outcome, by={"kind": "system"})
@@ -10444,7 +10457,7 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
         origin={"nodeId": edge["source"], "handle": edge["sourceHandle"]},
         action="drag",
         say=f"Wiring {edge['source']} → {edge['target']}",
-        did=_did("Wired", edge["target"]),
+        did=_did("Connected", edge["target"]),
     )
     return {"connection": f"{edge['source']}:{edge['sourceHandle']} -> {edge['target']}:{edge['targetHandle']}"}
 
@@ -12561,7 +12574,7 @@ async def delete_graph_edge(body: dict[str, Any]) -> dict:
             await _show_agent(
                 {"nodeId": body["target"]},
                 say=f"Unwired {body.get('source', '')} → {body.get('target', '')}",
-                did=_did("Unwired", body["target"]),
+                did=_did("Disconnected", body["target"]),
             )
     return {"status": "deleted" if removed else "not_found"}
 

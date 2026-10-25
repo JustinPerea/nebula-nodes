@@ -53,7 +53,7 @@ describe('the roster store', () => {
     const { statuses, cursors } = useAgentRosterStore.getState();
     expect(Object.keys(statuses)).toEqual(['ext:gemini']);
     expect(statuses['ext:gemini'].text).toBe('Sorting the moodboard');
-    expect(cursors.codex.did).toEqual({ verb: 'Ran', nodeId: 'n1', label: 'Upscale' });
+    expect(cursors.codex.did).toMatchObject({ verb: 'Ran', nodeId: 'n1', label: 'Upscale' });
   });
 
   it('lets the read win over an event it already includes', async () => {
@@ -80,5 +80,18 @@ describe('the roster store', () => {
   it('only a plain hex colour reaches the page', () => {
     emit(status({ ...CODEX, color: 'red;background:url(x)' }, 'Rendering', 1));
     expect(useAgentRosterStore.getState().statuses.codex.agent.color).toBe('#E8825A');
+  });
+});
+
+describe("the last action's own time (GM's review)", () => {
+  it('a read places the action at its own secondsAgo, not the cursor\'s', () => {
+    const at = 1_800_000_000_000;
+    useAgentRosterStore.getState().applyRoster({ projectId: 'p1', rev: 1, agents: [{
+      ...entry(CODEX, 'x'), status: null,
+      lastAction: { verb: 'Renamed', nodeId: 'n1', label: 'Hero', secondsAgo: 90 },
+      cursor: { nodeId: null, action: 'click', secondsAgo: 2 } }] } as never, at);
+    const cursor = useAgentRosterStore.getState().cursors.codex;
+    expect(cursor.at).toBe(at - 2_000);
+    expect(cursor.did?.at).toBe(at - 90_000);
   });
 });

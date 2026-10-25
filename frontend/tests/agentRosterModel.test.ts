@@ -5,6 +5,7 @@
  * Design's copy, 2026-10-25, verbatim.
  */
 import { describe, expect, it } from 'vitest';
+import { needsYouCount } from '../src/components/agent-notes/agentNeedsYou';
 import {
   agoLine,
   buildRosterRows,
@@ -231,5 +232,57 @@ describe('the rows', () => {
       cursors: [cursor(CODEX, { at: NOW - 1_000 })],
     }));
     expect(rows.map((row) => row.agent.name)).toEqual(['Codex', 'Gemini']);
+  });
+});
+
+// GM - Design's review of PR #193.
+describe("GM's review: Needs-you lines, the action's own time, the chip's count", () => {
+  it('a Needs-you row never shows a pointer action, live cursor or not: its status, else the waiting line', () => {
+    const looked = cursor(CLAUDE, { at: NOW - 2_000, did: { verb: 'Looked at', nodeId: 'n4', label: 'Hero shots' } });
+    const [answer] = buildRosterRows(input({ questions: [questions(CLAUDE)], cursors: [looked] }));
+    expect(answer.line).toBe('Waiting for your answer.');
+    const [ok] = buildRosterRows(input({ canvasProposals: [proposal(CLAUDE)], cursors: [looked] }));
+    expect(ok.line).toBe('Waiting for your OK.');
+    const [both] = buildRosterRows(input({
+      questions: [questions(CLAUDE)], canvasProposals: [proposal(CLAUDE)], cursors: [looked],
+    }));
+    expect(both.line).toBe('Waiting for your answer.');
+    const [said] = buildRosterRows(input({
+      questions: [questions(CLAUDE)], cursors: [looked], statuses: [status(CLAUDE, { text: 'Blocked on the crop' })],
+    }));
+    expect(said.line).toBe('Blocked on the crop');
+  });
+
+  it("the action line says when the action happened, not when the cursor last moved", () => {
+    const [row] = buildRosterRows(input({ cursors: [cursor(CODEX, {
+      at: NOW - 2_000, did: { verb: 'Renamed', nodeId: 'n4', label: 'Old', at: NOW - 95_000 },
+    })] }));
+    expect(row.line).toBe('Renamed “Hero shots” · 1 min ago');
+  });
+
+  it('a Working agent with no status and no action: just the name, a button only when its cursor is on a node', () => {
+    const [spot] = buildRosterRows(input({ cursors: [cursor(CODEX, { nodeId: null, did: null, at: NOW - 1_000 })] }));
+    expect(spot.group).toBe('working');
+    expect(spot.line).toBe('');
+    expect(spot.tooltip).toBeNull();
+    expect(spot.ariaLabel).toBeNull();
+    const [onNode] = buildRosterRows(input({ cursors: [cursor(CODEX, { nodeId: 'n7', did: null, at: NOW - 1_000 })] }));
+    expect(onNode.line).toBe('');
+    expect(onNode.ariaLabel).toBe('Codex. Show on canvas');
+  });
+
+  it("the chip's count is the panel's Needs-you group, agent for agent", () => {
+    const mixed = input({
+      statuses: [status(CODEX)],
+      questions: [questions(CLAUDE), questions(GEMINI, { id: 'qs_2', projectId: 'p2' }),
+        questions(CODEX, { id: 'qs_3', status: 'answered' })],
+      canvasProposals: [proposal(GEMINI, { id: 'p_9' }), proposal(CLAUDE, { id: 'p_2' })],
+      assetProposals: [asset(CODEX, { update: null }), asset(GEMINI, { id: 'pa_2', update: { id: 'u', projectId: 'p2' } })],
+    });
+    const rows = buildRosterRows(mixed);
+    const group = rows.filter((row) => row.group === 'needsYou').length;
+    expect(group).toBe(3);
+    expect(needsYouCount(mixed)).toBe(group);
+    expect(needsYouCount(input())).toBe(0);
   });
 });

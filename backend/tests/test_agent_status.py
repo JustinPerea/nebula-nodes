@@ -440,6 +440,106 @@ def test_a_single_rename_or_move_names_itself_in_the_roster(roster):
     assert len([m for m in roster.sent if m.get("type") == "agentPresence"]) == before
 
 
+# -- GM's review of the verbs (PR #193, Q125 item 2) ------------------------------------------
+#
+# GM - Design: "Wired" / "Unwired" become "Connected" / "Disconnected" (Nebula
+# says connected, never wired). Of the pointer gestures only "Pointed at “X”"
+# and "Looked at “X”" on a node and "Looked around" at a spot stay; "Clicked",
+# "Dragged to" and a bare "Moved", "Clicked" or "Dragged" at a spot are cut
+# ("'Moved · just now' reads like the agent moved a node, and the rest is
+# noise"). A cut gesture leaves the agent's previous kept action, with that
+# action's own time; with none, there is no action.
+
+def _wire(api) -> dict:
+    text = api.graph.add_node("text-input", {"value": "x"})
+    image = api.graph.add_node("gpt-image-2-5-generate", {})
+    return {"source": text, "sourceHandle": "text", "target": image, "targetHandle": "prompt"}
+
+
+def test_connecting_and_disconnecting_say_connected_never_wired(roster):
+    wire = _wire(roster)
+    assert roster.client.post("/api/graph/connect", headers=CODEX, json=wire).status_code == 200
+    action = _entry(_roster(roster), "Codex")["lastAction"]
+    assert action["verb"] == "Connected" and action["nodeId"] == wire["target"]
+    assert roster.client.request("DELETE", "/api/graph/edge", headers=CODEX, json=wire).status_code == 200
+    assert _entry(_roster(roster), "Codex")["lastAction"]["verb"] == "Disconnected"
+    for message in roster.sent:
+        if message.get("type") == "agentPresence" and message.get("did"):
+            assert "Wired" not in message["did"]["verb"] and "Unwired" not in message["did"]["verb"]
+
+
+def _point(api, body, headers=CODEX):
+    response = api.client.post("/api/canvas/cursor", headers=headers, json=body)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+@pytest.mark.parametrize(("target", "action", "verb"), [
+    ("node", "move", "Pointed at"),
+    ("node", "look", "Looked at"),
+    ("spot", "look", "Looked around"),
+])
+def test_the_kept_pointer_gestures_name_themselves(roster, target, action, verb):
+    n1 = roster.graph.add_node("text-input", {"value": "a cat"})
+    place = {"nodeId": n1} if target == "node" else {"x": 40, "y": 80}
+    _point(roster, {"target": place, "action": action})
+    last = _entry(_roster(roster), "Codex")["lastAction"]
+    assert last["verb"] == verb
+    assert last["nodeId"] == (n1 if target == "node" else None)
+
+
+CUT_GESTURES = [("node", "click"), ("node", "drag"), ("spot", "move"), ("spot", "click"), ("spot", "drag")]
+
+
+@pytest.mark.parametrize(("target", "action"), CUT_GESTURES)
+def test_a_cut_gesture_keeps_the_previous_action_and_its_time(roster, target, action):
+    created = roster.client.post("/api/graph/node", headers=CODEX,
+                                 json={"definitionId": "text-input", "params": {"value": "a cat"}})
+    node_id = created.json()["id"]
+    assert roster.client.put(f"/api/graph/node/{node_id}/label", headers=CODEX,
+                             json={"label": "Hero shots"}).status_code == 200
+    other = roster.graph.add_node("text-input", {"value": "dusk"})
+    roster.clock.now += 60
+    place = {"nodeId": other} if target == "node" else {"x": 900, "y": 640}
+    _point(roster, {"target": place, "action": action})
+    entry = _entry(_roster(roster), "Codex")
+    assert entry["lastAction"] == {"verb": "Renamed", "nodeId": node_id, "label": "Hero shots",
+                                   "secondsAgo": pytest.approx(60)}
+    # The cursor itself moved, and is active now.
+    assert entry["cursor"]["nodeId"] == (other if target == "node" else None)
+    assert entry["cursor"]["secondsAgo"] == pytest.approx(0)
+    # The live event carries the same action and how long ago it was.
+    (event,) = [m for m in roster.sent if m.get("type") == "agentPresence"][-1:]
+    assert event["did"]["verb"] == "Renamed" and event["did"]["secondsAgo"] == pytest.approx(60)
+
+
+@pytest.mark.parametrize(("target", "action"), CUT_GESTURES)
+def test_a_cut_gesture_with_nothing_before_it_names_no_action(roster, target, action):
+    other = roster.graph.add_node("text-input", {"value": "dusk"})
+    place = {"nodeId": other} if target == "node" else {"x": 900, "y": 640}
+    _point(roster, {"target": place, "action": action})
+    entry = _entry(_roster(roster), "Codex")
+    assert entry["lastAction"] is None
+    (event,) = [m for m in roster.sent if m.get("type") == "agentPresence"][-1:]
+    assert "did" not in event
+
+
+def test_no_cut_verb_is_ever_sent(roster):
+    other = roster.graph.add_node("text-input", {"value": "dusk"})
+    for target, action in CUT_GESTURES:
+        place = {"nodeId": other} if target == "node" else {"x": 1, "y": 2}
+        _point(roster, {"target": place, "action": action})
+    verbs = {m["did"]["verb"] for m in roster.sent if m.get("type") == "agentPresence" and m.get("did")}
+    assert not verbs & {"Clicked", "Dragged to", "Dragged", "Moved"}
+
+
+def test_a_real_node_move_still_says_moved(roster):
+    n1 = roster.graph.add_node("text-input", {"value": "a cat"})
+    assert roster.client.put("/api/graph/layout", headers=CODEX,
+                             json={"positions": {n1: {"x": 900, "y": 640}}}).status_code == 200
+    assert _entry(_roster(roster), "Codex")["lastAction"]["verb"] == "Moved"
+
+
 def test_the_roster_never_carries_another_agents_questions_answers_or_proposals(roster):
     asked_set = roster.client.post("/api/canvas/questions", headers=CLAUDE, json=TWO).json()["questions"]
     # One answered set too: its answers are the person's message to Claude alone.

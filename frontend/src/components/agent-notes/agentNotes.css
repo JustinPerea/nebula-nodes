@@ -173,6 +173,26 @@ body.app-slava-restraint .agent-notes-root {
   to { transform: scale(1); }
 }
 
+/* How many agents need the person (GM's review of PR #193): a filled light
+ * pill with a dark number, the inverse of the Agents panel's outlined
+ * Working badge. One badge counts several agents, so never an agent's
+ * colour. After the chip's unread count, and in the panel's Needs-you group. */
+.agent-notes-needs-badge {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border: 1px solid var(--an-ink-bold);
+  border-radius: 999px;
+  background: var(--an-ink-bold);
+  color: var(--an-on-dot);
+  font: 600 11px/1 var(--an-mono);
+  font-variant-numeric: tabular-nums;
+}
+
 /* =============== Author dots =============== */
 
 .agent-notes-dot {

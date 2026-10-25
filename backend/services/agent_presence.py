@@ -276,8 +276,11 @@ class AgentPresence:
 
         ``did`` names what the action was in the Agents panel's words (Q125
         item 2): ``{"verb": "Added", "nodeId", "label"}``, the verb past
-        tense, the node's name when it has one. With none, a cursor that
-        stays where it was keeps the last one (a line said in place).
+        tense, the node's name when it has one. With none (a line said in
+        place, or a pointer gesture GM cut: a click, a drag, a bare move to a
+        spot), the cursor keeps the agent's last action wherever it goes,
+        with that action's own time: the event's ``did`` carries
+        ``secondsAgo``, 0 for an action that just happened.
         ``project_id`` is the project open when it happened: the roster
         lists a cursor only in its own project.
         """
@@ -298,11 +301,19 @@ class AgentPresence:
         if origin is not None:
             event["from"] = origin
         previous = self._agents.get(identity.id)
-        if did is None and previous is not None and previous.get("target") == target and previous.get("did"):
+        if previous is not None and now - previous["_t"] > PRESENCE_TTL_SECONDS:
+            previous = None  # expired: its action went with it
+        did_at = now
+        if did is None and previous is not None and previous.get("did"):
             did = previous["did"]
+            did_at = previous.get("_did_t", previous["_t"])
+        stored: dict[str, Any] = {**event, "_t": now}
         if did is not None:
-            event["did"] = _clean_did(did)
-        self._agents[identity.id] = {**event, "_t": now}
+            clean = _clean_did(did)
+            event["did"] = {**clean, "secondsAgo": round(now - did_at, 1)}
+            stored["did"] = clean
+            stored["_did_t"] = did_at
+        self._agents[identity.id] = stored
         return event
 
     def here(self, identity: AgentIdentity) -> tuple[dict[str, Any], str]:
@@ -335,7 +346,8 @@ class AgentPresence:
                 "say": value["say"],
                 "secondsAgo": round(now - value["_t"], 1),
                 "projectId": value.get("projectId"),
-                **({"did": dict(value["did"])} if value.get("did") else {}),
+                **({"did": {**value["did"], "secondsAgo": round(now - value.get("_did_t", value["_t"]), 1)}}
+                   if value.get("did") else {}),
             }
             for value in sorted(self._agents.values(), key=lambda v: -v["_t"])
         ]
