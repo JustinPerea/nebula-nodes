@@ -206,7 +206,7 @@ def _refuse_apply_only_flags(args: argparse.Namespace) -> None:
     """`nebula propose` takes `nebula apply`'s other options only to name them."""
     for flag in APPLY_ONLY:
         if getattr(args, flag, None):
-            raise BuildError(f"`nebula propose` doesn't take --{flag}: a proposal adds nodes, wires, param changes, "
+            raise BuildError(f"`nebula propose` doesn't take --{flag}: a proposal adds nodes, connections, param changes, "
                              f"names for its new nodes and runs, for the person to accept. `nebula apply --{flag}` "
                              "does it directly.")
 

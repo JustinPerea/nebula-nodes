@@ -874,7 +874,7 @@ def test_every_route_table_nodes_missing_file_uses_gms_line(tmp_path, monkeypatc
 
     monkeypatch.setattr("services.file_access.require_allowed_path", lambda value: Path(value))
     exc = _raised(local_media_path, str(tmp_path / "gone.png"))
-    assert str(exc) == "A wired input isn't a readable file: gone.png"
+    assert str(exc) == "A connected input isn't a readable file: gone.png"
     assert person_line(exc) == "A connected image file can't be found. Connect it again, then run the node again."
     exc = _raised(local_media_path, str(tmp_path / "take.mp4"))
     assert person_line(exc) == "A connected video file can't be found. Connect it again, then run the node again."

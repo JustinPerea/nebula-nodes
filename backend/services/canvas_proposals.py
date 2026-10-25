@@ -313,7 +313,7 @@ def wire_shape_error(raw: Mapping[str, Any], label: str) -> str | None:
         if node and handle is None and re.search(r"[.:]", node):
             node, handle = re.split(r"[.:]", node, maxsplit=1)
         ends[node_key], ends[handle_key] = node, handle
-    message = f"{label} is a wire {WIRE_SHAPE}, not {'/'.join(others)}"
+    message = f"{label} is a connection {WIRE_SHAPE}, not {'/'.join(others)}"
     # Rewritten only when every end is short enough to be a real one.
     if all(isinstance(ends[key], str) and ends[key] and len(ends[key]) <= MAX_HANDLE for key in _EDGE_KEYS):
         message += ": " + json.dumps({key: ends[key] for key in _EDGE_KEYS}, ensure_ascii=False)
@@ -427,7 +427,7 @@ def parse_spec(body: Any, *, internal_ok: frozenset[str] = frozenset(), capped: 
     names = _names(body.get("rename"), refs)
 
     if not (nodes or edges or changes or run):
-        raise ProposalError(422, "a proposal needs at least one node, wire, param change or run")
+        raise ProposalError(422, "a proposal needs at least one node, connection, param change or run")
     return ProposalSpec(note=note, nodes=tuple(nodes), edges=tuple(edges), params=tuple(changes), run=tuple(run),
                         rename=tuple(names.items()))
 

@@ -82,12 +82,12 @@ PORT_TYPE_HINTS: dict[tuple[str, str], str] = {
 PORT_TYPE_PERSON_HINTS: dict[tuple[str, str], str] = {
     ("krea-2-generate", "moodboard"): (
         "“Moodboard” takes a Nebula moodboard now. To use a Krea moodboard, put its ID in “Moodboard ID” and "
-        "remove the wire."),
+        "remove the connection."),
 }
 
 # The card's lines for a wire the run can't use (error copy round 3e).
-STALE_INPUT_LINE = "A wire into this node no longer matches its inputs. Remove it, then connect it again."
-STALE_OUTPUT_LINE = "A wire from this node no longer matches its outputs. Remove it, then connect it again."
+STALE_INPUT_LINE = "A connection into this node no longer matches its inputs. Remove it, then connect it again."
+STALE_OUTPUT_LINE = "A connection from this node no longer matches its outputs. Remove it, then connect it again."
 
 
 def _input_name(port: Mapping[str, Any] | None, port_id: str) -> str:
@@ -99,12 +99,13 @@ def _input_name(port: Mapping[str, Any] | None, port_id: str) -> str:
 
 def _wrong_kind_line(port: Mapping[str, Any] | None, port_id: str) -> str:
     # GM's example, round 3g: "The wire into “Prompt” brings something it can't take."
-    return (f"The wire into “{_input_name(port, port_id)}” brings something it can't take. "
-            "Remove that wire, then connect a matching output.")
+    # Connection, never wire (GM - Design, 2026-10-25).
+    return (f"The connection into “{_input_name(port, port_id)}” brings something it can't take. "
+            "Remove that connection, then connect a matching output.")
 
 
 def _too_many_line(port: Mapping[str, Any] | None, port_id: str, limit: int) -> str:
-    takes = "one wire" if limit == 1 else f"up to {limit} wires"
+    takes = "one connection" if limit == 1 else f"up to {limit} connections"
     extra = "the extra one" if limit == 1 else "the extra ones"
     return f"“{_input_name(port, port_id)}” takes {takes}. Remove {extra}, then run the node again."
 
@@ -112,7 +113,7 @@ def _too_many_line(port: Mapping[str, Any] | None, port_id: str, limit: int) -> 
 # A configured Replicate node's ports are its model's file inputs; its other
 # inputs are params (services/universal_ports.replicate_inputs).
 _REPLICATE_PARAMS_HINT = (". The model's other inputs are params of the same name: "
-                          "set them with params instead of a wire")
+                          "set them with params instead of a connection")
 
 
 def port_types_compatible(source_type: str, target_type: str) -> bool:

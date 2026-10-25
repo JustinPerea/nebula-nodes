@@ -1131,7 +1131,7 @@ export function MoodboardStudioView() {
           {/* Q21 b: Krea 2's board references share out this strength.
               Q36 a: at 0 no node gets the board, text included. */}
           <span>Strength {draft.strength.toFixed(2)} · {draft.strength <= 0
-            ? 'board off: wired nodes get none of it'
+            ? 'board off: connected nodes get none of it'
             : <>the total the board&apos;s images share on Krea 2</>}</span>
           <input
             type="range"

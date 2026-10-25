@@ -310,7 +310,7 @@ def test_a_proposal_names_the_run_nodes_that_cannot_run_here(api, monkeypatch):
     # The person's canvas gets the same cost, so the bar can say it too.
     opened = [m for m in api.browser if m["type"] == "proposalOpened"][-1]
     assert opened["proposal"]["cost"]["notReady"] == cost["notReady"]
-    assert "can't  +img  GPT Image 2: " + need in format_proposal(response["proposal"])
+    assert "can't    +img  GPT Image 2: " + need in format_proposal(response["proposal"])
 
     keys["OPENAI_API_KEY"] = "sk-test"
     ready = _propose(api, body).json()
@@ -1209,10 +1209,10 @@ def test_cli_proposal_json_and_formatting():
     text = format_proposal(view, created=True, now_ms=1_000_000)
     assert text.splitlines() == [
         "Proposal p_9a1c3e02 is on the canvas for the person (expires in 15 min).",
-        "  adds   +up  Topaz Upscale  [paid · fal]  @(820,140)",
-        "  wires  n4.image → +up.image",
-        "  sets   n4: prompt",
-        "  runs   +up — up to 1 paid run (fal) — no list price",
+        "  adds     +up  Topaz Upscale  [paid · fal]  @(820,140)",
+        "  connects n4.image → +up.image",
+        "  sets     n4: prompt",
+        "  runs     +up — up to 1 paid run (fal) — no list price",
         "Check the outcome: nebula proposal p_9a1c3e02 --wait",
     ]
     priced = {**view, "cost": {**view["cost"], "estimate": {"low": 0.0047, "high": 0.43, "open": True}}}

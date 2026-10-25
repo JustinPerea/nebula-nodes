@@ -446,7 +446,7 @@ async def test_wired_inputs_count_against_a_routes_port_limit(route_fixtures):
     clients = _clients(*IMAGE_ROUTES)
     node = GraphNode(id="n", definitionId="routes-image", params={**IMAGE_DEFAULTS, "_provider": "openrouter"})
     five = {**PROMPT, "images": PortValueDict(type="Image", value=[f"{i}.png" for i in range(5)])}
-    with pytest.raises(MissingCredentialError, match="at most 4 wired images"):
+    with pytest.raises(MissingCredentialError, match="at most 4 connected images"):
         await maker_routes.multi_route(clients)(node, five, {"OPENROUTER_API_KEY": "o"})
     four = {**PROMPT, "images": PortValueDict(type="Image", value=[f"{i}.png" for i in range(4)])}
     await maker_routes.multi_route(clients)(node, four, {"OPENROUTER_API_KEY": "o"})

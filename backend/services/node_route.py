@@ -1407,8 +1407,8 @@ def _why(route: Mapping[str, Any], block: DirectBlock) -> str:
         limit = ((route.get("rules") or {}).get("ports") or {}).get(block.param) or {}
         name = port_limit_name(block.param, limit)
         if not limit.get("max"):
-            return f"it doesn't take wired {name}"
-        return f"it takes at most {limit.get('max')} wired {name}"
+            return f"it doesn't take connected {name}"
+        return f"it takes at most {limit.get('max')} connected {name}"
     return str(block.detail or block.reason)
 
 
@@ -1703,7 +1703,7 @@ def _visible_when_problems(definition: Mapping[str, Any], route: Mapping[str, An
                 problems.append(f"{at}.{controller} must list one or more values")
                 continue
             if any(value in (SET, NOT_SET) for value in allowed):
-                problems.append(f"{at}.{controller} can't use (set)/(unset): visibility never reads wired ports")
+                problems.append(f"{at}.{controller} can't use (set)/(unset): visibility never reads connected ports")
                 continue
             literal = _literal_values(listed[controller])
             stray = [value for value in allowed if literal is not None and match_value(value) not in literal]

@@ -226,13 +226,13 @@ def node_app_input(schema: dict, explicit: dict[str, Any], images: list[Any], te
     body = dict(explicit)
     open_images = [key for key, field in properties.items() if _wire_type(field) == "image" and key not in body]
     if len(images) > len(open_images):
-        raise with_person_line(ValueError(f"This node app takes {len(open_images)} more image(s); {len(images)} are wired"), f"This node app takes {len(open_images)} more {'image' if len(open_images) == 1 else 'images'}, and "
+        raise with_person_line(ValueError(f"This node app takes {len(open_images)} more image(s); {len(images)} are connected"), f"This node app takes {len(open_images)} more {'image' if len(open_images) == 1 else 'images'}, and "
                          f"{len(images)} are connected. Disconnect the extra ones, then run the node again.")
     body.update(zip(open_images, images))
     if text not in (None, ""):
         field = next((key for key, value in properties.items() if _wire_type(value) == "text" and key not in body), None)
         if field is None:
-            raise with_person_line(ValueError("This node app has no free text input for the wired text"), "This node app has no free text input for the connected text. Disconnect it, then run the node again.")
+            raise with_person_line(ValueError("This node app has no free text input for the connected text"), "This node app has no free text input for the connected text. Disconnect it, then run the node again.")
         body[field] = text
     return body
 
@@ -481,7 +481,7 @@ async def handle_krea_files_save(node: GraphNode, inputs: dict[str, PortValueDic
     paths = [_local_path(value) for value in _port_values(inputs.get("media"))]
     text = _clean_str(inputs["text"].value if inputs.get("text") else "")
     if not paths and not text:
-        raise with_person_line(ValueError("Wire media or text to save to Krea Files"), "Connect media or text to save to Krea Files, then run the node again.")
+        raise with_person_line(ValueError("Connect media or text to save to Krea Files"), "Connect media or text to save to Krea Files, then run the node again.")
     for path in paths:
         if path.stat().st_size > MAX_SAVE_BYTES:
             raise with_person_line(

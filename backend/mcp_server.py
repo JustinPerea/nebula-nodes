@@ -47,7 +47,7 @@ Call start_here first: the canvas, open pins and proposals, every moodboard, the
 
 The loop:
 1. describe_node: a node type's ports, params and prices (find_nodes searches them).
-2. edit_canvas: new nodes ("+img" refs), wires, params, names, moves and removals in one call; all of it lands or none of it (or send `steps`). remove_from_canvas deletes nodes or wires. Each edit returns an undo token: undo_canvas_edit takes your own edit back.
+2. edit_canvas: new nodes ("+img" refs), connections, params, names, moves and removals in one call, all or nothing (or send `steps`). remove_from_canvas deletes nodes or connections. Each edit returns an undo token: undo_canvas_edit takes your own edit back.
 3. run_nodes: runs a node and what feeds it, within the person's spend limits.
 4. view_output: look at what it made.
 5. propose_change instead, for a run over a limit or without a list price, or reworking their graph: the person accepts or rejects it in Nebula; agents cannot accept.
@@ -359,14 +359,14 @@ def look_at_canvas(ctx: Context | None = None) -> dict[str, Any]:
     Returns the browser's viewport and visible area (flow coordinates), every
     node with its name, run state (idle/queued/executing/complete/error),
     position, size, whether it is on screen, redacted params and outputs, the
-    wires, the user's selection, and other agents' cursors. An input node
+    connections, the user's selection, and other agents' cursors. An input node
     holding an uploaded file has `fileName`, the name it was uploaded with
     (its `filePath` is a stored, hashed name). `view.stale` is
     true when no browser has reported recently (the canvas may be closed).
     A node whose last run failed has `error`, the message its card shows
     (and `errorHint` when Nebula has a plainer reading of it). An OpenRouter,
     Nous Portal or Replicate node set up for its model has `ports`
-    ({inputs, outputs}: the ids to wire, which come from the model), plus
+    ({inputs, outputs}: the ids to connect, which come from the model), plus
     `unconfirmed` (port ids whose type is a guess) and a `note` saying what
     to do (a node saved before Replicate outputs were typed: set its
     model_id again). `events.cursor` is where wait_for_canvas_change should start (`since`).
@@ -506,7 +506,7 @@ def point_at(
     where your cursor already is and it doesn't move; with no cursor yet, it
     starts at the middle of the person's view, or at (0, 0) when no canvas
     has reported its view (`placed` says which). Give `from_node_id` (and `from_port`)
-    with action "drag" to show a wire being pulled. Graph edits made through
+    with action "drag" to show a connection being dragged. Graph edits made through
     Nebula's API move your cursor on their own; use this to point while
     explaining, or to show what you are about to change. What you noticed, a
     report or a suggestion goes in post_note, which the person reads in the
@@ -665,7 +665,7 @@ def propose_change(
 
     Use this before anything that spends money (paid model runs) or reworks
     their graph. The person sees your proposal as ghost nodes and dashed
-    wires; nothing changes until they click Accept, and that click is their
+    connections; nothing changes until they click Accept, and that click is their
     approval for the runs listed. You cannot accept your own proposal.
 
     Each proposal also posts an Update for you ("Claude Code proposes 3
@@ -682,7 +682,7 @@ def propose_change(
     - `nodes`: new nodes, each {"ref": "+up", "definitionId": "...",
       "params": {...}, "position": {"x", "y"}} (params and position optional).
       Refs start with "+" and are only used inside this proposal.
-    - `edges`: wires {"source", "sourceHandle", "target", "targetHandle"},
+    - `edges`: connections {"source", "sourceHandle", "target", "targetHandle"},
       where source/target is a ref ("+up") or an existing node id ("n4").
     - `params`: changes to existing nodes, [{"nodeId": "n4", "params": {...}}].
     - `run`: refs or node ids to run after acceptance (≤6).
@@ -690,7 +690,7 @@ def propose_change(
       (≤80 chars). The ghost shows the name and accepting applies it.
       Renaming a node already on the canvas is a direct edit (edit_canvas),
       and a proposal that tries it is refused.
-    A proposal can't move, arrange or remove nodes or wires; edit_canvas
+    A proposal can't move, arrange or remove nodes or connections; edit_canvas
     and remove_from_canvas do that directly.
 
     Returns {"proposal": {...}} with `id`, `status`, and `cost`: nodes are
@@ -1053,7 +1053,7 @@ def describe_node(definition_id: str, ctx: Context | None = None) -> dict[str, A
     answer then starts with `lookup`, the id it used ("Moodboard is the
     Moodboard node: nebula-moodboard"). An id always wins; a name two types
     share is refused with both ids. edit_canvas and propose_change take ids
-    only. The answer: input and output ports (ids to wire), params
+    only. The answer: input and output ports (ids to connect), params
     (type, default, options, ranges, `onlyWhen` another param has a value,
     and `optionsOnlyWhen` for options offered only for some values of another param),
     whether it runs here, and list prices by the params that set them
@@ -1084,7 +1084,7 @@ def describe_node(definition_id: str, ctx: Context | None = None) -> dict[str, A
     Scene's base model, a Video QC node's vision-llm mode) has
     `runsWithOptions`: readiness per value of the param that picks it, and a
     note when a different value would run with the keys set here.
-    A node with a Moodboard input has `moodboardAdapter`: what a wired Nebula
+    A node with a Moodboard input has `moodboardAdapter`: what a connected Nebula
     moodboard does there, at its defaults on the route a run takes here
     (`route`, when it has several). `line` is the card's Moodboard line;
     `channel`, `default` (images: board images go; text: only the brief),
@@ -1106,8 +1106,8 @@ def upload_file(path: str, position: dict[str, float] | None = None,
     <file>`): Nebula copies it into its output folder and puts an Image
     Input, Video Input, Audio Input or Document Input holding the copy on the
     canvas, at `position` ({"x", "y"} in canvas coordinates, as edit_canvas
-    takes) or, without one, right of the other nodes. Returns `nodeId` (wire
-    it into a node with edit_canvas), `kind`, `url` ("/api/outputs/..."),
+    takes) or, without one, right of the other nodes. Returns `nodeId` (connect
+    it to a node with edit_canvas), `kind`, `url` ("/api/outputs/..."),
     `filePath` and `filename` (the file's own name, which the card shows).
 
     Do this before running a node priced from its input's size (SeedVR2,
@@ -1174,7 +1174,7 @@ def edit_canvas(
     of existing nodes or removals.
     - `nodes`: new nodes [{"ref": "+img", "definitionId": "...", "params": {...}}];
       refs start with "+" and only live inside this call.
-    - `edges`: wires [{"source", "sourceHandle", "target", "targetHandle"}];
+    - `edges`: connections [{"source", "sourceHandle", "target", "targetHandle"}];
       ends are refs or existing ids ("n4"); handles are port ids from describe_node.
     - `params`: changes to existing nodes [{"nodeId": "n4", "params": {...}}].
     - `rename`: {"n4" or "+img": "Hero shot"} ("" restores the model's name).
@@ -1183,7 +1183,7 @@ def edit_canvas(
       the canvas lay out this call's new nodes by their real size once it has
       drawn them, starting where they were placed. Other nodes never move. With
       no canvas open, the first one to open does it; the result's `arrange` says which.
-    - `remove`: node ids to delete, with their wires. `unwire`: single wires,
+    - `remove`: node ids to delete, with their connections. `unwire`: single connections,
       [{"source", "sourceHandle", "target", "targetHandle"}].
     - `note`: one line on what this is for; shown beside your cursor. Your own
       edit only; what you noticed goes in post_note.
@@ -1204,10 +1204,10 @@ def edit_canvas(
     the node gets that model's ports (`images` in for a vision model, `image`
     out for an image model, a Replicate model's file inputs by name), listed in
     `modelPorts`. If Nebula can't read the model (no key: only the person adds
-    one) `modelPortNotes` says why and a wire to any other port is refused.
-    A model change that strands wires (the new model lacks their ports, or the
+    one) `modelPortNotes` says why and a connection to any other port is refused.
+    A model change that strands connections (the new model lacks their ports, or the
     model is cleared or can't be read, leaving the basic ports) is refused:
-    unwire them in the same call.
+    disconnect them in the same call (`unwire`).
     Nothing runs; call run_nodes next. Returns `idMap` (ref → node id), a
     summary and `undo` ({token, editId, expiresInSeconds, summary}): pass the
     token to undo_canvas_edit to take this edit back (a steps plan returns
@@ -1294,7 +1294,7 @@ def open_project(project_id: str, ctx: Context | None = None) -> dict[str, Any]:
 @_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=False))
 def remove_from_canvas(node_ids: list[str] | None = None, wires: list[dict] | None = None,
                        ctx: Context | None = None) -> dict[str, Any]:
-    """Delete nodes (with their wires) and/or single wires, all or nothing.
+    """Delete nodes (with their connections) and/or single connections, all or nothing.
 
     `wires` are [{"source", "sourceHandle", "target", "targetHandle"}] as
     look_at_canvas lists them. Their outputs stay in Nebula's output folder.
@@ -1321,11 +1321,11 @@ def undo_canvas_edit(token: str | list[str], ctx: Context | None = None) -> dict
     Each part of the edit goes back only if the canvas still has it as your
     edit left it: a node you added is removed, params, names and positions you
     changed return to their earlier values, and nodes you removed come back
-    with their params, outputs, name and wires. A part the person (or anyone)
+    with their params, outputs, name and connections. A part the person (or anyone)
     changed since stays as it is and is listed in `skipped` with the reason.
     A run counts as a change: a node the person, another agent or an unnamed
     client ran since your edit stays whole (not removed; its params, name,
-    position and the wires into it stay as they ran) as one `skipped` item,
+    position and the connections into it stay as they ran) as one `skipped` item,
     reason "ran since", with `ranBy` and a message such as "n3 ran since (run
     by the person), so it stays". Your own runs don't count, so you can still
     undo your own experiments.
@@ -1449,7 +1449,7 @@ async def run_nodes(node_id: str | None = None, wait_seconds: float = DEFAULT_RU
     from its input file's size (SeedVR2 Upscale) is checked at the size of
     the file it gets, measured only in Nebula's output folder (add a file
     of yours with upload_file first); an input another node makes in this
-    same run isn't known yet, so wire an Image Input holding the file into
+    same run isn't known yet, so connect an Image Input holding the file to
     it, or propose it. Waits up to
     `wait_seconds` (max 300). Finished: outputs per node, errors, `skipped`
     (nodes a gate such as Jev Decide's On Pass / On Fail withheld, with
@@ -1457,7 +1457,7 @@ async def run_nodes(node_id: str | None = None, wait_seconds: float = DEFAULT_RU
     images and videos. Status is "finished", or "failed" when any node
     failed: `errors` has each node's message (also on its card), `error` says
     it in one line, and finished nodes keep their outputs. A node that can't
-    run as set up (a missing key, an unwired required input) fails the run
+    run as set up (a missing key, a required input with nothing connected) fails the run
     before it starts: nothing ran, nothing was spent. Still going: status "running" and a runId;
     it keeps running, so call get_run(runId) or cancel_run(runId). To run
     several separate nodes, run the canvas or call this once per node.
@@ -1863,7 +1863,7 @@ def moodboard_get(board: str, ctx: Context | None = None) -> dict[str, Any]:
     hand-written brief when there is one, else the generated one),
     `negativePrompt`, `avoidPrompt`, `palette`/`accents` and `override`
     {active, stale}. It is null on a Nebula too old to send it. At
-    `strength` 0 the board is off and no node it's wired into gets any of
+    `strength` 0 the board is off and no node it's connected to gets any of
     it, images included (the run note "Board strength is 0: board not
     sent"). Don't use
     analysis.styleBrief as the brief: it leaves out Direction, pinned colours
@@ -2303,7 +2303,7 @@ def model_catalog(provider: str, query: str = "", limit: int = 25, ctx: Context 
     `image` out for an image model; model_schema has their types).
 
     Put a row's `id` in the node's `param` (returned) with edit_canvas, and
-    wire those ports in the same edit. It reads the provider's list with the
+    connect those ports in the same edit. It reads the provider's list with the
     person's key (no charge); without the key the refusal says which.
     Replicate has thousands of models and no list here: use
     model_schema("replicate", "owner/name")."""
@@ -2332,7 +2332,7 @@ def model_schema(provider: str, model_id: str, ctx: Context | None = None) -> di
     `ports` ({inputs, outputs}, each port {id, label, dataType, required,
     multiple?}): exactly the ports the node gets once its model is this one,
     worked out by the function edit_canvas configures it with, so the canvas
-    draws these and edit_canvas accepts wires on them in the same edit that
+    draws these and edit_canvas accepts connections on them in the same edit that
     sets the model. OpenRouter / Nous Portal: `messages` always, `images`
     for a model that takes images, `text` and/or `image` out. Replicate: a
     port per file input, named as the model names it, and one output: for a
@@ -2342,8 +2342,8 @@ def model_schema(provider: str, model_id: str, ctx: Context | None = None) -> di
     else `text`. When nothing says what file it is, the output is `image`
     with `typeUnconfirmed: true` and the answer has a `note`; a run that
     returns another kind of file then keeps it under that file's own port
-    (`video`, ...), so a wire on `image` gets nothing. A run fills the
-    declared port, so wire exactly these.
+    (`video`, ...), so a connection on `image` gets nothing. A run fills the
+    declared port, so connect exactly these.
 
     "replicate" with `model_id` "owner/name": also the model's latest
     `versionId`, `params` (its other inputs, set as params of the same name:
@@ -2597,8 +2597,8 @@ def get_project(project_id: str, ctx: Context | None = None) -> dict[str, Any]:
     """Read a saved project without opening it (an id from list_projects, or "current").
 
     Nodes come as look_at_canvas shows them (name, model, redacted params,
-    which outputs exist, wires in, state, position, and the last `error`),
-    with the wires, `cover` (as list_projects has it), `open`, and
+    which outputs exist, connections in, state, position, and the last `error`),
+    with the connections, `cover` (as list_projects has it), `open`, and
     `runHistory`: the newest 20 of `runHistoryCount` runs from the canvas's
     Run History, each with what it ran (`nodeIds`), its status and timing,
     and which outputs it made, never their values. view_output shows an
@@ -2620,7 +2620,7 @@ def project_size(project_id: str = "current", ctx: Context | None = None) -> dic
     `limitBytes`, `overLimit`, `savingPaused`, `overByBytes`, `largest` (the
     largest parts of 0.1 MB and up, at most ten: a node's `nodeId`, `name` and which
     `part` takes the space, "Text" (its params), "Stored outputs" or
-    "Embedded files"; or the project's own "Run history", "Wires", "Create
+    "Embedded files"; or the project's own "Run history", "Connections", "Create
     draft"), `smaller` (the rest) and a `note`. To trim, use edit_canvas
     (shorter params) or remove_from_canvas, and ask the person before deleting
     their work; run history is cleared only by the person. Read-only."""

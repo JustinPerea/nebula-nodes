@@ -52,13 +52,13 @@ describe("Projects: Couldn't save your edits.", () => {
     expect(screen.getByRole('alert').textContent).not.toContain('is opening');
   });
 
-  it("held from the open project's own canvas: the confirm says its nodes, wires and settings stay in that project (review)", () => {
+  it("held from the open project's own canvas: the confirm says its nodes, connections and settings stay in that project (review)", () => {
     const actions = props({ unsavedEdits: { reason: TOO_LARGE, keptIn: 'Glass campaign' } });
     render(<Home {...actions} />);
     fireEvent.click(screen.getByRole('button', { name: 'Continue without them' }));
     const dialog = screen.getByRole('alertdialog');
     const line = dialog.getAttribute('aria-labelledby') ? document.getElementById(dialog.getAttribute('aria-labelledby')!)?.textContent : '';
-    expect(line).toBe("Continue without them? “Glass campaign” keeps its nodes, wires and settings. "
+    expect(line).toBe("Continue without them? “Glass campaign” keeps its nodes, connections and settings. "
       + 'Run history since the last save, and anything else only this tab has, will be lost.');
     expect(line).not.toContain("Continue without your edits? They can't be recovered after this.");
     fireEvent.click(within(dialog).getByRole('button', { name: 'Continue without them' }));

@@ -238,7 +238,7 @@ def run_route(definition: Mapping[str, Any] | None, params: Mapping[str, Any] | 
 # -- what agents read (describe_node, `nebula info`) -----------------------------------------------------
 
 TEXT_LINE = "This model takes the brief as text."
-NO_ENTRY_NOTE = "This node has no moodboard adapter entry, so a wired board goes as text only."
+NO_ENTRY_NOTE = "This node has no moodboard adapter entry, so a connected board goes as text only."
 # Table bookkeeping an agent has no use for; byModel and byRoute come back as `variants`.
 _INTERNAL_FIELDS = ("sources", "checked", "byModel", "byRoute")
 

@@ -426,7 +426,7 @@ def test_an_unreadable_file_is_refused_for_what_it_is():
 
 def test_a_port_without_one_wire_is_refused_for_what_it_is():
     assert "more than one" in _decide_why("wires")
-    assert "nothing wired" in _decide_why("unwired")
+    assert "nothing connected" in _decide_why("unwired")
 
 
 def test_an_input_still_to_be_made_keeps_its_wording():

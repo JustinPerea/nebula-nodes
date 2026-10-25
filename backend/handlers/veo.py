@@ -220,7 +220,7 @@ async def handle_veo(
         else:
             raise with_person_line(ValueError(
                 "Veo extension needs a Veo-generated clip's source URI (a Gemini files/... URI). "
-                "Wire the upstream Veo node's 'Source URI' output into 'Extend Video' — Veo "
+                "Connect the upstream Veo node's 'Source URI' output to 'Extend Video' — Veo "
                 "rejects re-uploaded or external video files."
             ), "Veo extends only a clip Veo made, by its source URI. Connect the upstream Veo node's “Source URI” output "
                 "into “Extend Video”. Veo rejects re-uploaded or external video files.")
@@ -400,8 +400,8 @@ async def _vertex_video_payload(value: str) -> dict[str, Any]:
         return {"gcsUri": value, "mimeType": "video/mp4"}
     if "generativelanguage.googleapis.com" in value:
         raise with_person_line(ValueError(
-            "Vertex can't read a Gemini API file URI. Wire the upstream node's 'Video' output "
-            "(the saved clip) into 'Extend Video' instead."
+            "Vertex can't read a Gemini API file URI. Connect the upstream node's 'Video' output "
+            "(the saved clip) to 'Extend Video' instead."
         ), "Vertex AI can't extend a clip made through the Gemini API. Connect the upstream node's “Video” output to "
             "“Extend Video” instead.")
     if value.startswith(("http://", "https://")):

@@ -239,7 +239,7 @@ def test_an_agent_wires_a_video_models_video_output_in_the_edit_that_sets_it(neb
         "edges": [{"source": "+clip", "sourceHandle": "video", "target": "+frames", "targetHandle": "video"},
                   {"source": "+clip", "sourceHandle": "video", "target": "+look", "targetHandle": "input"}],
     })
-    assert built["summary"] == "added 3, wired 2"
+    assert built["summary"] == "added 3, connected 2"
     clip = built["idMap"]["+clip"]
     assert built["modelPorts"][clip] == {"model": "acme/clipmaker", "inputs": ["first_frame"], "outputs": ["video"]}
     canvas = {node["id"]: node for node in _call_tool("look_at_canvas", {})["nodes"]}

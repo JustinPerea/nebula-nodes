@@ -94,7 +94,7 @@ def port_values(inputs: Mapping[str, Any], port: str) -> list[Any]:
 def one_value(inputs: Mapping[str, Any], port: str, where: str) -> Any:
     values = port_values(inputs, port)
     if len(values) > 1:
-        raise refuse(where, f"takes one {port}, but {len(values)} are wired",
+        raise refuse(where, f"takes one {port}, but {len(values)} are connected",
                      f"takes one {port.replace('_', ' ')}, but {len(values)} are connected. Disconnect the extra ones.")
     return values[0] if values else None
 
@@ -113,7 +113,7 @@ def refuse_unwired(inputs: Mapping[str, Any], takes: set[str], where: str) -> No
     takes, so a wired input is never silently left out."""
     extra = sorted(wired(inputs) - takes)
     if extra:
-        raise refuse(where, f"can't take the wired {', '.join(extra)}. Disconnect it or choose another provider.",
+        raise refuse(where, f"can't take the connected {', '.join(extra)}. Disconnect it or choose another provider.",
                      f"can't take the connected {', '.join(port.replace('_', ' ') for port in extra)}. "
                      "Disconnect it or choose another provider.")
 
@@ -147,7 +147,7 @@ def video_frames(inputs: Mapping[str, Any], where: str) -> list[Any]:
     frames = [*frames, *end]
     if len(frames) > VIDEO_MAX_FRAMES:
         raise refuse(where, f"takes at most {VIDEO_MAX_FRAMES} images in all (start image, keyframes and end "
-                     f"image), but {len(frames)} are wired. Disconnect {len(frames) - VIDEO_MAX_FRAMES}.",
+                     f"image), but {len(frames)} are connected. Disconnect {len(frames) - VIDEO_MAX_FRAMES}.",
                      f"takes at most {VIDEO_MAX_FRAMES} images in all, counting the start image, keyframes and "
                      f"end image, but {len(frames)} are connected. Disconnect {len(frames) - VIDEO_MAX_FRAMES}.")
     return frames
@@ -167,7 +167,7 @@ def local_media_path(value: Any) -> Path | None:
     path = require_allowed_path(Path(ref))
     if not path.is_file():
         raise with_person_line(
-            ValueError(f"A wired input isn't a readable file: {Path(ref).name}"),
+            ValueError(f"A connected input isn't a readable file: {Path(ref).name}"),
             missing_file_line("file", ref))
     return path
 
@@ -464,7 +464,7 @@ def fal_fields(endpoint: str, params: Mapping[str, Any], inputs: Mapping[str, An
         if field in fields:
             both = [p.replace("_", " ") for p, (f, _many) in table.items() if f == field and port_values(inputs, p)]
             kind = "video" if "video" in field else "image" if "image" in field else "file"
-            raise refuse(where, f"takes one source for {field}; disconnect one of the wired inputs",
+            raise refuse(where, f"takes one source for {field}; disconnect one of the connected inputs",
                          f"takes one source {kind}, but the {' and the '.join(both)} are both connected. "
                          "Disconnect one.")
         fields[field] = [media_url(v) for v in values] if many else media_url(one_value(inputs, port, where))
@@ -579,7 +579,7 @@ def public_frame_url(value: Any, where: str) -> str:
     ref = local_media_ref(str(value))
     if not ref.startswith(("http://", "https://")):
         raise refuse(where, "takes frame images only as public http(s) URLs, not a Nebula output or an "
-                     "inline image. Choose another provider for it, or wire an image from a public URL.",
+                     "inline image. Choose another provider for it, or connect an image from a public URL.",
                      "takes frame images only from a public web address, not a Nebula output or an inline image. "
                      "Choose another provider, or connect an image from a public web address.")
     return ref

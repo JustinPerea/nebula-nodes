@@ -136,13 +136,13 @@ def test_the_route_wiring_lines_are_the_persons_lines() -> None:
 
     where = route_clients.Where("fal.ai's fal-ai/kling-video/v2.1", "Kling 2.1 on fal.ai")
     exc = _raised(route_clients.refuse_unwired, {"start_image": _port("a.png", "Image")}, {"prompt"}, where)
-    assert str(exc) == ("fal.ai's fal-ai/kling-video/v2.1 can't take the wired start_image. "
+    assert str(exc) == ("fal.ai's fal-ai/kling-video/v2.1 can't take the connected start_image. "
                         "Disconnect it or choose another provider.")
     assert person_line(exc) == ("Kling 2.1 on fal.ai can't take the connected start image. "
                                 "Disconnect it or choose another provider.")
 
     exc = _raised(route_clients.one_value, {"start_image": _port(["a.png", "b.png"], "Image")}, "start_image", where)
-    assert str(exc) == "fal.ai's fal-ai/kling-video/v2.1 takes one start_image, but 2 are wired"
+    assert str(exc) == "fal.ai's fal-ai/kling-video/v2.1 takes one start_image, but 2 are connected"
     assert person_line(exc) == "Kling 2.1 on fal.ai takes one start image, but 2 are connected. Disconnect the extra ones."
 
     # A plain string from a caller with no person form never reaches the card.
@@ -179,7 +179,7 @@ def test_kreas_node_app_image_count_is_the_persons_line() -> None:
 
     schema = {"properties": {"image": {"type": "string", "format": "uri"}}}
     exc = _raised(node_app_input, schema, {}, ["a.png", "b.png"], None)
-    assert str(exc) == "This node app takes 1 more image(s); 2 are wired"
+    assert str(exc) == "This node app takes 1 more image(s); 2 are connected"
     # Round 3d: no parentheses in a person line (GM).
     assert person_line(exc) == "This node app takes 1 more image, and 2 are connected. Disconnect the extra ones, then run the node again."
 
@@ -748,13 +748,13 @@ ID_IN_A_LINE = re.compile(r"/|(?<![{\w])[a-z0-9]+_[a-z0-9_]+(?![}\w])|\b[a-z0-9]
     ("openrouter", None, {}, "OpenRouter's black-forest-labs/flux-3-video needs a prompt",
      "FLUX 3 Video on OpenRouter needs a prompt. Connect one, then run the node again."),
     ("fal", None, {"prompt": _port("p"), "end_image": _port("https://e.com/b.png", "Image")},
-     "fal.ai's blackforestlabs/flux-3/text-to-video can't take the wired end_image. Disconnect it or choose "
+     "fal.ai's blackforestlabs/flux-3/text-to-video can't take the connected end_image. Disconnect it or choose "
      "another provider.",
      "FLUX 3 Video on fal.ai can't take the connected end image. Disconnect it or choose another provider."),
     ("fal", "blackforestlabs/flux-3/edit-video",
      {"prompt": _port("p"), "start_video": _port("https://e.com/a.mp4", "Video"),
       "video": _port("https://e.com/b.mp4", "Video")},
-     "fal.ai's blackforestlabs/flux-3/edit-video takes one source for video_url; disconnect one of the wired inputs",
+     "fal.ai's blackforestlabs/flux-3/edit-video takes one source for video_url; disconnect one of the connected inputs",
      "FLUX 3 Video on fal.ai takes one source video, but the start video and the video are both connected. "
      "Disconnect one."),
     ("fal", "blackforestlabs/flux-3/keyframes-to-video", {"prompt": _port("p"), "keyframes": _port(["a.png"], "Image")},
