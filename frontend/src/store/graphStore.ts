@@ -873,6 +873,9 @@ interface GraphState {
   selectAll: () => void;
   duplicateSelected: () => void;
   deleteSelected: () => void;
+  /** The canvas's Delete and Backspace: the selected nodes and wires, one
+   * undo step that puts back the nodes and every wire together (review 9, L-4). */
+  deleteCanvasElements: (nodeIds: string[], edgeIds: string[]) => void;
   autoLayoutSelected: () => void;
 
   // Existing methods. addNode/addDynamicNode are async because static nodes
@@ -1830,6 +1833,161 @@ type GraphSet = (
   partial: Partial<GraphState> | ((state: GraphState) => Partial<GraphState>),
 ) => void;
 type GraphGet = () => GraphState;
+
+/**
+ * The canvas's node changes (React Flow's onNodesChange, and every delete
+ * path: the toolbar, the context menu, the Inspector, deleteCanvasElements).
+ * A delete takes one undo step, or joins `shared` (deleteCanvasElements:
+ * the same step as the wires deleted with the nodes, review 9 L-4); `keep`
+ * says that step holds more than these nodes, so it stays even if no node
+ * goes after all.
+ */
+function changeCanvasNodes(
+  changes: NodeChange[],
+  set: GraphSet,
+  get: GraphGet,
+  shared?: { step: UndoSnapshot; keep: boolean },
+): void {
+  if (get().isExecuting && changes.some((change) => change.type === 'remove')) return;
+  const removedIds = changes.filter((c): c is NodeChange & { type: 'remove' } => c.type === 'remove').map((c) => c.id);
+  if (refuseHeldNodeDelete(get(), removedIds, set)) return;
+  const cliRemovedIds = removedIds.filter((nodeId) => CLI_ID_RE.test(nodeId));
+  if (cliRemovedIds.length === 0) {
+    if (removedIds.length === 0) {
+      applyCanvasNodeChanges(changes, set, get);
+      return;
+    }
+    breakUndoDebounce();
+    const step = shared?.step ?? pushUndo(set, get);
+    const present = new Set(get().nodes.map((node) => node.id));
+    applyCanvasNodeChanges(changes, set, get, step);
+    const gone = removedIds.filter((nodeId) => present.has(nodeId) && !get().nodes.some((node) => node.id === nodeId));
+    if (gone.length > 0) set(deletedNotice(gone.length, step));
+    return;
+  }
+
+  // A backend paid-safety rejection must leave the node visibly present.
+  // Wait for each authoritative delete rather than optimistically hiding it.
+  // The undo step is the canvas now: each delete's graphSync can remove the
+  // node here before its reply arrives.
+  breakUndoDebounce();
+  const undoStep = shared?.step ?? pushUndo(set, get);
+  const shownBefore = new Set(get().nodes.map((node) => node.id));
+  // A project opened (or a graph loaded) before the answers came: the
+  // canvas and its steps are another graph's now (second review).
+  const replacementRevision = canvasReplacementRevision;
+  const deleting = Promise.allSettled(cliRemovedIds.map(deleteCLIOriginNode)).then((results) => {
+    const confirmed = new Set<string>();
+    const failures: string[] = [];
+    const removals: RemovalRecord[] = [];
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        confirmed.add(cliRemovedIds[index]);
+        if (result.value) removals.push(result.value);
+      } else failures.push(failureCopy(result.reason).reason);
+    });
+    // Undoing this step names what each delete removed (GM, 2026-10-23).
+    if (removals.length > 0) undoStep.removals = mergeRemovals(undoStep.removals, removals);
+    if (replacementRevision !== canvasReplacementRevision) {
+      // Nothing here is that graph's any more: no node to take off, no
+      // step to renew, no notice. The step keeps its records, for an undo
+      // that comes back to that graph (an import undone).
+      if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length);
+      return;
+    }
+    if (removals.length > 0) {
+      set((state) => {
+        renewStackedRemovals(state, removals);
+        return {};
+      });
+    }
+    const safeChanges = changes.filter((change) => (
+      change.type !== 'remove'
+      || !CLI_ID_RE.test(change.id)
+      || confirmed.has(change.id)
+    ));
+    const removing = safeChanges.filter((change) => change.type === 'remove').map((change) => change.id);
+    // Nothing was deleted after all: the step taken above would undo nothing.
+    // (Unless it also took the wires deleted with them: deleteCanvasElements.)
+    if (removing.length === 0 && !shared?.keep) get().cancelUndoStep(undoStep);
+    if (safeChanges.length > 0) applyCanvasNodeChanges(safeChanges, set, get, undoStep);
+    const deleted = removing.filter((nodeId) => shownBefore.has(nodeId)).length;
+    // Its Undo applies only while this step is next in line: after a newer
+    // step, the line would offer a button that does nothing (withLiveNotice).
+    if (deleted > 0 && get().undoStack.at(-1) === undoStep) set(deletedNotice(deleted, undoStep));
+    if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length);
+  });
+  // An undo pressed while the deletes are on their way waits for their
+  // answers, so its restore can name what they removed.
+  restoreQueue = restoreQueue.then(() => deleting);
+}
+
+/** The canvas's wire changes, after the caller took the undo step for a
+ * removal: cli wires mirrored to Nebula's backend, Remotion sources pruned. */
+function applyCanvasEdgeChanges(changes: EdgeChange[], set: GraphSet, get: GraphGet): void {
+  const hasRemove = changes.some((c) => c.type === 'remove');
+  if (hasRemove) {
+    // Mirror cli-connected edge deletions to the backend. We resolve the edge
+    // to its endpoints from current state BEFORE applying the change so we
+    // can still find it.
+    const removedIds = changes
+      .filter((c): c is EdgeChange & { type: 'remove' } => c.type === 'remove')
+      .map((c) => c.id);
+    const currentEdges = get().edges;
+    for (const id of removedIds) {
+      const edge = currentEdges.find((e) => e.id === id);
+      if (!edge) continue;
+      if (CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) void sendWire(edge, false, set);
+    }
+  }
+  set((state) => {
+    const nextEdges = applyEdgeChanges(changes, state.edges);
+
+    // Rule B-2: For each removed edge whose targetHandle === 'sources' and
+    // whose target is a RemotionNode, prune any TrackItem whose sourceNodeId
+    // matches the edge's source node.
+    const removedEdges = changes
+      .filter((c): c is { id: string; type: 'remove' } => c.type === 'remove')
+      .map((c) => state.edges.find((e) => e.id === c.id))
+      .filter((e): e is NonNullable<typeof e> => !!e);
+
+    const sourceIdsLosingConnection: string[] = [];
+    for (const edge of removedEdges) {
+      if (edge.targetHandle !== 'sources') continue;
+      const targetNode = state.nodes.find((n) => n.id === edge.target);
+      if (targetNode?.data?.definitionId !== 'remotion-node') continue;
+      sourceIdsLosingConnection.push(edge.source);
+    }
+
+    if (sourceIdsLosingConnection.length === 0) {
+      return { edges: nextEdges };
+    }
+
+    const updatedNodes = state.nodes.map((n) => {
+      if (n.data?.definitionId !== 'remotion-node') return n;
+      const currentParams = (n.data.params ?? {}) as Record<string, unknown>;
+      const manifest = currentParams.manifest as VideoGraphManifest | undefined;
+      if (!manifest) return n;
+
+      let nextManifest = manifest;
+      let anyChange = false;
+      for (const sourceId of sourceIdsLosingConnection) {
+        const result = pruneTrackItemsForDeletedNode(nextManifest, sourceId);
+        if (result.changed) {
+          nextManifest = result.manifest;
+          anyChange = true;
+        }
+      }
+      if (!anyChange) return n;
+      return {
+        ...n,
+        data: { ...n.data, params: { ...currentParams, manifest: nextManifest } },
+      };
+    });
+
+    return { edges: nextEdges, nodes: updatedNodes };
+  });
+}
 
 function applyCanvasNodeChanges(
   changes: NodeChange[],
@@ -3694,13 +3852,15 @@ async function askUntilSettled(
 /** The rows no dollar amount covers ("price not listed", "price depends on its input"), by node and model. */
 function unpricedRows(model: PlaceholderRunConfirm): string[] {
   return model.rows.filter((row) => row.price === PRICE_NOT_LISTED || row.price === PRICE_DEPENDS_ON_INPUT)
-    .map((row) => `${row.nodeId}\u0000${row.model ?? ''}`);
+    .map((row) => `${row.nodeId}\u0000${row.modelKey}\u0000${row.setting ?? ''}`);
 }
 
-/** A row as the person read it: its node, the model it runs and its price
+/** A row as the person read it: its node, the model it runs (its raw name,
+ * even when the row hides it as the node's own name: review 9, L-3), a Krea
+ * node's sub-model setting (GM - Design, round 10, item 2) and its price
  * (review 7, L2: a node now on another model, or at another price, was not seen). */
 function rowSeen(row: PlaceholderRunConfirm['rows'][number]): string {
-  return `${row.nodeId}\u0000${row.model ?? ''}\u0000${row.price}`;
+  return `${row.nodeId}\u0000${row.modelKey}\u0000${row.setting ?? ''}\u0000${row.price}`;
 }
 
 /** Whether what the person confirmed (`shown`, as the dialog drew it) covers
@@ -4512,145 +4672,39 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   // so the delete says "Deleted the node." with Undo instead (lib/deleteNotice.ts).
   allowCanvasDelete: (nodeIds) => !refuseHeldNodeDelete(get(), nodeIds, set),
 
-  onNodesChange: (changes) => {
-    if (get().isExecuting && changes.some((change) => change.type === 'remove')) return;
-    const removedIds = changes.filter((c): c is NodeChange & { type: 'remove' } => c.type === 'remove').map((c) => c.id);
-    if (refuseHeldNodeDelete(get(), removedIds, set)) return;
-    const cliRemovedIds = removedIds.filter((nodeId) => CLI_ID_RE.test(nodeId));
-    if (cliRemovedIds.length === 0) {
-      if (removedIds.length === 0) {
-        applyCanvasNodeChanges(changes, set, get);
-        return;
-      }
-      breakUndoDebounce();
-      const step = pushUndo(set, get);
-      const present = new Set(get().nodes.map((node) => node.id));
-      applyCanvasNodeChanges(changes, set, get, step);
-      const gone = removedIds.filter((nodeId) => present.has(nodeId) && !get().nodes.some((node) => node.id === nodeId));
-      if (gone.length > 0) set(deletedNotice(gone.length, step));
-      return;
-    }
-
-    // A backend paid-safety rejection must leave the node visibly present.
-    // Wait for each authoritative delete rather than optimistically hiding it.
-    // The undo step is the canvas now: each delete's graphSync can remove the
-    // node here before its reply arrives.
-    breakUndoDebounce();
-    const undoStep = pushUndo(set, get);
-    const shownBefore = new Set(get().nodes.map((node) => node.id));
-    // A project opened (or a graph loaded) before the answers came: the
-    // canvas and its steps are another graph's now (second review).
-    const replacementRevision = canvasReplacementRevision;
-    const deleting = Promise.allSettled(cliRemovedIds.map(deleteCLIOriginNode)).then((results) => {
-      const confirmed = new Set<string>();
-      const failures: string[] = [];
-      const removals: RemovalRecord[] = [];
-      results.forEach((result, index) => {
-        if (result.status === 'fulfilled') {
-          confirmed.add(cliRemovedIds[index]);
-          if (result.value) removals.push(result.value);
-        } else failures.push(failureCopy(result.reason).reason);
-      });
-      // Undoing this step names what each delete removed (GM, 2026-10-23).
-      if (removals.length > 0) undoStep.removals = mergeRemovals(undoStep.removals, removals);
-      if (replacementRevision !== canvasReplacementRevision) {
-        // Nothing here is that graph's any more: no node to take off, no
-        // step to renew, no notice. The step keeps its records, for an undo
-        // that comes back to that graph (an import undone).
-        if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length);
-        return;
-      }
-      if (removals.length > 0) {
-        set((state) => {
-          renewStackedRemovals(state, removals);
-          return {};
-        });
-      }
-      const safeChanges = changes.filter((change) => (
-        change.type !== 'remove'
-        || !CLI_ID_RE.test(change.id)
-        || confirmed.has(change.id)
-      ));
-      const removing = safeChanges.filter((change) => change.type === 'remove').map((change) => change.id);
-      // Nothing was deleted after all: the step taken above would undo nothing.
-      if (removing.length === 0) get().cancelUndoStep(undoStep);
-      if (safeChanges.length > 0) applyCanvasNodeChanges(safeChanges, set, get, undoStep);
-      const deleted = removing.filter((nodeId) => shownBefore.has(nodeId)).length;
-      // Its Undo applies only while this step is next in line: after a newer
-      // step, the line would offer a button that does nothing (withLiveNotice).
-      if (deleted > 0 && get().undoStack.at(-1) === undoStep) set(deletedNotice(deleted, undoStep));
-      if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length);
-    });
-    // An undo pressed while the deletes are on their way waits for their
-    // answers, so its restore can name what they removed.
-    restoreQueue = restoreQueue.then(() => deleting);
-  },
+  onNodesChange: (changes) => changeCanvasNodes(changes, set, get),
 
   onEdgesChange: (changes) => {
     if (get().isExecuting && changes.some((change) => change.type === 'remove')) return;
-    const hasRemove = changes.some((c) => c.type === 'remove');
-    if (hasRemove) {
-      pushUndo(set, get);
-      // Mirror cli-connected edge deletions to the backend. We resolve the edge
-      // to its endpoints from current state BEFORE applying the change so we
-      // can still find it.
-      const removedIds = changes
-        .filter((c): c is EdgeChange & { type: 'remove' } => c.type === 'remove')
-        .map((c) => c.id);
-      const currentEdges = get().edges;
-      for (const id of removedIds) {
-        const edge = currentEdges.find((e) => e.id === id);
-        if (!edge) continue;
-        if (CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) void sendWire(edge, false, set);
-      }
-    }
-    set((state) => {
-      const nextEdges = applyEdgeChanges(changes, state.edges);
+    if (changes.some((change) => change.type === 'remove')) pushUndo(set, get);
+    applyCanvasEdgeChanges(changes, set, get);
+  },
 
-      // Rule B-2: For each removed edge whose targetHandle === 'sources' and
-      // whose target is a RemotionNode, prune any TrackItem whose sourceNodeId
-      // matches the edge's source node.
-      const removedEdges = changes
-        .filter((c): c is { id: string; type: 'remove' } => c.type === 'remove')
-        .map((c) => state.edges.find((e) => e.id === c.id))
-        .filter((e): e is NonNullable<typeof e> => !!e);
-
-      const sourceIdsLosingConnection: string[] = [];
-      for (const edge of removedEdges) {
-        if (edge.targetHandle !== 'sources') continue;
-        const targetNode = state.nodes.find((n) => n.id === edge.target);
-        if (targetNode?.data?.definitionId !== 'remotion-node') continue;
-        sourceIdsLosingConnection.push(edge.source);
-      }
-
-      if (sourceIdsLosingConnection.length === 0) {
-        return { edges: nextEdges };
-      }
-
-      const updatedNodes = state.nodes.map((n) => {
-        if (n.data?.definitionId !== 'remotion-node') return n;
-        const currentParams = (n.data.params ?? {}) as Record<string, unknown>;
-        const manifest = currentParams.manifest as VideoGraphManifest | undefined;
-        if (!manifest) return n;
-
-        let nextManifest = manifest;
-        let anyChange = false;
-        for (const sourceId of sourceIdsLosingConnection) {
-          const result = pruneTrackItemsForDeletedNode(nextManifest, sourceId);
-          if (result.changed) {
-            nextManifest = result.manifest;
-            anyChange = true;
-          }
-        }
-        if (!anyChange) return n;
-        return {
-          ...n,
-          data: { ...n.data, params: { ...currentParams, manifest: nextManifest } },
-        };
-      });
-
-      return { edges: nextEdges, nodes: updatedNodes };
+  deleteCanvasElements: (nodeIds, edgeIds) => {
+    const state = get();
+    if (state.isExecuting) return;
+    const nodes = nodeIds.filter((id) => state.nodes.some((node) => node.id === id));
+    // A node holding World Labs state stays, and then nothing goes (as React
+    // Flow's onBeforeDelete had it).
+    if (nodes.length > 0 && refuseHeldNodeDelete(state, nodes, set)) return;
+    const doomed = new Set(nodes);
+    // The wires of deleted nodes go with them; these are the other selected ones.
+    const wires = edgeIds.filter((id) => {
+      const edge = state.edges.find((candidate) => candidate.id === id);
+      return edge !== undefined && !doomed.has(edge.source) && !doomed.has(edge.target);
     });
+    const wireChanges = wires.map((id) => ({ id, type: 'remove' as const }));
+    if (nodes.length === 0) {
+      if (wireChanges.length > 0) get().onEdgesChange(wireChanges);
+      return;
+    }
+    // Review 9, L-4: one step for all of it. React Flow's deleteElements
+    // removed the wires (one step) and then the nodes (another), so the first
+    // Cmd+Z put a node back without its wire.
+    breakUndoDebounce();
+    const step = pushUndo(set, get);
+    if (wireChanges.length > 0) applyCanvasEdgeChanges(wireChanges, set, get);
+    changeCanvasNodes(nodes.map((id) => ({ id, type: 'remove' as const })), set, get, { step, keep: wireChanges.length > 0 });
   },
 
   onConnect: (connection, options) => {

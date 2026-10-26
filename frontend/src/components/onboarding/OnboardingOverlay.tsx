@@ -1,9 +1,10 @@
 import { useCallback, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { createPortal } from 'react-dom';
 import { ONBOARDING_HELP_SELECTOR, ONBOARDING_TOUR, placeOnboardingTooltip, type OnboardingPlacement } from '../../lib/onboarding';
 import { useUIStore } from '../../store/uiStore';
 import './onboarding.css';
 import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
+import { ModalPortal } from '../ModalPortal';
+import { sitsBehind } from '../../lib/modalFocus';
 
 const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -46,7 +47,7 @@ export function OnboardingOverlay() {
     focusCard();
     const isolate = () => {
       for (const sibling of document.body.children) {
-        if (sibling === overlay || background.has(sibling)) continue;
+        if (!sitsBehind(sibling, overlay) || background.has(sibling)) continue;
         background.set(sibling, { inert: sibling.getAttribute('inert'), hidden: sibling.getAttribute('aria-hidden') });
         sibling.setAttribute('inert', '');
         sibling.setAttribute('aria-hidden', 'true');
@@ -56,6 +57,8 @@ export function OnboardingOverlay() {
     const observer = new MutationObserver(isolate);
     observer.observe(document.body, { childList: true });
     const containFocus = (event: FocusEvent) => {
+      // A modal dialog opened over the tour keeps its own focus.
+      if (keyBlockedByModal(overlay)) return;
       if (event.target instanceof Node && !overlay.contains(event.target)) focusCard();
     };
     document.addEventListener('focusin', containFocus);
@@ -156,7 +159,8 @@ export function OnboardingOverlay() {
   const highlight = placement?.highlight;
   const cardStyle = placement ? { top: placement.top, left: placement.left } : undefined;
 
-  return createPortal(
+  return (
+    <ModalPortal>
     <div
       className={`onboarding${step > 0 ? ' onboarding--tour' : ''}`}
       ref={overlayRef}
@@ -211,6 +215,7 @@ export function OnboardingOverlay() {
           </>
         )}
       </div>
-    </div>, document.body,
+    </div>
+    </ModalPortal>
   );
 }

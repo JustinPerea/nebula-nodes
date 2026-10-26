@@ -1,5 +1,5 @@
 import { useUIStore } from '../store/uiStore';
-import { isModalDialogOpen } from './canvasShortcutScope';
+import { keyBlockedByModal } from './canvasShortcutScope';
 
 /**
  * When the command palette opens, shared by the palette (a deferred chunk,
@@ -11,10 +11,12 @@ import { isModalDialogOpen } from './canvasShortcutScope';
 export const COMMAND_PALETTE_OPEN_EVENT = 'nebula:command-palette-open';
 
 /** ⌘K / Ctrl+K toggles the palette, except in the video editors, whose own ⌘K cuts at the playhead,
- * and while a modal dialog is open: its "Run graph" would run behind the dialog (review 7, M-1). */
-export function isPaletteHotkey(event: KeyboardEvent): boolean {
+ * and while a modal dialog is open: its "Run graph" would run behind the dialog (review 7, M-1).
+ * The open palette is one (review 9, L-1): pass it as `palette`, and its own ⌘K still closes it
+ * unless another modal dialog is on top of it. */
+export function isPaletteHotkey(event: KeyboardEvent, palette: Element | null = null): boolean {
   if (!(event.metaKey || event.ctrlKey) || (event.key !== 'k' && event.key !== 'K')) return false;
-  if (isModalDialogOpen()) return false;
+  if (keyBlockedByModal(palette)) return false;
   const viewMode = useUIStore.getState().viewMode;
   return viewMode !== 'editor' && viewMode !== 'remotion-editor';
 }

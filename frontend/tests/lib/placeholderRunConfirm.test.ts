@@ -44,8 +44,9 @@ describe('placeholderRunConfirm', () => {
     expect(model.intro).toBe("Codex hasn't finished these, so their settings may not be final.");
     // GM - Design, round 6, item 3: every dollar in the total has a row; the
     // run's own paid node is muted, with no agent.
-    expect(model.rows).toEqual([{ nodeId: 'i', name: '“Hero still”', model: 'Nano Banana Pro (3 Pro)', price: '$0.12', agent: codex },
-      { nodeId: 'o', name: '“Final”', model: 'Nano Banana 2 (3.1 Flash)', price: '$0.12', agent: null }]);
+    expect(model.rows).toEqual([{ nodeId: 'i', name: '“Hero still”', model: 'Nano Banana Pro (3 Pro)', modelKey: 'Nano Banana Pro (3 Pro)',
+      setting: null, price: '$0.12', agent: codex },
+    { nodeId: 'o', name: '“Final”', model: 'Nano Banana 2 (3.1 Flash)', modelKey: 'Nano Banana 2 (3.1 Flash)', setting: null, price: '$0.12', agent: null }]);
     expect(model.freeLine).toBe('Plus 1 free node.');
     // The whole run: the placeholder and the node after it.
     expect(model.totalLine).toBe('This run could cost up to $0.24 at list prices.');

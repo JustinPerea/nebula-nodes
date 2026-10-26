@@ -986,6 +986,8 @@ body.app-slava-restraint .commons-folder__path {
 /* -- prompt ---------------------------------------------------------------------- */
 
 body.app-slava-restraint .commons-prompt {
+  /* On document.body (ModalPortal), outside .commons-view: its own spring. */
+  --commons-spring: cubic-bezier(0.2, 0.9, 0.3, 1.2);
   position: fixed;
   inset: 0;
   z-index: 60;

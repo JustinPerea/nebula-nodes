@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useReactFlow } from '@xyflow/react';
 import { useShallow } from 'zustand/react/shallow';
 import { useGraphStore } from '../store/graphStore';
@@ -16,6 +15,8 @@ import { useFitCanvasView } from '../hooks/useFitCanvasView';
 import { canLoadGraph, canSaveGraph, requestGraphLoad, requestGraphSave } from '../lib/graphFileActions';
 import { COMMAND_PALETTE_OPEN_EVENT, isPaletteHotkey, paletteOpenRequestApplies } from '../lib/commandPaletteKeys';
 import { claimIntent } from '../lib/heldIntents';
+import { returnFocusOnSlip } from '../lib/modalFocus';
+import { ModalPortal } from './ModalPortal';
 import '../styles/command-palette.css';
 
 const NO_NODE_FIELDS: readonly string[] = Object.freeze([]);
@@ -34,6 +35,7 @@ export function CommandPalette() {
   const [selected, setSelected] = useState(0);
   const [reservedInsertPositions, setReservedInsertPositions] = useState<NodePosition[]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
 
   const { screenToFlowPosition, fitView } = useReactFlow();
   // Fit view includes an open proposal's ghosts.
@@ -154,7 +156,9 @@ export function CommandPalette() {
       setOpen(true);
     };
     function onKey(e: KeyboardEvent) {
-      if (!isPaletteHotkey(e)) return;
+      // The open palette is a modal dialog itself: its own ⌘K closes it,
+      // unless another modal dialog is on top of it (review 9, L-1).
+      if (!isPaletteHotkey(e, openRef.current ? dialogRef.current : null)) return;
       e.preventDefault();
       if (openRef.current) close();
       else openPalette();
@@ -243,8 +247,29 @@ export function CommandPalette() {
 
   const indexById = new Map(flat.map((c, i) => [c.id, i] as const));
 
-  return createPortal(
-    <div className="command-palette" onMouseDown={close}>
+  // Review 9, L-1: it covers the window, so it is a modal dialog. Focus stays
+  // in it: Tab wraps, and a click on its text (a group label) that drops focus
+  // on the page brings it back to the search field, so no canvas key (Delete,
+  // ⌘Enter, ⌘Z) acts on the graph behind it (lib/canvasShortcutScope.ts).
+  const onDialogKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'Tab') return;
+    const stops = [...(dialogRef.current?.querySelectorAll<HTMLElement>('input, button:not([disabled])') ?? [])];
+    const first = stops[0];
+    const last = stops.at(-1);
+    if (!first || !last) return;
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+
+  return (
+    <ModalPortal>
+    <div ref={dialogRef} className="command-palette" role="dialog" aria-modal="true" aria-label="Search commands and nodes"
+      onMouseDown={close} onKeyDown={onDialogKeyDown} onBlur={(e) => returnFocusOnSlip(e, () => inputRef.current)}>
       <div className="command-palette__panel" onMouseDown={(e) => e.stopPropagation()}>
         <input
           ref={inputRef}
@@ -296,7 +321,7 @@ export function CommandPalette() {
           </div>
         )}
       </div>
-    </div>,
-    document.body
+    </div>
+    </ModalPortal>
   );
 }

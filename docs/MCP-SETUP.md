@@ -194,7 +194,13 @@ The server exposes these tools for building and running (see
   path follows `upload_file`'s rules (an in-app chat's turn reads only its
   own workspace, protected files are refused, the read follows no links),
   files up to 528 MB.
-- `remove_from_canvas`: deletes nodes or single connections, all or nothing. Its
+- `remove_from_canvas`: deletes nodes or single connections, all or nothing.
+  On the person's open canvas it is one undo step: one Cmd+Z puts the nodes
+  back with their connections (as the person's own delete is, from the
+  Delete key, the selection toolbar, the context menu or the Inspector; the
+  Delete and Backspace keys, like every canvas shortcut, act only with focus
+  on the canvas or its bars, never in a panel that owns its keys such as the
+  Inspector or chat, nor behind a modal dialog). Its
   result has `undo` too, which puts the nodes back with their params,
   outputs, names and connections, the person's pins on them, and the proposals
   the delete closed when they still fit. `removals` lists, per node it
@@ -1395,7 +1401,14 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   placeholder with its agent's dot ("“Hero still” · FLUX · $0.04"; a node
   whose model is a free-text param names the chosen model as its card
   shows it, "“Writer” · openai/gpt-4o-mini · price not listed", so a switch
-  to another model is a changed row; a Meshy node names its Model option), "price
+  to another model is a changed row, even when the node is named after its
+  model; a Meshy node names its Model option; a Krea node also names its
+  sub-model setting as its card does, even at the default: "“Hero” · Krea 2
+  · Variant: Medium · on your Krea plan", "Engine: …" on Magnific, "Model: …"
+  on Topaz (the video upscaler: its "Enhancement model" and "Frame
+  interpolation model"), "Version: …" on a Krea node app, so switching one
+  asks again; Krea Style Search's free-text Model is a search filter, never
+  named as the model), "price
   not listed", "price depends on its input" while an input's size is
   measured, "on your Krea plan"), then a muted row with no dot for every
   other paid node in the run ("“Shot 1” · Nano Banana · $0.07"), so every
@@ -1443,9 +1456,10 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   one still a placeholder under another type is asked about, as Nebula
   does (it reads placeholders by id). A placeholder its agent changed after
   the run was saved (same type, other settings) runs at its saved settings,
-  so the dialog says so: "Replay the saved version?" / "Codex changed this
-  node after the run was saved. The replay uses the saved settings." ("…
-  these nodes …"; several agents, "The agents changed …"), with the saved
+  so the dialog says so: "Replay the saved version?" / "Codex changed
+  “Grade” after the run was saved. The replay uses the saved settings."
+  (two: "“Grade” and “Wide”"; three or more: "3 nodes"; several agents,
+  "The agents changed …"), with the saved
   version as a muted row; if placeholders are still being set up, the
   still-setting-up heading stays and that sentence goes under its body,
   before the left line. One finished with the saved settings reads "Run
@@ -1453,8 +1467,8 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   person clicks, it asks again over the new run; a run with no placeholder
   left goes ahead without asking again only if its total is no higher than
   the one the person saw, every row in it was on screen exactly as it is
-  now (the same node, model and price; a row now on another model or at
-  another price, even a cheaper one, asks again), and every "Not included"
+  now (the same node, model, Krea setting and price; a row now on another
+  model or setting or at another price, even a cheaper one, asks again), and every "Not included"
   note in it was on screen, held to that total. If another run started
   first, a yes runs nothing and the canvas says "Nothing ran. Another run
   started first. Click “Run” again when it finishes." (from Cinema, "…
@@ -1467,7 +1481,12 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   Cancel) and no key acts behind it: not Cmd+Enter, Delete or Backspace,
   Cmd+K, Cmd+O or any other canvas shortcut, nor Moodboard Studio's or the
   video editors' keys, wherever focus is (the same for every modal dialog,
-  the keyboard shortcuts and the mask painter included).
+  the keyboard shortcuts, the command palette and the mask painter
+  included). Every modal dialog covers the whole window (the mask painter
+  too), and nothing pressed or clicked inside one reaches
+  what is behind it: arrows, Enter, Space and Escape in the Mesh or World
+  preview never move, select or deselect its node, and a click or
+  right-click there never selects it or opens its menu.
   The costly-run setting's browser confirm never follows it.
   `/api/execute-node` and `/api/cinema/generate-shot` enforce it: the
   person's run carries `confirmedPlaceholders` (exactly those paid

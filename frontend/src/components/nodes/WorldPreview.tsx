@@ -10,7 +10,6 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
-import { createPortal } from 'react-dom';
 import {
   Download,
   ExternalLink,
@@ -40,6 +39,7 @@ import { safeWorldAsset as safeAsset, worldCaption, worldThumbnail } from '../..
 import '../../styles/world-preview.css';
 import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
 import { failureMessage } from '../../lib/errorCopy';
+import { ModalPortal } from '../ModalPortal';
 
 const LazyWorldEnvironmentViewer = lazy(() =>
   import('./WorldEnvironmentViewer').then((module) => ({ default: module.WorldEnvironmentViewer })),
@@ -231,7 +231,8 @@ function WorldPreviewComponent({ value, compact = false }: WorldPreviewProps) {
         <WorldPreviewFace world={world} />
       </button>
 
-      {showModal && createPortal(
+      {showModal && (
+        <ModalPortal>
         <div
           className="world-modal-overlay nodrag nowheel"
           onMouseDown={(event) => event.stopPropagation()}
@@ -437,8 +438,8 @@ function WorldPreviewComponent({ value, compact = false }: WorldPreviewProps) {
               </div>
             </footer>
           </section>
-        </div>,
-        document.body,
+        </div>
+        </ModalPortal>
       )}
     </>
   );

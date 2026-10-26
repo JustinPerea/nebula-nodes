@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { createPortal } from 'react-dom';
 import '../styles/prompt-dialog.css';
+import { ModalPortal } from './ModalPortal';
 
 export interface PromptRequest {
   label: string;
@@ -30,7 +30,8 @@ export function PromptDialog({ request, onDone, maxLength }: {
     event.preventDefault();
     onDone(value);
   };
-  return createPortal(
+  return (
+    <ModalPortal>
     <div className="prompt-dialog" role="dialog" aria-modal="true" aria-label={request.label}>
       <form ref={form} className="prompt-dialog__card" onSubmit={submit} onKeyDown={(event) => {
         if (event.key === 'Escape') {
@@ -60,7 +61,7 @@ export function PromptDialog({ request, onDone, maxLength }: {
           <button type="submit" className="prompt-dialog__confirm">OK</button>
         </div>
       </form>
-    </div>,
-    document.body,
+    </div>
+    </ModalPortal>
   );
 }

@@ -728,3 +728,208 @@ Justin, Q133 b, the same two rules: a paid placeholder never runs without the pe
 - Build budget: 391,266 bytes raw / 117,762 gzip (limit 512,000).
 - INSTRUCTIONS: 2,233 characters (2,957 with the Commons guide), unchanged.
 
+
+## Round 10: review 9 and GM - Design's round-10 rulings (2026-10-26)
+
+### What changed and why
+
+- **One way to render a modal (M-1, M-2, nit b).** New `components/ModalPortal.tsx`; all 15 `aria-modal="true"` dialogs render through it. It renders onto `document.body` inside a `div.modal-portal.nokey[data-modal-layer]` (`display: contents`).
+  - On the body, a modal covers the window wherever it opened from.
+  - `nokey`: React Flow ignores keys coming from inside it. Before this, a modal opened from a node card (the Mesh and World previews) passed its keys up to the node through React's portal bubbling: arrows moved the node, Enter and Space selected it, Escape deselected it.
+  - Clicks, double clicks and context menus stop at the wrapper, so the node behind doesn't select itself or open its menu.
+  - `data-modal-layer` records the order modals opened in, so the guard knows which one is on top.
+  - A test (`modalStructure.round10.test.tsx`) lists every `aria-modal` file and fails if any of them still calls `createPortal` itself.
+- **Mask painter (M-2).** It rendered inside the Inspector popover. Under Slava restraint, the popover's backdrop-filter made it the containing block of the painter's fixed overlay, so the "modal" was the popover's 260x300 box. The painter and its loading shell now go through ModalPortal (`DeferredPanels.tsx`).
+- **Command palette (L-1).** It is now a labelled modal dialog. Its label, "Search commands and nodes", is copy that already exists: the rail button and the shortcuts list use it.
+  - Tab stays inside, and focus that slips out comes back to the search field (`returnFocusOnSlip`).
+  - Cmd+K still closes it: `isPaletteHotkey` uses `keyBlockedByModal(palette)`, so the palette's own key passes while a modal on top of it blocks.
+- **Delete is one undo step (L-4).** The canvas's Delete and Backspace now call a new `deleteCanvasElements` in the graph store. It takes one undo step for the selected nodes, their wires and any other selected wires.
+  - Before, the key went through React Flow's `deleteElements`, which removed wires and nodes as two steps.
+  - `onNodesChange` and `onEdgesChange` are split into module functions so the delete can share one step.
+  - Every other delete path was checked: see the list below.
+- **Model switch hidden by a label (L-3).** A row now carries `modelKey`, the raw model name, even when it hides the model because it equals the node's label. The "seen" key and the unpriced key read it, so a switch asks again.
+- **The modal guard (nits a, b).** `canvasShortcutScope.ts` now counts only shown dialogs: none under `[hidden]` or `[inert]`, none with `display: none` (`checkVisibility` where the browser has it).
+  - The dialog on top is the last one opened, by `data-modal-layer`.
+  - A dialog without a layer counts as above anything before it in page order. That keeps a raw `aria-modal` element appended later on top, which the round-9 KeyboardShortcuts test relies on.
+- **Focus isolation.** ResultComparison and the onboarding tour now leave a modal opened over them alone:
+  - their sibling isolation skips their own portal wrapper and later layers (`sitsBehind` in `modalFocus.ts`);
+  - their focus trap stands down while a modal sits on top (`keyBlockedByModal`).
+- **Provider switcher popover.** Also portalled from inside the node card. It gets `nokey`, so arrows in its menu don't move the node.
+- **CommonsPrompt.** It is portalled now, so it left `.commons-view`, which defined `--commons-spring`. Its own rule now defines that token, and it keeps its spring.
+- **GM r10 item 1.** The replay sentence names the changed nodes, verbatim:
+  - one: "Codex changed “Grade” …";
+  - two: "“Grade” and “Wide”";
+  - three or more: "3 nodes";
+  - several agents: "The agents changed …".
+  
+  It applies under "Replay the saved version?" and as the still-setting-up `savedLine`. The names are the rows' names (Cinema names included), in the rows' order.
+- **GM r10 item 2.** A Krea node's sub-model setting is named in its row, using the card's labels, even at its default:
+  - "“Hero” · Krea 2 · Variant: Medium · on your Krea plan";
+  - Magnific "Engine: …", Topaz "Model: …", krea-node-app "Version: …".
+  
+  The setting is part of the row's seen key, so a switch while the dialog is open redraws it, and a switch in the moment of the click asks again. These settings are no longer taken for the model name.
+- **Krea Style Search (nit c).** Its free-text `model` is a search filter. Neither the row nor the run pill presents it as the model (`NOT_A_MODEL` in the frontend, `_NOT_A_MODEL` in `main.py`).
+- **The 80-character cut (nit d).** The JS cut now counts code points (`Array.from`), as Python does, so an astral character is never cut in half.
+- **Docs.** `docs/MCP-SETUP.md` and `skills/nebula/SKILL.md` now cover:
+  - the Krea setting rows and Style Search;
+  - the named replay sentence;
+  - the seen key ("same node, model, Krea setting and price");
+  - every modal covering the window and containing clicks and keys;
+  - `remove_from_canvas` and the person's delete each being one undo step with the connections;
+  - the L-2 sentence.
+
+### Decisions not in the spec
+
+- **L-2 is kept (the coordinator's decision).** Delete and Backspace act only with focus on the canvas or its bars, never in the Inspector, the chat or behind a modal. Panels own their keys, like every other canvas shortcut. MCP-SETUP says so.
+- **Keys are not stopped at a modal's root; only `nokey` is added.** React's synthetic `stopPropagation` would also stop the native event at the portal container (body), before the window and document listeners the modals themselves use (Escape, Tab, "?"). `nokey` is the scoped switch React Flow provides. Clicks, double clicks and context menus are stopped, because no window or document listener reads those from inside a modal.
+- **Names follow the rows' order.** Live, the target “Wide” was added before “Grade”, so the dialog read "Codex changed “Wide” and “Grade” …" over rows listing “Wide” first. GM's example order is "“Grade” and “Wide”"; the sentence follows the list under it.
+- **Label choices for Topaz and krea-node-app.**
+  - Topaz video names its two settings by the card's labels: "Enhancement model: …" and "Frame interpolation model: …". GM wrote "Model: …", which is the single-setting Topaz image node's card label.
+  - krea-node-app uses GM's "Version", although its card label is "Node app version ID".
+- **The backend run pill is unchanged except for Style Search.** For Topaz on Krea it still names the chosen model option (for example "Redefine") as the model. The row splits the same information into node type and setting.
+
+### Tradeoffs
+
+- The selection toolbar's action slot is also portalled from inside the node, and keys from it still bubble to React Flow (arrows move the node with focus on a toolbar button). Adding `nokey` there would also change Delete with focus on the toolbar, so it stays as it was and is listed below.
+- A modal with no `data-modal-layer` (none in the app; only a raw element in a test) is taken as on top of anything before it in page order.
+
+### Tests (first, each seen failing)
+
+- `lib/placeholderRunConfirm.round10.test.ts`: 16 tests, all 16 failed first:
+  - GM1: the sentence still read "this node / these nodes";
+  - GM2: no `setting` field, so Krea rows were unnamed;
+  - L-3: no `modelKey`;
+  - nit c: the Style Search row read "flux";
+  - nit d: `.slice` cut a surrogate pair.
+- `graphStore.placeholderRuns.round10.test.ts`: 5 tests, all 5 failed first:
+  - a model switch on a node labelled with its model id ran unasked;
+  - the Krea row had no setting;
+  - a Variant switch ran unasked and didn't redraw;
+  - the replay `savedLine` read "this node".
+- `canvasShortcutScope.round10.test.ts`: 4 tests, all 4 failed first:
+  - nit a (3): a dialog under `hidden`, under `inert` and under `display: none` still blocked;
+  - nit b (1): an inline modal opened later read as below a portalled one.
+- `modalsInsideNodes.round10.test.tsx`: the real React Flow canvas with the Mesh and World previews, 16 tests, all 16 failed first:
+  - arrows moved the node (for example to 905,160);
+  - Enter and Space selected it, and Escape deselected it;
+  - a context menu inside the preview reached `onNodeContextMenu`.
+- `modalStructure.round10.test.tsx`: the inventory of 15 files, plus ModalPortal's behaviour. It failed first on the import, because ModalPortal didn't exist.
+- `commandPaletteModal.round10.test.tsx`: the real Canvas with the palette, 5 tests. 4 failed first:
+  - no dialog role or label;
+  - focus wasn't returned after a click on a group label;
+  - Backspace on the page deleted node "a" (`['b']` left);
+  - Tab walked out.
+  
+  "Cmd+K still closes it" passed before, as a control.
+- `canvasDeleteUndo.round10.test.tsx`: 8 tests. 3 failed first: the Delete key with canvas-only ids, the Delete key with n1/n2 ids, and a node plus a separate selected wire each made 2 undo steps. 5 controls passed before and after: a wire alone, `deleteSelected`, `deleteNode` (context menu and Inspector), and an agent's `remove_from_canvas` arriving as one graphSync.
+- `components/MaskPainterPortal.round10.test.tsx`: 2 tests, both failed first: the loading shell and the painter both rendered inside the popover.
+- `components/ProviderSwitcher.test.tsx`: added one test, the popover carries `nokey`, which failed first.
+- Backend `tests/test_pending_nodes_round10.py`: 2 tests.
+  - The Style Search test failed first: the pill named "flux".
+  - The 80-code-point test passed first: Python already counts code points. It stays as the other half of nit d.
+- Updated to the new wording and fields: the round-9 placeholder tests (the named sentences, the `SAVED` constant) and `placeholderRunConfirm.test.ts` (rows carry `modelKey` and `setting`).
+
+### Every modal
+
+The 15 `aria-modal="true"` dialogs below render through ModalPortal: on `document.body`, `nokey`, clicks contained, layered. The mask painter's shell and painter count as one.
+
+- PlaceholderRunDialog (alertdialog)
+- PromptDialog
+- KeyboardShortcuts
+- CommandPalette (new modal)
+- ResultComparison
+- ModelPicker
+- Lightbox
+- MeshPreview
+- WorldPreview
+- the mask painter (`DeferredPanels` shell + `panels/MaskPainterModal`)
+- CommonsPrompt
+- UnsavedEditsNotice (alertdialog)
+- PersonalAgentWarning
+- OnboardingOverlay
+
+Panels with `role="dialog"` that aren't modal are unchanged: Settings, ChatPanel, AgentQuestionsForm, AgentNotesList, ConnectionPopup, PresetLibrary, ChatModelPicker, ProjectSizePanel, the final-export popovers, CommonsLeavePopover (`aria-modal="false"`) and CommonsCloseBatch.
+
+### Every delete path and its undo step
+
+- **Delete or Backspace on the canvas:** `deleteCanvasElements`, one step for the nodes, their wires and other selected wires.
+- **Selection toolbar:** `deleteSelected` → `onNodesChange`, one step.
+- **Context menu and Inspector:** `deleteNode`, one step.
+- **A generation:** `deleteGeneration`, one step.
+- **An agent's `remove_from_canvas`:** one `graphSync` per apply, so one foreign step with the node and its wires.
+
+All are tested in `canvasDeleteUndo.round10`.
+
+### Live check (1280x800 and 1440x900)
+
+- **Setup.**
+  - Isolated backend on 8795 (temp HOME, every NEBULA_* root under scratch, no keys) and Vite on 5795 (`VITE_NEBULA_BACKEND_PORT=8795`). `/api/health` through Vite matched.
+  - Codex and Claude were verified agents (app tokens). No key was set, so nothing paid could run.
+  - Run was clicked once, in the Krea re-ask: the run changed in the same task, so the yes sent nothing. Run requests: none.
+- **The skins.** The app has one skin, Slava restraint (`DEFAULT_SKIN`), so "the default skin" and "slava-restraint" are the same. The painter was also checked with that skin's body class removed (the base styles).
+- **Review 9's probes, adapted to 8795/5795** (`agent-presence/r10probes/`): live-rv9 passed 22 of 22, live-rv9b 4 of 4.
+  - LA1 to LA7 passed.
+  - LA6 (Delete with focus on an Inspector button) deleted nothing, as kept for L-2.
+  - LB1: Backspace with the palette open left the node; focus stayed in the search field.
+  - LC1 to LC7 passed.
+  - LD1: arrows with focus on the Mesh preview's Close left the node at 900,160 (review 9: it moved to 920,165).
+  - LD2: Escape closed the preview and the node stayed selected (review 9: deselected).
+  - LE1 passed.
+  - LF: one Cmd+Z brought back the node and its wire together. The second Cmd+Z undid Codex's earlier edit, as expected.
+  - LG: the painter is 0,0,1440,900 and 0,0,1280,800, not inside the popover. A click at a node's place hit the painter, and Delete deleted nothing (review 9: the overlay was the popover's 260x300 box).
+- **Round 10's own script** (`agent-presence/live-r10.mjs`): 33 of 33.
+  - Delete on a node with a wire added one undo step: the stack went from 1 (Codex's own foreign step from adding the pair) to 2. One Cmd+Z put back the node and its wire.
+  - The palette: a labelled modal on the body; Backspace and Delete with focus on the page left the canvas.
+  - The Mesh preview is on the body. Arrows, then Enter and Space on the dialog, left the node in place and selected; Escape closed it with the node still selected.
+  - The painter covered the window at both sizes under Slava restraint and under the base styles, with Close in view and every probe point hitting the painter.
+  - The replay sentence, from real agent edits:
+    - one: "Codex changed “Grade”";
+    - two: "Codex changed “Wide” and “Grade”";
+    - three: "Codex changed 3 nodes";
+    - several agents: "The agents changed “Wide” and “Grade”" and "The agents changed 3 nodes".
+    
+    Each read the same under the still-setting-up heading and under "Replay the saved version?". All were cancelled, and nothing was sent.
+  - Krea 2:
+    - "“Hero” · Krea 2 · Variant: Medium · on your Krea plan" showed at the default.
+    - Codex's switch to Large while the dialog was open redrew the row with the changed line.
+    - The click and a switch back in the same task asked again ("Run with Codex's changes?"), and nothing was sent.
+    - The Krea placeholder is Codex's in the tab only, as in rounds 5 and 9: agents can't choose plan billing.
+- **Blocked requests and console.** Every run blocked 2 requests, both the canaries; 0 went toward 8000-8010 or 5173.
+  - Undo toasts were dismissed before every screenshot (0 shown).
+  - The Mesh step's fake output (`none.glb`) makes the project save answer 400 ("Save failed · Retry" in the header). That is the probe's doing, as in review 9's run.
+  - Servers were stopped by PID and the state dirs deleted.
+- **Screenshots:** in the scratchpad `agent-presence/`, the `r10-*.png` files:
+  - replay: one, two, three, agents and agents-three, each still-setting-up and saved, at 1440 and 1280;
+  - `krea-row`, `krea-redrawn`, `krea-reask`;
+  - `painter-{slava,base}-{1440,1280}`;
+  - `palette-backspace`;
+  - `mesh-arrows`;
+  - `delete-1-before`, `delete-2-deleted`, `delete-3-one-undo`.
+
+### Open items (round 10)
+
+- **For GM:**
+  - Topaz video's two settings are named by their card labels ("Enhancement model", "Frame interpolation model"), not "Model".
+  - krea-node-app uses "Version", not its card label "Node app version ID".
+  - Magnific Precise's "Flavor" and Topaz's "Grain model" aren't named.
+  - Topaz Standard with no model chosen shows no setting.
+  - The replay sentence names nodes in the rows' order; GM's example had the upstream node first.
+- **The run pill** still names Topaz-on-Krea by its model option, so the pill and the row split it differently.
+- **The selection toolbar's action slot** still passes keys to React Flow (see Tradeoffs).
+- **For GM, from round 7, unchanged:** the left line for several agents.
+- **Known gaps, unchanged** (item 7 follow-up, for the PR body):
+  - the tab that hasn't heard of an agent's placeholder, with "Ask before costly runs" on, shows the browser confirm and then Nebula's dialog;
+  - free-placeholder runs still use the browser's costly-run confirm;
+  - the browser confirm shows whole dollars from $10.
+- L8 as before.
+
+### Gates (round 10)
+
+- Backend full suite: 11,035 passed, 71 skipped (16 min 16 s).
+- Vitest full suite, run beside the backend suite: 481 files and 6,053 tests. 464 files passed and 17 failed (43 tests, 35 of them "Test timed out").
+  - The 17 rerun one file at a time (`--no-file-parallelism`): 17 files, 289 tests passed.
+- Lint, first run: 2 errors, both in my own new test (`modalsInsideNodes.round10`, `react-hooks/globals`: its harness reassigned module variables during render). The harness now assigns them in an effect. Lint is clean after that, and the file passes 16 of 16.
+- errorCopy ratchets: 14 files, 173 tests passed.
+- tsc: clean.
+- Build budget: 392,133 bytes raw / 118,097 gzip (limit 512,000).
+- INSTRUCTIONS: 2,233 characters (2,957 with the Commons guide), unchanged (`mcp_server.py` untouched).

@@ -6,7 +6,6 @@ import {
   useRef,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
-import { createPortal } from 'react-dom';
 import { Download, X } from 'lucide-react';
 import { backendAssetUrlSync, fetchUrl } from '../../lib/backend';
 import { AssetByteLimitError, readBoundedAssetResponse } from '../../lib/boundedAsset';
@@ -15,6 +14,7 @@ import { oneLine, requestError, requestSucceeded, FailureNotice, failureMessage 
 import { isSafeWorldUrl } from '../../lib/worldValue';
 import { isSplatExport, meshFormatLabel } from '../../lib/meshFormat';
 import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
+import { ModalPortal } from '../ModalPortal';
 
 interface MeshPreviewProps {
   src: string;
@@ -288,7 +288,8 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
         </div>
       </div>
 
-      {showModal && createPortal(
+      {showModal && (
+        <ModalPortal>
         <div className="mesh-modal-overlay" onClick={handleClose}>
           <div
             ref={dialogRef}
@@ -355,8 +356,8 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
               </button>
             </div>
           </div>
-        </div>,
-        document.body
+        </div>
+        </ModalPortal>
       )}
     </>
   );

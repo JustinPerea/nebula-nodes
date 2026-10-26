@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { ModalPortal } from '../ModalPortal';
 
 export interface PromptRequest {
   label: string;
@@ -13,6 +14,7 @@ export function PromptDialog({ request, onDone }: { request: PromptRequest; onDo
     onDone(value);
   };
   return (
+    <ModalPortal>
     <div className="commons-prompt" role="dialog" aria-modal="true" aria-label={request.label}>
       <form
         className="commons-prompt__card"
@@ -35,5 +37,6 @@ export function PromptDialog({ request, onDone }: { request: PromptRequest; onDo
         </div>
       </form>
     </div>
+    </ModalPortal>
   );
 }

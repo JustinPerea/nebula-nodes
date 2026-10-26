@@ -1,11 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 import { isCanvasShortcutTarget, keyBlockedByModal } from '../lib/canvasShortcutScope';
 import { returnFocusOnSlip } from '../lib/modalFocus';
 import { displayKey, SHORTCUT_GROUPS, SHORTCUTS_OPEN_EVENT } from '../lib/keyboardShortcuts';
 import '../styles/keyboard-shortcuts.css';
+import { ModalPortal } from './ModalPortal';
 
 /**
  * "?" on the canvas, or "Keyboard shortcuts" in the command palette.
@@ -57,7 +57,8 @@ export function KeyboardShortcuts() {
   }, [open]);
 
   if (!open) return null;
-  return createPortal(
+  return (
+    <ModalPortal>
     <div className="keyboard-shortcuts" onPointerDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
       <section ref={cardRef} className="keyboard-shortcuts__card" role="dialog" aria-modal="true" aria-labelledby={titleId}
         onBlur={(event) => returnFocusOnSlip(event, () => closeRef.current)}
@@ -94,7 +95,7 @@ export function KeyboardShortcuts() {
           ))}
         </div>
       </section>
-    </div>,
-    document.body,
+    </div>
+    </ModalPortal>
   );
 }

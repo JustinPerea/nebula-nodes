@@ -8,7 +8,7 @@ import type { PlaceholderRunConfirm } from '../src/lib/placeholderRunConfirm';
 // changed line.
 
 const codex = { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true };
-const SAVED = 'Codex changed this node after the run was saved. The replay uses the saved settings.';
+const SAVED = 'Codex changed “Hero still” after the run was saved. The replay uses the saved settings.';
 const model: PlaceholderRunConfirm = {
   heading: 'Run 1 node Codex is still setting up?', intro: "Codex hasn't finished this, so its settings may not be final.",
   savedLine: SAVED, leftLine: '1 node Codex was setting up is no longer in this run.',

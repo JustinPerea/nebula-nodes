@@ -10367,6 +10367,10 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
 # model id typed or picked, as the node card shows it.
 _MODEL_SELECT_KEYS = ("model", "model_id", "ai_model")
 _MODEL_TEXT_KEYS = ("model", "model_id", "endpoint_id")
+# Params by those names that pick no model the node runs (review 9, nit c):
+# Krea Style Search's free-text ``model`` is a search filter. The canvas
+# skips the same (lib/placeholderRunConfirm.ts NOT_A_MODEL).
+_NOT_A_MODEL: dict[str, frozenset[str]] = {"krea-style-search": frozenset({"model"})}
 
 
 def _run_model_name(node: GraphNode) -> str:
@@ -10379,8 +10383,9 @@ def _run_model_name(node: GraphNode) -> str:
     paid-placeholder dialog names a row's model the same way."""
     definition = node_registry.get(node.definition_id) or {}
     params = node.params or {}
+    skipped = _NOT_A_MODEL.get(node.definition_id, frozenset())
     specs = [spec for spec in [*(definition.get("params") or []), *(definition.get("sharedParams") or [])]
-             if isinstance(spec, dict)]
+             if isinstance(spec, dict) and spec.get("key") not in skipped]
     for spec in specs:
         if spec.get("key") not in _MODEL_SELECT_KEYS or spec.get("type") != "enum":
             continue

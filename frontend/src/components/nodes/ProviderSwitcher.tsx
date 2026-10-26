@@ -302,7 +302,9 @@ function ProviderPopover({ anchorRef, id, onClose, children }: {
 
   return createPortal(
     <div ref={popoverRef} id={id}
-      className={`provider-switcher__popover${position ? ' provider-switcher__popover--open' : ''}${position?.above ? ' provider-switcher__popover--above' : ''}`}
+      // nokey: portalled from inside the node card, its keys bubble (React) to
+      // React Flow's node, which would move or select it (review 9, M-1).
+      className={`provider-switcher__popover nokey${position ? ' provider-switcher__popover--open' : ''}${position?.above ? ' provider-switcher__popover--above' : ''}`}
       style={position ? { left: position.left, top: position.top } : undefined}
       onClick={(event) => event.stopPropagation()}>
       {children}

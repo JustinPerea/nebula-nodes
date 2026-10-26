@@ -19,7 +19,8 @@ import { runCostNotes, type RunCost, type RunScopeSummary } from './runScope';
  * the heading once no placeholder is left, round 7 for "this node", the
  * input-priced footnotes, placeholders that left the run and the amounts in
  * cents, and the ruling on review 8 L-b for a replay of a placeholder its
- * agent changed after the run was saved), verbatim.
+ * agent changed after the run was saved; round 10 for its names and Krea's
+ * sub-model settings in rows), verbatim.
  * The backend refuses the run unless it carries these exact paid
  * placeholders and a total no lower than its own estimate (main.execute_node
  * and main.generate_cinema_shot, `confirmedPlaceholders` and
@@ -34,6 +35,13 @@ export interface PlaceholderRunRow {
   name: string;
   /** The model it runs, unquoted, in the provider's spelling; null when it is the name. */
   model: string | null;
+  /** The model it runs, always (review 9, L-3: a node named after its model
+   * shows no model, but a switch must still be a changed row). */
+  modelKey: string;
+  /** A Krea node's sub-model setting, as its card names it: "Variant: Large",
+   * "Engine: …", "Model: …", "Version: …" (GM - Design, round 10, item 2:
+   * named even when it is the default, so a switch re-asks); else null. */
+  setting: string | null;
   /** "$0.04", "$0.0047–0.43", "price not listed", "price depends on its
    * input" or "on your Krea plan" (GM, rounds 4 and 6). */
   price: string;
@@ -49,8 +57,8 @@ export interface PlaceholderRunConfirm {
   intro: string;
   /** Under the intro on a replay that still has placeholders being set up,
    * when its agents changed some after the run was saved (GM - Design on
-   * review 8 L-b): "Codex changed this node after the run was saved. The
-   * replay uses the saved settings."; else null (with none left being set
+   * review 8 L-b; round 10 names them): "Codex changed “Grade” after the
+   * run was saved. The replay uses the saved settings."; else null (with none left being set
    * up, that sentence is the intro, under "Replay the saved version?"). */
   savedLine: string | null;
   /** Under the intro when placeholders the dialog showed left the run
@@ -123,20 +131,57 @@ export const PRICE_ON_KREA_PLAN = 'on your Krea plan';
  * and _MODEL_TEXT_KEYS): a select labelled Model, or a free-text model id. */
 const MODEL_SELECT_KEYS = new Set(['model', 'model_id', 'ai_model']);
 const MODEL_TEXT_KEYS = new Set(['model', 'model_id', 'endpoint_id']);
+/** Nodes whose free-text `model` is no model they run (backend main._NOT_A_MODEL):
+ * Krea Style Search's is a search filter (review 9, nit c). */
+const NOT_A_MODEL: Readonly<Record<string, ReadonlySet<string>>> = { 'krea-style-search': new Set(['model']) };
+
+/** A Krea node's sub-model settings (GM - Design, round 10, item 2): Krea 2's
+ * Variant, Magnific's Engine, Topaz's Model (and the video upscaler's
+ * enhancement and frame-interpolation models), a node app's Version. They
+ * are settings of the model the node type names, so its row names the type
+ * as the model and each setting by the label its card uses. */
+const KREA_SETTING_KEYS = ['variant', 'engine', 'model', 'enhancement_model', 'frame_interpolation_model', 'node_app_version_id'];
+/** GM's word for the node app's version (its card's field is "Node app version ID"). */
+const KREA_SETTING_LABELS: Readonly<Record<string, string>> = { node_app_version_id: 'Version' };
+
+type ParamSpec = NonNullable<(typeof NODE_DEFINITIONS)[string]['params']>[number];
+
+function isKrea(definition: (typeof NODE_DEFINITIONS)[string]): boolean {
+  return definition.apiProvider === 'krea';
+}
+
+/** Whether `spec` is one of a Krea node's sub-model settings: a select, or the node app's version id. */
+function isKreaSetting(definition: (typeof NODE_DEFINITIONS)[string], spec: ParamSpec): boolean {
+  if (!isKrea(definition) || !KREA_SETTING_KEYS.includes(spec.key)) return false;
+  return spec.type === 'enum' || spec.key === 'node_app_version_id';
+}
+
+/** At most 80 characters, counted in code points as Python counts them
+ * (backend main._run_model_name `[:80]`; review 9, nit d), never half a pair. */
+function cut80(text: string): string {
+  const points = Array.from(text);
+  return points.length > 80 ? points.slice(0, 80).join('') : text;
+}
+
+function specsOf(definition: (typeof NODE_DEFINITIONS)[string]): ParamSpec[] {
+  return [...(definition.params ?? []), ...(definition.sharedParams ?? [])];
+}
 
 /** The model a node runs, as Nebula shows it (backend main._run_model_name):
  * the chosen option of its model picker, by its label; the model id a
  * free-text model param names, as the node card shows it ("openai/gpt-4o-mini"
  * on an OpenRouter node: review 8, L-a, so a switch is a changed row); else
  * the node type. A node that runs another model's handler (a Cinema scene)
- * names that model. */
+ * names that model. A Krea node's sub-model setting is no model of its own
+ * (kreaSetting). */
 function modelName(node: Node<NodeData>): string {
   const definition = NODE_DEFINITIONS[node.data?.definitionId];
   if (!definition) return node.data?.definitionId ?? node.id;
   const params = (node.data?.params ?? {}) as Record<string, unknown>;
   const via = definition.providerVia?.kind === 'model' ? modelChoice(definition, params) : null;
   if (via && NODE_DEFINITIONS[via]) return NODE_DEFINITIONS[via].displayName;
-  const specs = [...(definition.params ?? []), ...(definition.sharedParams ?? [])];
+  const specs = specsOf(definition).filter((spec) => !isKreaSetting(definition, spec)
+    && !NOT_A_MODEL[definition.id]?.has(spec.key));
   for (const spec of specs) {
     if (!MODEL_SELECT_KEYS.has(spec.key) || spec.type !== 'enum') continue;
     const value = params[spec.key] ?? spec.default;
@@ -146,9 +191,32 @@ function modelName(node: Node<NodeData>): string {
   for (const spec of specs) {
     if (!MODEL_TEXT_KEYS.has(spec.key) || spec.type !== 'string') continue;
     const value = params[spec.key] ?? spec.default;
-    if (typeof value === 'string' && value.trim()) return value.trim().slice(0, 80);
+    if (typeof value === 'string' && value.trim()) return cut80(value.trim());
   }
   return definition.displayName;
+}
+
+/** A Krea node's sub-model settings as its row names them, "Variant: Large"
+ * (GM - Design, round 10, item 2: the setting's label and the chosen
+ * option's label, as the node card shows them, even when it is the default),
+ * joined with " · "; null for any other node, or none chosen. */
+function kreaSetting(node: Node<NodeData>): string | null {
+  const definition = NODE_DEFINITIONS[node.data?.definitionId];
+  if (!definition || !isKrea(definition)) return null;
+  const params = (node.data?.params ?? {}) as Record<string, unknown>;
+  const named: string[] = [];
+  for (const spec of specsOf(definition)) {
+    if (!isKreaSetting(definition, spec)) continue;
+    const value = params[spec.key] ?? spec.default;
+    const label = KREA_SETTING_LABELS[spec.key] ?? spec.label;
+    if (spec.type === 'enum') {
+      const option = spec.options?.find((candidate) => typeof candidate === 'object' && candidate.value === value);
+      if (option && typeof option === 'object' && option.label) named.push(`${label}: ${option.label}`);
+    } else if (typeof value === 'string' && value.trim()) {
+      named.push(`${label}: ${cut80(value.trim())}`);
+    }
+  }
+  return named.length > 0 ? named.join(' · ') : null;
 }
 
 /** Calls a provider (backend model_pricing.is_local): an unknown type counts as paid. */
@@ -315,16 +383,18 @@ export function placeholderRunConfirm(
   let anyMissing = false;
   const unlisted: string[] = [];
   const byInput: string[] = [];
+  const labelOf = (node: Node<NodeData>) => options.names?.[node.id] || node.data?.label
+    || NODE_DEFINITIONS[node.data?.definitionId]?.displayName || node.id;
   const row = (node: Node<NodeData>): PlaceholderRunRow => {
     const definition = NODE_DEFINITIONS[node.data?.definitionId];
-    const label = options.names?.[node.id] || node.data?.label || definition?.displayName || node.id;
+    const label = labelOf(node);
     const model = modelName(node);
     const price = rowPrice(node.id, summary, node.data?.label || definition?.displayName || node.id);
     if (price.missing) anyMissing = true;
     if (price.text === PRICE_NOT_LISTED) unlisted.push(`“${label}”`);
     if (price.text === PRICE_DEPENDS_ON_INPUT) byInput.push(`“${label}”`);
-    return { nodeId: node.id, name: `“${label}”`, model: model === label ? null : model, price: price.text,
-      agent: agentOf.get(node.id) ?? null };
+    return { nodeId: node.id, name: `“${label}”`, model: model === label ? null : model, modelKey: model,
+      setting: kreaSetting(node), price: price.text, agent: agentOf.get(node.id) ?? null };
   };
   const paidNodes = scope.filter(isPaid);
   // The agents' rows first (with their dots), then the run's other paid nodes, muted.
@@ -343,13 +413,16 @@ export function placeholderRunConfirm(
   const leftLine = left.length === 0 ? null : left.length === 1
     ? `1 node ${leftWho} was setting up is no longer in this run.`
     : `${left.length} nodes ${leftWho} ${leftAgents.length === 1 ? 'was' : 'were'} setting up are no longer in this run.`;
-  // GM - Design on review 8 L-b, verbatim: "Codex changed this node after
-  // the run was saved. The replay uses the saved settings." and its forms.
+  // GM - Design on review 8 L-b and round 10, item 1, verbatim: "Codex
+  // changed “Grade” after the run was saved. The replay uses the saved
+  // settings.", "“Grade” and “Wide”", "3 nodes"; "The agents changed …" for
+  // several agents. The names are the rows'.
   let savedSentence: string | null = null;
   if (changedByAgent.length > 0) {
     const agents = agentNames(changedByAgent.map(({ agent }) => agent));
-    const these = changedByAgent.length === 1 ? 'this node' : 'these nodes';
-    savedSentence = `${agents.length === 1 ? agents[0] : 'The agents'} changed ${these} after the run was saved. The replay uses the saved settings.`;
+    const names = changedByAgent.map(({ node }) => `“${labelOf(node)}”`);
+    const which = names.length === 1 ? names[0] : names.length === 2 ? `${names[0]} and ${names[1]}` : `${names.length} nodes`;
+    savedSentence = `${agents.length === 1 ? agents[0] : 'The agents'} changed ${which} after the run was saved. The replay uses the saved settings.`;
   }
   if (count > 0) {
     const agents = agentNames(placeholders.map(({ agent }) => agent));

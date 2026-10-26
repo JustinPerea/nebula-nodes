@@ -657,16 +657,19 @@ export function Canvas() {
       // placeholder dialog was deleted. Here it goes through the same guard as
       // every canvas key (isCanvasShortcutTarget, above), keeps React Flow's
       // rules (bare key only, nothing in `.nokey`, not while a run goes, one
-      // delete per press) and deletes through React Flow, so onBeforeDelete
-      // (a node holding World Labs state stays) and the Undo notice still apply.
+      // delete per press). Review 9, L-4: it deletes through the store in one
+      // undo step, nodes and wires together (React Flow's deleteElements took
+      // two: the wires, then the nodes); a node holding World Labs state
+      // stays (as onBeforeDelete had it), and "Deleted the node." with Undo
+      // still shows.
       if ((event.key === 'Delete' || event.key === 'Backspace') && !isCtrlOrCmd && !event.altKey && !event.shiftKey) {
         if (event.repeat || isExecuting) return;
         if (event.target instanceof Element && event.target.closest('.nokey')) return;
-        const doomedNodes = reactFlow.getNodes().filter((node) => node.selected);
-        const doomedEdges = reactFlow.getEdges().filter((edge) => edge.selected);
+        const doomedNodes = reactFlow.getNodes().filter((node) => node.selected).map((node) => node.id);
+        const doomedEdges = reactFlow.getEdges().filter((edge) => edge.selected).map((edge) => edge.id);
         if (doomedNodes.length === 0 && doomedEdges.length === 0) return;
         event.preventDefault();
-        void reactFlow.deleteElements({ nodes: doomedNodes, edges: doomedEdges });
+        useGraphStore.getState().deleteCanvasElements(doomedNodes, doomedEdges);
         flowStore.setState({ nodesSelectionActive: false });
         return;
       }

@@ -142,7 +142,7 @@ describe('review 8', () => {
       await useGraphStore.getState().rerunHistoryRecord('saved');
       const last = pushed.at(-1)!;
       expect(last).toMatchObject({ heading: 'Replay the saved version?',
-        intro: 'Codex changed this node after the run was saved. The replay uses the saved settings.', runLabel: 'Run for $0.70' });
+        intro: 'Codex changed “a” after the run was saved. The replay uses the saved settings.', runLabel: 'Run for $0.70' });
       // The saved version, muted: no dot, at the saved model's price.
       expect(last.rows.find((row) => row.nodeId === 'a')).toMatchObject({ agent: null, price: '$0.10' });
       // What was shown runs: the saved params.
@@ -159,7 +159,7 @@ describe('review 8', () => {
       askMock.mockResolvedValue(null);
       await useGraphStore.getState().rerunHistoryRecord('saved');
       expect(askMock.mock.calls[0][0]).toMatchObject({ heading: 'Run 1 node Codex is still setting up?',
-        savedLine: 'Codex changed this node after the run was saved. The replay uses the saved settings.' });
+        savedLine: 'Codex changed “a” after the run was saved. The replay uses the saved settings.' });
     });
 
     it('Codex finishes it with the saved settings: "Run with Codex\'s changes?" as before', async () => {

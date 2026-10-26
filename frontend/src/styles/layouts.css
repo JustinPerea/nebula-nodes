@@ -660,6 +660,10 @@ body:not(.app-slava-restraint) .agent-log__msg {
 /* Preserve shared Settings/Chat state while Commons temporarily owns the screen. */
 .workspace-overlays--hidden { display: none; }
 
+/* Every modal's portal on document.body (components/ModalPortal.tsx): no box
+   of its own, so each modal keeps its own fixed overlay and stacking. */
+.modal-portal { display: contents; }
+
 /* A failure on a two-line surface (components/failure/FailureLines.tsx, GM
  * error-copy round 2): the heading on line 1, the reason on line 2, and no
  * short last word left alone on a line. Colour comes from the notice. */

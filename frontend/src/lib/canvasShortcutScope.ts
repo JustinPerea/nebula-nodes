@@ -23,6 +23,33 @@ const CANVAS_OWNED = [
 ].join(', ');
 
 /**
+ * Whether a modal dialog is shown (review 9, nit a): one inside a hidden,
+ * inert or display:none ancestor is on the page but not in front of anyone,
+ * so it never holds the keys.
+ */
+function isShown(dialog: Element): boolean {
+  if (dialog.closest('[hidden], [inert]')) return false;
+  const check = (dialog as Element & { checkVisibility?: () => boolean }).checkVisibility;
+  if (typeof check === 'function') return check.call(dialog);
+  for (let node: Element | null = dialog; node; node = node.parentElement) {
+    if (getComputedStyle(node).display === 'none') return false;
+  }
+  return true;
+}
+
+/** The modal dialogs shown, in page order. */
+function shownModalDialogs(): Element[] {
+  if (typeof document === 'undefined') return [];
+  return [...document.querySelectorAll('[aria-modal="true"]')].filter(isShown);
+}
+
+/** The order a modal opened in (ModalPortal's `data-modal-layer`), or null for one outside a layer. */
+function layerOf(dialog: Element): number | null {
+  const value = dialog.closest('[data-modal-layer]')?.getAttribute('data-modal-layer');
+  return value ? Number(value) : null;
+}
+
+/**
  * Whether a modal dialog is open anywhere in the app (the paid placeholder
  * confirm, a prompt, the keyboard shortcuts…). While one is, no key acts on
  * the graph behind it, wherever focus is: review 7, M-1 found focus could fall
@@ -31,15 +58,19 @@ const CANVAS_OWNED = [
  * including ones added later.
  */
 export function isModalDialogOpen(): boolean {
-  return typeof document !== 'undefined' && document.querySelector('[aria-modal="true"]') !== null;
+  return shownModalDialogs().length > 0;
 }
 
-/** The modal dialog on top: the last one on the page (dialogs portal to the
- * end of the page in the order they open), or null. */
+/** The modal dialog on top, or null: the last one opened (review 9, nit b),
+ * by ModalPortal's layers, wherever it sits on the page; a modal outside a
+ * layer is above what comes before it on the page, as before. */
 function topModalDialog(): Element | null {
-  if (typeof document === 'undefined') return null;
-  const open = document.querySelectorAll('[aria-modal="true"]');
-  return open.length > 0 ? open[open.length - 1] : null;
+  let top: Element | null = null;
+  for (const dialog of shownModalDialogs()) {
+    const [mine, theirs] = [layerOf(dialog), top ? layerOf(top) : null];
+    if (!top || mine === null || theirs === null || mine >= theirs) top = dialog;
+  }
+  return top;
 }
 
 /**

@@ -1,9 +1,9 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent, type RefObject } from 'react';
-import { createPortal } from 'react-dom';
 import type { PlaceholderRunConfirm } from '../lib/placeholderRunConfirm';
 import { returnFocusOnSlip } from '../lib/modalFocus';
 import '../styles/prompt-dialog.css';
 import '../styles/placeholder-run-dialog.css';
+import { ModalPortal } from './ModalPortal';
 
 /**
  * Q133 (Justin, 2026-10-25): before the person's direct run makes an agent's
@@ -147,7 +147,8 @@ export function PlaceholderRunDialog({ model, changed = false, onDone }: {
       }
     }
   };
-  return createPortal(
+  return (
+    <ModalPortal>
     <div className="prompt-dialog placeholder-run" role="alertdialog" aria-modal="true"
       aria-labelledby={headingId} aria-describedby={bodyId} onKeyDown={onKeyDown} onBlur={onBlur}>
       <div ref={card} className="prompt-dialog__card placeholder-run__card">
@@ -164,12 +165,12 @@ export function PlaceholderRunDialog({ model, changed = false, onDone }: {
                 <li key={row.nodeId} className="placeholder-run__row" style={{ '--prd-color': row.agent.color } as CSSProperties}>
                   <span className="placeholder-run__dot" data-verified={String(row.agent.verified)} aria-hidden="true" />
                   <span className="placeholder-run__name">{row.name}</span>
-                  {[row.model, row.price].filter(Boolean).map((part) => ` · ${part}`).join('')}
+                  {[row.model, row.setting, row.price].filter(Boolean).map((part) => ` · ${part}`).join('')}
                 </li>
               ) : (
                 <li key={row.nodeId} className="placeholder-run__row placeholder-run__row--muted">
                   <span className="placeholder-run__name">{row.name}</span>
-                  {[row.model, row.price].filter(Boolean).map((part) => ` · ${part}`).join('')}
+                  {[row.model, row.setting, row.price].filter(Boolean).map((part) => ` · ${part}`).join('')}
                 </li>
               )
             ))}
@@ -184,7 +185,7 @@ export function PlaceholderRunDialog({ model, changed = false, onDone }: {
           <button type="button" className="prompt-dialog__confirm" onClick={run}>{model.runLabel}</button>
         </div>
       </div>
-    </div>,
-    document.body,
+    </div>
+    </ModalPortal>
   );
 }
