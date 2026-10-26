@@ -141,13 +141,18 @@ describe("review 5: the person's direct run once the placeholder dialog has show
       expect(execute.mock.calls[0][7]).toBe(9.6);
     });
 
-    it('a run that got cheaper goes ahead, held to the total the person saw', async () => {
+    // Review 7, L2 (coordinator's decision): a row counts as seen only if its
+    // node, model and price all match, so a row now at another price asks
+    // again, even when cheaper (this test said "goes ahead" until round 8).
+    it('a run that got cheaper asks again: its row changed price', async () => {
       const execute = vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'started' } as never);
-      askMock.mockImplementationOnce(async (model: PlaceholderRunConfirm) => { codexFinishes('cheap'); return model; });
+      askMock.mockImplementationOnce(async (model: PlaceholderRunConfirm) => { codexFinishes('cheap'); return model; })
+        .mockImplementationOnce(yes);
       await useGraphStore.getState().executeNode('b');
-      expect(askMock).toHaveBeenCalledOnce();
+      expect(askMock).toHaveBeenCalledTimes(2);
+      expect(askMock.mock.calls[1][1]).toMatchObject({ changed: true });
       expect(execute.mock.calls[0][6]).toEqual([]);
-      expect(execute.mock.calls[0][7]).toBe(1.2);
+      expect(execute.mock.calls[0][7]).toBe(0.7);
     });
 
     it('a Cinema shot asks again the same way, with the Generate button', async () => {

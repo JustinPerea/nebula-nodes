@@ -31,6 +31,7 @@ from typing import Any, Callable, Iterator, Mapping
 from services import universal_ports
 from services.input_file_name import input_file_name
 from services.selection_context import _safe_value as safe_value
+from services.text_cut import safe_cut
 
 PRESENCE_TTL_SECONDS = 120.0
 VIEW_STALE_SECONDS = 30.0
@@ -243,7 +244,8 @@ def _clean_say(raw: Any) -> str:
     if not isinstance(raw, str):
         raise PresenceError("say must be text")
     text = " ".join(raw.split())
-    return text[:MAX_SAY_CHARS]
+    # Never through a character (an accent, an emoji sequence, a flag): review 7, L5.
+    return text[:safe_cut(text, MAX_SAY_CHARS)]
 
 
 class AgentPresence:

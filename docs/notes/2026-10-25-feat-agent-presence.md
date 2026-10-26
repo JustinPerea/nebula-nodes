@@ -570,3 +570,75 @@ Justin, Q133 b, the same two rules: a paid placeholder never runs without the pe
 - `tsc -b` clean, lint clean.
 - Build budget: 389,865 bytes raw entry, 117,428 gzip (limit 512,000 raw).
 - MCP INSTRUCTIONS: 2,233 characters, unchanged (2,957 with the commons guide).
+
+## Round 8: review 7 and GM - Design's round-8 rulings (2026-10-26)
+
+Justin, Q133 b, the same two rules: a paid placeholder never runs without the person's confirmation, and what runs never costs more than the person was shown. Review 7 found no high finding: one medium (focus could fall out of the dialog, and canvas shortcuts then acted behind it) and five lows. GM signed off item 3 once its two round-8 items are in (the left line under the still-setting-up heading; the import notice). Every fix was test-first.
+
+### What changed and why
+
+- **M-1: focus stays in the dialog, and nothing acts behind it.** When the rows stop scrolling while the list has focus (an agent deletes placeholders, the window grows), focus moves to Cancel in the same commit that drops the list's Tab stop, before the browser can drop it on the page; any other slip to the page (a click on the backdrop, an element that went away) comes back to Cancel (PlaceholderRunDialog.tsx). Structural part: `isModalDialogOpen()` (lib/canvasShortcutScope.ts) reads whether any `[aria-modal="true"]` is on the page; while one is, `isCanvasShortcutTarget` is false for every target, the page included, so Cmd+Enter, Delete, Cmd+Z and the rest don't act behind any modal dialog, wherever focus is. The same check stops the app-wide keys that aren't canvas shortcuts but act on the graph: Cmd+O and Cmd+S (GraphFileActions: Cmd+O would open a file over the canvas) and Cmd+K (lib/commandPaletteKeys.ts: the palette's "Run graph" would run behind the dialog, even with focus correctly on Cancel, since the palette listens app-wide).
+- **L1: a replay words what runs.** A replay sends its saved copy of every node. `snapshotCanvas` now marks a saved node `gone` when its live node was deleted, or is another type and no placeholder; the dialog (`gone` option) never counts such a node as "finished": the agent's placeholder is one that left the run ("Run without the node Codex was setting up?" / "It's no longer in this run.", or the left line), and the saved copy runs as a muted row priced in the total (it is what runs, so its dollars need a row). The row keeps the name the dialog last showed. A live placeholder under another type is still flagged (by id, regardless of type), because Nebula reads placeholders by id (main._skip_placeholders) and would refuse the run otherwise; before, the tab dropped the flag and only Nebula's 409 brought the dialog back.
+- **L2 (coordinator's decision): a row counts as seen only if its node, model and price all match** what was drawn (`rowSeen`, graphStore.ts). A node switched to another model, or at another price, asks again with "This run changed since you last reviewed it.", even when cheaper. What still goes ahead without a second ask: every row unchanged (Codex finishes without changing anything), or rows dropped, at a total no higher.
+- **L3: a notice never takes an agent's Undo away.** `notify` (every caller: a failure, "Nothing ran. Another run started first.", the import notice) writes the canvas notice as before, except while it offers an Undo or Redo: then the line goes to `messageNotice`, shown by `CanvasMessageNotice` in a new region slot `message` above the late count and the canvas notice, so the notice with the button stays nearest the bar (GM round 4's rule for the late count). Same look, tone (alert for errors), Dismiss and reading-time hold; on every screen; a project open clears it. No new words.
+- **L4: any amount above zero confirms at least $0.01.** `roundUpToCent` floors a positive amount at a cent (it read under half a millionth as $0.00). Backend: `_six_places` (main.py) reads an estimate at 6 places as before, but a positive one never as 0 (under half a millionth it reads 0.000001), so `confirmedCost: 0` can't pass a run that costs something.
+- **L5 (coordinator's decision; GM did not override):** a status over 140 characters is cut at its last space only if that keeps at least 100 characters (`MIN_WORD_CUT_CHARS`), otherwise cut hard ("Reading https://example.com/ppp…", 139 characters and "…", not "Reading…"). A hard cut never splits a character: `services/text_cut.py` `safe_cut` backs off over combining marks (Mn, Mc, Me), ZWJ sequences, variation selectors, skin tones, emoji tags, Hangul medial vowels and finals, and regional-indicator pairs (counted from the start of the run). A cursor's `say` (cut at 140 with no "…") uses the same safe cut: the same kind of cut on the same kind of text.
+- **GM item 2:** the left line also shows under the still-setting-up heading: "Run 1 node Codex is still setting up?" / "Codex hasn't finished this, so its settings may not be final." / "1 node Codex was setting up is no longer in this run." / "This run changed since you last reviewed it." / rows (the dialog already drew lines in that order).
+- **GM item 4:** a yes dropped while a graph import runs: "Nothing ran. Nebula is still importing. Click “Run” again when it finishes." (Cinema: "Nothing ran. Nebula is still importing. Generate again when it finishes."). `announceDroppedYes` checks the import first (no run starts while one runs), then another run; on both places a yes can be dropped (the first dialog, Nebula's re-ask), for node runs, Generate all, replays and shots. Cancel still says nothing.
+- **Found in the live check: the dot's keyboard focus showed 320 px and "…".** Below 60% zoom the pill's dot is a Tab stop, but only the node's keyboard focus showed the whole status (wrapping past 480 px, GM round 5). With L5 a status now keeps a long URL, so the dot's keyboard focus now counts the same (AgentNodeMarkLayer.tsx `useKeyboardFocusedNode`); a pointer press still doesn't.
+- **Agent support:** docs/MCP-SETUP.md (the left line under the first heading; what a replay runs and says; "every row exactly as it is now" for going ahead; the import notice; a notice beside an Undo; focus and no shortcuts behind the dialog; an estimate above zero never reads 0; the status cut's 100-character rule and safe hard cut), skills/nebula/SKILL.md (a model or price change asks again; a replay runs its saved copy; the status cut), the `set_status` docstring. INSTRUCTIONS unchanged. No CLI change: confirming is the person's alone, and `nebula status` sends the text to the same cut.
+
+### Decisions not in the spec
+
+- The structural guard reads `aria-modal="true"` from the page rather than a registry, so every modal dialog counts, including later ones; all of the app's are rendered only while open (checked each). Cmd+K, Cmd+O and Cmd+S yield too: they act on the graph from app-wide listeners that never asked `isCanvasShortcutTarget`. Side effect: "?" on the page no longer closes the keyboard shortcuts dialog (its own keys still do; focus starts in it).
+- A replay's saved copy of a deleted placeholder still runs (replays run their saved recipe, unchanged); it is worded as a normal paid node, and its placeholder as one that left.
+- L2 makes the round-6 and round-7 "a cheaper run goes ahead" tests ask again (updated, with a comment); the round-8 suite pins the case that still goes ahead.
+- The message slot sits above the late count; the late count stays directly above the canvas notice, as its test and GM's rule have it.
+- `say` gets the safe hard cut but keeps its own rule otherwise (no "…", no word cut).
+
+### Tradeoffs
+
+- L2 asks again for a cheaper price too: one more click in that race, never a run at words the person didn't see.
+- `safe_cut` covers the grapheme rules that matter for one line of agent text, not all of UAX #29 (no package for one line; no installs).
+
+### Tests (first, each seen failing)
+
+- **Backend** (`tests/test_pending_nodes_round8.py`, 14 tests): 11 failed first, 3 passed.
+  - L4 (2 failed): the estimate's `high` and `low` read 0.0 for a run of 4e-7; `confirmedCost: 0` got 200 "started" for it. Passed before and after: $0.01 runs.
+  - L5 (9 failed): "Reading…" for the 228-character URL (direct and over HTTP); a word cut keeping 99 characters; hard cuts that split a combining accent, a ZWJ family, a flag, a variation selector, a skin tone (139 code points where a whole number of units fits in 138 or 135); a cursor `say` ending on a bare "e" before its accent. Passed before and after: word cuts keeping 100 and 110 characters; a flag run after a lone indicator.
+- **Frontend:** 28 failed first, 8 passed (the ⌘O control first failed for a missing ReactFlowProvider in the test, fixed before it counted), plus 1 from the live check.
+  - `lib/placeholderRunConfirm.round8.test.ts` (10): 8 failed (no left line under "Run 1 node Codex is still setting up?" for one or two left; a gone saved copy counted "finished" with its agent's dot; $0.00 for 4e-7, 4.9e-7, 1e-9 and the smallest double); 2 passed (nothing left, no line; zero stays zero, float noise kept out).
+  - `graphStore.placeholderRuns.round8.test.ts` (15): 11 failed (replay delete: "Run with Codex's changes?"; replay type change: same; a live placeholder under another type: no dialog at all; another model, and a lower price: ran unasked; the Undo notice replaced by "Another run started first" and by any notice; no import notice on node Run, Nebula's re-ask, a replay or Cinema); 4 passed (Codex finishing unchanged goes ahead; a notice with no Undo showing is the canvas notice; Cancel during an import says nothing; another run keeps its notice).
+  - `PlaceholderRunDialog.round8.test.tsx` (5): 4 failed (focus stayed on the list after it stopped scrolling; a slip to the page stayed there; the page and the canvas were shortcut targets with the dialog open); 1 passed (Escape cancels).
+  - `shortcutsBehindModal.round8.test.tsx` (3): 2 failed (⌘O loaded and ⌘S saved behind an open dialog; ⌘K opened the palette); 1 passed (⌘O with no dialog).
+  - `noticeMessageBesideUndo.round8.test.tsx` (3): 3 failed (no `message` slot; the line replaced the Undo, on the canvas and in Cinema).
+  - `AgentNodeMarkLayer.test.tsx` (+1, from the live check): failed first (the dot's keyboard focus set no `data-focused`).
+  - Updated to the new rules: round 6 "a run that got cheaper goes ahead" and round 7 "the same rows, cheaper" (now ask again, then run at the new total), and `lateRestoreCount`'s slot list (adds `message`).
+
+### Live check (1280x800)
+
+- Isolated backend on 8795 (temp HOME and every NEBULA_* root under scratch, no keys) and Vite on 5795 (`VITE_NEBULA_BACKEND_PORT=8795`); `/api/health` through Vite matched. Codex verified (an app token). No key was set, so nothing paid could run. Run was clicked in three dialogs, each a yes that sends nothing (an import holding the canvas, twice; another run holding it); the model-switch re-ask was cancelled. Run requests: one POST (and its OPTIONS) for the free Video Edit, nothing else.
+- 16 of 16 checks passed (script `agent-presence/live-r8.mjs`). The first run failed one check, which found a real gap: the dot's keyboard focus showed the URL status at 320 px with "…" (fixed and tested above; the script then focuses the dot from the keyboard, as Tab would).
+  - Codex removes one of two placeholders while the dialog is open: "Run 1 node Codex is still setting up?", the body, "1 node Codex was setting up is no longer in this run.", "This run changed since you last reviewed it.", the rows.
+  - 34 rows: Shift+Tab from Cancel puts focus on the list; Codex deletes 30: the list fits, no Tab stop, focus on Cancel; the dialog reads "Run 4 nodes Codex is still setting up?" with "30 nodes Codex was setting up are no longer in this run.". A blur to the page came back to Cancel. With focus on the page, Cmd+Enter, Ctrl+Enter, Cmd+K, Cmd+O and Cmd+A did nothing: no run request, no palette, the dialog still open. Escape cancelled.
+  - An import reserved through the store's own `reserveGraphImport` (as an Open or a project open does) while the dialog was open; Run: "Nothing ran. Nebula is still importing. Click “Run” again when it finishes.", no request. From a Cinema shot's Generate (the store's `executeShot`, which the Cinema panel calls; the dialog's button read "Generate for $0.14"): "Nothing ran. Nebula is still importing. Generate again when it finishes.". Both showed above "Codex changed the canvas · Undo", which kept its Undo.
+  - L2: the click on "Run for $0.14" and Codex's change in the same task (applied to the tab's store as a socket sync would: a socket message can't be timed into that window from outside): the dialog came back as "Run with Codex's changes?" with the changed line and "“a” · Nano Banana 2.1 · $0.034" (was "Nano Banana 2 (3.1 Flash) · $0.067"), "Run for $0.11"; nothing sent.
+  - L3: a free Video Edit run started while the dialog was open, Codex renamed a node (its notice with Undo), Run: "Nothing ran. Another run started first. Click “Run” again when it finishes." in the message slot above "Codex changed the canvas" with its Undo.
+  - L5: the 228-character status came back "Reading https://example.com/ppp…" (140 with "…"), and the dot's keyboard focus at 50% zoom shows it whole, wrapped over three lines.
+- Blocked requests: 2, both the canaries; 0 toward 8000-8010 or 5173. Console errors: the canary's only. No browser dialog. Servers stopped by PID; the state dir deleted.
+- Screenshots in the scratchpad `agent-presence/`: `r8-still-setting-up-left-line.png`, `r8-focus-cancel-after-shrink.png`, `r8-still-importing.png`, `r8-still-importing-cinema.png`, `r8-reask-model-switch.png`, `r8-another-run-with-undo.png`, `r8-status-url-cut.png`.
+
+### Open items (round 8)
+
+- For GM: the left line for several agents ("2 nodes agents were setting up are no longer in this run.") still follows GM's "Run without the nodes agents were setting up?" pattern (round 7 open item, now under both headings).
+- Known gaps unchanged (item 7 follow-up, for the PR body): the tab that hasn't heard of an agent's placeholder with "Ask before costly runs" on (browser confirm, then Nebula's dialog); free-placeholder runs still use the browser's costly-run confirm; the browser confirm's whole dollars from $10. No browser-confirm fallback added.
+- L8 as before.
+
+### Gates (round 8)
+
+- Backend full suite: 11,024 passed, 71 skipped (13 min 14 s).
+- Vitest full: 466 files, 5,919 tests. The first run, during the backend suite, had 21 failures in 10 files, all load-shaped: 15 "Test timed out", 2 `toHaveFocus` waits, 2 roles not found in time, and 2 more in the same files. Two of those files (CommandPalette, GraphFileActions) are near this round's change, so they were checked: rerun alone, all 10 files passed, 200 of 200.
+- errorCopy ratchets: 14 files, 173 tests passed.
+- `tsc -b` clean, lint clean.
+- Build budget: 389,993 bytes raw entry, 117,453 gzip (limit 512,000 raw).
+- MCP INSTRUCTIONS: 2,233 characters, unchanged.

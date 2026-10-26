@@ -239,6 +239,31 @@ describe('AgentNodeMarkLayer', () => {
       focusNode('n7', true);
       expect(container.querySelector<HTMLElement>('.agent-node-mark')!.dataset.focused).toBeUndefined();
     });
+
+    // Round 8 (review 7, L5 live check): a status now keeps a long URL whole up
+    // to the cut, which has no space to wrap at. Below 60% zoom the dot is its
+    // own Tab stop: tabbing to it shows the whole status (wrapping past 480
+    // px, GM round 5), the same as the node's keyboard focus, not 320 px with "…".
+    it('tabbing to the dot below 60% zoom shows the whole status, as the node\'s focus does', () => {
+      flow.state.transform = [0, 0, 0.4];
+      setStatus(CLAUDE, 'n4', `Reading https://example.com/${'p'.repeat(111)}…`);
+      const { container } = render(<AgentNodeMarkLayer />);
+      const mark = () => container.querySelector<HTMLElement>('.agent-node-mark[data-node="n4"]')!;
+      const pill = mark().querySelector<HTMLElement>('.agent-node-mark__pill')!;
+      act(() => {
+        fireEvent.keyDown(document, { key: 'Tab' });
+        fireEvent.focusIn(pill);
+      });
+      expect(mark().dataset.focused).toBe('true');
+      act(() => { fireEvent.focusOut(pill); });
+      expect(mark().dataset.focused).toBeUndefined();
+      // A pointer's press on the dot (hover shows its words) changes nothing.
+      act(() => {
+        fireEvent.pointerDown(pill);
+        fireEvent.focusIn(pill);
+      });
+      expect(mark().dataset.focused).toBeUndefined();
+    });
   });
 
   it('leaves the full-size pill out of the tab order', () => {

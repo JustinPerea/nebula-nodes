@@ -554,7 +554,8 @@ def set_status(text: str, node_id: str | None = None, ctx: Context | None = None
     passing remark at your cursor, gone in seconds; a report, something you
     noticed or a suggestion for the person goes in post_note. One line, at
     most 140 characters (whitespace is collapsed; a longer one is cut after
-    its last whole word and ends in "…"). You set only your own; it
+    its last whole word if that keeps at least 100 characters, otherwise cut
+    hard without splitting a character, and ends in "…"). You set only your own; it
     belongs to the open project and isn't kept across a Nebula restart.
     """
     body: dict[str, Any] = {"text": text}

@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type RefObject } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import type { PlaceholderRunConfirm } from '../lib/placeholderRunConfirm';
 import '../styles/prompt-dialog.css';
@@ -36,6 +36,10 @@ import '../styles/placeholder-run-dialog.css';
  * the changed line, the total, the footnotes and the buttons stay on screen.
  * A list that scrolls is a Tab stop named by the heading; one that fits isn't.
  * Review 6, L-b: the line for placeholders that left the run sits under the intro.
+ * Review 7, M-1: focus never leaves it while it is open (the rows that stop
+ * scrolling hand focus to Cancel; a slip to the page comes back to Cancel),
+ * and no canvas shortcut acts behind it (lib/canvasShortcutScope.ts
+ * isModalDialogOpen: it is aria-modal).
  */
 export const CHANGED_LINE = 'This run changed since you last reviewed it.';
 /** How long Run ignores clicks after the dialog's numbers change (GM: "~500 ms"). */
@@ -105,6 +109,27 @@ export function PlaceholderRunDialog({ model, changed = false, onDone }: {
     cancel.current?.focus();
     return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus(); };
   }, []);
+  // Review 7, M-1: focus never falls out of the open dialog. The rows that
+  // stop scrolling (an agent deleted placeholders, the window grew) leave the
+  // Tab order; if they had focus, it moves to Cancel before the browser can
+  // drop it on the page, where Cmd+Enter would run the graph behind the dialog.
+  const scrolled = useRef(false);
+  useLayoutEffect(() => {
+    const was = scrolled.current;
+    scrolled.current = scrolls;
+    if (scrolls || !was) return;
+    const active = document.activeElement;
+    if (active === list.current || active === document.body || active === null) cancel.current?.focus();
+  }, [scrolls]);
+  // Any other slip to the page (a click on the backdrop, an element that
+  // went away) comes back to Cancel, once the browser has settled where focus is.
+  const onBlur = (event: FocusEvent<HTMLDivElement>) => {
+    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+    window.setTimeout(() => {
+      const active = document.activeElement;
+      if (cancel.current?.isConnected && (active === document.body || active === null)) cancel.current.focus();
+    }, 0);
+  };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -127,7 +152,7 @@ export function PlaceholderRunDialog({ model, changed = false, onDone }: {
   };
   return createPortal(
     <div className="prompt-dialog placeholder-run" role="alertdialog" aria-modal="true"
-      aria-labelledby={headingId} aria-describedby={bodyId} onKeyDown={onKeyDown}>
+      aria-labelledby={headingId} aria-describedby={bodyId} onKeyDown={onKeyDown} onBlur={onBlur}>
       <div ref={card} className="prompt-dialog__card placeholder-run__card">
         <h2 id={headingId} className="placeholder-run__heading">{model.heading}</h2>
         <div id={bodyId} className="placeholder-run__body">

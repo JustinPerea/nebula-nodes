@@ -10,6 +10,7 @@ import { apiRequest } from '../lib/apiRequest';
 import { rewriteBackendAssetUrls } from '../lib/backend';
 import { failureMessage, RequestFailedError } from '../lib/errorCopy';
 import { showNotice } from '../lib/canvasNotice';
+import { isModalDialogOpen } from '../lib/canvasShortcutScope';
 import { computeCanvasFitPadding } from '../lib/canvasFit';
 import { providerKeyWarnings } from '../lib/providerSwitch';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
@@ -195,6 +196,8 @@ export function GraphFileActions() {
       const key = event.key.toLowerCase();
       if (key !== 's' && key !== 'o') return;
       event.preventDefault();
+      // Never behind an open dialog: opening a file swaps the canvas under it (review 7, M-1).
+      if (isModalDialogOpen()) return;
       if (key === 's') void save();
       else void load();
     };

@@ -254,7 +254,8 @@ describe('in the region', () => {
   it('nothing else in the stack order moves (top to bottom)', () => {
     expect([...NOTICE_SLOTS]).toEqual([
       'proposal', 'run-later', 'person-required', 'project-switch', 'save-paused', 'project-home',
-      'pin', 'board', 'asset-trash', 'late', 'notice',
+      // Review 7, L3: a line beside an Undo has its own slot above the late count.
+      'pin', 'board', 'asset-trash', 'message', 'late', 'notice',
     ]);
   });
 

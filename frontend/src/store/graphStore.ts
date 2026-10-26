@@ -496,6 +496,23 @@ export interface LateNotice {
 
 let lateNoticeSeq = 0;
 
+/**
+ * Review 7, L3: a written line (graphStore.notify: a failure, "Nothing ran.
+ * Another run started first. …") that arrives while the canvas notice offers
+ * an Undo or Redo ("Codex changed the canvas · Undo") never replaces it: the
+ * Undo is the person's way back from an agent's edit. It shows on its own
+ * line in its own slot above the canvas notice (lib/noticeSlots.ts
+ * 'message'), as GM - Design ruled for the late count (round 4: "put the late
+ * line above the newer one, so the notice with a button stays nearest the
+ * bar"), with the same hold, Dismiss and tone. Not an offer: the stacks never
+ * clear it.
+ */
+export interface MessageNotice {
+  id: number;
+  text: string;
+  tone: 'error' | 'info';
+}
+
 /** Whether a notice's Undo or Redo still applies: its step is next in line on its stack. */
 function offerApplies(notice: UndoNotice, stacks: { undoStack: UndoEntry[]; redoStack: UndoEntry[] }): boolean {
   if (!notice.offer || !notice.entry) return true;
@@ -830,9 +847,15 @@ interface GraphState {
   /** A restore's late count, shown above the canvas notice (LateNotice). */
   lateNotice: LateNotice | null;
   dismissLateNotice: () => void;
+  /** A written line that arrived while the canvas notice offers Undo or Redo
+   * (MessageNotice): shown above it, so the offer stays. */
+  messageNotice: MessageNotice | null;
+  dismissMessageNotice: () => void;
   /** Show a written line as the canvas notice, non-blocking and dismissable,
    * where a native alert used to stop the canvas (round 3f). 'error' by
-   * default; 'info' for a note such as an import's warnings. */
+   * default; 'info' for a note such as an import's warnings. While the canvas
+   * notice offers an Undo or Redo (an agent's edit), the line shows above it
+   * instead of replacing it (review 7, L3). */
   notify: (text: string, tone?: 'error' | 'info') => void;
 
   // Clipboard
@@ -2467,11 +2490,12 @@ async function executeHistoricalRun(
   if (directTarget) {
     let first = true;
     const shot = source.cinemaShot;
+    const names = new Map<string, string>();
     const answer = confirmDirectRun(() => {
       if (!first && (get().isExecuting || get().isImportingGraph)) return null;
       first = false;
-      const graph = snapshotCanvas(snapshot, get().nodes);
-      return shot ? { nodes: oneShotCanvas(graph.nodes, shot.nodeId, shot.shotId), edges: graph.edges } : graph;
+      const graph = snapshotCanvas(snapshot, get().nodes, names);
+      return shot ? { ...graph, nodes: oneShotCanvas(graph.nodes, shot.nodeId, shot.shotId) } : graph;
     }, directTarget, { passes: shot?.variations ?? 1, costly: false, busy: () => get().isExecuting, ...wording });
     agreed = answer instanceof Promise ? await answer : answer;
     if (!agreed) return;
@@ -3522,8 +3546,10 @@ async function askDirectRun(
   }
 }
 
-/** The graph a direct run would send, as the canvas reads it for its cost and dialog. */
-interface DirectRunGraph { nodes: Node<NodeData>[]; edges: Edge[] }
+/** The graph a direct run would send, as the canvas reads it for its cost and
+ * dialog; for a replay, the saved nodes that are no longer their agent's
+ * (snapshotCanvas `gone`, review 7 L1). */
+interface DirectRunGraph { nodes: Node<NodeData>[]; edges: Edge[]; gone?: ReadonlySet<string> }
 
 /** How the dialog words this run: "Generate" from Cinema, a shot's name. */
 type DirectRunWording = Pick<PlaceholderRunOptions, 'verb' | 'names'>;
@@ -3556,7 +3582,7 @@ function confirmDirectRun(
 ): DirectRunConfirmed | null | Promise<DirectRunConfirmed | null> {
   const graph = read();
   if (!graph) return null;
-  const asked = directRunConfirm(graph.nodes, graph.edges, nodeId, passes, null, { verb, names });
+  const asked = directRunConfirm(graph.nodes, graph.edges, nodeId, passes, null, { verb, names, gone: graph.gone });
   // No dialog: answered at once, so the caller starts its run in the same
   // turn (a second click can't slip in), as before.
   if (!asked) {
@@ -3571,8 +3597,18 @@ function confirmDirectRun(
 export const ANOTHER_RUN_FIRST = 'Nothing ran. Another run started first. Click “Run” again when it finishes.';
 export const ANOTHER_RUN_FIRST_CINEMA = 'Nothing ran. Another run started first. Generate again when it finishes.';
 
-function announceAnotherRunFirst(verb: DirectRunWording['verb']): void {
-  useGraphStore.getState().notify(verb === 'Generate' ? ANOTHER_RUN_FIRST_CINEMA : ANOTHER_RUN_FIRST);
+/** GM - Design's notice (round 8, item 4, verbatim) when the yes can't start
+ * the run because a graph import is running. */
+export const STILL_IMPORTING = 'Nothing ran. Nebula is still importing. Click “Run” again when it finishes.';
+export const STILL_IMPORTING_CINEMA = 'Nothing ran. Nebula is still importing. Generate again when it finishes.';
+
+/** A yes the run can't act on says why when something holds the canvas: a
+ * graph import (it comes first: no run starts while one runs), or another
+ * run (`busy`). Anything else (the node deleted, the shot gone) says nothing. */
+function announceDroppedYes(verb: DirectRunWording['verb'], busy?: () => boolean): void {
+  const cinema = verb === 'Generate';
+  if (useGraphStore.getState().isImportingGraph) useGraphStore.getState().notify(cinema ? STILL_IMPORTING_CINEMA : STILL_IMPORTING);
+  else if (busy?.()) useGraphStore.getState().notify(cinema ? ANOTHER_RUN_FIRST_CINEMA : ANOTHER_RUN_FIRST);
 }
 
 /**
@@ -3603,7 +3639,7 @@ async function askUntilSettled(
   };
   const build = (graph: DirectRunGraph) => {
     remember(graph);
-    return directRunConfirm(graph.nodes, graph.edges, nodeId, passes, null, { ...wording, shown });
+    return directRunConfirm(graph.nodes, graph.edges, nodeId, passes, null, { ...wording, shown, gone: graph.gone });
   };
   remember(firstGraph);
   const recompute = () => {
@@ -3617,8 +3653,9 @@ async function askUntilSettled(
     if (!answer) return null;
     const graph = read();
     if (!graph) {
-      // A yes that can't start: say so when another run started first (L-c).
-      if (busy?.()) announceAnotherRunFirst(wording.verb);
+      // A yes that can't start: say so when another run started first (L-c)
+      // or a graph import is running (GM round 8, item 4).
+      announceDroppedYes(wording.verb, busy);
       return null;
     }
     const now = build(graph);
@@ -3640,16 +3677,22 @@ function unpricedRows(model: PlaceholderRunConfirm): string[] {
     .map((row) => `${row.nodeId}\u0000${row.model ?? ''}`);
 }
 
+/** A row as the person read it: its node, the model it runs and its price
+ * (review 7, L2: a node now on another model, or at another price, was not seen). */
+function rowSeen(row: PlaceholderRunConfirm['rows'][number]): string {
+  return `${row.nodeId}\u0000${row.model ?? ''}\u0000${row.price}`;
+}
+
 /** Whether what the person confirmed (`shown`, as the dialog drew it) covers
  * the run now (review 6, L-a): a total no higher than the one shown, every
- * row (by node) on screen, no row without a price the dialog didn't show as
- * such, and no gate or "Not included" note it didn't show. Anything new
- * asks again. */
+ * row on screen as it is now (its node, model and price: review 7, L2), no
+ * row without a price the dialog didn't show as such, and no gate or "Not
+ * included" note it didn't show. Anything new or changed asks again. */
 function coveredBy(shown: PlaceholderRunConfirm, now: PlaceholderRunConfirm): boolean {
   if (shown.confirmCost === null || now.confirmCost === null) return false;
   if (now.confirmCost > shown.confirmCost) return false;
-  const rows = new Set(shown.rows.map((row) => row.nodeId));
-  if (!now.rows.every((row) => rows.has(row.nodeId))) return false;
+  const rows = new Set(shown.rows.map(rowSeen));
+  if (!now.rows.every((row) => rows.has(rowSeen(row)))) return false;
   const unpriced = new Set(unpricedRows(shown));
   if (!unpricedRows(now).every((row) => unpriced.has(row))) return false;
   const notes = new Set(shown.costNotes);
@@ -3703,15 +3746,16 @@ async function sendDirectRun<T>(
       if (!refusal || !stillOurs()) throw error;
       const nodes = withRefusalFlags(agreed.nodes, refusal);
       const model = directRunConfirm(nodes, agreed.edges, nodeId, passes, refusal.estimate,
-        { ...wording, shown: agreed.shown });
+        { ...wording, shown: agreed.shown, gone: agreed.gone });
       if (!model) throw error;
       withdraw();
       const shown = await askDirectRun({ ...model, confirmIds: [...refusal.placeholders].sort() }, placeholders !== undefined);
       if (!shown) return DECLINED;
       if (!begin()) {
-        // The person said yes but another run started first: it is left
-        // alone, and the yes is dropped out loud (review 6, L-c).
-        if (busy?.()) announceAnotherRunFirst(wording.verb);
+        // The person said yes but another run started first (or an import
+        // runs): it is left alone, and the yes is dropped out loud (review 6,
+        // L-c; GM round 8, item 4).
+        announceDroppedYes(wording.verb, busy);
         return DECLINED;
       }
       placeholders = shown.confirmIds;
@@ -3791,22 +3835,33 @@ function oneShotCanvas(nodes: Node<NodeData>[], cinemaId: string, shotId: string
  * A saved run's snapshot as canvas nodes for its cost and dialog: what the
  * replay sends (its params, its connections), with the live canvas's names
  * and placeholder flags, since the backend reads which nodes are still
- * placeholders from the canvas as it is now (main._skip_placeholders).
+ * placeholders from the canvas as it is now, by id (main._skip_placeholders):
+ * a placeholder the agent turned into another type is still asked about.
+ *
+ * Review 7, L1: the replay sends its saved copy of every node, so what runs
+ * decides the words. A saved node whose live one was deleted, or is now
+ * another type and no placeholder, is `gone`: its copy runs as a paid node
+ * of the run, and an agent's placeholder there counts as one that left the
+ * run, never as "finished". `names` keeps each node's name as the dialog
+ * last showed it, for a node deleted since.
  */
-function snapshotCanvas(snapshot: RunGraphSnapshot, live: Node<NodeData>[]): DirectRunGraph {
+function snapshotCanvas(snapshot: RunGraphSnapshot, live: Node<NodeData>[], names = new Map<string, string>()): DirectRunGraph {
   const byId = new Map(live.map((node) => [node.id, node]));
+  const gone = new Set<string>();
   const nodes = snapshot.nodes.map((saved) => {
     const now = byId.get(saved.id);
-    const flag = now && now.data.definitionId === saved.definitionId ? cleanPending(now.data.pending) : null;
+    const flag = now ? cleanPending(now.data.pending) : null;
+    if (!flag && (!now || now.data.definitionId !== saved.definitionId)) gone.add(saved.id);
+    if (now) names.set(saved.id, now.data.label ?? '');
     return {
       id: saved.id, type: now?.type ?? 'model-node', position: now?.position ?? { x: 0, y: 0 },
-      data: { definitionId: saved.definitionId, label: now?.data.label ?? '', params: saved.params,
+      data: { definitionId: saved.definitionId, label: now?.data.label ?? names.get(saved.id) ?? '', params: saved.params,
         state: 'idle', outputs: {}, ...(flag ? { pending: flag } : {}) },
     } as Node<NodeData>;
   });
   const edges = snapshot.edges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target,
     sourceHandle: edge.sourceHandle ?? null, targetHandle: edge.targetHandle ?? null })) as Edge[];
-  return { nodes, edges };
+  return { nodes, edges, gone };
 }
 
 export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get) => ({
@@ -3855,7 +3910,11 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   dismissUndoNotice: () => set({ undoNotice: null }),
   lateNotice: null,
   dismissLateNotice: () => set({ lateNotice: null }),
-  notify: (text, tone = 'error') => set({ undoNotice: { id: ++undoNoticeSeq, text, offer: null, tone } }),
+  messageNotice: null,
+  dismissMessageNotice: () => set({ messageNotice: null }),
+  notify: (text, tone = 'error') => set((state) => (state.undoNotice?.offer
+    ? { messageNotice: { id: ++undoNoticeSeq, text, tone } }
+    : { undoNotice: { id: ++undoNoticeSeq, text, offer: null, tone } })),
 
   // ---------------------------------------------------------------------------
   // Clipboard: copy/paste with UUID regeneration
@@ -6494,7 +6553,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       // The old project's notice (its edit's Undo, its error) is about that
       // canvas; a notice for the new one is set after this load. Its late
       // restore count too.
-      undoNotice: null, lateNotice: null,
+      undoNotice: null, lateNotice: null, messageNotice: null,
       providerRecoveryWarning: null, providerRecoveries: [], providerStartAmbiguities: [],
       uncertainWorldLabsRunId: null,
     });

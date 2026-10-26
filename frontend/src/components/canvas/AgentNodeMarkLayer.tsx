@@ -87,7 +87,8 @@ function useClock(ticking: boolean): number {
  * keyboard focus shows the pill's whole text (review 3, finding 8). Keyboard
  * means a key was pressed since the last pointer press (review 4, L5), not
  * :focus-visible, which a text field clicked with the mouse matches too: a
- * pointer's focus changes nothing, typing in a field included.
+ * pointer's focus changes nothing, typing in a field included. Below 60% the
+ * pill's dot is a Tab stop, and its keyboard focus counts the same.
  */
 function useKeyboardFocusedNode(): string | null {
   const [focused, setFocused] = useState<string | null>(null);
@@ -98,7 +99,12 @@ function useKeyboardFocusedNode(): string | null {
     const onFocusIn = (event: FocusEvent) => {
       const target = event.target instanceof HTMLElement ? event.target : null;
       const node = target?.closest<HTMLElement>('.react-flow__node[data-id]');
-      setFocused(keyboard && node ? node.dataset.id ?? null : null);
+      // Below 60% the dot is its own Tab stop: its keyboard focus shows the
+      // whole status too, wrapping past 480 px (round 8: a status keeps a
+      // long URL, with no space to wrap at, not 320 px and "…").
+      const dot = target?.closest('.agent-node-mark__pill')?.closest<HTMLElement>('.agent-node-mark[data-node]');
+      const id = node?.dataset.id ?? dot?.dataset.node ?? null;
+      setFocused(keyboard ? id : null);
     };
     const onFocusOut = () => setFocused(null);
     document.addEventListener('keydown', onKeyDown, true);

@@ -1282,8 +1282,9 @@ Needs-you row opens its oldest question set or proposal.
   `nebula status "<text>" [--node nX]`, HTTP `POST /api/canvas/status` with
   `{text, nodeId?}`. One line, cleaned like a cursor's `say` (whitespace
   collapsed, 140 characters at most: a longer one is cut after its last
-  whole word that fits (one with no space is cut hard) and ends in
-  "…", so the node's pill never ends mid-word); `nodeId` must be a node on the open
+  whole word that fits when that keeps at least 100 characters, else cut
+  hard (a long URL stays mostly whole), and ends in "…"; a hard cut never
+  splits a character (an accent, an emoji sequence, a flag); `nodeId` must be a node on the open
   canvas. Empty text clears it (`set_status("")`, `nebula status --clear`).
   Only an identified agent sets one, and only its own: the browser gets 403,
   an unnamed caller 400, and the body takes no agent name. A bare
@@ -1431,14 +1432,30 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   finished and some left, the "changes" heading counting the finished ones,
   then "1 node Codex was setting up is no longer in this run." ("2 nodes …
   are no longer in this run."); and if some are still placeholders, the
-  first heading counting only those. If anything changed by the time the
+  first heading counting only those, with the same line for any that left
+  under its body. A replay from Run history sends its saved copy of every
+  node, so it words what runs: a placeholder deleted from the canvas, or
+  turned into another type and finished, counts as one that left (never
+  "finished"), and its saved copy runs as a muted row priced in the total;
+  one still a placeholder under another type is asked about, as Nebula
+  does (it reads placeholders by id). If anything changed by the time the
   person clicks, it asks again over the new run; a run with no placeholder
   left goes ahead without asking again only if its total is no higher than
-  the one the person saw and every row and every "Not included" note in it
-  was on screen, held to that total. If another run started first, a yes
-  runs nothing and the canvas says "Nothing ran. Another run started first.
-  Click “Run” again when it finishes." (from Cinema, "… Generate again when
-  it finishes."). The costly-run setting's browser confirm never follows it.
+  the one the person saw, every row in it was on screen exactly as it is
+  now (the same node, model and price; a row now on another model or at
+  another price, even a cheaper one, asks again), and every "Not included"
+  note in it was on screen, held to that total. If another run started
+  first, a yes runs nothing and the canvas says "Nothing ran. Another run
+  started first. Click “Run” again when it finishes." (from Cinema, "…
+  Generate again when it finishes."); if a graph import is running,
+  "Nothing ran. Nebula is still importing. Click “Run” again when it
+  finishes." (from Cinema, "… Generate again when it finishes."). A notice
+  that arrives while "Codex changed the canvas" offers its Undo shows above
+  it and leaves the Undo in place. While the dialog is open, focus stays in
+  it (if the rows stop scrolling while they have focus, focus moves to
+  Cancel) and no canvas shortcut acts behind it: not Cmd+Enter, Cmd+K, Cmd+O
+  or any other, wherever focus is (the same for every modal dialog).
+  The costly-run setting's browser confirm never follows it.
   `/api/execute-node` and `/api/cinema/generate-shot` enforce it: the
   person's run carries `confirmedPlaceholders` (exactly those paid
   placeholder ids) and `confirmedCost` (the amount the dialog showed in its
@@ -1450,8 +1467,10 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   every price read from an input file measured first (an inline `data:`
   image too, as `POST /api/pricing/input-sizes` measures it for the
   canvas), a shot as one shot times its variations, multiplied and then
-  rounded to 6 places; anything above `confirmedCost` (no slack) gets the
-  same 409. A run that carries `confirmedCost` is held to it even when
+  rounded to 6 places (an amount above zero never reads as 0: under half a
+  millionth it reads 0.000001, so `confirmedCost: 0` can't pass a run that
+  costs something; the canvas shows and sends $0.01 for it); anything above
+  `confirmedCost` (no slack) gets the same 409. A run that carries `confirmedCost` is held to it even when
   no placeholder is left (their agents finished them while the dialog was
   open); `confirmedPlaceholders` then doesn't matter. A paid node with no
   list price counts nothing on either side, as the dialog says. The 409

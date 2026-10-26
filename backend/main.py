@@ -8710,6 +8710,15 @@ def _paid_placeholders(nodes: list[GraphNode], ready: Iterable[str]) -> list[str
     return sorted(paid, key=_node_order)
 
 
+def _six_places(amount: float) -> float:
+    """USD read at 6 places, the canvas's arithmetic (review 4, L1), except
+    that an amount above zero never reads as nothing (review 7, L4): under
+    half a millionth it is one millionth, so a confirmed 0 can't pass a run
+    that costs something (the canvas shows and sends $0.01 for it)."""
+    rounded = round(amount, 6)
+    return 0.000001 if amount > 0 and rounded <= 0 else rounded
+
+
 def _run_estimate(nodes: list[GraphNode], edges: list[GraphEdge], *, passes: int = 1,
                   api_keys: Mapping[str, Any] | None = None,
                   sizes: Mapping[str, Mapping[str, Any]] | None = None) -> dict[str, Any] | None:
@@ -8741,8 +8750,8 @@ def _run_estimate(nodes: list[GraphNode], edges: list[GraphEdge], *, passes: int
     lines = {node_id: {"low": float(line["low"]) * times, "high": float(line["high"]) * times}
              for node_id, line in priced.items()}
     return {
-        "low": round(sum(line["low"] for line in lines.values()), 6) if lines else None,
-        "high": round(sum(line["high"] for line in lines.values()), 6) if lines else None,
+        "low": _six_places(sum(line["low"] for line in lines.values())) if lines else None,
+        "high": _six_places(sum(line["high"] for line in lines.values())) if lines else None,
         "nodes": lines,
         "unpriced": list(estimate.get("unpriced") or []),
         "plan": list(estimate.get("plan") or []),

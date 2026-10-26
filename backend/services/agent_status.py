@@ -41,9 +41,13 @@ from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Mapping
 
 from services.agent_presence import MAX_SAY_CHARS, AgentIdentity
+from services.text_cut import safe_cut
 
 STATUS_IDLE_SECONDS = 600.0
 MAX_STATUS_CHARS = MAX_SAY_CHARS
+# A cut at a word keeps at least this many of the 140 characters; a status
+# whose last space comes earlier is cut hard (review 7, L5, coordinator's decision).
+MIN_WORD_CUT_CHARS = 100
 
 
 class StatusError(ValueError):
@@ -56,19 +60,22 @@ def clean_status_text(raw: Any) -> str:
     shows it whole (GM - Design, round 6: "let it wrap until the whole status
     shows") never ends as if that were all of it. The cut lands after the
     last whole word that fits (GM, round 7: it reads "then…", not
-    "then checki…"); a status with no space to cut at is cut hard."""
+    "then checki…"), but only when that keeps at least MIN_WORD_CUT_CHARS
+    (review 7, L5: "Reading https://…" must not become "Reading…");
+    otherwise it is cut hard, and a hard cut never splits a character
+    (text_cut.safe_cut: an accent, an emoji sequence, a flag)."""
     if not isinstance(raw, str):
         raise StatusError("text must be text: one line about what you're working on (\"\" clears it)")
     text = " ".join(raw.split())
     if len(text) <= MAX_STATUS_CHARS:
         return text
     room = MAX_STATUS_CHARS - 1  # the "…" takes the last place
-    kept = text[:room]
-    if text[room] != " ":  # the cut falls inside a word: drop that word
-        space = kept.rfind(" ")
-        if space > 0:
-            kept = kept[:space]
-    return kept.rstrip() + "…"
+    end = room
+    if text[room] != " ":  # the cut falls inside a word: drop that word if enough is left
+        space = text.rfind(" ", 0, room)
+        if space >= MIN_WORD_CUT_CHARS:
+            end = space
+    return text[:safe_cut(text, end)].rstrip() + "…"
 
 
 @dataclass

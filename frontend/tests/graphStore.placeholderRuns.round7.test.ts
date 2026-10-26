@@ -124,16 +124,19 @@ describe("review 6: the person's direct run once the placeholder dialog has show
       expect(execute.mock.calls[0][7]).toBe(0.3);
     });
 
-    it('the same rows, cheaper: goes ahead without asking again, at the total shown', async () => {
+    // Review 7, L2 (coordinator's decision): a row at another price was not
+    // seen, so this asks again (until round 8 it went ahead at the total shown;
+    // the case that still goes ahead, every row unchanged, is in round 8's tests).
+    it('the same nodes, one cheaper: asks again, since that row changed', async () => {
       const execute = vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'started' } as never);
       askMock.mockImplementationOnce(async (model: PlaceholderRunConfirm) => {
         useGraphStore.setState({ nodes: useGraphStore.getState().nodes.map((n) => n.id === 'a'
           ? { ...n, data: { ...n.data, pending: undefined, params: { model: 'cheap' } } } : n) as never });
         return model;
-      });
+      }).mockImplementationOnce(yes);
       await useGraphStore.getState().executeNode('b');
-      expect(askMock).toHaveBeenCalledOnce();
-      expect(execute.mock.calls[0][7]).toBe(1.2);
+      expect(askMock).toHaveBeenCalledTimes(2);
+      expect(execute.mock.calls[0][7]).toBe(0.7);
     });
   });
 

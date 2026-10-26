@@ -46,9 +46,10 @@ export interface PlaceholderRunRow {
 export interface PlaceholderRunConfirm {
   heading: string;
   intro: string;
-  /** Under the intro when some placeholders the dialog showed finished and
-   * others left the run (deleted or disconnected): "1 node Codex was setting
-   * up is no longer in this run." (GM - Design, round 7, review 6 L-b); else null. */
+  /** Under the intro when placeholders the dialog showed left the run
+   * (deleted or disconnected) while others finished (GM - Design, round 7,
+   * review 6 L-b) or are still being set up (round 8, item 2): "1 node Codex
+   * was setting up is no longer in this run."; else null. */
   leftLine: string | null;
   rows: PlaceholderRunRow[];
   /** "Plus 1 free node." / "Plus 2 free nodes.", or null. */
@@ -92,6 +93,12 @@ export interface PlaceholderRunOptions {
    * ("Run with Codex's changes?", "Run without the node Codex was setting
    * up?"), never none. One no longer in the run is never "finished". */
   shown?: ReadonlyMap<string, PendingAgent>;
+  /** Nodes of this run that are no longer what their agent was setting up:
+   * a replay's saved copy of a placeholder since deleted from the canvas or
+   * turned into another type (review 7, L1). The copy still runs, as a paid
+   * node of the run with a muted row; the agent's placeholder counts as one
+   * that left the run, never as "finished". */
+  gone?: ReadonlySet<string>;
 }
 
 /** A row's price words (GM - Design, rounds 4 and 6, verbatim). */
@@ -165,7 +172,7 @@ function rowPrice(nodeId: string, summary: RunScopeSummary, name: string): { tex
   return { text: PRICE_NOT_LISTED, missing: true };
 }
 
-/** USD rounded up to the cent: what the person confirms (review 6, L-e; GM -
+/** USD rounded up to the cent, and never under a cent when above zero: what the person confirms (review 6, L-e; GM -
  * Design, round 7: "amounts the person confirms (button and total line)
  * ALWAYS show cents, rounded UP to the next cent, regardless of size ... and
  * "$0.01" for anything under a cent"). Read at 6 places first, Nebula's own
@@ -174,7 +181,9 @@ function rowPrice(nodeId: string, summary: RunScopeSummary, name: string): { tex
 export function roundUpToCent(amount: number): number {
   if (!(amount > 0)) return 0;
   const micros = Math.round(amount * 1e6);
-  return Math.ceil(micros / 1e4) / 100;
+  // Review 7, L4: an amount under half a millionth still costs something,
+  // so it confirms a cent, never $0.00 (backend main._six_places agrees).
+  return Math.max(0.01, Math.ceil(micros / 1e4) / 100);
 }
 
 /** "$0.21", "$10.49", "$0.01": an amount the person confirms, always in
@@ -255,15 +264,18 @@ export function placeholderRunConfirm(
   const paid = placeholders.filter(({ node }) => isPaid(node));
   // Placeholders a dialog of this run showed that their agents have finished
   // since (H1): still in the run, no longer placeholders.
+  const gone = (node: Node<NodeData>) => options.gone?.has(node.id) === true && !cleanPending(node.data?.pending);
   const finished = scope.flatMap((node) => {
     const agent = options.shown?.get(node.id);
-    return agent && !cleanPending(node.data?.pending) ? [{ node, agent }] : [];
+    return agent && !cleanPending(node.data?.pending) && !gone(node) ? [{ node, agent }] : [];
   });
   // And those that left the run since (deleted or disconnected): never
-  // "finished" (review 6, L-b).
-  const inScope = new Set(scope.map((node) => node.id));
+  // "finished" (review 6, L-b). A replay's saved copy of one that is gone
+  // from the canvas runs, but the agent's placeholder left (review 7, L1).
+  const inScope = new Set(scope.filter((node) => !gone(node)).map((node) => node.id));
   const left = [...(options.shown ?? [])].filter(([id]) => !inScope.has(id)).map(([, agent]) => agent);
   if (paid.length === 0 && !(options.shown && options.shown.size > 0)) return null;
+  // A saved copy that is no longer its agent's node has no dot (review 7, L1).
   const agentOf = new Map<string, PendingAgent>([...finished, ...placeholders].map(({ node, agent }) => [node.id, agent]));
   let anyMissing = false;
   const unlisted: string[] = [];
@@ -289,7 +301,13 @@ export function placeholderRunConfirm(
   const free = count - paid.length;
   let heading: string;
   let intro: string;
-  let leftLine: string | null = null;
+  // GM - Design, round 7 (review 6 L-b answer), and round 8 item 2: also
+  // under the still-setting-up heading. Verbatim.
+  const leftAgents = agentNames(left);
+  const leftWho = leftAgents.length === 1 ? leftAgents[0] : 'agents';
+  const leftLine = left.length === 0 ? null : left.length === 1
+    ? `1 node ${leftWho} was setting up is no longer in this run.`
+    : `${left.length} nodes ${leftWho} ${leftAgents.length === 1 ? 'was' : 'were'} setting up are no longer in this run.`;
   if (count > 0) {
     const agents = agentNames(placeholders.map(({ agent }) => agent));
     const one = agents.length === 1 ? agents[0] : null;
@@ -307,13 +325,6 @@ export function placeholderRunConfirm(
     const these = finished.length === 1 ? 'this node' : 'these nodes';
     heading = one ? `Run with ${one}'s changes?` : "Run with the agents' changes?";
     intro = one ? `${one} finished setting up ${these}.` : `The agents finished setting up ${these}.`;
-    if (left.length > 0) {
-      const leftAgents = agentNames(left);
-      const who = leftAgents.length === 1 ? leftAgents[0] : 'agents';
-      leftLine = left.length === 1
-        ? `1 node ${who} was setting up is no longer in this run.`
-        : `${left.length} nodes ${who} ${leftAgents.length === 1 ? 'was' : 'were'} setting up are no longer in this run.`;
-    }
   } else {
     // Every placeholder the dialog showed left the run, none finished
     // (GM - Design, answer to review 6 L-b, verbatim): neutral, never "removed".
@@ -330,7 +341,8 @@ export function placeholderRunConfirm(
   return {
     heading,
     intro,
-    leftLine,
+    // The heading already says they left: no second line under it.
+    leftLine: count === 0 && finished.length === 0 ? null : leftLine,
     rows,
     freeLine: free > 0 ? `Plus ${free} free ${free === 1 ? 'node' : 'nodes'}.` : null,
     totalLine,

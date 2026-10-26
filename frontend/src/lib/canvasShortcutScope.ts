@@ -3,6 +3,7 @@
  * working after you click Run, a rail button or the header. They still yield
  * to anything that owns its own keys: text fields, dialogs, and panels like
  * chat or the inspector, where ⌘A or ⌘C mean the panel's text, not the graph.
+ * None acts while a modal dialog is open (isModalDialogOpen).
  */
 const CANVAS_OWNED = [
   '.canvas-wrapper',
@@ -21,7 +22,20 @@ const CANVAS_OWNED = [
   '.notice-region',
 ].join(', ');
 
+/**
+ * Whether a modal dialog is open anywhere in the app (the paid placeholder
+ * confirm, a prompt, the keyboard shortcuts…). While one is, no key acts on
+ * the graph behind it, wherever focus is: review 7, M-1 found focus could fall
+ * to the page under an open confirm, and Cmd+Enter then ran the graph behind
+ * it. Read from the page, so every dialog that says it is modal counts,
+ * including ones added later.
+ */
+export function isModalDialogOpen(): boolean {
+  return typeof document !== 'undefined' && document.querySelector('[aria-modal="true"]') !== null;
+}
+
 export function isCanvasShortcutTarget(target: EventTarget | null): boolean {
+  if (isModalDialogOpen()) return false;
   if (!(target instanceof Element)) return true;
   if (target === document.body || target === document.documentElement) return true;
   if (target instanceof HTMLElement && target.isContentEditable) return false;
