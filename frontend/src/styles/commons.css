@@ -2,8 +2,18 @@
    and uses its --sr-* tokens, following moodboard-studio.css. Motion is a short spring
    (cubic-bezier with overshoot, under 240 ms) and switches off for prefers-reduced-motion. */
 
-body.app-slava-restraint .commons-view {
+/* What Commons' own surfaces share wherever they render (review 10, M-1): the
+   view, and its prompt, which renders on document.body (ModalPortal), outside
+   the view. Its spring, its type and ink, and (below, under -- fields --) its
+   fields and focus rings are scoped to this class, which both carry. */
+body.app-slava-restraint .commons-scope {
   --commons-spring: cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+  font-size: 12px;
+}
+
+body.app-slava-restraint .commons-view {
   --commons-detail-w: 0px;
   position: fixed;
   inset: 0;
@@ -17,9 +27,6 @@ body.app-slava-restraint .commons-view {
     "candidates candidates candidates"
     "filters main detail";
   background: var(--sr-canvas);
-  color: var(--sr-ink);
-  font-family: var(--sr-ui);
-  font-size: 12px;
   overflow: hidden;
 }
 
@@ -268,9 +275,9 @@ body.app-slava-restraint .commons-field--grow {
   flex: 1;
 }
 
-body.app-slava-restraint .commons-view input:not([type="range"]):not([type="checkbox"]),
-body.app-slava-restraint .commons-view select,
-body.app-slava-restraint .commons-view textarea {
+body.app-slava-restraint .commons-scope input:not([type="range"]):not([type="checkbox"]),
+body.app-slava-restraint .commons-scope select,
+body.app-slava-restraint .commons-scope textarea {
   width: 100%;
   min-width: 0;
   border: 1px solid var(--sr-edge);
@@ -289,20 +296,20 @@ body.app-slava-restraint .commons-field--inline select {
   max-width: 180px;
 }
 
-body.app-slava-restraint .commons-view textarea {
+body.app-slava-restraint .commons-scope textarea {
   resize: vertical;
   line-height: 1.35;
 }
 
-body.app-slava-restraint .commons-view input:focus-visible,
-body.app-slava-restraint .commons-view select:focus-visible,
-body.app-slava-restraint .commons-view textarea:focus-visible,
-body.app-slava-restraint .commons-view button:focus-visible {
+body.app-slava-restraint .commons-scope input:focus-visible,
+body.app-slava-restraint .commons-scope select:focus-visible,
+body.app-slava-restraint .commons-scope textarea:focus-visible,
+body.app-slava-restraint .commons-scope button:focus-visible {
   outline: var(--sr-focus-outline);
   outline-offset: var(--sr-focus-offset);
 }
 
-body.app-slava-restraint .commons-view input[type="range"] {
+body.app-slava-restraint .commons-scope input[type="range"] {
   width: 100%;
   accent-color: var(--sr-accent);
 }
@@ -985,9 +992,9 @@ body.app-slava-restraint .commons-folder__path {
 
 /* -- prompt ---------------------------------------------------------------------- */
 
+/* On document.body (ModalPortal), outside .commons-view: it carries
+   .commons-scope itself (components/commons/CommonsPrompt.tsx). */
 body.app-slava-restraint .commons-prompt {
-  /* On document.body (ModalPortal), outside .commons-view: its own spring. */
-  --commons-spring: cubic-bezier(0.2, 0.9, 0.3, 1.2);
   position: fixed;
   inset: 0;
   z-index: 60;

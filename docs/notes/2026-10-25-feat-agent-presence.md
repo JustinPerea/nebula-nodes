@@ -933,3 +933,108 @@ All are tested in `canvasDeleteUndo.round10`.
 - tsc: clean.
 - Build budget: 392,133 bytes raw / 118,097 gzip (limit 512,000).
 - INSTRUCTIONS: 2,233 characters (2,957 with the Commons guide), unchanged (`mcp_server.py` untouched).
+
+## Round 11: review 10 and GM - Design's round-11 rulings (2026-10-26)
+
+Branch feat/agent-presence, base main (head de9909bd before this round).
+
+### What changed and why
+
+- **M-1, the Commons prompt lost its styling on the body.** ModalPortal moved Commons' prompt ("New collection…", "Why?", "Label this region", "Rename region") out of `.commons-view`, and its field, button-focus and type rules were scoped to that view. On the body its field became the browser's white box (no padding, 11px uppercase meta ink from a looser rule, black focus ring).
+  - Fix: a scope class the prompt carries itself. `body.app-slava-restraint .commons-scope` holds the ink, type and spring that `.commons-view` used to set (`styles/commons.css`); the field, focus-visible, textarea and range rules now select `.commons-scope` instead of `.commons-view`. `CommonsView` and `CommonsPrompt` both carry the class. No rule is duplicated.
+  - `.commons-view` keeps only its own layout, its detail width and its background.
+- **M-1, every portalled modal checked.** 15 modals render through ModalPortal. A static scan of every stylesheet (no rule targets a body child, a sibling of a modal, `.nokey` or the wrapper beyond `display: contents` and the `*` reset) and a live sweep per modal (below) compare the rules and computed styles where each renders now with where it rendered before the move.
+  - 12 were already portalled to the body before ModalPortal; only the `display: contents` wrapper is new.
+  - 2 really moved: the Commons prompt (from `.commons-view`, fixed above) and the mask painter (from the Inspector's `.inspector__section`; its geometry changed on purpose in round 10).
+  - PlaceholderRunDialog was new on this branch and always on the body.
+- **L-1, the palette with focus on an item.** Escape, ArrowDown and ArrowUp are handled on the dialog root when focus is on an item or on Clear search (`CommandPalette.tsx` `onDialogKeyDown`), not only in the search field. Escape in agent mode goes back to commands; otherwise it closes. Arrows move focus and the active row together and stop at the ends, passing over disabled rows. An item that gets focus (Tab) becomes the active row.
+- **L-2, Cmd+Z while a delete is on its way.** A generic hold at the undo-step level (`graphStore.ts`, `holdStep` / `settleStep` / `holdsHistory`).
+  - A step whose backend request is still on its way is "in flight". Cmd+Z on top of it waits (and later presses queue in order) until the answer is on the canvas, then replays. A delete that went through is then undone by the usual restore (`POST /api/graph/restore`), so Nebula's graph and the canvas match, and Redo deletes again.
+  - A refused or cancelled step drops the first held undo, so the press doesn't undo an earlier step the person didn't mean.
+  - A 15 s limit releases a stuck hold.
+  - Callers end their step with the new `endUndoStep` (in a `finally`) or cancel it with `cancelUndoStep`; a test reads every file that begins a step and checks it.
+- **Delete paths covered:** Delete/Backspace on the canvas (`deleteCanvasElements`), the toolbar's delete (`deleteSelected`), the context menu and Inspector (`deleteNode`), `deleteGeneration`, the toolbar's Clear canvas, and chat `/clear`. Chat `/clear` now also takes its canvas side locally (`clearBackendNodes`: the CLI nodes and their wires go, local nodes stay), as Toolbar's clear did, so the step it begins holds a real change.
+  - Also every other `beginUndoStep` caller: file drop, chat upload, proposal accept, and the OpenRouter and Replicate model configures.
+  - remove_from_canvas (an agent's delete) has no in-flight window in the tab: it arrives as one graphSync, one foreign step (round 10's test covers it).
+- **GM r11, the replay sentence.** Names up to three nodes ("Codex changed “Wide”, “Hero still” and “Grade” after the run was saved. …"), a count from four ("Codex changed 4 nodes …"); the agents form follows the same rule. Names are sorted by row order explicitly; the price footnotes keep their count from 3.
+- **GM r11 item 4.** "Grain model" is named only while Grain is on (`KREA_SETTING_WHEN`); Flavor is not named.
+- **GM r11 item 5.** A model-picking setting with nothing chosen reads "Model: default" (Topaz Standard is the only such node today).
+- **GM r11 item 6.** "the agents" in the heading and the left line: "Run 3 nodes the agents are still setting up?", "Run without the nodes the agents were setting up?", "2 nodes the agents were setting up are no longer in this run." The body and "The agents changed…" are unchanged.
+- **GM r11 items 1-3:** row order kept, Topaz video keeps its card labels, krea-node-app keeps "Version". No code change.
+- **Docs:** `docs/MCP-SETUP.md` (the in-flight Cmd+Z on remove_from_canvas, the three-name and count rule, the full Krea setting list including Training Model, Grain model and the Topaz video nodes by name, "Model: default", the agents wording) and `skills/nebula/SKILL.md` (the setting list, "up to three; a count from four"). MCP tools and the CLI are unchanged (nothing an agent can call changed); INSTRUCTIONS unchanged.
+
+### Decisions and tradeoffs
+
+- **The hold, not a per-path patch.** One mechanism for every step with a request in flight, rather than special-casing the delete. Cost: an undo pressed in that window waits for the answer (normally well under a second; at most 15 s).
+- **The row-naming inventory (review 10):**
+  - Meshy's Mesh Type ("Smart Topology (Meshy T2)") is not named: it reads like a model, so it's a question for GM.
+  - krea-node-app with no version is refused (the backend never picks one), so no "Version: default".
+  - Krea Style Train's "Training Model" was already named.
+- **The test-side cascade (`tests/helpers/cssCascade.ts`).** jsdom's `getComputedStyle` drops shorthands that hold a `var()` and mis-resolves `font: inherit`, so the modal-style test reads the app's stylesheets with postcss, matches each selector, and keeps the winning declaration per state and property.
+
+### Tests (each failed first on the current code)
+
+- `tests/lib/placeholderRunConfirm.round11.test.ts`, 18 tests. 9 failed first: the three-name sentences (got "3 nodes"), the agents heading and left line (got "nodes agents"), Grain model (not named), "Model: default" (no setting). 9 controls passed.
+- `tests/commandPaletteKeys.round11.test.tsx`, 7 tests. 5 failed first: Escape on an item and on Clear search (the palette stayed open), Tab made no item active, the arrows on an item did nothing, passing over a disabled item. 2 controls passed.
+- `tests/canvasDeleteInFlightUndo.round11.test.tsx`, 13 tests. 12 failed first: with the delete held, Cmd+Z left nodes [n1] with stacks undo 1 / redo 1 and no restore sent; `endUndoStep` and `clearBackendNodes` were not functions. 1 control passed (a refused delete with a separate wire).
+- `tests/undoStepEnds.round11.test.ts`, 6 tests. 5 failed first: no caller ended its step.
+- `tests/modalStyles.round11.test.tsx`, 4 tests. 3 failed first, on HEAD's CSS (input padding 0, ink `--sr-ink-meta`, 11px uppercase, no Slava border, background or focus ring). The spring control passed.
+- Updated to the new wording or the hold: `placeholderRunConfirm.round10` (the count case uses 4 nodes), `round7`, `placeholderRunConfirm.test`, `PlaceholderRunDialog.test`, `graphStore.agentUndo` (an undo before `endUndoStep` waits, then applies), and the mocks in `canvasProposalsStore.test`, `ProposalBar.test` and `components/Toolbar.test` (which now also checks the step is ended on success and on refusal).
+
+### Live check (round 11)
+
+- Isolated backend on 8795 and Vite on 5795, no keys, 8000-8010 and 5173 blocked. 45 of 45 checks passed. 6 attempts were blocked: the 2 canaries, plus 4 ORB blocks of a missing thumbnail on the isolated backend (the World preview fixture). None went toward Justin's ports.
+- **L-2:** with Nebula's delete answer held 2.5 s, Delete then Cmd+Z brought back the node and its wire. Stacks were undo 1 / redo 1 (as before the delete), Nebula's graph had the node and the wire, and the notice read "Restored the node."
+- **L-1:** Tab to an item, then the arrows moved focus and the active row together (Run graph → Save graph → Run graph). Escape with focus on the item closed the palette.
+- **GM r11:**
+  - the three-name and four-count replay sentences, Codex and agents forms, still setting up and saved;
+  - "the agents" heading, left line and "Run without…";
+  - "Topaz Standard (Krea) · Model: default" and "Topaz Bloom 2 (Krea) · Grain model: gaussian".
+  - Cancel sent nothing in every case.
+- **The modal sweep, at 1440:** for each modal, the rules that match every element and the full computed style (with ::before, ::after and ::placeholder), measured where it renders now and where it rendered before the move. The subtree is moved there and back, and both placements are measured right after a move, with focus put back and entry animations finished.
+  - All 15 have 0 rules lost, 0 rules gained and 0 style differences.
+  - Mask painter: 40 geometry values differ, as intended in round 10. Two inherited values have no effect in the painter: the Inspector's scrollbar colour (nothing in the painter scrolls) and `--scroll-fade-size` (no rule in it reads it).
+  - Commons prompt: the view's `--commons-detail-w` differs, and no rule in the prompt reads it.
+  - The real Commons field on the body matches review 10's in-view measurement: rgba(0,0,0,.3) background, 0.92 ink, 1px edge, 12px Inter, 5px 7px padding. Focused, it shows the Slava 2px ring.
+- **Review 10's probes, on 8795/5795:**
+  - rv9: 22 of 22.
+  - rv9b: 4 of 4.
+  - rv9c: 23 of 23.
+  - rv9d: 6 of 6.
+  - rv10rv: 10 of 12, the same two failures as in review 10's own run. P1a types "fit", which leaves one item, so the arrows can't move. P1e expects a graph selection, but Enter focuses the node in the Inspector (rv10rv2 Q1b passes). Its mesh-clicks section can't find the preview, as in review 10; rv9c's RV10-Q2 covers it and passes.
+  - rv10rv2: 7 of 8. Q3a builds the prompt's old markup by hand, without `commons-scope`. Q3b, the real prompt, is now the Slava field: in review 10 it was the white Arial box.
+  - The first runs of rv9, rv9b and rv9c, beside the full vitest suite, had "Promise was collected" section errors. Rerun with the machine quieter, they are clean.
+- **Screenshots:** under `scratchpad/agent-presence/`:
+  - `r11-inflight-{1-before,2-undo-pressed-while-deleting,3-restored}-1440`;
+  - `r11-palette-{1-focus-on-item,2-closed-on-escape}-1440`;
+  - `r11-replay-{three,four,agents-three,agents-four}-{still-setting-up,saved}-{1440,1280}`;
+  - `r11-the-agents-{heading,left-line,run-without}-{1440,1280}`;
+  - `r11-topaz-rows-{1440,1280}`;
+  - `r11-modal-<name>-1440` for every modal, and `r11-modal-CommonsPrompt-{focused,unfocused}-1440` plus `unfocused-1280`.
+
+### Open items (round 11)
+
+- **For GM:**
+  - Three lines still read "nodes agents", not "the agents": the skip line ("Skipped 3 nodes agents are still setting up."), the included line ("Includes 3 nodes agents …") and the backend's refusal ("…2 paid nodes agents are still setting up…"). r11 ruled only the heading and the left line.
+  - Meshy's Mesh Type ("Smart Topology (Meshy T2)"): is it a model setting to name?
+  - A changed node with no row (a free one) is named after the rowed names. Is that the right place?
+- **The held undo for uploads and drops:** their node arrives only with the echo sync. If the HTTP answer lands before the echo, a held undo finds nothing to undo, and the step ends as a no-op. Not seen live.
+- **The UnsavedEditsNotice sweep** used a stand-in reason line (no real project state).
+- **From round 10, unchanged:**
+  - the run pill names Topaz-on-Krea by its model option;
+  - the selection toolbar's action slot passes keys to React Flow.
+- **Known gaps, unchanged** (item 7 follow-up, for the PR body):
+  - the tab that hasn't heard of an agent's placeholder, with "Ask before costly runs" on, shows the browser confirm and then Nebula's dialog;
+  - free-placeholder runs still use the browser's costly-run confirm;
+  - the browser confirm shows whole dollars from $10.
+
+### Gates (round 11)
+
+- Backend full suite: 11,034 passed, 71 skipped, 1 failed (19 min 10 s), run beside the vitest suite and the live checks. The failure was `test_acp_session.py::test_opening_a_gemini_agent_never_blocks_the_event_loop`, a timing test; it passes alone. The backend is untouched this round.
+- Vitest full suite, run beside the review probes: 486 files and 6,101 tests. 444 files passed and 42 failed (105 tests, 93 of them "Test timed out").
+  - The 42 rerun one file at a time (`--no-file-parallelism`): 42 files, 629 tests passed.
+- errorCopy ratchets: 14 files, 173 tests passed.
+- tsc: clean.
+- Lint: clean (the inline-style and Slava-scope guards passed).
+- Build budget: 392,261 bytes raw / 118,126 gzip (limit 512,000).
+- INSTRUCTIONS: 2,233 characters (2,957 with the Commons guide), unchanged.

@@ -200,7 +200,13 @@ The server exposes these tools for building and running (see
   Delete key, the selection toolbar, the context menu or the Inspector; the
   Delete and Backspace keys, like every canvas shortcut, act only with focus
   on the canvas or its bars, never in a panel that owns its keys such as the
-  Inspector or chat, nor behind a modal dialog). Its
+  Inspector or chat, nor behind a modal dialog). A Cmd+Z the person
+  presses before their own delete has reached Nebula waits for Nebula's
+  answer, then undoes that delete: the nodes come back with their
+  connections on the canvas and in Nebula's graph, and Redo deletes them
+  again (the same for every step the canvas takes before Nebula answers: a
+  clear, an upload, an accepted proposal; a delete Nebula refused undoes
+  nothing). Its
   result has `undo` too, which puts the nodes back with their params,
   outputs, names and connections, the person's pins on them, and the proposals
   the delete closed when they still fit. `removals` lists, per node it
@@ -1397,18 +1403,26 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   Inspector, a Cinema shot's Generate, a replay of a node run or a shot
   from Run history), the canvas always asks first (whatever "Ask before
   costly runs" is set to), in one dialog that replaces the costly-run
-  confirm: "Run 2 nodes Codex is still setting up?", a row per paid
+  confirm: "Run 2 nodes Codex is still setting up?" ("Run 3 nodes the
+  agents are still setting up?" for several agents), a row per paid
   placeholder with its agent's dot ("“Hero still” · FLUX · $0.04"; a node
   whose model is a free-text param names the chosen model as its card
   shows it, "“Writer” · openai/gpt-4o-mini · price not listed", so a switch
   to another model is a changed row, even when the node is named after its
   model; a Meshy node names its Model option; a Krea node also names its
   sub-model setting as its card does, even at the default: "“Hero” · Krea 2
-  · Variant: Medium · on your Krea plan", "Engine: …" on Magnific, "Model: …"
-  on Topaz (the video upscaler: its "Enhancement model" and "Frame
-  interpolation model"), "Version: …" on a Krea node app, so switching one
-  asks again; Krea Style Search's free-text Model is a search filter, never
-  named as the model), "price
+  · Variant: Medium · on your Krea plan", "Engine: …" on Magnific Creative,
+  "Model: …" on Topaz Image Upscale and Topaz Standard ("Model: default"
+  when none is chosen and Krea picks it), "Training Model: …" on Krea Style
+  Train, "Grain model: …" on Topaz Bloom 2 and Wonder 3.5 while Grain is on
+  (with Grain off no grain model runs), "Enhancement model: …" and "Frame
+  interpolation model: …" on Topaz Video Upscale, "Frame interpolation
+  model: …" on Topaz Starlight Precise, Starlight Precise 2.5, Astra, Astra
+  2 and Hyperion 2.5, "Version: …" on a Krea node app, so switching one asks
+  again: a setting is named when it chooses which model or engine runs, so
+  Magnific Precise's Flavor (a style of the same engine) is not; Krea Style
+  Search's free-text Model is a search filter, never named as the model),
+  "price
   not listed", "price depends on its input" while an input's size is
   measured, "on your Krea plan"), then a muted row with no dot for every
   other paid node in the run ("“Shot 1” · Nano Banana · $0.07"), so every
@@ -1444,10 +1458,11 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   (deleted, or disconnected) and none finished, "Run without the node Codex
   was setting up?" / "It's no longer in this run." ("Run without the nodes
   Codex was setting up?" / "They're no longer in this run."; several
-  agents, "Run without the nodes agents were setting up?"); if some
+  agents, "Run without the nodes the agents were setting up?"); if some
   finished and some left, the "changes" heading counting the finished ones,
   then "1 node Codex was setting up is no longer in this run." ("2 nodes …
-  are no longer in this run."); and if some are still placeholders, the
+  are no longer in this run."; several agents, "2 nodes the agents were
+  setting up are no longer in this run."); and if some are still placeholders, the
   first heading counting only those, with the same line for any that left
   under its body. A replay from Run history sends its saved copy of every
   node, so it words what runs: a placeholder deleted from the canvas, or
@@ -1458,8 +1473,9 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   the run was saved (same type, other settings) runs at its saved settings,
   so the dialog says so: "Replay the saved version?" / "Codex changed
   “Grade” after the run was saved. The replay uses the saved settings."
-  (two: "“Grade” and “Wide”"; three or more: "3 nodes"; several agents,
-  "The agents changed …"), with the saved
+  (two: "“Grade” and “Wide”"; three: "“Wide”, “Hero still” and
+  “Grade”"; four or more: "4 nodes"; the names in the order of the rows
+  under it; several agents, "The agents changed …"), with the saved
   version as a muted row; if placeholders are still being set up, the
   still-setting-up heading stays and that sentence goes under its body,
   before the left line. One finished with the saved settings reads "Run

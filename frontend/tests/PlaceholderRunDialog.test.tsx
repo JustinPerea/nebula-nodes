@@ -11,7 +11,7 @@ const codex = { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true
 const cursor = { id: 'self:cursor', name: 'Cursor', color: '#5B8DEF', verified: false };
 
 const several: PlaceholderRunConfirm = {
-  heading: 'Run 3 nodes agents are still setting up?',
+  heading: 'Run 3 nodes the agents are still setting up?',
   intro: "Agents haven't finished these, so their settings may not be final.",
   rows: [
     { nodeId: 'i', name: '“Hero still”', model: 'FLUX.2 [pro]', price: '$0.06', agent: codex },
@@ -29,7 +29,7 @@ afterEach(() => { cleanup(); document.body.innerHTML = ''; });
 describe('PlaceholderRunDialog', () => {
   it("draws GM's copy: heading, intro, a row per paid placeholder with its agent's dot or ring, the free line, the total, the buttons", () => {
     render(<PlaceholderRunDialog model={several} onDone={() => {}} />);
-    const dialog = screen.getByRole('alertdialog', { name: 'Run 3 nodes agents are still setting up?' });
+    const dialog = screen.getByRole('alertdialog', { name: 'Run 3 nodes the agents are still setting up?' });
     expect(dialog.getAttribute('aria-modal')).toBe('true');
     expect(dialog.textContent).toContain("Agents haven't finished these, so their settings may not be final.");
     const rows = [...dialog.querySelectorAll('.placeholder-run__row')];

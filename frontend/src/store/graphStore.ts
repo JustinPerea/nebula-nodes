@@ -838,10 +838,14 @@ interface GraphState {
   undo: () => void;
   redo: () => void;
   /** Starts an undo step for an edit this tab sends and the backend makes
-   * (an upload that adds a node, accepting a proposal): the canvas before it.
-   * Pass the step to cancelUndoStep if the request fails. */
+   * (an upload that adds a node, accepting a proposal, a clear): the canvas
+   * before it. Pass the step to cancelUndoStep if the request fails, and to
+   * endUndoStep once it answered and its change is on the canvas: until
+   * then an undo waits for it (review 10, L-2). */
   beginUndoStep: () => object;
   cancelUndoStep: (step: object) => void;
+  /** The request of a beginUndoStep step answered: an undo pressed meanwhile now undoes it. */
+  endUndoStep: (step: object) => void;
   /** The notice for someone else's edit: it landed, or was undone or redone. */
   undoNotice: UndoNotice | null;
   dismissUndoNotice: () => void;
@@ -1022,6 +1026,10 @@ interface GraphState {
   /** `undoStep`: the step beginUndoStep made before the backend clear, so the
    * clear stays one step even when the clear's graphSync landed first. */
   clearGraph: (options?: { undoStep?: object }) => void;
+  /** The chat's /clear answered: the backend's nodes and their wires leave the
+   * canvas (nodes only this tab has stay, as its graphSync has it), under
+   * the step beginUndoStep made before the request (review 10, L-2). */
+  clearBackendNodes: (options: { undoStep: object }) => void;
   /** The OpenRouter / Nous Portal picker: the backend configures the node for
    * the model (its ports, params) and drops wires the model has no port for. */
   configureOpenRouterModel: (nodeId: string, modelId: string, model?: OpenRouterModel) => Promise<void>;
@@ -1876,7 +1884,16 @@ function changeCanvasNodes(
   // A project opened (or a graph loaded) before the answers came: the
   // canvas and its steps are another graph's now (second review).
   const replacementRevision = canvasReplacementRevision;
+  // An undo pressed before the answers waits for them (review 10, L-2).
+  holdStep(undoStep);
   const deleting = Promise.allSettled(cliRemovedIds.map(deleteCLIOriginNode)).then((results) => {
+    try {
+      applyDeleteAnswers(results);
+    } finally {
+      settleStep(undoStep, set, get);
+    }
+  });
+  function applyDeleteAnswers(results: PromiseSettledResult<RemovalRecord | null>[]): void {
     const confirmed = new Set<string>();
     const failures: string[] = [];
     const removals: RemovalRecord[] = [];
@@ -1909,16 +1926,20 @@ function changeCanvasNodes(
     const removing = safeChanges.filter((change) => change.type === 'remove').map((change) => change.id);
     // Nothing was deleted after all: the step taken above would undo nothing.
     // (Unless it also took the wires deleted with them: deleteCanvasElements.)
-    if (removing.length === 0 && !shared?.keep) get().cancelUndoStep(undoStep);
+    // (Taken off here, not through cancelUndoStep: the step settles below, after its answer is on the canvas.)
+    if (removing.length === 0 && !shared?.keep) {
+      set((state) => state.undoStack[state.undoStack.length - 1] === undoStep
+        ? { undoStack: state.undoStack.slice(0, -1) } : {});
+    }
     if (safeChanges.length > 0) applyCanvasNodeChanges(safeChanges, set, get, undoStep);
     const deleted = removing.filter((nodeId) => shownBefore.has(nodeId)).length;
     // Its Undo applies only while this step is next in line: after a newer
     // step, the line would offer a button that does nothing (withLiveNotice).
     if (deleted > 0 && get().undoStack.at(-1) === undoStep) set(deletedNotice(deleted, undoStep));
     if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length);
-  });
-  // An undo pressed while the deletes are on their way waits for their
-  // answers, so its restore can name what they removed.
+  }
+  // A restore already queued (an earlier undo or redo) reaches the backend
+  // after these deletes, so its restore can name what they removed.
   restoreQueue = restoreQueue.then(() => deleting);
 }
 
@@ -3072,14 +3093,75 @@ function withFreshKeyStatus(nodes: Node<NodeData>[], before: Node<NodeData>[]): 
 }
 
 /**
+ * Review 10, L-2: steps whose backend request is still on its way. A
+ * backend delete takes its step before it sends (changeCanvasNodes), as does
+ * every beginUndoStep edit (a clear, an upload, an accepted proposal), and
+ * the change reaches the canvas only with the answer. An undo of such a step
+ * pressed before the answer used to take the step off while it undid nothing
+ * yet; the answer then made the change anyway, with a new step and a redo
+ * that did nothing. Now that undo waits (heldHistory), and so does every
+ * undo or redo pressed after it, in order. When the step's request answers
+ * (settleStep) they run: the change is on the canvas by then, so the undo
+ * puts it back and tells the backend (sendRestore). A step whose request
+ * failed was taken off (cancelUndoStep): the undo aimed at it has nothing to
+ * undo, and is dropped. A request that never answers releases them after
+ * HOLD_LIMIT_MS, so Cmd+Z is never stuck.
+ */
+const stepsInFlight = new Set<UndoEntry>();
+let heldHistory: Array<'undo' | 'redo'> = [];
+let heldFor: UndoEntry | null = null;
+let heldTimer: ReturnType<typeof setTimeout> | null = null;
+const HOLD_LIMIT_MS = 15_000;
+
+function holdStep(step: UndoEntry): void {
+  stepsInFlight.add(step);
+}
+
+function settleStep(step: UndoEntry, set: GraphSet, get: GraphGet): void {
+  stepsInFlight.delete(step);
+  if (heldFor !== step) return;
+  const queue = heldHistory;
+  heldHistory = [];
+  heldFor = null;
+  if (heldTimer !== null) clearTimeout(heldTimer);
+  heldTimer = null;
+  // The step was taken off (its request failed, or another graph opened):
+  // the undo aimed at it goes to nothing; the presses after it still count.
+  const cancelled = !get().undoStack.includes(step);
+  queue.forEach((action, index) => {
+    if (index === 0 && cancelled) return;
+    stepHistory(action, set, get);
+  });
+}
+
+/** Whether this press waits for a step's answer (and is queued). */
+function holdsHistory(action: 'undo' | 'redo', state: GraphState, set: GraphSet, get: GraphGet): boolean {
+  if (heldHistory.length > 0) {
+    heldHistory.push(action);
+    return true;
+  }
+  const top = state.undoStack[state.undoStack.length - 1];
+  if (action !== 'undo' || !top || !stepsInFlight.has(top)) return false;
+  heldFor = top;
+  heldHistory = [action];
+  heldTimer = setTimeout(() => {
+    heldTimer = null;
+    if (heldFor === top) settleStep(top, set, get);
+  }, HOLD_LIMIT_MS);
+  return true;
+}
+
+/**
  * One undo or redo. The step leaves its stack and its inverse goes on the
  * other one: a snapshot's inverse is a snapshot of the canvas now; a foreign
  * edit is its own inverse (undo puts back its `before`, redo its `after`).
- * Then the backend is told (sendRestore), and an agent's edit says so.
+ * Then the backend is told (sendRestore), and an agent's edit says so. An
+ * undo of a step whose request is on its way waits for it (holdsHistory).
  */
 function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): void {
   const state = get();
   if (state.isExecuting || state.providerRecoveries.length > 0 || state.providerStartAmbiguities.length > 0) return;
+  if (holdsHistory(action, state, set, get)) return;
   const from = action === 'undo' ? state.undoStack : state.redoStack;
   const entry = from[from.length - 1];
   if (!entry) return;
@@ -4085,14 +4167,19 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
 
   beginUndoStep: () => {
     breakUndoDebounce();
-    return pushUndo(set, get);
+    const step = pushUndo(set, get);
+    holdStep(step);
+    return step;
   },
 
   cancelUndoStep: (step) => {
     // Only while nothing was stacked on top of it: a later step depends on it.
     set((state) => state.undoStack[state.undoStack.length - 1] === step
       ? { undoStack: state.undoStack.slice(0, -1) } : {});
+    settleStep(step as UndoEntry, set, get);
   },
+
+  endUndoStep: (step) => settleStep(step as UndoEntry, set, get),
 
   undoNotice: null,
   dismissUndoNotice: () => set({ undoNotice: null }),
@@ -6722,6 +6809,16 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     set({ nodes: [], edges: [], undoStack: newStack, redoStack: [], backendFreshStartPending: false });
   },
 
+  clearBackendNodes: ({ undoStep }) => {
+    const { nodes, edges, undoStack } = get();
+    // As the clear's graphSync has it (its `empty` branch): only nodes this tab alone has stay.
+    const remaining = nodes.filter((node) => !CLI_ID_RE.test(node.id));
+    if (remaining.length === nodes.length) return;
+    const kept = new Set(remaining.map((node) => node.id));
+    if (undoStack[undoStack.length - 1] !== undoStep) pushUndo(set, get);
+    set({ nodes: remaining, edges: edges.filter((edge) => kept.has(edge.source) && kept.has(edge.target)) });
+  },
+
   // The model pickers ask the backend for a model's ports and params
   // (services/universal_ports.py, POST /api/graph/node/{id}/model): one set of
   // rules for the canvas, the wire checks and agents' edits. The backend also
@@ -6761,6 +6858,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     } catch (err) {
       get().cancelUndoStep(step);
       console.error('Failed to set the model:', err);
+    } finally {
+      // An undo pressed while the request was on its way now acts (review 10, L-2).
+      get().endUndoStep(step);
     }
   },
 
@@ -6794,6 +6894,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     } catch (err) {
       get().cancelUndoStep(step);
       console.error('Failed to fetch Replicate schema:', err);
+    } finally {
+      // An undo pressed while the request was on its way now acts (review 10, L-2).
+      get().endUndoStep(step);
     }
   },
 

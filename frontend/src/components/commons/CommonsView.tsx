@@ -500,7 +500,7 @@ export function CommonsView() {
     : 'No matches. Drop images or videos here, or use Add.';
 
   return (
-    <div className={`commons-view${selectedId && tab !== 'settings' && tab !== 'labeling' && tab !== 'review' ? ' commons-view--detail' : ''}`}>
+    <div className={`commons-view commons-scope${selectedId && tab !== 'settings' && tab !== 'labeling' && tab !== 'review' ? ' commons-view--detail' : ''}`}>
       <WorkspaceHeader title="Commons" backLabel={workspaceLabel(returnView)} className="commons-toolbar" backRef={backRef}
         onBack={() => request({ anchor: backRef.current, go: exitCommons, busy: busyFor('back') }, true)}
         backBusy={busyAt === 'back'} homeBusy={busyAt === 'home'}

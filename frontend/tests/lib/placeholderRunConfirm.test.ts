@@ -61,7 +61,7 @@ describe('placeholderRunConfirm', () => {
       node('i', 'nano-banana', 'Hero still', cursor),
     ];
     const model = confirmFor(nodes, [wire('p', 'i'), wire('q', 'i', 'text')], 'i')!;
-    expect(model.heading).toBe('Run 3 nodes agents are still setting up?');
+    expect(model.heading).toBe('Run 3 nodes the agents are still setting up?');
     expect(model.intro).toBe("Agents haven't finished these, so their settings may not be final.");
     expect(model.rows.map((row) => [row.name, row.agent?.verified])).toEqual([['“Hero still”', false]]);
     expect(model.freeLine).toBe('Plus 2 free nodes.');

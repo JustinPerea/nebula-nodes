@@ -158,11 +158,12 @@ they are deciding, Nebula shows them your changes and runs nothing that
 costs more than they agreed to, nor a node, model, price or extra cost
 they didn't see (a model or price that changed asks them again, even a
 cheaper one, and a switch on a free-text model such as OpenRouter's counts,
-as does a Krea node's Variant, Engine, Model or Version);
+as does a Krea node's Variant, Engine, Model, Training Model, Version, or
+grain model while Grain is on);
 if you delete or disconnect one, it tells them it's no longer in the run,
 and a replay of a saved run then runs its saved copy, as it does when you
 changed one after the run was saved: the dialog names the nodes you changed
-and tells them the replay uses the saved settings). Only new
+(up to three; a count from four) and tells them the replay uses the saved settings). Only new
 nodes can be placeholders, and only you make yours ready. `nebula undo` of
 your `--ready` (or of a delete) makes them placeholders again, unless someone
 ran or changed one since. A proposal whose run needs your placeholder runs

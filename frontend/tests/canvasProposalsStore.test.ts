@@ -12,6 +12,7 @@ const graph = vi.hoisted(() => ({
     adoptAcceptedProposal: vi.fn(),
     beginUndoStep: vi.fn(() => ({})),
     cancelUndoStep: vi.fn(),
+    endUndoStep: vi.fn(),
   },
 }));
 const api = vi.hoisted(() => ({ acceptProposal: vi.fn(), rejectProposal: vi.fn(), releaseApproval: vi.fn() }));
@@ -58,6 +59,7 @@ beforeEach(() => {
     api.acceptProposal, api.rejectProposal, api.releaseApproval]) fn.mockReset();
   graph.state.beginUndoStep.mockClear();
   graph.state.cancelUndoStep.mockClear();
+  graph.state.endUndoStep.mockClear();
 });
 afterEach(() => vi.useRealTimers());
 
@@ -127,6 +129,8 @@ describe('canvas proposals store', () => {
     // One undo step for the accept, taken before the request.
     expect(graph.state.beginUndoStep).toHaveBeenCalledTimes(1);
     expect(graph.state.cancelUndoStep).not.toHaveBeenCalled();
+    // And ended once its nodes are on the canvas, so an undo pressed meanwhile acts (review 10, L-2).
+    expect(graph.state.endUndoStep).toHaveBeenCalledWith(graph.state.beginUndoStep.mock.results[0].value);
     // The run carries the approval, so the backend can check it is what was accepted.
     expect(graph.state.executeNode).toHaveBeenCalledWith('n7', { approvalId: 'ra_a' });
     // Then it is released (a no-op once the run used it), so a run the canvas

@@ -38,10 +38,10 @@ describe('GM round 10, item 1: the replay sentence names the changed nodes', () 
     expect(model.intro).toBe(`Codex changed “Grade” and “Wide” ${SAVED}`);
   });
 
-  it('three or more: a count', () => {
+  it('four or more: a count (GM round 11: names up to 3, a count from 4)', () => {
     const model = placeholderRunConfirm(four, wires, 'o', priced,
-      { shown: new Map([['g', codex], ['w', codex], ['x', codex]]), changed: new Set(['g', 'w', 'x']) })!;
-    expect(model.intro).toBe(`Codex changed 3 nodes ${SAVED}`);
+      { shown: new Map([['g', codex], ['w', codex], ['x', codex], ['o', codex]]), changed: new Set(['g', 'w', 'x', 'o']) })!;
+    expect(model.intro).toBe(`Codex changed 4 nodes ${SAVED}`);
   });
 
   it('several agents: "The agents changed …", the same three forms', () => {
@@ -53,8 +53,8 @@ describe('GM round 10, item 1: the replay sentence names the changed nodes', () 
       { shown: new Map([['g', codex], ['w', claude]]), changed: new Set(['g', 'w']) })!;
     expect(two.intro).toBe(`The agents changed “Grade” and “Wide” ${SAVED}`);
     const three = placeholderRunConfirm(four, wires, 'o', priced,
-      { shown: new Map([['g', codex], ['w', claude], ['x', codex]]), changed: new Set(['g', 'w', 'x']) })!;
-    expect(three.intro).toBe(`The agents changed 3 nodes ${SAVED}`);
+      { shown: new Map([['g', codex], ['w', claude], ['x', codex], ['o', codex]]), changed: new Set(['g', 'w', 'x', 'o']) })!;
+    expect(three.intro).toBe(`The agents changed 4 nodes ${SAVED}`);
   });
 
   it('a Cinema name is the one the rows use', () => {

@@ -66,10 +66,10 @@ describe('review 6, L-b (GM answer): placeholders the dialog showed that left th
     expect(model.intro).toBe("They're no longer in this run.");
   });
 
-  it('several agents: "Run without the nodes agents were setting up?"', () => {
+  it('several agents: "Run without the nodes the agents were setting up?"', () => {
     const nodes = [node('p', 'Plate'), node('o', 'Final', undefined, 'image-compare')];
     const model = placeholderRunConfirm(nodes, [wire('p', 'o')], 'o', priced, { shown: new Map([['h', codex], ['g', claude]]) })!;
-    expect(model.heading).toBe('Run without the nodes agents were setting up?');
+    expect(model.heading).toBe('Run without the nodes the agents were setting up?');
     expect(model.intro).toBe("They're no longer in this run.");
   });
 

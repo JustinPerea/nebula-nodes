@@ -20,7 +20,8 @@ import { runCostNotes, type RunCost, type RunScopeSummary } from './runScope';
  * input-priced footnotes, placeholders that left the run and the amounts in
  * cents, and the ruling on review 8 L-b for a replay of a placeholder its
  * agent changed after the run was saved; round 10 for its names and Krea's
- * sub-model settings in rows), verbatim.
+ * sub-model settings in rows; round 11 for three names before a count, "the
+ * agents", the grain model and "Model: default"), verbatim.
  * The backend refuses the run unless it carries these exact paid
  * placeholders and a total no lower than its own estimate (main.execute_node
  * and main.generate_cinema_shot, `confirmedPlaceholders` and
@@ -40,7 +41,9 @@ export interface PlaceholderRunRow {
   modelKey: string;
   /** A Krea node's sub-model setting, as its card names it: "Variant: Large",
    * "Engine: …", "Model: …", "Version: …" (GM - Design, round 10, item 2:
-   * named even when it is the default, so a switch re-asks); else null. */
+   * named even when it is the default, so a switch re-asks); "Grain model: …"
+   * with Grain on, and "Model: default" when Krea picks it (round 11, items 4
+   * and 5); else null. */
   setting: string | null;
   /** "$0.04", "$0.0047–0.43", "price not listed", "price depends on its
    * input" or "on your Krea plan" (GM, rounds 4 and 6). */
@@ -140,9 +143,18 @@ const NOT_A_MODEL: Readonly<Record<string, ReadonlySet<string>>> = { 'krea-style
  * enhancement and frame-interpolation models), a node app's Version. They
  * are settings of the model the node type names, so its row names the type
  * as the model and each setting by the label its card uses. */
-const KREA_SETTING_KEYS = ['variant', 'engine', 'model', 'enhancement_model', 'frame_interpolation_model', 'node_app_version_id'];
+const KREA_SETTING_KEYS = ['variant', 'engine', 'model', 'enhancement_model', 'frame_interpolation_model', 'grain_model',
+  'node_app_version_id'];
 /** GM's word for the node app's version (its card's field is "Node app version ID"). */
 const KREA_SETTING_LABELS: Readonly<Record<string, string>> = { node_app_version_id: 'Version' };
+/** Settings that pick a model only while a switch is on (GM - Design, round 11, item 4: "Name 'Grain
+ * model' when one is chosen (it picks a model that runs)"): Topaz Bloom 2's and Wonder 3.5's grain
+ * model runs only with Grain on. Magnific Precise's Flavor is a style setting on the same engine,
+ * so it is never one of these settings. */
+const KREA_SETTING_WHEN: Readonly<Record<string, string>> = { grain_model: 'grain' };
+/** GM - Design, round 11, item 5: a model the backend leaves to Krea, which the tab can't know
+ * (Topaz Standard with no model chosen; the gateway sends no `model`), so a later switch still shows up. */
+const KREA_SETTING_DEFAULT = 'default';
 
 type ParamSpec = NonNullable<(typeof NODE_DEFINITIONS)[string]['params']>[number];
 
@@ -205,13 +217,17 @@ function kreaSetting(node: Node<NodeData>): string | null {
   if (!definition || !isKrea(definition)) return null;
   const params = (node.data?.params ?? {}) as Record<string, unknown>;
   const named: string[] = [];
-  for (const spec of specsOf(definition)) {
+  const specs = specsOf(definition);
+  for (const spec of specs) {
     if (!isKreaSetting(definition, spec)) continue;
+    const when = KREA_SETTING_WHEN[spec.key];
+    if (when && (params[when] ?? specs.find((candidate) => candidate.key === when)?.default) !== true) continue;
     const value = params[spec.key] ?? spec.default;
     const label = KREA_SETTING_LABELS[spec.key] ?? spec.label;
     if (spec.type === 'enum') {
       const option = spec.options?.find((candidate) => typeof candidate === 'object' && candidate.value === value);
       if (option && typeof option === 'object' && option.label) named.push(`${label}: ${option.label}`);
+      else if (value === undefined || value === null || value === '') named.push(`${label}: ${KREA_SETTING_DEFAULT}`);
     } else if (typeof value === 'string' && value.trim()) {
       named.push(`${label}: ${cut80(value.trim())}`);
     }
@@ -409,7 +425,8 @@ export function placeholderRunConfirm(
   // GM - Design, round 7 (review 6 L-b answer), and round 8 item 2: also
   // under the still-setting-up heading. Verbatim.
   const leftAgents = agentNames(left);
-  const leftWho = leftAgents.length === 1 ? leftAgents[0] : 'agents';
+  // Round 11, item 6: "the agents" ("nodes agents" read like a stumble).
+  const leftWho = leftAgents.length === 1 ? leftAgents[0] : 'the agents';
   const leftLine = left.length === 0 ? null : left.length === 1
     ? `1 node ${leftWho} was setting up is no longer in this run.`
     : `${left.length} nodes ${leftWho} ${leftAgents.length === 1 ? 'was' : 'were'} setting up are no longer in this run.`;
@@ -417,17 +434,21 @@ export function placeholderRunConfirm(
   // changed “Grade” after the run was saved. The replay uses the saved
   // settings.", "“Grade” and “Wide”", "3 nodes"; "The agents changed …" for
   // several agents. The names are the rows'.
+  // Round 11: up to 3 by name ("“Wide”, “Hero still” and “Grade”"), a count from 4, and the
+  // names in the order the rows below them read (item 1). A free node has no row: it comes after.
   let savedSentence: string | null = null;
   if (changedByAgent.length > 0) {
     const agents = agentNames(changedByAgent.map(({ agent }) => agent));
-    const names = changedByAgent.map(({ node }) => `“${labelOf(node)}”`);
-    const which = names.length === 1 ? names[0] : names.length === 2 ? `${names[0]} and ${names[1]}` : `${names.length} nodes`;
+    const rowAt = (id: string) => { const at = rows.findIndex((candidate) => candidate.nodeId === id); return at < 0 ? rows.length : at; };
+    const names = [...changedByAgent].sort((a, b) => rowAt(a.node.id) - rowAt(b.node.id)).map(({ node }) => `“${labelOf(node)}”`);
+    const which = names.length > 3 ? `${names.length} nodes`
+      : names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
     savedSentence = `${agents.length === 1 ? agents[0] : 'The agents'} changed ${which} after the run was saved. The replay uses the saved settings.`;
   }
   if (count > 0) {
     const agents = agentNames(placeholders.map(({ agent }) => agent));
     const one = agents.length === 1 ? agents[0] : null;
-    heading = `Run ${count} ${count === 1 ? 'node' : 'nodes'} ${one ? `${one} is` : 'agents are'} still setting up?`;
+    heading = `Run ${count} ${count === 1 ? 'node' : 'nodes'} ${one ? `${one} is` : 'the agents are'} still setting up?`;
     intro = one
       ? `${one} hasn't finished ${count === 1 ? 'this, so its settings' : 'these, so their settings'} may not be final.`
       : `Agents haven't finished ${count === 1 ? 'this, so its settings' : 'these, so their settings'} may not be final.`;
@@ -453,7 +474,7 @@ export function placeholderRunConfirm(
     const one = agents.length === 1 ? agents[0] : null;
     heading = left.length === 1 && one
       ? `Run without the node ${one} was setting up?`
-      : one ? `Run without the nodes ${one} was setting up?` : 'Run without the nodes agents were setting up?';
+      : one ? `Run without the nodes ${one} was setting up?` : 'Run without the nodes the agents were setting up?';
     intro = left.length === 1 ? "It's no longer in this run." : "They're no longer in this run.";
   }
   const totalLine = totalLineFor(cost, anyMissing);

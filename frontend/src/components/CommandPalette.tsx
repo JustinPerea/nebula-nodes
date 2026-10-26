@@ -213,15 +213,22 @@ export function CommandPalette() {
     close();
   }, [query, close]);
 
+  // Escape leaves the agent prompt, else closes the palette: from the field
+  // and, through the dialog (review 10, L-1), from anything else in it.
+  const escape = () => {
+    if (mode === 'agent') {
+      setMode('commands');
+      setQuery('');
+      inputRef.current?.focus();
+    } else {
+      close();
+    }
+  };
+
   const onInputKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       e.preventDefault();
-      if (mode === 'agent') {
-        setMode('commands');
-        setQuery('');
-      } else {
-        close();
-      }
+      escape();
       return;
     }
     if (mode === 'agent') {
@@ -251,7 +258,29 @@ export function CommandPalette() {
   // in it: Tab wraps, and a click on its text (a group label) that drops focus
   // on the page brings it back to the search field, so no canvas key (Delete,
   // ⌘Enter, ⌘Z) acts on the graph behind it (lib/canvasShortcutScope.ts).
+  // Review 10, L-1: keys with focus on an item (or "Clear search") were lost,
+  // since only the field read them. Escape works as from the field; the arrows
+  // move the active item, as from the field, and focus with it, passing over
+  // an item that can't take focus and stopping at the ends.
   const onDialogKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.target === inputRef.current && (e.key === 'Escape' || e.key === 'ArrowDown' || e.key === 'ArrowUp')) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      escape();
+      return;
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      const items = [...(dialogRef.current?.querySelectorAll<HTMLButtonElement>('.command-palette__item') ?? [])];
+      const at = items.indexOf(e.target as HTMLButtonElement);
+      if (at < 0) return;
+      e.preventDefault();
+      const step = e.key === 'ArrowDown' ? 1 : -1;
+      let next = at + step;
+      while (next >= 0 && next < items.length && items[next].disabled) next += step;
+      if (next < 0 || next >= items.length) return;
+      items[next].focus();
+      return;
+    }
     if (e.key !== 'Tab') return;
     const stops = [...(dialogRef.current?.querySelectorAll<HTMLElement>('input, button:not([disabled])') ?? [])];
     const first = stops[0];
@@ -306,6 +335,7 @@ export function CommandPalette() {
                       type="button"
                       className={`command-palette__item${isSel ? ' command-palette__item--selected' : ''}${disabled ? ' command-palette__item--disabled' : ''}`}
                       onMouseEnter={() => setSelected(index)}
+                      onFocus={() => setSelected(index)}
                       onClick={() => run(cmd)}
                       disabled={disabled}
                     >

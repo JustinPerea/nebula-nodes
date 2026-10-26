@@ -912,6 +912,9 @@ export function ChatPanel() {
               : p,
           );
         });
+      } finally {
+        // Its node is on the canvas or the step was cancelled: an undo pressed meanwhile now acts (review 10, L-2).
+        useGraphStore.getState().endUndoStep(undoStep);
       }
     },
     [],
@@ -1456,9 +1459,14 @@ export function ChatPanel() {
       const undoStep = useGraphStore.getState().beginUndoStep();
       // force: typing /clear is the person's confirmation (the backend
       // refuses a clear of a project with nodes without it).
+      // The canvas side lands with the answer, under its step (its graphSync
+      // can come later), so an undo pressed meanwhile brings the nodes back
+      // here and on the backend (review 10, L-2).
       apiFetch('/api/graph?force=true', { method: 'DELETE' }).then((response) => {
         if (!response.ok) useGraphStore.getState().cancelUndoStep(undoStep);
-      }).catch(() => useGraphStore.getState().cancelUndoStep(undoStep));
+        else useGraphStore.getState().clearBackendNodes({ undoStep });
+      }).catch(() => useGraphStore.getState().cancelUndoStep(undoStep))
+        .finally(() => useGraphStore.getState().endUndoStep(undoStep));
       setMessages([
         {
           role: 'assistant',

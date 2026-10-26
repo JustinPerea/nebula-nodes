@@ -216,6 +216,8 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
       accepted = true;
       synced.stop();
       useGraphStore.getState().adoptAcceptedProposal(result, { undoStep, synced: synced.seen });
+      // Its nodes are on the canvas: an undo pressed meanwhile acts now, not after the run below.
+      useGraphStore.getState().endUndoStep(undoStep);
       get().close({ proposalId: id, status: 'accepted' });
       if (result.runNodeIds.length > 0 && runsNothing(entry.view)) {
         // Its whole run waits on agents' placeholders, so the button said
@@ -239,6 +241,8 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
         : failureMessage(error, "Couldn't accept the proposal.");
       set((state) => ({ errors: { ...state.errors, [id]: message } }));
     } finally {
+      // On every path (ending twice is harmless): an undo pressed meanwhile acts (review 10, L-2).
+      useGraphStore.getState().endUndoStep(undoStep);
       synced.stop();
       set((state) => ({ pending: without(state.pending, id) }));
     }

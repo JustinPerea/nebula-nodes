@@ -188,6 +188,9 @@ export function Toolbar() {
     } catch (error) {
       useGraphStore.getState().cancelUndoStep(undoStep);
       showNotice(failureMessage(error, CLEAR_CANVAS));
+    } finally {
+      // An undo pressed while the clear was on its way now undoes it (review 10, L-2).
+      useGraphStore.getState().endUndoStep(undoStep);
     }
   }, []);
 

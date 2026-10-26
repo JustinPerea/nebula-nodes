@@ -13,6 +13,7 @@ const graph = vi.hoisted(() => ({
     adoptAcceptedProposal: vi.fn(),
     beginUndoStep: vi.fn(() => ({})),
     cancelUndoStep: vi.fn(),
+    endUndoStep: vi.fn(),
   },
 }));
 const net = vi.hoisted(() => ({ apiFetch: vi.fn() }));
