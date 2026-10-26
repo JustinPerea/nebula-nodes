@@ -9,7 +9,7 @@ import type { NodeData } from '../../src/types';
  * placeholders (Q125 item 3). GM - Design, 2026-10-25, verbatim: "the cost
  * shown before the person's Run must count the placeholders it will run and
  * say so, with a line under the cost: “Includes 2 nodes Codex is still
- * setting up.” With several agents: “Includes 3 nodes agents are still
+ * setting up.” With several agents: “Includes 3 nodes the agents are still
  * setting up.” ... for a whole-canvas Run that SKIPS placeholders, the cost
  * shown must leave out the skipped nodes and everything downstream of them."
  * The backend's spend check prices only what runs (main._skip_placeholders):
@@ -79,7 +79,7 @@ describe("the person's direct run of a node counts the placeholders it runs and 
     const two = [image('p', CODEX), image('q', CLAUDE), image('t')];
     const summary = summarizeRunScope(two, [wire('p', 't'), wire('q', 't')], { kind: 'node', nodeId: 't' }, context);
     expect(summary.pendingIncluded).toEqual({ count: 3, agents: ['Codex', 'Claude Code'] });
-    expect(runCostConfirmMessage(summary)).toContain('Includes 3 nodes agents are still setting up.');
+    expect(runCostConfirmMessage(summary)).toContain('Includes 3 nodes the agents are still setting up.');
   });
 
   it('says nothing when no placeholder is in the run', () => {

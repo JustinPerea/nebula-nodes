@@ -842,6 +842,8 @@ export function ChatPanel() {
       // The upload adds a node to the canvas: one undo step, taken before the
       // backend's graphSync can add it.
       const undoStep = useGraphStore.getState().beginUndoStep();
+      // The node the upload adds, which comes with its echo (review 11, L-2).
+      let arrives: string[] = [];
       try {
         const resp = await apiFetch('/api/uploads', { method: 'POST', body: form });
         if (!resp.ok) {
@@ -870,6 +872,7 @@ export function ChatPanel() {
           thumbUrl: string;
           filename: string;
         };
+        if (typeof body.nodeId === 'string') arrives = [body.nodeId];
         setPendingImages((prev) => {
           const prior = prev.find((p) => p.id === chipId);
           // URL.revokeObjectURL is idempotent — safe inside a StrictMode-
@@ -913,8 +916,9 @@ export function ChatPanel() {
           );
         });
       } finally {
-        // Its node is on the canvas or the step was cancelled: an undo pressed meanwhile now acts (review 10, L-2).
-        useGraphStore.getState().endUndoStep(undoStep);
+        // The step was cancelled, or it settles once its node is on the canvas:
+        // an undo pressed meanwhile then acts (review 10, L-2; review 11, L-2).
+        useGraphStore.getState().endUndoStep(undoStep, { arrives });
       }
     },
     [],

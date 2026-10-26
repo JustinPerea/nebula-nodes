@@ -205,8 +205,17 @@ The server exposes these tools for building and running (see
   answer, then undoes that delete: the nodes come back with their
   connections on the canvas and in Nebula's graph, and Redo deletes them
   again (the same for every step the canvas takes before Nebula answers: a
-  clear, an upload, an accepted proposal; a delete Nebula refused undoes
-  nothing). Its
+  clear, an upload once its node is on the canvas, an accepted proposal, a
+  model picked on an OpenRouter or Replicate node; a delete Nebula refused
+  undoes nothing). That Cmd+Z is bound to the step it was pressed for: if
+  another edit lands on top first (yours, another agent's or the person's),
+  it never undoes that edit instead. It is dropped, and the canvas says
+  "Nothing was undone. Your last change was still saving."; so it is if
+  Nebula hasn't answered within 15 s, or another project opens. A clear
+  takes off only the nodes that were on the canvas when the person cleared,
+  never one you added after it (even under a reused id such as n1), and an
+  accept the person undid while it was on its way runs nothing (its
+  approval goes back). Its
   result has `undo` too, which puts the nodes back with their params,
   outputs, names and connections, the person's pins on them, and the proposals
   the delete closed when they still fit. `removals` lists, per node it
@@ -1380,8 +1389,9 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   a canvas run's reply adds `pendingSkipped` ({count, placeholders,
   agents}: `count` is the placeholders and what needs them, `placeholders`
   the placeholders alone) for the line
-  under Run ("Skipped 3 nodes Codex is still setting up.", "agents" when
-  they are more than one agent's), and the run's Agent log line ends with
+  under Run ("Skipped 3 nodes Codex is still setting up.", "Skipped 3
+  nodes the agents are still setting up." when they are more than one
+  agent's), and the run's Agent log line ends with
   the same sentence. The cost the person sees before a run matches what it
   runs: a whole-canvas Run, Run selected and an accepted proposal's run
   leave the skipped nodes out (a proposal's `cost` adds `pendingSkipped`;
@@ -1391,7 +1401,8 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   run for it (it would skip every node; no Run history entry) and frees its
   approval, and nothing is queued for when you finish), and the person's
   direct Run of a node counts the placeholders it runs, with "Includes 2
-  nodes Codex is still setting up." under the cost. A proposal's run is
+  nodes Codex is still setting up." ("Includes 3 nodes the agents are
+  still setting up." for several agents) under the cost. A proposal's run is
   priced when it is made, so a placeholder in it that turns normal before
   the run starts (its owner's `pending: false`, the idle rule) changes what
   it runs: Accept refuses it (409, "what it runs changed after it was
@@ -1409,17 +1420,20 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   whose model is a free-text param names the chosen model as its card
   shows it, "“Writer” · openai/gpt-4o-mini · price not listed", so a switch
   to another model is a changed row, even when the node is named after its
-  model; a Meshy node names its Model option; a Krea node also names its
+  model; a Meshy node names its Model option and its mesh type, even at
+  the default, "Mesh type: Smart Topology (Meshy T2)", since it picks the
+  model that runs; a Krea node also names its
   sub-model setting as its card does, even at the default: "“Hero” · Krea 2
   · Variant: Medium · on your Krea plan", "Engine: …" on Magnific Creative,
-  "Model: …" on Topaz Image Upscale and Topaz Standard ("Model: default"
-  when none is chosen and Krea picks it), "Training Model: …" on Krea Style
+  "Model: …" on Topaz Image Upscale and Topaz Standard, "Training Model: …" on Krea Style
   Train, "Grain model: …" on Topaz Bloom 2 and Wonder 3.5 while Grain is on
   (with Grain off no grain model runs), "Enhancement model: …" and "Frame
   interpolation model: …" on Topaz Video Upscale, "Frame interpolation
   model: …" on Topaz Starlight Precise, Starlight Precise 2.5, Astra, Astra
   2 and Hyperion 2.5, "Version: …" on a Krea node app, so switching one asks
-  again: a setting is named when it chooses which model or engine runs, so
+  again; a required one with nothing chosen reads "Model: not chosen"
+  ("Version: not chosen") and the row keeps its other parts, though such a
+  run never reaches the dialog (below): a setting is named when it chooses which model or engine runs, so
   Magnific Precise's Flavor (a style of the same engine) is not; Krea Style
   Search's free-text Model is a search filter, never named as the model),
   "price
@@ -1503,7 +1517,21 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   what is behind it: arrows, Enter, Space and Escape in the Mesh or World
   preview never move, select or deselect its node, and a click or
   right-click there never selects it or opens its menu.
-  The costly-run setting's browser confirm never follows it.
+  The costly-run setting's browser confirm never follows it. A row wraps
+  only between its parts, at the " · ", never inside one ("Grain model:
+  gaussian", "on your Krea plan", a node's name), and its second line keeps
+  the row's indent.
+- **A model nobody chose:** Topaz Standard needs its Model (Krea requires
+  it), as a Krea node app needs its Version. A run that would send one with
+  nothing chosen is refused before anything runs or is priced, on every
+  run path, and before any dialog: the canvas says "Nothing ran. Choose a
+  model for “Clean plate” first." ("Choose a version for …" for a node
+  app) and asks nothing. Your `run_nodes` and `nebula run` come back
+  `failed` with "Choose a model for “Clean plate” first." as that node's
+  error (and in `error`, after "Nothing ran, so nothing was spent."), and
+  the card shows the same line. A whole-canvas run that skips the node (a
+  placeholder) isn't refused for it. Set the model with `edit_canvas`
+  before you run it, or leave it for the person to choose.
   `/api/execute-node` and `/api/cinema/generate-shot` enforce it: the
   person's run carries `confirmedPlaceholders` (exactly those paid
   placeholder ids) and `confirmedCost` (the amount the dialog showed in its

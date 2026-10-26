@@ -70,6 +70,26 @@
   overflow-wrap: anywhere;
 }
 
+/* GM - Design, round 12: a row wraps only between its segments, at the
+   " · ", never inside one ("Grain model: gaussian", "on your Krea plan",
+   “Name”), and its next line keeps the row's indent. Each segment is one
+   unit on the line; one longer than the row still wraps inside itself. */
+.placeholder-run__seg {
+  display: inline-block;
+  max-width: 100%;
+  text-indent: 0;
+  vertical-align: top;
+}
+
+/* A dotted row's first segment starts at the dot, out in the row's indent:
+   it may be that much wider, and a long name wrapping inside it keeps the
+   same hanging indent as the row. */
+.placeholder-run__row:not(.placeholder-run__row--muted) > .placeholder-run__seg--lead {
+  max-width: calc(100% + 16px);
+  padding-left: 16px;
+  text-indent: -16px;
+}
+
 /* The agent's dot, as on its node's pill; a ring when it named itself. */
 .placeholder-run__dot {
   display: inline-block;

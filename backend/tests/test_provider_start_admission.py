@@ -143,7 +143,7 @@ async def test_recovery_admission_blocks_immediate_stale_fresh_payload(
     recovery_params: dict[str, Any],
     fresh_params: dict[str, Any],
 ) -> None:
-    monkeypatch.setattr(main_module, "validate_graph", lambda *_args: [])
+    monkeypatch.setattr(main_module, "validate_graph", lambda *_args, **_kwargs: [])
     node_id = "shared-world-node"
     recovery_node = GraphNode(
         id=node_id,
@@ -290,7 +290,7 @@ async def test_more_than_256_tracked_stop_cycles_do_not_brick_admission() -> Non
 async def test_active_owner_observes_stop_from_second_backend(
     monkeypatch,
 ) -> None:
-    monkeypatch.setattr(main_module, "validate_graph", lambda *_args: [])
+    monkeypatch.setattr(main_module, "validate_graph", lambda *_args, **_kwargs: [])
     started = asyncio.Event()
     cancelled = asyncio.Event()
 
@@ -1404,7 +1404,7 @@ async def test_cinema_shot_recovery_ancestor_holds_lease_until_terminal(
         "get_subgraph",
         lambda _nodes, _edges, _target: ([world, cinema], []),
     )
-    monkeypatch.setattr(main_module, "validate_graph", lambda *_args: [])
+    monkeypatch.setattr(main_module, "validate_graph", lambda *_args, **_kwargs: [])
     started = asyncio.Event()
     release = asyncio.Event()
 
@@ -1488,7 +1488,7 @@ async def test_cinema_shot_pre_first_turn_cancel_releases_recovery_lease(
         "get_subgraph",
         lambda _nodes, _edges, _target: ([world, cinema], []),
     )
-    monkeypatch.setattr(main_module, "validate_graph", lambda *_args: [])
+    monkeypatch.setattr(main_module, "validate_graph", lambda *_args, **_kwargs: [])
     execute_graph = AsyncMock()
     monkeypatch.setattr(main_module, "execute_graph", execute_graph)
 

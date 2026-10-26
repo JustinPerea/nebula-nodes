@@ -71,7 +71,7 @@ from models.events import (
     ProviderStartAmbiguousEvent,
     execution_run_id,
 )
-from execution.engine import execute_graph, validate_graph, topological_sort, get_subgraph, CycleError
+from execution.engine import execute_graph, validate_graph, topological_sort, get_subgraph, CycleError, unchosen_model_errors
 from execution.sync_runner import get_handler_registry
 from execution import provider_calls
 from services.settings import (
@@ -4809,6 +4809,24 @@ def _run_node_name(node_id: str, run_nodes: Mapping[str, GraphNode]) -> str:
         return node_id
 
 
+def _run_names(nodes: list[GraphNode]) -> Callable[[str], str]:
+    """A run's node names for its refusals (_run_node_name), by node id."""
+    by_id = {node.id: node for node in nodes}
+    return lambda node_id: _run_node_name(node_id, by_id)
+
+
+async def _refuse_unchosen_models(run_id: str, nodes: list[GraphNode], skips: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The person's direct run (a node's, a shot's) of a Krea node with no
+    model chosen is refused before its paid-placeholder confirmation: GM -
+    Design, round 12 addendum b, "Don't ask someone to approve a run that
+    can't go out." The same line validate_graph gives every other run path."""
+    errors = unchosen_model_errors(nodes, name_of=_run_names(nodes))
+    if not errors:
+        return None
+    await _announce_validation_errors(errors, run_id)
+    return {**_validation_response(errors), "runId": run_id, **_skip_reply(skips)}
+
+
 def _quoted(label: str) -> str:
     """A node's name in a cursor bubble, in curly quotes as the Agents panel
     shows it (GM - Design, 2026-10-25: Connecting “A” to “B”), without
@@ -8794,7 +8812,8 @@ def _placeholder_confirm_refusal(run_id: str, paid: list[str], estimate: Mapping
         name = who.get("name")
         if name and name not in owners:
             owners.append(name)
-    who = f"{owners[0]} is" if len(owners) == 1 else "agents are"
+    # GM - Design, round 12, item 1: "the agents" ("nodes agents" read like a stumble).
+    who = f"{owners[0]} is" if len(owners) == 1 else "the agents are"
     one = len(paid) == 1
     again = ("Generate again to review it." if shot
              else f"Click “Run” again to review {'it' if one else 'them'}.")
@@ -8922,7 +8941,7 @@ async def execute(request: ExecuteRequest) -> dict:
     submitted = _submitted_params(nodes)
     _validate_cinema_base_models(nodes)
 
-    errors = validate_graph(nodes, edges, api_keys)
+    errors = validate_graph(nodes, edges, api_keys, name_of=_run_names(nodes))
     if errors:
         await _announce_validation_errors(errors, run_id)
         return {**_validation_response(errors), "runId": run_id, **_skip_reply(skips)}
@@ -9077,12 +9096,15 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     # proposal's run (approval_id) is not running it directly.
     sub_nodes, sub_edges, skips, ready = await _skip_placeholders(
         run_id, sub_nodes, sub_edges, direct=request.target_node_id if request.approval_id is None else None)
+    refused = await _refuse_unchosen_models(run_id, sub_nodes, skips)
+    if refused is not None:
+        return refused
     await _require_placeholder_confirmation(run_id, sub_nodes, sub_edges, ready, request.confirmed_placeholders,
                                             request.confirmed_cost, api_keys=api_keys)
 
     _validate_cinema_base_models(sub_nodes)
 
-    errors = validate_graph(sub_nodes, sub_edges, api_keys)
+    errors = validate_graph(sub_nodes, sub_edges, api_keys, name_of=_run_names(sub_nodes))
     if errors:
         await _announce_validation_errors(errors, run_id)
         return {**_validation_response(errors), "runId": run_id, **_skip_reply(skips)}
@@ -9733,6 +9755,9 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     if request.node_id in skips:
         canvas_events.forget_run(run_id)
         return {"status": "skipped", "runId": run_id, **_skip_reply(skips)}
+    refused = await _refuse_unchosen_models(run_id, sub_nodes, skips)
+    if refused is not None:
+        return refused
     await _require_placeholder_confirmation(run_id, sub_nodes, sub_edges, ready, request.confirmed_placeholders,
                                             request.confirmed_cost, passes=request.variations or 1,
                                             api_keys=api_keys, shot=True)
@@ -9748,7 +9773,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
             ),
         )
 
-    errors = validate_graph(sub_nodes, sub_edges, api_keys)
+    errors = validate_graph(sub_nodes, sub_edges, api_keys, name_of=_run_names(sub_nodes))
     if errors:
         await _announce_validation_errors(errors, run_id)
         # With each error (error copy round 3e), so the shot panel can say
@@ -15242,7 +15267,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     # The canvas Run's own pre-call check (/api/execute): a node that can't
     # run as set up (no key, a required input unwired) stops the run here,
     # before the spending check and any provider call, and shows on its card.
-    errors = validate_graph(sub_nodes, sub_edges, api_keys)
+    errors = validate_graph(sub_nodes, sub_edges, api_keys, name_of=_run_names(sub_nodes))
     try:
         topological_sort(sub_nodes, sub_edges)
     except CycleError as exc:

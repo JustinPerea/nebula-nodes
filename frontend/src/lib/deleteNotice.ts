@@ -30,6 +30,12 @@ export interface RemovalRecord {
   replaces?: string;
 }
 
+/** GM - Design, round 12 addendum (a), verbatim: a Cmd+Z pressed while a
+ * change was still on its way to Nebula that the canvas dropped instead of
+ * undoing something else (a newer step landed on top, the 15 s limit, a
+ * project switch). No button, and no promise that a retry works. */
+export const DROPPED_UNDO_TEXT = 'Nothing was undone. Your last change was still saving.';
+
 export function deletedNoticeText(count: number): string {
   return count === 1 ? 'Deleted the node.' : `Deleted ${count} nodes.`;
 }

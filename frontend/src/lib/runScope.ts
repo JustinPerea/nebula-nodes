@@ -207,19 +207,16 @@ export function wiredPorts(nodes: Node<NodeData>[], edges: Edge[]): Map<string, 
   return wired;
 }
 
-/**
- * Mirrors the stores' run scopes so Run buttons can say what they will do:
- * the whole graph; one target plus every node feeding it; or an explicit
- * cluster. A node is paid when it calls a provider: any non-utility node, and
- * a utility node whose providerVia says it does with these params.
- * With a cost context, it also estimates the run from the price table.
- */
-export function summarizeRunScope(
-  nodes: Node<NodeData>[],
-  edges: Edge[],
-  scope: RunScope,
-  costContext?: RunCostContext,
-): RunScopeSummary {
+/** The nodes a run of `scope` sends and runs, as the backend reads it: the
+ * scope, less agents' placeholders and what needs them, except on the
+ * person's direct run of a node (it runs them). */
+export function nodesThatRun(nodes: Node<NodeData>[], edges: Edge[], scope: RunScope): Node<NodeData>[] {
+  return scopeOf(nodes, edges, scope).included;
+}
+
+function scopeOf(nodes: Node<NodeData>[], edges: Edge[], scope: RunScope): {
+  included: Node<NodeData>[]; pendingSkipped: PendingSkipSummary | null; pendingIncluded: PendingSkipSummary | null;
+} {
   let included: Node<NodeData>[];
   if (scope.kind === 'graph') {
     included = nodes;
@@ -261,6 +258,23 @@ export function summarizeRunScope(
       included = included.filter((node) => !skips.has(node.id));
     }
   }
+  return { included, pendingSkipped, pendingIncluded };
+}
+
+/**
+ * Mirrors the stores' run scopes so Run buttons can say what they will do:
+ * the whole graph; one target plus every node feeding it; or an explicit
+ * cluster. A node is paid when it calls a provider: any non-utility node, and
+ * a utility node whose providerVia says it does with these params.
+ * With a cost context, it also estimates the run from the price table.
+ */
+export function summarizeRunScope(
+  nodes: Node<NodeData>[],
+  edges: Edge[],
+  scope: RunScope,
+  costContext?: RunCostContext,
+): RunScopeSummary {
+  const { included, pendingSkipped, pendingIncluded } = scopeOf(nodes, edges, scope);
 
   const paid: string[] = [];
   const pricing = costContext?.pricing;

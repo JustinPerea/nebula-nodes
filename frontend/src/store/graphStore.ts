@@ -83,7 +83,7 @@ import {
 } from '../lib/errorCopy';
 import { CANVAS_NOTICE_EVENT, showNotice, type CanvasNoticeDetail } from '../lib/canvasNotice';
 import { cleanPending, pendingSkipLine, type PendingAgent, type PendingSkipSummary } from '../lib/pendingNodes';
-import { cleanRemovals, deletedNoticeText, lateRestoreText, mergeRemovals, notRestoredText, pinsOnAnotherModel, restoredNoticeText, supersededBy, type RemovalRecord } from '../lib/deleteNotice';
+import { cleanRemovals, deletedNoticeText, DROPPED_UNDO_TEXT, lateRestoreText, mergeRemovals, notRestoredText, pinsOnAnotherModel, restoredNoticeText, supersededBy, type RemovalRecord } from '../lib/deleteNotice';
 import { NOTHING_RAN_LINE, OTHER_NODE_LINE, SHOT_NOT_STARTED_LINE, validationReadings, writtenReading, type ValidationReading } from '../lib/validationCopy';
 import {
   RUNTIME_FIELDS, applySlice, diffCanvas, edgeKey, editArrivedText, foldArrange, forgetClearedPlaceholders, foreignSource,
@@ -96,8 +96,8 @@ import { useUIStore } from './uiStore';
 import { usePricingStore } from './pricingStore';
 import { useInputSizeStore } from './inputSizeStore';
 import { useStoredAssetsStore } from './storedAssetsStore';
-import { repeatRun, runCostConfirmMessage, shouldConfirmRunCost, summarizeRunScope, type RunScope } from '../lib/runScope';
-import { PRICE_DEPENDS_ON_INPUT, PRICE_NOT_LISTED, placeholderRefusalOf, placeholderRunConfirm, runPlaceholders, withRefusalFlags, withRunEstimate, type PlaceholderRunConfirm, type PlaceholderRunOptions, type RunEstimate } from '../lib/placeholderRunConfirm';
+import { nodesThatRun, repeatRun, runCostConfirmMessage, shouldConfirmRunCost, summarizeRunScope, type RunScope } from '../lib/runScope';
+import { PRICE_DEPENDS_ON_INPUT, PRICE_NOT_LISTED, modelNotChosenText, placeholderRefusalOf, placeholderRunConfirm, runPlaceholders, withRefusalFlags, withRunEstimate, type PlaceholderRunConfirm, type PlaceholderRunOptions, type RunEstimate } from '../lib/placeholderRunConfirm';
 import { placeholderRunDialogModule } from '../lib/placeholderRunDialogModule';
 import { useCreateDraftStore } from './createDraftStore';
 import { getCinemaUploadIssue, useCinemaUploadStore } from './cinemaUploadStore';
@@ -844,8 +844,11 @@ interface GraphState {
    * then an undo waits for it (review 10, L-2). */
   beginUndoStep: () => object;
   cancelUndoStep: (step: object) => void;
-  /** The request of a beginUndoStep step answered: an undo pressed meanwhile now undoes it. */
-  endUndoStep: (step: object) => void;
+  /** The request of a beginUndoStep step answered: an undo pressed meanwhile
+   * now undoes it, if nothing newer landed on top (review 11, M-1).
+   * `arrives`: the nodes the change adds that come with its echo (an
+   * upload's): the step settles once they are on the canvas (L-2). */
+  endUndoStep: (step: object, options?: { arrives?: string[] }) => void;
   /** The notice for someone else's edit: it landed, or was undone or redone. */
   undoNotice: UndoNotice | null;
   dismissUndoNotice: () => void;
@@ -1935,7 +1938,8 @@ function changeCanvasNodes(
     const deleted = removing.filter((nodeId) => shownBefore.has(nodeId)).length;
     // Its Undo applies only while this step is next in line: after a newer
     // step, the line would offer a button that does nothing (withLiveNotice).
-    if (deleted > 0 && get().undoStack.at(-1) === undoStep) set(deletedNotice(deleted, undoStep));
+    const top = get().undoStack.at(-1);
+    if (deleted > 0 && top && (top === undoStep || top === stepSuccessors.get(undoStep))) set(deletedNotice(deleted, top));
     if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length);
   }
   // A restore already queued (an earlier undo or redo) reaches the backend
@@ -2034,9 +2038,16 @@ function applyCanvasNodeChanges(
     return;
   }
 
-  // A backend deletion took its step before sending (its graphSync can land first).
+  // A backend deletion took its step before sending (its graphSync can land
+  // first). With newer steps on top of it, the delete takes a step above
+  // them, which a press bound to its step then undoes (review 11, M-1); a
+  // delete with nothing left to remove (its echo took the nodes) takes none.
   const stack = get().undoStack;
-  if (!undoStep || stack[stack.length - 1] !== undoStep) pushUndo(set, get);
+  const present = new Set(get().nodes.map((node) => node.id));
+  if ((!undoStep || stack[stack.length - 1] !== undoStep) && removedIds.some((id) => present.has(id))) {
+    const successor = pushUndo(set, get);
+    if (undoStep) stepSuccessors.set(undoStep, successor);
+  }
   set((state) => {
     const nextNodes = applyNodeChanges(changes, state.nodes) as Node<NodeData>[];
     const nextEdges = state.edges.filter(
@@ -2695,6 +2706,10 @@ async function executeHistoricalRun(
     }, directTarget, { passes: shot?.variations ?? 1, costly: false, busy: () => get().isExecuting, ...wording });
     agreed = answer instanceof Promise ? await answer : answer;
     if (!agreed) return;
+  } else {
+    // A whole-canvas replay sends the saved graph (round 12 addendum b).
+    const saved = snapshotCanvas(snapshot, get().nodes);
+    if (refuseUnchosenModel(saved.nodes, saved.edges, { kind: 'graph' })) return;
   }
 
   resetExecution();
@@ -3108,63 +3123,229 @@ function withFreshKeyStatus(nodes: Node<NodeData>[], before: Node<NodeData>[]): 
  * HOLD_LIMIT_MS, so Cmd+Z is never stuck.
  */
 const stepsInFlight = new Set<UndoEntry>();
-let heldHistory: Array<'undo' | 'redo'> = [];
+const HOLD_LIMIT_MS = 15_000;
+
+/*
+ * Review 11, M-1 (round 12): a held press is bound to the step it was
+ * pressed for. The old queue replayed its presses against whatever was on
+ * top when the step settled, so an agent's edit (or the person's) that
+ * landed in between was undone instead (H2, H8, H9, S1).
+ *
+ * Each held press names its target: the first, the in-flight step on top;
+ * a later one, what would be on top of its stack once the presses before it
+ * ran (an entry, or the inverse an earlier press makes). When the step
+ * settles, the presses run in order while each one's target is still on top
+ * of its stack (a delete's step may have been re-pushed above newer steps
+ * with the answer: stepSuccessors). A target that was taken off (its request
+ * failed: cancelUndoStep, a refused delete) drops that press silently: its
+ * failure says why. A newer step on top drops the press and every one after
+ * it, and GM's line says so (DROPPED_UNDO_TEXT). So do the 15 s limit (a
+ * press is never applied late, L-3) and a project switch (L-4).
+ */
+type PressTarget = { entry: UndoEntry } | { inverseOf: number };
+interface HeldPress { id: number; action: 'undo' | 'redo'; target: PressTarget | null }
+let heldPresses: HeldPress[] = [];
+let heldPressSeq = 0;
+/** The inverse each applied held press made, by press id (a later redo's target). */
+const heldInverses = new Map<number, UndoEntry>();
+/** The step the front press waits for, and its limit. */
 let heldFor: UndoEntry | null = null;
 let heldTimer: ReturnType<typeof setTimeout> | null = null;
-const HOLD_LIMIT_MS = 15_000;
+/** A delete whose answer landed under newer steps re-pushes its step on top
+ * (applyCanvasNodeChanges): a press bound to the old step applies to that one. */
+const stepSuccessors = new WeakMap<UndoEntry, UndoEntry>();
+/** Nodes a graphSync brought onto the canvas while a step was in flight: a
+ * clear's answer never removes them, even under a reused id (L-6, S1). */
+const arrivedSince = new WeakMap<UndoEntry, Set<string>>();
+/** The graph a step was taken in (canvasReplacementRevision). */
+const stepRevisions = new WeakMap<UndoEntry, number>();
+/** Steps whose answer is in but whose change arrives with their echo (an
+ * upload's node: L-2): they settle when those nodes are on the canvas. */
+const awaitingArrival = new Map<UndoEntry, { ids: string[]; timer: ReturnType<typeof setTimeout> }>();
 
 function holdStep(step: UndoEntry): void {
   stepsInFlight.add(step);
+  arrivedSince.set(step, new Set());
+  stepRevisions.set(step, canvasReplacementRevision);
+}
+
+/** Whether `step` was taken in the graph on the canvas now (no project switch or load since). */
+function sameGraphAs(step: UndoEntry): boolean {
+  return (stepRevisions.get(step) ?? canvasReplacementRevision) === canvasReplacementRevision;
+}
+
+/** Whether a clear taken as `step` removes the node `id`: one it sent (on
+ * the canvas when the step began) that no sync has brought back since. */
+function clearedBy(step: UndoEntry, id: string): boolean {
+  if (isForeignEdit(step)) return false;
+  return step.nodes.some((node) => node.id === id) && !arrivedSince.get(step)?.has(id);
 }
 
 function settleStep(step: UndoEntry, set: GraphSet, get: GraphGet): void {
   stepsInFlight.delete(step);
-  if (heldFor !== step) return;
-  const queue = heldHistory;
-  heldHistory = [];
+  const waiting = awaitingArrival.get(step);
+  if (waiting) {
+    clearTimeout(waiting.timer);
+    awaitingArrival.delete(step);
+  }
+  runHeldPresses(set, get);
+}
+
+/** The step's answer is in, and the nodes it adds (`ids`) come with its echo. */
+function awaitArrival(step: UndoEntry, ids: string[], set: GraphSet): void {
+  // A change that never arrives releases the step after the limit; a press
+  // bound to it is dropped, never applied to a step that changed nothing.
+  const timer = setTimeout(() => {
+    awaitingArrival.delete(step);
+    stepsInFlight.delete(step);
+    if (heldFor === step) dropHeldPresses(set, true);
+  }, HOLD_LIMIT_MS);
+  awaitingArrival.set(step, { ids, timer });
+}
+
+/** After a graphSync: what it brought counts as arrived for each step in
+ * flight, and a step waiting for its echo settles once its nodes are here. */
+function noteSyncArrivals(before: Node<NodeData>[], after: Node<NodeData>[], set: GraphSet, get: GraphGet): void {
+  const had = new Set(before.map((node) => node.id));
+  const added = after.filter((node) => !had.has(node.id)).map((node) => node.id);
+  if (added.length > 0) {
+    for (const step of stepsInFlight) {
+      const arrived = arrivedSince.get(step);
+      if (arrived) for (const id of added) arrived.add(id);
+    }
+  }
+  if (awaitingArrival.size === 0) return;
+  const present = new Set(after.map((node) => node.id));
+  for (const [step, { ids }] of [...awaitingArrival]) {
+    if (ids.every((id) => present.has(id))) settleStep(step, set, get);
+  }
+}
+
+/** Drops every held press; GM's line says so when `tell` (round 12, addendum a). */
+function dropHeldPresses(set: GraphSet, tell: boolean): void {
+  const had = heldPresses.length > 0;
+  heldPresses = [];
+  heldInverses.clear();
   heldFor = null;
   if (heldTimer !== null) clearTimeout(heldTimer);
   heldTimer = null;
-  // The step was taken off (its request failed, or another graph opened):
-  // the undo aimed at it goes to nothing; the presses after it still count.
-  const cancelled = !get().undoStack.includes(step);
-  queue.forEach((action, index) => {
-    if (index === 0 && cancelled) return;
-    stepHistory(action, set, get);
-  });
+  if (had && tell) set((state) => noticeLine(state, DROPPED_UNDO_TEXT, 'info'));
 }
 
-/** Whether this press waits for a step's answer (and is queued). */
-function holdsHistory(action: 'undo' | 'redo', state: GraphState, set: GraphSet, get: GraphGet): boolean {
-  if (heldHistory.length > 0) {
-    heldHistory.push(action);
+/** Another graph is on the canvas (a project opened, a graph loaded): the
+ * presses held for the old one's steps are dropped, and its steps no longer
+ * hold anything here, so a press in the new graph never waits (L-4). */
+function forgetStepsInFlight(set: GraphSet): void {
+  dropHeldPresses(set, true);
+  stepsInFlight.clear();
+  for (const { timer } of awaitingArrival.values()) clearTimeout(timer);
+  awaitingArrival.clear();
+}
+
+/** The entry a press is bound to, once the presses before it ran; undefined
+ * when that was an earlier press that did nothing. */
+function pressTarget(press: HeldPress): UndoEntry | undefined {
+  if (!press.target) return undefined;
+  return 'entry' in press.target ? press.target.entry : heldInverses.get(press.target.inverseOf);
+}
+
+/** What a new press would act on once the held presses before it ran. */
+function nextPressTarget(action: 'undo' | 'redo', state: GraphState): PressTarget | null {
+  const undo: PressTarget[] = state.undoStack.map((entry) => ({ entry }));
+  const redo: PressTarget[] = state.redoStack.map((entry) => ({ entry }));
+  for (const press of heldPresses) {
+    (press.action === 'undo' ? undo : redo).pop();
+    (press.action === 'undo' ? redo : undo).push({ inverseOf: press.id });
+  }
+  return (action === 'undo' ? undo : redo).at(-1) ?? null;
+}
+
+function waitFor(step: UndoEntry, set: GraphSet): void {
+  if (heldFor === step) return;
+  heldFor = step;
+  if (heldTimer !== null) clearTimeout(heldTimer);
+  // The limit drops the presses (L-3): a late answer is then an ordinary step.
+  heldTimer = setTimeout(() => {
+    heldTimer = null;
+    if (heldFor === step) dropHeldPresses(set, true);
+  }, HOLD_LIMIT_MS);
+}
+
+/** Runs the held presses whose step has settled, in order (see above). */
+function runHeldPresses(set: GraphSet, get: GraphGet): void {
+  while (heldPresses.length > 0) {
+    const press = heldPresses[0];
+    const state = get();
+    const stack = press.action === 'undo' ? state.undoStack : state.redoStack;
+    const top = stack[stack.length - 1];
+    const wanted = pressTarget(press);
+    const onTop = wanted !== undefined && top !== undefined
+      && (top === wanted || stepSuccessors.get(wanted) === top);
+    if (onTop && stepsInFlight.has(top)) {
+      waitFor(top, set);
+      return;
+    }
+    if (!onTop) {
+      const successor = wanted && stepSuccessors.get(wanted);
+      const stacked = (entry: UndoEntry | undefined) => entry !== undefined
+        && (state.undoStack.includes(entry) || state.redoStack.includes(entry));
+      if (wanted !== undefined && (stacked(wanted) || stacked(successor))) {
+        // A newer step landed on top of it: never undo that one instead.
+        dropHeldPresses(set, true);
+        return;
+      }
+      // Its step was taken off (the request failed): this press goes to
+      // nothing, the presses after it still count.
+      heldPresses.shift();
+      continue;
+    }
+    heldPresses.shift();
+    const inverse = applyHistory(press.action, set, get);
+    if (inverse) heldInverses.set(press.id, inverse);
+  }
+  heldInverses.clear();
+  heldFor = null;
+  if (heldTimer !== null) clearTimeout(heldTimer);
+  heldTimer = null;
+}
+
+/** Whether this press waits for a step's answer (and is queued, bound to its target). */
+function holdsHistory(action: 'undo' | 'redo', state: GraphState, set: GraphSet): boolean {
+  if (heldPresses.length > 0) {
+    heldPresses.push({ id: ++heldPressSeq, action, target: nextPressTarget(action, state) });
     return true;
   }
   const top = state.undoStack[state.undoStack.length - 1];
   if (action !== 'undo' || !top || !stepsInFlight.has(top)) return false;
-  heldFor = top;
-  heldHistory = [action];
-  heldTimer = setTimeout(() => {
-    heldTimer = null;
-    if (heldFor === top) settleStep(top, set, get);
-  }, HOLD_LIMIT_MS);
+  heldPresses = [{ id: ++heldPressSeq, action, target: { entry: top } }];
+  waitFor(top, set);
   return true;
 }
 
 /**
- * One undo or redo. The step leaves its stack and its inverse goes on the
- * other one: a snapshot's inverse is a snapshot of the canvas now; a foreign
- * edit is its own inverse (undo puts back its `before`, redo its `after`).
- * Then the backend is told (sendRestore), and an agent's edit says so. An
- * undo of a step whose request is on its way waits for it (holdsHistory).
+ * One undo or redo. An undo of a step whose request is on its way waits for
+ * it (holdsHistory); otherwise it applies now (applyHistory).
  */
 function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): void {
   const state = get();
   if (state.isExecuting || state.providerRecoveries.length > 0 || state.providerStartAmbiguities.length > 0) return;
-  if (holdsHistory(action, state, set, get)) return;
+  if (holdsHistory(action, state, set)) return;
+  applyHistory(action, set, get);
+}
+
+/**
+ * The step leaves its stack and its inverse goes on the other one: a
+ * snapshot's inverse is a snapshot of the canvas now; a foreign edit is its
+ * own inverse (undo puts back its `before`, redo its `after`). Then the
+ * backend is told (sendRestore), and an agent's edit says so. Returns the
+ * inverse, or null when nothing was there to undo or redo.
+ */
+function applyHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): UndoEntry | null {
+  const state = get();
+  if (state.isExecuting || state.providerRecoveries.length > 0 || state.providerStartAmbiguities.length > 0) return null;
   const from = action === 'undo' ? state.undoStack : state.redoStack;
   const entry = from[from.length - 1];
-  if (!entry) return;
+  if (!entry) return null;
   const { nodes, edges } = state;
   let next: { nodes: Node<NodeData>[]; edges: Edge[] };
   let inverse: UndoEntry;
@@ -3206,6 +3387,7 @@ function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): voi
   });
   void sendRestore(action, nodes, edges, nextNodes, next.edges, entry, inverse, set,
     { noticeId, ownLine: ownLine?.kind === 'restored' && waitsForBackend ? ownLine : null });
+  return inverse;
 }
 
 /** A restore's count that arrived too late for its own line: the plain line
@@ -3409,6 +3591,8 @@ wsClient.subscribe((event) => {
     };
     if (graphReplaced) {
       canvasReplacementRevision += 1;
+      // The presses held for the old graph's steps go (review 11, L-4).
+      forgetStepsInFlight(useGraphStore.setState as GraphSet);
       pendingConnectedNodeCreationAttempt = null;
       wireWrites.clear();
       unsavedParamEdits.clear();
@@ -3465,6 +3649,7 @@ wsClient.subscribe((event) => {
         backendFreshStartPending: false,
         ...foreignEditStep(state, remainingNodes, remainingEdges, origin, graphReplaced, moved),
       });
+      noteSyncArrivals(state.nodes, remainingNodes, useGraphStore.setState as GraphSet, useGraphStore.getState);
       useCinemaUploadStore.getState().reconcileTargets(remainingNodes);
       useArrangeStore.getState().setPending([]);
       return;
@@ -3648,6 +3833,8 @@ wsClient.subscribe((event) => {
       backendFreshStartPending: false,
       ...foreignEditStep(state, merged, mergedEdges, origin, graphReplaced, moved),
     });
+    // What it brought arrived after any step in flight; an upload waiting for its node settles (review 11, L-2, L-6).
+    noteSyncArrivals(graphReplaced ? [] : state.nodes, merged, useGraphStore.setState as GraphSet, useGraphStore.getState);
     useCinemaUploadStore.getState().reconcileTargets(merged);
     // After the merge, so the nodes an arrange names are already on the canvas.
     useArrangeStore.getState().setPending(arrange);
@@ -3708,6 +3895,22 @@ for (const record of initialRunHistory) {
   activeRunOwners.get(record.id)!.status = 'uncertain';
 }
 currentRunId = initialRunHistory.find((record) => record.status === 'running' && !record.createOrigin && !record.cinemaShot)?.id ?? null;
+
+/**
+ * GM - Design, round 12 addendum (b): a run with a Krea node whose required
+ * model setting has nothing chosen (Topaz Standard's Model) would be refused
+ * by the gateway, so it is refused here before any dialog or confirm ("Don't
+ * ask someone to approve a run that can't go out"), with GM's line naming
+ * the node and the field. Every run path asks it, over the nodes that run
+ * would send (placeholders it skips aren't among them). True: refused.
+ */
+function refuseUnchosenModel(nodes: Node<NodeData>[], edges: Edge[], scope: RunScope,
+  names?: Readonly<Record<string, string>>): boolean {
+  const text = modelNotChosenText(nodesThatRun(nodes, edges, scope), names);
+  if (!text) return false;
+  useGraphStore.getState().notify(text);
+  return true;
+}
 
 /** Asks before a run whose list-price estimate reaches the user's threshold
  * (Settings > Interface). Every run path goes through the execute actions,
@@ -3840,6 +4043,7 @@ function confirmDirectRun(
 ): DirectRunConfirmed | null | Promise<DirectRunConfirmed | null> {
   const graph = read();
   if (!graph) return null;
+  if (refuseUnchosenModel(graph.nodes, graph.edges, { kind: 'node', nodeId }, names)) return null;
   const asked = directRunConfirm(graph.nodes, graph.edges, nodeId, passes, null,
     { verb, names, gone: graph.gone, changed: graph.changed });
   // No dialog: answered at once, so the caller starts its run in the same
@@ -4179,7 +4383,20 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     settleStep(step as UndoEntry, set, get);
   },
 
-  endUndoStep: (step) => settleStep(step as UndoEntry, set, get),
+  endUndoStep: (step, options) => {
+    const entry = step as UndoEntry;
+    // An upload's node comes with its echo, which can land after the answer
+    // (review 11, L-2): the step settles once that node is on the canvas.
+    const ids = (options?.arrives ?? []).filter((id) => typeof id === 'string' && id.length > 0);
+    const present = new Set(get().nodes.map((node) => node.id));
+    if (ids.length > 0 && stepsInFlight.has(entry) && !awaitingArrival.has(entry)
+      && get().undoStack.includes(entry) && ids.some((id) => !present.has(id))) {
+      awaitArrival(entry, ids, set);
+      return;
+    }
+    if (awaitingArrival.has(entry)) return;
+    settleStep(entry, set, get);
+  },
 
   undoNotice: null,
   dismissUndoNotice: () => set({ undoNotice: null }),
@@ -5557,6 +5774,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     if (isExecuting || get().isImportingGraph) return;
     const uploadIssue = pendingCinemaUploadIssue(nodes);
     if (uploadIssue) { warnPendingCinemaUpload(uploadIssue); return; }
+    if (refuseUnchosenModel(nodes, edges, { kind: 'graph' })) return;
     if (!confirmRunCost(nodes, edges, { kind: 'graph' })) return;
     resetExecution();
     const snapshot = captureRunSnapshot(nodes, edges);
@@ -5637,6 +5855,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // run sends the ones confirmed, and the backend refuses it without them.
     let agreed: DirectRunConfirmed | null;
     if (options?.approvalId) {
+      if (refuseUnchosenModel(nodes, edges, { kind: 'node', nodeId, direct: false })) return;
       agreed = confirmRunCost(nodes, edges, { kind: 'node', nodeId, direct: false }) ? { nodes, edges } : null;
     } else {
       // The dialog waits for the person: another run may start meanwhile.
@@ -5953,6 +6172,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     const uploadIssue = pendingCinemaUploadIssue(clusterNodes);
     if (uploadIssue) { warnPendingCinemaUpload(uploadIssue); return; }
     const clusterEdges = edges.filter((e) => idSet.has(e.source) && idSet.has(e.target));
+    if (refuseUnchosenModel(nodes, edges, { kind: 'cluster', nodeIds })) return;
     if (!confirmRunCost(nodes, edges, { kind: 'cluster', nodeIds })) return;
     resetExecution();
     const snapshot = captureRunSnapshot(clusterNodes, clusterEdges);
@@ -6043,6 +6263,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     const uploadIssue = pendingCinemaUploadIssue(clusterNodes);
     if (uploadIssue) { warnPendingCinemaUpload(uploadIssue); return; }
     const clusterEdges = edges.filter((edge) => idSet.has(edge.source) && idSet.has(edge.target));
+    if (refuseUnchosenModel(nodes, edges, { kind: 'cluster', nodeIds })) return;
     const snapshot = captureRunSnapshot(clusterNodes, clusterEdges);
     if (runIncludesWorldLabs(snapshot)) {
       // Keep paid World Labs starts in the exclusive Canvas admission path.
@@ -6210,25 +6431,27 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // Like authorGenerationCluster's merge: one undo step, ids never duplicated.
     // The step is usually the one Accept took before sending (its graphSync
     // can land before this reply); without one, take it now.
-    const stack = get().undoStack;
-    if (options?.undoStep === undefined || stack[stack.length - 1] !== options.undoStep) pushUndo(set, get);
-    set((state) => {
-      const updates = new Map(updatedNodes.map((node) => [node.id, node]));
-      const merged = state.nodes.map((node) => {
-        const update = updates.get(node.id);
-        return update
-          ? { ...node, data: { ...node.data, params: { ...node.data.params, ...update.data.params } } }
-          : node;
-      });
-      const existingIds = new Set(state.nodes.map((node) => node.id));
-      const existingEdgeIds = new Set(state.edges.map((edge) => edge.id));
-      // What a sync already carried is the syncs' (an agent may have removed it since).
-      const synced = options?.synced ?? new Set<string>();
-      return {
-        nodes: [...merged, ...incoming.filter((node) => !existingIds.has(node.id) && !synced.has(node.id))],
-        edges: [...state.edges, ...incomingEdges.filter((edge) => !existingEdgeIds.has(edge.id) && !synced.has(edgeKey(edge)))],
-      };
+    const state = get();
+    const step = options?.undoStep as UndoEntry | undefined;
+    if (step && !sameGraphAs(step)) return;
+    const updates = new Map(updatedNodes.map((node) => [node.id, node]));
+    const merged = state.nodes.map((node) => {
+      const update = updates.get(node.id);
+      return update
+        ? { ...node, data: { ...node.data, params: { ...node.data.params, ...update.data.params } } }
+        : node;
     });
+    const existingIds = new Set(state.nodes.map((node) => node.id));
+    const existingEdgeIds = new Set(state.edges.map((edge) => edge.id));
+    // What a sync already carried is the syncs' (an agent may have removed it since).
+    const synced = options?.synced ?? new Set<string>();
+    const added = incoming.filter((node) => !existingIds.has(node.id) && !synced.has(node.id));
+    const addedEdges = incomingEdges.filter((edge) => !existingEdgeIds.has(edge.id) && !synced.has(edgeKey(edge)));
+    // Its echo already brought it all: no change, so no step (review 11, H9).
+    if (updates.size === 0 && added.length === 0 && addedEdges.length === 0) return;
+    // Its change belongs to its own step, also under newer steps (review 11, M-1).
+    if (!step || !state.undoStack.includes(step)) pushUndo(set, get);
+    set({ nodes: [...merged, ...added], edges: [...state.edges, ...addedEdges] });
   },
 
   deleteGeneration: (modelNodeIds) => {
@@ -6614,6 +6837,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   loadGraph: (nodes, edges, options) => {
     if (get().isExecuting && !options?.allowDuringExecution) return;
     canvasReplacementRevision += 1;
+    forgetStepsInFlight(set);
     pendingConnectedNodeCreationAttempt = null;
     clearCinemaScenePersistence();
     useCinemaMotionStore.getState().clear();
@@ -6664,6 +6888,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     if (!get().canSwitchProject() && !bootstrapSameOwners) return false;
 
     canvasReplacementRevision += 1;
+    forgetStepsInFlight(set);
     pendingNodeCreationAttempt = null;
     pendingConnectedNodeCreationAttempt = null;
     clearAllParamPushTimers();
@@ -6799,23 +7024,41 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       providerStartAmbiguities,
     } = get();
     if (isExecuting || providerRecoveries.length > 0 || providerStartAmbiguities.length > 0) return;
+    const step = options?.undoStep as UndoEntry | undefined;
+    // The clear's answer after another graph opened: its nodes are gone, and
+    // these are another graph's.
+    if (step && !sameGraphAs(step)) return;
     clearCinemaScenePersistence();
     useCinemaMotionStore.getState().clear();
     clearReplacedCanvasFocus();
     useCinemaUploadStore.getState().clear();
-    const stepped = options?.undoStep !== undefined && undoStack[undoStack.length - 1] === options.undoStep;
-    const newStack = stepped ? undoStack : [...undoStack, createSnapshot(nodes, edges)];
-    if (newStack.length > UNDO_CAP) newStack.shift();
-    set({ nodes: [], edges: [], undoStack: newStack, redoStack: [], backendFreshStartPending: false });
+    if (!step) {
+      const newStack = [...undoStack, createSnapshot(nodes, edges)];
+      if (newStack.length > UNDO_CAP) newStack.shift();
+      set({ nodes: [], edges: [], undoStack: newStack, redoStack: [], backendFreshStartPending: false });
+      return;
+    }
+    // Review 11, M-1 and L-6: a clear takes off the nodes it sent, never one
+    // that arrived after it (an agent's next node, even under a reused id),
+    // and its change belongs to its own step even when newer steps landed on
+    // top: undoing those, then it, brings the canvas back.
+    const remaining = nodes.filter((node) => !clearedBy(step, node.id));
+    const kept = new Set(remaining.map((node) => node.id));
+    if (!undoStack.includes(step) && remaining.length !== nodes.length) pushUndo(set, get);
+    set({ nodes: remaining, edges: edges.filter((edge) => kept.has(edge.source) && kept.has(edge.target)),
+      backendFreshStartPending: false });
   },
 
   clearBackendNodes: ({ undoStep }) => {
     const { nodes, edges, undoStack } = get();
-    // As the clear's graphSync has it (its `empty` branch): only nodes this tab alone has stay.
-    const remaining = nodes.filter((node) => !CLI_ID_RE.test(node.id));
+    const step = undoStep as UndoEntry;
+    if (!sameGraphAs(step)) return;
+    // As the clear's graphSync has it (its `empty` branch): only nodes this
+    // tab alone has stay; and only the ones the clear sent go (as above).
+    const remaining = nodes.filter((node) => !CLI_ID_RE.test(node.id) || !clearedBy(step, node.id));
     if (remaining.length === nodes.length) return;
     const kept = new Set(remaining.map((node) => node.id));
-    if (undoStack[undoStack.length - 1] !== undoStep) pushUndo(set, get);
+    if (!undoStack.includes(step)) pushUndo(set, get);
     set({ nodes: remaining, edges: edges.filter((edge) => kept.has(edge.source) && kept.has(edge.target)) });
   },
 

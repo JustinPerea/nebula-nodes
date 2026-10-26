@@ -22,6 +22,12 @@ import '../styles/command-palette.css';
 const NO_NODE_FIELDS: readonly string[] = Object.freeze([]);
 const NO_COMMANDS: PaletteCommand[] = [];
 
+/** A key the input method is using to end or commit a composition (keyCode
+ * 229 is how browsers mark such a keydown when isComposing isn't set). */
+function composing(event: React.KeyboardEvent): boolean {
+  return event.nativeEvent.isComposing || event.keyCode === 229;
+}
+
 /**
  * Global ⌘K / Ctrl+K command palette. Searches + inserts nodes, runs toolbar
  * actions, switches views/panels, and hands a query to the agent. Mounted
@@ -177,12 +183,13 @@ export function CommandPalette() {
     };
   }, [close]);
 
-  // Focus the input when the palette opens (DOM side effect only).
+  // Focus the input when the palette opens, and when it switches to the
+  // agent prompt (the item that was clicked is gone then) (DOM side effect only).
   useEffect(() => {
     if (!open) return;
     const id = window.setTimeout(() => inputRef.current?.focus(), 0);
     return () => window.clearTimeout(id);
-  }, [open]);
+  }, [open, mode]);
 
   const filtered = useMemo(() => filterCommands(commands, query), [commands, query]);
   const groups = useMemo(
@@ -200,7 +207,7 @@ export function CommandPalette() {
   const run = useCallback(
     (cmd: PaletteCommand | undefined) => {
       if (!cmd || cmd.enabled === false) return;
-      close();
+      if (!cmd.keepsOpen) close();
       cmd.perform();
     },
     [close]
@@ -226,6 +233,9 @@ export function CommandPalette() {
   };
 
   const onInputKeyDown = (e: React.KeyboardEvent) => {
+    // A key that ends or commits an IME composition is the input method's,
+    // never the palette's (review 11): Escape doesn't close, Enter doesn't run.
+    if (composing(e)) return;
     if (e.key === 'Escape') {
       e.preventDefault();
       escape();
@@ -263,6 +273,7 @@ export function CommandPalette() {
   // move the active item, as from the field, and focus with it, passing over
   // an item that can't take focus and stopping at the ends.
   const onDialogKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (composing(e)) return;
     if (e.target === inputRef.current && (e.key === 'Escape' || e.key === 'ArrowDown' || e.key === 'ArrowUp')) return;
     if (e.key === 'Escape') {
       e.preventDefault();

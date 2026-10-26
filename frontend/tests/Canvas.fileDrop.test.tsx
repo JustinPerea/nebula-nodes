@@ -269,6 +269,13 @@ describe('Canvas file drop', () => {
     expect(cancel).toHaveBeenCalledWith(begin.mock.results[1].value);
   });
 
+  it("ends each upload's step with the node its echo brings (review 11, L-2)", async () => {
+    const end = vi.spyOn(useGraphStore.getState(), 'endUndoStep');
+    api.fetch.mockImplementation(async () => new Response(JSON.stringify({ nodeId: 'n4' }), { status: 200 }));
+    await drop([file('a.png', 'image/png')]);
+    expect(end).toHaveBeenCalledWith(expect.any(Object), { arrives: ['n4'] });
+  });
+
   it('does not refit the camera over the nodes the person just dropped', async () => {
     let finish!: () => void;
     api.fetch.mockImplementation(() => new Promise<Response>((resolve) => {

@@ -158,8 +158,9 @@ they are deciding, Nebula shows them your changes and runs nothing that
 costs more than they agreed to, nor a node, model, price or extra cost
 they didn't see (a model or price that changed asks them again, even a
 cheaper one, and a switch on a free-text model such as OpenRouter's counts,
-as does a Krea node's Variant, Engine, Model, Training Model, Version, or
-grain model while Grain is on);
+as does a Meshy node's mesh type, or a Krea node's Variant, Engine, Model,
+Training Model, Version, Enhancement model or Frame interpolation model (the
+Topaz video upscalers), or grain model while Grain is on);
 if you delete or disconnect one, it tells them it's no longer in the run,
 and a replay of a saved run then runs its saved copy, as it does when you
 changed one after the run was saved: the dialog names the nodes you changed
@@ -269,7 +270,10 @@ started from the canvas is theirs to stop: the CLI refuses it, so tell them
 to press Stop in Nebula.
 
 A run where any node failed exits 1 and prints each node's error (a missing
-key refuses the whole run before anything is called or spent). The card on
+key refuses the whole run before anything is called or spent, as does a
+Topaz Standard with no Model chosen, or a Krea node app with no Version:
+"Choose a model for “Clean plate” first."; set it with `nebula set` first,
+or leave the choice to the person). The card on
 the canvas shows the same error. `nebula look` prints a failed node's error
 under it, and `nebula path` says why there is no file. The error stays on the
 node, through reloads, project switches and restarts, until it runs again.

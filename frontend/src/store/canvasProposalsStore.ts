@@ -219,7 +219,13 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
       // Its nodes are on the canvas: an undo pressed meanwhile acts now, not after the run below.
       useGraphStore.getState().endUndoStep(undoStep);
       get().close({ proposalId: id, status: 'accepted' });
-      if (result.runNodeIds.length > 0 && runsNothing(entry.view)) {
+      // Undone while it was on its way (review 11, L-5): its nodes are off
+      // the canvas, so its run goes nowhere; the approval goes back instead.
+      const onCanvas = new Set(useGraphStore.getState().nodes.map((node) => node.id));
+      const undone = result.runNodeIds.some((nodeId) => !onCanvas.has(nodeId));
+      if (result.runNodeIds.length > 0 && undone) {
+        if (result.approvalId) await releaseApproval(result.approvalId);
+      } else if (result.runNodeIds.length > 0 && runsNothing(entry.view)) {
         // Its whole run waits on agents' placeholders, so the button said
         // "Accept" (GM - Design, round 5): no run, no Run history entry, no
         // held run, and the approval goes back (review 5, L1).

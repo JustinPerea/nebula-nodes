@@ -199,15 +199,20 @@ export async function addDroppedFiles(files: readonly File[], origin: { x: numbe
     // One undo step per dropped file, taken before its graphSync lands.
     const undoStep = useGraphStore.getState().beginUndoStep();
     const heading = `Couldn't upload ${quoted(file.name)}.`;
+    // The node the upload adds, which comes with its echo (review 11, L-2).
+    let arrives: string[] = [];
     try {
-      await apiRequest(heading, '/api/uploads', { method: 'POST', body: form });
+      const response = await apiRequest(heading, '/api/uploads', { method: 'POST', body: form });
+      const body = await response.json().catch(() => null) as { nodeId?: unknown } | null;
+      if (typeof body?.nodeId === 'string') arrives = [body.nodeId];
     } catch (error) {
       useGraphStore.getState().cancelUndoStep(undoStep);
       failed.set(at, { kind: 'upload', name: file.name, line: failureMessage(error, heading),
         reason: failureCopy(error, { heading }).reason });
     } finally {
-      // An undo pressed while the upload was on its way now acts (review 10, L-2).
-      useGraphStore.getState().endUndoStep(undoStep);
+      // An undo pressed while the upload was on its way acts once its node is
+      // on the canvas (review 10, L-2; review 11, L-2).
+      useGraphStore.getState().endUndoStep(undoStep, { arrives });
     }
   }));
   window.setTimeout(() => { dropsInFlight = Math.max(0, dropsInFlight - 1); }, DROP_FIT_GRACE_MS);

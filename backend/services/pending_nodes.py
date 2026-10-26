@@ -216,15 +216,16 @@ def skip_summary(skips: Mapping[str, Mapping[str, Any]]) -> dict[str, Any] | Non
 def skip_line(summary: Mapping[str, Any] | None) -> str | None:
     """GM - Design's line for a run that skipped placeholders (2026-10-25,
     verbatim): "Skipped 1 node Codex is still setting up.", "Skipped 3 nodes
-    Codex is still setting up.", "Skipped 3 nodes agents are still setting
-    up.": the agent named when every skipped node is one agent's (downstream
-    nodes count toward the agent whose placeholder blocked them). The canvas
+    Codex is still setting up.", "Skipped 3 nodes the agents are still
+    setting up." (round 12, item 1): the agent named when every skipped
+    node is one agent's (downstream nodes count toward the agent whose
+    placeholder blocked them). The canvas
     has its twin (frontend lib/pendingNodes.ts pendingSkipLine)."""
     count = int((summary or {}).get("count") or 0)
     if count < 1:
         return None
     agents = [str(name) for name in (summary or {}).get("agents") or [] if name]
-    who = f"{agents[0]} is" if len(agents) == 1 else "agents are"
+    who = f"{agents[0]} is" if len(agents) == 1 else "the agents are"
     return f"Skipped {count} node{'' if count == 1 else 's'} {who} still setting up."
 
 

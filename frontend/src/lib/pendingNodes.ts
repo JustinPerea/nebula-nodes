@@ -61,19 +61,20 @@ export function placeholderLine(agentName: string): string {
  * "{prefix} N node(s) {agent} is still setting up.": GM - Design's naming
  * rule, 2026-10-25: name the agent when every node belongs to one agent
  * (downstream nodes count toward the agent whose pending node blocked
- * them), "agents" only when they come from more than one.
+ * them), "the agents" only when they come from more than one.
  */
 function placeholderCountLine(prefix: string, summary: PendingSkipSummary | null | undefined): string | null {
   if (!summary || !Number.isFinite(summary.count) || summary.count < 1) return null;
   const nodes = `${summary.count} ${summary.count === 1 ? 'node' : 'nodes'}`;
-  const who = summary.agents.length === 1 && summary.agents[0] ? `${summary.agents[0]} is` : 'agents are';
+  // GM - Design, round 12, item 1: "the agents" ("nodes agents" read like a stumble).
+  const who = summary.agents.length === 1 && summary.agents[0] ? `${summary.agents[0]} is` : 'the agents are';
   return `${prefix} ${nodes} ${who} still setting up.`;
 }
 
 /**
  * The line after Run when it skipped placeholders (GM, verbatim: "Skipped 1
  * node Codex is still setting up.", "Skipped 3 nodes Codex is still setting
- * up.", "Skipped 3 nodes agents are still setting up.", counting the nodes
+ * up.", "Skipped 3 nodes the agents are still setting up." (round 12), counting the nodes
  * downstream too).
  */
 export function pendingSkipLine(summary: PendingSkipSummary | null | undefined): string | null {
@@ -83,7 +84,7 @@ export function pendingSkipLine(summary: PendingSkipSummary | null | undefined):
 /**
  * The line under the cost before the person's direct run of placeholders
  * (GM, verbatim: "Includes 2 nodes Codex is still setting up.", "Includes 3
- * nodes agents are still setting up."), counting the nodes downstream of
+ * nodes the agents are still setting up." (round 12)), counting the nodes downstream of
  * them that the run also makes run.
  */
 export function pendingIncludedLine(summary: PendingSkipSummary | null | undefined): string | null {

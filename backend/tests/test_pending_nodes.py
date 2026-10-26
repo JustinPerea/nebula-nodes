@@ -730,7 +730,7 @@ def test_the_skip_line_names_the_agent_when_every_skip_is_one_agents():
     assert pending_nodes.skip_line({"count": 1, "agents": ["Codex"]}) == "Skipped 1 node Codex is still setting up."
     assert pending_nodes.skip_line({"count": 3, "agents": ["Codex"]}) == "Skipped 3 nodes Codex is still setting up."
     assert pending_nodes.skip_line({"count": 3, "agents": ["Codex", "Claude Code"]}) == (
-        "Skipped 3 nodes agents are still setting up.")
+        "Skipped 3 nodes the agents are still setting up.")
     assert pending_nodes.skip_line(None) is None
 
 

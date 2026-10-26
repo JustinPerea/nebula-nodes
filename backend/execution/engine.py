@@ -807,12 +807,39 @@ def _iterator_validation_errors(
     return errors
 
 
+def unchosen_model_errors(
+    nodes: list[GraphNode], *, name_of: Callable[[str], str] | None = None,
+) -> list[ValidationErrorDetail]:
+    """A Krea node whose required model-choosing setting has nothing chosen
+    (Topaz Standard's Model, a node app's Version): the gateway would refuse
+    it, so the run is refused before anything runs or is priced, naming the
+    node and the field (GM - Design, round 12 addendum b:
+    services/model_choice.py)."""
+    from services import model_choice
+
+    errors: list[ValidationErrorDetail] = []
+    for node in nodes:
+        field = model_choice.unchosen_field(node.definition_id, node.params)
+        if field is None:
+            continue
+        definition = _node_def_for(node.definition_id) or {}
+        name = (name_of(node.id) if name_of else None) or str(definition.get("displayName") or node.id)
+        line = model_choice.not_chosen_line(name, field)
+        errors.append(ValidationErrorDetail(node_id=node.id, port_id="", message=line, person=line))
+    return errors
+
+
 def validate_graph(
     nodes: list[GraphNode],
     edges: list[GraphEdge],
     api_keys: dict[str, str],
+    *,
+    name_of: Callable[[str], str] | None = None,
 ) -> list[ValidationErrorDetail]:
+    """Every pre-call refusal of a run. ``name_of``: a node's name for the
+    lines that name it (the canvas's label), else its type's name."""
     errors: list[ValidationErrorDetail] = []
+    errors.extend(unchosen_model_errors(nodes, name_of=name_of))
     errors.extend(_iterator_validation_errors(nodes, edges))
 
     definitions = dict(NODE_DEFS)

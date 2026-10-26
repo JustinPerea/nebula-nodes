@@ -57,6 +57,12 @@ beforeEach(() => {
   graph.state.edges = [];
   for (const fn of [graph.state.executeNode, graph.state.executeCluster, graph.state.adoptAcceptedProposal,
     api.acceptProposal, api.rejectProposal, api.releaseApproval]) fn.mockReset();
+  // As the real store: once adopted, the run's nodes are on the canvas (the
+  // accept's run is sent only while they are: review 11, L-5).
+  graph.state.adoptAcceptedProposal.mockImplementation((result: { runNodeIds?: string[] }) => {
+    const ids = new Set(graph.state.nodes.map((node) => node.id));
+    graph.state.nodes = [...graph.state.nodes, ...(result.runNodeIds ?? []).filter((id) => !ids.has(id)).map((id) => ({ id }))];
+  });
   graph.state.beginUndoStep.mockClear();
   graph.state.cancelUndoStep.mockClear();
   graph.state.endUndoStep.mockClear();

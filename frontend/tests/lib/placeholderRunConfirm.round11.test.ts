@@ -131,9 +131,10 @@ describe('GM round 11, items 4 and 5: rows name the settings that choose which m
     expect(krea('krea-enhance-magnific-precise-enhance', { flavor: 'photo' }).setting).toBeNull();
   });
 
-  it('item 5: Topaz Standard with no model chosen reads "Model: default"', () => {
-    expect(krea('krea-enhance-topaz-standard-enhance', {}).setting).toBe('Model: default');
-    expect(krea('krea-enhance-topaz-standard-enhance', { model: '' }).setting).toBe('Model: default');
+  // Round 12 addendum (b) replaces "Model: default": Krea requires the model (review 11, L-1).
+  it('item 5: Topaz Standard with no model chosen reads "Model: not chosen" (round 12)', () => {
+    expect(krea('krea-enhance-topaz-standard-enhance', {}).setting).toBe('Model: not chosen');
+    expect(krea('krea-enhance-topaz-standard-enhance', { model: '' }).setting).toBe('Model: not chosen');
   });
 
   it('item 5: a later switch from the default still shows up', () => {

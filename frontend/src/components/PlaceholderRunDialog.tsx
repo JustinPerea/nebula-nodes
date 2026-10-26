@@ -1,5 +1,5 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent, type RefObject } from 'react';
-import type { PlaceholderRunConfirm } from '../lib/placeholderRunConfirm';
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent, type RefObject } from 'react';
+import { rowSegments, type PlaceholderRunConfirm, type PlaceholderRunRow } from '../lib/placeholderRunConfirm';
 import { returnFocusOnSlip } from '../lib/modalFocus';
 import '../styles/prompt-dialog.css';
 import '../styles/placeholder-run-dialog.css';
@@ -71,6 +71,29 @@ function useScrolls(list: RefObject<HTMLUListElement | null>, rows: number): boo
     };
   }, [list, rows]);
   return scrolls;
+}
+
+/**
+ * A row's segments (rowSegments), each one unit on the line (GM - Design,
+ * round 12): the row wraps only between them, never inside "Grain model:
+ * gaussian" or “Name”. The " ·" stays with the segment before it, so a
+ * wrapped line starts with a segment, at the row's indent. The agent's dot
+ * leads the first segment, with the name.
+ */
+function RowSegments({ row }: { row: PlaceholderRunRow }) {
+  const [name, ...rest] = rowSegments(row);
+  const separator = (index: number) => (index < rest.length ? ' ·' : '');
+  return (
+    <>
+      <span className="placeholder-run__seg placeholder-run__seg--lead">
+        {row.agent && <span className="placeholder-run__dot" data-verified={String(row.agent.verified)} aria-hidden="true" />}
+        <span className="placeholder-run__name">{name}</span>{separator(0)}
+      </span>
+      {rest.map((segment, index) => (
+        <Fragment key={index}>{' '}<span className="placeholder-run__seg">{segment}{separator(index + 1)}</span></Fragment>
+      ))}
+    </>
+  );
 }
 
 export function PlaceholderRunDialog({ model, changed = false, onDone }: {
@@ -161,18 +184,10 @@ export function PlaceholderRunDialog({ model, changed = false, onDone }: {
           <ul ref={list} className="placeholder-run__rows"
             {...(scrolls ? { tabIndex: 0, 'aria-labelledby': headingId } : {})}>
             {model.rows.map((row) => (
-              row.agent ? (
-                <li key={row.nodeId} className="placeholder-run__row" style={{ '--prd-color': row.agent.color } as CSSProperties}>
-                  <span className="placeholder-run__dot" data-verified={String(row.agent.verified)} aria-hidden="true" />
-                  <span className="placeholder-run__name">{row.name}</span>
-                  {[row.model, row.setting, row.price].filter(Boolean).map((part) => ` · ${part}`).join('')}
-                </li>
-              ) : (
-                <li key={row.nodeId} className="placeholder-run__row placeholder-run__row--muted">
-                  <span className="placeholder-run__name">{row.name}</span>
-                  {[row.model, row.setting, row.price].filter(Boolean).map((part) => ` · ${part}`).join('')}
-                </li>
-              )
+              <li key={row.nodeId} className={row.agent ? 'placeholder-run__row' : 'placeholder-run__row placeholder-run__row--muted'}
+                style={row.agent ? { '--prd-color': row.agent.color } as CSSProperties : undefined}>
+                <RowSegments row={row} />
+              </li>
             ))}
           </ul>
           {model.freeLine && <p className="prompt-dialog__line placeholder-run__free">{model.freeLine}</p>}

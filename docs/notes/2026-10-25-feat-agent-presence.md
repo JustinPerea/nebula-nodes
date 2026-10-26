@@ -1019,6 +1019,7 @@ Branch feat/agent-presence, base main (head de9909bd before this round).
   - Meshy's Mesh Type ("Smart Topology (Meshy T2)"): is it a model setting to name?
   - A changed node with no row (a free one) is named after the rowed names. Is that the right place?
 - **The held undo for uploads and drops:** their node arrives only with the echo sync. If the HTTP answer lands before the echo, a held undo finds nothing to undo, and the step ends as a no-op. Not seen live.
+  - *Corrected in round 12 (review 11, L-2):* this understated it. The press was not a no-op: the undo was lost, a stray redo stayed, and Redo then deleted the upload on the canvas and in Nebula's graph (probe H7). Round 12 fixes it: such a step settles only once both its answer and its echo are in.
 - **The UnsavedEditsNotice sweep** used a stand-in reason line (no real project state).
 - **From round 10, unchanged:**
   - the run pill names Topaz-on-Krea by its model option;
@@ -1037,4 +1038,128 @@ Branch feat/agent-presence, base main (head de9909bd before this round).
 - tsc: clean.
 - Lint: clean (the inline-style and Slava-scope guards passed).
 - Build budget: 392,261 bytes raw / 118,126 gzip (limit 512,000).
+- INSTRUCTIONS: 2,233 characters (2,957 with the Commons guide), unchanged.
+
+## Round 12: review 11 and GM - Design's round-12 rulings (2026-10-26)
+
+Branch feat/agent-presence, base main (head 942a375c before this round).
+
+### What changed and why
+
+- **M-1, a held Cmd+Z is bound to its step.** Round 11's hold replayed a held press against whatever was on top when the step settled, so an agent's or the person's newer edit could be undone instead (H2 upload, H8 model configure, H9 accept, live S1 clear). Now each held press records its target (`graphStore.ts` `PressTarget`, ~3145): the undo entry it was pressed for, or the inverse of an earlier held press (`{ inverseOf }`).
+  - On settle (`runHeldPresses`, ~3275), a press applies only to its own step or to a delete's re-pushed successor of that step (`stepSuccessors`, recorded in `applyCanvasNodeChanges` ~2049).
+  - If a newer step is on top, every held press is dropped and GM's notice shows: "Nothing was undone. Your last change was still saving." (`lib/deleteNotice.ts` `DROPPED_UNDO_TEXT`).
+  - A step that was cancelled or refused drops its press silently: the failure notice already says what happened.
+- **M-1 root cause, a clear covers only the ids it sent.** `clearGraph` (~7017) and `clearBackendNodes` (~7052) remove only nodes that the step's snapshot holds and that did not arrive while it was in flight (`clearedBy`, `arrivedSince` filled by `noteSyncArrivals` in both graphSync branches). A node an agent added mid-clear stays. A clear whose step is already on the stack folds into it instead of pushing a second step. Chat `/clear` uses the same path (L-6).
+- **L-2, a step whose change arrives by echo.** Chat upload (`ChatPanel.tsx` ~846-921) and file drop (`canvasFileDrop.ts` ~203-215) pass the node id from the answer: `endUndoStep(step, { arrives })`. The step settles only once that node is on the canvas (`awaitArrival`, ~3195), and the line ~1021 note above is corrected.
+- **L-3, the 15 s limit drops, never applies late.** At the limit the held presses go with the notice. A later answer is a normal sync: no stray redo, canvas and Nebula's graph agree.
+- **L-4, a project switch.** `loadGraph`, `loadProjectGraph` and a graphReplaced sync call `forgetStepsInFlight` (~3238): the old project's presses are dropped with the notice, and its steps no longer hold anything, so a press in the new project never waits.
+- **L-5, an accept that was undone runs nothing.** `canvasProposalsStore.ts` ~225: if any of the run's nodes is gone from the canvas after the accept settles, the approval is released and no run is sent.
+- **Proposal accept, no empty step.** `adoptAcceptedProposal` (~6428) adds no step when nothing changed and folds into the accept's step when it is on the stack (H9: no no-op step, no stray redo).
+- **L-1, L-7, docs.** "Model: default … Krea picks it" was wrong (Krea requires Topaz Standard's model) and is gone from `docs/MCP-SETUP.md`. `skills/nebula/SKILL.md` lists Topaz video's Enhancement model and Frame interpolation model.
+- **The palette.** "Ask the agent…" closed the palette, so agent mode was unreachable. `agent:ask` now has `keepsOpen` (`lib/commandPalette.ts` 61; `CommandPalette.tsx` 210). Escape and Enter are ignored while composing (`isComposing` or keyCode 229, `composing()` at 27). Focus follows the mode.
+- **GM r12, rows wrap only at " · " (bug r11-topaz-rows).** `PlaceholderRunDialog.tsx` `RowSegments` (83) renders each row as whole segments (`rowSegments` in `placeholderRunConfirm.ts` 310). Each segment is an inline-block that keeps its trailing " ·", and the lead holds the dot and the name. `styles/placeholder-run-dialog.css` 77-90: segments get `text-indent: 0`, and a dotted row's lead keeps the 16px hanging indent. Every row kind (dotted and muted) and every node kind.
+- **GM r12 item 1, "the agents".** The skip line, the included line (`pendingNodes.ts` 70) and the backend's paid-placeholder refusal (`main.py` 8816, `services/pending_nodes.py` 228).
+- **GM r12 item 2, Meshy.** "Mesh type: Smart Topology (Meshy T2)" for Meshy text- and image-to-3D, named at its default too (`placeholderRunConfirm.ts` 169-170), so a switch re-asks.
+- **GM r12 item 3.** A changed free node stays named in the replay sentence, after the names with rows (already so; a test now holds it).
+- **Addendum (a).** The dropped-undo notice is GM's sentence for all three cases (newer step on top, the 15 s limit, a project switch). No button.
+- **Addendum (b), a model nobody chose.**
+  - Inventory (`backend/services/model_choice.py` `required_model_settings`): Krea definitions whose model-choosing setting is required with no default. These are Topaz Standard's Model and a node app's Version. Every other Krea model setting has a default.
+  - Canvas: a required setting with nothing in it reads "Model: not chosen" ("Version: not chosen") and keeps the rest of the row (`SETTING_NOT_CHOSEN`, 164).
+  - Before any dialog, `refuseUnchosenModel` (`graphStore.ts` ~3907) shows "Nothing ran. Choose a model for “Clean plate” first." and sends nothing. It runs on every run path: a node's Run (Inspector and context menu included) through `confirmDirectRun` (~4046), an accepted proposal's run (~5858), Run selected (~6175), the toolbar's Run (~5777), Creator Studio's cluster (~6266), and replays from Run history (~2712). Cinema shots go through `confirmDirectRun`.
+  - Backend: `engine.unchosen_model_errors` (810) runs first in `validate_graph`, with the node's name (`name_of=_run_names(...)` at every call). A direct run over placeholders is refused before its placeholder confirmation (`_refuse_unchosen_models`, 4818, called at 9099 and 9758).
+  - Agents' `run_nodes` and `nebula run` read "Nothing ran, so nothing was spent. n7 (Clean plate): Choose a model for “Clean plate” first."
+  - Docs: MCP-SETUP.md's "A model nobody chose" bullet; SKILL.md's Run section (with `nebula set`).
+- **INSTRUCTIONS unchanged:** 2,233 characters (2,957 with the Commons guide).
+
+### Every beginUndoStep caller under the bound press
+
+- **Deletes** (Delete key, `deleteSelected`, `deleteNode`, `deleteGeneration`, `deleteCanvasElements`): the press applies to the step or to its re-pushed successor. A newer step on top drops it with the notice.
+- **Toolbar Clear canvas, chat /clear:** fold into their own step and clear only the ids they sent. A newer step on top drops the press with the notice.
+- **Chat upload, file drop:** settle once both the answer and the node's echo are in.
+- **Proposal accept:** the adopt folds into its step, with no empty step. A run is skipped if the accept was undone.
+- **OpenRouter and Replicate configures:** the local set happens at once, with no extra step. A newer step on top drops the press.
+- **A cancelled or refused step:** its press is dropped silently.
+- **The 15 s limit, a project switch:** drop with the notice.
+
+### Decisions and tradeoffs
+
+- **Drop, not redirect.** When a newer step is on top, the press is dropped rather than applied to the older step underneath. Undoing out of stack order would split the canvas from Nebula's graph. The person presses again, and the notice says why.
+- **"Version: not chosen" and "Choose a version for “X” first."** extend GM's Topaz ruling to krea-node-app. GM to confirm.
+- **The backend's card and agent line is "Choose a model for “X” first."** without "Nothing ran.", because run_nodes' frame already opens with "Nothing ran, so nothing was spent." The canvas notice is GM's full sentence.
+- **"Mesh type"** follows GM's casing; the card label is "Mesh Type".
+
+### Tests (each failed first on the current code)
+
+- `tests/heldUndoBound.round12.test.tsx`, 19 tests. 14 failed first, for example:
+  - H2: nodes [n1, n2], without Codex's n7;
+  - H3 and S1: redo 1, not 0;
+  - H6: the value 'NewProjectEdit';
+  - H7: n2 not removed;
+  - H9: undo 3, not 2;
+  - H10: nodes [n1] at 15 s;
+  - H13: only [local];
+  - clear-only-sent: [], not ['later'];
+  - delete echo + agent: undo 3.
+  - H8, H11 and H12 also failed when run on their own: H8 [n1], H11 [n1, n2], H12 redo 1.
+  - H1 and S1 answer-first failed only because `DROPPED_UNDO_TEXT` did not exist yet.
+  - H5 is a control: deletes already re-pushed.
+  - The source check that ChatPanel and canvasFileDrop pass `arrives` failed 3 ways on HEAD's files.
+- `tests/acceptUndoneNoRun.round12.test.ts` (H14 + control): HEAD sent 1 execute request.
+- `tests/commandPaletteAgentMode.round12.test.tsx`: 8 of 8 failed first.
+- `tests/lib/placeholderRunConfirm.round12.test.ts`: 10 failed first. Rows read 'Model: default'; the node app's Version was null; `modelNotChosenText` and `rowSegments` did not exist; Meshy's setting was null; the lines said "agents are". Item 3 and the chosen-model case passed as controls.
+- `tests/PlaceholderRunDialog.round12.test.tsx`: no segments existed (the length check guards against a vacuous pass).
+- `tests/graphStore.modelNotChosen.round12.test.ts`: 7 failed on HEAD's store; the control passed.
+- `backend/tests/test_model_not_chosen_round12.py`, 20 tests: 12 failed first. The runs got 'finished' or 'started' instead of validation_error, a direct run over a placeholder got 409 instead of the refusal, and the lines were worded wrong. The agent, whole-canvas and chosen-model runs use the real `validate_graph` (the `pend` fixture stubs it).
+- Updated:
+  - `Canvas.fileDrop.test` (arrives);
+  - `ProposalBar.test` and `canvasProposalsStore.test` (their adopt mock now puts the run's nodes on the canvas);
+  - `pendingNodes.test`, `runScope.placeholders.test`, `test_pending_nodes_round4.py`, `test_pending_nodes.py` ("the agents");
+  - `placeholderRunConfirm.round11.test` ("Model: not chosen").
+
+### Live check (round 12)
+
+- Isolated backend on 8795 and Vite on 5795, no keys, 8000-8010 and 5173 blocked. 19 of 19 checks passed. 2 attempts were blocked, both canaries; none went toward Justin's ports.
+- **S1, Clear canvas held while Codex adds a node:**
+  - Cmd+Z pressed during the clear was dropped with GM's notice. Canvas and backend were both [n1:Agent node], with redo 0.
+  - Three Cmd+Z presses then walked back Codex's label, Codex's node and the clear. Hero prompt and Second prompt came back on the canvas and in Nebula's graph.
+- **Rows, at 1440 and 1280:**
+  - The Bloom 2 row (Grain model: gaussian), the Meshy row ("Mesh type: Smart Topology (Meshy T2)") and the long-name row each wrap only between segments. Every continuation line starts at the 16px indent.
+  - The long name wraps inside its own segment because it is wider than the row.
+  - Cancel sent nothing.
+- **Model not chosen:** Topaz Standard as Codex's placeholder showed no dialog and GM's refusal, and nothing was sent. An agent's run_nodes read the refusal.
+- **"The agents":**
+  - "Skipped 3 nodes the agents are still setting up." (toast).
+  - "Includes 4 nodes the agents are still setting up" (the selection's Run title; the target counts as downstream).
+  - "Nothing ran. This run includes 2 paid nodes the agents are still setting up, …" (backend 409).
+- **Review 11's live-rv11.mjs on 8795/5795: 11 of 13.**
+  - S1 "brings back the cleared nodes" fails by design: under M-1 the press is dropped with the notice, and the later presses restore everything (above).
+  - S2's computed-style diff is only `--commons-detail-w`, which nothing in the prompt reads (as in round 11).
+  - S3a-e pass: agent mode is reachable, Escape goes back to commands.
+- **Screenshots** in `scratchpad/agent-presence/`: `r12-rows-wrap`, `r12-dropped-undo`, `r12-clear-restored`, `r12-model-not-chosen` and `r12-the-agents-skipped`, each at `-1440` and `-1280`.
+
+### Open items (round 12)
+
+- **For GM:**
+  - "Version: not chosen" and "Choose a version for “X” first." for a node app;
+  - "Mesh type" vs the card's "Mesh Type";
+  - the backend line without "Nothing ran." inside run_nodes' own "Nothing ran" frame.
+- **A cancelled step's held press is dropped silently.**
+- **The Commons prompt doesn't close on Escape when focus has left it** (the live script blurred it). This was the same before ModalPortal; not changed here.
+- **Known gaps, unchanged** (item 7 follow-up, for the PR body):
+  - the tab that hasn't heard of an agent's placeholder, with "Ask before costly runs" on, shows the browser confirm and then Nebula's dialog;
+  - free-placeholder runs still use the browser's costly-run confirm;
+  - the browser confirm shows whole dollars from $10.
+
+### Gates (round 12)
+
+- Backend full suite: 11,047 passed, 71 skipped and 8 failed (19 min 16 s), run beside the vitest suite.
+  - 7 failures were in `test_provider_start_admission.py`. Its `validate_graph` stubs (`lambda *_args`) didn't accept the new `name_of` keyword; they now take `**_kwargs`. That file plus the eighth failure's file, rerun alone: 53 passed.
+  - The eighth was `test_krea_mcp_server.py::test_stdio_bridge_process_connects_to_only_local_discovery_routes`, a timing test under load; it passes alone.
+- Vitest full suite: 492 files and 6,154 tests. 478 files passed and 14 failed (47 tests: 41 "Test timed out", 6 focus or find timeouts under load).
+  - The 14 rerun one file at a time (`--no-file-parallelism`): 214 tests passed.
+- errorCopy ratchets: 14 files, 173 tests passed.
+- tsc: clean.
+- Lint: clean (the inline-style and Slava-scope guards passed).
+- Build budget: 392,767 bytes raw / 118,192 gzip (limit 512,000).
 - INSTRUCTIONS: 2,233 characters (2,957 with the Commons guide), unchanged.

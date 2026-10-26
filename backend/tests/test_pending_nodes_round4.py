@@ -360,7 +360,7 @@ def test_the_refusal_names_agents_when_they_are_several(pend):
     response = _direct(pend, combine)
     assert response.status_code == 409, response.text
     assert response.json()["detail"]["message"] == (
-        "Nothing ran. This run includes 2 paid nodes agents are still setting up, and Nebula asks "
+        "Nothing ran. This run includes 2 paid nodes the agents are still setting up, and Nebula asks "
         "before running those. Click “Run” again to review them.")
 
 

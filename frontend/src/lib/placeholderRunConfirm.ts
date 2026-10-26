@@ -1,6 +1,7 @@
 import type { Edge, Node } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { NodeData } from '../types';
+import { allParamDefinitions } from './directRoute';
 import { isLocalRun, modelChoice } from './nodeKeys';
 import { cleanPending, type PendingAgent } from './pendingNodes';
 import { formatUsdRange } from './pricing';
@@ -21,7 +22,9 @@ import { runCostNotes, type RunCost, type RunScopeSummary } from './runScope';
  * cents, and the ruling on review 8 L-b for a replay of a placeholder its
  * agent changed after the run was saved; round 10 for its names and Krea's
  * sub-model settings in rows; round 11 for three names before a count, "the
- * agents", the grain model and "Model: default"), verbatim.
+ * agents", the grain model and "Model: default"; round 12 for "Model: not
+ * chosen", Meshy's mesh type and a row that wraps only between its
+ * segments), verbatim.
  * The backend refuses the run unless it carries these exact paid
  * placeholders and a total no lower than its own estimate (main.execute_node
  * and main.generate_cinema_shot, `confirmedPlaceholders` and
@@ -42,8 +45,9 @@ export interface PlaceholderRunRow {
   /** A Krea node's sub-model setting, as its card names it: "Variant: Large",
    * "Engine: …", "Model: …", "Version: …" (GM - Design, round 10, item 2:
    * named even when it is the default, so a switch re-asks); "Grain model: …"
-   * with Grain on, and "Model: default" when Krea picks it (round 11, items 4
-   * and 5); else null. */
+   * with Grain on (round 11, item 4), "Mesh type: …" on a Meshy node and
+   * "Model: not chosen" for a required one with nothing chosen (round 12,
+   * item 2 and addendum b); else null. Several are joined with " · ". */
   setting: string | null;
   /** "$0.04", "$0.0047–0.43", "price not listed", "price depends on its
    * input" or "on your Krea plan" (GM, rounds 4 and 6). */
@@ -152,9 +156,19 @@ const KREA_SETTING_LABELS: Readonly<Record<string, string>> = { node_app_version
  * model runs only with Grain on. Magnific Precise's Flavor is a style setting on the same engine,
  * so it is never one of these settings. */
 const KREA_SETTING_WHEN: Readonly<Record<string, string>> = { grain_model: 'grain' };
-/** GM - Design, round 11, item 5: a model the backend leaves to Krea, which the tab can't know
- * (Topaz Standard with no model chosen; the gateway sends no `model`), so a later switch still shows up. */
-const KREA_SETTING_DEFAULT = 'default';
+/** GM - Design, round 12 addendum (b): a required setting with nothing chosen (Topaz Standard's
+ * Model, a node app's Version) reads "Model: not chosen", and the row keeps its other segments:
+ * it shows why the run will be refused. (Round 11's "Model: default" assumed Krea picks one; Krea's
+ * schema requires it, and the gateway refuses the run: review 11, L-1.) An optional one with
+ * nothing chosen (none today) is left to the provider: "default". */
+export const SETTING_NOT_CHOSEN = 'not chosen';
+const SETTING_DEFAULT = 'default';
+/** Settings of other nodes that pick the model that runs, named like Krea's (GM - Design, round 12,
+ * item 2: Meshy's mesh type, "Mesh type: Smart Topology (Meshy T2)"; a switch re-asks). */
+const OTHER_SETTINGS: Readonly<Record<string, ReadonlyArray<{ key: string; label: string }>>> = {
+  'meshy-text-to-3d': [{ key: 'model_type', label: 'Mesh type' }],
+  'meshy-image-to-3d': [{ key: 'model_type', label: 'Mesh type' }],
+};
 
 type ParamSpec = NonNullable<(typeof NODE_DEFINITIONS)[string]['params']>[number];
 
@@ -208,31 +222,93 @@ function modelName(node: Node<NodeData>): string {
   return definition.displayName;
 }
 
-/** A Krea node's sub-model settings as its row names them, "Variant: Large"
- * (GM - Design, round 10, item 2: the setting's label and the chosen
- * option's label, as the node card shows them, even when it is the default),
- * joined with " · "; null for any other node, or none chosen. */
+function unset(value: unknown): boolean {
+  return value === undefined || value === null || (typeof value === 'string' && !value.trim());
+}
+
+/** A setting's words in a row: "Variant: Large" (the chosen option's label),
+ * "Version: v_9" (a typed id), "Model: not chosen" (required, nothing
+ * chosen), "Model: default" (optional, nothing chosen); null otherwise. */
+function settingWords(spec: ParamSpec, label: string, value: unknown): string | null {
+  if (spec.type === 'enum') {
+    const option = spec.options?.find((candidate) => typeof candidate === 'object' && candidate.value === value);
+    if (option && typeof option === 'object' && option.label) return `${label}: ${option.label}`;
+  } else if (typeof value === 'string' && value.trim()) {
+    return `${label}: ${cut80(value.trim())}`;
+  }
+  if (!unset(value)) return null;
+  return `${label}: ${spec.required ? SETTING_NOT_CHOSEN : SETTING_DEFAULT}`;
+}
+
+/** The settings that pick which model runs, as the row names them, "Variant:
+ * Large" (GM - Design, round 10, item 2: the setting's label and the chosen
+ * option's label, as the node card shows them, even when it is the default;
+ * round 12, item 2: Meshy's "Mesh type"), joined with " · "; null for any
+ * other node, or none named. */
 function kreaSetting(node: Node<NodeData>): string | null {
   const definition = NODE_DEFINITIONS[node.data?.definitionId];
-  if (!definition || !isKrea(definition)) return null;
+  if (!definition) return null;
   const params = (node.data?.params ?? {}) as Record<string, unknown>;
   const named: string[] = [];
-  const specs = specsOf(definition);
-  for (const spec of specs) {
-    if (!isKreaSetting(definition, spec)) continue;
-    const when = KREA_SETTING_WHEN[spec.key];
-    if (when && (params[when] ?? specs.find((candidate) => candidate.key === when)?.default) !== true) continue;
-    const value = params[spec.key] ?? spec.default;
-    const label = KREA_SETTING_LABELS[spec.key] ?? spec.label;
-    if (spec.type === 'enum') {
-      const option = spec.options?.find((candidate) => typeof candidate === 'object' && candidate.value === value);
-      if (option && typeof option === 'object' && option.label) named.push(`${label}: ${option.label}`);
-      else if (value === undefined || value === null || value === '') named.push(`${label}: ${KREA_SETTING_DEFAULT}`);
-    } else if (typeof value === 'string' && value.trim()) {
-      named.push(`${label}: ${cut80(value.trim())}`);
+  const other = OTHER_SETTINGS[definition.id];
+  if (other) {
+    const specs = allParamDefinitions(definition);
+    for (const { key, label } of other) {
+      const spec = specs.find((candidate) => candidate.key === key);
+      const words = spec ? settingWords(spec, label, params[key] ?? spec.default) : null;
+      if (words) named.push(words);
+    }
+  }
+  if (isKrea(definition)) {
+    const specs = specsOf(definition);
+    for (const spec of specs) {
+      if (!isKreaSetting(definition, spec)) continue;
+      const when = KREA_SETTING_WHEN[spec.key];
+      if (when && (params[when] ?? specs.find((candidate) => candidate.key === when)?.default) !== true) continue;
+      const words = settingWords(spec, KREA_SETTING_LABELS[spec.key] ?? spec.label, params[spec.key] ?? spec.default);
+      if (words) named.push(words);
     }
   }
   return named.length > 0 ? named.join(' · ') : null;
+}
+
+/** The field word of a node's required model-choosing setting with nothing
+ * chosen ("model", "version"), or null (backend services/model_choice.py). */
+function unchosenField(node: Node<NodeData>): string | null {
+  const definition = NODE_DEFINITIONS[node.data?.definitionId];
+  if (!definition || !isKrea(definition)) return null;
+  const params = (node.data?.params ?? {}) as Record<string, unknown>;
+  for (const spec of specsOf(definition)) {
+    if (!isKreaSetting(definition, spec) || !spec.required || !unset(spec.default)) continue;
+    if (unset(params[spec.key])) return (KREA_SETTING_LABELS[spec.key] ?? spec.label).toLowerCase();
+  }
+  return null;
+}
+
+/**
+ * GM - Design, round 12 addendum (b), verbatim: "Nothing ran. Choose a model
+ * for “Clean plate” first." for the first node among `nodes` (the nodes a run
+ * would send) whose required model setting has nothing chosen, or null. The
+ * gateway would refuse that run, so the canvas refuses it before any dialog
+ * ("Don't ask someone to approve a run that can't go out"), on every run
+ * path; the backend refuses it the same way (execution.engine
+ * unchosen_model_errors). `names`: a node's name for this run.
+ */
+export function modelNotChosenText(nodes: Node<NodeData>[], names?: Readonly<Record<string, string>>): string | null {
+  for (const node of nodes) {
+    const field = unchosenField(node);
+    if (!field) continue;
+    const name = names?.[node.id] || node.data?.label || NODE_DEFINITIONS[node.data?.definitionId]?.displayName || node.id;
+    return `Nothing ran. Choose a ${field} for “${name}” first.`;
+  }
+  return null;
+}
+
+/** A row's segments, in order: the name, the model, each setting, the price
+ * (GM - Design, round 12: the row wraps only between them, never inside one).
+ * The dialog draws each as one unit, with the " · " between. */
+export function rowSegments(row: PlaceholderRunRow): string[] {
+  return [row.name, ...(row.model ? [row.model] : []), ...(row.setting ? row.setting.split(' · ') : []), row.price];
 }
 
 /** Calls a provider (backend model_pricing.is_local): an unknown type counts as paid. */
