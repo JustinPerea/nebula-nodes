@@ -90,7 +90,7 @@ describe('a price that changes while the dialog is open', () => {
   it('askPlaceholderRun shows what its watch sends, at once, and stops watching once answered', async () => {
     let push: ((next: PlaceholderRunConfirm) => void) | undefined;
     const stop = vi.fn();
-    let answer: Promise<boolean> | undefined;
+    let answer: Promise<PlaceholderRunConfirm | null> | undefined;
     await act(async () => {
       answer = askPlaceholderRun(model('price not listed', '$0'), { watch: (show) => { push = show; return stop; } });
     });
@@ -100,7 +100,8 @@ describe('a price that changes while the dialog is open', () => {
     fireEvent.click(screen.getByText('Run for $35'));
     act(() => { vi.advanceTimersByTime(500); });
     await act(async () => { fireEvent.click(screen.getByText('Run for $35')); });
-    await expect(answer).resolves.toBe(true);
+    // Review 5, L6: it hands back the words it showed.
+    await expect(answer).resolves.toMatchObject({ runLabel: 'Run for $35' });
     expect(stop).toHaveBeenCalledOnce();
   });
 });

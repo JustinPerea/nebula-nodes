@@ -265,16 +265,17 @@ export function proposalEstimateLabel(view: ProposalView): string | null {
 }
 
 /** A proposal whose whole run waits on agents' placeholders: its run skips
- * them and everything that needs them, so it runs nothing. */
-function runsNothing(view: ProposalView): boolean {
+ * them and everything that needs them, so it runs nothing, and Accept starts
+ * no run for it (canvasProposalsStore.accept; review 5, L1). */
+export function runsNothing(view: ProposalView): boolean {
   const { paidRuns, freeRuns, pendingSkipped } = view.cost;
   return view.run.length > 0 && paidRuns === 0 && freeRuns === 0 && Boolean(pendingSkipped && pendingSkipped.count > 0);
 }
 
 /** The primary button's words. "Accept" when accepting runs nothing (GM -
- * Design, round 5, item 3): the run Accept starts then skips every node
- * (canvasProposalsStore.accept, backend main._skip_placeholders), and nothing
- * is queued for when the agent finishes. */
+ * Design, round 5, item 3): Accept starts no run for it (it would skip every
+ * node: backend main._skip_placeholders), and nothing is queued for when the
+ * agent finishes. */
 export function acceptLabel(view: ProposalView): string {
   if (view.run.length === 0 || runsNothing(view)) return 'Accept';
   return view.cost.paidRuns > 0 ? `Accept & run (${view.cost.paidRuns} paid)` : 'Accept & run';

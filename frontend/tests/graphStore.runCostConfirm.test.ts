@@ -8,6 +8,8 @@ vi.mock('../src/lib/backend', async (importOriginal) => ({
 }));
 const askMock = vi.hoisted(() => vi.fn());
 vi.mock('../src/components/askPlaceholderRun', () => ({ askPlaceholderRun: askMock }));
+/** The person clicks Run on the words the dialog showed (it hands them back: review 5, L6). */
+const yes = async (model: unknown) => model;
 vi.mock('../src/lib/wsClient', () => ({ wsClient: {
   connect: vi.fn(), subscribe: vi.fn(), disconnect: vi.fn(),
 } }));
@@ -114,7 +116,7 @@ describe('run cost confirmation', () => {
 
       it('always asks, even with "Ask before costly runs" off, and Cancel runs and changes nothing', async () => {
         useUIStore.setState({ runCostConfirmUsd: null });
-        askMock.mockResolvedValue(false);
+        askMock.mockResolvedValue(null);
         const confirm = vi.spyOn(window, 'confirm');
         const execute = vi.spyOn(api, 'executeNode');
         const before = useGraphStore.getState().nodes;
@@ -135,7 +137,7 @@ describe('run cost confirmation', () => {
 
       it('replaces the costly-run confirm when both apply: one dialog', async () => {
         useUIStore.setState({ runCostConfirmUsd: 0.01 });
-        askMock.mockResolvedValue(false);
+        askMock.mockResolvedValue(null);
         const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
         await useGraphStore.getState().executeNode('b');
         expect(askMock).toHaveBeenCalledOnce();
@@ -144,7 +146,7 @@ describe('run cost confirmation', () => {
 
       it('a confirmed run sends exactly the paid placeholders it confirmed', async () => {
         useUIStore.setState({ runCostConfirmUsd: 0.01 });
-        askMock.mockResolvedValue(true);
+        askMock.mockImplementation(yes);
         const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
         const execute = vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'started' } as never);
         await useGraphStore.getState().executeNode('b');
@@ -167,7 +169,7 @@ describe('run cost confirmation', () => {
         useUIStore.setState({ runCostConfirmUsd: 0.01 });
         const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
         const execute = vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'started' } as never);
-        askMock.mockImplementationOnce(async () => { paidX(); return true; }).mockResolvedValueOnce(true);
+        askMock.mockImplementationOnce(async (model: unknown) => { paidX(); return model; }).mockImplementationOnce(yes);
         await useGraphStore.getState().executeNode('b');
         expect(askMock).toHaveBeenCalledTimes(2);
         expect(askMock.mock.calls[0][0].runLabel).toBe('Run for $1.20');
@@ -185,45 +187,48 @@ describe('run cost confirmation', () => {
             { match: { model: 'gemini-3-pro-image' }, price: 0.9 }, { match: {}, price: 0.6 }] },
         } } });
         const execute = vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'started' } as never);
-        askMock.mockImplementationOnce(async () => {
+        askMock.mockImplementationOnce(async (model: unknown) => {
           useGraphStore.setState({ nodes: useGraphStore.getState().nodes.map((node) => node.id === 'a'
             ? { ...node, data: { ...node.data, params: { model: 'gemini-3-pro-image' } } } : node) });
-          return true;
-        }).mockResolvedValueOnce(false);
+          return model;
+        }).mockResolvedValueOnce(null);
         await useGraphStore.getState().executeNode('b');
         expect(askMock).toHaveBeenCalledTimes(2);
         expect(askMock.mock.calls[1][0].rows[0].model).not.toBe(askMock.mock.calls[0][0].rows[0].model);
         expect(execute).not.toHaveBeenCalled();
       });
 
-      it('falls through to the costly-run confirm when an agent made it normal and added a paid node meanwhile', async () => {
+      // Review 5, H1: once the dialog has shown it stays the authority; the
+      // costly-run setting and the browser's confirm never take over.
+      it('asks again in the dialog when an agent made it normal and added a paid node meanwhile', async () => {
         useUIStore.setState({ runCostConfirmUsd: 0.01 });
-        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
         const execute = vi.spyOn(api, 'executeNode');
-        askMock.mockImplementation(async () => {
+        askMock.mockImplementationOnce(async (model: unknown) => {
           paidX();
           useGraphStore.setState({ nodes: useGraphStore.getState().nodes.map((node) => node.id === 'a'
             ? { ...node, data: { ...node.data, pending: undefined } } : node) });
-          return true;
-        });
+          return model;
+        }).mockResolvedValueOnce(null);
         await useGraphStore.getState().executeNode('b');
-        expect(askMock).toHaveBeenCalledOnce();
-        expect(confirm).toHaveBeenCalledOnce();
-        expect(confirm.mock.calls[0][0]).toContain('could cost up to $1.80');
+        expect(askMock).toHaveBeenCalledTimes(2);
+        expect(askMock.mock.calls[1][0]).toMatchObject({ heading: "Run with Codex's changes?", runLabel: 'Run for $1.80' });
+        expect(confirm).not.toHaveBeenCalled();
         expect(execute).not.toHaveBeenCalled();
       });
 
-      it('with the costly-run setting off, that run goes ahead without a confirmation to send', async () => {
+      it('with nothing else changed, that run goes ahead held to the total the person confirmed', async () => {
         useUIStore.setState({ runCostConfirmUsd: null });
         const execute = vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'started' } as never);
-        askMock.mockImplementation(async () => {
+        askMock.mockImplementation(async (model: unknown) => {
           useGraphStore.setState({ nodes: useGraphStore.getState().nodes.map((node) => node.id === 'a'
             ? { ...node, data: { ...node.data, pending: undefined } } : node) });
-          return true;
+          return model;
         });
         await useGraphStore.getState().executeNode('b');
         expect(execute).toHaveBeenCalledOnce();
-        expect(execute.mock.calls[0][6]).toBeUndefined();
+        expect(execute.mock.calls[0][6]).toEqual([]);
+        expect(execute.mock.calls[0][7]).toBeCloseTo(1.2);
       });
 
       it("an accepted proposal's run never asks (it skips the placeholder)", async () => {

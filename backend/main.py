@@ -8789,10 +8789,18 @@ def _placeholder_confirm_refusal(run_id: str, paid: list[str], estimate: Mapping
     one = len(paid) == 1
     again = ("Generate again to review it." if shot
              else f"Click “Run” again to review {'it' if one else 'them'}.")
+    if paid:
+        message = (f"Nothing ran. This run includes {len(paid)} paid {'node' if one else 'nodes'} {who} still "
+                   f"setting up, and Nebula asks before running those. {again}")
+    else:
+        # No placeholder left (their agents finished them while the dialog
+        # was open), but the run now costs more than the person confirmed
+        # (review 5, H1): GM's words from the dialog and the refusal.
+        again = "Generate again to review it." if shot else "Click “Run” again to review it."
+        message = f"Nothing ran. This run changed since you last reviewed it. {again}"
     return HTTPException(status_code=409, detail={
         "code": "placeholder_confirm_required",
-        "message": (f"Nothing ran. This run includes {len(paid)} paid {'node' if one else 'nodes'} {who} still "
-                    f"setting up, and Nebula asks before running those. {again}"),
+        "message": message,
         "placeholders": paid,
         "agents": agents,
         "estimate": dict(estimate) if estimate is not None else None,
@@ -8822,15 +8830,21 @@ async def _require_placeholder_confirmation(
     it. Every route that runs the person's direct run calls this:
     /api/execute-node and /api/cinema/generate-shot. Agents' runs of their
     own placeholders are unchanged (their ``ready`` holds only their own, and
-    they never confirm)."""
+    they never confirm).
+
+    Once the dialog showed (the run carries ``confirmed_cost``), that total
+    holds even when no placeholder is left: their agents may have finished
+    them while it was open, and a pricier model must not run at a total
+    nobody saw (review 5, H1). The ids confirmed then don't matter, since
+    nothing is a placeholder any more."""
     if identify_agent(current_request_headers()) is not None or not _is_person_request():
         return
     paid = _paid_placeholders(nodes, ready)
-    if not paid:
+    if not paid and confirmed_cost is None:
         return
     sizes = await _measure_confirmed_run(nodes, edges)
     estimate = _run_estimate(nodes, edges, passes=passes, api_keys=api_keys, sizes=sizes)
-    if sorted(set(confirmed or [])) != sorted(paid):
+    if paid and sorted(set(confirmed or [])) != sorted(paid):
         raise _placeholder_confirm_refusal(run_id, paid, estimate, shot=shot)
     high = None if estimate is None else estimate["high"]
     if high is None:
@@ -9931,7 +9945,9 @@ async def get_input_sizes(body: dict[str, Any]) -> dict:
     given and its resolved path both inside the store, no ``..``, nothing
     Nebula is still writing: services/input_sizes.py), so the canvas and the
     check agree; an outside URL or any other path is null, never fetched or
-    opened. An inline data: image is null here (the canvas sends files)."""
+    opened. An inline data: image is measured as the run's checks measure it
+    (its pixels are in the run's params), so the canvas prices it as the
+    confirmation does (review 5, L4)."""
     refs = body.get("refs") if isinstance(body, dict) else None
     if not isinstance(refs, list) or len(refs) > MAX_SIZE_REFS:
         raise HTTPException(status_code=400, detail=f"refs must be a list of at most {MAX_SIZE_REFS} {{ref, kind}}")
@@ -9944,7 +9960,7 @@ async def get_input_sizes(body: dict[str, Any]) -> dict:
         wanted.append((ref, kind))
 
     def measure_all() -> dict[str, Any]:
-        return {ref: input_sizes.measure(ref, kind, inline=False) for ref, kind in wanted}
+        return {ref: input_sizes.measure(ref, kind) for ref, kind in wanted}
 
     return {"sizes": await asyncio.to_thread(measure_all)}
 

@@ -44,7 +44,7 @@ export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) 
         type="button"
         className="cinema-studio-toolbar__action"
         onClick={() => {
-          if (!getCinemaUploadIssue(cinemaNodeId, undefined, true)) executeNode(cinemaNodeId);
+          if (!getCinemaUploadIssue(cinemaNodeId, undefined, true)) executeNode(cinemaNodeId, { verb: 'Generate' });
         }}
         disabled={isExecuting || isImportingGraph || Boolean(referenceIssue)}
         title={referenceIssue ?? 'Generate every shot using the current scene settings'}

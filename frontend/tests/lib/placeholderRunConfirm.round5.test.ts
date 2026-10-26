@@ -11,17 +11,18 @@ import { ExecutionStartRejectedError } from '../../src/lib/api';
 
 const codex = { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true };
 
-function node(id: string, label: string, agent?: typeof codex): Node<NodeData> {
+function node(id: string, label: string, agent?: typeof codex, definitionId = 'nano-banana'): Node<NodeData> {
   return { id, type: 'model-node', position: { x: 0, y: 0 },
-    data: { definitionId: 'nano-banana', label, params: {}, state: 'idle', outputs: {}, ...(agent ? { pending: { agent, at: 1 } } : {}) } } as Node<NodeData>;
+    data: { definitionId, label, params: {}, state: 'idle', outputs: {}, ...(agent ? { pending: { agent, at: 1 } } : {}) } } as Node<NodeData>;
 }
 const wire = (source: string, target: string): Edge => ({ id: `${source}-${target}`, source, target, sourceHandle: 'image', targetHandle: 'images' });
 const line = (nodeId: string, name: string, low: number, high: number) => ({ nodeId, name, low, high, runs: [1, 1] as [number, number] });
 const summaryOf = (cost: Partial<RunCost>): RunScopeSummary => ({ total: 2, paid: ['Hero still'], cost: {
   low: 0, high: 0, lines: [], unpriced: [], plan: [], plus: [], awaitingInput: [], sizeRefs: [], ...cost } });
 
-// i (Codex's) feeds o; k (Codex's) feeds o too.
-const nodes = [node('i', 'Hero still', codex), node('k', 'Krea still', codex), node('o', 'Final')];
+// i (Codex's) feeds o; k (Codex's) feeds o too. o is free (round 6 gives a
+// paid one its own row, which these cases don't price).
+const nodes = [node('i', 'Hero still', codex), node('k', 'Krea still', codex), node('o', 'Final', undefined, 'image-compare')];
 const edges = [wire('i', 'o'), wire('k', 'o')];
 
 describe("GM round 5: the placeholder dialog's $0 lines", () => {

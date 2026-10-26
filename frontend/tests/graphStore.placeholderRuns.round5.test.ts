@@ -23,6 +23,8 @@ vi.mock('../src/lib/backend', async (importOriginal) => ({
 }));
 const askMock = vi.hoisted(() => vi.fn());
 vi.mock('../src/components/askPlaceholderRun', () => ({ askPlaceholderRun: askMock }));
+/** The person clicks Run on the words the dialog showed (it hands them back: review 5, L6). */
+const yes = async (model: unknown) => model;
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn(), disconnect: vi.fn() } }));
 
 import { useGraphStore } from '../src/store/graphStore';
@@ -88,7 +90,7 @@ describe("review 4: the person's direct run over a paid placeholder", () => {
 
   describe("M1: Nebula's refusal re-opens the dialog with its own numbers", () => {
     it("a node's Run asks again with Nebula's total and the changed line, then runs at it, with no error", async () => {
-      askMock.mockResolvedValue(true);
+      askMock.mockImplementation(yes);
       const execute = vi.spyOn(api, 'executeNode')
         .mockRejectedValueOnce(refusal(4.8)).mockResolvedValueOnce({ status: 'started' } as never);
       await useGraphStore.getState().executeNode('b');
@@ -105,7 +107,7 @@ describe("review 4: the person's direct run over a paid placeholder", () => {
     });
 
     it('Cancel on the re-ask runs nothing, shows no refusal and leaves the placeholder as it was', async () => {
-      askMock.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+      askMock.mockImplementationOnce(yes).mockResolvedValueOnce(null);
       const execute = vi.spyOn(api, 'executeNode').mockRejectedValueOnce(refusal(4.8));
       await useGraphStore.getState().executeNode('b');
       expect(execute).toHaveBeenCalledOnce();
@@ -118,7 +120,7 @@ describe("review 4: the person's direct run over a paid placeholder", () => {
     it('a run the tab thought had no paid placeholder asks first when Nebula says it has one (no changed line)', async () => {
       // The tab hasn't heard of the flag yet.
       useGraphStore.setState({ nodes: [imageNode('a'), imageNode('b'), cinemaNode()] as never });
-      askMock.mockResolvedValue(true);
+      askMock.mockImplementation(yes);
       const execute = vi.spyOn(api, 'executeNode')
         .mockRejectedValueOnce(refusal(1.2)).mockResolvedValueOnce({ status: 'started' } as never);
       await useGraphStore.getState().executeNode('b');
@@ -130,7 +132,7 @@ describe("review 4: the person's direct run over a paid placeholder", () => {
     });
 
     it('a Cinema shot asks again the same way, and the shot never shows the refusal', async () => {
-      askMock.mockResolvedValue(true);
+      askMock.mockImplementation(yes);
       const shot = vi.spyOn(api, 'generateCinemaShot')
         .mockRejectedValueOnce(refusal(9.6, 'Nothing ran. This run includes 1 paid node Codex is still setting up, and Nebula asks before running those. Generate again to review it.'))
         .mockResolvedValueOnce({ status: 'started' });
@@ -153,7 +155,7 @@ describe("review 4: the person's direct run over a paid placeholder", () => {
           { id: 'b', definitionId: 'nano-banana', params: {}, outputs: {} },
         ], edges: [{ id: 'e1', source: 'a', sourceHandle: 'image', target: 'b', targetHandle: 'image_input' }] } };
       useGraphStore.setState({ runHistory: [record] });
-      askMock.mockResolvedValue(true);
+      askMock.mockImplementation(yes);
       const execute = vi.spyOn(api, 'executeNode')
         .mockRejectedValueOnce(refusal(4.8)).mockResolvedValueOnce({ status: 'started' } as never);
       await useGraphStore.getState().rerunHistoryRecord('saved-node');
@@ -164,7 +166,7 @@ describe("review 4: the person's direct run over a paid placeholder", () => {
     });
 
     it('any other refusal still shows as before', async () => {
-      askMock.mockResolvedValue(true);
+      askMock.mockImplementation(yes);
       vi.spyOn(api, 'executeNode').mockRejectedValueOnce(new api.ExecutionStartRejectedError('Busy.', 409, { detail: 'Busy.' }));
       await useGraphStore.getState().executeNode('b');
       expect(askMock).toHaveBeenCalledOnce();
@@ -175,11 +177,11 @@ describe("review 4: the person's direct run over a paid placeholder", () => {
   describe('M3 / GM: the dialog re-asked over a changed run says so', () => {
     it('the second ask after an agent changed the run carries the changed line', async () => {
       const execute = vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'started' } as never);
-      askMock.mockImplementationOnce(async () => {
+      askMock.mockImplementationOnce(async (model: unknown) => {
         useGraphStore.setState({ nodes: useGraphStore.getState().nodes.map((node) => node.id === 'a'
           ? { ...node, data: { ...node.data, params: { model: 'gemini-3-pro-image' } } } : node) as never });
-        return true;
-      }).mockResolvedValueOnce(true);
+        return model;
+      }).mockImplementationOnce(yes);
       await useGraphStore.getState().executeNode('b');
       expect(askMock).toHaveBeenCalledTimes(2);
       expect(askMock.mock.calls[0][1]?.changed).toBeFalsy();
@@ -210,11 +212,12 @@ describe("review 4: the person's direct run over a paid placeholder", () => {
         const stop = options?.watch?.((next) => shown.push(next));
         useInputSizeStore.setState({ sizes: { '/clips/long-1080p.mp4': { width: 1920, height: 1080, seconds: 60, frames: 1440 } } });
         stop?.();
-        return true;
+        return shown[shown.length - 1]; // clicked on the measured words
       });
       await useGraphStore.getState().executeNode('u');
       expect(request).toHaveBeenCalledWith([{ ref: '/clips/long-1080p.mp4', kind: 'Video' }]);
-      expect(shown[0].rows[0].price).toBe('price not listed');
+      // GM - Design, round 6, item 2: the row says so while its input is measured.
+      expect(shown[0].rows[0].price).toBe('price depends on its input');
       const measured = shown[shown.length - 1];
       expect(measured.rows[0].price).toMatch(/^\$\d/);
       expect(measured.confirmCost).toBeGreaterThan(1);
@@ -229,10 +232,10 @@ describe("review 4: the person's direct run over a paid placeholder", () => {
       useUIStore.setState({ runCostConfirmUsd: 0.01 });
       const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
       const execute = vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'started' } as never);
-      askMock.mockImplementation(async () => {
+      askMock.mockImplementation(async (model: unknown) => {
         useGraphStore.setState({ nodes: useGraphStore.getState().nodes.map((node) => node.id === 'a'
           ? { ...node, data: { ...node.data, pending: undefined } } : node) as never });
-        return true;
+        return model;
       });
       await useGraphStore.getState().executeNode('b');
       expect(askMock).toHaveBeenCalledOnce();
@@ -243,7 +246,7 @@ describe("review 4: the person's direct run over a paid placeholder", () => {
     it('a shot with a paid placeholder never also asks the browser', async () => {
       useUIStore.setState({ runCostConfirmUsd: 0.01 });
       const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
-      askMock.mockResolvedValue(true);
+      askMock.mockImplementation(yes);
       vi.spyOn(api, 'generateCinemaShot').mockResolvedValue({ status: 'started' });
       await useGraphStore.getState().executeShot('cine', 's1', undefined, 2);
       expect(askMock).toHaveBeenCalledOnce();
@@ -255,7 +258,7 @@ describe("review 4: the person's direct run over a paid placeholder", () => {
     it('asks App for a fresh copy of the settings when the dialog opens', async () => {
       const refresh = vi.fn();
       window.addEventListener('nebula:settings-refresh', refresh);
-      askMock.mockResolvedValue(false);
+      askMock.mockResolvedValue(null);
       await useGraphStore.getState().executeNode('b');
       window.removeEventListener('nebula:settings-refresh', refresh);
       expect(refresh).toHaveBeenCalledOnce();

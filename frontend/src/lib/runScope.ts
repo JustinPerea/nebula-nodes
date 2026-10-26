@@ -33,6 +33,10 @@ export interface RunCost {
   sizeUnreadable?: string[];
   /** Input files to measure (inputSizeStore) before those can be priced. */
   sizeRefs: Array<{ ref: string; kind: 'Image' | 'Video' }>;
+  /** `unpriced`, `plan` and `awaitingInput` by node id, for a reader that
+   * needs each node's own (two nodes can share a name): the placeholder
+   * dialog's rows (lib/placeholderRunConfirm.ts). */
+  ids?: { unpriced: string[]; plan: string[]; awaitingInput: string[] };
 }
 
 export interface RunScopeSummary {
@@ -260,7 +264,8 @@ export function summarizeRunScope(
 
   const paid: string[] = [];
   const pricing = costContext?.pricing;
-  const cost: RunCost = { low: 0, high: 0, lines: [], unpriced: [], plan: [], plus: [], awaitingInput: [], sizeRefs: [] };
+  const ids: NonNullable<RunCost['ids']> = { unpriced: [], plan: [], awaitingInput: [] };
+  const cost: RunCost = { low: 0, high: 0, lines: [], unpriced: [], plan: [], plus: [], awaitingInput: [], sizeRefs: [], ids };
   // Fan-out within what actually runs: a node scope already holds every
   // upstream Batch, and a cluster run sends only its own nodes and edges.
   const multipliers = pricing ? runMultipliers(included, edges) : null;
@@ -296,6 +301,7 @@ export function summarizeRunScope(
     if (!pricing || !multipliers) continue;
     if (noPrice) {
       cost.unpriced.push(name);
+      ids.unpriced.push(node.id);
       continue;
     }
     // A Krea-only setting that arrives by wire keeps the run on Krea
@@ -304,6 +310,7 @@ export function summarizeRunScope(
     const routed = withWiredBlockers(definition, params, ports);
     if (usesKreaAccount(definition, routed)) {
       cost.plan.push(name);
+      ids.plan.push(node.id);
       continue;
     }
     let priceKey: string | null;
@@ -311,6 +318,7 @@ export function summarizeRunScope(
       const missing = routeUnavailable(definition, routed, costContext.apiKeys);
       if (missing) {
         cost.unpriced.push(name);
+        ids.unpriced.push(node.id);
         cost.unavailable = { ...cost.unavailable, [name]: missing.message };
         continue;
       }
@@ -335,8 +343,10 @@ export function summarizeRunScope(
     const estimate = estimateNode(entry, definition, params, priceKey, ports.keys(), size);
     if (!estimate || estimate.currency !== 'usd') {
       cost.unpriced.push(name);
+      ids.unpriced.push(node.id);
       if (!size && awaitsInput(entryForRoute(entry, priceKey))) {
         cost.awaitingInput.push(name);
+        ids.awaitingInput.push(node.id);
         if (size === null) cost.sizeUnreadable = [...(cost.sizeUnreadable ?? []), name];
       }
       continue;
@@ -453,12 +463,16 @@ export function runCostConfirmMessage({ cost, gated, pendingIncluded }: RunScope
 
 /** The costly-run confirm's notes under its prices (gates, not included, no
  * list price, priced once its input is known); the placeholder run dialog
- * (lib/placeholderRunConfirm.ts) shows the same ones. */
-export function runCostNotes({ cost, gated }: Pick<RunScopeSummary, 'cost' | 'gated'>): string[] {
+ * (lib/placeholderRunConfirm.ts) shows the gates and what's not included
+ * (`prices: false`), and says the rest in its rows. */
+export function runCostNotes({ cost, gated }: Pick<RunScopeSummary, 'cost' | 'gated'>,
+  { prices = true }: { prices?: boolean } = {}): string[] {
   const notes: string[] = [];
   if (gated?.length) notes.push(`${gatedNote(gated)}.`);
   if (!cost) return notes;
   if (cost.plus.length) notes.push(`Not included: ${cost.plus.join(', ')}.`);
+  // The placeholder dialog says these in its rows and its own footnote (GM - Design, round 6).
+  if (!prices) return notes;
   const unpriced = cost.unpriced.filter((name) => !cost.awaitingInput?.includes(name));
   if (unpriced.length) notes.push(`No list price for ${nameList(unpriced)}, so it may cost more.`);
   notes.push(...awaitingNotes(cost).map((note) => `${note}, so it may cost more.`));

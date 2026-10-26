@@ -11,6 +11,7 @@ import {
   ProposalRequestError,
   rejectProposal,
   releaseApproval,
+  runsNothing,
   withAncestors,
 } from '../lib/canvasProposals';
 import type { Point } from '../lib/agentCursorMotion';
@@ -216,7 +217,12 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
       synced.stop();
       useGraphStore.getState().adoptAcceptedProposal(result, { undoStep, synced: synced.seen });
       get().close({ proposalId: id, status: 'accepted' });
-      if (result.runNodeIds.length > 0) {
+      if (result.runNodeIds.length > 0 && runsNothing(entry.view)) {
+        // Its whole run waits on agents' placeholders, so the button said
+        // "Accept" (GM - Design, round 5): no run, no Run history entry, no
+        // held run, and the approval goes back (review 5, L1).
+        if (result.approvalId) await releaseApproval(result.approvalId);
+      } else if (result.runNodeIds.length > 0) {
         if (useGraphStore.getState().isExecuting) {
           set({ deferredRun: { agentName: entry.view.agent.name, nodeIds: result.runNodeIds, approvalId: result.approvalId } });
         } else {

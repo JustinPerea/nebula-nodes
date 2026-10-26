@@ -404,3 +404,86 @@ Justin, Q133 b, again the rule this round holds: a paid placeholder never runs w
 - `tsc -b` clean, lint clean.
 - Build budget: 389,437 bytes raw entry, 117,275 gzip (limit 512,000 raw).
 - MCP INSTRUCTIONS: 2,233 characters, unchanged (2,957 with the commons guide, limit 3,000).
+
+## Round 6: review 5 and GM - Design's round-6 rulings (2026-10-26)
+
+Justin, Q133 b, again the rule: a paid placeholder never runs without the person's confirmation, and what runs never costs more than the person was shown. Review 5 found the one way left around the second half (H1): an agent finishing its placeholders while the dialog was open turned the run into an ordinary one, which then fell to the costly-run setting (off by default) and to a backend with nothing to hold it to. The coordinator chose both halves of the fix; GM ruled the copy. Every fix was test-first.
+
+### What changed and why
+
+- **H1 (a), the canvas: the dialog stays in charge once it has shown.** `askUntilSettled` (graphStore.ts) keeps every placeholder a dialog of this run showed (`shown`), and `placeholderRunConfirm` never returns "no dialog" while it has some. When their agents finish them while it is open, the open dialog updates in place to GM's words: "Run with Codex's changes?" / "Codex finished setting up these nodes." ("Run with the agents' changes?" / "The agents finished setting up these nodes." for several), then the changed line, the rows, the total and the button as usual. If some placeholders are left, the first heading counts only those. After the click the run is read again: the same words run at what was shown; a run with no placeholder left that the shown total still covers (no higher, and no row without a price the dialog didn't show) runs, sending the total the person saw; anything else asks again. The costly-run setting and the browser's confirm never follow the dialog any more (`coveredBy`/`costlyOk` fall-through removed).
+- **H1 (b), the backend: a confirmed total holds with no placeholder left.** `_require_placeholder_confirmation` (main.py) now checks whenever the request carries `confirmedCost`, not only when a paid placeholder is left: above Nebula's estimate it refuses with the same 409 `placeholder_confirm_required`, `placeholders: []`, the estimate, and (for a tab too old to re-ask) "Nothing ran. This run changed since you last reviewed it. Click “Run” again to review it." ("Generate again to review it." for a shot). The ids confirmed don't matter then. The canvas answers that 409 with GM's dialog in the finished form. Agents' requests are never held to it.
+- **L1: Accept on a proposal that runs nothing starts no run.** `canvasProposalsStore.accept` skips `runNodes` and the deferred "Run them when the current run finishes." when `runsNothing(view)` (what made the button "Accept"), and releases the approval. No Run history entry, no Queued, no skip line.
+- **L2 and GM item 4: a refused run leaves the canvas as it was.** `sendDirectRun` takes the start back before it asks again (`withdrawRunStart`): no Run history record (an older record the new one pushed past the cap comes back), no owner, no Stop, isExecuting off, and each node's state, error and progress as they were (a "complete" node stays complete). After a yes it registers the same run again (`begin`), unless another run started meanwhile. A Cinema shot gets its output back too. Every direct path does this: node Run (and Inspector, context menu, Run selected of one, Generate all), Generate shot / Generate N, replays.
+- **L3:** left as the item-7 known gap (see Open items); not fixable without asking Nebula before the browser confirm.
+- **L4: one measuring for inline images.** `POST /api/pricing/input-sizes` measures a `data:` image as the run's checks do (`input_sizes.measure(ref, kind)`, inline on), so the canvas no longer shows "price not listed", the "can't read the size" note, and a forced re-ask for one.
+- **L5 and GM item 3: every dollar in the total has a row.** Each paid node of the run that is no placeholder gets a muted row with no dot ("“Shot 1” · Nano Banana · $0.067"), after the agents' rows and above "Plus 1 free node.". A normal paid node with no list price reads "price not listed", makes the button plain "Run" and is in the footnote. The backend counts an unpriced node as nothing, as the canvas does (pinned by a test).
+- **L6: the dialog hands back what it showed.** `PlaceholderRunDialog` calls `onDone(ok, model)` with the model it had rendered; `askPlaceholderRun` resolves with it (or null), and the store sends that model's cost. A newer model still waiting to be drawn can't be confirmed.
+- **L7: the change is announced.** A visually hidden `aria-live="polite"` region says "This run changed since you last reviewed it." at each in-place change (a no-break space alternates, so a second change is read again). No new words.
+- **L8:** left as is: the refusal's words can still show when the person stopped the run mid-request or the canvas can't build a model.
+- **GM item 1: footnotes.** No total line, no footnote. With one: "“Flux still” has no list price, so the run may cost more.", "“Flux still” and “Upscale” have no list price, so the run may cost more.", "3 nodes have no list price, so the run may cost more." The old "No list price for …" note is gone from the dialog (`runCostNotes(..., { prices: false })`; the browser's costly-run confirm keeps it).
+- **GM item 2:** a price waiting on its input reads "“Upscale” · SeedVR2 Video Upscale · price depends on its input"; "Priced when its input is known: …" and the unreadable-size note are gone from the dialog. The row updates in place to the real price.
+- **GM item 3, Cinema's button:** "Generate for $X", "Generate for up to $0.50", plain "Generate", from Generate shot, Generate N and Generate all (`executeNode(id, { verb: 'Generate' })` from the toolbar). Heading unchanged. Replays from Run history keep "Run".
+- **GM item 5: the pill.** It already wraps every line. What stopped it after 2 lines was the status itself: Nebula keeps 140 characters (the documented limit), and the round-5 check sent 172, cut mid-word. A cut status now ends in "…" (`clean_status_text`), so the pill never ends as if that were all. Raising the limit would change the agents' contract, so I didn't.
+- **GM note 2:** the changed line shows for in-place updates too, whenever the heading, the intro, a row, a price, the total or the button changes after the dialog first shows, and stays.
+- **Rows by node, not name.** `RunCost` gains `ids` (unpriced, plan, awaitingInput by node id) so two nodes with one name get their own prices.
+- **Agent support:** docs/MCP-SETUP.md (the muted rows, the footnotes, "price depends on its input", Generate, the dialog staying in charge, "Run with Codex's changes?", `confirmedCost` held with no placeholder left, `placeholders: []` and its message, the canvas taking the start back, inline images measured, Accept starting no run, the status cut with "…"); skills/nebula/SKILL.md (finishing or changing placeholders while the person decides; the status cut); the `set_status` MCP docstring (the cut). INSTRUCTIONS unchanged: 2,233 characters. No CLI change: confirming is the person's alone.
+
+### Decisions not in the spec
+
+- In "Run with Codex's changes?" the nodes Codex finished keep its dot (they are "these nodes" the body names); the run's other paid nodes are muted. GM's rule for muted rows is "paid nodes that aren't placeholders"; strictly those finished nodes aren't placeholders any more. Listed for GM.
+- The footnote names only "price not listed" rows. A row that reads "price depends on its input" says so itself, and "has no list price" would be wrong for it.
+- A run that got cheaper or stayed the same after its agent finished goes ahead without a second ask, sending the total the person saw (the coordinator's ruling). A change that adds a row with no price, or a different set of placeholders, asks again.
+- The shot's row is named "Shot N" (its place in the scene, as the Cinema panel numbers it) and its model is the scene's base model's display name ("Nano Banana"), as in GM's example.
+- After the refusal re-ask, the run's id stays the same (its record is removed and made again), as round 5 decided.
+
+### Tests (first, each seen failing)
+
+- **Backend** (`tests/test_pending_nodes_round6.py`, 10 tests): 5 failed first, 5 passed.
+  - H1 (3): 200 "started" where a 409 belonged (node run below the estimate with no placeholder left, stale ids, a shot).
+  - L4: `None == {'height': 480, 'width': 640}` from the size endpoint.
+  - GM item 5: the cut status didn't end in "…".
+  - Passing before and after (they pin what must not change): a covered total runs, no confirmation and no placeholder runs as before, an agent's run is never held, L5's unpriced node counts nothing on both sides, a status that fits is kept whole.
+- **Frontend:** 33 failed first, 12 passed.
+  - `lib/placeholderRunConfirm.round6.test.ts` (16): 14 failed (the old notes, "price not listed" instead of "price depends on its input", no muted rows, "Run for" from Cinema, no finished heading, prices by name); 2 passed (no dialog when nothing was shown and no paid placeholder is in the run, and the "some still left" heading).
+  - `PlaceholderRunDialog.round6.test.tsx` (6): all failed (no muted row class, no changed line in place, no live region, `onDone`/`askPlaceholderRun` gave a boolean).
+  - `graphStore.placeholderRuns.round6.test.ts` (13): 12 failed (no second ask after the agent finished, `confirmedPlaceholders` undefined, a "cancelled" history record and a "complete" node turned idle, the shot's output left "idle", "Run for" in Cinema), 1 passed (a yes on the re-ask makes one record).
+  - `canvasProposalsStore.test.ts` L1: `executeNode` was called.
+  - Added after the first pass: "a full Run history keeps every record it had" (the withdrawn record had pushed the oldest one past the 100-record cap; only those come back, so a history the person cleared meanwhile stays cleared).
+  - Updated to the new rules: round-3/4/5 cases where a paid node of the person's sat beside the placeholders (it now has a muted row), the shot's button ("Generate for $2.40"), the awaiting row's words, the ask mocks (the dialog now resolves with the model), and the two round-5 tests that pinned the costly-run fall-through H1 removes.
+
+### Live check (1280x800)
+
+- Isolated backend on 8795 (temp HOME and every NEBULA_* root under scratch, no keys) and Vite on 5795 (`VITE_NEBULA_BACKEND_PORT=8795`); `/api/health` through Vite matched. Codex verified (an app token), Claude Code self-named. No key was set, so nothing paid could run. Run was clicked once (the re-ask check): Nebula refused it with a 409, and nothing ran.
+- 24 of 24 checks passed (script `agent-presence/live-r6.mjs`):
+  - Cinema Generate shot: "“Hero still” · GPT Image 2 · $0.0047–0.43", the muted "“Shot 1” · Nano Banana · $0.067", "Plus 1 free node.", "This run could cost up to $0.50 at list prices.", "Generate for up to $0.50"; the rows add up to the total; no browser confirm.
+  - The canvas dialog with the scene's muted row ("“Cinema Scene” · Nano Banana · $0.13"), "The listed prices total up to $0.56.", plain "Run", and each footnote: one name, two names, "3 nodes".
+  - "“Upscale” · SeedVR2 Video Upscale · price depends on its input" with no note, then "$9.95", "Run for $9.95" and the changed line, in place.
+  - Codex changed the quality while the dialog was open: the changed line in place (and in the live region). Then Codex set high quality and finished both nodes: "Run with Codex's changes?", "Codex finished setting up these nodes.", the changed line, "$0.16–0.43", "Run for up to $0.43". Cancel ran nothing.
+  - The refusal's re-ask: behind it no Stop, nothing Queued, the Agent log not "streaming", no run, no Run history record; Cancel left none.
+  - The pill: a 172-character status shows whole, cut by Nebula to "…then checki…", wrapped on two lines at 480 px, nothing clipped.
+  - A proposal that runs nothing: "runs nothing until Codex finishes 1 node", Show / Reject / Accept; Accept added its node and started nothing (Run history "No saved runs yet.").
+- Blocked requests: 2, both the canaries; 0 toward 8000-8010 or 5173. Console errors: the canary's and the expected 409. Servers stopped by PID; the state dir deleted.
+- Screenshots in the scratchpad `agent-presence/`: `r6-cinema-generate.png`, `r6-footnote-1.png`, `r6-footnote-2.png`, `r6-footnote-3.png`, `r6-depends-before.png`, `r6-depends-after.png`, `r6-changed-inplace.png`, `r6-h1-codex-changes.png`, `r6-reask-canvas-clear.png`, `r6-pill-wrap.png`, `r6-proposal-accepted-no-run.png`.
+
+### Open items (round 6)
+
+- For GM:
+  - The backend's refusal with no placeholder left: "Nothing ran. This run changed since you last reviewed it. Click “Run” again to review it." (a shot's ends "Generate again to review it."). Put together from GM's existing lines; the canvas never shows it, only a tab too old to re-ask.
+  - In "Run with Codex's changes?" the finished nodes keep Codex's dot (see Decisions).
+  - The footnote leaves out "price depends on its input" rows.
+  - The pill: the 2-line stop was the 140-character status limit, now marked with "…". A longer limit is a contract change for Justin.
+- Known gaps (item 7 follow-up, for the PR body):
+  - Round 5's two-dialog case (an agent clears its placeholders mid-dialog and the run costs more) is gone: H1 asks again in GM's dialog and never falls to the browser's confirm.
+  - The one two-dialog case left: the tab hasn't heard of an agent's placeholder yet and "Ask before costly runs" is on. The browser's costly-run confirm shows, then Nebula's 409 brings GM's dialog (review 5, L3). Avoiding it would need asking Nebula before the browser confirm; item 7 moves that confirm into Nebula's dialog. No new browser-confirm path was added.
+  - A free-placeholder run's costly-run confirm is still the browser's (GM round 4, item 7).
+- L8 as is: the refusal's words can show if the person stopped the run mid-request or the canvas can't build the dialog.
+
+### Gates (round 6)
+
+- Backend full suite: 11,003 passed, 71 skipped (13 min 25 s).
+- Vitest full: 457 files, 5,833 tests. The first run, during the backend suite, had 22 failures in 10 files, all load timeouts and focus/findBy waits ("Test timed out in 5000ms" 16 times, `toHaveFocus`, a role not found in time); none of them is a file this round touched. Rerun alone, those 10 files passed: 200 of 200.
+- errorCopy ratchets: 14 files, 173 tests passed.
+- `tsc -b` clean, lint clean.
+- Build budget: 389,508 bytes raw entry, 117,299 gzip (limit 512,000 raw).
+- MCP INSTRUCTIONS: 2,233 characters, unchanged.

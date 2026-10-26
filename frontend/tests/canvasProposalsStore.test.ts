@@ -173,6 +173,24 @@ describe('canvas proposals store', () => {
     expect(graph.state.executeNode).not.toHaveBeenCalled();
   });
 
+  it('review 5, L1: Accept on a proposal that runs nothing starts no run and holds none, and frees its approval', async () => {
+    // Its whole run waits on Codex's placeholders: the button said "Accept" (GM round 5, item 3).
+    const waits = { paidRuns: 0, freeRuns: 0, estimate: null, upTo: false, providers: [], nodes: [], note: '',
+      pendingSkipped: { count: 2, placeholders: 1, agents: ['Codex'] } };
+    for (const executing of [false, true]) {
+      graph.state.isExecuting = executing;
+      const id = executing ? 'p_b' : 'p_a';
+      emit({ type: 'proposalOpened', proposal: proposal(id, { cost: waits as never }), acceptKey: `key-${id}` });
+      api.acceptProposal.mockResolvedValue({ idMap: {}, runNodeIds: ['n7'], approvalId: `ra_${id}`,
+        nodes: [], edges: [], updatedNodes: [] });
+      await useCanvasProposalsStore.getState().accept(id);
+      expect(graph.state.executeNode).not.toHaveBeenCalled();
+      expect(graph.state.executeCluster).not.toHaveBeenCalled();
+      expect(useCanvasProposalsStore.getState().deferredRun).toBeNull();
+      expect(api.releaseApproval).toHaveBeenCalledWith(`ra_${id}`);
+    }
+  });
+
   it('runs a proposal without listed runs never, and without an approval sends none', async () => {
     emit({ type: 'proposalOpened', proposal: proposal('p_a'), acceptKey: 'key-a' });
     api.acceptProposal.mockResolvedValue({ idMap: {}, runNodeIds: [], approvalId: null,

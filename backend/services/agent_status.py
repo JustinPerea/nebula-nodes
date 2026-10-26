@@ -7,7 +7,8 @@ new thing kept here: a status line per agent.
 - An identified agent sets one line of text about what it is doing,
   optionally on a node (``set_status``, ``nebula status``, ``POST
   /api/canvas/status``). The text is cleaned like a cursor's ``say``
-  (whitespace collapsed, at most MAX_STATUS_CHARS); empty text clears it.
+  (whitespace collapsed, at most MAX_STATUS_CHARS, a longer one cut to end
+  in "…"); empty text clears it.
   The browser and anonymous callers have no identity, so they can't set
   one, and an agent sets only its own (the route takes no agent name).
 - It lasts until the agent replaces or clears it, or until
@@ -50,10 +51,16 @@ class StatusError(ValueError):
 
 
 def clean_status_text(raw: Any) -> str:
-    """One line, like a cursor's ``say``: whitespace collapsed, cut at MAX_STATUS_CHARS."""
+    """One line, like a cursor's ``say``: whitespace collapsed, at most
+    MAX_STATUS_CHARS. A longer one is cut and ends in "…", so the pill that
+    shows it whole (GM - Design, round 6: "let it wrap until the whole status
+    shows") never ends mid-word as if that were all of it."""
     if not isinstance(raw, str):
         raise StatusError("text must be text: one line about what you're working on (\"\" clears it)")
-    return " ".join(raw.split())[:MAX_STATUS_CHARS]
+    text = " ".join(raw.split())
+    if len(text) <= MAX_STATUS_CHARS:
+        return text
+    return text[:MAX_STATUS_CHARS - 1].rstrip() + "…"
 
 
 @dataclass

@@ -42,7 +42,10 @@ describe('placeholderRunConfirm', () => {
     const model = confirmFor(nodes, [wire('p', 'i'), wire('i', 'o', 'images')], 'o')!;
     expect(model.heading).toBe('Run 2 nodes Codex is still setting up?');
     expect(model.intro).toBe("Codex hasn't finished these, so their settings may not be final.");
-    expect(model.rows).toEqual([{ nodeId: 'i', name: '“Hero still”', model: 'Nano Banana Pro (3 Pro)', price: '$0.12', agent: codex }]);
+    // GM - Design, round 6, item 3: every dollar in the total has a row; the
+    // run's own paid node is muted, with no agent.
+    expect(model.rows).toEqual([{ nodeId: 'i', name: '“Hero still”', model: 'Nano Banana Pro (3 Pro)', price: '$0.12', agent: codex },
+      { nodeId: 'o', name: '“Final”', model: 'Nano Banana 2 (3.1 Flash)', price: '$0.12', agent: null }]);
     expect(model.freeLine).toBe('Plus 1 free node.');
     // The whole run: the placeholder and the node after it.
     expect(model.totalLine).toBe('This run could cost up to $0.24 at list prices.');
@@ -59,7 +62,7 @@ describe('placeholderRunConfirm', () => {
     const model = confirmFor(nodes, [wire('p', 'i'), wire('q', 'i', 'text')], 'i')!;
     expect(model.heading).toBe('Run 3 nodes agents are still setting up?');
     expect(model.intro).toBe("Agents haven't finished these, so their settings may not be final.");
-    expect(model.rows.map((row) => [row.name, row.agent.verified])).toEqual([['“Hero still”', false]]);
+    expect(model.rows.map((row) => [row.name, row.agent?.verified])).toEqual([['“Hero still”', false]]);
     expect(model.freeLine).toBe('Plus 2 free nodes.');
     expect(model.totalLine).toBe('This run could cost up to $0.12 at list prices.');
   });

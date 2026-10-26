@@ -55,11 +55,11 @@ describe('PlaceholderRunDialog', () => {
   });
 
   it('askPlaceholderRun resolves with the answer and takes the dialog away', async () => {
-    let answer: Promise<boolean> | undefined;
+    let answer: Promise<unknown> | undefined;
     await act(async () => { answer = askPlaceholderRun(several); });
     expect(document.querySelector('.placeholder-run')).not.toBeNull();
     await act(async () => { fireEvent.click(screen.getByText('Cancel')); });
-    await expect(answer).resolves.toBe(false);
+    await expect(answer).resolves.toBeNull();
     expect(document.querySelector('.placeholder-run')).toBeNull();
   });
 });

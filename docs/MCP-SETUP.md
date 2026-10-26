@@ -1281,7 +1281,8 @@ Needs-you row opens its oldest question set or proposal.
 - **Set your status:** MCP `set_status(text, node_id?)`, CLI
   `nebula status "<text>" [--node nX]`, HTTP `POST /api/canvas/status` with
   `{text, nodeId?}`. One line, cleaned like a cursor's `say` (whitespace
-  collapsed, 140 characters at most); `nodeId` must be a node on the open
+  collapsed, 140 characters at most: a longer one is cut and ends in
+  "…", so the node's pill never ends mid-word); `nodeId` must be a node on the open
   canvas. Empty text clears it (`set_status("")`, `nebula status --clear`).
   Only an identified agent sets one, and only its own: the browser gets 403,
   an unnamed caller 400, and the body takes no agent name. A bare
@@ -1372,8 +1373,9 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   leave the skipped nodes out (a proposal's `cost` adds `pendingSkipped`;
   a proposal whose whole run waits on them reads "runs nothing until Codex
   finishes 2 nodes", or "agents finish" for several, counting the
-  placeholders themselves, and its button reads "Accept": the run Accept
-  starts skips every node, and nothing is queued for when you finish), and the person's
+  placeholders themselves, and its button reads "Accept": Accept starts no
+  run for it (it would skip every node; no Run history entry) and frees its
+  approval, and nothing is queued for when you finish), and the person's
   direct Run of a node counts the placeholders it runs, with "Includes 2
   nodes Codex is still setting up." under the cost. A proposal's run is
   priced when it is made, so a placeholder in it that turns normal before
@@ -1388,22 +1390,34 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   from Run history), the canvas always asks first (whatever "Ask before
   costly runs" is set to), in one dialog that replaces the costly-run
   confirm: "Run 2 nodes Codex is still setting up?", a row per paid
-  placeholder ("“Hero still” · FLUX · $0.04", "price not listed", "on your
-  Krea plan"), the free ones in one line, the run's total, then "Cancel"
-  and "Run for $0.12" ("Run for up to $0.86" for a range). A dollar amount
-  shows only when it covers every paid row (a Krea-plan row costs nothing
-  extra): with a "price not listed" row the total reads "The listed prices
-  total $0.43." and the button just "Run"; with nothing priced there is no
-  total and the button reads "Run". Cancel changes nothing. A price read
-  from an input file (FLUX Video Upscale, SeedVR2) is measured while the
-  dialog is open, and the dialog updates in place. When a row or the total
-  changes while it is open, Run takes no click for 500 ms. If anything the
-  dialog said changed by the time the person clicks (an agent changed a
-  row's model, connected another paid node), it asks again over the new
-  run, with "This run changed since you last reviewed it." above the rows;
-  if the placeholders turned normal meanwhile, the run goes ahead when the
-  total the person confirmed covers it, and otherwise the costly-run
-  setting decides.
+  placeholder with its agent's dot ("“Hero still” · FLUX · $0.04", "price
+  not listed", "price depends on its input" while an input's size is
+  measured, "on your Krea plan"), then a muted row with no dot for every
+  other paid node in the run ("“Shot 1” · Nano Banana · $0.07"), so every
+  dollar in the total has a row, the free placeholders in one line, the
+  run's total, then "Cancel" and "Run for $0.12" ("Run for up to $0.86" for
+  a range; from Cinema "Generate for $0.12", "Generate for up to $0.50",
+  "Generate"). A dollar amount shows only when it covers every paid row (a
+  Krea-plan row costs nothing extra): with a row that has none the total
+  reads "The listed prices total $0.43." and the button just "Run", and a
+  footnote names the rows with no list price ("“Flux still” has no list
+  price, so the run may cost more.", two by name, "3 nodes have no list
+  price, …" for more); with nothing priced there is no total and no
+  footnote. Cancel changes nothing. A price read from an input file (FLUX
+  Video Upscale, SeedVR2) is measured while the dialog is open, and the
+  row updates in place. Whenever a row, a price or the heading changes
+  after the dialog first shows, it says "This run changed since you last
+  reviewed it." above the rows (a screen reader hears it), and Run takes
+  no click for 500 ms. Once it has shown, the dialog stays in charge of
+  that run until it is sent or cancelled: if the agents finish their
+  placeholders while it is open, it reads "Run with Codex's changes?" /
+  "Codex finished setting up these nodes." ("Run with the agents'
+  changes?" / "The agents finished setting up these nodes." for several),
+  and if some are still left, the first heading counting only those. If
+  anything changed by the time the person clicks, it asks again over the
+  new run; a run with no placeholder left that the total the person saw
+  still covers goes ahead, held to that total. The costly-run setting's
+  browser confirm never follows it.
   `/api/execute-node` and `/api/cinema/generate-shot` enforce it: the
   person's run carries `confirmedPlaceholders` (exactly those paid
   placeholder ids) and `confirmedCost` (the total of the listed prices the
@@ -1411,20 +1425,28 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   `confirmedPlaceholders` whenever Nebula can price the run) or gets 409
   `placeholder_confirm_required` before anything is priced or changes.
   Nebula holds the run to its own estimate: at the keys in Settings, with
-  every price read from an input file measured first, a shot as one shot
-  times its variations, multiplied and then rounded to 6 places; above
-  `confirmedCost` (by more than $0.000001) gets the same 409. The 409
-  carries `placeholders`, `agents` (each one's owner), `estimate` (`low`,
-  `high`, `nodes` {id: {low, high}}, `unpriced`, `plan`, `plus`,
-  `unavailable`, `awaitingInput`) and the message "Nothing ran. This run
-  includes 1 paid node Codex is still setting up, and Nebula asks before
-  running those. Click “Run” again to review it." (a shot's ends "Generate
-  again to review it."). The canvas never shows that message: it asks again
-  at once in its dialog, priced at `estimate`, and sends the same run again
-  with `estimate.high`; the message is for a tab too old to do that. Free
-  placeholders need no confirmation. Agents' runs are unchanged: your own
-  placeholders run when you run them, and a Cinema shot you start skips
-  another agent's.
+  every price read from an input file measured first (an inline `data:`
+  image too, as `POST /api/pricing/input-sizes` measures it for the
+  canvas), a shot as one shot times its variations, multiplied and then
+  rounded to 6 places; above `confirmedCost` (by more than $0.000001) gets
+  the same 409. A run that carries `confirmedCost` is held to it even when
+  no placeholder is left (their agents finished them while the dialog was
+  open); `confirmedPlaceholders` then doesn't matter. A paid node with no
+  list price counts nothing on either side, as the dialog says. The 409
+  carries `placeholders` (empty when none is left), `agents` (each one's
+  owner), `estimate` (`low`, `high`, `nodes` {id: {low, high}}, `unpriced`,
+  `plan`, `plus`, `unavailable`, `awaitingInput`) and the message "Nothing
+  ran. This run includes 1 paid node Codex is still setting up, and Nebula
+  asks before running those. Click “Run” again to review it." (a shot's
+  ends "Generate again to review it."; with no placeholder left, "Nothing
+  ran. This run changed since you last reviewed it. Click “Run” again to
+  review it."). The canvas never shows that message: it takes the start
+  back (no Run history record, nothing Queued, no Stop), asks again at
+  once in its dialog, priced at `estimate`, and starts the same run again
+  with `estimate.high` after a yes; the message is for a tab too old to do
+  that. Free placeholders need no confirmation. Agents' runs are
+  unchanged: your own placeholders run when you run them, and a Cinema
+  shot you start skips another agent's.
 - **Saved with the graph:** the flag lives on the node with its owner
   (`{agent: {id, name, color, verified}, at}`), in the persisted graph, the
   export (`data.pending`) and the project, so it survives a reload and a

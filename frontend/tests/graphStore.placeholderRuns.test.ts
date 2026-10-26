@@ -17,6 +17,8 @@ vi.mock('../src/lib/backend', async (importOriginal) => ({
 }));
 const askMock = vi.hoisted(() => vi.fn());
 vi.mock('../src/components/askPlaceholderRun', () => ({ askPlaceholderRun: askMock }));
+/** The person clicks Run on the words the dialog showed (it hands them back: review 5, L6). */
+const yes = async (model: unknown) => model;
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn(), disconnect: vi.fn() } }));
 
 import { useGraphStore } from '../src/store/graphStore';
@@ -71,21 +73,22 @@ describe('the person\'s direct runs over a paid placeholder', () => {
 
   describe('a Cinema shot (finding 1)', () => {
     it('asks first, and Cancel generates nothing and leaves the shot as it was', async () => {
-      askMock.mockResolvedValue(false);
+      askMock.mockResolvedValue(null);
       const shot = vi.spyOn(api, 'generateCinemaShot');
       await useGraphStore.getState().executeShot('cine', 's1', undefined, 2);
       expect(askMock).toHaveBeenCalledOnce();
       expect(askMock.mock.calls[0][0]).toMatchObject({
         heading: 'Run 1 node Codex is still setting up?', confirmIds: ['a'],
         // One shot of the base model plus the placeholder, twice (two variations).
-        totalLine: 'This run could cost up to $2.40 at list prices.', runLabel: 'Run for $2.40',
+        // From Cinema the button says Generate (GM - Design, round 6, item 3).
+        totalLine: 'This run could cost up to $2.40 at list prices.', runLabel: 'Generate for $2.40',
       });
       expect(shot).not.toHaveBeenCalled();
       expect(shotStatus()).toBeUndefined();
     });
 
     it('a confirmed shot sends the placeholders and the total it confirmed', async () => {
-      askMock.mockResolvedValue(true);
+      askMock.mockImplementation(yes);
       const shot = vi.spyOn(api, 'generateCinemaShot').mockResolvedValue({ status: 'started' });
       await useGraphStore.getState().executeShot('cine', 's1', undefined, 2);
       expect(shot).toHaveBeenCalledOnce();
@@ -123,7 +126,7 @@ describe('the person\'s direct runs over a paid placeholder', () => {
 
     it("a node run's replay asks over the placeholder that is still one, and Cancel runs nothing", async () => {
       useGraphStore.setState({ runHistory: [nodeRun] });
-      askMock.mockResolvedValue(false);
+      askMock.mockResolvedValue(null);
       const execute = vi.spyOn(api, 'executeNode');
       await useGraphStore.getState().rerunHistoryRecord(nodeRun.id);
       expect(askMock).toHaveBeenCalledOnce();
@@ -135,7 +138,7 @@ describe('the person\'s direct runs over a paid placeholder', () => {
 
     it('a confirmed replay sends what the person confirmed', async () => {
       useGraphStore.setState({ runHistory: [nodeRun] });
-      askMock.mockResolvedValue(true);
+      askMock.mockImplementation(yes);
       const execute = vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'started' } as never);
       await useGraphStore.getState().rerunHistoryRecord(nodeRun.id);
       expect(execute).toHaveBeenCalledOnce();
@@ -145,7 +148,7 @@ describe('the person\'s direct runs over a paid placeholder', () => {
 
     it("a shot's replay asks too and sends the confirmation", async () => {
       useGraphStore.setState({ runHistory: [shotRun] });
-      askMock.mockResolvedValue(true);
+      askMock.mockImplementation(yes);
       const shot = vi.spyOn(api, 'generateCinemaShot').mockResolvedValue({ status: 'started' });
       await useGraphStore.getState().rerunHistoryRecord(shotRun.id);
       expect(askMock).toHaveBeenCalledOnce();

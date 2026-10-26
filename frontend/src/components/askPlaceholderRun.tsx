@@ -12,22 +12,24 @@ export interface AskPlaceholderRunOptions {
   watch?: (show: (next: PlaceholderRunConfirm) => void) => () => void;
 }
 
-/** Shows the dialog and resolves with the person's answer: true runs. Newer
- * words from `watch` are drawn at once (flushSync), so the click guard starts
- * with them and a click can't land on the old ones. */
-export function askPlaceholderRun(model: PlaceholderRunConfirm, options: AskPlaceholderRunOptions = {}): Promise<boolean> {
+/** Shows the dialog and resolves with the words it was showing when the
+ * person clicked Run (review 5, L6: the run sends those, never words still
+ * waiting to be drawn), or null for Cancel. Newer words from `watch` are
+ * drawn at once where React allows it (flushSync), so the click guard starts
+ * with them. */
+export function askPlaceholderRun(model: PlaceholderRunConfirm, options: AskPlaceholderRunOptions = {}): Promise<PlaceholderRunConfirm | null> {
   return new Promise((resolve) => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const root = createRoot(host);
     let settled = false;
-    const done = (ok: boolean) => {
+    const done = (ok: boolean, shown: PlaceholderRunConfirm) => {
       if (settled) return;
       settled = true;
       stop?.();
       root.unmount();
       host.remove();
-      resolve(ok);
+      resolve(ok ? shown : null);
     };
     const draw = (shown: PlaceholderRunConfirm) =>
       root.render(<PlaceholderRunDialog model={shown} changed={options.changed} onDone={done} />);

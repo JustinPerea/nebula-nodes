@@ -81,7 +81,7 @@ import {
   warnFailure,
 } from '../lib/errorCopy';
 import { CANVAS_NOTICE_EVENT, showNotice, type CanvasNoticeDetail } from '../lib/canvasNotice';
-import { cleanPending, pendingSkipLine, type PendingSkipSummary } from '../lib/pendingNodes';
+import { cleanPending, pendingSkipLine, type PendingAgent, type PendingSkipSummary } from '../lib/pendingNodes';
 import { cleanRemovals, deletedNoticeText, lateRestoreText, mergeRemovals, notRestoredText, pinsOnAnotherModel, restoredNoticeText, supersededBy, type RemovalRecord } from '../lib/deleteNotice';
 import { NOTHING_RAN_LINE, OTHER_NODE_LINE, SHOT_NOT_STARTED_LINE, validationReadings, writtenReading, type ValidationReading } from '../lib/validationCopy';
 import {
@@ -96,7 +96,7 @@ import { usePricingStore } from './pricingStore';
 import { useInputSizeStore } from './inputSizeStore';
 import { useStoredAssetsStore } from './storedAssetsStore';
 import { repeatRun, runCostConfirmMessage, shouldConfirmRunCost, summarizeRunScope, type RunScope } from '../lib/runScope';
-import { placeholderRefusalOf, placeholderRunConfirm, withRefusalFlags, withRunEstimate, type PlaceholderRunConfirm, type RunEstimate } from '../lib/placeholderRunConfirm';
+import { PRICE_DEPENDS_ON_INPUT, PRICE_NOT_LISTED, placeholderRefusalOf, placeholderRunConfirm, withRefusalFlags, withRunEstimate, type PlaceholderRunConfirm, type PlaceholderRunOptions, type RunEstimate } from '../lib/placeholderRunConfirm';
 import { placeholderRunDialogModule } from '../lib/placeholderRunDialogModule';
 import { useCreateDraftStore } from './createDraftStore';
 import { getCinemaUploadIssue, useCinemaUploadStore } from './cinemaUploadStore';
@@ -946,7 +946,9 @@ interface GraphState {
   reconcilePersistedWorldLabsRun: () => Promise<void>;
   dismissProviderRecoveryWarning: () => void;
   /** `approvalId`: the run a proposal's Accept approved (see AcceptedProposal). */
-  executeNode: (nodeId: string, options?: { approvalId?: string }) => Promise<void>;
+  /** `verb: 'Generate'`: Cinema's Generate all, so the placeholder dialog's
+   * button says Generate (GM - Design, round 6, item 3). */
+  executeNode: (nodeId: string, options?: { approvalId?: string; verb?: 'Run' | 'Generate' }) => Promise<void>;
   /** Regenerate one tracked Cinema shot. Distinct shots may run concurrently.
    * `variations` > 1 generates seeded candidates into shot.variations. */
   executeShot: (nodeId: string, shotId: string, seed?: number, variations?: number) => Promise<void>;
@@ -2447,6 +2449,11 @@ async function executeHistoricalRun(
   // whole-canvas replay skips them. Replays never asked the costly-run
   // question, and still don't.
   const directTarget = source.cinemaShot?.nodeId ?? targetNodeId;
+  // A shot's replay names the scene's row after the shot (GM - Design, round 6).
+  const replayShot = source.cinemaShot;
+  const wording: DirectRunWording = replayShot ? { names: { [replayShot.nodeId]: shotName(
+    snapshot.nodes.find((node) => node.id === replayShot.nodeId)?.params?.scene as CinemaSceneSpec | undefined,
+    replayShot.shotId) } } : {};
   let agreed: DirectRunConfirmed | null = null;
   if (directTarget) {
     let first = true;
@@ -2456,7 +2463,7 @@ async function executeHistoricalRun(
       first = false;
       const graph = snapshotCanvas(snapshot, get().nodes);
       return shot ? { nodes: oneShotCanvas(graph.nodes, shot.nodeId, shot.shotId), edges: graph.edges } : graph;
-    }, directTarget, { passes: shot?.variations ?? 1, costly: false });
+    }, directTarget, { passes: shot?.variations ?? 1, costly: false, ...wording });
     agreed = answer instanceof Promise ? await answer : answer;
     if (!agreed) return;
   }
@@ -2464,28 +2471,40 @@ async function executeHistoricalRun(
   resetExecution();
   const runId = uuidv4();
   const scopeIds = snapshotExecutionScopeIds(snapshot, targetNodeId);
-  currentRunId = runId;
-  registerRun(runId, snapshot, targetNodeId, source.cinemaShot?.shotId);
-  set((state) => ({
-    nodes: markSnapshotScopeQueued(state.nodes, scopeIds),
-    activeRuns: ownershipState().activeRuns,
-    isExecuting: true,
-    isCancelling: false,
-    runHistory: persistedRunHistory(openRunRecord(state.runHistory, {
-      id: runId,
-      trigger: source.trigger,
-      startedAt: Date.now(),
-      snapshot,
-      targetNodeId,
-      sourceRunId: source.id,
-      replayAction,
-      createOrigin: source.createOrigin,
-      cinemaShot: source.cinemaShot,
-      startedFreshPaidWorldLabs: runIncludesFreshPaidWorldLabsStart(snapshot, targetNodeId),
-    })),
-  }));
+  let before = new Map<string, NodeRunLook>();
+  let trimmed: RunRecord[] = [];
+  // Registers the replay; again after Nebula's refusal and a yes, unless
+  // another run started meanwhile (review 5, L2).
+  const begin = (again = false) => {
+    if (again && (get().isExecuting || get().isImportingGraph)) return false;
+    before = runLookOf(get().nodes, scopeIds);
+    const historyBefore = get().runHistory;
+    currentRunId = runId;
+    registerRun(runId, snapshot, targetNodeId, source.cinemaShot?.shotId);
+    set((state) => ({
+      nodes: markSnapshotScopeQueued(state.nodes, scopeIds),
+      activeRuns: ownershipState().activeRuns,
+      isExecuting: true,
+      isCancelling: false,
+      runHistory: persistedRunHistory(openRunRecord(state.runHistory, {
+        id: runId,
+        trigger: source.trigger,
+        startedAt: Date.now(),
+        snapshot,
+        targetNodeId,
+        sourceRunId: source.id,
+        replayAction,
+        createOrigin: source.createOrigin,
+        cinemaShot: source.cinemaShot,
+        startedFreshPaidWorldLabs: runIncludesFreshPaidWorldLabsStart(snapshot, targetNodeId),
+      })),
+    }));
+    trimmed = trimmedBy(historyBefore, get().runHistory);
+    pendingStartRunIds.add(runId);
+    return true;
+  };
+  begin();
 
-  pendingStartRunIds.add(runId);
   try {
     const stillOurs = () => ownsRun(runId) && !cancellationRequestedRunIds.has(runId);
     const shot = source.cinemaShot;
@@ -2494,13 +2513,10 @@ async function executeHistoricalRun(
         ? apiGenerateShot(snapshot.nodes, snapshot.edges.map((edge) => ({ ...edge,
           sourceHandle: edge.sourceHandle, targetHandle: edge.targetHandle })), shot.nodeId,
           shot.shotId, shot.seed, shot.variations, runId, placeholders, cost)
-        : apiExecuteNode(snapshot.nodes, snapshot.edges, targetNodeId!, runId, true, undefined, placeholders, cost)))
+        : apiExecuteNode(snapshot.nodes, snapshot.edges, targetNodeId!, runId, true, undefined, placeholders, cost)),
+      { begin: () => begin(true), withdraw: () => withdrawRunStart(runId, set, before, trimmed) }, wording)
       : await apiExecuteGraph(snapshot.nodes, snapshot.edges, runId, true);
-    if (result === DECLINED) {
-      pendingStartRunIds.delete(runId);
-      settleTrackedExecutionStatus('cancelled', runId, set, get);
-      return;
-    }
+    if (result === DECLINED) return;
     pendingStartRunIds.delete(runId);
     announcePendingSkips(result);
     if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
@@ -3421,13 +3437,15 @@ function confirmRunCost(nodes: Node<NodeData>[], edges: Edge[], scope: RunScope,
  * placeholder it would make normal calls a paid model, Nebula always asks
  * first, whatever the costly-run setting, in one dialog that replaces the
  * costly-run confirm (components/PlaceholderRunDialog.tsx). The dialog's
- * words, or null when no paid placeholder is in the run (then the costly-run
- * confirm applies as before). A price read from an input file asks the
- * backend for its size (review 4, H1); the open dialog updates when it
- * arrives. `estimate`: Nebula's own, from its refusal (review 4, M1).
+ * words, or null when no paid placeholder is in the run and no dialog has
+ * shown for it (`options.shown`; then the costly-run confirm applies as
+ * before). A price read from an input file asks the backend for its size
+ * (review 4, H1); the open dialog updates when it arrives. `estimate`:
+ * Nebula's own, from its refusal (review 4, M1).
  */
 function directRunConfirm(
   nodes: Node<NodeData>[], edges: Edge[], nodeId: string, passes = 1, estimate?: RunEstimate | null,
+  options: PlaceholderRunOptions = {},
 ): PlaceholderRunConfirm | null {
   if (typeof window === 'undefined') return null;
   const pricing = usePricingStore.getState().table;
@@ -3437,7 +3455,7 @@ function directRunConfirm(
   const sizeRefs = summary.cost?.sizeRefs;
   if (sizeRefs?.length) useInputSizeStore.getState().request(sizeRefs);
   if (estimate) summary = withRunEstimate(summary, estimate, nodes);
-  return placeholderRunConfirm(nodes, edges, nodeId, summary);
+  return placeholderRunConfirm(nodes, edges, nodeId, summary, options);
 }
 
 function sameConfirm(a: PlaceholderRunConfirm, b: PlaceholderRunConfirm): boolean {
@@ -3466,26 +3484,28 @@ function refreshSettingsCache(): void {
 }
 
 /**
- * Shows that dialog and resolves with the words the person said yes to (the
- * last ones it showed), or null. `changed`: asked again because the run
- * changed (GM, round 5: its line, and Run held for 500 ms). `recompute`, when
- * given, is the dialog's words now: the open dialog shows them as they change
- * (a measured price, the keys read again). A dialog that can't load runs nothing.
+ * Shows that dialog and resolves with the words the person said yes to, as
+ * the dialog had them on screen at the click (review 5, L6), or null.
+ * `changed`: asked again because the run changed (GM, round 5: its line, and
+ * Run held for 500 ms). `recompute`, when given, is the dialog's words now:
+ * the open dialog shows them as they change (a measured price, the keys read
+ * again, an agent finishing its placeholders). A dialog that can't load runs
+ * nothing.
  */
 async function askDirectRun(
   model: PlaceholderRunConfirm, changed: boolean, recompute?: () => PlaceholderRunConfirm | null,
 ): Promise<PlaceholderRunConfirm | null> {
-  let shown = model;
+  let pushed = model;
   try {
     const dialog = await placeholderRunDialogModule.load();
     const watch = recompute && ((show: (next: PlaceholderRunConfirm) => void) => watchRunInputs(() => {
       const next = recompute();
-      if (next && !sameConfirm(next, shown)) {
-        shown = next;
+      if (next && !sameConfirm(next, pushed)) {
+        pushed = next;
         show(next);
       }
     }));
-    return await dialog.askPlaceholderRun(model, { changed, watch }) ? shown : null;
+    return await dialog.askPlaceholderRun(model, { changed, watch });
   } catch (error) {
     console.error("Couldn't open the run confirmation:", error);
     return null;
@@ -3495,11 +3515,17 @@ async function askDirectRun(
 /** The graph a direct run would send, as the canvas reads it for its cost and dialog. */
 interface DirectRunGraph { nodes: Node<NodeData>[]; edges: Edge[] }
 
+/** How the dialog words this run: "Generate" from Cinema, a shot's name. */
+type DirectRunWording = Pick<PlaceholderRunOptions, 'verb' | 'names'>;
+
 /** What the person agreed to: the graph to run as it stood after the last
- * question, and, when the dialog asked, the placeholders and total confirmed. */
+ * question, and, when the dialog asked, the placeholders and total confirmed
+ * and every placeholder it showed (`shown`): once it has shown, it stays the
+ * authority for this run, also when Nebula refuses it (review 5, H1). */
 interface DirectRunConfirmed extends DirectRunGraph {
   confirmedPlaceholders?: string[];
   confirmedCost?: number;
+  shown?: ReadonlyMap<string, PendingAgent>;
 }
 
 /**
@@ -3508,85 +3534,120 @@ interface DirectRunConfirmed extends DirectRunGraph {
  * (Q133; review 3 findings 1, 2 and 7). `read` is the graph that run would
  * send now, re-read after each question (an agent may have changed it while
  * the dialog was open), or null when the run can no longer start. A paid
- * placeholder asks in GM's dialog; the person's Run re-reads the graph and,
- * when anything the dialog said (each row's model and price, the total, the
- * free line, the button) changed, asks again over the new one. When no paid
- * placeholder is left, the costly-run confirm decides (`costly`; replays
- * never asked it). Null: the person said no, or the run can't start.
+ * placeholder asks in GM's dialog (askUntilSettled). With none, the
+ * costly-run confirm decides (`costly`; replays never asked it). Null: the
+ * person said no, or the run can't start.
  */
 function confirmDirectRun(
   read: () => DirectRunGraph | null,
   nodeId: string,
-  { passes = 1, costly = true }: { passes?: number; costly?: boolean } = {},
+  { passes = 1, costly = true, verb, names }: { passes?: number; costly?: boolean } & DirectRunWording = {},
 ): DirectRunConfirmed | null | Promise<DirectRunConfirmed | null> {
   const graph = read();
   if (!graph) return null;
-  const costlyOk = (current: DirectRunGraph) =>
-    !costly || confirmRunCost(current.nodes, current.edges, { kind: 'node', nodeId }, passes);
-  const asked = directRunConfirm(graph.nodes, graph.edges, nodeId, passes);
+  const asked = directRunConfirm(graph.nodes, graph.edges, nodeId, passes, null, { verb, names });
   // No dialog: answered at once, so the caller starts its run in the same
   // turn (a second click can't slip in), as before.
-  if (!asked) return costlyOk(graph) ? graph : null;
-  return askUntilSettled(read, nodeId, asked, passes, costlyOk);
+  if (!asked) {
+    return !costly || confirmRunCost(graph.nodes, graph.edges, { kind: 'node', nodeId }, passes) ? graph : null;
+  }
+  return askUntilSettled(read, nodeId, asked, passes, { verb, names }, graph);
 }
 
+/**
+ * Once the dialog has shown for a run it stays the authority until the run
+ * is sent or cancelled (review 5, H1; GM round 5: never the browser's
+ * costly-run confirm after it). The open dialog follows the run as it
+ * changes (`recompute`): a new price, another node, or its agent finishing
+ * its placeholders ("Run with Codex's changes?", GM round 6). After the click
+ * the run is read again: the same words run at what was shown; a run with no
+ * placeholder left that the shown total still covers runs held to that total
+ * (Nebula refuses it above); anything else asks again, with GM's changed line.
+ */
 async function askUntilSettled(
   read: () => DirectRunGraph | null,
   nodeId: string,
   first: PlaceholderRunConfirm,
   passes: number,
-  costlyOk: (graph: DirectRunGraph) => boolean,
+  wording: DirectRunWording,
+  firstGraph: DirectRunGraph,
 ): Promise<DirectRunConfirmed | null> {
   refreshSettingsCache();
+  // Every placeholder of this run a dialog has shown, with its agent.
+  const shown = new Map<string, PendingAgent>();
+  const remember = (graph: DirectRunGraph) => {
+    for (const node of graph.nodes) {
+      const flag = cleanPending(node.data?.pending);
+      if (flag) shown.set(node.id, flag.agent);
+    }
+  };
+  const build = (graph: DirectRunGraph) => {
+    remember(graph);
+    return directRunConfirm(graph.nodes, graph.edges, nodeId, passes, null, { ...wording, shown });
+  };
+  remember(firstGraph);
   const recompute = () => {
     const graph = read();
-    return graph && directRunConfirm(graph.nodes, graph.edges, nodeId, passes);
+    return graph && build(graph);
   };
   let asked = first;
   let changed = false;
   for (;;) {
-    const shown = await askDirectRun(asked, changed, recompute);
-    if (!shown) return null;
+    const answer = await askDirectRun(asked, changed, recompute);
+    if (!answer) return null;
     const graph = read();
     if (!graph) return null;
-    const now = directRunConfirm(graph.nodes, graph.edges, nodeId, passes);
-    // No paid placeholder left (an agent made them normal): an ordinary
-    // direct run now. GM, round 5: never the browser's costly-run confirm
-    // after this dialog, so the total the person confirmed covers it; only a
-    // run that now costs more than that falls to the costly-run setting.
-    if (!now) return coveredBy(shown, graph, nodeId, passes) || costlyOk(graph) ? graph : null;
-    if (sameConfirm(now, shown)) {
-      return { ...graph, confirmedPlaceholders: now.confirmIds, confirmedCost: now.confirmCost ?? undefined };
+    const now = build(graph);
+    if (!now) return null;
+    if (sameConfirm(now, answer)) {
+      return { ...graph, confirmedPlaceholders: now.confirmIds, confirmedCost: now.confirmCost ?? undefined, shown };
+    }
+    if (now.confirmIds.length === 0 && coveredBy(answer, now)) {
+      return { ...graph, confirmedPlaceholders: [], confirmedCost: answer.confirmCost ?? undefined, shown };
     }
     asked = now;
     changed = true;
   }
 }
 
-/** Whether the total the person just confirmed covers this run's list price. */
-function coveredBy(shown: PlaceholderRunConfirm, graph: DirectRunGraph, nodeId: string, passes: number): boolean {
-  const pricing = usePricingStore.getState().table;
-  if (!pricing || shown.confirmCost === null) return false;
-  const { settingsCache } = useUIStore.getState();
-  const summary = repeatRun(summarizeRunScope(graph.nodes, graph.edges, { kind: 'node', nodeId },
-    { pricing, apiKeys: settingsCache.apiKeys, sizes: useInputSizeStore.getState().sizes }), passes);
-  return Boolean(summary.cost) && summary.cost!.high <= shown.confirmCost + 1e-6;
+/** The rows no dollar amount covers ("price not listed", "price depends on its input"), by node and model. */
+function unpricedRows(model: PlaceholderRunConfirm): string[] {
+  return model.rows.filter((row) => row.price === PRICE_NOT_LISTED || row.price === PRICE_DEPENDS_ON_INPUT)
+    .map((row) => `${row.nodeId}\u0000${row.model ?? ''}`);
 }
 
-/** The person said no when Nebula's refusal asked again: nothing ran. */
+/** Whether the total the person confirmed (`shown`) covers the run now: no
+ * higher, and no row without a price that the dialog didn't show as such. */
+function coveredBy(shown: PlaceholderRunConfirm, now: PlaceholderRunConfirm): boolean {
+  if (shown.confirmCost === null || now.confirmCost === null) return false;
+  const before = new Set(unpricedRows(shown));
+  return now.confirmCost <= shown.confirmCost + 1e-6 && unpricedRows(now).every((row) => before.has(row));
+}
+
+/** The person said no when Nebula's refusal asked again, or the run can no
+ * longer start when they said yes: nothing ran, and the canvas is as it was. */
 const DECLINED = Symbol('declined');
+
+/** How a direct run's start is taken back and made again around Nebula's
+ * refusal (review 5, L2; GM round 6, item 4): `withdraw` leaves the canvas
+ * exactly as it was before the run (no Run history record, nothing Queued,
+ * no Stop, nothing streaming) while the dialog asks again; `begin` starts it
+ * again after a yes, or says it can't (another run started meanwhile). */
+interface DirectRunStart {
+  begin: () => boolean;
+  withdraw: () => void;
+}
 
 /**
  * Sends the person's direct run (`send`, with the confirmation to carry). When
- * Nebula refuses it over agents' paid placeholders (409
- * `placeholder_confirm_required`: the confirmation is missing, or its total
- * is below Nebula's own estimate, at the backend's keys and measured inputs),
- * the canvas asks again itself in GM's dialog, priced at Nebula's numbers,
- * with "This run changed since you last reviewed it." when the person had
- * already confirmed, and sends the same run again with what they confirm.
- * The refusal's own words ("Click “Run” again…") are only for a tab too old
- * to do this (GM, round 5; review 4, M1). DECLINED: they said no, or the run
- * was stopped meanwhile (`stillOurs`).
+ * Nebula refuses it over agents' paid placeholders, or over a total higher
+ * than the person confirmed (409 `placeholder_confirm_required`: at the
+ * backend's keys and measured inputs), the canvas takes the start back and
+ * asks again itself in GM's dialog, priced at Nebula's numbers, with "This run
+ * changed since you last reviewed it." when the person had already confirmed,
+ * and starts the same run again with what they confirm. The refusal's own
+ * words ("Click “Run” again…") are only for a tab too old to do this (GM,
+ * round 5; review 4, M1). DECLINED: they said no, or it can't start now.
  */
 async function sendDirectRun<T>(
   agreed: DirectRunConfirmed,
@@ -3594,6 +3655,8 @@ async function sendDirectRun<T>(
   passes: number,
   stillOurs: () => boolean,
   send: (placeholders?: string[], cost?: number) => Promise<T>,
+  { begin, withdraw }: DirectRunStart,
+  wording: DirectRunWording = {},
 ): Promise<T | typeof DECLINED> {
   let placeholders = agreed.confirmedPlaceholders;
   let cost = agreed.confirmedCost;
@@ -3604,14 +3667,70 @@ async function sendDirectRun<T>(
       const refusal = placeholderRefusalOf(error);
       if (!refusal || !stillOurs()) throw error;
       const nodes = withRefusalFlags(agreed.nodes, refusal);
-      const model = directRunConfirm(nodes, agreed.edges, nodeId, passes, refusal.estimate);
+      const model = directRunConfirm(nodes, agreed.edges, nodeId, passes, refusal.estimate,
+        { ...wording, shown: agreed.shown });
       if (!model) throw error;
+      withdraw();
       const shown = await askDirectRun({ ...model, confirmIds: [...refusal.placeholders].sort() }, placeholders !== undefined);
-      if (!shown || !stillOurs()) return DECLINED;
+      if (!shown || !begin()) return DECLINED;
       placeholders = shown.confirmIds;
       cost = shown.confirmCost ?? undefined;
     }
   }
+}
+
+/** The records in `before` that `after` no longer has: what a new record pushed past the cap. */
+function trimmedBy(before: RunRecord[], after: RunRecord[]): RunRecord[] {
+  return before.filter((record) => !after.some((candidate) => candidate.id === record.id));
+}
+
+/** What a run start changes on its nodes (markExecutionScopeQueued), to put back. */
+type NodeRunLook = Pick<NodeData, 'state' | 'error' | 'progress' | 'streamingText' | 'streamingPartials' | 'streamingSvg'>;
+
+function runLookOf(nodes: Node<NodeData>[], ids: Set<string>): Map<string, NodeRunLook> {
+  return new Map(nodes.filter((node) => ids.has(node.id)).map((node) => [node.id, {
+    state: node.data.state, error: node.data.error, progress: node.data.progress,
+    streamingText: node.data.streamingText, streamingPartials: node.data.streamingPartials,
+    streamingSvg: node.data.streamingSvg }]));
+}
+
+/**
+ * Takes back a run start Nebula refused before anything ran (review 5, L2;
+ * GM round 6, item 4: "If Nebula refused, nothing is running"): its owner,
+ * its Run history record (and the older ones its record pushed past the cap,
+ * `trimmed`), and its nodes' Queued, back to how they were (`before`) where
+ * nothing else has changed them since.
+ */
+function withdrawRunStart(runId: string, set: GraphSet, before: ReadonlyMap<string, NodeRunLook>,
+  trimmed: RunRecord[]): void {
+  activeRunOwners.delete(runId);
+  if (currentRunId === runId) currentRunId = null;
+  pendingStartRunIds.delete(runId);
+  cancellationRequestedRunIds.delete(runId);
+  const timer = statusReconciliationTimers.get(runId);
+  if (timer !== undefined) clearTimeout(timer);
+  statusReconciliationTimers.delete(runId);
+  runErrors.delete(runId);
+  runShareableInputs.delete(runId);
+  set((state) => {
+    const kept = state.runHistory.filter((record) => record.id !== runId);
+    const back = trimmed.filter((record) => !kept.some((candidate) => candidate.id === record.id));
+    return {
+      ...ownershipState(),
+      runHistory: persistedRunHistory([...kept, ...back]),
+      nodes: state.nodes.map((node) => {
+        const look = before.get(node.id);
+        if (!look || node.data.state !== 'queued') return node;
+        return { ...node, data: { ...node.data, ...look } };
+      }),
+    };
+  });
+}
+
+/** A shot's name as the Cinema panel shows it: "Shot 2" for the second. */
+function shotName(scene: CinemaSceneSpec | undefined, shotId: string): string {
+  const index = scene?.shots?.findIndex((shot) => shot.id === shotId) ?? -1;
+  return `Shot ${index >= 0 ? index + 1 : 1}`;
 }
 
 /** The scene with only `shotId` in it: what a Cinema shot runs and is priced
@@ -5259,11 +5378,11 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         if (!first && (get().isExecuting || get().isImportingGraph)) return null;
         first = false;
         return { nodes: get().nodes, edges: get().edges };
-      }, nodeId);
+      }, nodeId, { verb: options?.verb });
       agreed = answer instanceof Promise ? await answer : answer;
     }
     if (!agreed) return;
-    const { nodes: runNodes, edges: runEdges, confirmedPlaceholders, confirmedCost } = agreed;
+    const { nodes: runNodes, edges: runEdges } = agreed;
     resetExecution();
     const snapshot = captureRunSnapshot(runNodes, runEdges);
     const heldStart = blockedProviderStart(
@@ -5276,34 +5395,46 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       return;
     }
     const runId = uuidv4();
-    currentRunId = runId;
-    registerRun(runId, snapshot, nodeId);
-    set((state) => ({
-      activeRuns: ownershipState().activeRuns,
-      nodes: markExecutionScopeQueued(state.nodes, state.edges, nodeId),
-      isExecuting: true,
-      isCancelling: false,
-      runHistory: persistedRunHistory(openRunRecord(state.runHistory, {
-        id: runId,
-        trigger: 'node',
-        startedAt: Date.now(),
-        snapshot,
-        targetNodeId: nodeId,
-        startedFreshPaidWorldLabs: runIncludesFreshPaidWorldLabsStart(snapshot, nodeId),
-      })),
-    }));
-    pendingStartRunIds.add(runId);
+    let before = new Map<string, NodeRunLook>();
+    let trimmed: RunRecord[] = [];
+    // Registers the run: its Run history record, its nodes Queued, Stop. Again
+    // after Nebula's refusal and a yes, unless another run started meanwhile.
+    const begin = (again = false) => {
+      if (again && (get().isExecuting || get().isImportingGraph)) return false;
+      const state = get();
+      before = runLookOf(state.nodes, new Set(nodesInExecutionScope(state.nodes, state.edges, nodeId).map((node) => node.id)));
+      const historyBefore = state.runHistory;
+      currentRunId = runId;
+      registerRun(runId, snapshot, nodeId);
+      set((current) => ({
+        activeRuns: ownershipState().activeRuns,
+        nodes: markExecutionScopeQueued(current.nodes, current.edges, nodeId),
+        isExecuting: true,
+        isCancelling: false,
+        runHistory: persistedRunHistory(openRunRecord(current.runHistory, {
+          id: runId,
+          trigger: 'node',
+          startedAt: Date.now(),
+          snapshot,
+          targetNodeId: nodeId,
+          startedFreshPaidWorldLabs: runIncludesFreshPaidWorldLabsStart(snapshot, nodeId),
+        })),
+      }));
+      trimmed = trimmedBy(historyBefore, get().runHistory);
+      pendingStartRunIds.add(runId);
+      return true;
+    };
+    begin();
     try {
-      const result = await sendDirectRun({ ...agreed, confirmedPlaceholders, confirmedCost }, nodeId, 1,
+      const result = await sendDirectRun(agreed, nodeId, 1,
         () => ownsRun(runId) && !cancellationRequestedRunIds.has(runId),
         (placeholders, cost) => apiExecuteNode(snapshot.nodes, snapshot.edges, nodeId, runId, undefined,
-          options?.approvalId, placeholders, cost));
-      if (result === DECLINED) {
-        // The person said no when Nebula asked again: nothing ran, nothing changed.
-        pendingStartRunIds.delete(runId);
-        settleTrackedExecutionStatus('cancelled', runId, set, get);
-        return;
-      }
+          options?.approvalId, placeholders, cost),
+        { begin: () => begin(true), withdraw: () => withdrawRunStart(runId, set, before, trimmed) },
+        { verb: options?.verb });
+      // The person said no when Nebula asked again: nothing ran, and the
+      // start was already taken back.
+      if (result === DECLINED) return;
       pendingStartRunIds.delete(runId);
       announcePendingSkips(result);
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
@@ -5378,10 +5509,13 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // 1): a paid placeholder feeding it asks first in GM's dialog, else the
     // costly-run setting decides, priced as the one shot it generates times
     // its variations (each a full pass), as the backend checks it.
+    // From Cinema the dialog says Generate, and the scene's row is the shot's
+    // (GM - Design, round 6, item 3: “Shot 1” · Nano Banana · $0.07).
+    const wording: DirectRunWording = { verb: 'Generate', names: { [nodeId]: shotName(live.scene, shotId) } };
     const answer = confirmDirectRun(() => {
       live = admissible();
       return live && { nodes: oneShotCanvas(live.nodes, nodeId, shotId), edges: live.edges };
-    }, nodeId, { passes: variations ?? 1 });
+    }, nodeId, { passes: variations ?? 1, ...wording });
     const agreed = answer instanceof Promise ? await answer : answer;
     if (!agreed || !live) return;
     const { nodes, edges, scene, shot } = live;
@@ -5405,10 +5539,6 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       return;
     }
 
-    // Optimistically mark this shot running (local only — the backend streams the
-    // terminal scene back via graphSync).
-    applySceneToNode(set, nodeId, patchShot(scene, { ...withoutShotError(shot.output), status: 'running' }));
-
     const graphNodes = shotSnapshot.nodes;
     const graphEdges = shotSnapshot.edges.map((edge) => ({
       ...edge,
@@ -5430,23 +5560,50 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     };
 
     const runId = uuidv4();
-    registerRun(runId, shotSnapshot, nodeId, shotId);
-    pendingStartRunIds.add(runId);
-    set((state) => ({ ...ownershipState(), runHistory: persistedRunHistory(openRunRecord(state.runHistory, {
-      id: runId, trigger: 'shot', startedAt: Date.now(), snapshot: shotSnapshot,
-      targetNodeId: nodeId, startedFreshPaidWorldLabs: false,
-      cinemaShot: { nodeId, shotId, seed, variations },
-    })) }));
+    let trimmed: RunRecord[] = [];
+    let shotBefore: CinemaShot['output'];
+    // Registers the shot's run: the shot marked running (local only — the
+    // backend streams the terminal scene back via graphSync), its Run history
+    // record, Stop. Again after Nebula's refusal and a yes, unless the shot
+    // can't start now.
+    const begin = (again = false) => {
+      if (again && get().isShotAdmissionBlocked(nodeId, shotId)) return false;
+      const current = (get().nodes.find((n) => n.id === nodeId)?.data.params as { scene?: CinemaSceneSpec } | undefined)?.scene;
+      const currentShot = current?.shots.find((s) => s.id === shotId);
+      if (again && (!current || !currentShot || currentShot.output?.status === 'running')) return false;
+      shotBefore = (currentShot ?? shot).output;
+      const historyBefore = get().runHistory;
+      applySceneToNode(set, nodeId, patchShot(current ?? scene, { ...withoutShotError(shotBefore), status: 'running' }));
+      registerRun(runId, shotSnapshot, nodeId, shotId);
+      pendingStartRunIds.add(runId);
+      set((state) => ({ ...ownershipState(), runHistory: persistedRunHistory(openRunRecord(state.runHistory, {
+        id: runId, trigger: 'shot', startedAt: Date.now(), snapshot: shotSnapshot,
+        targetNodeId: nodeId, startedFreshPaidWorldLabs: false,
+        cinemaShot: { nodeId, shotId, seed, variations },
+      })) }));
+      trimmed = trimmedBy(historyBefore, get().runHistory);
+      return true;
+    };
+    // Nebula refused it before anything ran: the shot as it was, no record (review 5, L2).
+    const withdraw = () => {
+      withdrawRunStart(runId, set, new Map(), trimmed);
+      const current = (get().nodes.find((n) => n.id === nodeId)?.data.params as { scene?: CinemaSceneSpec } | undefined)?.scene;
+      if (!current || current.shots.find((s) => s.id === shotId)?.output?.status !== 'running') return;
+      applySceneToNode(set, nodeId, { ...current, shots: current.shots.map((s) => {
+        if (s.id !== shotId) return s;
+        const back: CinemaShot = { ...s, output: shotBefore };
+        if (!shotBefore) delete back.output;
+        return back;
+      }) });
+    };
+    begin();
     try {
       const result = await sendDirectRun(agreed, nodeId, variations ?? 1,
         () => ownsRun(runId) && !cancellationRequestedRunIds.has(runId),
         (placeholders, cost) => apiGenerateShot(graphNodes, graphEdges, nodeId, shotId, seed, variations, runId,
-          placeholders, cost));
-      if (result === DECLINED) {
-        pendingStartRunIds.delete(runId);
-        settleTrackedExecutionStatus('cancelled', runId, set, get);
-        return;
-      }
+          placeholders, cost),
+        { begin: () => begin(true), withdraw }, wording);
+      if (result === DECLINED) return;
       pendingStartRunIds.delete(runId);
       if (!ownsRun(runId)) return;
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
