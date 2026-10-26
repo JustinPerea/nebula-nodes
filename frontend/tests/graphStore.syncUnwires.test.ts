@@ -193,7 +193,7 @@ describe("the person's own wire on its way", () => {
     useGraphStore.getState().onConnect(connection('n1', 'n2'));
     await release('/api/graph/connect', { status: 409, detail: 'A run is going.' });
     expect(wires()).toEqual([]);
-    expect(useGraphStore.getState().undoNotice?.text).toBe("Couldn't connect that wire. A run is going.");
+    expect(useGraphStore.getState().undoNotice?.text).toBe("Couldn't make that connection. A run is going.");
     sync(nodes(), []);
     expect(wires()).toEqual([]);
   });
@@ -245,7 +245,7 @@ describe('a wire the person deleted', () => {
     useGraphStore.getState().onEdgesChange([{ type: 'remove', id: 'e1' }]);
     await release('/api/graph/edge', { status: 409, detail: 'A run is going.' });
     expect(wires()).toEqual(['e1:n1->n2']);
-    expect(useGraphStore.getState().undoNotice?.text).toBe("Couldn't remove that wire. A run is going.");
+    expect(useGraphStore.getState().undoNotice?.text).toBe("Couldn't remove that connection. A run is going.");
     sync(nodes(), [wire('n1', 'n2', 'e1')]);
     expect(wires()).toEqual(['e1:n1->n2']);
   });

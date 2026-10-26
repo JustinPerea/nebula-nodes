@@ -310,6 +310,9 @@ def test_an_added_node_the_person_changed_or_wired_since_stays(api):
     assert set(api.graph.nodes) == {prompt, image, a, b}
     reasons = {item["nodeId"]: item["reason"] for item in result["skipped"]}
     assert reasons == {a: "changed since", b: "wired since"}
+    # The reason stays a code; the message agents and `nebula undo` read says connected (GM, 2026-10-25).
+    messages = {item["nodeId"]: item["message"] for item in result["skipped"]}
+    assert messages[b] == f"{b} was connected to {image} since, so it stays"
 
 
 def test_a_wire_that_cannot_go_back_is_skipped_and_the_rest_is_undone(api):
@@ -816,7 +819,7 @@ def test_a_wire_out_of_an_added_node_that_ran_goes(api):
     assert [(item["nodeId"], item["reason"], item["left"]) for item in result["skipped"]] == [
         (source, "ran since", ["node"])]
     # The reply counts the wire it took away, and lists the node once.
-    assert result["message"] == f"Undone: unwired 1. Left as is: {source} ran since (run by the person), so it stays."
+    assert result["message"] == f"Undone: disconnected 1. Left as is: {source} ran since (run by the person), so it stays."
 
 
 @pytest.mark.parametrize("runner", ["person", "Codex"])

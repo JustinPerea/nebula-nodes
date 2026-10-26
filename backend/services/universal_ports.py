@@ -248,7 +248,7 @@ def unconfirmed_note(model: str, outputs: list[dict[str, Any]]) -> str | None:
     return (f"Replicate's data for {model} doesn't say {what}, so its output `{port_id}` is typed "
             f"{port.get('dataType')}, unconfirmed (`typeUnconfirmed`). A run that returns a file of another "
             f"type keeps it under that type's own port (`video`, `audio`, ...), which this node doesn't declare, "
-            f"so a wire on `{port_id}` gets nothing then. Nebula doesn't guess the type from the model's name.")
+            f"so a connection on `{port_id}` gets nothing then. Nebula doesn't guess the type from the model's name.")
 
 
 def stale_note(model: str) -> str:

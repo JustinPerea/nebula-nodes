@@ -132,7 +132,7 @@ def _print_brief(board: dict[str, Any]) -> None:
     source = _OVERRIDE_AUTHOR[override["by"]] if override else "generated"
     if board_is_off(board):
         # Q36 a: at 0 no node it's wired into gets any of it.
-        print(f"  Brief ({source}), not sent: board strength is 0, so no node it's wired into gets the board:")
+        print(f"  Brief ({source}), not sent: board strength is 0, so no node it's connected to gets the board:")
     else:
         print(f"  Brief sent to generators ({source}):")
     if composed.get("styleBrief"):

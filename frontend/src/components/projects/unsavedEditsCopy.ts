@@ -5,11 +5,11 @@ export const UNSAVED_EDITS_HEADING = "Couldn't save your edits.";
 export const CONFIRM_LINE = "Continue without your edits? They can't be recovered after this.";
 
 /** The confirm when the held edits are the open project's own canvas (Q118
- * review): the backend's switch keeps its nodes, wires and settings in that
+ * review): the backend's switch keeps its nodes, connections and settings in that
  * project, so only what only this tab had is lost. DRAFT, not GM's yet: GM -
  * Design to replace it word for word. */
 export function keptConfirmLine(projectName: string): string {
-  return `Continue without them? “${projectName}” keeps its nodes, wires and settings. `
+  return `Continue without them? “${projectName}” keeps its nodes, connections and settings. `
     + 'Run history since the last save, and anything else only this tab has, will be lost.';
 }
 

@@ -33,7 +33,7 @@ def _job_id(node: GraphNode, inputs: dict[str, PortValueDict]) -> str:
         wired = wired.get("job_id") or wired.get("id")
     job_id = _clean_str(wired or node.params.get("job_id"))
     if not _JOB_ID.fullmatch(job_id):
-        raise with_person_line(ValueError("Wire a Krea 3D job or enter its job ID"), "Connect a Krea 3D job or fill in “Job ID”, then run the node again.")
+        raise with_person_line(ValueError("Connect a Krea 3D job or enter its job ID"), "Connect a Krea 3D job or fill in “Job ID”, then run the node again.")
     return job_id
 
 

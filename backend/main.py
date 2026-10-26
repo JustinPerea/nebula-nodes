@@ -87,7 +87,7 @@ from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services.input_file_name import PARAM as INPUT_FILE_NAME_PARAM, file_name_param
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
-from services import agent_start, input_sizes, node_categories, node_lookup
+from services import agent_start, input_sizes, node_categories, node_lookup, node_names
 from services import output_thumbnail
 from services import refusal_copy
 from services.node_errors import NodeErrors
@@ -2336,6 +2336,7 @@ def _require_spend_approval(
         ) from exc
     key, label = _spend_session(headers)
     items = [{"id": n.id, "definitionId": n.definition_id, "params": n.params} for n in nodes]
+    run_nodes = {n.id: n for n in nodes}
     definitions = node_registry.get_all()
     # A price that depends on the input's size is checked at the size of the
     # file this run will send (services/input_sizes.py), measured before this
@@ -2347,6 +2348,12 @@ def _require_spend_approval(
         settings=settings, pricing=pricing, definitions=definitions,
         budgets=_spend_budgets(key, settings), how_to_ask=ask, passes=passes, sizes=measured.sizes,
         size_reasons=measured.reasons,
+        # What is connected to a port with more than one input, by name, for the refusal to list.
+        # Named from this run's own nodes (/api/execute and a shot price the
+        # request's nodes, which needn't match the open canvas): _run_node_name.
+        size_inputs={node_id: (port, [(_run_node_name(source, run_nodes), source, handle)
+                                      for source, handle in sources])
+                     for node_id, (port, sources) in measured.connected.items()},
     )
     if decision.refusal:
         raise _person_only_refusal(decision.refusal)
@@ -2941,7 +2948,7 @@ async def upload_file_consolidated(
         # (an agent's `nebula upload` / upload_file, or the person's drop).
         publish_action(f"Added {node_type} ({node_id})")
         _journal_node_added(node_id)
-        await _show_agent({"nodeId": node_id}, say=f"Added {_node_label(node_id)}", did=_did("Added", node_id))
+        await _show_agent({"nodeId": node_id}, say=f"Added {_quoted(_node_label(node_id))}", did=_did("Added", node_id))
         response["nodeId"] = node_id
         if node_type == "image-input":
             response["thumbUrl"] = url
@@ -4334,7 +4341,7 @@ def _brief_param(param: dict[str, Any]) -> dict[str, Any]:
 
 
 _CHAT_MODEL_PORTS = (
-    "These ports follow the node's `model`: `messages` always; `images` (Image, several wires) when the model "
+    "These ports follow the node's `model`: `messages` always; `images` (Image, several connections) when the model "
     "takes images; `text` when it writes text and `image` (Image) when it makes images. Set `model` with "
     "edit_canvas and the node gets that model's ports (the edit's `modelPorts` lists them; look_at_canvas shows "
     "a node's `ports`). Nebula reads the model list with the person's key, which costs nothing; without it the "
@@ -4764,6 +4771,38 @@ def _node_label(node_id: str) -> str:
         return node["label"]
     definition = node_registry.get_all().get(str(node.get("definitionId", "")), {})
     return str(definition.get("displayName") or node.get("definitionId") or node_id)
+
+
+def _run_node_name(node_id: str, run_nodes: Mapping[str, GraphNode]) -> str:
+    """A node's name in a run, from the run's own nodes, for a refusal: the
+    label it carries (a run's node has none today: GraphNode keeps no label),
+    else the open canvas's label when the canvas node with that id is the
+    same definition (a run of the canvas: /api/graph/run), else the run
+    node's type name, else its id. Never raises: it only names things in a
+    refusal that is already decided."""
+    try:
+        node = run_nodes.get(node_id)
+        if node is None:
+            return node_id
+        own = getattr(node, "label", None)
+        if isinstance(own, str) and own.strip():
+            return own
+        live = cli_graph.nodes.get(node_id)
+        if isinstance(live, dict) and live.get("definitionId") == node.definition_id:
+            canvas_label = live.get("label")
+            if isinstance(canvas_label, str) and canvas_label.strip():
+                return canvas_label
+        definition = node_registry.get_all().get(node.definition_id) or {}
+        return str(definition.get("displayName") or node_id)
+    except Exception:  # noqa: BLE001 - a name in a refusal must never turn it into a 500
+        return node_id
+
+
+def _quoted(label: str) -> str:
+    """A node's name in a cursor bubble, in curly quotes as the Agents panel
+    shows it (GM - Design, 2026-10-25: Connecting “A” to “B”), without
+    doubling quotes already around the name (services/node_names.py)."""
+    return node_names.quoted(label)
 
 
 # The Agents panel's verb for a point_at with nothing else behind it (Q125
@@ -6066,14 +6105,14 @@ def _refuse_orphaned_wires(graph: CLIGraph, node_id: str, name: str | None = Non
         model = universal_ports.model_of(definition_id, params)
         who = name or node_id
         if configured:
-            why = f"{who}'s new model {model} doesn't have the ports these wires use"
+            why = f"{who}'s new model {model} doesn't have the ports these connections use"
         elif model:
             why = (f"{reason}, so Nebula can't tell which ports {model} has and {who} keeps only "
-                   f"{_basic_ports_line(definition_id, params)}; these wires use others")
+                   f"{_basic_ports_line(definition_id, params)}; these connections use others")
         else:
-            why = f"Without a model {who} has {_basic_ports_line(definition_id, params)}; these wires use others"
+            why = f"Without a model {who} has {_basic_ports_line(definition_id, params)}; these connections use others"
         raise HTTPException(status_code=400, detail=(
-            f"{why}: {wires}. Unwire them in the same edit (`unwire`), or pick a model that takes them."))
+            f"{why}: {wires}. Disconnect them in the same edit (`unwire`), or pick a model that takes them."))
 
 
 def _stage_proposal(
@@ -6170,7 +6209,7 @@ def _stage_proposal(
                 name = ref_for.get(node_id, node_id)
                 model = universal_ports.model_of(definition_id, node.get("params"))
                 raise HTTPException(status_code=400, detail=(
-                    f"Can't wire {name}.{handle}: {reason}, so Nebula can't tell which ports {model} has. "
+                    f"Can't connect {name}.{handle}: {reason}, so Nebula can't tell which ports {model} has. "
                     f"Until it can, {name} has {_basic_ports_line(definition_id, node.get('params') or {})}."))
     try:
         edge_ids = _stage_graph_edges(candidate, raw_edges, refs)
@@ -10328,7 +10367,7 @@ def _journal_node_added(node_id: str, *, actor: dict[str, Any] | None = None, no
 
 def _journal_edge(kind: str, edge: dict[str, Any], *, actor: dict[str, Any] | None = None, note: str = "") -> None:
     data = _edge_data(edge)
-    verb = "wired" if kind == "edge.added" else "unwired"
+    verb = "connected" if kind == "edge.added" else "disconnected"
     _journal(
         kind,
         node_id=str(data.get("target") or "") or None,
@@ -10422,7 +10461,7 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
     await _broadcast_graph_sync(edit=True)
     publish_action(f"Added {definition_id} ({short_id})")
     _journal_node_added(short_id)
-    await _show_agent({"nodeId": short_id}, say=f"Added {_node_label(short_id)}", did=_did("Added", short_id))
+    await _show_agent({"nodeId": short_id}, say=f"Added {_quoted(_node_label(short_id))}", did=_did("Added", short_id))
     return cli_graph.nodes[short_id]
 
 
@@ -10450,7 +10489,7 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
         raise HTTPException(status_code=400, detail=str(e))
     await _broadcast_graph_sync(edit=True)
     publish_action(
-        f"Wired {edge['source']}:{edge['sourceHandle']} → "
+        f"Connected {edge['source']}:{edge['sourceHandle']} → "
         f"{edge['target']}:{edge['targetHandle']}"
     )
     _journal_edge("edge.added", edge)
@@ -10458,7 +10497,7 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
         {"nodeId": edge["target"], "handle": edge["targetHandle"]},
         origin={"nodeId": edge["source"], "handle": edge["sourceHandle"]},
         action="drag",
-        say=f"Wiring {edge['source']} → {edge['target']}",
+        say=f"Connecting {_quoted(_node_label(edge['source']))} to {_quoted(_node_label(edge['target']))}",
         did=_did("Connected", edge["target"]),
     )
     return {"connection": f"{edge['source']}:{edge['sourceHandle']} -> {edge['target']}:{edge['targetHandle']}"}
@@ -10574,18 +10613,18 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     if edge is not None:
         _journal_edge("edge.added", edge)
         publish_action(
-            f"Wired {src}:{connect_spec.get('sourceHandle', '')} → "
+            f"Connected {src}:{connect_spec.get('sourceHandle', '')} → "
             f"{dst}:{connect_spec.get('targetHandle', '')}"
         )
         await _show_agent(
             {"nodeId": dst, "handle": connect_spec.get("targetHandle", "")},
             origin={"nodeId": src, "handle": connect_spec.get("sourceHandle", "")},
             action="drag",
-            say=f"Added {_node_label(short_id)} and wired it",
+            say=f"Added {_quoted(_node_label(short_id))} and connected it",
             did=_did("Added", short_id),
         )
     else:
-        await _show_agent({"nodeId": short_id}, say=f"Added {_node_label(short_id)}", did=_did("Added", short_id))
+        await _show_agent({"nodeId": short_id}, say=f"Added {_quoted(_node_label(short_id))}", did=_did("Added", short_id))
     return response
 
 
@@ -10889,7 +10928,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
             summary=f"set {_listed(changes['keys'], 4)} on {_node_label(node_id)} ({node_id})",
         )
     changed = ", ".join(sorted(str(key) for key in params)[:4])
-    await _show_agent({"nodeId": node_id}, say=f"Set {changed}" if changed else f"Updated {node_id}",
+    await _show_agent({"nodeId": node_id}, say=f"Set {changed}" if changed else f"Updated {_quoted(_node_label(node_id))}",
                       did=_did("Changed", node_id))
     return cli_graph.nodes[node_id]
 
@@ -11021,7 +11060,7 @@ async def rename_graph_node(node_id: str, body: dict[str, Any]) -> dict:
         )
         # An agent's rename is an action like any edit (the Agents panel's
         # line, Q125 item 2); a no-op for the person's own.
-        await _show_agent({"nodeId": node_id}, say=f"Renamed {current}", did=_did("Renamed", node_id))
+        await _show_agent({"nodeId": node_id}, say=f"Renamed {_quoted(current)}", did=_did("Renamed", node_id))
     return {"id": node_id, "label": current}
 
 
@@ -11125,7 +11164,7 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
         if arrange is None:
             # An agent's move (`nebula move`) is an action too (the Agents
             # panel's line, Q125 item 2); a no-op for the person's drags.
-            await _show_agent({"nodeId": moved[0]}, action="move", say=f"Moved {_node_label(moved[0])}",
+            await _show_agent({"nodeId": moved[0]}, action="move", say=f"Moved {_quoted(_node_label(moved[0]))}",
                               did=_did("Moved", moved[0]))
     if arrange is not None:
         return {"status": "arranged", "count": len(normalized), "positions": normalized}
@@ -11387,9 +11426,10 @@ async def delete_graph_node(node_id: str) -> dict:
     last_point = agent_presence.last_point(node_id)
     await _announce_removed_nodes(entries, note="", pin_reason=lambda gone: f"{gone['name']} was deleted")
     if last_point is not None:
-        await _show_agent(last_point, say=f"Removed {label}", did={"verb": "Removed", "nodeId": None, "label": label})
+        await _show_agent(last_point, say=f"Removed {_quoted(label)}", did={"verb": "Removed", "nodeId": None, "label": label})
     # What the delete removed, for its undo (POST /api/graph/restore `removals`).
-    return {"status": "deleted", "id": node_id, "removal": removals[0]}
+    # `label` is its name as the canvas showed it (the type's name when it has none): `nebula delete` says it.
+    return {"status": "deleted", "id": node_id, "label": label, "removal": removals[0]}
 
 
 def _billing_choice(definition_id: str, params: Mapping[str, Any]) -> tuple[str, str] | None:
@@ -11644,8 +11684,8 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         for edge in spec.unwire:
             if not candidate.remove_edge(edge.source, edge.source_handle, edge.target, edge.target_handle):
                 raise HTTPException(status_code=404, detail=(
-                    f"There's no wire {edge.source}.{edge.source_handle} → {edge.target}.{edge.target_handle}; "
-                    "look_at_canvas lists the current wires."))
+                    f"There's no connection {edge.source}.{edge.source_handle} → {edge.target}.{edge.target_handle}; "
+                    "look_at_canvas lists the current connections."))
         for node_id in spec.remove:
             node = candidate.nodes.get(node_id)
             if node is None:
@@ -11751,12 +11791,12 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     added = list(id_map.values())
     parts = [
         f"added {len(added)}" if added else "",
-        f"wired {len(edge_ids)}" if edge_ids else "",
+        f"connected {len(edge_ids)}" if edge_ids else "",
         f"changed {len(changed)}" if changed else "",
         f"renamed {len(renamed)}" if renamed else "",
         f"moved {len(moves)}" if moves else "",
         f"removed {len(removed)}" if removed else "",
-        f"unwired {len(spec.unwire)}" if spec.unwire else "",
+        f"disconnected {len(spec.unwire)}" if spec.unwire else "",
     ]
     summary = ", ".join(part for part in parts if part) or "no change"
     publish_action(f"{identity.name} edited the canvas: {summary}")
@@ -11796,8 +11836,8 @@ def _refuse_oversized_graph(candidate: CLIGraph) -> None:
     nodes, edges = len(candidate.nodes), len(candidate.edges)
     if nodes > RESTORE_MAX_GRAPH_NODES or edges > RESTORE_MAX_GRAPH_EDGES:
         raise HTTPException(status_code=413, detail=(
-            f"A canvas holds at most {RESTORE_MAX_GRAPH_NODES:,} nodes and {RESTORE_MAX_GRAPH_EDGES:,} wires "
-            f"(the most a project can save). This edit would leave {nodes:,} nodes and {edges:,} wires, "
+            f"A canvas holds at most {RESTORE_MAX_GRAPH_NODES:,} nodes and {RESTORE_MAX_GRAPH_EDGES:,} connections "
+            f"(the most a project can save). This edit would leave {nodes:,} nodes and {edges:,} connections, "
             "so nothing changed."))
 
 
@@ -12018,7 +12058,7 @@ async def _restore_graph(
             missing = next((node_id for node_id in (source, target) if node_id not in candidate.nodes), None)
             if missing is not None:
                 raise HTTPException(status_code=409, detail=(
-                    f"{missing} is no longer on the canvas, so its wire can't be put back. "
+                    f"{missing} is no longer on the canvas, so its connection can't be put back. "
                     "Reload the canvas to see the current graph."))
             try:
                 _validate_connect_handles(source, source_handle, target, target_handle, graph=candidate)
@@ -12098,7 +12138,7 @@ async def _restore_graph(
     for edge in wired:
         _journal_edge("edge.added", edge, note=note)
     publish_action(f"{action.capitalize()} on the canvas: {len(added)} back, {len(removed)} removed, "
-                   f"{len(changed)} changed, {len(wired)} wired, {len(unwired)} unwired")
+                   f"{len(changed)} changed, {len(wired)} connected, {len(unwired)} disconnected")
     # The nodes it brought back: their pins on them again, and the proposals
     # their deletes closed open again where they still fit (GM, 2026-10-23).
     # A swapped id (in ``remove`` too) holds another node now, not the one deleted.
@@ -12362,7 +12402,7 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         skipped = plan.skipped + [{
             "part": "wire", "nodeId": wire["target"], "reason": "can't be wired now",
             "wire": {key: wire[key] for key in ("source", "sourceHandle", "target", "targetHandle")},
-            "message": (f"the wire {wire['source']}.{wire['sourceHandle']} → {wire['target']}.{wire['targetHandle']} "
+            "message": (f"the connection {wire['source']}.{wire['sourceHandle']} → {wire['target']}.{wire['targetHandle']} "
                         f"can't come back: {wire['reason']}")} for wire in wire_skips]
         record.state, record.undone_by, record.undo_id = "undone", actor_record(actor), undo_id
         record.last_skipped = skipped
@@ -12569,13 +12609,14 @@ async def delete_graph_edge(body: dict[str, Any]) -> dict:
         await _broadcast_graph_sync(edit=True)
         _journal_edge("edge.removed", body)
         publish_action(
-            f"Unwired {body.get('source', '')}:{body.get('sourceHandle', '')} → "
+            f"Disconnected {body.get('source', '')}:{body.get('sourceHandle', '')} → "
             f"{body.get('target', '')}:{body.get('targetHandle', '')}"
         )
         if body.get("target") in cli_graph.nodes:
             await _show_agent(
                 {"nodeId": body["target"]},
-                say=f"Unwired {body.get('source', '')} → {body.get('target', '')}",
+                say=(f"Disconnected {_quoted(_node_label(str(body.get('source', ''))))} "
+                     f"from {_quoted(_node_label(body['target']))}"),
                 did=_did("Disconnected", body["target"]),
             )
     return {"status": "deleted" if removed else "not_found"}
@@ -14598,7 +14639,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         f"Running {target}..." if target else f"Running {len(sub_nodes)} node(s)..."
     )
     if target:
-        await _show_agent({"nodeId": target}, say=f"Running {_node_label(target)}", did=_did("Ran", target))
+        await _show_agent({"nodeId": target}, say=f"Running {_quoted(_node_label(target))}", did=_did("Ran", target))
     else:
         # The whole canvas has no one node to point at: the Agent log only.
         await _say_agent_action(f"Running {len(sub_nodes)} node{'' if len(sub_nodes) == 1 else 's'}")
@@ -14642,7 +14683,9 @@ async def _refused_cli_run(run_id: str, target: str | None, errors: list[Validat
                    + (" ".join(said.values()) or person.get("") or "Couldn't run the canvas."))
     first = next(iter(per_node), None)
     if first is not None:
-        await _show_agent({"nodeId": first}, say=said[first], did=_did("Tried to run", first))
+        # The cursor quotes the node like every other bubble; the log keeps its line.
+        bubble = f"{_quoted(_node_label(first))} can't run." + (f" {person[first]}" if person.get(first) else "")
+        await _show_agent({"nodeId": first}, say=bubble, did=_did("Tried to run", first))
     response = {
         "runId": run_id,
         "targetNodeId": target,

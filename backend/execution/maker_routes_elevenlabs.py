@@ -197,7 +197,7 @@ def runway_sts_to_elevenlabs(node: GraphNode, inputs: dict[str, PortValueDict]) 
     audio = inputs.get("audio")
     if audio is None or audio.value in (None, ""):
         if inputs.get("video") is not None and inputs["video"].value not in (None, ""):
-            raise with_person_line(ValueError("ElevenLabs speech-to-speech takes audio, not video. Wire the audio track into "
+            raise with_person_line(ValueError("ElevenLabs speech-to-speech takes audio, not video. Connect the audio track to "
                              "Audio, or clear the ElevenLabs voice_id to run this on Runway."),
                 "ElevenLabs speech-to-speech takes audio, not video. Connect the audio track to “Audio”, or clear “ElevenLabs voice ID” to run this on Runway.")
         raise with_person_line(ValueError("Audio input is required for speech-to-speech"), "Connect audio to this node, then run it again.")

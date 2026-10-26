@@ -1068,7 +1068,7 @@ async def handle_krea_library_manage(
         arguments[name_key] = new_name
     else:
         if wired is not None:
-            raise with_person_line(ValueError("Deletes need the ID typed into the node, not wired in; nothing was deleted"), "Type the ID into “ID” to delete an item, instead of connecting it. Nothing was deleted.")
+            raise with_person_line(ValueError("Deletes need the ID typed into the node, not connected; nothing was deleted"), "Type the ID into “ID” to delete an item, instead of connecting it. Nothing was deleted.")
         if _clean_str(node.params.get("confirm_delete")) != item_id:
             raise with_person_line(ValueError("Type the same ID into Confirm delete to remove this Krea item; nothing was deleted"), "Type the same ID into “Confirm delete” to remove this Krea item. Nothing was deleted.")
 

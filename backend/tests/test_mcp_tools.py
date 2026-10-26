@@ -641,7 +641,7 @@ def test_an_agent_builds_universal_nodes_whose_ports_come_from_the_model(nebula)
                       {"source": "+paint", "sourceHandle": "image", "target": "+edit", "targetHandle": "input_image"}],
         })
         ids = built["idMap"]
-        assert built["summary"] == "added 4, wired 3"
+        assert built["summary"] == "added 4, connected 3"
         assert built["modelPorts"][ids["+edit"]]["inputs"] == ["input_image"]
         canvas = {node["id"]: node for node in _call_tool("look_at_canvas", {})["nodes"]}
         assert canvas[ids["+paint"]]["ports"] == {"inputs": ["messages", "images"], "outputs": ["text", "image"]}

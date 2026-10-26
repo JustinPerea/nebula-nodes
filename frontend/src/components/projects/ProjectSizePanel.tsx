@@ -41,7 +41,7 @@ function shownRows(rows: ProjectSizeRow[]): ShownRow[] {
         part: PART_LABELS[row.part], size: rowSize(row.bytes), nodeId: row.nodeId, opensHistory: false };
     }
     const part = row.kind === 'runHistory' ? `${row.count} ${row.count === 1 ? 'run' : 'runs'}`
-      : row.kind === 'wires' ? `${row.count} ${row.count === 1 ? 'wire' : 'wires'}` : '';
+      : row.kind === 'wires' ? `${row.count} ${row.count === 1 ? 'connection' : 'connections'}` : '';
     return { key: `${row.kind}:${index}`, name: ROW_NAMES[row.kind], type: null, part, size: rowSize(row.bytes),
       nodeId: null, opensHistory: row.kind === 'runHistory' };
   });

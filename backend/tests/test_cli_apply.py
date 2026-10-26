@@ -112,7 +112,7 @@ def test_a_plan_file_lands_in_one_step_and_prints_the_new_ids(api):
     assert apply_cmd.run_apply(api.client, _args(file=_plan_file(api, PLAN)), out=out) == 0
 
     lines = out.getvalue().splitlines()
-    assert lines[0] == "Applied: added 3, wired 2, renamed 2."
+    assert lines[0] == "Applied: added 3, connected 2, renamed 2."
     assert lines[1:4] == ["  +p → n2  Text Input", "  +wide → n3  Wide", "  +tight → n4  Tight"]
     # The last line says how to take it back.
     assert re.fullmatch(r"  Undo: nebula undo [0-9a-f]{40}  \(for 60 minutes; parts changed or run since stay\)", lines[4])
@@ -242,7 +242,7 @@ def test_a_later_step_wires_refs_an_earlier_step_created(api):
     lines = out.getvalue().splitlines()
     assert lines[0] == "Step 1 of 2. Applied: added 1."
     assert lines[1] == "  +p → n2  Text Input"
-    assert lines[2] == "Step 2 of 2. Applied: added 2, wired 2, renamed 1."
+    assert lines[2] == "Step 2 of 2. Applied: added 2, connected 2, renamed 1."
     assert {(e["source"], e["target"]) for e in api.graph.edges} == {("n2", "n3"), ("n2", "n4")}
     assert api.graph.nodes["n2"]["label"] == "Prompt"
 
@@ -445,7 +445,7 @@ def test_nebula_undo_counts_a_wire_it_took_away_and_lists_each_part_once(api):
     out = io.StringIO()
     assert apply_cmd.run_undo(api.client, _undo_args(applied["undo"]["token"]), out=out) == 0
     assert out.getvalue().splitlines() == [
-        "Undone: unwired 1.", f"  Left as is: {added} ran since (run by the person), so it stays"]
+        "Undone: disconnected 1.", f"  Left as is: {added} ran since (run by the person), so it stays"]
     assert api.graph.edges == [] and added in api.graph.nodes
 
 

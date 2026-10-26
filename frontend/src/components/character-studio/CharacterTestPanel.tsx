@@ -75,7 +75,7 @@ export function CharacterTestPanel({
       <div className="character-test__head">
         <span className="character-def__label">Test identity</span>
         <span className="character-def__hint">
-          Drop this Character on the canvas, wire it into a base-edit or Cinema
+          Drop this Character on the canvas, connect it to a base-edit or Cinema
           Scene node, and run to confirm the look holds.
         </span>
       </div>

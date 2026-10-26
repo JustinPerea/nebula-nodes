@@ -863,7 +863,7 @@ function why(route: RouteSpec, block: DirectBlock): string {
   if (block.reason === 'ports') {
     const limit = route.rules?.ports?.[block.param ?? ''];
     const name = portLimitName(block.param ?? '', limit);
-    return limit?.max ? `it takes at most ${limit.max} wired ${name}` : `it doesn't take wired ${name}`;
+    return limit?.max ? `it takes at most ${limit.max} connected ${name}` : `it doesn't take connected ${name}`;
   }
   return String(block.detail ?? block.reason);
 }

@@ -222,7 +222,7 @@ def _moodboard_lines(board: dict[str, Any]) -> list[str]:
             "weight", weight.get("mode"), weight.get("field") or weight.get("param"),
             f"{span[0]}-{span[1]}" if isinstance(span, list) and len(span) == 2 else None) if bit))
     if board.get("needsWired"):
-        parts.append(f"needs {', '.join(board['needsWired'])} wired")
+        parts.append(f"needs {', '.join(board['needsWired'])} connected")
     if board.get("never"):
         parts.append(f"never {', '.join(board['never'])}")
     for variant in board.get("variants") or []:
@@ -702,7 +702,7 @@ def format_snapshot(snapshot: dict[str, Any]) -> str:
     edges = snapshot.get("edges") or []
     if edges:
         lines.append("")
-        lines.append("WIRES:")
+        lines.append("CONNECTIONS:")
         for edge in edges:
             lines.append(f"  {edge.get('source')}.{edge.get('sourceHandle')} → {edge.get('target')}.{edge.get('targetHandle')}")
 
@@ -876,7 +876,10 @@ def _usd(amount: float) -> str:
 
 
 def format_proposal(view: dict[str, Any], *, created: bool = False, now_ms: float | None = None) -> str:
-    """A proposal as the person will see it: what it adds, wires, sets and runs."""
+    """A proposal as the person will see it: what it adds, connects, sets and runs.
+
+    The verbs are a column 8 wide (the widest, "connects", plus a space), so
+    every value starts in the same column."""
     import time as _time
 
     proposal_id = view.get("id", "?")
@@ -906,22 +909,22 @@ def format_proposal(view: dict[str, Any], *, created: bool = False, now_ms: floa
             where = f"  @({float(pos.get('x', 0)):.0f},{float(pos.get('y', 0)):.0f})"
         except (TypeError, ValueError):
             where = ""
-        lines.append(f"  adds   {node.get('ref')}  {node.get('name') or node.get('definitionId')}  [{cost}]{where}")
+        lines.append(f"  adds     {node.get('ref')}  {node.get('name') or node.get('definitionId')}  [{cost}]{where}")
     for edge in view.get("edges") or []:
-        lines.append(f"  wires  {edge.get('source')}.{edge.get('sourceHandle')} → {edge.get('target')}.{edge.get('targetHandle')}")
+        lines.append(f"  connects {edge.get('source')}.{edge.get('sourceHandle')} → {edge.get('target')}.{edge.get('targetHandle')}")
     for change in view.get("params") or []:
         keys = ", ".join((change.get("changes") or {}).keys())
-        lines.append(f"  sets   {change.get('nodeId')}: {keys}")
+        lines.append(f"  sets     {change.get('nodeId')}: {keys}")
     run = view.get("run") or []
     if run:
-        lines.append(f"  runs   {', '.join(run)} — {_cost_line(view.get('cost') or {})}")
+        lines.append(f"  runs     {', '.join(run)} — {_cost_line(view.get('cost') or {})}")
     else:
-        lines.append("  runs   nothing until the person chooses")
+        lines.append("  runs     nothing until the person chooses")
     if status == "open":
         # The run's nodes that can't run here: if the person accepts, it fails at them.
         for row in (view.get("cost") or {}).get("notReady") or []:
             if isinstance(row, dict):
-                lines.append(f"  can't  {row.get('ref') or row.get('nodeId')}  {row.get('name') or ''}: "
+                lines.append(f"  can't    {row.get('ref') or row.get('nodeId')}  {row.get('name') or ''}: "
                              f"{row.get('missing') or 'not set up here'}")
     if created:
         lines.append(f"Check the outcome: nebula proposal {proposal_id} --wait")
@@ -1123,7 +1126,7 @@ def format_project(view: dict[str, Any]) -> str:
     edges = view.get("edges") or []
     if edges:
         lines.append("")
-        lines.append("WIRES:")
+        lines.append("CONNECTIONS:")
         for edge in edges:
             lines.append(f"  {edge.get('source')}.{edge.get('sourceHandle')} → {edge.get('target')}.{edge.get('targetHandle')}")
 

@@ -141,7 +141,7 @@ interface ProjectState {
    * the reason, with the same two choices. `keptIn`: the edits are the open
    * project's own live canvas (the person's Open or New project, or an
    * agent's switch, while saving was paused), and the backend's switch keeps
-   * its nodes, wires and settings in that project, named here, so "Continue
+   * its nodes, connections and settings in that project, named here, so "Continue
    * without them" loses only what only this tab had; the confirm says so. */
   /** `agentOpening`: an agent's switch left the project (GM, 2026-10-24:
    * "{agent} is opening “{name}”." above the screen's lines). */
