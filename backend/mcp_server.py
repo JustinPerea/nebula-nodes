@@ -2798,9 +2798,9 @@ async def serve_channel(read_stream: Any, write_stream: Any, *, clock: Any = _ti
     async def fetch_pins() -> dict[str, Any]:
         # Which pins are still open, before a push decision that would hold
         # pins. A local GET that answers at once: past PIN_CHECK_TIMEOUT it
-        # failed, and is tried again later (review 5 of PR #114, L1).
-        with anyio.fail_after(mcp_channel.PIN_CHECK_TIMEOUT):
-            return await _channel_fetch("/api/canvas/pins", {}, mcp_channel.PIN_CHECK_TIMEOUT, agent["name"])
+        # failed, and is tried again later (review 5 of PR #114, L1). The
+        # Listener bounds the whole check itself (review 6, LOW-3).
+        return await _channel_fetch("/api/canvas/pins", {}, mcp_channel.PIN_CHECK_TIMEOUT, agent["name"])
 
     state = mcp_channel.ChannelState(limits=mcp_channel.Limits.from_env(), now=clock())
     listener = mcp_channel.Listener(state, fetch_events=fetch_events, fetch_run=fetch_run, push=push, clock=clock,

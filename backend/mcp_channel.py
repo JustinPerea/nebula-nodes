@@ -1161,9 +1161,12 @@ class Listener:
     async def _ask_nebula(self, checked: list[str]) -> None:
         """The pin check itself, as a task of its own: a slow or hanging
         Nebula holds only this, never the decisions (review 5, L1). Its
-        answer (or what went wrong) waits for the next decision."""
+        answer (or what went wrong) waits for the next decision. Bounded
+        here, whatever ``fetch_pins`` does: past PIN_CHECK_TIMEOUT it failed
+        (review 6, LOW-3)."""
         try:
-            listing: Any = await self._fetch_pins()
+            with anyio.fail_after(PIN_CHECK_TIMEOUT):
+                listing: Any = await self._fetch_pins()
         except Exception as exc:  # noqa: BLE001 - Nebula down, restarting, slow or refusing
             self._check_answer = ("failed", exc)
         else:
@@ -1199,6 +1202,14 @@ class Listener:
             self._pin_check_answered()
             self._log(f"pins: Nebula refused the pin check (HTTP {status}): {dropped} "
                       f"pin{'s' if dropped != 1 else ''} dropped without a wake")
+            return True
+        if not self.state.pins_waiting():
+            # Every pin it asked about left while it was out (answered
+            # elsewhere, deleted, another project) and none came since: no
+            # pin waits on this failure, so it ends the episode. A pin added
+            # later starts its checks afresh (review 6, LOW-2).
+            self.state.pin_check_failed(-math.inf)
+            self._pin_episode_over()
             return True
         # It couldn't answer: the pins wait, unconfirmed, and nothing else
         # waits for them (review 4, M2). The next try counts from now, when

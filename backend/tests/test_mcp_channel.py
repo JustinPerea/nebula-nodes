@@ -2222,6 +2222,93 @@ def test_a_new_pin_after_a_failing_episode_starts_afresh():
     assert logs and all(at >= 3601.0 + 60.0 for at, _ in logs), logs
 
 
+def test_a_check_that_fails_with_no_pin_waiting_ends_the_episode():
+    # Review 6, LOW-2 (probe probe_r6_episode): the only pin was answered by
+    # another agent while a check hung; that check then failed with no pin
+    # waiting, yet armed the backoff and the failure clock. A pin an hour
+    # later inherited the episode: checks 10, 20, 40 s apart, and "failed for
+    # over 60 s" logged on its first failure.
+    state = ChannelState(now=0.0)
+    clock = {"t": 100.0}
+    state.last_person = 100.0
+    state.observe(resp(pin(1)), now=100.0)
+    checks, logs = [], []
+    added: dict = {}
+
+    async def fetch_pins():
+        started = clock["t"]
+        checks.append(round(started, 1))
+        if len(checks) == 1:
+            # Another agent answers pin 1 while this check is out; then it times out.
+            state.observe(resp(ev(2, "pin.resolved", actor={"kind": "agent", "id": "agent:o", "name": "O"},
+                                  data={"pinId": "pin_00000001"})), now=started)
+            while clock["t"] < started + mcp_channel.PIN_CHECK_TIMEOUT:
+                await anyio.sleep(0)
+            raise TimeoutError("timed out")
+        raise ConnectionError("refused")
+
+    async def push(content, meta):
+        pass
+
+    async def sleep(seconds):
+        clock["t"] += min(seconds, 0.5 if listener._check_out is not None else 4000.0)
+        t = clock["t"]
+        if t >= 3600.0 and not added:
+            added["at"] = clock["t"] = t = 3600.0
+            state.last_person = t
+            state.observe(resp(pin(3)), now=t)  # an hour later, a new pin
+            listener._nudge()
+        if t > 3800.0:
+            raise _Done()
+        await anyio.sleep(0)
+
+    async def never(*args):
+        await anyio.sleep_forever()
+
+    listener = mcp_channel.Listener(state, fetch_events=never, fetch_run=never, push=push, clock=lambda: clock["t"],
+                                    log=lambda line: logs.append((clock["t"], line)), sleep=sleep,
+                                    fetch_pins=fetch_pins)
+    _until_done(listener)
+    later = [c for c in checks if c >= 3600.0]
+    assert checks[0] == 101.0 and later[:3] == [3601.0, 3606.0, 3616.0], checks
+    assert logs and all(at >= 3601.0 + 60.0 for at, _ in logs), logs
+
+
+def test_the_listener_bounds_a_pin_check_that_never_answers(monkeypatch):
+    # Review 6, LOW-3: the listener bounds its own check (it relied on the
+    # caller's fetch_pins to time out): one that never answers fails after
+    # PIN_CHECK_TIMEOUT, and the pins wait for the retry.
+    monkeypatch.setattr(mcp_channel, "PIN_CHECK_TIMEOUT", 0.2)
+    state = ChannelState(now=0.0)
+    state.observe(resp(pin(1)), now=100.0)
+    asked: list = []
+
+    async def fetch_pins():
+        asked.append(True)
+        await anyio.sleep_forever()
+
+    async def never(*args):
+        await anyio.sleep_forever()
+
+    async def push(content, meta):
+        pass
+
+    listener = mcp_channel.Listener(state, fetch_events=never, fetch_run=never, push=push, clock=lambda: 110.0,
+                                    log=lambda line: None, fetch_pins=fetch_pins)
+
+    async def main():
+        with anyio.fail_after(3):
+            await listener._ask_nebula(["pin_00000001"])
+
+    anyio.run(main)
+    assert asked and listener._check_answer is not None
+    outcome, error = listener._check_answer
+    assert outcome == "failed" and isinstance(error, TimeoutError), listener._check_answer
+    listener._check_out = ["pin_00000001"]
+    assert listener._take_check_answer(110.0)
+    assert state._pin_retry_at == 110.0 + mcp_channel.PIN_RETRY_MIN and "pin_00000001" in state._pins
+
+
 def test_the_pin_check_gives_up_after_a_few_seconds(nebula):
     # The real server against a Nebula whose pins listing hangs: the check
     # times out after PIN_CHECK_TIMEOUT (it was 15 s), and the person's edit
@@ -2356,6 +2443,12 @@ def _listener_check_fuzz(seed: int, horizon: float = 900.0) -> dict:
             if gated:
                 out["violations"].append((seed, clock["t"], "a gated push carrying a pin"))
             last = answers[-1] if answers else None
+            # Review 6: the answer that confirmed it came for this decision
+            # (with the slowest check counted, within 0.5 s of fake time), so
+            # a confirmation never outlives its decision.
+            if last is None or clock["t"] - last[0] > 0.5 + 1e-9:
+                out["violations"].append((seed, clock["t"], "pin push %s after the answer that confirmed it"
+                                          % ("with no answer" if last is None else f"{clock['t'] - last[0]:.2f} s")))
             for p in shown:
                 if last is None or p not in last[2] or s.project_id != last[1]:
                     out["violations"].append((seed, clock["t"], p, "not open in the answer that confirmed it"))

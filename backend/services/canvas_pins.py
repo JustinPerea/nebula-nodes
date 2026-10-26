@@ -219,6 +219,10 @@ class CanvasPins:
                 store.commit(catalog)
         return project_id, result
 
+    # add, remove and resolve answer the pin; their ``*_in`` twins answer
+    # (project_id, pin): the project the write itself went to, for the
+    # route's journal tag. A second read of the catalog after the write could
+    # name a project opened since (review 6 of PR #114, LOW-1).
     def add(
         self,
         text: Any,
@@ -227,6 +231,16 @@ class CanvasPins:
         position: Any = None,
         graph_nodes: Mapping[str, Any],
     ) -> dict[str, Any]:
+        return self.add_in(text, node_id=node_id, position=position, graph_nodes=graph_nodes)[1]
+
+    def add_in(
+        self,
+        text: Any,
+        *,
+        node_id: str | None = None,
+        position: Any = None,
+        graph_nodes: Mapping[str, Any],
+    ) -> tuple[str, dict[str, Any]]:
         clean = clean_text(text, limit=MAX_PIN_TEXT)
         if (node_id is None) == (position is None):
             raise PinError(422, "Pin a note to a node (nodeId) or to a canvas spot (position), not both")
@@ -262,18 +276,24 @@ class CanvasPins:
                 pins.remove(oldest)
             return public_pin(pin)
 
-        return self._write(mutate)[1]
+        return self._write(mutate)
 
     def remove(self, pin_id: str) -> dict[str, Any]:
+        return self.remove_in(pin_id)[1]
+
+    def remove_in(self, pin_id: str) -> tuple[str, dict[str, Any]]:
         def mutate(pins: list[dict[str, Any]]) -> dict[str, Any]:
             for index, pin in enumerate(pins):
                 if pin.get("id") == pin_id:
                     return public_pin(pins.pop(index))
             raise PinError(404, "That note isn't there anymore. Reload to get the latest notes.")
 
-        return self._write(mutate)[1]
+        return self._write(mutate)
 
     def resolve(self, pin_id: str, reply: Any, identity: AgentIdentity) -> dict[str, Any]:
+        return self.resolve_in(pin_id, reply, identity)[1]
+
+    def resolve_in(self, pin_id: str, reply: Any, identity: AgentIdentity) -> tuple[str, dict[str, Any]]:
         text = clean_text(reply, limit=MAX_REPLY, label="Reply")
 
         def mutate(pins: list[dict[str, Any]]) -> dict[str, Any]:
@@ -285,7 +305,7 @@ class CanvasPins:
                     return public_pin(pin)
             raise PinError(404, f"No note {pin_id[:40]} on this canvas")
 
-        return self._write(mutate)[1]
+        return self._write(mutate)
 
     def _detach(self, pins: list[dict[str, Any]], node_ids: Callable[[str], bool],
                 positions: Mapping[str, Any], removals: Mapping[str, Mapping[str, Any]] | None = None,

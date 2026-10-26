@@ -812,7 +812,9 @@ accept or the end of Claude's own run goes without the pins, and past 4 s
 the check counts as failed. If Nebula can't answer the check, only the pins wait: it checks
 again (5 s after the failure, doubling up to 60 s), every other push goes
 meanwhile by its own rules, without them, and the server's log says so
-once the check has failed for a minute. If Nebula refuses the check
+once the check has failed for a minute. Once no pin waits (each was
+answered, deleted or left with its project), a later pin's checks start
+afresh, at 5 s. If Nebula refuses the check
 (an error such as an agent token it no longer accepts), the pins are dropped
 without a wake, and the log says how many. "Still open" means still open
 when Nebula answered: a pin you delete in the moment between that answer and

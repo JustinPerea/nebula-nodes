@@ -705,6 +705,68 @@ def test_a_pin_added_between_a_switchs_commit_and_its_broadcast_wakes_claude(api
     _assert_pin_wake(*_channel_decides(client, journal), added["pin"]["id"], now_open)
 
 
+# Review 6 of PR #114, LOW-1: the pin routes read the project they wrote to,
+# awaited the browsers' broadcast, then journaled with that tag. A switch and a
+# pin on the new project could be journaled during that await, so the late
+# event named the project left, and the listener (_project_open) dropped the
+# open project's waiting pin: a lost wake. Each route now journals right after
+# its write, before any await, tagged with the project the write itself names.
+
+@pytest.mark.parametrize("route", ["create", "delete", "resolve"])
+def test_a_pin_route_journals_before_a_switch_can_overtake_it(api, monkeypatch, route):
+    import main as main_module
+    from services.agent_presence import _request_headers
+
+    client, _graph, journal, _sent, store, (active, other) = api
+    capture = main_module.manager.broadcast_raw
+    done: dict = {}
+    if route != "create":
+        first = client.post("/api/canvas/pins", headers=PERSON, json={"text": "on the first", "position": {"x": 0, "y": 0}})
+        assert first.status_code == 201, first.text
+        first_id = first.json()["pin"]["id"]
+
+    async def switch_and_pin(data):
+        await capture(data)
+        if data.get("type") == "canvasPins" and "armed" in done and "pin" not in done:
+            done["pin"] = None
+            # The person opens the other project while this route awaits its
+            # broadcast, and pins a note there at once (that route ends first).
+            held = _request_headers.set(PERSON)
+            try:
+                revision = store.read()["workspaceRevision"]
+                await main_module.open_saved_project(other, {"workspaceRevision": revision})
+                done["pin"] = (await main_module.create_canvas_pin(
+                    {"text": "on the other one", "position": {"x": 1, "y": 1}}))["pin"]
+            finally:
+                _request_headers.reset(held)
+
+    monkeypatch.setattr(main_module.manager, "broadcast_raw", switch_and_pin)
+    done["armed"] = True
+    if route == "create":
+        answer = client.post("/api/canvas/pins", headers=PERSON, json={"text": "on the first", "position": {"x": 0, "y": 0}})
+        assert answer.status_code == 201, answer.text
+    elif route == "delete":
+        answer = client.delete(f"/api/canvas/pins/{first_id}", headers=PERSON)
+        assert answer.status_code == 200, answer.text
+    else:
+        answer = client.post(f"/api/canvas/pins/{first_id}/resolve", headers=AGENT, json={"reply": "done"})
+        assert answer.status_code == 200, answer.text
+    assert done.get("pin"), done
+    assert store.read()["activeProjectId"] == other
+    events = journal.read(after=0)["events"]
+    kinds = [(e["kind"], e["projectId"]) for e in events if e["kind"].startswith("pin.") or e["kind"] == "canvas.replaced"]
+    answer_, checked, dropped, push = _channel_decides(client, journal)
+    pin_b = done["pin"]["id"]
+    assert checked == [pin_b] and dropped == 0, (checked, dropped, kinds)
+    assert push is not None and (push.wake, push.gate) == ("pin", False)
+    assert f'pin id="{pin_b}"' in push.content and answer_["projectId"] == other
+    # The first route's event is journaled before the switch, tagged with the project it wrote to.
+    own = {"create": "pin.added", "delete": "pin.removed", "resolve": "pin.resolved"}[route]
+    switched = next(i for i, (kind, _) in enumerate(kinds) if kind == "canvas.replaced")
+    assert (own, active) in kinds[:switched], kinds
+    assert all(project == other for _, project in kinds[switched:]), kinds
+
+
 def _large_catalog(tmp_path, projects: int = 30, nodes: int = 200) -> ProjectStore:
     """Probe probe_cache_perf's middle size: about 3 MB, every project with a pin."""
     def node(i):

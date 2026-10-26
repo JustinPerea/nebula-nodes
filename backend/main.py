@@ -297,16 +297,6 @@ def _journal_project() -> str | None:
     return _workspace_context()["activeProjectId"]
 
 
-def _project_written_to() -> Any:
-    """Right after a pin write: the project it went to (the one open now),
-    for its event's tag. ``...`` (the journal's own tag) when the catalog
-    can't be read: the journal never fails the route."""
-    try:
-        return _journal_project()
-    except ProjectStoreError:
-        return ...
-
-
 def _events_journal():
     """The canvas event journal, tagging events and answers with the project
     the catalog has open (CanvasEventJournal.follow). Through here so a
@@ -5777,19 +5767,19 @@ async def create_canvas_pin(body: dict[str, Any]) -> dict[str, Any]:
     """
     require_person(current_request_headers())
     try:
-        pin = canvas_pins.add(
+        project_id, pin = canvas_pins.add_in(
             body.get("text"),
             node_id=body.get("nodeId"),
             position=body.get("position"),
             graph_nodes=cli_graph.nodes,
         )
-        # The project it was written to (nothing on this loop commits in
-        # between), for its event: a switch during the broadcast below
-        # must not tag it with the project opened next.
-        project_id = _project_written_to()
     except PinError as exc:
         raise _pin_http_error(exc) from exc
-    await _broadcast_pins()
+    # Journaled at once, before any await, tagged with the project the write
+    # went to: a switch (and a pin on the project it opens) journaled during
+    # an await here would come first, and this event, naming the project
+    # left, would then make the --channel listener drop the open project's
+    # pin (review 6 of PR #114, LOW-1). The same in delete and resolve.
     anchor = pin.get("anchor") or {}
     _journal(
         "pin.added",
@@ -5798,6 +5788,7 @@ async def create_canvas_pin(body: dict[str, Any]) -> dict[str, Any]:
         summary=pin_summary(pin),
         project_id=project_id,
     )
+    await _broadcast_pins()
     return {"pin": pin}
 
 
@@ -5806,18 +5797,17 @@ async def delete_canvas_pin(pin_id: str) -> dict[str, Any]:
     """Delete a note. Only the person can do this."""
     require_person(current_request_headers())
     try:
-        pin = canvas_pins.remove(pin_id)
-        project_id = _project_written_to()  # where it was deleted (see create_canvas_pin)
+        project_id, pin = canvas_pins.remove_in(pin_id)
     except PinError as exc:
         raise _pin_http_error(exc) from exc
-    await _broadcast_pins()
-    _journal(
+    _journal(  # before any await, tagged with the write's project (see create_canvas_pin)
         "pin.removed",
         node_id=(pin.get("anchor") or {}).get("nodeId"),
         data={"pinId": pin_id, "text": pin.get("text")},
         summary=f"deleted the note {pin_id}",
         project_id=project_id,
     )
+    await _broadcast_pins()
     return {"status": "deleted"}
 
 
@@ -5828,20 +5818,19 @@ async def resolve_canvas_pin(pin_id: str, body: dict[str, Any]) -> dict[str, Any
     if identity is None:
         raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
     try:
-        pin = canvas_pins.resolve(pin_id, body.get("reply"), identity)
-        project_id = _project_written_to()  # where it was answered (see create_canvas_pin)
+        project_id, pin = canvas_pins.resolve_in(pin_id, body.get("reply"), identity)
     except PinError as exc:
         raise _pin_http_error(exc) from exc
-    await _broadcast_pins()
     reply = (pin.get("reply") or {}).get("text", "")
     anchor = pin.get("anchor") or {}
-    _journal(
+    _journal(  # before any await, tagged with the write's project (see create_canvas_pin)
         "pin.resolved",
         node_id=anchor.get("nodeId"),
         data={"pinId": pin_id, "text": pin.get("text"), "reply": reply},
         summary=f'answered the note {pin_id} ("{str(pin.get("text"))[:40]}"): {reply}',
         project_id=project_id,
     )
+    await _broadcast_pins()
     try:
         target = anchor if anchor.get("nodeId") in cli_graph.nodes else (
             pin.get("position") or {"x": anchor.get("x", 0.0), "y": anchor.get("y", 0.0)}
