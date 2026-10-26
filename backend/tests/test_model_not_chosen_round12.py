@@ -24,16 +24,21 @@ TOPAZ = "krea-enhance-topaz-standard-enhance"
 GM_LINE = "Choose a model for “Clean plate” first."
 
 
+# Round 13 (GM: only the first missing field, in the card's order): Topaz
+# Standard's Width and Height come before its Model, so these set them.
+SIZE = {"width": 2048, "height": 2048}
+
+
 @pytest.mark.parametrize(("definition_id", "params", "field"), [
-    (TOPAZ, {}, "model"),
-    (TOPAZ, {"model": ""}, "model"),
-    (TOPAZ, {"model": "  "}, "model"),
-    (TOPAZ, {"model": "CGI"}, None),
+    (TOPAZ, {**SIZE}, "model"),
+    (TOPAZ, {**SIZE, "model": ""}, "model"),
+    (TOPAZ, {**SIZE, "model": "  "}, "model"),
+    (TOPAZ, {**SIZE, "model": "CGI"}, None),
     ("krea-node-app", {}, "version"),
     ("krea-node-app", {"node_app_version_id": "v_9"}, None),
     # Settings with a default always have a model.
-    ("krea-enhance-topaz-bloom-2-enhance", {}, None),
-    ("krea-enhance-magnific-precise-enhance", {}, None),
+    ("krea-enhance-topaz-bloom-2-enhance", {**SIZE}, None),
+    ("krea-enhance-magnific-precise-enhance", {**SIZE}, None),
     ("krea-enhance-topaz-video-upscale", {}, None),
     # Not a Krea node, or no model setting: never.
     ("nano-banana", {}, None),
@@ -58,7 +63,7 @@ def test_the_line_names_the_node_and_the_field():
 
 
 def _topaz_chain(pend, *, pending: bool, headers=CLAUDE, model: str | None = None) -> dict[str, str]:
-    params = {} if model is None else {"model": model}
+    params = {**SIZE} if model is None else {**SIZE, "model": model}
     body = {
         "note": "clean the plate",
         "nodes": [{"ref": "+s", "definitionId": "text-input", "params": {"value": "unused"}},

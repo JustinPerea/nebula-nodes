@@ -38,11 +38,13 @@ describe('addendum (b): a required model setting with nothing chosen', () => {
   });
 
   it('the refusal names the node and the field', () => {
-    expect(modelNotChosenText([node('t', 'Clean plate', codex, 'krea-enhance-topaz-standard-enhance')]))
+    // Round 13 (GM: only the first missing field, in the card's order): its
+    // Width and Height come first, so they are set here.
+    expect(modelNotChosenText([node('t', 'Clean plate', codex, 'krea-enhance-topaz-standard-enhance', { width: 2048, height: 2048 })]))
       .toBe('Nothing ran. Choose a model for “Clean plate” first.');
     expect(modelNotChosenText([node('a', 'Lab app', undefined, 'krea-node-app')]))
       .toBe('Nothing ran. Choose a version for “Lab app” first.');
-    expect(modelNotChosenText([node('t', 'Clean plate', codex, 'krea-enhance-topaz-standard-enhance', { model: 'CGI' })])).toBeNull();
+    expect(modelNotChosenText([node('t', 'Clean plate', codex, 'krea-enhance-topaz-standard-enhance', { width: 2048, height: 2048, model: 'CGI' })])).toBeNull();
     expect(modelNotChosenText([node('n', 'Hero', codex)])).toBeNull();
   });
 });

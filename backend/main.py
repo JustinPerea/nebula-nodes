@@ -870,6 +870,8 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # The model picker's failure kind (MODEL_SETTINGS_FAILURE_HEADER, review 12 L-4).
+    expose_headers=["X-Nebula-Failure"],
 )
 # Added after CORS so it runs first (Starlette wraps later middleware around
 # earlier ones): foreign Hosts and Origins never reach CORS or the routes.
@@ -11493,10 +11495,17 @@ def _universal_request(body: Any, definition_id: str | None = None) -> tuple[str
     return definition_id, model.strip()
 
 
+# Review 12, L-4: the canvas's model picker says "Couldn't load the model
+# settings for “X”." only when reading the provider's settings is what failed
+# (GM - Design, round 13); this header marks that answer (CORS exposes it).
+MODEL_SETTINGS_FAILURE_HEADER = "X-Nebula-Failure"
+
+
 async def _universal_data(definition_id: str, model: str) -> dict[str, Any]:
     found = await universal_ports.look_up(definition_id, model)
     if isinstance(found, str):
-        raise HTTPException(status_code=400, detail=found[0].upper() + found[1:] + ".")
+        raise HTTPException(status_code=400, detail=found[0].upper() + found[1:] + ".",
+                            headers={MODEL_SETTINGS_FAILURE_HEADER: "model-settings"})
     return found
 
 
@@ -15823,6 +15832,13 @@ async def quick_execute(body: dict[str, Any]) -> dict:
         params=params,
         outputs={},
     ))
+    # Review 12, L-3: a required field with nothing chosen (Krea 2's Aspect
+    # ratio, Topaz Standard's Model) is refused here as on every other run
+    # path (services/model_choice.py), before the spend check and before
+    # anything runs. The node has no canvas name: its type's name stands in.
+    unchosen = unchosen_model_errors([temp_nodes[-1]])
+    if unchosen:
+        raise HTTPException(status_code=400, detail=f"Nothing ran, so nothing was spent. {unchosen[0].message}")
     # A quick run has no canvas node to propose, so point at one.
     quick_run = f"quick-{uuid4().hex}"
     measured = await _measure_run_inputs(temp_nodes, temp_edges)

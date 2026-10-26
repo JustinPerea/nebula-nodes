@@ -31,6 +31,7 @@ import { PersonalAgentWarning } from './PersonalAgentWarning';
 import { PERSONAL_AGENTS_CHANGED_EVENT } from '../../lib/personalAgentsEvents';
 import { CHAT_SEND_EVENT, type ChatSendDetail } from '../../lib/chatSend';
 import { claimIntent } from '../../lib/heldIntents';
+import { clearCanvasFromChat } from '../../lib/chatCanvasClear';
 import '../../styles/personal-agents.css';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl, personTokenForSocket } from '../../lib/backend';
 import { DEFAULT_BACKEND_PORT, devProxyPort } from '../../lib/devBackendPort';
@@ -1456,21 +1457,9 @@ export function ChatPanel() {
     if (raw === '/clear') {
       if (personal && sessionId) closePersonalSessionRef.current(sessionId);
       setSessionId(null);
-      // Also wipe cli_graph on the backend so Claude starts with a clean canvas,
-      // not whatever nodes accumulated from prior sessions. graphSync handles the
-      // frontend side — cli-origin nodes drop out, library-dragged work survives.
-      // One undo step, so the person can bring the canvas back.
-      const undoStep = useGraphStore.getState().beginUndoStep();
-      // force: typing /clear is the person's confirmation (the backend
-      // refuses a clear of a project with nodes without it).
-      // The canvas side lands with the answer, under its step (its graphSync
-      // can come later), so an undo pressed meanwhile brings the nodes back
-      // here and on the backend (review 10, L-2).
-      apiFetch('/api/graph?force=true', { method: 'DELETE' }).then((response) => {
-        if (!response.ok) useGraphStore.getState().cancelUndoStep(undoStep);
-        else useGraphStore.getState().clearBackendNodes({ undoStep });
-      }).catch(() => useGraphStore.getState().cancelUndoStep(undoStep))
-        .finally(() => useGraphStore.getState().endUndoStep(undoStep));
+      // Also wipe Nebula's graph, under one undo step; a failure says so
+      // (lib/chatCanvasClear.ts).
+      void clearCanvasFromChat();
       setMessages([
         {
           role: 'assistant',

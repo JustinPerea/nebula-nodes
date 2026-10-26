@@ -272,23 +272,54 @@ function kreaSetting(node: Node<NodeData>): string | null {
   return named.length > 0 ? named.join(' · ') : null;
 }
 
-/** The field word of a node's required model-choosing setting with nothing
- * chosen ("model", "version"), or null (backend services/model_choice.py). */
+/**
+ * Review 12, L-7, and GM - Design's round-13 rule: the fields a Krea node
+ * can't run without, in the card's order (backend services/model_choice.py
+ * required_fields): required, no default, not hidden, and no input port of
+ * the same id (a wire could fill those). The canvas fills none in (a new
+ * node keeps nothing, the field reads "Choose…"), and the gateway refuses a
+ * request without one. Each is [key, the word the line uses]: the card's
+ * label, lowercased; a node app's Version as GM named it.
+ */
+function requiredFields(definition: (typeof NODE_DEFINITIONS)[string]): string[][] {
+  if (!isKrea(definition)) return [];
+  const ports = new Set((definition.inputPorts ?? []).map((port) => port.id));
+  const seen = new Set<string>();
+  const fields: string[][] = [];
+  for (const spec of specsOf(definition)) {
+    if (seen.has(spec.key)) continue;
+    seen.add(spec.key);
+    if (!spec.required || !unset(spec.default) || spec.hidden || ports.has(spec.key)) continue;
+    fields.push([spec.key, (KREA_SETTING_LABELS[spec.key] ?? spec.label).toLowerCase()]);
+  }
+  return fields;
+}
+
+/** The word for a node's first required field (in the card's order) with
+ * nothing chosen ("aspect ratio", "model", "version"), or null. GM, round
+ * 13: only the first is named, so the notice stays one line. */
 function unchosenField(node: Node<NodeData>): string | null {
   const definition = NODE_DEFINITIONS[node.data?.definitionId];
-  if (!definition || !isKrea(definition)) return null;
+  if (!definition) return null;
   const params = (node.data?.params ?? {}) as Record<string, unknown>;
-  for (const spec of specsOf(definition)) {
-    if (!isKreaSetting(definition, spec) || !spec.required || !unset(spec.default)) continue;
-    if (unset(params[spec.key])) return (KREA_SETTING_LABELS[spec.key] ?? spec.label).toLowerCase();
+  return requiredFields(definition).find(([key]) => unset(params[key]))?.[1] ?? null;
+}
+
+/** Every Krea definition with a field the refusal names: {id: [[key, word]]}. */
+export function requiredFieldInventory(): Record<string, string[][]> {
+  const found: Record<string, string[][]> = {};
+  for (const definition of Object.values(NODE_DEFINITIONS)) {
+    const fields = requiredFields(definition);
+    if (fields.length > 0) found[definition.id] = fields;
   }
-  return null;
+  return found;
 }
 
 /**
  * GM - Design, round 12 addendum (b), verbatim: "Nothing ran. Choose a model
  * for “Clean plate” first." for the first node among `nodes` (the nodes a run
- * would send) whose required model setting has nothing chosen, or null. The
+ * would send) with a required field that has nothing chosen (unchosenField;
+ * round 13: "Choose an aspect ratio for “X” first."), or null. The
  * gateway would refuse that run, so the canvas refuses it before any dialog
  * ("Don't ask someone to approve a run that can't go out"), on every run
  * path; the backend refuses it the same way (execution.engine
@@ -299,7 +330,9 @@ export function modelNotChosenText(nodes: Node<NodeData>[], names?: Readonly<Rec
     const field = unchosenField(node);
     if (!field) continue;
     const name = names?.[node.id] || node.data?.label || NODE_DEFINITIONS[node.data?.definitionId]?.displayName || node.id;
-    return `Nothing ran. Choose a ${field} for “${name}” first.`;
+    // GM, round 13: "Choose an aspect ratio …", "Choose a model …".
+    const article = /^[aeiou]/i.test(field) ? 'an' : 'a';
+    return `Nothing ran. Choose ${article} ${field} for “${name}” first.`;
   }
   return null;
 }

@@ -207,11 +207,23 @@ The server exposes these tools for building and running (see
   again (the same for every step the canvas takes before Nebula answers: a
   clear, an upload once its node is on the canvas, an accepted proposal, a
   model picked on an OpenRouter or Replicate node; a delete Nebula refused
-  undoes nothing). That Cmd+Z is bound to the step it was pressed for: if
-  another edit lands on top first (yours, another agent's or the person's),
-  it never undoes that edit instead. It is dropped, and the canvas says
-  "Nothing was undone. Your last change was still saving."; so it is if
-  Nebula hasn't answered within 15 s, or another project opens. A clear
+  undoes nothing, and says why: a refused delete, clear, upload, accept or
+  model pick each has its own line). That Cmd+Z is bound to the step it was
+  pressed for, and a second Cmd+Z to the step below it, or to a step the
+  person took after the first Cmd+Z that is still on its way (delete,
+  Cmd+Z, delete, Cmd+Z undoes both deletes). While its own step is still on
+  its way it waits, even if something else lands meanwhile; the person's
+  own earlier delete answering first is no newer edit (the delete lands in
+  its place on the undo stack, with no extra step left behind), and a later
+  step of the person's still on its way isn't either (the Cmd+Z applies
+  beneath it). If a newer edit has settled on top of its step by then
+  (yours, another agent's, or the person's own later edit), it never undoes
+  that edit instead: it is dropped, and the canvas says "Nothing was undone. Your last
+  change was still saving."; if some Cmd+Z presses went through and some
+  were dropped, the restore's line ends "1 undo was skipped while a change
+  was saving." (Redo stays). The same line shows if Nebula hasn't answered
+  within 15 s, or another project opens (the person's own switch, or your
+  load into the open project, whose own notice stays beside it). A clear
   takes off only the nodes that were on the canvas when the person cleared,
   never one you added after it (even under a reused id such as n1), and an
   accept the person undid while it was on its way runs nothing (its
@@ -1433,7 +1445,7 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   2 and Hyperion 2.5, "Version: …" on a Krea node app, so switching one asks
   again; a required one with nothing chosen reads "Model: not chosen"
   ("Version: not chosen") and the row keeps its other parts, though such a
-  run never reaches the dialog (below): a setting is named when it chooses which model or engine runs, so
+  run never reaches the dialog (a required field with nothing chosen, below): a setting is named when it chooses which model or engine runs, so
   Magnific Precise's Flavor (a style of the same engine) is not; Krea Style
   Search's free-text Model is a search filter, never named as the model),
   "price
@@ -1521,17 +1533,26 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   only between its parts, at the " · ", never inside one ("Grain model:
   gaussian", "on your Krea plan", a node's name), and its second line keeps
   the row's indent.
-- **A model nobody chose:** Topaz Standard needs its Model (Krea requires
-  it), as a Krea node app needs its Version. A run that would send one with
-  nothing chosen is refused before anything runs or is priced, on every
-  run path, and before any dialog: the canvas says "Nothing ran. Choose a
-  model for “Clean plate” first." ("Choose a version for …" for a node
-  app) and asks nothing. Your `run_nodes` and `nebula run` come back
-  `failed` with "Choose a model for “Clean plate” first." as that node's
-  error (and in `error`, after "Nothing ran, so nothing was spent."), and
-  the card shows the same line. A whole-canvas run that skips the node (a
-  placeholder) isn't refused for it. Set the model with `edit_canvas`
-  before you run it, or leave it for the person to choose.
+- **A required field nobody chose:** some Krea nodes have required fields
+  with no default, and Krea refuses a request without them: Krea 2 (Large,
+  Medium, Turbo), GPT Image 2.5 Flare and Sunburst, Recraft V4.1 Flash,
+  Grok Imagine 2.0 and Z Image need an Aspect ratio and a Resolution; Flux
+  1.1 Pro, Seedream 4 and 5, Wan 2.1 and 2.2, Magnific Creative and
+  Precise, and Topaz Bloom, Bloom 2, Image Upscale, Standard and Wonder 3.5
+  need a Width and a Height; Topaz Standard also needs its Model, a Krea
+  node app its Version, Krea Style Train its Name. Nebula never fills one
+  in. A run that would send one with nothing chosen is refused before
+  anything runs or is priced, on every run path, and before any dialog: the
+  canvas says "Nothing ran. Choose an aspect ratio for “Hero” first." ("…
+  a model …", "… a version …"), naming only the first missing field in the
+  card's order, and asks nothing. Your `run_nodes` and `nebula run` come
+  back `failed` with "Choose an aspect ratio for “Hero” first." as that
+  node's error (and in `error`, after "Nothing ran, so nothing was
+  spent."), and the card shows the same line; `nebula quick` gets the same
+  refusal (HTTP 400, naming the node type). A whole-canvas run that skips
+  the node (a placeholder) isn't refused for it. Set the field with
+  `edit_canvas` (or `nebula set`) before you run it, or leave it for the
+  person to choose.
   `/api/execute-node` and `/api/cinema/generate-shot` enforce it: the
   person's run carries `confirmedPlaceholders` (exactly those paid
   placeholder ids) and `confirmedCost` (the amount the dialog showed in its

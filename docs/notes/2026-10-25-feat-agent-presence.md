@@ -1163,3 +1163,125 @@ Branch feat/agent-presence, base main (head 942a375c before this round).
 - Lint: clean (the inline-style and Slava-scope guards passed).
 - Build budget: 392,767 bytes raw / 118,192 gzip (limit 512,000).
 - INSTRUCTIONS: 2,233 characters (2,957 with the Commons guide), unchanged.
+
+## Round 13: review 12 and GM - Design's round-13 lines (2026-10-26)
+
+Branch feat/agent-presence, base main (head f9c407d1 before this round).
+
+### What changed and why
+
+- **M-1, a held press waits for its own step.** `runHeldPresses` (`graphStore.ts` ~3500): while the press's target is in `stepsInFlight` it waits, whatever settles meanwhile. Once the target has settled, the press applies when the target (or its delete successor, `successorOf`) is on top of its stack, or has only the person's steps still in flight above it. In that second case the undo applies beneath them (`applyHistory(..., target)` ~3575), and each of those snapshots takes in the change (`diffCanvas` + `applySlice`) plus the nodes it brought back as arrivals, so a clear's answer leaves them. A settled newer step on top drops the press: another actor's, or the person's own later step.
+- **M-1, where a delete's step goes when it lands** (`placeDeleteStep` ~3275):
+  - Only in-flight steps above it: it stays. It takes in what arrived while it was in flight (`renewWithArrivals`), and those steps lose the deleted nodes.
+  - Settled steps above it: a successor snapshot replaces it, above them and below the in-flight ones (L-5, no phantom step). The successor keeps the removals.
+  - Every redo snapshot loses the deleted nodes. A step taken clears redo, so all of them were made while the delete was in flight. Redo never brings a deleted node back.
+- **Found in the live check: the echo before the answer.** The backend's own graphSync for a delete can reach the tab before its HTTP answer. That always happens live, unlike the unit tests. The answer then found nothing to remove and left the step under an agent's edit that had landed before the echo, so P16 read "Nothing was undone." Now `noteEchoRemovals` (~3221, called from graphSync for own or unmarked syncs while steps are in flight) records, for each node it took off, the stack's top at that moment and the canvas just before. The answer places the step from that record (`applyCanvasNodeChanges` ~2073), so:
+  - an agent edit that landed before the echo is older than the delete;
+  - one that landed after the echo is newer.
+- **L-1, each press binds to its own step** (`nextPressTarget` ~3465). It replays the held presses against copies of the stacks: each press removes its target and the settled entries above it, keeps the in-flight ones, and pushes `{inverseOf}` on the other stack. This round adds keeping the in-flight steps above, so delete, Cmd+Z, delete, Cmd+Z undoes both deletes (H4b). A press with no target goes to nothing quietly.
+- **L-1, the notice follows what happened** (`announceDrop` ~3410):
+  - nothing applied: GM's "Nothing was undone. Your last change was still saving.";
+  - some applied: the restore's own line, then "1 undo was skipped while a change was saving." ("2 undos were …"), with Redo kept;
+  - a restore line still waiting for its backend answer takes the sentence when it shows (`ownLinesWaiting`/`skippedAfter`, `sendRestore`);
+  - a line already showing has it appended (`skippedShown`);
+  - with no line of its own, the sentence shows alone with Redo.
+- **L-2:** `loadGraph`, `loadProjectGraph` and a graphReplaced graphSync collect the drop first (`forgetStepsInFlight` returns it) and announce it after the new graph is on the canvas. P5/P5b get the line; P14 gets it as the message beside Codex's notice.
+- **L-3:** `/api/quick` (`main.py` ~15839) refuses an unchosen required field before `_measure_run_inputs` and `_require_spend_approval`: 400 "Nothing ran, so nothing was spent. Choose a width for “Topaz Standard (Krea)” first." The CLI's `_fail` prints it.
+- **L-4, failure lines:**
+  - Chat /clear (`lib/chatCanvasClear.ts`): a 4xx reads "Couldn't clear the canvas. Nothing was removed." because the backend refuses before clearing. A 5xx or no answer reads only "Couldn't clear the canvas." because it clears and then saves, so it can be partial. The step is cancelled in every failure case.
+  - OpenRouter and Replicate configure (`graphStore.ts` ~7348, ~7393): "Couldn't load the model settings for “X”." when the provider's settings couldn't be read. The backend marks that with the header `X-Nebula-Failure: model-settings`, exposed through CORS (`main.py` 874, 11501). Any other failure reads "Couldn't set up “X”." The node's params stay untouched and the step is cancelled.
+- **L-5:** the successor replaces the original in place (above).
+- **L-6:** `docs/MCP-SETUP.md` held-undo paragraph rewritten (waits for its own step; earlier delete and later in-flight steps are no newer edit; the mixed line; the dropped line on a project switch or an agent load).
+- **L-7, required fields:**
+  - `model_choice.required_fields()`: a Krea param counts when it is required, has no default, isn't hidden and has no input port of the same id. The list is in card order.
+  - `unchosen_field` names the first unset field. GM: name only the first.
+  - The canvas never fills a value in: `buildDefaultParams` stores null, and the Inspector shows "Choose…". Without a value the gateway refuses after the dialog. No silent default was added.
+  - The refusal now covers 23 definitions, on every frontend run path (`placeholderRunConfirm.ts` `requiredFields`) and the backend (`validate_graph`, `/api/execute-node`, `/api/quick`). The line is GM's "Nothing ran. Choose an aspect ratio for “X” first.", with "an" before a vowel.
+
+### Held presses, scenario → outcome → notice
+
+| Scenario | Outcome | Notice |
+|---|---|---|
+| P1 two deletes, one Cmd+Z, answers in order (or reversed) | second delete undone; next Cmd+Z restores the first | "Restored the node." |
+| P2 delete in flight, then an upload, Cmd+Z (for the upload), the delete answers first | the press waits and undoes the upload (the earlier delete is no newer edit) | "Deleted the node." |
+| P3 Cmd+Z then Cmd+Shift+Z while held | undone, then redone | "Deleted the node." |
+| P4/P4b upload + delete in flight, Cmd+Z ×2, either answer first | each press undoes its own step | own lines |
+| P5/P5b own project switch or loadGraph while held | dropped | "Nothing was undone. Your last change was still saving." |
+| P6 clear / P12 delete: own echo, then an agent edit, then the answer | dropped (the agent's edit is newer than the change); the next presses undo Codex, then the clear or delete | the dropped line beside "Codex changed the canvas" |
+| P8 two clears in flight, one Cmd+Z | undoes the second clear (nothing to bring back); the next Cmd+Z restores 2 nodes | no line, then "Restored 2 nodes." |
+| P9/H10/H11 no answer in 15 s | dropped; the late answer is an ordinary step | the dropped line |
+| P10 configure cancelled | that press goes to nothing quietly; the next press undoes the step below | the configure's own failure line |
+| P11/H5 the person types after Cmd+Z, then the answer | delete undone; the typing stays | "Restored the node." |
+| P13 own echo, then the answer | undone | "Restored the node." |
+| P14/P14b agent loads a graph into the project | dropped | the dropped line beside the agent's notice |
+| P15/P16 delete + an earlier edit, Cmd+Z ×2, agent edit lands before the delete's change | delete undone, edit press skipped | "Restored the node. 1 undo was skipped while a change was saving." + Redo |
+| P16 the echo after Codex's node (live order) | the same | the same |
+| 3 presses, 2 skipped | the first applied | "… 2 undos were skipped while a change was saving." |
+| H1 agent edit before the answer | delete undone (successor above Codex's step) | "Restored the node." |
+| H4 delete, Cmd+Z, delete again before the first answer | first delete undone beneath the second; redo never brings the second's node back | "Deleted the node." (the second delete's answer is the newer event) |
+| H4b the same + a second Cmd+Z | both deletes undone | "Restored the node." |
+| H12 refused delete | that press goes to nothing | "Couldn't delete the node. It is running." |
+
+### Backend run entry points
+
+- **Execute:**
+  - `POST /api/execute` (`validate_graph`);
+  - `/api/execute-node` (`_refuse_unchosen_models` + `validate_graph`);
+  - `/api/cinema/generate-shot` (the same; its base models are allowlisted and none is Krea);
+  - `/api/graph/run` (`run_nodes`, `nebula run`; `validate_graph`);
+  - `/api/quick` (`nebula quick`; refused now).
+- Batch and cinema handlers run inside `execute_graph`.
+- **Not executing:** `/api/cinema/promote-shot-variation` and `/api/cinema/send-to-motion`.
+
+### Krea required fields with no default (23)
+
+- **Width, height:** Magnific Creative and Precise; Topaz Bloom, Bloom 2, Generative and Wonder 3.5; FLUX 1.1 Pro; Seedream 4, 5 Lite and 5 Pro; Wan 2.1 and 2.2.
+- **Width, height, model:** Topaz Standard.
+- **Aspect ratio, resolution:** Krea 2 Large, Medium and Medium Turbo; GPT Image 2.5 Flare and Sunburst; Recraft V4.1 Flash; Grok Imagine 2; Z-Image.
+- **Version:** node app. **Name:** style training.
+
+### Tests (each failed first on the current code)
+
+- `tests/heldUndo.round13.test.tsx`, 31 tests:
+  - 24 written before the code: 22 failed first, for example P1 [n3] vs [n2, n3]; P5, P14 and P14b with no notice; P11 and H1 with a phantom step (undo 2); P15 and P16 reading "Nothing was undone".
+  - H4, H4 redo, H4b and H4c: all four failed with the apply-beneath fix taken out. The H4 redo test also fails without the redo strip.
+  - P16 echo first: fails with `noteEchoRemovals` taken out.
+  - The echo-first P1/H4 variant passes.
+- `tests/failureLines.round13.test.ts`: every case failed first (the lines didn't exist).
+- `tests/requiredFields.round13.test.ts`: the inventory had 2 of 23 entries, and the run paths ran.
+- `backend/tests/test_required_fields_round13.py`: 15 of 24 failed first (unchosen_field None or "model", "a aspect", run statuses started/409/200, no header); 9 controls passed.
+- Updated:
+  - Round-12 Topaz tests now set width and height (the card order names width first);
+  - `undoStepEnds.round11` inventory adds `lib/chatCanvasClear.ts`.
+
+### Live check (8795/5795, isolated, `scratchpad/agent-presence/r13/live/live-r13.mjs`): 15 of 15
+
+- **P1** (keyboard deletes, held answers): one Cmd+Z undid the second delete; canvas and backend held Second and Third; "Restored the node." with Redo. The next Cmd+Z brought First back, with no dead press.
+- **Mixed batch** (an edit, a held delete request, Cmd+Z ×2, Codex adds a node, then the answer): Draft back, the edit kept, "Restored the node. 1 undo was skipped while a change was saving." with Redo. The first two runs held only the response, so the echo came first; they showed "Nothing was undone." That is how the echo-first gap above was found.
+- **chat /clear refused** (a 409 stubbed in the page; nothing was removed): GM's two sentences; canvas and backend unchanged; no step.
+- **OpenRouter and Replicate configure** (real 400: no keys, nothing leaves the machine): GM's line; params untouched; no step.
+- **Krea 2 Medium "Hero" with no aspect ratio:** no dialog, nothing sent, GM's line. An agent's run_nodes got "Choose an aspect ratio for “Hero” first."
+- **Blocked requests:** 2, both the canaries; none toward 8000-8010 or 5173.
+- **Screenshots** `r13-p1-one-undo`, `r13-mixed-batch`, `r13-chat-clear-failed`, `r13-openrouter-settings-failed`, `r13-replicate-settings-failed` and `r13-aspect-ratio-refused`, each at -1440 and -1280. One toast each, leftovers dismissed first.
+
+### Open items (round 13)
+
+- **For GM:**
+  - Typed required fields ("Choose a width / height / name for “X” first."). Style training's handler already says "Fill in “Name”…".
+  - Chat /clear's system line still says "…with an empty canvas." when the clear failed (live screenshot). Suggest dropping that clause on failure.
+- **Port-fed required fields** (prompt, image_url, video_url, image_urls, reference_images, start_image, camera_trajectory) are still refused only at the gateway.
+- **"undos were skipped" counts redo presses too.**
+- **H4's restored line is covered** by the second delete's "Deleted the node." when that answer comes first. That answer is the newer event; the canvas shows n1 back.
+- **A rare case is dropped:** a successor of an older step lands above a settled target whose press waits behind another press.
+
+### Gates (round 13)
+
+- Backend full suite (after the last backend change): 11,079 passed, 71 skipped, 0 failed (14 min 32 s).
+- Vitest full suite: 495 files and 6,216 tests. 482 files passed and 13 failed (29 tests: 23 "Test timed out", 6 focus or find waits under load, run beside the backend suite).
+  - The 13 rerun one file at a time (`--no-file-parallelism`): 229 tests passed.
+- Held-undo files (13 files, round 8 to round 13): 161 tests passed. Review 11/12 probes rerun: hold 8, hold2 5, hold3 18, accept 1, krea 1 (all ran; outcomes in the table above).
+- errorCopy ratchets: 14 files, 173 tests passed.
+- tsc: clean.
+- Lint: clean (the inline-style and Slava-scope guards passed).
+- Build budget: 392,752 bytes raw / 118,194 gzip (limit 512,000).
+- INSTRUCTIONS: 2,233 characters (2,957 with the Commons guide), unchanged.

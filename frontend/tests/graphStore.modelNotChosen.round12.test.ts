@@ -29,6 +29,9 @@ import * as api from '../src/lib/api';
 
 const TOPAZ = 'krea-enhance-topaz-standard-enhance';
 const GM = 'Nothing ran. Choose a model for “Clean plate” first.';
+/** Round 13 (GM: only the first missing field, in the card's order): Topaz
+ * Standard's Width and Height come before its Model, so they are set. */
+const SIZE = { width: 2048, height: 2048 };
 const initialCache = useUIStore.getState().settingsCache;
 const initialThreshold = useUIStore.getState().runCostConfirmUsd;
 const codex = { agent: { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true }, at: 1 };
@@ -70,7 +73,7 @@ describe('a run with no model chosen is refused before any dialog (round 12 adde
   });
 
   it("an agent's paid placeholder: no dialog opens, GM's refusal shows, nothing is sent", async () => {
-    setCanvas(node('n2', 'Clean plate', TOPAZ, {}, { pending: codex }));
+    setCanvas(node('n2', 'Clean plate', TOPAZ, { ...SIZE }, { pending: codex }));
     await useGraphStore.getState().executeNode('n2');
     expect(askMock).not.toHaveBeenCalled();
     expect(window.confirm).not.toHaveBeenCalled();
@@ -85,7 +88,7 @@ describe('a run with no model chosen is refused before any dialog (round 12 adde
     ["the toolbar's Run", () => useGraphStore.getState().executeGraph()],
     ["Creator Studio's run", () => useGraphStore.getState().executeClusterConcurrent(['n1', 'n2'])],
   ])('%s: refused with no costly-run confirm', async (_name, run) => {
-    setCanvas(node('n2', 'Clean plate', TOPAZ));
+    setCanvas(node('n2', 'Clean plate', TOPAZ, { ...SIZE }));
     await run();
     expect(window.confirm).not.toHaveBeenCalled();
     expect(started).not.toHaveBeenCalled();
@@ -93,9 +96,9 @@ describe('a run with no model chosen is refused before any dialog (round 12 adde
   });
 
   it('a replay from Run history: the saved node with no model is refused too', async () => {
-    setCanvas(node('n2', 'Clean plate', TOPAZ));
+    setCanvas(node('n2', 'Clean plate', TOPAZ, { ...SIZE }));
     const snapshot = { nodes: [{ id: 'n1', definitionId: 'image-input', params: { value: 'plate.png' } },
-      { id: 'n2', definitionId: TOPAZ, params: {} }], edges: [{ id: 'e1', source: 'n1', target: 'n2', sourceHandle: 'image', targetHandle: 'image' }] };
+      { id: 'n2', definitionId: TOPAZ, params: { ...SIZE } }], edges: [{ id: 'e1', source: 'n1', target: 'n2', sourceHandle: 'image', targetHandle: 'image' }] };
     for (const targetNodeId of ['n2', null]) {
       useGraphStore.setState({ runHistory: [{ id: 'r1', status: 'failed', startedAt: 1, endedAt: 2, snapshot, targetNodeId,
         nodeIds: ['n1', 'n2'] }] as never, undoNotice: null, messageNotice: null });
@@ -106,12 +109,12 @@ describe('a run with no model chosen is refused before any dialog (round 12 adde
   });
 
   it('(control) a chosen model runs; a placeholder a whole-canvas run skips is not refused', async () => {
-    setCanvas(node('n2', 'Clean plate', TOPAZ, { model: 'CGI' }));
+    setCanvas(node('n2', 'Clean plate', TOPAZ, { ...SIZE, model: 'CGI' }));
     await useGraphStore.getState().executeNode('n2');
     expect(started).toHaveBeenCalled();
     started.mockClear();
     useGraphStore.getState().resetExecution();
-    setCanvas(node('n2', 'Clean plate', TOPAZ, {}, { pending: codex }));
+    setCanvas(node('n2', 'Clean plate', TOPAZ, { ...SIZE }, { pending: codex }));
     await useGraphStore.getState().executeGraph();
     expect(notice()).not.toBe(GM);
   });

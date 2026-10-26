@@ -271,9 +271,12 @@ to press Stop in Nebula.
 
 A run where any node failed exits 1 and prints each node's error (a missing
 key refuses the whole run before anything is called or spent, as does a
-Topaz Standard with no Model chosen, or a Krea node app with no Version:
-"Choose a model for “Clean plate” first."; set it with `nebula set` first,
-or leave the choice to the person). The card on
+Krea node with a required field nobody chose: Krea 2's Aspect ratio and
+Resolution, a Width and Height on Flux 1.1 Pro, Seedream, Wan 2.1/2.2,
+Magnific and the Topaz image upscalers, Topaz Standard's Model, a node app's
+Version: "Choose an aspect ratio for “Hero” first.", naming the first one
+in the card's order; `nebula quick` is refused the same way. Set it with
+`nebula set` first, or leave the choice to the person). The card on
 the canvas shows the same error. `nebula look` prints a failed node's error
 under it, and `nebula path` says why there is no file. The error stays on the
 node, through reloads, project switches and restarts, until it runs again.

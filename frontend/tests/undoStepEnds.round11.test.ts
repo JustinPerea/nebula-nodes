@@ -28,6 +28,8 @@ describe('every beginUndoStep is ended', () => {
       'components/panels/ChatPanel.tsx',
       'components/panels/Toolbar.tsx',
       'lib/canvasFileDrop.ts',
+      // Chat's /clear (review 12, L-4: moved out of ChatPanel so its failure line is tested).
+      'lib/chatCanvasClear.ts',
       'store/canvasProposalsStore.ts',
       'store/graphStore.ts',
     ]);

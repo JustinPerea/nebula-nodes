@@ -36,6 +36,18 @@ export interface RemovalRecord {
  * project switch). No button, and no promise that a retry works. */
 export const DROPPED_UNDO_TEXT = 'Nothing was undone. Your last change was still saving.';
 
+/** GM - Design, round 13, verbatim: several Cmd+Z held together, some of
+ * which went through and some of which were dropped (review 12, L-1). The
+ * restore's own line comes first ("Restored the node."), then this; Redo
+ * stays, since something was restored. DROPPED_UNDO_TEXT is only for a batch
+ * in which no undo went through. */
+export function skippedUndoText(count: number): string {
+  return count === 1 ? '1 undo was skipped while a change was saving.'
+    : `${count} undos were skipped while a change was saving.`;
+}
+
+export const SKIPPED_UNDO_TEXT = skippedUndoText(1);
+
 export function deletedNoticeText(count: number): string {
   return count === 1 ? 'Deleted the node.' : `Deleted ${count} nodes.`;
 }
