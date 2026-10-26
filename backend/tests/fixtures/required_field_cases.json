@@ -1,0 +1,30 @@
+{
+  "_doc": "Review 13 M-1/L-6 and GM - Design round 14 item 1. A Krea node's required field with nothing in it is refused only on the route that needs it: the Krea gateway (an API token or the plan), or a maker whose own API sizes by that field (directRoute.size). With no usable route (no key, the plan not connected) the key or sign-in refusal comes first, so no field is named. backend services/model_choice.py unchosen and frontend lib/placeholderRunConfirm.ts unchosenField both read these cases. `expect` is [verb, field] or null.",
+  "cases": [
+    {"name": "GPT Image 2.5 Flare, OpenAI key: OpenAI picks the size itself", "definitionId": "krea-image-openai-gpt-image-2-5-flare", "params": {}, "apiKeys": {"OPENAI_API_KEY": "sk"}, "expect": null},
+    {"name": "GPT Image 2.5 Flare, both keys: Auto takes the maker", "definitionId": "krea-image-openai-gpt-image-2-5-flare", "params": {}, "apiKeys": {"OPENAI_API_KEY": "sk", "KREA_API_TOKEN": "k"}, "expect": null},
+    {"name": "GPT Image 2.5 Flare, Krea token only: the gateway", "definitionId": "krea-image-openai-gpt-image-2-5-flare", "params": {}, "apiKeys": {"KREA_API_TOKEN": "k"}, "expect": ["Choose", "aspect ratio"]},
+    {"name": "GPT Image 2.5 Flare, no key: the key line comes first", "definitionId": "krea-image-openai-gpt-image-2-5-flare", "params": {}, "apiKeys": {}, "expect": null},
+    {"name": "GPT Image 2.5 Sunburst, OpenAI key", "definitionId": "krea-image-openai-gpt-image-2-5-sunburst", "params": {}, "apiKeys": {"OPENAI_API_KEY": "sk"}, "expect": null},
+    {"name": "GPT Image 2.5 Sunburst, Krea token", "definitionId": "krea-image-openai-gpt-image-2-5-sunburst", "params": {"aspect_ratio": "16:9"}, "apiKeys": {"KREA_API_TOKEN": "k"}, "expect": ["Choose", "resolution"]},
+    {"name": "Grok Imagine 2.0, xAI key: xAI leaves the size out", "definitionId": "krea-image-xai-grok-imagine-2", "params": {}, "apiKeys": {"XAI_API_KEY": "x"}, "expect": null},
+    {"name": "Grok Imagine 2.0, both keys, style images wired: stays on Krea", "definitionId": "krea-image-xai-grok-imagine-2", "params": {}, "apiKeys": {"XAI_API_KEY": "x", "KREA_API_TOKEN": "k"}, "wired": ["style_images"], "expect": ["Choose", "aspect ratio"]},
+    {"name": "Grok Imagine 2.0, both keys, style images set: stays on Krea", "definitionId": "krea-image-xai-grok-imagine-2", "params": {"style_images": "[\"https://example.com/a.png\"]"}, "apiKeys": {"XAI_API_KEY": "x", "KREA_API_TOKEN": "k"}, "expect": ["Choose", "aspect ratio"]},
+    {"name": "Seedream 4, BytePlus key: ModelArk sizes by width x height", "definitionId": "krea-image-bytedance-seedream-4", "params": {}, "apiKeys": {"BYTEPLUS_API_KEY": "b"}, "expect": ["Set", "width"]},
+    {"name": "Seedream 4, BytePlus key, width only", "definitionId": "krea-image-bytedance-seedream-4", "params": {"width": 2048}, "apiKeys": {"BYTEPLUS_API_KEY": "b"}, "expect": ["Set", "height"]},
+    {"name": "Seedream 4, BytePlus key, both set", "definitionId": "krea-image-bytedance-seedream-4", "params": {"width": 2048, "height": 2048}, "apiKeys": {"BYTEPLUS_API_KEY": "b"}, "expect": null},
+    {"name": "Seedream 5 Lite, Krea token: the gateway", "definitionId": "krea-image-bytedance-seedream-5-lite", "params": {}, "apiKeys": {"KREA_API_TOKEN": "k"}, "expect": ["Set", "width"]},
+    {"name": "Seedream 5 Pro, BytePlus key", "definitionId": "krea-image-bytedance-seedream-5-pro", "params": {}, "apiKeys": {"BYTEPLUS_API_KEY": "b"}, "expect": ["Set", "width"]},
+    {"name": "Krea 2 Medium, no Krea token: the key line comes first (L-6)", "definitionId": "krea-image-krea-krea-2-medium", "params": {}, "apiKeys": {}, "expect": null},
+    {"name": "Krea 2 Medium, Krea token", "definitionId": "krea-image-krea-krea-2-medium", "params": {}, "apiKeys": {"KREA_API_TOKEN": "k"}, "expect": ["Choose", "aspect ratio"]},
+    {"name": "Krea 2 Medium on the plan, signed in", "definitionId": "krea-image-krea-krea-2-medium", "params": {"_kreaAuth": "mcp"}, "apiKeys": {}, "planReady": true, "expect": ["Choose", "aspect ratio"]},
+    {"name": "Krea 2 Medium on the plan, not signed in: the sign-in line comes first", "definitionId": "krea-image-krea-krea-2-medium", "params": {"_kreaAuth": "mcp"}, "apiKeys": {"KREA_API_TOKEN": "k"}, "planReady": false, "expect": null},
+    {"name": "Topaz Standard, Krea token", "definitionId": "krea-enhance-topaz-standard-enhance", "params": {}, "apiKeys": {"KREA_API_TOKEN": "k"}, "expect": ["Set", "width"]},
+    {"name": "Topaz Standard, Krea token, a size", "definitionId": "krea-enhance-topaz-standard-enhance", "params": {"width": 2048, "height": 2048}, "apiKeys": {"KREA_API_TOKEN": "k"}, "expect": ["Choose", "model"]},
+    {"name": "Topaz Standard, no Krea token", "definitionId": "krea-enhance-topaz-standard-enhance", "params": {}, "apiKeys": {}, "expect": null},
+    {"name": "Wan 2.1, Krea token", "definitionId": "krea-video-alibaba-wan-2-1", "params": {"width": 1280}, "apiKeys": {"KREA_API_TOKEN": "k"}, "expect": ["Set", "height"]},
+    {"name": "A node app, Krea token: Version is a picker", "definitionId": "krea-node-app", "params": {}, "apiKeys": {"KREA_API_TOKEN": "k"}, "expect": ["Choose", "version"]},
+    {"name": "Style training, Krea token: Name is typed", "definitionId": "krea-style-train", "params": {"name": " "}, "apiKeys": {"KREA_API_TOKEN": "k"}, "expect": ["Set", "name"]},
+    {"name": "Not a Krea node", "definitionId": "nano-banana", "params": {}, "apiKeys": {"GOOGLE_API_KEY": "g"}, "expect": null}
+  ]
+}

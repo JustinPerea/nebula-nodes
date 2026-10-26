@@ -52,7 +52,7 @@ describe('a run with no model chosen is refused before any dialog (round 12 adde
   let started: ReturnType<typeof vi.fn>;
   beforeEach(() => {
     useGraphStore.getState().resetExecution();
-    useUIStore.setState({ settingsCache: { apiKeys: { KREA_API_KEY: 'set' }, loaded: true }, runCostConfirmUsd: 0 } as never);
+    useUIStore.setState({ settingsCache: { apiKeys: { KREA_API_TOKEN: 'set' }, loaded: true }, runCostConfirmUsd: 0 } as never);
     usePricingStore.setState({ table: { currencies: {}, nodes: {} } } as never);
     apiFetchMock.mockReset().mockRejectedValue(new TypeError('Offline fixture'));
     askMock.mockReset();

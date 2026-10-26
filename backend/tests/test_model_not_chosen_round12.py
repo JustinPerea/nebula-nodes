@@ -20,6 +20,23 @@ from tests.conftest import PERSON
 from tests.test_canvas_proposals import CLAUDE, CODEX, KEY, _key, api  # noqa: F401 - fixture
 from tests.test_pending_nodes import _apply, _direct, _execute_body, _paid_chain, pend  # noqa: F401 - fixture
 
+@pytest.fixture(autouse=True)
+def _krea_token(monkeypatch):
+    """Round 14 (review 13, M-1 and L-6): the field is refused on the route
+    that needs it, the Krea gateway here, so the runs have a Krea token. With
+    none, the key line comes first (tests/test_route_aware_refusal_round14.py)."""
+    import main
+
+    real = main.load_settings
+
+    def with_token():
+        settings = dict(real())
+        settings["apiKeys"] = {**(settings.get("apiKeys") or {}), "KREA_API_TOKEN": "fake-krea"}
+        return settings
+
+    monkeypatch.setattr(main, "load_settings", with_token)
+
+
 TOPAZ = "krea-enhance-topaz-standard-enhance"
 GM_LINE = "Choose a model for “Clean plate” first."
 

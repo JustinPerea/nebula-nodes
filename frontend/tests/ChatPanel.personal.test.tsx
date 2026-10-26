@@ -350,3 +350,38 @@ describe('Settings > Personal agents: Gemini and Antigravity', () => {
     }
   });
 });
+
+// Review 13, L-7, with GM - Design's round-14 lines (item 2, verbatim): the
+// chat's system line after /clear says what happened to the canvas, and stays
+// after the notice is gone.
+describe('Chat /clear: the system line says what happened to the canvas', () => {
+  const systemLine = (text: string) => screen.findByText(text);
+  it('the clear went through: the usual line', async () => {
+    await connected();
+    apiMocks.apiFetch.mockResolvedValue(new Response('{}', { status: 200 }));
+    await sendText('/clear');
+    expect(await systemLine('Session cleared. Next message starts a fresh conversation with an empty canvas.')).toBeInTheDocument();
+  });
+
+  it('refused (a 4xx: nothing was removed)', async () => {
+    await connected();
+    apiMocks.apiFetch.mockResolvedValue(new Response('{"detail":"A run is going."}', { status: 409 }));
+    await sendText('/clear');
+    expect(await systemLine("Session cleared. Next message starts a fresh conversation. The canvas wasn't cleared.")).toBeInTheDocument();
+    expect(screen.queryByText(/with an empty canvas/)).toBeNull();
+  });
+
+  it('a server error: it may be partly cleared', async () => {
+    await connected();
+    apiMocks.apiFetch.mockResolvedValue(new Response('{}', { status: 500 }));
+    await sendText('/clear');
+    expect(await systemLine('Session cleared. Next message starts a fresh conversation. The canvas may not be fully cleared.')).toBeInTheDocument();
+  });
+
+  it('no answer: the same', async () => {
+    await connected();
+    apiMocks.apiFetch.mockRejectedValue(new TypeError('Failed to fetch'));
+    await sendText('/clear');
+    expect(await systemLine('Session cleared. Next message starts a fresh conversation. The canvas may not be fully cleared.')).toBeInTheDocument();
+  });
+});

@@ -34,6 +34,8 @@ const node = (id: string, label: string, definitionId: string, params: Record<st
   data: { definitionId, label, params, state: 'idle', outputs: {} } });
 const KREA2 = 'krea-image-krea-krea-2-medium';
 const TOPAZ = 'krea-enhance-topaz-standard-enhance';
+/** Round 14 (review 13, M-1): the field is refused on the route that needs it, the Krea gateway here. */
+const ON_KREA = { apiKeys: { KREA_API_TOKEN: '(set)' }, edges: [] };
 
 /** The same inventory backend/tests/test_required_fields_round13.py pins. */
 const WH = [['width', 'width'], ['height', 'height']];
@@ -82,24 +84,25 @@ describe('the required-field refusal line (L-7, GM round 13)', () => {
   });
 
   it('names the aspect ratio, with "an"', () => {
-    expect(modelNotChosenText([node('n2', 'Hero', KREA2, { aspect_ratio: null, resolution: null }) as never]))
+    expect(modelNotChosenText([node('n2', 'Hero', KREA2, { aspect_ratio: null, resolution: null }) as never], undefined, ON_KREA))
       .toBe('Nothing ran. Choose an aspect ratio for “Hero” first.');
   });
 
   it('names only the first missing field, in the card order', () => {
-    expect(modelNotChosenText([node('n2', 'Hero', KREA2, { aspect_ratio: '16:9' }) as never]))
+    expect(modelNotChosenText([node('n2', 'Hero', KREA2, { aspect_ratio: '16:9' }) as never], undefined, ON_KREA))
       .toBe('Nothing ran. Choose a resolution for “Hero” first.');
-    expect(modelNotChosenText([node('n3', 'Clean plate', TOPAZ, {}) as never]))
-      .toBe('Nothing ran. Choose a width for “Clean plate” first.');
-    expect(modelNotChosenText([node('n3', 'Clean plate', TOPAZ, { width: 2048, height: 2048 }) as never]))
+    expect(modelNotChosenText([node('n3', 'Clean plate', TOPAZ, {}) as never], undefined, ON_KREA))
+      // GM, round 14, item 1: a typed value is "Set".
+      .toBe('Nothing ran. Set a width for “Clean plate” first.');
+    expect(modelNotChosenText([node('n3', 'Clean plate', TOPAZ, { width: 2048, height: 2048 }) as never], undefined, ON_KREA))
       .toBe('Nothing ran. Choose a model for “Clean plate” first.');
-    expect(modelNotChosenText([node('n4', 'Flare', 'krea-image-openai-gpt-image-2-5-flare', {}) as never]))
+    expect(modelNotChosenText([node('n4', 'Flare', 'krea-image-openai-gpt-image-2-5-flare', {}) as never], undefined, ON_KREA))
       .toBe('Nothing ran. Choose an aspect ratio for “Flare” first.');
   });
 
   it('nothing to say once every field has a value, or for a node outside the list', () => {
-    expect(modelNotChosenText([node('n2', 'Hero', KREA2, { aspect_ratio: '16:9', resolution: '1K' }) as never])).toBeNull();
-    expect(modelNotChosenText([node('n5', 'Pic', 'nano-banana', {}) as never])).toBeNull();
+    expect(modelNotChosenText([node('n2', 'Hero', KREA2, { aspect_ratio: '16:9', resolution: '1K' }) as never], undefined, ON_KREA)).toBeNull();
+    expect(modelNotChosenText([node('n5', 'Pic', 'nano-banana', {}) as never], undefined, ON_KREA)).toBeNull();
   });
 });
 

@@ -29,6 +29,23 @@ TOPAZ = "krea-enhance-topaz-standard-enhance"
 FLUX = "krea-image-bfl-flux-1-1-pro"
 HERO_LINE = "Choose an aspect ratio for “Hero” first."
 
+
+@pytest.fixture(autouse=True)
+def _krea_token(monkeypatch):
+    """Round 14 (review 13, M-1 and L-6): the field is refused on the route
+    that needs it, the Krea gateway here, so the runs have a Krea token. With
+    none, the key line comes first (tests/test_route_aware_refusal_round14.py)."""
+    import main
+
+    real = main.load_settings
+
+    def with_token():
+        settings = dict(real())
+        settings["apiKeys"] = {**(settings.get("apiKeys") or {}), "KREA_API_TOKEN": "fake-krea"}
+        return settings
+
+    monkeypatch.setattr(main, "load_settings", with_token)
+
 WH = [("width", "width"), ("height", "height")]
 AR = [("aspect_ratio", "aspect ratio"), ("resolution", "resolution")]
 # The same inventory frontend/tests/requiredFields.round13.test.ts pins.
@@ -198,7 +215,8 @@ def test_a_settings_read_failure_is_marked_for_the_canvas(pend, monkeypatch):
     from services import universal_ports
 
     async def unreachable(definition_id, model):
-        return "Nebula couldn't reach OpenRouter to read x's ports; try again"
+        return universal_ports.LookupFailure("Nebula couldn't reach OpenRouter to read x's ports; try again",
+                                             "model-settings")
 
     monkeypatch.setattr(universal_ports, "look_up", unreachable)
     node_id = pend.graph.add_node("openrouter-universal", {})

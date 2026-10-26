@@ -4817,12 +4817,15 @@ def _run_names(nodes: list[GraphNode]) -> Callable[[str], str]:
     return lambda node_id: _run_node_name(node_id, by_id)
 
 
-async def _refuse_unchosen_models(run_id: str, nodes: list[GraphNode], skips: Mapping[str, Any]) -> dict[str, Any] | None:
+async def _refuse_unchosen_models(run_id: str, nodes: list[GraphNode], edges: list[GraphEdge],
+                                  api_keys: Mapping[str, Any], skips: Mapping[str, Any]) -> dict[str, Any] | None:
     """The person's direct run (a node's, a shot's) of a Krea node with no
     model chosen is refused before its paid-placeholder confirmation: GM -
     Design, round 12 addendum b, "Don't ask someone to approve a run that
-    can't go out." The same line validate_graph gives every other run path."""
-    errors = unchosen_model_errors(nodes, name_of=_run_names(nodes))
+    can't go out." The same line validate_graph gives every other run path,
+    on the route the run takes (review 13, M-1: a maker key that takes the
+    run without the field is no refusal)."""
+    errors = unchosen_model_errors(nodes, edges, api_keys, name_of=_run_names(nodes))
     if not errors:
         return None
     await _announce_validation_errors(errors, run_id)
@@ -9098,7 +9101,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     # proposal's run (approval_id) is not running it directly.
     sub_nodes, sub_edges, skips, ready = await _skip_placeholders(
         run_id, sub_nodes, sub_edges, direct=request.target_node_id if request.approval_id is None else None)
-    refused = await _refuse_unchosen_models(run_id, sub_nodes, skips)
+    refused = await _refuse_unchosen_models(run_id, sub_nodes, sub_edges, api_keys, skips)
     if refused is not None:
         return refused
     await _require_placeholder_confirmation(run_id, sub_nodes, sub_edges, ready, request.confirmed_placeholders,
@@ -9757,7 +9760,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     if request.node_id in skips:
         canvas_events.forget_run(run_id)
         return {"status": "skipped", "runId": run_id, **_skip_reply(skips)}
-    refused = await _refuse_unchosen_models(run_id, sub_nodes, skips)
+    refused = await _refuse_unchosen_models(run_id, sub_nodes, sub_edges, api_keys, skips)
     if refused is not None:
         return refused
     await _require_placeholder_confirmation(run_id, sub_nodes, sub_edges, ready, request.confirmed_placeholders,
@@ -11498,14 +11501,17 @@ def _universal_request(body: Any, definition_id: str | None = None) -> tuple[str
 # Review 12, L-4: the canvas's model picker says "Couldn't load the model
 # settings for “X”." only when reading the provider's settings is what failed
 # (GM - Design, round 13); this header marks that answer (CORS exposes it).
+# Review 13, L-5: a missing key is marked as one ("missing-key": the canvas
+# names the key to add); a malformed model id carries no header.
 MODEL_SETTINGS_FAILURE_HEADER = "X-Nebula-Failure"
 
 
 async def _universal_data(definition_id: str, model: str) -> dict[str, Any]:
     found = await universal_ports.look_up(definition_id, model)
     if isinstance(found, str):
-        raise HTTPException(status_code=400, detail=found[0].upper() + found[1:] + ".",
-                            headers={MODEL_SETTINGS_FAILURE_HEADER: "model-settings"})
+        kind = getattr(found, "kind", "")
+        headers = {MODEL_SETTINGS_FAILURE_HEADER: kind} if kind in ("model-settings", "missing-key") else None
+        raise HTTPException(status_code=400, detail=found[0].upper() + found[1:] + ".", headers=headers)
     return found
 
 
@@ -15833,10 +15839,13 @@ async def quick_execute(body: dict[str, Any]) -> dict:
         outputs={},
     ))
     # Review 12, L-3: a required field with nothing chosen (Krea 2's Aspect
-    # ratio, Topaz Standard's Model) is refused here as on every other run
+    # ratio, Topaz Standard's Width) is refused here as on every other run
     # path (services/model_choice.py), before the spend check and before
-    # anything runs. The node has no canvas name: its type's name stands in.
-    unchosen = unchosen_model_errors([temp_nodes[-1]])
+    # anything runs, on the route the run takes (review 13, M-1, B9: a maker
+    # key that takes the run without the field is no refusal; with no key
+    # that can run it, nothing here). The node has no canvas name: its type's
+    # name stands in.
+    unchosen = unchosen_model_errors([temp_nodes[-1]], temp_edges, api_keys)
     if unchosen:
         raise HTTPException(status_code=400, detail=f"Nothing ran, so nothing was spent. {unchosen[0].message}")
     # A quick run has no canvas node to propose, so point at one.

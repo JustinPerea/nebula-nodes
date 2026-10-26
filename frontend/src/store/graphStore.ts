@@ -83,8 +83,8 @@ import {
 } from '../lib/errorCopy';
 import { CANVAS_NOTICE_EVENT, showNotice, type CanvasNoticeDetail } from '../lib/canvasNotice';
 import { cleanPending, pendingSkipLine, type PendingAgent, type PendingSkipSummary } from '../lib/pendingNodes';
-import { MODEL_SETTINGS_FAILURE, MODEL_SETTINGS_FAILURE_HEADER, modelSettingsFailedText, modelSetupFailedText } from '../lib/failureLines';
-import { cleanRemovals, deletedNoticeText, DROPPED_UNDO_TEXT, skippedUndoText, lateRestoreText, mergeRemovals, notRestoredText, pinsOnAnotherModel, restoredNoticeText, supersededBy, type RemovalRecord } from '../lib/deleteNotice';
+import { MISSING_KEY_FAILURE, MODEL_SETTINGS_FAILURE, MODEL_SETTINGS_FAILURE_HEADER, modelKeyMissingText, modelSettingsFailedText, modelSetupFailedText } from '../lib/failureLines';
+import { cleanRemovals, deletedNoticeText, DROPPED_REDO_TEXT, DROPPED_UNDO_TEXT, skippedPressText, lateRestoreText, mergeRemovals, notRestoredText, pinsOnAnotherModel, restoredNoticeText, supersededBy, type RemovalRecord } from '../lib/deleteNotice';
 import { NOTHING_RAN_LINE, OTHER_NODE_LINE, SHOT_NOT_STARTED_LINE, validationReadings, writtenReading, type ValidationReading } from '../lib/validationCopy';
 import {
   RUNTIME_FIELDS, applySlice, diffCanvas, edgeKey, editArrivedText, foldArrange, forgetClearedPlaceholders, foreignSource,
@@ -104,7 +104,7 @@ import { useCreateDraftStore } from './createDraftStore';
 import { getCinemaUploadIssue, useCinemaUploadStore } from './cinemaUploadStore';
 import { cinemaMotionSource, cinemaMotionTarget, useCinemaMotionStore } from './cinemaMotionStore';
 import { nodeKeyStatus, withNewKreaMode } from '../lib/kreaConnection';
-import { allParamDefinitions } from '../lib/directRoute';
+import { allParamDefinitions, envKeyNames } from '../lib/directRoute';
 import { clipSpeed, type EditClip } from '../lib/editor/virtualPlayback';
 import type { KeyframeData, VideoGraphManifest, TrackItem } from '../types/video';
 import { createEmptyManifest, DEFAULT_FPS } from '../types/video';
@@ -843,7 +843,7 @@ interface GraphState {
    * before it. Pass the step to cancelUndoStep if the request fails, and to
    * endUndoStep once it answered and its change is on the canvas: until
    * then an undo waits for it (review 10, L-2). */
-  beginUndoStep: () => object;
+  beginUndoStep: (options?: { clear?: boolean }) => object;
   cancelUndoStep: (step: object) => void;
   /** The request of a beginUndoStep step answered: an undo pressed meanwhile
    * now undoes it, if nothing newer landed on top (review 11, M-1).
@@ -1163,21 +1163,29 @@ async function backendDetail(response: Response): Promise<string> {
  * the provider's settings for the model is what failed (the backend marks
  * that answer: MODEL_SETTINGS_FAILURE_HEADER). */
 class UniversalModelError extends Error {
-  readonly settings: boolean;
-  constructor(message: string, settings: boolean) {
+  /** The backend's failure kind (MODEL_SETTINGS_FAILURE_HEADER), or null. */
+  readonly kind: string | null;
+  constructor(message: string, kind: string | null) {
     super(message);
-    this.settings = settings;
+    this.kind = kind;
   }
 }
 
 async function universalModelError(response: Response): Promise<UniversalModelError> {
-  const settings = response.headers.get(MODEL_SETTINGS_FAILURE_HEADER) === MODEL_SETTINGS_FAILURE;
-  return new UniversalModelError(await backendDetail(response), settings);
+  return new UniversalModelError(await backendDetail(response), response.headers.get(MODEL_SETTINGS_FAILURE_HEADER));
 }
 
-/** GM - Design's line for a model picker that failed (round 13), naming the node as its card does. */
-function modelPickerFailure(err: unknown, name: string): string {
-  return err instanceof UniversalModelError && err.settings ? modelSettingsFailedText(name) : modelSetupFailedText(name);
+/** GM - Design's line for a model picker that failed (round 13), naming the
+ * node as its card does: a failed read of the provider's settings, or a
+ * missing key named (review 13, L-5), else "Couldn't set up “X”.". */
+function modelPickerFailure(err: unknown, name: string, definitionId: string): string {
+  const kind = err instanceof UniversalModelError ? err.kind : null;
+  if (kind === MODEL_SETTINGS_FAILURE) return modelSettingsFailedText(name);
+  if (kind === MISSING_KEY_FAILURE) {
+    const definition = NODE_DEFINITIONS[definitionId];
+    return modelKeyMissingText(name, definition ? envKeyNames(definition) : []);
+  }
+  return modelSetupFailedText(name);
 }
 
 /** The node's name as its card shows it. */
@@ -1916,10 +1924,15 @@ function changeCanvasNodes(
   const replacementRevision = canvasReplacementRevision;
   // An undo pressed before the answers waits for them (review 10, L-2).
   holdStep(undoStep);
+  // What this step's deletes remove, and which step each node's delete
+  // belongs to while it is on its way: its echo places the step (review 13, M-2).
+  removedBy.set(undoStep, new Set([...(removedBy.get(undoStep) ?? []), ...cliRemovedIds]));
+  for (const nodeId of cliRemovedIds) deletesInFlight.set(nodeId, undoStep);
   const deleting = Promise.allSettled(cliRemovedIds.map(deleteCLIOriginNode)).then((results) => {
     try {
       applyDeleteAnswers(results);
     } finally {
+      for (const nodeId of cliRemovedIds) if (deletesInFlight.get(nodeId) === undoStep) deletesInFlight.delete(nodeId);
       settleStep(undoStep, set, get);
     }
   });
@@ -1966,7 +1979,7 @@ function changeCanvasNodes(
     // Its Undo applies only while this step is next in line: after a newer
     // step, the line would offer a button that does nothing (withLiveNotice).
     const top = get().undoStack.at(-1);
-    if (deleted > 0 && top && (top === undoStep || top === stepSuccessors.get(undoStep))) set(deletedNotice(deleted, top));
+    if (deleted > 0 && top && (top === undoStep || top === successorOf(undoStep))) set(deletedNotice(deleted, top));
     if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length);
   }
   // A restore already queued (an earlier undo or redo) reaches the backend
@@ -2067,19 +2080,11 @@ function applyCanvasNodeChanges(
 
   // A backend deletion took its step before sending (its graphSync can land
   // first). Where that step goes now that the nodes come off: placeDeleteStep
-  // (review 12, M-1 and L-5). A delete whose echo took the nodes first places
-  // its step where the stack stood when that echo came (echoRemovals).
+  // (review 12, M-1 and L-5). Nodes its echo took off first were placed then
+  // (placeEchoedDeletes, review 13 M-2); the step is the one it became.
   const present = new Set(get().nodes.map((node) => node.id));
   const leaving = removedIds.filter((id) => present.has(id));
-  if (leaving.length > 0) {
-    placeDeleteStep(undoStep, leaving, set, get);
-  } else if (undoStep) {
-    // Its echo took them first: the step goes where the stack stood when the
-    // echo came (an agent's edit that landed before it is older; one after, newer).
-    const landed = removedIds.map((id) => echoRemovals.get(id)).find((record) => record !== undefined);
-    if (landed) placeDeleteStep(undoStep, removedIds.filter((id) => echoRemovals.has(id)), set, get, landed);
-  }
-  for (const id of removedIds) echoRemovals.delete(id);
+  if (leaving.length > 0) placeDeleteStep(undoStep ? successorOf(undoStep) : undefined, leaving, set, get);
   set((state) => {
     const nextNodes = applyNodeChanges(changes, state.nodes) as Node<NodeData>[];
     const nextEdges = state.edges.filter(
@@ -3187,7 +3192,14 @@ const HOLD_LIMIT_MS = 15_000;
  * delete's, the model pickers' and chat /clear's, review 12 L-4).
  */
 type PressTarget = { entry: UndoEntry } | { inverseOf: number };
-interface HeldPress { id: number; action: 'undo' | 'redo'; target: PressTarget | null }
+/** `order`: when it was pressed, against when each clear was issued (clearSteps). */
+interface HeldPress { id: number; action: 'undo' | 'redo'; target: PressTarget | null; order: number }
+/** The order presses and clears were issued in (review 13, L-2). */
+let historyOrder = 0;
+/** The clears' steps (the toolbar's, chat /clear's), by when each was issued.
+ * A held press beneath a clear the person issued after it is dropped: the
+ * clear supersedes it (review 13, L-2). */
+const clearSteps = new WeakMap<UndoEntry, number>();
 let heldPresses: HeldPress[] = [];
 let heldPressSeq = 0;
 /** The inverse each applied held press made, by press id (a later redo's target). */
@@ -3212,18 +3224,37 @@ const stepSuccessors = new WeakMap<UndoEntry, UndoEntry>();
 /** Nodes a graphSync brought onto the canvas while a step was in flight: a
  * clear's answer never removes them, even under a reused id (L-6, S1). */
 const arrivedSince = new WeakMap<UndoEntry, Set<string>>();
-/** Nodes a graphSync of this tab's own took off while steps were in flight:
- * the stack's top then and the canvas just before. A delete's answer that
- * comes after its echo places its step from this (placeDeleteStep). */
-interface EchoRemoval { top: UndoEntry | undefined; snapshot: UndoSnapshot }
-const echoRemovals = new Map<string, EchoRemoval>();
+/** The nodes each delete step removes (changeCanvasNodes; a re-pushed
+ * successor keeps them). An undo applied beneath such a step never brings
+ * them back (review 13, M-2: R4). */
+const removedBy = new WeakMap<UndoEntry, Set<string>>();
+/** A node whose backend delete is on its way, and that delete's step. */
+const deletesInFlight = new Map<string, UndoEntry>();
+/** The settled steps a re-pushed delete step went above (placeDeleteStep).
+ * The delete was sent before them, so it is no newer edit than they are: a
+ * press bound to one of them still applies beneath it (review 13, L-1). */
+const jumpedOver = new WeakMap<UndoEntry, Set<UndoEntry>>();
 
-function noteEchoRemovals(state: GraphState, kept: ReadonlySet<string>): void {
+/**
+ * Review 13, M-2 and L-3: this tab's own graphSync can take a delete's nodes
+ * off before its answer comes, and that is when the delete's change lands.
+ * Its step is placed then (placeDeleteStep), exactly as the answer would have
+ * placed it: the person's steps taken after the delete was sent lose the
+ * nodes now, so no undo of one of them, held or not, brings a deleted node
+ * back to the canvas and to Nebula; a step that settled before the echo (an
+ * agent's edit, the person's typing) is older than the delete, so the
+ * delete's step goes above it, still on its way until the answer.
+ */
+function placeEchoedDeletes(state: GraphState, kept: ReadonlySet<string>, set: GraphSet, get: GraphGet): void {
   if (stepsInFlight.size === 0) return;
-  const gone = state.nodes.filter((node) => !kept.has(node.id));
-  if (gone.length === 0) return;
-  const record: EchoRemoval = { top: state.undoStack[state.undoStack.length - 1], snapshot: createSnapshot(state.nodes, state.edges) };
-  for (const node of gone) echoRemovals.set(node.id, record);
+  const byStep = new Map<UndoEntry, string[]>();
+  for (const node of state.nodes) {
+    if (kept.has(node.id)) continue;
+    const step = deletesInFlight.get(node.id);
+    if (!step || !stepsInFlight.has(step)) continue;
+    byStep.set(step, [...(byStep.get(step) ?? []), node.id]);
+  }
+  for (const [step, removed] of byStep) placeDeleteStep(successorOf(step), removed, set, get, { echo: true });
 }
 
 /** The graph a step was taken in (canvasReplacementRevision). */
@@ -3273,34 +3304,33 @@ function successorOf(entry: UndoEntry): UndoEntry {
  *   the deleted nodes. It keeps what the delete removed (its removals).
  */
 function placeDeleteStep(undoStep: UndoEntry | undefined, removed: string[], set: GraphSet, get: GraphGet,
-  landed?: EchoRemoval): void {
+  options: { echo?: boolean } = {}): void {
   const { undoStack, nodes, edges } = get();
   const at = undoStep ? undoStack.indexOf(undoStep) : -1;
-  // Its echo took the nodes off earlier, with its step no longer on the stack: nothing to place.
-  if (landed && at < 0) return;
+  // Its echo took the nodes off with its step no longer on the stack: nothing to place.
+  if (options.echo && at < 0) return;
   if (!undoStep || at < 0) {
     // No step of its own on the stack (none taken, or it left it): one now.
     const successor = pushUndo(set, get);
     if (undoStep) {
       if (undoStep.removals) successor.removals = undoStep.removals;
-      stepSuccessors.set(undoStep, successor);
+      succeed(undoStep, successor, new Set());
     }
     return;
   }
-  // The change landed now, or (its echo first) when the stack's top was `landed.top`.
-  let settledAbove = landed ? Math.max(at, undoStack.indexOf(landed.top as UndoEntry)) : undoStack.length - 1;
+  // The change lands now (its answer, or its echo before that), on the canvas as it is.
+  let settledAbove = undoStack.length - 1;
   while (settledAbove > at && stepsInFlight.has(undoStack[settledAbove])) settledAbove -= 1;
   let placed = at;
   if (settledAbove === at) {
-    // What arrived before its change (the canvas then: its echo's, or now).
-    if (landed) renewWithArrivals(undoStep, landed.snapshot.nodes, landed.snapshot.edges);
-    else renewWithArrivals(undoStep, nodes, edges);
+    // What arrived before its change.
+    renewWithArrivals(undoStep, nodes, edges);
   } else {
-    const successor = landed ? createSnapshot(landed.snapshot.nodes, landed.snapshot.edges) : createSnapshot(nodes, edges);
+    const successor = createSnapshot(nodes, edges);
     if (undoStep.removals) successor.removals = undoStep.removals;
     const stack = [...undoStack.slice(0, at), ...undoStack.slice(at + 1, settledAbove + 1), successor,
       ...undoStack.slice(settledAbove + 1)];
-    stepSuccessors.set(undoStep, successor);
+    succeed(undoStep, successor, new Set(undoStack.slice(at + 1, settledAbove + 1)));
     placed = settledAbove;
     set({ undoStack: stack, redoStack: [] });
   }
@@ -3315,6 +3345,20 @@ function placeDeleteStep(undoStep: UndoEntry | undefined, removed: string[], set
   // clears them), from a canvas that still had its nodes: a redo never brings
   // them back (review 12 probe H4: an undo applied beneath this delete).
   for (const entry of get().redoStack) strip(entry);
+}
+
+/** `successor` takes `step`'s place: what it removes, the steps it went
+ * above, and (its delete still on its way, after an echo) being in flight. */
+function succeed(step: UndoEntry, successor: UndoEntry, over: Set<UndoEntry>): void {
+  stepSuccessors.set(step, successor);
+  const removes = removedBy.get(step);
+  if (removes) removedBy.set(successor, new Set(removes));
+  jumpedOver.set(successor, new Set([...(jumpedOver.get(step) ?? []), ...over]));
+  if (stepsInFlight.has(step)) {
+    stepsInFlight.add(successor);
+    arrivedSince.set(successor, new Set(arrivedSince.get(step) ?? []));
+    stepRevisions.set(successor, stepRevisions.get(step) ?? canvasReplacementRevision);
+  }
 }
 
 /** A step taken before its change landed takes in the nodes (and their
@@ -3338,8 +3382,11 @@ function renewWithArrivals(step: UndoEntry, nodes: Node<NodeData>[], edges: Edge
 }
 
 function settleStep(step: UndoEntry, set: GraphSet, get: GraphGet): void {
-  stepsInFlight.delete(step);
-  if (stepsInFlight.size === 0) echoRemovals.clear();
+  // And the step it became, if its echo re-pushed it (placeEchoedDeletes).
+  for (let current: UndoEntry | undefined = step; current; current = stepSuccessors.get(current)) {
+    stepsInFlight.delete(current);
+    if (stepSuccessors.get(current) === current) break;
+  }
   const waiting = awaitingArrival.get(step);
   if (waiting) {
     clearTimeout(waiting.timer);
@@ -3380,11 +3427,12 @@ function noteSyncArrivals(before: Node<NodeData>[], after: Node<NodeData>[], set
 
 /** What dropping the held presses left to say: how many were dropped, and
  * the last one of their batch that went through, if any. */
-interface DroppedPresses { skipped: number; applied: AppliedPress | null }
+interface DroppedPresses { undos: number; redos: number; applied: AppliedPress | null }
 
 /** Drops every held press (the batch ends); announceDrop says so. */
 function dropHeldPresses(): DroppedPresses {
-  const dropped = { skipped: heldPresses.length, applied: batchLastApplied };
+  const undos = heldPresses.filter((press) => press.action === 'undo').length;
+  const dropped = { undos, redos: heldPresses.length - undos, applied: batchLastApplied };
   heldPresses = [];
   endHeldBatch();
   return dropped;
@@ -3407,13 +3455,14 @@ function endHeldBatch(): void {
  * shows (sendRestore); one already showing takes it now; with no line of its
  * own (a param edit undone), the sentence shows alone, with Redo.
  */
-function announceDrop(set: GraphSet, { skipped, applied }: DroppedPresses): void {
-  if (skipped === 0) return;
+function announceDrop(set: GraphSet, { undos, redos, applied }: DroppedPresses): void {
+  if (undos + redos === 0) return;
   if (!applied) {
-    set((state) => noticeLine(state, DROPPED_UNDO_TEXT, 'info'));
+    // GM, round 14, item 3: redos only, "Nothing was redone. …"; else the undo line.
+    set((state) => noticeLine(state, undos === 0 ? DROPPED_REDO_TEXT : DROPPED_UNDO_TEXT, 'info'));
     return;
   }
-  const sentence = skippedUndoText(skipped);
+  const sentence = skippedPressText(undos, redos);
   if (ownLinesWaiting.has(applied.noticeId)) {
     skippedAfter.set(applied.noticeId, sentence);
     return;
@@ -3441,7 +3490,7 @@ function announceDrop(set: GraphSet, { skipped, applied }: DroppedPresses): void
 function forgetStepsInFlight(): DroppedPresses {
   const dropped = dropHeldPresses();
   stepsInFlight.clear();
-  echoRemovals.clear();
+  deletesInFlight.clear();
   for (const { timer } of awaitingArrival.values()) clearTimeout(timer);
   awaitingArrival.clear();
   return dropped;
@@ -3452,6 +3501,14 @@ function forgetStepsInFlight(): DroppedPresses {
 function pressTarget(press: HeldPress): UndoEntry | undefined {
   if (!press.target) return undefined;
   return 'entry' in press.target ? press.target.entry : heldInverses.get(press.target.inverseOf);
+}
+
+/** Whether a step above a press's target lets the press apply beneath it:
+ * one of the person's steps still on its way (its change lands after this
+ * one), or the person's own delete re-pushed above the target because its
+ * answer came late (it was sent first, so it is no newer edit: L-1). */
+function staysAbove(step: UndoEntry, target: UndoEntry): boolean {
+  return stepsInFlight.has(step) || Boolean(jumpedOver.get(step)?.has(target));
 }
 
 function sameTarget(a: PressTarget, b: PressTarget): boolean {
@@ -3472,8 +3529,9 @@ function nextPressTarget(action: 'undo' | 'redo', state: GraphState): PressTarge
     const inverse: PressTarget = { inverseOf: press.id };
     // The person's steps still on their way above it stay (it applies beneath
     // them); anything else above it drops the press.
+    const bound = from[at];
     const left = [...from.slice(0, at), ...from.slice(at + 1)
-      .filter((target) => 'entry' in target && stepsInFlight.has(target.entry))];
+      .filter((target) => 'entry' in target && 'entry' in bound && staysAbove(target.entry, bound.entry))];
     if (press.action === 'undo') {
       undo = left;
       redo = [...redo, inverse];
@@ -3515,10 +3573,17 @@ function runHeldPresses(set: GraphSet, get: GraphGet): void {
     const state = get();
     const stack = press.action === 'undo' ? state.undoStack : state.redoStack;
     const at = stack.indexOf(entry);
+    // A clear the person issued after this press supersedes it (review 13,
+    // L-2): the canvas ends as the clear leaves it.
+    if (at >= 0 && stack.slice(at + 1).some((above) => (clearSteps.get(above) ?? -1) > press.order)) {
+      announceDrop(set, dropHeldPresses());
+      return;
+    }
     // On top, or under steps of the person's still on their way only (their
     // change lands after this one: review 12 probe H4, delete, Cmd+Z, delete
-    // again before the first answer): it applies beneath them (applyHistory).
-    if (at >= 0 && stack.slice(at + 1).every((above) => stepsInFlight.has(above))) {
+    // again before the first answer), or under the person's own older delete
+    // re-pushed by its late answer (L-1): it applies beneath them (applyHistory).
+    if (at >= 0 && stack.slice(at + 1).every((above) => staysAbove(above, entry))) {
       heldPresses.shift();
       const done = applyHistory(press.action, set, get, entry);
       if (done) {
@@ -3542,13 +3607,13 @@ function runHeldPresses(set: GraphSet, get: GraphGet): void {
 /** Whether this press waits for a step's answer (and is queued, bound to its target). */
 function holdsHistory(action: 'undo' | 'redo', state: GraphState, set: GraphSet): boolean {
   if (heldPresses.length > 0) {
-    heldPresses.push({ id: ++heldPressSeq, action, target: nextPressTarget(action, state) });
+    heldPresses.push({ id: ++heldPressSeq, action, target: nextPressTarget(action, state), order: ++historyOrder });
     return true;
   }
   const top = state.undoStack[state.undoStack.length - 1];
   if (action !== 'undo' || !top || !stepsInFlight.has(top)) return false;
   endHeldBatch();
-  heldPresses = [{ id: ++heldPressSeq, action, target: { entry: top } }];
+  heldPresses = [{ id: ++heldPressSeq, action, target: { entry: top }, order: ++historyOrder }];
   waitFor(top, set);
   return true;
 }
@@ -3593,6 +3658,7 @@ function applyHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet, tar
     next = { nodes: restoreWithOutputs(entry, nodes), edges: entry.edges.map((edge) => ({ ...edge })) };
     inverse = createSnapshot(nodes, edges);
   }
+  if (above.length > 0) next = withoutRemovedAbove(next, nodes, above);
   const nextNodes = withFreshKeyStatus(next.nodes, nodes);
   breakUndoDebounce();
   // The person's own step that brings nodes back says "Restored the node.",
@@ -3639,6 +3705,24 @@ function applyHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet, tar
   void sendRestore(action, nodes, edges, nextNodes, next.edges, entry, inverse, set,
     { noticeId, ownLine: ownLine?.kind === 'restored' && waitsForBackend ? ownLine : null });
   return { inverse, noticeId };
+}
+
+/**
+ * Review 13, M-2 (R4) and L-1: an undo applied beneath deletes of the
+ * person's (still on their way, or re-pushed by a late answer) never brings
+ * back the nodes they removed: those deletes come after it, so the canvas,
+ * and the restore Nebula is sent, keep them gone. A node still on the canvas
+ * (its delete hasn't landed yet) stays as it is; its delete takes it off.
+ */
+function withoutRemovedAbove(next: { nodes: Node<NodeData>[]; edges: Edge[] }, nodes: Node<NodeData>[],
+  above: UndoEntry[]): { nodes: Node<NodeData>[]; edges: Edge[] } {
+  const here = new Set(nodes.map((node) => node.id));
+  const gone = new Set([...above.flatMap((step) => [...(removedBy.get(step) ?? [])])].filter((id) => !here.has(id)));
+  if (gone.size === 0) return next;
+  return {
+    nodes: next.nodes.filter((node) => !gone.has(node.id)),
+    edges: next.edges.filter((edge) => !gone.has(edge.source) && !gone.has(edge.target)),
+  };
 }
 
 /** A restore's count that arrived too late for its own line: the plain line
@@ -4100,7 +4184,9 @@ wsClient.subscribe((event) => {
     if (!origin && !graphReplaced) foldFinishedArrange(state, arranged, cliNodes as Node<NodeData>[]);
     if (!graphReplaced && !(origin && isOwnEcho(origin, TAB_ID))) forgetPlaceholdersMadeNormal(state, merged);
     // This tab's own echo can take a delete's nodes off before its answer.
-    if (!graphReplaced && (!origin || isOwnEcho(origin, TAB_ID))) noteEchoRemovals(state, mergedIds);
+    if (!graphReplaced && (!origin || isOwnEcho(origin, TAB_ID))) {
+      placeEchoedDeletes(state, mergedIds, useGraphStore.setState as GraphSet, useGraphStore.getState);
+    }
     useGraphStore.setState({
       nodes: merged,
       edges: mergedEdges,
@@ -4181,7 +4267,13 @@ currentRunId = initialRunHistory.find((record) => record.status === 'running' &&
  */
 function refuseUnchosenModel(nodes: Node<NodeData>[], edges: Edge[], scope: RunScope,
   names?: Readonly<Record<string, string>>): boolean {
-  const text = modelNotChosenText(nodesThatRun(nodes, edges, scope), names);
+  // On the route each node's run takes (review 13, M-1): the keys set, its
+  // wires, the Krea plan's sign-in. Before the settings load, the backend
+  // refuses on the route it knows instead.
+  const { settingsCache } = useUIStore.getState();
+  const context = settingsCache.loaded ? { apiKeys: settingsCache.apiKeys, edges,
+    planReady: settingsCache.kreaConnection?.status === 'connected' } : undefined;
+  const text = modelNotChosenText(nodesThatRun(nodes, edges, scope), names, context);
   if (!text) return false;
   useGraphStore.getState().notify(text);
   return true;
@@ -4644,10 +4736,11 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
 
   redo: () => stepHistory('redo', set, get),
 
-  beginUndoStep: () => {
+  beginUndoStep: (options) => {
     breakUndoDebounce();
     const step = pushUndo(set, get);
     holdStep(step);
+    if (options?.clear) clearSteps.set(step, ++historyOrder);
     return step;
   },
 
@@ -7383,7 +7476,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       get().cancelUndoStep(step);
       console.error('Failed to set the model:', err);
       // Its held Cmd+Z goes to nothing, so this line says why (review 12, L-4).
-      get().notify(modelPickerFailure(err, name));
+      get().notify(modelPickerFailure(err, name, get().nodes.find((n) => n.id === nodeId)?.data.definitionId ?? 'openrouter-universal'));
     } finally {
       // An undo pressed while the request was on its way now acts (review 10, L-2).
       get().endUndoStep(step);
@@ -7423,7 +7516,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       get().cancelUndoStep(step);
       console.error('Failed to fetch Replicate schema:', err);
       // Its held Cmd+Z goes to nothing, so this line says why (review 12, L-4).
-      get().notify(modelPickerFailure(err, nodeName));
+      get().notify(modelPickerFailure(err, nodeName, 'replicate-universal'));
     } finally {
       // An undo pressed while the request was on its way now acts (review 10, L-2).
       get().endUndoStep(step);

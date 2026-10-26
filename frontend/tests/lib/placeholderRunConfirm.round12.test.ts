@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { Edge, Node } from '@xyflow/react';
 import type { NodeData } from '../../src/types';
 import { modelNotChosenText, placeholderRunConfirm, rowSegments } from '../../src/lib/placeholderRunConfirm';
+
+/** Round 14 (review 13, M-1): the field is refused on the route that needs it, the Krea gateway here. */
+const ON_KREA = { apiKeys: { KREA_API_TOKEN: '(set)' }, edges: [] };
 import { pendingIncludedLine, pendingSkipLine } from '../../src/lib/pendingNodes';
 import type { RunCost, RunScopeSummary } from '../../src/lib/runScope';
 
@@ -40,12 +43,12 @@ describe('addendum (b): a required model setting with nothing chosen', () => {
   it('the refusal names the node and the field', () => {
     // Round 13 (GM: only the first missing field, in the card's order): its
     // Width and Height come first, so they are set here.
-    expect(modelNotChosenText([node('t', 'Clean plate', codex, 'krea-enhance-topaz-standard-enhance', { width: 2048, height: 2048 })]))
+    expect(modelNotChosenText([node('t', 'Clean plate', codex, 'krea-enhance-topaz-standard-enhance', { width: 2048, height: 2048 })], undefined, ON_KREA))
       .toBe('Nothing ran. Choose a model for “Clean plate” first.');
-    expect(modelNotChosenText([node('a', 'Lab app', undefined, 'krea-node-app')]))
+    expect(modelNotChosenText([node('a', 'Lab app', undefined, 'krea-node-app')], undefined, ON_KREA))
       .toBe('Nothing ran. Choose a version for “Lab app” first.');
-    expect(modelNotChosenText([node('t', 'Clean plate', codex, 'krea-enhance-topaz-standard-enhance', { width: 2048, height: 2048, model: 'CGI' })])).toBeNull();
-    expect(modelNotChosenText([node('n', 'Hero', codex)])).toBeNull();
+    expect(modelNotChosenText([node('t', 'Clean plate', codex, 'krea-enhance-topaz-standard-enhance', { width: 2048, height: 2048, model: 'CGI' })], undefined, ON_KREA)).toBeNull();
+    expect(modelNotChosenText([node('n', 'Hero', codex)], undefined, ON_KREA)).toBeNull();
   });
 });
 

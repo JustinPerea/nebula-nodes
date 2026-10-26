@@ -1,7 +1,7 @@
 import type { Edge, Node } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { NodeData } from '../types';
-import { allParamDefinitions } from './directRoute';
+import { allParamDefinitions, hasRoutes, routeById, selectRoute, withWiredBlockers } from './directRoute';
 import { isLocalRun, modelChoice } from './nodeKeys';
 import { cleanPending, type PendingAgent } from './pendingNodes';
 import { formatUsdRange } from './pricing';
@@ -295,14 +295,82 @@ function requiredFields(definition: (typeof NODE_DEFINITIONS)[string]): string[]
   return fields;
 }
 
-/** The word for a node's first required field (in the card's order) with
- * nothing chosen ("aspect ratio", "model", "version"), or null. GM, round
- * 13: only the first is named, so the notice stays one line. */
-function unchosenField(node: Node<NodeData>): string | null {
-  const definition = NODE_DEFINITIONS[node.data?.definitionId];
+/** Fields the person picks rather than types, besides every enum: a node
+ * app's Version (backend model_choice._PICKED). */
+const PICKED_FIELDS = new Set(['node_app_version_id']);
+
+/** GM - Design, round 14, item 1: "Choose" for a picker (an enum, a node
+ * app's version), "Set" for a value the person types (width, height, a
+ * name). backend services/model_choice.py field_verb is the same rule. */
+function fieldVerb(definition: (typeof NODE_DEFINITIONS)[string], key: string): 'Choose' | 'Set' {
+  const spec = specsOf(definition).find((candidate) => candidate.key === key) as (ParamSpec & { type?: string; options?: unknown[] }) | undefined;
+  return PICKED_FIELDS.has(key) || spec?.type === 'enum' || (spec?.options?.length ?? 0) > 0 ? 'Choose' : 'Set';
+}
+
+/** What a run of the node can be refused for: the keys set (the settings
+ * cache), what is wired into it, and whether the Krea plan is signed in. */
+export interface RouteContext {
+  apiKeys: Readonly<Record<string, string | undefined>>;
+  wired?: Iterable<string>;
+  planReady?: boolean;
+}
+
+/** A size with one of its two fields empty is a missing field, not a size
+ * the maker can't render (backend model_choice._whole_sizes): it is left out
+ * of the route choice. */
+function wholeSizes(definition: (typeof NODE_DEFINITIONS)[string], params: Record<string, unknown>): Record<string, unknown> {
+  const values = { ...params };
+  const ruleSets = [definition.directRoute, ...(definition.routes ?? []).map((route) => route.rules)];
+  for (const rules of ruleSets) {
+    const size = (rules as { size?: { widthParam?: string; heightParam?: string } } | undefined)?.size;
+    if (!size?.widthParam || !size.heightParam) continue;
+    const pair = [size.widthParam, size.heightParam];
+    if (pair.filter((key) => unset(values[key])).length === 1) for (const key of pair) delete values[key];
+  }
+  return values;
+}
+
+/** The params a maker's own API sizes by (its `size` rule; backend
+ * model_choice._maker_sizes_by): Seedream on BytePlus takes width x height. */
+function makerSizesBy(definition: (typeof NODE_DEFINITIONS)[string], routeId: string | null | undefined): Set<string> {
+  const rules = hasRoutes(definition)
+    ? routeById(definition, routeId)?.rules
+    : definition.directRoute;
+  const size = (rules as { size?: { widthParam?: string; heightParam?: string } } | undefined)?.size;
+  return new Set([size?.widthParam, size?.heightParam].filter((key): key is string => Boolean(key)));
+}
+
+/**
+ * Review 13, M-1 and L-6 (round 14): the first required field (card order)
+ * that the route the run takes needs with nothing in it, as [verb, word], or
+ * null. The route is selectRoute's, the rule the backend's router, pricing
+ * and spend gate read: the Krea gateway (a token, or the plan) needs every
+ * field; a maker's own API with the person's key only what it sizes by
+ * (OpenAI picks GPT Image 2.5's size, xAI leaves Grok's out, BytePlus needs
+ * Seedream's width and height). No usable route (no key, the plan not
+ * signed in): null, and the key or sign-in line comes first. backend
+ * services/model_choice.py unchosen is the same rule;
+ * backend/tests/fixtures/required_field_cases.json pins both.
+ */
+export function unchosenOnRoute(definitionId: string, params: Record<string, unknown> | undefined,
+  context: RouteContext): [string, string] | null {
+  const definition = NODE_DEFINITIONS[definitionId];
   if (!definition) return null;
-  const params = (node.data?.params ?? {}) as Record<string, unknown>;
-  return requiredFields(definition).find(([key]) => unset(params[key]))?.[1] ?? null;
+  const fields = requiredFields(definition);
+  if (fields.length === 0) return null;
+  const values = params ?? {};
+  const routed = withWiredBlockers(definition, wholeSizes(definition, values), context.wired ?? []);
+  const route = selectRoute(definition, routed, context.apiKeys);
+  let needed: string[][];
+  if (route.kind === 'plan') needed = context.planReady ? fields : [];
+  else if (route.kind === 'unset' || !route.key || !String(context.apiKeys[route.key] ?? '').trim()) needed = [];
+  else if (route.provider === 'krea') needed = fields;
+  else {
+    const sizes = makerSizesBy(definition, route.routeId);
+    needed = fields.filter(([key]) => sizes.has(key));
+  }
+  const missing = needed.find(([key]) => unset(values[key]));
+  return missing ? [fieldVerb(definition, missing[0]), missing[1]] : null;
 }
 
 /** Every Krea definition with a field the refusal names: {id: [[key, word]]}. */
@@ -318,21 +386,31 @@ export function requiredFieldInventory(): Record<string, string[][]> {
 /**
  * GM - Design, round 12 addendum (b), verbatim: "Nothing ran. Choose a model
  * for “Clean plate” first." for the first node among `nodes` (the nodes a run
- * would send) with a required field that has nothing chosen (unchosenField;
- * round 13: "Choose an aspect ratio for “X” first."), or null. The
- * gateway would refuse that run, so the canvas refuses it before any dialog
- * ("Don't ask someone to approve a run that can't go out"), on every run
- * path; the backend refuses it the same way (execution.engine
- * unchosen_model_errors). `names`: a node's name for this run.
+ * would send) with a required field that has nothing chosen, on the route
+ * its run takes (unchosenOnRoute; round 13: "Choose an aspect ratio for “X”
+ * first."; round 14, item 1: "Set a width for “X” first." for a typed value),
+ * or null. That route would refuse the run, so the canvas refuses it before
+ * any dialog ("Don't ask someone to approve a run that can't go out"), on
+ * every run path; the backend refuses it the same way (execution.engine
+ * unchosen_model_errors). `names`: a node's name for this run. `context`:
+ * the keys set, the run's wires, the Krea plan's sign-in; without one
+ * (settings not loaded) nothing is refused here, and the backend, which
+ * knows the keys, refuses on the route.
  */
-export function modelNotChosenText(nodes: Node<NodeData>[], names?: Readonly<Record<string, string>>): string | null {
+export function modelNotChosenText(nodes: Node<NodeData>[], names?: Readonly<Record<string, string>>,
+  context?: { apiKeys: RouteContext['apiKeys']; edges?: Edge[]; planReady?: boolean }): string | null {
+  if (!context) return null;
   for (const node of nodes) {
-    const field = unchosenField(node);
-    if (!field) continue;
+    const wired = (context.edges ?? []).filter((edge) => edge.target === node.id && edge.targetHandle)
+      .map((edge) => edge.targetHandle as string);
+    const found = unchosenOnRoute(node.data?.definitionId, (node.data?.params ?? {}) as Record<string, unknown>,
+      { apiKeys: context.apiKeys, wired, planReady: context.planReady });
+    if (!found) continue;
+    const [verb, field] = found;
     const name = names?.[node.id] || node.data?.label || NODE_DEFINITIONS[node.data?.definitionId]?.displayName || node.id;
-    // GM, round 13: "Choose an aspect ratio …", "Choose a model …".
+    // GM, round 13: "an aspect ratio", "a model".
     const article = /^[aeiou]/i.test(field) ? 'an' : 'a';
-    return `Nothing ran. Choose ${article} ${field} for “${name}” first.`;
+    return `Nothing ran. ${verb} ${article} ${field} for “${name}” first.`;
   }
   return null;
 }

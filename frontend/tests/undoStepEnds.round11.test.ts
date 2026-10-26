@@ -20,7 +20,7 @@ function sources(dir: string): string[] {
 
 const callers = sources(SRC)
   .map((path) => ({ path: relative(SRC, path), text: readFileSync(path, 'utf8') }))
-  .filter(({ text }) => /beginUndoStep\(\)/.test(text));
+  .filter(({ text }) => /beginUndoStep\((\{ clear: true \})?\)/.test(text));
 
 describe('every beginUndoStep is ended', () => {
   it('the inventory: every file that begins a step', () => {
@@ -36,7 +36,7 @@ describe('every beginUndoStep is ended', () => {
   });
 
   it.each(callers.map(({ path, text }) => [path, text] as const))('%s ends each step it begins, in a finally', (_path, text) => {
-    const begun = text.match(/beginUndoStep\(\)/g)?.length ?? 0;
+    const begun = text.match(/beginUndoStep\((\{ clear: true \})?\)/g)?.length ?? 0;
     const ended = text.match(/finally\s*(?:\{|\(\(\) => )[^}]*?endUndoStep\(/g)?.length ?? 0;
     expect(ended).toBe(begun);
   });

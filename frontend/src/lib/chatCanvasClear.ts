@@ -1,5 +1,5 @@
 import { apiFetch } from './backend';
-import { CLEAR_FAILED_TEXT, CLEAR_REFUSED_TEXT } from './failureLines';
+import { CLEAR_FAILED_TEXT, CLEAR_REFUSED_TEXT, type ChatClearOutcome } from './failureLines';
 import { useGraphStore } from '../store/graphStore';
 
 /**
@@ -20,22 +20,27 @@ import { useGraphStore } from '../store/graphStore';
  * (it clears, then saves), and no answer says nothing either way, so those
  * read just "Couldn't clear the canvas." (GM: "Use the second sentence only
  * if it is true.") Its own graphSync, if it cleared after all, then shows it.
+ * The outcome is what the chat's system line says (chatClearLine, GM round
+ * 14, item 2). Its step is a clear's (review 13, L-2): a Cmd+Z held from
+ * before it is dropped rather than undone beneath it.
  */
-export async function clearCanvasFromChat(): Promise<void> {
+export async function clearCanvasFromChat(): Promise<ChatClearOutcome> {
   const graph = useGraphStore.getState();
-  const undoStep = graph.beginUndoStep();
+  const undoStep = graph.beginUndoStep({ clear: true });
   try {
     const response = await apiFetch('/api/graph?force=true', { method: 'DELETE' });
     if (response.ok) {
       useGraphStore.getState().clearBackendNodes({ undoStep });
-    } else {
-      useGraphStore.getState().cancelUndoStep(undoStep);
-      const refused = response.status >= 400 && response.status < 500;
-      useGraphStore.getState().notify(refused ? CLEAR_REFUSED_TEXT : CLEAR_FAILED_TEXT);
+      return 'cleared';
     }
+    useGraphStore.getState().cancelUndoStep(undoStep);
+    const refused = response.status >= 400 && response.status < 500;
+    useGraphStore.getState().notify(refused ? CLEAR_REFUSED_TEXT : CLEAR_FAILED_TEXT);
+    return refused ? 'refused' : 'failed';
   } catch {
     useGraphStore.getState().cancelUndoStep(undoStep);
     useGraphStore.getState().notify(CLEAR_FAILED_TEXT);
+    return 'failed';
   } finally {
     useGraphStore.getState().endUndoStep(undoStep);
   }

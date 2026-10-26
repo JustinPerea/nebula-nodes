@@ -175,7 +175,7 @@ export function Toolbar() {
     // rejects this while any tracked execution owns provider lifecycle state.
     // One undo step for the clear, taken before the backend's graphSync can
     // empty the canvas.
-    const undoStep = useGraphStore.getState().beginUndoStep();
+    const undoStep = useGraphStore.getState().beginUndoStep({ clear: true });
     try {
       // force: the person just confirmed, and a project with nodes needs it
       // (the backend refuses a clear without it, 409).

@@ -26,12 +26,27 @@ The fields: a Krea definition's params (in the card's order, the definition's)
 that are required, have no default, aren't hidden, and have no input port of
 the same id (a wire could fill those). Nothing here adds a default: which
 value to use is the person's choice.
+
+Review 13, M-1 and L-6 (round 14): the refusal follows the route the run
+takes (:func:`unchosen`), as node_route.select_route picks it for the router,
+pricing and the spend gate. The Krea gateway (an API token, or the plan)
+needs every field above. A Krea copy that runs on its maker's own API with
+the person's key needs only what that API sizes by (directRoute.size: Seedream
+on BytePlus takes width x height); OpenAI picks GPT Image 2.5's size itself
+and xAI leaves Grok's out, so those run. With no usable route (no key, the
+plan not signed in) no field is named: the key or sign-in refusal comes
+first. frontend lib/placeholderRunConfirm.ts reads the same rule, and both
+are pinned by tests/fixtures/required_field_cases.json.
+
+GM - Design, round 14, item 1: a typed value is "Set" ("Set a width for “X”
+first."), a picker keeps "Choose" (model, version, aspect ratio).
 """
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping, NamedTuple
 
+from services import node_route
 from services.node_registry import NodeRegistry
 
 # The frontend's KREA_SETTING_KEYS (lib/placeholderRunConfirm.ts): the
@@ -40,6 +55,9 @@ _SETTING_KEYS = ("variant", "engine", "model", "enhancement_model", "frame_inter
                  "node_app_version_id")
 # The word a field goes by in the line; else its card label, lowercased.
 _FIELD_WORDS = {"node_app_version_id": "version"}
+# Fields the person picks rather than types, besides every enum: a node app's
+# Version (GM, round 14: "Choose stays for pickers (model, version, aspect ratio)").
+_PICKED = frozenset({"node_app_version_id"})
 
 
 def _unset(value: Any) -> bool:
@@ -94,17 +112,96 @@ def required_model_settings() -> dict[str, tuple[str, str]]:
     return found
 
 
+def field_verb(definition_id: str, key: str) -> str:
+    """GM - Design, round 14, item 1: "Choose" for a picker (an enum, a node
+    app's version), "Set" for a value the person types (width, height, name)."""
+    definition = NodeRegistry().get_all().get(definition_id) or {}
+    spec = next((spec for spec in _specs(definition) if spec.get("key") == key), {})
+    return "Choose" if key in _PICKED or spec.get("type") == "enum" or spec.get("options") else "Set"
+
+
+class Unchosen(NamedTuple):
+    """The first field a run can't go without: the line's verb and word."""
+    verb: str
+    field: str
+
+
+def _maker_sizes_by(definition: Mapping[str, Any], route: node_route.Route) -> set[str]:
+    """The params a maker's own API sizes by (its ``size`` rule: Seedream on
+    BytePlus takes width x height, maker_routes_byteplus refuses a run
+    without them). Any other maker field here is Krea's alone."""
+    if node_route.has_routes(definition):
+        spec = node_route.route_by_id(definition, route.route_id) or {}
+        rules = spec.get("rules") if isinstance(spec.get("rules"), Mapping) else {}
+    else:
+        rules = definition.get("directRoute") if isinstance(definition.get("directRoute"), Mapping) else {}
+    size = rules.get("size") if isinstance(rules, Mapping) else None
+    if not isinstance(size, Mapping):
+        return set()
+    return {str(size[name]) for name in ("widthParam", "heightParam") if size.get(name)}
+
+
+def _whole_sizes(definition: Mapping[str, Any], params: Mapping[str, Any] | None) -> dict[str, Any]:
+    """``params`` for choosing the route: a size with one of its two fields
+    empty (a width and no height) is a missing field, named as such, not a
+    size the maker can't render (node_route._size_block would send the run
+    to the copy), so it is left out of the choice."""
+    values = dict(params or {})
+    for rules in [definition.get("directRoute"), *[(route or {}).get("rules") for route in definition.get("routes") or []]]:
+        size = rules.get("size") if isinstance(rules, Mapping) else None
+        if not isinstance(size, Mapping) or not size.get("widthParam") or not size.get("heightParam"):
+            continue
+        pair = (str(size["widthParam"]), str(size["heightParam"]))
+        if sum(_unset(values.get(key)) for key in pair) == 1:
+            for key in pair:
+                values.pop(key, None)
+    return values
+
+
+def route_fields(definition_id: str, params: Mapping[str, Any] | None, api_keys: Mapping[str, Any],
+                 *, wired: Iterable[str] | Mapping[str, int] = (), plan_ready: bool = True) -> list[tuple[str, str]]:
+    """The required fields (required_fields) the run's route needs, in the
+    card's order. The route is the one the run takes: select_route over the
+    params with what is wired in (with_wired_blockers), as the router reads
+    them. ``plan_ready``: the person's Krea plan is signed in."""
+    fields = required_fields().get(definition_id)
+    if not fields:
+        return []
+    definition = NodeRegistry().get_all().get(definition_id) or {}
+    routed = node_route.with_wired_blockers(definition, _whole_sizes(definition, params), wired)
+    route = node_route.select_route(definition, routed, api_keys)
+    if route.kind == node_route.PLAN:
+        return list(fields) if plan_ready else []
+    if route.kind == node_route.UNSET or not route.key or not str(api_keys.get(route.key) or "").strip():
+        return []
+    if route.provider == "krea":
+        return list(fields)
+    needs = _maker_sizes_by(definition, route)
+    return [field for field in fields if field[0] in needs]
+
+
+def unchosen(definition_id: str, params: Mapping[str, Any] | None, api_keys: Mapping[str, Any],
+             *, wired: Iterable[str] | Mapping[str, int] = (), plan_ready: bool = True) -> Unchosen | None:
+    """The first field (card order) the run's route needs with nothing in it."""
+    for key, word in route_fields(definition_id, params, api_keys, wired=wired, plan_ready=plan_ready):
+        if _unset((params or {}).get(key)):
+            return Unchosen(field_verb(definition_id, key), word)
+    return None
+
+
 def unchosen_field(definition_id: str, params: Mapping[str, Any] | None) -> str | None:
     """The word for the first required field (in the card's order) with
-    nothing chosen ("aspect ratio", "model", "version"); else None."""
+    nothing chosen, on the Krea gateway ("aspect ratio", "model", "version");
+    else None. Run paths ask :func:`unchosen`, which follows the route."""
     for key, word in required_fields().get(definition_id, ()):
         if _unset((params or {}).get(key)):
             return word
     return None
 
 
-def not_chosen_line(name: str, field: str) -> str:
+def not_chosen_line(name: str, field: str, verb: str = "Choose") -> str:
     """GM's refusal for the node, without the "Nothing ran." that the run's
-    own refusal already says ("Nothing ran, so nothing was spent. …")."""
+    own refusal already says ("Nothing ran, so nothing was spent. …"):
+    "Choose an aspect ratio for “X” first.", "Set a width for “X” first."."""
     article = "an" if field[:1].lower() in "aeiou" else "a"
-    return f"Choose {article} {field} for “{name}” first."
+    return f"{verb} {article} {field} for “{name}” first."

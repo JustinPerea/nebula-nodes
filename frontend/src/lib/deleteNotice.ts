@@ -42,9 +42,26 @@ export const DROPPED_UNDO_TEXT = 'Nothing was undone. Your last change was still
  * stays, since something was restored. DROPPED_UNDO_TEXT is only for a batch
  * in which no undo went through. */
 export function skippedUndoText(count: number): string {
-  return count === 1 ? '1 undo was skipped while a change was saving.'
-    : `${count} undos were skipped while a change was saving.`;
+  return skippedPressText(count, 0);
 }
+
+/** GM - Design, round 14, item 3, verbatim (review 13, L-4): the dropped
+ * Cmd+Z and Cmd+Shift+Z presses counted apart, undos first, a kind with none
+ * left out: "1 redo was skipped while a change was saving.", "2 undos and 1
+ * redo were skipped while a change was saving." It follows the line of the
+ * press that went through. */
+export function skippedPressText(undos: number, redos: number): string {
+  const parts = [
+    ...(undos > 0 ? [undos === 1 ? '1 undo' : `${undos} undos`] : []),
+    ...(redos > 0 ? [redos === 1 ? '1 redo' : `${redos} redos`] : []),
+  ];
+  const one = parts.length === 1 && undos + redos === 1;
+  return `${parts.join(' and ')} ${one ? 'was' : 'were'} skipped while a change was saving.`;
+}
+
+/** GM - Design, round 14, item 3: no press went through and every one
+ * dropped was a redo. Undos only, or both kinds: DROPPED_UNDO_TEXT. */
+export const DROPPED_REDO_TEXT = 'Nothing was redone. Your last change was still saving.';
 
 export const SKIPPED_UNDO_TEXT = skippedUndoText(1);
 

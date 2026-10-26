@@ -274,9 +274,15 @@ key refuses the whole run before anything is called or spent, as does a
 Krea node with a required field nobody chose: Krea 2's Aspect ratio and
 Resolution, a Width and Height on Flux 1.1 Pro, Seedream, Wan 2.1/2.2,
 Magnific and the Topaz image upscalers, Topaz Standard's Model, a node app's
-Version: "Choose an aspect ratio for “Hero” first.", naming the first one
-in the card's order; `nebula quick` is refused the same way. Set it with
-`nebula set` first, or leave the choice to the person). The card on
+Version, a style training's Name: "Choose an aspect ratio for “Hero”
+first." for a picker, "Set a width for “Hero” first." for a typed value,
+naming the first one in the card's order; `nebula quick` is refused the same
+way. Only the route the run takes counts: Krea's own API needs them all, but
+GPT Image 2.5 Flare/Sunburst with an OpenAI key and Grok Imagine 2.0 with an
+xAI key run without an Aspect ratio or Resolution (Seedream with a BytePlus
+key still needs its Width and Height). With no key that can run it, the
+refusal names the key instead. Set it with `nebula set` first, or leave the
+choice to the person). The card on
 the canvas shows the same error. `nebula look` prints a failed node's error
 under it, and `nebula path` says why there is no file. The error stays on the
 node, through reloads, project switches and restarts, until it runs again.

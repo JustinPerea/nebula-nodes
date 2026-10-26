@@ -1285,3 +1285,104 @@ Branch feat/agent-presence, base main (head f9c407d1 before this round).
 - Lint: clean (the inline-style and Slava-scope guards passed).
 - Build budget: 392,752 bytes raw / 118,194 gzip (limit 512,000).
 - INSTRUCTIONS: 2,233 characters (2,957 with the Commons guide), unchanged.
+
+## Round 14: review 13 and GM - Design's round-14 rulings (2026-10-26)
+
+Branch feat/agent-presence, base main (head f4c6f719 before this round).
+
+### What changed and why
+
+- **M-1, the refusal follows the route** (`backend/services/model_choice.py` `route_fields` ~161 and `unchosen` ~183; `frontend/src/lib/placeholderRunConfirm.ts` `unchosenOnRoute` ~355). A required field with nothing in it is refused only on the route that needs it:
+  - the Krea gateway (an API token, or the plan once signed in) needs every field;
+  - a maker's own API needs only what it sizes by (`directRoute.size`: Seedream on BytePlus needs width and height);
+  - GPT Image 2.5 Flare and Sunburst with an OpenAI key and Grok Imagine 2.0 with an xAI key run with no field set;
+  - a wire into a Krea-only port (Grok's style images) keeps the run on Krea, so its field is named.
+- **Single source of truth.** The route comes from the existing selector (`node_route.select_route` and `directRoute.ts selectRoute`, already pinned to each other by `route_cases.json`, with `with_wired_blockers`). The field-plus-route rule is pinned on both sides by a new shared case list, `backend/tests/fixtures/required_field_cases.json` (25 cases), read by the backend and the frontend tests.
+- **Every run path uses it:**
+  - backend `validate_graph` → `unchosen_model_errors(nodes, edges, api_keys)` (`execution/engine.py` ~810) with `_krea_plan_ready()` (~845); `_refuse_unchosen_models` (`main.py` ~4820) on `/api/execute-node` (~9104) and the Cinema shot (~9763); `/api/quick` (~15848);
+  - canvas `refuseUnchosenModel` (`graphStore.ts` ~4268) reads the loaded settings (keys, edges, plan state) and refuses nothing before the settings have loaded (the backend refuses on the route it knows).
+- **L-6:** with no usable route (no key, the plan not signed in) no field is named; the key or sign-in refusal comes first.
+- **A half-set size** (`_whole_sizes` / `wholeSizes`): a width without a height used to move the run off the direct route (`_size_block`), so Seedream on BytePlus with only a width wasn't refused. The route is now chosen with the half pair dropped, and the missing half is named.
+- **GM item 1:** "Set" for typed values ("Nothing ran. Set a width for “X” first.", height, name), "Choose" for pickers (model, version, aspect ratio, resolution). `field_verb` (~115) / `fieldVerb` (~305): Choose for an enum, a field with options, or a picked one (`node_app_version_id`); Set otherwise.
+- **M-2, echo-first:** the echo is now when a delete lands. `changeCanvasNodes` records the ids each in-flight delete removes (`removedBy`, `deletesInFlight`, ~1930). `placeEchoedDeletes` (~3248, called from graphSync ~4188) places the delete step when its echo takes the nodes off, not when the answer comes. A successor made then stays in flight until the answer (`succeed` ~3352). An undo applied beneath later steps leaves out every node a step above it removed and the canvas doesn't have (`withoutRemovedAbove` ~3717, `applyHistory` ~3661), so a restore body never names a node an in-flight or settled delete removed.
+- **L-1 (Q4):** the person's older delete re-pushed above the target when its answer came late is no newer edit for that press (`jumpedOver`, `staysAbove` ~3510), so the press goes through.
+- **L-2 (Q5):** a clear's step is marked (`beginUndoStep({ clear: true })` ~4743: Toolbar ~178 and chat /clear). A held press with a clear issued after it above its target is dropped with the dropped line (`runHeldPresses` ~3578). The canvas ends empty and the backend agrees.
+- **L-3 (Q6):** a step taken between a delete and its echo is below the delete once the echo places it; Cmd+Z then waits for and undoes the delete. Canvas = backend.
+- **L-4, GM item 3:** undos and redos are counted apart (`skippedPressText`, `deleteNotice.ts` ~53): "1 redo was skipped while a change was saving.", "2 undos and 1 redo were skipped while a change was saving." Undos first; a kind with 0 is left out. Nothing went through: redos only → "Nothing was redone. Your last change was still saving."; undos only or both → the undo line (`announceDrop` ~3458).
+- **L-5:** `X-Nebula-Failure` is set only when the read failed (`model-settings`) or the key is missing (`missing-key`; `main.py` ~11513). `LookupFailure` carries a kind (`universal_ports.py` ~423). A missing key reads "Couldn't set up “X”. Add your {key} in Settings." (`modelKeyMissingText`, `failureLines.ts` ~48); a malformed id reads "Couldn't set up “X”."
+- **L-7, GM item 2:** chat /clear's system line follows the outcome (`chatClearLine` ~26; `ChatPanel.tsx` ~1468): refused → "Session cleared. Next message starts a fresh conversation. The canvas wasn't cleared."; a server error or no answer → "… The canvas may not be fully cleared."
+- **Docs:** `docs/MCP-SETUP.md` (the required-field bullet ~1560: route-aware, Set/Choose, the key line first; the held-undo paragraph ~214: the older delete, the echo as landing, a later clear supersedes, the redo line and the counts) and `skills/nebula/SKILL.md` (~274). MCP tools and CLI unchanged; INSTRUCTIONS unchanged.
+
+### Decisions and tradeoffs
+
+- Seedream on BytePlus is still refused for width and height on the maker's route. That goes past "refuse only on the gateway", but it is true: ModelArk refuses a run with no size.
+- `/api/quick` gets the route-aware field check only. Full `validate_graph` there changed 15 CLI tests (no keys, fake handlers); left to the coordinator.
+- Q6: Cmd+Z after the echo undoes the delete (it landed after the typing), not the typing.
+- The missing-key picker line is composed from the existing key phrase, not a GM line (open item).
+
+### Held presses, round 14 cases → outcome
+
+| Case | Outcome |
+|---|---|
+| R1 / Q1 / Q1b | restore [n2] only |
+| R2 | restore [n2]; canvas = backend [n2] |
+| R3 | restore [remove n3]; canvas = backend [n2] |
+| R4 (H4 echo-first) | restore [n1]; canvas = backend [n1, n3]; the next Cmd+Z restores n2 |
+| R5 (control) | unchanged |
+| Q2 (echo before typing) | dropped |
+| Q2b | n2 back, the typing kept |
+| Q3 (delete, upload, Cmd+Z for the upload) | the press undoes the upload (restore [remove n3]); canvas = backend [n2]; the next Cmd+Z restores n1 |
+| Q4 / Q4b (older delete re-pushed) | the press goes through; restores [remove n3], [n2]; n1 stays gone; no skipped line |
+| Q5 / Q5b (clear after the press) | dropped with the dropped line; canvas = backend = empty; the next presses undo the clear, then the delete |
+| Q6 | the press waits; canvas = backend [n1, n2]; restore [n2] |
+| Q7 | "… 2 undos were skipped while a change was saving." |
+| Q8 | "Restored the node. 1 undo and 1 redo were skipped while a change was saving." |
+| Q9-Q13 (controls) | unchanged |
+
+### Run entry points and direct-route nodes
+
+- **Backend:** `/api/execute` (`validate_graph`); `/api/execute-node` (`_refuse_unchosen_models` + `validate_graph`); `/api/cinema/generate-shot` (the same); `/api/graph/run` (`run_nodes`, `nebula run`); `/api/quick` (`nebula quick`). Batch and cinema handlers run inside `execute_graph`.
+- **Canvas** (`refuseUnchosenModel`): `executeNode` (node Run, Inspector, context menu, an accepted proposal; Cinema shots through `confirmDirectRun`), `executeCluster`, `executeGraph`, `executeClusterConcurrent` (two sites), `rerunHistoryRecord`.
+- **Direct-route nodes among the 23:** GPT Image 2.5 Flare and Sunburst (OpenAI), Grok Imagine 2.0 (xAI), Seedream 4, 5 Lite and 5 Pro (BytePlus). No other route-table node has a required field without a default.
+
+### Tests (each failed first on the current code)
+
+- `frontend/tests/heldUndo.round14.test.tsx`, 24 tests (fake backend applying deletes, syncs, restores and clears in arrival order; every case asserts the restore bodies and canvas = backend): 11 failed first, for example `skippedPressText` not a function, Q8 "2 undos were skipped", R1 restored [n1, n2], R2/R3 canvas [n1, n2], R4 [n1, n2, n3] vs [n1, n3], Q4 one restore, Q5 "Restored the node.", Q6 [n1, n2] vs [n1].
+- `frontend/tests/requiredFields.round14.test.ts`, 56 tests (the shared cases, GM's lines, the Grok wire, every run path with OpenAI, xAI, Krea or no key, the plan, unloaded settings, a replay): 50 failed first.
+- `frontend/tests/failureLines.round14.test.ts`, 13 tests: 5 failed first (no key in the line, `modelKeyMissingText` missing).
+- `frontend/tests/ChatPanel.personal.test.tsx`, 4 new /clear tests (cleared, refused 409, 500, no answer): 2 failed first.
+- `backend/tests/test_route_aware_refusal_round14.py`, 63 tests (the shared cases; the 6 direct-route nodes; Set vs Choose; e2e with a recording transport: Flare, Sunburst and Grok start and reach the maker host, Seedream ×3 refused "Set a width" and run once sized, Krea refusals for all 6, Krea 2 with no key gives only the key line; review 13's B probes; the L-5 header): 50 failed first, 13 passed.
+- Updated: rounds 12/13 backend tests get a Krea token (an autouse fixture), their frontend tests a Krea context and "Set a width"; `graphStore.modelNotChosen.round12` uses `KREA_API_TOKEN`; the `undoStepEnds.round11` inventory takes `beginUndoStep({ clear: true })`.
+- Review 13's probes rerun, adapted (`scratchpad/agent-presence/r14/probes/`): frontend 41 of 41 ran (table above); backend 14 passed (e2e direct routes reach OpenAI/xAI; CORS: missing key → `missing-key`, bad id and missing model → no header; with no keys B4 and B7 show only the key line).
+
+### Live check (8795/5795, isolated, `scratchpad/agent-presence/r14/live/live-r14.mjs`): 22 of 22
+
+- Fake keys only, written into the temp settings file; the backend behind a dead proxy (`HTTPS_PROXY`/`HTTP_PROXY` to 127.0.0.1:9, loopback bypassed); every run request answered in the page (none were made). Nothing left the machine.
+- **H4 echo-first** (keyboard deletes, each echo landing before its held answer): the one restore named First only; canvas = backend = First, Third. The next Cmd+Z brought Second back; canvas = backend = all three.
+- **chat /clear:** refused (409) "… The canvas wasn't cleared."; 500 and no answer "… The canvas may not be fully cleared."; cleared "… with an empty canvas." One line each; canvas = backend each time.
+- **Set a width:** Topaz "Clean plate" on a Krea token: "Nothing ran. Set a width for “Clean plate” first.", no dialog, nothing sent; an agent's run_nodes got the same line.
+- **Direct key:** Codex's GPT Image 2.5 Flare and Grok Imagine 2.0 placeholders with OpenAI and xAI keys: no refusal, the placeholder dialog as usual, Cancel sent nothing. The same Flare on the Krea token only: "Nothing ran. Choose an aspect ratio for “Hero still” first.", no dialog.
+- **Blocked requests:** 2, both the canaries; none toward 8000-8010 or 5173.
+- **Screenshots** `r14-h4-echo-first`, `r14-h4-next-undo`, `r14-chat-clear-{refused,failed,no-answer,cleared}`, `r14-set-width`, `r14-direct-key-{flare,grok,flare-on-krea}`, each at -1440 and -1280. Leftover toasts dismissed before each action.
+- Found on the way: round 13's live helper clicked the bottom-right corner to focus the canvas, which is the chat button; the round-14 helper clicks empty canvas.
+
+### Open items (round 14)
+
+- `modelKeyMissingText` ("Couldn't set up “X”. Add your OpenRouter API key in Settings.") is composed, not GM-ruled.
+- "Couldn't clear the session." has no failure path: the session id is reset locally and a personal agent's close is fire-and-forget, so the line isn't wired.
+- `/api/quick` has no up-front key check (pre-existing); full `validate_graph` there is the coordinator's call.
+- The placeholder dialog names the Krea definitions ("Grok Imagine 2.0 (Krea) · $0.06") when the run goes to the maker on its own key (pre-existing naming).
+- Q1b/R1: D1's late "Deleted the node." covers the restore line (pre-existing).
+- Nous 401 still reads as model-settings.
+
+### Gates (round 14)
+
+- Backend full suite (after the last backend change): 11,140 passed, 71 skipped, 2 failed (20 min 6 s), run beside the vitest suite.
+  - `test_connected_copy_sweep` caught "A wire into" in this round's `docs/MCP-SETUP.md` text; now "A connection into". `test_agent_process::test_terminate_agent_process_tree_kills_setsid_grandchild` is a timing test in code this round didn't touch. Both files rerun: 76 passed.
+- Vitest full suite: 498 files and 6,313 tests. 468 files passed and 30 failed (42 tests: 36 "Test timed out", the rest focus or find waits under load, run beside the backend suite).
+  - The 30 rerun with `--no-file-parallelism`: 372 tests passed.
+- errorCopy ratchets: 14 files, 173 tests passed.
+- tsc: clean.
+- Lint: clean (the inline-style and Slava-scope guards passed).
+- Build budget: 392,757 bytes raw / 118,192 gzip (limit 512,000).
+- INSTRUCTIONS: 2,233 characters (2,957 with the Commons guide), unchanged.

@@ -214,14 +214,23 @@ The server exposes these tools for building and running (see
   Cmd+Z, delete, Cmd+Z undoes both deletes). While its own step is still on
   its way it waits, even if something else lands meanwhile; the person's
   own earlier delete answering first is no newer edit (the delete lands in
-  its place on the undo stack, with no extra step left behind), and a later
-  step of the person's still on its way isn't either (the Cmd+Z applies
-  beneath it). If a newer edit has settled on top of its step by then
+  its place on the undo stack, with no extra step left behind, even when
+  its answer comes after the person's later edits: a Cmd+Z for one of them
+  still goes through), and a later step of the person's still on its way
+  isn't either (the Cmd+Z applies beneath it, and never brings back a node
+  that later delete removed). A delete's change lands when Nebula's own
+  sync takes its nodes off, which can come before its answer: no undo
+  after that, waiting or not, brings those nodes back to the canvas or to
+  Nebula's graph unless it undoes that delete. A clear the person issues
+  after a Cmd+Z that is still waiting supersedes it: the Cmd+Z is dropped
+  and the canvas ends cleared. If a newer edit has settled on top of its step by then
   (yours, another agent's, or the person's own later edit), it never undoes
   that edit instead: it is dropped, and the canvas says "Nothing was undone. Your last
-  change was still saving."; if some Cmd+Z presses went through and some
-  were dropped, the restore's line ends "1 undo was skipped while a change
-  was saving." (Redo stays). The same line shows if Nebula hasn't answered
+  change was still saving." ("Nothing was redone. …" when only Cmd+Shift+Z
+  presses were dropped); if some presses went through and some were
+  dropped, the restore's line ends with what was skipped, undos and redos
+  counted apart: "1 undo was skipped while a change was saving.", "2 undos
+  and 1 redo were skipped while a change was saving." (Redo stays). The same line shows if Nebula hasn't answered
   within 15 s, or another project opens (the person's own switch, or your
   load into the open project, whose own notice stays beside it). A clear
   takes off only the nodes that were on the canvas when the person cleared,
@@ -1541,18 +1550,30 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   Precise, and Topaz Bloom, Bloom 2, Image Upscale, Standard and Wonder 3.5
   need a Width and a Height; Topaz Standard also needs its Model, a Krea
   node app its Version, Krea Style Train its Name. Nebula never fills one
-  in. A run that would send one with nothing chosen is refused before
-  anything runs or is priced, on every run path, and before any dialog: the
-  canvas says "Nothing ran. Choose an aspect ratio for “Hero” first." ("…
-  a model …", "… a version …"), naming only the first missing field in the
-  card's order, and asks nothing. Your `run_nodes` and `nebula run` come
-  back `failed` with "Choose an aspect ratio for “Hero” first." as that
-  node's error (and in `error`, after "Nothing ran, so nothing was
-  spent."), and the card shows the same line; `nebula quick` gets the same
-  refusal (HTTP 400, naming the node type). A whole-canvas run that skips
-  the node (a placeholder) isn't refused for it. Set the field with
-  `edit_canvas` (or `nebula set`) before you run it, or leave it for the
-  person to choose.
+  in. Only the route the run takes counts (the one `describe_node` and the
+  run's price name): Krea's own API (a Krea token, or the person's Krea
+  plan) needs every one of these. A copy that runs on its maker's API with
+  the person's key needs only what that API sizes by: GPT Image 2.5 Flare
+  and Sunburst with an OpenAI key, and Grok Imagine 2.0 with an xAI key,
+  run without an Aspect ratio or Resolution (OpenAI picks the size, xAI
+  leaves it out); Seedream 4 and 5 with a BytePlus key still need a Width
+  and a Height. A connection into a Krea-only input (Grok's style images) keeps
+  the run on Krea. With no key that can run it (or the plan not signed in),
+  no field is named: the run is refused for the key ("Add your Krea API
+  token in Settings, then run the node again.") or the sign-in first.
+  A run that would send one with nothing in it is refused before anything
+  runs or is priced, on every run path, and before any dialog: the canvas
+  says "Nothing ran. Choose an aspect ratio for “Hero” first." for a
+  picker ("… a model …", "… a version …", "… a resolution …") and "Nothing
+  ran. Set a width for “Hero” first." for a value typed in ("… a height
+  …", "… a name …"), naming only the first missing field in the card's
+  order, and asks nothing. Your `run_nodes` and `nebula run` come back
+  `failed` with that line, without "Nothing ran.", as that node's error
+  (and in `error`, after "Nothing ran, so nothing was spent."), and the
+  card shows the same line; `nebula quick` gets the same refusal (HTTP 400,
+  naming the node type). A whole-canvas run that skips the node (a
+  placeholder) isn't refused for it. Set the field with `edit_canvas` (or
+  `nebula set`) before you run it, or leave it for the person to choose.
   `/api/execute-node` and `/api/cinema/generate-shot` enforce it: the
   person's run carries `confirmedPlaceholders` (exactly those paid
   placeholder ids) and `confirmedCost` (the amount the dialog showed in its

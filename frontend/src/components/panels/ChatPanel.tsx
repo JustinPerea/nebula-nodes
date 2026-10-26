@@ -32,6 +32,7 @@ import { PERSONAL_AGENTS_CHANGED_EVENT } from '../../lib/personalAgentsEvents';
 import { CHAT_SEND_EVENT, type ChatSendDetail } from '../../lib/chatSend';
 import { claimIntent } from '../../lib/heldIntents';
 import { clearCanvasFromChat } from '../../lib/chatCanvasClear';
+import { chatClearLine } from '../../lib/failureLines';
 import '../../styles/personal-agents.css';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl, personTokenForSocket } from '../../lib/backend';
 import { DEFAULT_BACKEND_PORT, devProxyPort } from '../../lib/devBackendPort';
@@ -1458,14 +1459,20 @@ export function ChatPanel() {
       if (personal && sessionId) closePersonalSessionRef.current(sessionId);
       setSessionId(null);
       // Also wipe Nebula's graph, under one undo step; a failure says so
-      // (lib/chatCanvasClear.ts).
-      void clearCanvasFromChat();
+      // (lib/chatCanvasClear.ts), and so does this line once it is known
+      // (GM - Design, round 14, item 2).
+      const lineId = newId();
+      void clearCanvasFromChat().then((outcome) => {
+        if (outcome === 'cleared') return;
+        setMessages((current) => current.map((message) => message.id !== lineId ? message
+          : { ...message, parts: [{ kind: 'system', text: chatClearLine(outcome) }] }));
+      });
       setMessages([
         {
           role: 'assistant',
-          id: newId(),
+          id: lineId,
           streaming: false,
-          parts: [{ kind: 'system', text: 'Session cleared. Next message starts a fresh conversation with an empty canvas.' }],
+          parts: [{ kind: 'system', text: chatClearLine('cleared') }],
         },
       ]);
       setInput('');
