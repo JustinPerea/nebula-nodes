@@ -17,11 +17,13 @@ limits shrunk through the env, as tests/test_mcp_nonblocking.py does).
 from __future__ import annotations
 
 import json
+import random
 import re
 import threading
 import time
 from contextlib import asynccontextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import anyio
@@ -1254,6 +1256,497 @@ def test_a_gated_turn_may_propose_an_asset_change():
     assert "pa_g" in state.own_proposals
 
 
+# -- Review 3 of PR #114 (2026-10-26) ------------------------------------------------
+# H1: a pin wake needs a live pin from the person when it goes. A pin the
+# person deleted, another agent answered, or its own gated turn answered
+# with resolve_pin stayed in the batch and lifted the gate of everything held
+# behind it (live: an ungated pin wake quoting the deleted pin, and
+# edit_canvas ran). L2: a proposal an undo reopened never pushed its
+# decision. L3: withdrawn proposals stayed in own_proposals, unbounded.
+
+def _pins_shown(push: mcp_channel.Push) -> set[str]:
+    return {part.split('"', 1)[0] for part in push.content.split('<pin id="')[1:]}
+
+
+def _in_project(project_id: str | None, *events: dict, **kwargs) -> dict:
+    """A journal answer after a switch: Nebula tags each event and the answer with the open project."""
+    for event in events:
+        event["projectId"] = project_id
+    answer = resp(*events, **kwargs)
+    answer["projectId"] = project_id
+    return answer
+
+
+def test_a_pin_the_person_deleted_while_it_waited_never_lifts_the_gate():
+    # Probe Q1: the person pins during a gated window, deletes the pin, then
+    # rejects a proposal and edits. The batch went at 168.5 as an ungated pin
+    # wake quoting the deleted note.
+    state = ChannelState(now=0.0)
+    state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_r"}}, now=1.0)
+    _young_window(state)
+    state.observe(resp(pin(2)), now=110.0)
+    state.observe(resp(ev(3, "pin.removed", node="n7", data={"pinId": "pin_00000002", "text": "warmer"},
+                          summary="deleted the note pin_00000002")), now=115.0)
+    state.observe(resp(ev(4, "proposal.rejected", data={"proposalId": "prop_r", "reason": "no"})), now=120.0)
+    state.observe(resp(edit(5, node="n8")), now=125.0)
+    pushes = drain(state, 115.0, 138.0)
+    # Nothing holds the gated push back now: it goes at the 30 s spacing, gated.
+    assert [(at, p.wake, p.gate, p.count) for at, p in pushes] == [(138.0, "proposal", True, 3)]
+    content = pushes[0][1].content
+    assert "<pin" not in content and "pinned" not in content
+    assert "was rejected" in content and "deleted the note pin_00000002" in content and "set prompt" in content
+    assert state.tool_started("edit_canvas", {}, 139.0) is not None
+    assert drain(state, 139.0, 400.0) == []
+
+
+def test_a_pin_another_agent_answered_while_it_waited_never_lifts_the_gate():
+    # Probe Q2: another agent's pin.resolved was dropped by the actor filter.
+    state = ChannelState(now=0.0)
+    _young_window(state)
+    state.observe(resp(pin(2)), now=110.0)
+    state.observe(resp(ev(3, "pin.resolved", actor=OTHER_AGENT,
+                          data={"pinId": "pin_00000002", "text": "warmer", "reply": "done"})), now=115.0)
+    state.observe(resp(edit(4, node="n8")), now=125.0)
+    pushes = drain(state, 115.0, 138.0)
+    assert [(at, p.wake, p.gate, p.count) for at, p in pushes] == [(138.0, "change", True, 1)]
+    assert "<pin" not in pushes[0][1].content
+    assert state.tool_started("edit_canvas", {}, 139.0) is not None
+    assert drain(state, 139.0, 400.0) == []
+
+
+def test_a_pin_its_gated_turn_answered_with_resolve_pin_never_lifts_the_next_gate():
+    # Probe Q3: the gated turn sees the pin in look_at_canvas and answers it
+    # (allowed); its own pin.resolved never reaches its feed.
+    state = ChannelState(now=0.0)
+    _young_window(state)
+    state.observe(resp(pin(2)), now=110.0)
+    assert state.tool_started("look_at_canvas", {}, 111.0) is None
+    state.tool_finished("look_at_canvas", {}, {}, 111.5)
+    assert state.tool_started("resolve_pin", {"pin_id": "pin_00000002", "reply": "noted"}, 112.0) is None
+    state.tool_finished("resolve_pin", {"pin_id": "pin_00000002", "reply": "noted"},
+                        {"pin": {"id": "pin_00000002", "status": "resolved"}}, 112.5)
+    state.observe(resp(edit(4, node="n8")), now=125.0)
+    pushes = drain(state, 115.0, 138.0)
+    assert [(at, p.wake, p.gate, p.count) for at, p in pushes] == [(138.0, "change", True, 1)]
+    assert "<pin" not in pushes[0][1].content
+    assert state.tool_started("edit_canvas", {}, 139.0) is not None
+    assert drain(state, 139.0, 400.0) == []
+
+
+def test_a_resolve_pin_call_that_failed_leaves_the_pin_waiting():
+    # Only an answer Nebula saved takes the pin out (the listener's check at
+    # push time catches a pin that is gone for another reason).
+    state = ChannelState(now=0.0)
+    _young_window(state)
+    state.observe(resp(pin(2)), now=110.0)
+    assert state.tool_started("resolve_pin", {"pin_id": "pin_00000002", "reply": "x"}, 112.0) is None
+    state.tool_finished("resolve_pin", {"pin_id": "pin_00000002", "reply": "x"}, None, 112.5)
+    pushes = drain(state, 115.0, 400.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(168.5, "pin", False)]
+    assert _pins_shown(pushes[0][1]) == {"pin_00000002"}
+
+
+@pytest.mark.parametrize("actor", [PERSON, OTHER_AGENT], ids=["person", "other_agent"])
+@pytest.mark.parametrize("reason,project", [("project-open", "proj_2"), ("project-create", "proj_3"),
+                                            ("project-delete", None)])
+def test_a_pin_of_a_project_no_longer_open_never_lifts_the_gate(reason, project, actor):
+    # Pins belong to the project record: after a switch (or the open
+    # project's delete) the pin isn't on the canvas the woken turn acts on.
+    state = ChannelState(now=0.0)
+    _young_window(state)
+    state.observe(resp(pin(2)), now=110.0)
+    state.observe(_in_project(project, ev(3, "canvas.replaced", actor=actor,
+                                          data={"reason": reason, "projectId": project},
+                                          summary="opened project “Two”")), now=115.0)
+    state.observe(_in_project(project, edit(4, node="n8")), now=125.0)
+    pushes = drain(state, 115.0, 400.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(138.0, "change", True)]
+    assert "<pin" not in pushes[0][1].content
+
+
+def test_a_pin_is_dropped_when_its_own_turn_opens_another_project():
+    # Its own open_project or new_project (in a pin's turn) never reaches its feed.
+    for tool in ("open_project", "new_project"):
+        state = ChannelState(now=0.0)
+        state.observe(resp(pin(1)), now=10.0)
+        state.observe(resp(pin(2)), now=10.5)
+        assert state.tool_started(tool, {"project_id": "proj_2"}, 10.6) is None
+        state.tool_finished(tool, {"project_id": "proj_2"}, {"project": {"id": "proj_2", "name": "Two"}}, 10.7)
+        state.observe(_in_project("proj_2", edit(3, node="n8")), now=11.0)
+        pushes = drain(state, 11.0, 100.0)
+        # A gated push: the edit is quiet at 19, and its call 20 s back at 31 (no turn under way).
+        assert [(at, p.wake, p.gate) for at, p in pushes] == [(31.0, "change", True)], tool
+        assert "<pin" not in pushes[0][1].content
+
+
+def test_a_pin_is_dropped_when_the_journal_names_another_open_project():
+    # Its own open_project (in a pin's turn) never reaches its feed; the
+    # journal's answers then name the new project.
+    state = ChannelState(now=0.0)
+    _young_window(state)
+    state.observe(resp(pin(2)), now=110.0)
+    state.observe(_in_project("proj_2", edit(3, node="n8")), now=125.0)
+    pushes = drain(state, 115.0, 400.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(138.0, "change", True)]
+
+
+def test_an_import_into_the_same_project_keeps_the_pin():
+    state = ChannelState(now=0.0)
+    _young_window(state)
+    state.observe(resp(pin(2)), now=110.0)
+    state.observe(resp(ev(3, "canvas.replaced", data={"reason": "import"}, summary="replaced the canvas (import)")),
+                  now=115.0)
+    pushes = drain(state, 115.0, 400.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(168.5, "pin", False)]
+    assert _pins_shown(pushes[0][1]) == {"pin_00000002"}
+
+
+def test_a_pin_that_lost_its_node_still_waits_and_says_where_it_is():
+    # A delete (the person's or an agent's) detaches the pin, which stays
+    # open where the node was; the undo of that delete puts it back.
+    state = ChannelState(now=0.0)
+    _young_window(state)
+    state.observe(resp(pin(2)), now=110.0)
+    state.observe(resp(ev(3, "node.removed", node="n7", summary="removed Hero (n7)"),
+                       ev(4, "pin.detached", node="n7", data={"pinId": "pin_00000002", "text": "warmer",
+                                                             "anchor": {"x": 10.0, "y": 20.0}, "reason": "deleted"})),
+                  now=112.0)
+    pushes = drain(state, 112.0, 400.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(168.5, "pin", False)]
+    assert '<pin id="pin_00000002">warmer</pin>' in pushes[0][1].content
+    state = ChannelState(now=0.0)
+    _young_window(state)
+    state.observe(resp(pin(2)), now=110.0)
+    state.observe(resp(ev(4, "pin.detached", actor=OTHER_AGENT, node="n7",
+                          data={"pinId": "pin_00000002", "anchor": {"x": 1.0, "y": 2.0}}),
+                       ev(5, "pin.reattached", data={"pinId": "pin_00000002", "anchor": {"nodeId": "n9"}})), now=112.0)
+    pushes = drain(state, 112.0, 400.0)
+    assert '<pin id="pin_00000002" node="n9">warmer</pin>' in pushes[0][1].content
+    # A pin that wasn't waiting never starts waiting on a reattach.
+    state = ChannelState(now=0.0)
+    state.observe(resp(ev(6, "pin.reattached", data={"pinId": "pin_00000009", "anchor": {"nodeId": "n9"}})), now=1.0)
+    assert drain(state, 1.0, 200.0) == []
+
+
+def _pin_fuzz(seed: int) -> tuple[list, int]:
+    """Random pins, pin deletes and answers (the person's, another agent's,
+    its own resolve_pin), detaches, project switches, edits, proposals,
+    decisions, lost events and tool calls; every push checked against the
+    pins that are live at that moment."""
+    rnd = random.Random(seed)
+    state = ChannelState(now=0.0)
+    project = ["proj_1", 1]
+    live: set[str] = set()
+    violations: list = []
+    checked = 0
+    pids: list[str] = []
+    seq = 0
+    t = 0.0
+    in_flight = None
+
+    def answer(*events, gap=False):
+        return _in_project(project[0], *events, gap=gap)
+
+    while t < 2000.0:
+        r = rnd.random()
+        seq += 1
+        if r < 0.04:
+            state.observe(answer(pin(seq)), now=t)
+            live.add(f"pin_{seq:08x}")
+        elif r < 0.05 and live:
+            gone = rnd.choice(sorted(live))
+            live.discard(gone)
+            state.observe(answer(ev(seq, "pin.removed", data={"pinId": gone}, summary=f"deleted the note {gone}")),
+                          now=t)
+        elif r < 0.06 and live:
+            gone = rnd.choice(sorted(live))
+            live.discard(gone)
+            state.observe(answer(ev(seq, "pin.resolved", actor=OTHER_AGENT, data={"pinId": gone, "reply": "ok"})),
+                          now=t)
+        elif r < 0.065 and live:
+            state.observe(answer(ev(seq, "pin.detached", data={"pinId": rnd.choice(sorted(live)),
+                                                               "anchor": {"x": 1.0, "y": 1.0}})), now=t)
+        elif r < 0.07:
+            opened = f"proj_{project[1] + 1}"
+            if rnd.random() < 0.5:  # the person's or another agent's switch
+                project[:] = [opened, project[1] + 1]
+                live.clear()
+                state.observe(answer(ev(seq, "canvas.replaced", actor=rnd.choice([PERSON, OTHER_AGENT]),
+                                        data={"reason": "project-open", "projectId": opened})), now=t)
+            elif state.tool_started("open_project", {"project_id": opened}, t) is None:
+                # Its own open_project (refused in a gated turn), left out of its feed.
+                project[:] = [opened, project[1] + 1]
+                live.clear()
+                state.tool_finished("open_project", {"project_id": opened}, {"project": {"id": opened}}, t)
+        elif r < 0.15:
+            state.observe(answer(edit(seq, node=f"n{rnd.randint(1, 5)}")), now=t)
+        elif r < 0.17:
+            pid = f"prop_{seq}"
+            if state.tool_started("propose_change", {}, t) is None:
+                state.tool_finished("propose_change", {}, {"proposal": {"id": pid}}, t)
+                pids.append(pid)
+        elif r < 0.19 and pids:
+            pid = pids.pop(0)
+            kind = rnd.choice(["proposal.accepted", "proposal.rejected", "proposal.expired", "proposal.invalidated"])
+            state.observe(answer(ev(seq, kind, data={"proposalId": pid})), now=t)
+        elif r < 0.21:
+            state.observe(answer(gap=True), now=t)
+        elif r < 0.25 and in_flight is None:
+            name = rnd.choice(["look_at_canvas", "edit_canvas", "get_proposal", "resolve_pin", "run_nodes"])
+            args = {"pin_id": rnd.choice(sorted(live)) if live else "pin_none", "reply": "ok"} \
+                if name == "resolve_pin" else {"proposal_id": "x"}
+            refused = state.tool_started(name, args, t)
+            if state._window_open(t) and name not in mcp_channel.CHANGE_TURN_TOOLS and refused is None:
+                violations.append((seed, t, "not refused", name))
+            if refused is None:
+                in_flight = (name, args, t + rnd.choice([0.2, 5.0, 40.0]))
+        if in_flight and t >= in_flight[2]:
+            name, args, _ = in_flight
+            result: object = {}
+            if name == "resolve_pin":
+                answered = args["pin_id"]
+                result = {"pin": {"id": answered, "status": "resolved"}} if answered in live else None
+                live.discard(answered)
+            state.tool_finished(name, args, result, t)
+            in_flight = None
+        window_before = state._window_open(t)
+        push = state.take_push(t)
+        if push is not None:
+            shown = _pins_shown(push)
+            if not push.gate and window_before:
+                violations.append((seed, t, "ungated push into an open window", push.wake))
+            if shown - live:
+                violations.append((seed, t, "a pin no longer live in a push", sorted(shown - live), push.gate))
+            carries = ("- Person:" in push.content or "events were lost" in push.content
+                       or "person's run" in push.content
+                       or any(w in push.content for w in ("was rejected", "expired (", "was invalidated")))
+            if not push.gate and carries:
+                checked += 1
+                # The invariant: an ungated batch carrying the person's edits
+                # (or a gated decision) holds a live pin from the person.
+                if not shown or not shown <= live:
+                    violations.append((seed, t, "ungated with edits and no live pin", push.wake))
+        t = round(t + 0.5, 3)
+    return violations, checked
+
+
+def test_fuzz_an_ungated_batch_carrying_edits_always_holds_a_live_pin():
+    # Review 3's fuzz (Q7), with every pin lifecycle event the backend
+    # journals: 775 of its ungated batches carrying edits showed only pins
+    # already deleted.
+    violations, checked = [], 0
+    for seed in range(400):
+        found, count = _pin_fuzz(seed)
+        violations += found
+        checked += count
+    assert violations == [], (len(violations), violations[:5])
+    assert checked > 1000, checked  # the invariant was exercised, not vacuous
+
+
+def test_a_withdrawn_proposal_leaves_its_open_proposals():
+    # Probe Q9.
+    state = ChannelState(now=0.0)
+    state.tool_finished("propose_asset_change", {}, {"proposal": {"id": "pa_w"}}, now=1.0)
+    assert state.tool_started("withdraw_proposal", {"proposal_id": "pa_w"}, 2.0) is None
+    state.tool_finished("withdraw_proposal", {"proposal_id": "pa_w"},
+                        {"proposal": {"id": "pa_w", "status": "withdrawn"}}, 2.1)
+    assert "pa_w" not in state.own_proposals
+    # A withdraw Nebula refused (it was decided meanwhile) leaves it: its decision still pushes.
+    state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_k"}}, now=3.0)
+    state.tool_finished("withdraw_proposal", {"proposal_id": "prop_k"}, None, 4.0)
+    assert "prop_k" in state.own_proposals
+
+
+def test_its_open_proposals_are_capped():
+    # Probe Q9: proposals a Nebula restart closed never get a decision event.
+    state = ChannelState(now=0.0)
+    for n in range(mcp_channel.MAX_OWN + 40):
+        state.tool_finished("propose_change", {}, {"proposal": {"id": f"prop_{n}"}}, now=1.0)
+    assert len(state.own_proposals) == mcp_channel.MAX_OWN
+    assert "prop_0" not in state.own_proposals and f"prop_{mcp_channel.MAX_OWN + 39}" in state.own_proposals
+
+
+def test_a_decision_on_its_proposal_an_undo_reopened_wakes_it():
+    # Probe Q10: invalidated (pushed), reopened by an undo, then accepted.
+    state = ChannelState(now=0.0)
+    state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_u"}}, now=1.0)
+    state.observe(resp(ev(1, "proposal.invalidated", actor={"kind": "system"}, data={"proposalId": "prop_u"})),
+                  now=10.0)
+    first = state.take_push(30.0)
+    assert first is not None and first.wake == "proposal" and first.gate
+    state.observe(resp(ev(2, "proposal.reopened", data={"proposalId": "prop_u"})), now=200.0)
+    state.observe(resp(ev(3, "proposal.accepted", data={"proposalId": "prop_u", "idMap": {}})), now=220.0)
+    pushes = drain(state, 220.0, 400.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(220.0, "proposal", False)]
+    assert "prop_u" in pushes[0][1].content and "accepted" in pushes[0][1].content
+
+
+def test_a_reopened_proposals_waiting_invalidation_is_not_pushed():
+    # Reopened before its invalidation went: that news is no longer true.
+    state = ChannelState(now=0.0)
+    state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_u"}}, now=1.0)
+    _young_window(state)
+    state.observe(resp(ev(2, "proposal.invalidated", actor={"kind": "system"}, data={"proposalId": "prop_u"})),
+                  now=115.0)
+    state.observe(resp(ev(3, "proposal.reopened", data={"proposalId": "prop_u"})), now=120.0)
+    assert drain(state, 115.0, 300.0) == []
+    state.observe(resp(ev(4, "proposal.rejected", data={"proposalId": "prop_u", "reason": "no"})), now=300.0)
+    pushes = drain(state, 300.0, 400.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(300.0, "proposal", True)]
+    # Another agent's proposal reopening never becomes its own.
+    state.observe(resp(ev(5, "proposal.reopened", data={"proposalId": "prop_other"})), now=500.0)
+    assert "prop_other" not in state.own_proposals
+
+
+def test_an_edit_in_the_last_8_s_before_a_pin_goes_follows_in_a_gated_push():
+    # Probe Q11: the docs said every edit made while a pin waits goes with
+    # it. One the person makes in the quiet time before the pin goes (8 s)
+    # isn't quiet yet: it follows on its own, gated, at the 30 s spacing.
+    state = ChannelState(now=0.0)
+    _young_window(state)
+    state.observe(resp(pin(2)), now=110.0)
+    state.observe(resp(edit(3, node="n8")), now=165.0)
+    pushes = drain(state, 110.0, 400.0)
+    assert [(at, p.wake, p.gate, p.count) for at, p in pushes] == [(168.5, "pin", False, 1), (198.5, "change", True, 1)]
+    repo = Path(__file__).resolve().parents[2]
+    setup = (repo / "docs" / "MCP-SETUP.md").read_text(encoding="utf-8")
+    for text in (" ".join(mcp_channel.__doc__.split()), " ".join(setup.split())):
+        assert "last 8 s before it goes" in text
+        assert "longer while that turn keeps calling Nebula" in text
+    plan = " ".join((repo / "docs" / "moodboard-canvas-plan.md").read_text(encoding="utf-8").split())
+    assert "an ungated pin wake, about a minute after the last gated push" not in plan
+
+
+# The listener checks with Nebula, right before a push that holds pins, that
+# each is still open on the open project's canvas: events can't tell it about
+# a pin answered under its own name elsewhere (the `nebula` CLI: its own
+# events are left out of its feed) or one whose delete was in lost events.
+
+def _pin_check_rig(responses: list[dict], fetch_pins, sleeps: list | None = None):
+    # The quiet time is under the pin merge, so the edit is due when the pin goes.
+    limits = Limits(quiet=0.02, max_hold=2.0, min_gap=0.0, agent_quiet=0.0, pin_merge=0.05, run_gather=0.05)
+    record: dict = {"pushes": [], "pin_checks": 0}
+    queue = list(responses)
+
+    async def fetch_events(params):
+        if queue:
+            return queue.pop(0)
+        await anyio.sleep(float(params["wait"]))
+        return {"journal": "abc123", "cursor": params.get("after", 0), "events": []}
+
+    async def fetch_run(run_id):
+        await anyio.sleep_forever()
+
+    async def push(content, meta):
+        record["pushes"].append((dict(meta), content))
+
+    async def counted_pins():
+        record["pin_checks"] += 1
+        return await fetch_pins(record)
+
+    async def fast_sleep(seconds):
+        if sleeps is not None:
+            sleeps.append(seconds)
+        await anyio.sleep(0.01)
+
+    state = ChannelState(limits=limits, now=time.monotonic())
+    listener = mcp_channel.Listener(state, fetch_events=fetch_events, fetch_run=fetch_run, push=push,
+                                    clock=time.monotonic, log=lambda line: None, sleep=fast_sleep,
+                                    fetch_pins=counted_pins)
+    return listener, record
+
+
+def _run_rig(listener, record, until, settle: float = 0.4):
+    async def main():
+        async with anyio.create_task_group() as group:
+            group.start_soon(listener.run)
+            await _until(lambda: until(record), timeout=5.0)
+            await anyio.sleep(settle)
+            group.cancel_scope.cancel()
+
+    anyio.run(main)
+
+
+def _listing(*open_ids: str, resolved: tuple[str, ...] = (), project: str = "proj_1") -> dict:
+    pins = [{"id": pid, "status": "open"} for pid in open_ids] + [{"id": pid, "status": "resolved"} for pid in resolved]
+    return {"projectId": project, "pins": pins}
+
+
+def test_a_pin_wake_goes_only_for_a_pin_nebula_still_lists_open():
+    async def answered_elsewhere(record):
+        return _listing(resolved=("pin_00000001",))
+
+    listener, record = _pin_check_rig([resp(pin(1), edit(2, node="n8"))], answered_elsewhere)
+    _run_rig(listener, record, lambda r: r["pushes"])
+    assert record["pin_checks"] == 1
+    assert len(record["pushes"]) == 1
+    meta, content = record["pushes"][0]
+    assert meta["wake"] == "change" and meta["gate"] == "change" and "<pin" not in content
+
+    async def still_open(record):
+        return _listing("pin_00000001")
+
+    listener, record = _pin_check_rig([resp(pin(1), edit(2, node="n8"))], still_open)
+    _run_rig(listener, record, lambda r: r["pushes"])
+    meta, content = record["pushes"][0]
+    assert meta["wake"] == "pin" and "gate" not in meta and 'pin id="pin_00000001"' in content
+    assert len(record["pushes"]) == 1
+
+
+def test_a_pin_that_arrives_during_the_check_is_never_dropped_by_it():
+    def run():
+        listener = None
+
+        async def lists_neither(record):
+            # The person pins again while Nebula answers the check for the
+            # first (which they deleted, the event not in yet).
+            if record["pin_checks"] == 1:
+                listener.state.observe(resp(pin(9, "cooler")), now=time.monotonic())
+                return _listing()
+            return _listing("pin_00000009")
+
+        listener, record = _pin_check_rig([resp(pin(1))], lists_neither)
+        _run_rig(listener, record, lambda r: r["pushes"])
+        return record
+
+    record = run()
+    assert [meta["wake"] for meta, _ in record["pushes"]] == ["pin"]
+    assert 'pin id="pin_00000009"' in record["pushes"][0][1] and "pin_00000001" not in record["pushes"][0][1]
+
+
+def test_a_pin_check_nebula_cant_answer_holds_the_pin_and_retries():
+    sleeps: list[float] = []
+
+    class Down(Exception):
+        status = 503
+
+    async def flaky(record):
+        if record["pin_checks"] < 3:
+            raise Down("nebula is restarting")
+        return _listing("pin_00000001")
+
+    listener, record = _pin_check_rig([resp(pin(1), edit(2, node="n8"))], flaky, sleeps)
+    _run_rig(listener, record, lambda r: r["pushes"])
+    assert record["pin_checks"] == 3 and len(sleeps) == 2
+    meta, content = record["pushes"][0]
+    assert meta["wake"] == "pin" and "set prompt" in content
+    assert len(record["pushes"]) == 1
+
+
+def test_a_pin_check_nebula_refuses_drops_the_pins():
+    # A 4xx (no project open, say) is an answer: none of them can be confirmed.
+    class NoProject(Exception):
+        status = 409
+
+    async def refused(record):
+        raise NoProject("Open or create a project before leaving notes")
+
+    listener, record = _pin_check_rig([resp(pin(1), edit(2, node="n8"))], refused)
+    _run_rig(listener, record, lambda r: r["pushes"])
+    meta, content = record["pushes"][0]
+    assert meta["wake"] == "change" and meta["gate"] == "change" and "<pin" not in content
+
+
 def test_the_change_turn_allow_list_is_reads_and_the_change_turn_writes():
     tools = {tool.name: tool for tool in anyio.run(mcp_server.mcp.list_tools)}
     allowed = mcp_channel.CHANGE_TURN_TOOLS
@@ -1292,6 +1785,7 @@ class _Journal:
         self.tool_agents: list[str] = []
         self.runs: dict[str, dict] = {}  # GET /api/graph/runs/{id}: the answer, by run id
         self.run_polls: list[str] = []
+        self.pin_checks = 0  # GET /api/canvas/pins: the listener's check before a push that holds pins
 
     def add(self, kind: str, actor=None, **kwargs) -> None:
         with self.cond:
@@ -1340,6 +1834,20 @@ def _fake_nebula(journal: _Journal):
                         journal.cond.wait(left)
                     answer = dict(journal.runs.get(run_id) or {"status": "running"})
                 self._send({"runId": run_id, **answer})
+                return
+            if url.path == "/api/canvas/pins":
+                journal.pin_checks += 1
+                with journal.cond:
+                    status: dict = {}
+                    for event in journal.events:
+                        pin_id = (event.get("data") or {}).get("pinId")
+                        if event["kind"] == "pin.added":
+                            status[pin_id] = "open"
+                        elif event["kind"] == "pin.resolved" and pin_id in status:
+                            status[pin_id] = "resolved"
+                        elif event["kind"] == "pin.removed":
+                            status.pop(pin_id, None)
+                self._send({"projectId": "proj_1", "pins": [{"id": k, "status": v} for k, v in status.items()]})
                 return
             journal.tool_agents.append(self.headers.get("X-Nebula-Agent") or "")
             self._send({"ok": True, "path": url.path})
@@ -1469,6 +1977,7 @@ def test_a_pin_and_an_edit_reach_the_session_and_the_gate_holds(nebula):
 
     refused, allowed, proposed = anyio.run(main)
     assert pushes[0]["meta"]["wake"] == "pin" and "warmer" in pushes[0]["content"]
+    assert nebula.pin_checks >= 1  # Round 4: Nebula confirmed the pin was still open before it went
     assert pushes[1]["meta"]["wake"] == "change" and pushes[1]["meta"]["gate"] == "change"
     assert "set prompt on Hero (n7)" in pushes[1]["content"]
     assert refused.isError and "propose_change" in refused.content[0].text
@@ -1478,6 +1987,33 @@ def test_a_pin_and_an_edit_reach_the_session_and_the_gate_holds(nebula):
     assert {p["agent"] for p in nebula.polls} == {"Claude Code"}
     assert all(p.get("self") != "1" for p in nebula.polls)
     assert "Claude Code" in nebula.tool_agents
+
+
+def test_a_pin_it_answered_under_its_own_name_elsewhere_never_lifts_the_gate(nebula):
+    # Round 4: the `nebula` CLI under the same name answers the pin; Nebula
+    # leaves that pin.resolved out of the listener's feed, so only the check
+    # at push time can see the pin is no longer open.
+    pushes: list[dict] = []
+    me = {"kind": "agent", "id": "ext:claude-code", "name": "Claude Code"}
+
+    async def main():
+        async with _connected(channel=True, pushes=pushes) as (session, _, _done):
+            await _until(lambda: nebula.polls)
+            with nebula.cond:
+                nebula.add("pin.added", node="n7", data={"pinId": "pin_dddddddd", "text": "warmer",
+                                                         "anchor": {"nodeId": "n7"}})
+                nebula.add("pin.resolved", actor=me, node="n7", data={"pinId": "pin_dddddddd", "reply": "done"})
+                nebula.add("node.params", node="n7", data={"keys": ["prompt"]}, summary="set prompt on Hero (n7)")
+            await _until(lambda: len(pushes) == 1)
+            await anyio.sleep(0.5)
+            refused = await session.call_tool("edit_canvas", {"params": [{"nodeId": "n7", "params": {"prompt": "x"}}]})
+            return refused
+
+    refused = anyio.run(main)
+    assert len(pushes) == 1 and nebula.pin_checks >= 1
+    assert pushes[0]["meta"]["wake"] == "change" and pushes[0]["meta"]["gate"] == "change"
+    assert "<pin" not in pushes[0]["content"] and "set prompt on Hero (n7)" in pushes[0]["content"]
+    assert refused.isError and "propose_change" in refused.content[0].text
 
 
 def test_a_persons_run_reaches_the_session_once_at_its_end(nebula):

@@ -56,11 +56,23 @@ with a fake clock. What it follows, from Justin's answers of 2026-10-20 and
   goes only once the window has ended on its own terms. (Claude Code queues
   pushes that arrive while Claude is busy for its next turn, so sending one
   into the window could only have freed the change turn still running.)
-  While a pin waits for a window's end, no gated push goes: the edits and
-  decisions that come meanwhile go in the pin's batch, a pin wake. So a pin
-  waits only for the window it came in (at least ``window_min`` after that
-  push, longer while that turn keeps calling Nebula), never for the windows
-  later edits would open.
+  While a pin waits for a window's end, no gated push goes: the decisions
+  and the edits that come meanwhile go in the pin's batch, a pin wake, except
+  edits from the last 8 s before it goes (``quiet``): they aren't due yet and
+  follow in a gated push of their own, ``min_gap`` later at the earliest. So
+  a pin waits only for the window it came in (at least ``window_min`` after
+  that push, longer while that turn keeps calling Nebula), never for the
+  windows later edits would open.
+- Only a live pin from the person makes a pin wake (review 3 of PR #114). A
+  pin leaves the batch when the person deletes it, when any agent answers it
+  (its own resolve_pin included) and when another project opens (anyone's
+  switch, its own open_project or new_project, or the open project's
+  delete); a pin that loses its node, or gets it back, keeps waiting. Right
+  before a push that holds pins the listener asks Nebula which are still
+  open (GET /api/canvas/pins) and keeps only those: its own answers made
+  elsewhere (the `nebula` CLI under its name) never reach its feed, and lost
+  events can hide a delete. A batch left with no pin goes gated, by the
+  rules above.
 """
 from __future__ import annotations
 
@@ -107,6 +119,9 @@ CHANGE_KINDS = frozenset({
 # and is left out; board.resized is a card's weight, an edit.
 CANVAS_LINE_KINDS = frozenset({"canvas.replaced", "canvas.cleared"})
 DECISIONS = frozenset({"proposal.accepted", "proposal.rejected", "proposal.expired", "proposal.invalidated"})
+# A canvas replace that opens another project (or none): the pins waiting
+# belong to the project that was open (an import keeps the project).
+PROJECT_REPLACES = frozenset({"project-open", "project-create", "project-delete"})
 # Q51 a: a push for one of these is gated as a change; for an accept it isn't.
 GATED_DECISIONS = frozenset({"proposal.rejected", "proposal.expired", "proposal.invalidated"})
 TERMINAL_RUNS = frozenset({"finished", "failed", "cancelled"})
@@ -246,7 +261,11 @@ class ChannelState:
         self.last_person = self.now
         self.last_call = -math.inf
         self.in_flight = 0  # Nebula calls running now: a turn is under way
-        self._pins: list[dict] = []
+        # The person's pins waiting to be pushed, by pin id: {pinId, text,
+        # node, project}. Only a live pin makes a pin wake (review 3, H1), so
+        # one leaves as soon as it is deleted, answered (by any agent, this
+        # one included) or no longer on the open project's canvas.
+        self._pins: dict[str, dict] = {}
         self._last_pin = -math.inf
         # The person's edits waiting: changes that wake (Q50 a), the ends of
         # their runs (which wake too), lines that only ride along (board
@@ -265,8 +284,10 @@ class ChannelState:
         self._pin_overflow = 0   # pins past MAX_PENDING
         self._limited_since: float | None = None
         self._history: deque[float] = deque()
-        # Its proposals still waiting for the person (a decision on one pushes).
-        self.own_proposals: set[str] = set()
+        # Its proposals still waiting for the person (a decision on one
+        # pushes), oldest first, at most MAX_OWN (one a Nebula restart closed
+        # never gets a decision).
+        self.own_proposals: dict[str, None] = {}
         # Every proposal it made, decided or not, oldest first, with its
         # tool ("canvas" or "asset"): the canvas's run for an accepted one
         # names it, and is its own run; an accepted asset proposal's board
@@ -289,16 +310,78 @@ class ChannelState:
 
     # -- the journal ---------------------------------------------------------------
     def _keep(self, bucket: list[dict], item: dict) -> bool:
-        """Pins and edits are capped each on their own, so a pile of edits
-        never crowds out a pin (proposals and runs are the agent's own few)."""
+        """Edits are capped (pins on their own, in _add_pin), so a pile of
+        edits never crowds out a pin (proposals and runs are the agent's own few)."""
         if len(bucket) >= MAX_PENDING:
-            if bucket is self._pins:
-                self._pin_overflow += 1
-            else:
-                self._overflow += 1
+            self._overflow += 1
             return False
         bucket.append(item)
         return True
+
+    def _add_pin(self, event: Mapping[str, Any], now: float) -> None:
+        data = _data(event)
+        pin_id = str(data.get("pinId") or "")
+        if not pin_id:
+            return  # Nebula always names a pin; one it can't follow never wakes
+        self._last_pin = now
+        if pin_id not in self._pins and len(self._pins) >= MAX_PENDING:
+            self._pin_overflow += 1
+            return
+        anchor = data.get("anchor") if isinstance(data.get("anchor"), Mapping) else {}
+        project = event.get("projectId") or self.project_id
+        self._pins[pin_id] = {"pinId": pin_id, "text": clean_text(data.get("text"), 300),
+                              "node": anchor.get("nodeId") or event.get("nodeId"),
+                              "project": str(project) if project else None}
+
+    def _project_open(self, project_id: Any) -> None:
+        """Nebula names the open project: a pin of another one isn't on the
+        canvas a woken turn acts on, so it no longer waits."""
+        if project_id:
+            for pin_id, pin in list(self._pins.items()):
+                if pin["project"] and pin["project"] != str(project_id):
+                    del self._pins[pin_id]
+
+    def _pin_event(self, kind: str, event: Mapping[str, Any]) -> None:
+        """What happened to a pin, from anyone: a pin deleted or answered
+        leaves (the person's delete still counts as their edit, below), a
+        replace that opens another project takes the old project's pins
+        with it, and a pin that lost or regained its node keeps waiting."""
+        data = _data(event)
+        pin_id = str(data.get("pinId") or "")
+        if kind in ("pin.removed", "pin.resolved"):
+            self._pins.pop(pin_id, None)
+        elif kind in ("pin.detached", "pin.reattached") and pin_id in self._pins:
+            anchor = data.get("anchor") if isinstance(data.get("anchor"), Mapping) else {}
+            self._pins[pin_id]["node"] = anchor.get("nodeId")
+        elif kind == "canvas.replaced" and data.get("reason") in PROJECT_REPLACES:
+            opened = data.get("projectId", event.get("projectId"))
+            for key, pin in list(self._pins.items()):
+                if not opened or pin["project"] != str(opened):
+                    del self._pins[key]
+
+    def pins_to_check(self, now: float) -> list[str]:
+        """The pins the push due now would carry. The listener asks Nebula
+        whether each is still open before it pushes (confirm_pins): its own
+        answers made elsewhere (the `nebula` CLI under its name) never reach
+        its feed, and lost events may hide a delete."""
+        if self.off or not self._pins or self._window_open(now):
+            return []
+        if self._ready(now) is None or self._allowed_at(now) > now:
+            return []
+        return list(self._pins)
+
+    def confirm_pins(self, checked: list[str], listing: Any) -> None:
+        """Nebula's GET /api/canvas/pins answer (None: it refused, so none is
+        confirmed): of the pins checked, only those it lists open stay. A pin
+        that arrived meanwhile wasn't checked and stays."""
+        open_ids: set[str] = set()
+        pins = listing.get("pins") if isinstance(listing, Mapping) else None
+        for pin in pins if isinstance(pins, list) else []:
+            if isinstance(pin, Mapping) and pin.get("status") == "open":
+                open_ids.add(str(pin.get("id") or ""))
+        for pin_id in checked:
+            if pin_id not in open_ids:
+                self._pins.pop(pin_id, None)
 
     def _has_wake_edits(self) -> bool:
         return bool(self._changes or self._person_ends or self._lost)
@@ -320,7 +403,6 @@ class ChannelState:
         if response.get("cursor") is not None:
             self.cursor = int(response["cursor"])
         self.journal = response.get("journal") or self.journal
-        self.project_id = response.get("projectId") or self.project_id
         lost = "reset" if response.get("reset") else "gap" if response.get("gap") else None
         if lost:
             self._note_edit(now, wakes=True)
@@ -328,6 +410,9 @@ class ChannelState:
         for event in response.get("events") or []:
             if isinstance(event, Mapping):
                 self._observe_event(event, now)
+        # The project open now (its own open_project never reaches its feed).
+        self._project_open(response.get("projectId"))
+        self.project_id = response.get("projectId") or self.project_id
 
     def _observe_event(self, event: Mapping[str, Any], now: float) -> None:
         kind = str(event.get("kind") or "")
@@ -335,18 +420,29 @@ class ChannelState:
         data = _data(event)
         if actor == "person":
             self.last_person = now
+        # Before the actor filter: what anyone does to a pin or a proposal.
+        self._project_open(event.get("projectId"))
+        self._pin_event(kind, event)
         if kind in DECISIONS:
             proposal_id = str(data.get("proposalId") or "")
             if proposal_id in self.own_proposals:
-                self.own_proposals.discard(proposal_id)
+                self.own_proposals.pop(proposal_id, None)
                 if not self._waiting_proposals.get(proposal_id):
                     self._keep(self._proposals, dict(event))
+            return
+        if kind == "proposal.reopened":
+            # An undo put back what its invalidated proposal needed: it is
+            # open again, so its next decision pushes, and a waiting
+            # "invalidated" is no longer true (review 3, L2).
+            proposal_id = str(data.get("proposalId") or "")
+            if proposal_id in self._own_proposal_ids:
+                _remember(self.own_proposals, proposal_id)
+                self._proposals = [p for p in self._proposals if str(_data(p).get("proposalId")) != proposal_id]
             return
         if actor != "person":
             return  # other agents, anonymous clients, Nebula itself
         if kind == "pin.added":
-            self._keep(self._pins, dict(event))
-            self._last_pin = now
+            self._add_pin(event, now)
             return
         if kind == "run.started":
             self._person_run_started(event, now)
@@ -490,13 +586,31 @@ class ChannelState:
             if status and status != "open":
                 # It knows the decision: no push for it. Still its proposal
                 # (_own_proposal_ids), so the canvas's run for it is its own.
-                self.own_proposals.discard(key)
+                self.own_proposals.pop(key, None)
                 self._proposals = [p for p in self._proposals if str(_data(p).get("proposalId")) != key]
+        elif name == "withdraw_proposal":
+            # Withdrawn: no decision will come (review 3, L3). A withdraw
+            # Nebula refused (result None) leaves it waiting for one.
+            shown = result.get("proposal") if isinstance(result, Mapping) else None
+            if isinstance(shown, Mapping) and shown.get("status") and shown.get("status") != "open":
+                self.own_proposals.pop(str(args.get("proposal_id") or ""), None)
+        elif name in ("open_project", "new_project"):
+            # It opened another project: the pins waiting are the old one's
+            # (its own switch never reaches its feed).
+            shown = result.get("project") if isinstance(result, Mapping) else None
+            if isinstance(shown, Mapping):
+                self._project_open(shown.get("id"))
+        elif name == "resolve_pin":
+            # It answered the pin (Nebula saved it): its own pin.resolved never
+            # reaches its feed, so the pin leaves here (review 3, H1).
+            if isinstance(result, Mapping) and isinstance(result.get("pin"), Mapping):
+                self._pins.pop(str(args.get("pin_id") or ""), None)
+                self._pins.pop(str(result["pin"].get("id") or ""), None)
         elif name in ("propose_change", "propose_asset_change") and isinstance(result, Mapping):
             # Both are its proposals: a decision on either pushes (Q51 a).
             proposal_id = (result.get("proposal") or {}).get("id") if isinstance(result.get("proposal"), Mapping) else None
             if proposal_id:
-                self.own_proposals.add(str(proposal_id))
+                _remember(self.own_proposals, str(proposal_id))
                 _remember(self._own_proposal_ids, str(proposal_id), "asset" if name == "propose_asset_change" else "canvas")
         elif name in ("run_nodes", "get_run"):
             if name == "get_run":
@@ -682,7 +796,7 @@ class ChannelState:
         gate = not take_pins and (take_edits or any(self._gated_decision(p) for p in proposals))
         if not gate and not free:
             return None  # never reached (_ready checks the same), and nothing was taken
-        pins, self._pins = (self._pins, []) if take_pins else ([], self._pins)
+        pins, self._pins = (list(self._pins.values()), {}) if take_pins else ([], self._pins)
         self._proposals = [p for p in self._proposals if not any(p is q for q in proposals)]
         runs, self._runs = (self._runs, []) if take_runs else ([], self._runs)
         changes: list[dict] = []
@@ -746,12 +860,10 @@ class ChannelState:
             total_pins = len(pins) + pin_overflow
             lines.append(f"Nebula: the person pinned {'a note' if total_pins == 1 else f'{total_pins} notes'} for "
                          "you. The note text, written by the person:")
-            for event in pins[:MAX_LISTED]:
-                data = _data(event)
-                anchor = data.get("anchor") if isinstance(data.get("anchor"), Mapping) else {}
-                node = _ident(anchor.get("nodeId") or event.get("nodeId"))
+            for pin in pins[:MAX_LISTED]:
+                node = _ident(pin["node"])
                 where = f' node="{node}"' if node else ""
-                lines.append(f'<pin id="{_ident(data.get("pinId"))}"{where}>{clean_text(data.get("text"), 300)}</pin>')
+                lines.append(f'<pin id="{_ident(pin["pinId"])}"{where}>{pin["text"]}</pin>')
             hidden_pins = total_pins - min(len(pins), MAX_LISTED)
             if hidden_pins:
                 lines.append(f"{hidden_pins} more notes not listed: their text is in look_at_canvas `pins`.")
@@ -821,6 +933,7 @@ class ChannelState:
 
 FetchEvents = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
 FetchRun = Callable[[str], Awaitable[dict[str, Any]]]
+FetchPins = Callable[[], Awaitable[dict[str, Any]]]
 PushFn = Callable[[str, dict[str, str]], Awaitable[None]]
 
 POLL_SECONDS = 25.0  # Nebula caps a long-poll at 25 s
@@ -836,14 +949,19 @@ class Listener:
     the events long-poll, one watcher per followed run, and the pusher, which
     sleeps until a push may be due or something changed. Nothing but the end
     of listening cancels a long-poll: an abandoned one held a slot of
-    Nebula's 32 waiters for the rest of its 25 s (review 1 of PR #114)."""
+    Nebula's 32 waiters for the rest of its 25 s (review 1 of PR #114).
+    Before a push that holds pins, the pusher asks Nebula which pins are
+    still open (``fetch_pins``) and pushes only those (review 3, H1)."""
 
     def __init__(self, state: ChannelState, *, fetch_events: FetchEvents, fetch_run: FetchRun, push: PushFn,
                  clock: Callable[[], float], log: Callable[[str], None] | None = None,
-                 sleep: Callable[[float], Awaitable[None]] | None = None) -> None:
+                 sleep: Callable[[float], Awaitable[None]] | None = None,
+                 fetch_pins: FetchPins | None = None) -> None:
         self.state = state
         self._fetch_events = fetch_events
         self._fetch_run = fetch_run
+        self._fetch_pins = fetch_pins
+        self._pin_backoff = 0.0
         self._push = push
         self._clock = clock
         self._sleep = sleep or anyio.sleep
@@ -929,6 +1047,27 @@ class Listener:
         finally:
             self._watching.discard(run_id)
 
+    async def _confirm_pins(self, now: float) -> bool:
+        """Before a push that holds pins: keep only those Nebula still lists
+        open. False when Nebula couldn't answer (the pins wait, and so does
+        the push: a pin wake never goes on a pin it couldn't confirm)."""
+        checked = self.state.pins_to_check(now) if self._fetch_pins is not None else []
+        if not checked:
+            return True
+        try:
+            listing: Any = await self._fetch_pins()
+            self._pin_backoff = 0.0
+        except Exception as exc:  # noqa: BLE001 - Nebula down or restarting
+            status = getattr(exc, "status", None)
+            if not (isinstance(status, int) and 400 <= status < 500 and status != 429):
+                self._pin_backoff = min(60.0, max(5.0, self._pin_backoff * 2))
+                self._log(f"pins: {exc}; checking again in {self._pin_backoff:g} s")
+                await self._sleep(self._pin_backoff)
+                return False
+            listing = None  # an answer (no project open, say): none of them can be confirmed
+        self.state.confirm_pins(checked, listing)
+        return True
+
     async def _push_when_due(self) -> None:
         """Push what is due; otherwise sleep until a push may be due or something changed."""
         while True:
@@ -938,6 +1077,9 @@ class Listener:
                 self._log(f"no activity from the person for {_duration(self.state.limits.idle_off)}: "
                           "stopped listening (Reconnect turns it back on)")
                 return
+            if not await self._confirm_pins(now):
+                continue
+            now = self._clock()
             push = self.state.take_push(now)
             if push is not None:
                 try:

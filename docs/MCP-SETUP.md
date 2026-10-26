@@ -697,10 +697,12 @@ now; the experiment is tried on individual accounts.) It doesn't work with
 
 **What wakes Claude:**
 
-- a pin you add, at once (pins under 1 s apart go together);
+- a pin you add, at once (pins under 1 s apart go together), as long as it
+  is still open when it goes (below);
 - your decision on one of its own proposals (accepted, rejected, expired or
   invalidated), from `propose_change` or `propose_asset_change`, unless it is
-  already waiting for it in `get_proposal`;
+  already waiting for it in `get_proposal` or withdrew it. One an undo
+  reopens counts again: its next decision wakes it too;
 - the end of a run it started and stopped waiting for (`run_nodes` or
   `get_run` answered "running"), unless it is collecting it with `get_run`.
   The run the canvas starts for its accepted proposal counts as its own run:
@@ -762,8 +764,9 @@ Commons, `get_proposal`, `withdraw_proposal`). Edits, runs, project
 switches, board writes and any tool not on that list are refused for that
 turn, so it offers instead of editing under your hands. Which pushes:
 
-- **Never gated:** a push that holds a pin (whatever else it carries), and
-  one for your accepting its proposal or for its own run's end. Those act
+- **Never gated:** a push that holds a pin of yours still open (whatever
+  else it carries), and one for your accepting its proposal or for its own
+  run's end. Those act
   like any turn, and none of them ends a gated turn's window early.
 - **Always gated:** a push for a proposal you rejected, that expired or that
   was invalidated (it may only offer again), and a push carrying your edits:
@@ -780,12 +783,29 @@ with no Nebula call and none running. A Nebula call still running (a
 however long it waits. The cost: a pin you add during a gated turn's window
 waits for that window's end, at least a minute after the change push and
 longer while that turn keeps calling Nebula. While a pin waits, no other
-gated push goes: the edits you make meanwhile, and a proposal you reject,
-go with the pin when it does, in one push that isn't gated (it holds a pin).
-So a pin waits only for the window it came in, however long you keep
+gated push goes: a proposal you reject meanwhile, and the edits you make
+meanwhile, go with the pin when it does, in one push that isn't gated (it
+holds a pin). Edits from your last 8 s before it goes are the exception:
+they aren't due yet (the 8 s quiet time), so they follow in a gated push of
+their own, at least 30 s later and once Claude has made no Nebula call for
+20 s. So a pin waits only for the window it came in, however long you keep
 editing. Claude Code wouldn't give it to the running turn anyway (pushes
 that arrive while Claude is busy are delivered together on its next turn),
 so sending it sooner could only have freed the change turn to edit.
+
+**Only a pin still open lifts the gate.** A pin wake needs a pin of yours
+that is still open when it goes. A pin you delete, one any agent answers
+(Claude's own `resolve_pin` included, even in a gated turn), and the pins
+of a project that is no longer open (anyone's switch, or the open project's
+delete) leave the waiting batch at once. A pin whose node is deleted stays:
+it keeps its place on the canvas. Right before a push that holds pins, the
+listener also asks Nebula which of them are still open (`GET
+/api/canvas/pins`). That catches what its event feed can't show: a pin
+answered with the `nebula` CLI under the same agent name (Nebula leaves an
+agent's own events out of its feed), or a delete lost while Nebula
+restarted. A batch left with no pin goes gated, like any batch carrying
+your edits. If Nebula can't answer the check, the pin and the push wait and
+it checks again (after 5 s, doubling up to 60 s).
 
 The gate lives in this MCP server process, and that has two gaps. Nebula
 can't see where a Claude Code turn ends, so the timing is guessed from when
