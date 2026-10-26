@@ -5234,6 +5234,8 @@ async def _journal_wait(request: Request, **kwargs: Any) -> dict[str, Any]:
         if not waiting.done() and gone.exception() is not None:
             await asyncio.wait({waiting})  # the server's receive failed: wait it out as before
     finally:
+        if gone.done() and not gone.cancelled():
+            gone.exception()  # a receive that failed as the wait ended: read it, nothing more (review 2)
         gone.cancel()
         abandoned = not waiting.done()
         if abandoned:
@@ -7884,7 +7886,8 @@ async def _apply_asset_proposal(proposal: AssetProposal) -> dict[str, Any]:
     # clicked Accept reads the board again like every other open one.
     headers = {k: v for k, v in (current_request_headers() or {}).items() if k.lower() != "x-nebula-tab"}
     with request_headers_scope(headers):
-        answer = await update_moodboard(proposal.target_id, MoodboardUpdate(sendNotes=True))
+        # Its board.* events name the proposal, as a canvas accept's do.
+        answer = await _update_moodboard(proposal.target_id, MoodboardUpdate(sendNotes=True), proposal_id=proposal.id)
     if isinstance(answer, Response):
         detail = ""
         try:
@@ -8673,6 +8676,7 @@ async def execute(request: ExecuteRequest) -> dict:
         _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=nodes)
     except BaseException:
         _return_hold(run_id)
+        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise
 
     async def _run() -> None:
@@ -8734,6 +8738,7 @@ async def execute(request: ExecuteRequest) -> dict:
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
+        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ExecutionCancellationCapacityError as exc:
         if task is None:
@@ -8742,6 +8747,7 @@ async def execute(request: ExecuteRequest) -> dict:
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
+        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         if task is None:
@@ -8751,6 +8757,7 @@ async def execute(request: ExecuteRequest) -> dict:
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
+        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception:
         if task is None:
@@ -8759,6 +8766,7 @@ async def execute(request: ExecuteRequest) -> dict:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise
 
     return {"status": "started", "runId": run_id}
@@ -8821,6 +8829,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
         _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
     except BaseException:
         _return_hold(run_id)
+        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise
 
     async def _run() -> None:
@@ -8862,20 +8871,24 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
         await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
+        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ExecutionCancellationCapacityError as exc:
         await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
+        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
+        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception:
         await _release_paid_worldlabs_starts(run_id)
+        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise
 
     return {"status": "started", "nodeCount": len(sub_nodes), "runId": run_id}
@@ -15962,7 +15975,8 @@ def _moodboard_conflict(exc: Any) -> JSONResponse:
     })
 
 
-def _journal_board_change(before: dict, after: dict, changes: dict, *, say: str = "") -> None:
+def _journal_board_change(before: dict, after: dict, changes: dict, *, say: str = "",
+                          proposal_id: str | None = None) -> None:
     """The journal events for a board write (plan section 5.2): an edit
     batch or a PUT. One ``board.*`` event for its images, cards and frames,
     and one ``board.fields`` event naming the board fields it changed
@@ -15970,7 +15984,9 @@ def _journal_board_change(before: dict, after: dict, changes: dict, *, say: str 
     the CLI, an undo's ``restore``, an accepted proposal's PUT), so none is
     missed. Tagged with the open canvas project; the board's own scope is in
     ``data`` (a Global board is in every project). Never any note text, and
-    never a field's value."""
+    never a field's value. ``proposal_id``: the accepted asset proposal that
+    made the write (only _apply_asset_proposal passes it, as canvas accepts
+    name theirs), so nebula-mcp --channel tells it from the person's edits."""
     from services.moodboard_edits import journal_entries
 
     for entry in journal_entries(changes, before, after):
@@ -15982,6 +15998,8 @@ def _journal_board_change(before: dict, after: dict, changes: dict, *, say: str 
             data.update({"refs": entry["refs"], "kinds": entry["kinds"]})
         if say:
             data["say"] = say
+        if proposal_id:
+            data["proposalId"] = proposal_id
         _journal(entry["kind"], data=data, summary=entry["summary"])
 
 
@@ -16007,6 +16025,12 @@ def _base_version(raw: Any) -> int | None:
 
 @app.put("/api/moodboards/{moodboard_id}")
 async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
+    return await _update_moodboard(moodboard_id, body)
+
+
+async def _update_moodboard(moodboard_id: str, body: MoodboardUpdate, *, proposal_id: str | None = None) -> dict:
+    """The PUT itself. ``proposal_id`` is for an accepted asset proposal's
+    write only (_apply_asset_proposal); the route never takes one."""
     _refuse_moodboard_layout(body)
     store = _moodboard_store()
     base_version = _base_version(body.baseVersion)
@@ -16043,7 +16067,7 @@ async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
         raise HTTPException(status_code=422, detail=str(exc))
     # An older client edits images through PUT: its edits are journaled too.
     changes = diff(before, moodboard)
-    _journal_board_change(before, moodboard, changes)
+    _journal_board_change(before, moodboard, changes, proposal_id=proposal_id)
     await _broadcast_stored_asset("moodboard", moodboard, edit={"touched": changes["touched"], "undo": None})
     await _say_agent_board_change(before, moodboard, changes)
     # The answer is the board plus `undo`, the `restore` that takes this

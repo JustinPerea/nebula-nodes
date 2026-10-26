@@ -467,6 +467,34 @@ def test_an_agent_proposes_sending_a_boards_notes_and_the_person_accepts_in_stud
     assert "Your notes say dusk" not in json.dumps(fields)
 
 
+def test_an_accepted_board_proposals_write_names_the_proposal_and_the_persons_never_does(api):
+    # Review 2 of PR #114 (L1): the accept's board write was journaled as the
+    # person's own board.fields with no mark, so nebula-mcp --channel counted
+    # it as the person's edit and gated the agent's next push. The accept
+    # route now names the proposal in its data, as canvas accepts do; a
+    # write the person makes can't carry the field.
+    board = _board(api)
+    view = _propose(api, {"sendNotes": True}, kind="moodboard", target=board["id"]).json()["proposal"]
+    accepted = api.client.post(f"/api/asset-proposals/{view['id']}/accept",
+                               headers={**api.person, KEY: _key(api, view["id"])})
+    assert accepted.status_code == 200, accepted.text
+    [applied] = _events(api, "board.")
+    assert applied["kind"] == "board.fields" and applied["data"]["proposalId"] == view["id"]
+    assert applied["actor"]["kind"] == "person"
+    # The person's own writes: a PUT, an edit batch with a `say`, and a PUT
+    # that tries to name a proposal (refused: the body takes no such field).
+    assert api.client.put(f"/api/moodboards/{board['id']}", json={"name": "Dusk 2"},
+                          headers=api.person).status_code == 200
+    edited = api.client.post(f"/api/moodboards/{board['id']}/edits", headers=api.person, json={
+        "ops": [{"op": "note", "image": 1, "notes": "warmer"}], "say": view["id"]})
+    assert edited.status_code == 200, edited.text
+    forged = api.client.put(f"/api/moodboards/{board['id']}", json={"name": "Dusk 3", "proposalId": view["id"]},
+                            headers=api.person)
+    assert forged.status_code == 422
+    mine = _events(api, "board.")[1:]
+    assert len(mine) == 2 and all("proposalId" not in event["data"] for event in mine), mine
+
+
 @pytest.mark.parametrize(("change", "status", "words"), [
     ({"sendNotes": False}, 422, "directly"),
     ({"notes": "x"}, 422, "sendNotes"),

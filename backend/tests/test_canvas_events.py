@@ -513,6 +513,36 @@ def test_a_connected_long_poll_still_gets_its_event_through_the_disconnect_watch
     assert journal.waiting == 0
 
 
+def test_a_disconnect_watch_that_fails_as_the_wait_ends_is_read(api):
+    # Review 2 of PR #114 (L3a): when the wait finished and the server's
+    # receive failed in the same step, nothing read the watcher's exception,
+    # and asyncio logged "Task exception was never retrieved".
+    import gc
+
+    from starlette.requests import Request
+
+    _client, _graph, journal, main_module = api
+    journal.publish("pin.added", actor=PERSON, summary="left a note")
+
+    async def receive() -> dict:
+        raise RuntimeError("receive failed")
+
+    async def scenario():
+        loop = asyncio.get_running_loop()
+        logged: list[dict] = []
+        loop.set_exception_handler(lambda _loop, context: logged.append(context))
+        request = Request({"type": "http", "method": "GET", "headers": [], "query_string": b""}, receive)
+        answer = await main_module._journal_wait(request, after=0, journal=journal.journal_id, wait=5)
+        gc.collect()
+        await asyncio.sleep(0)
+        return answer, logged
+
+    answer, logged = asyncio.run(scenario())
+    assert [e["kind"] for e in answer["events"]] == ["pin.added"]
+    assert [context.get("message") for context in logged] == []
+    assert journal.waiting == 0
+
+
 def test_events_endpoint_refuses_beyond_the_waiter_cap(api, monkeypatch):
     client, _graph, journal, _ = api
 

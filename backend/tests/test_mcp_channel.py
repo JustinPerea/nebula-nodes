@@ -766,8 +766,10 @@ _KIND_TIMES = {
     # kind:            (no window, young window, a call at 113, a call in flight 113-150)
     "pin":             ((116.0, False), (168.5, False), (168.5, False), (170.5, False)),
     "accept":          ((115.0, False), (168.5, False), (168.5, False), (170.5, False)),
+    "asset_accept":    ((115.0, False), (168.5, False), (168.5, False), (170.5, False)),
     "own_run_end":     ((117.0, False), (168.5, False), (168.5, False), (170.5, False)),
     "reject":          ((115.0, True), (138.0, True), (138.0, True), (170.0, True)),
+    "asset_reject":    ((115.0, True), (138.0, True), (138.0, True), (170.0, True)),
     "change":          ((123.0, True), (138.0, True), (138.0, True), (170.0, True)),
     "person_run_end":  ((123.0, True), (138.0, True), (138.0, True), (170.0, True)),
 }
@@ -779,6 +781,7 @@ _WINDOWS = ("none", "young", "calling", "in_flight")
 def test_every_push_kind_against_every_window_state(kind, window):
     state = ChannelState(now=0.0)
     state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_k"}}, now=1.0)
+    state.tool_finished("propose_asset_change", {}, {"proposal": {"id": "pa_k"}}, now=1.0)
     state.tool_finished("run_nodes", {}, [json.dumps({"status": "running", "runId": "run_own"})], now=1.0)
     state.observe(resp(run_started(1, "run_person")), now=50.0)
     if window != "none":
@@ -795,6 +798,11 @@ def test_every_push_kind_against_every_window_state(kind, window):
         state.observe(resp(ev(5, "proposal.accepted", data={"proposalId": "prop_k", "idMap": {}})), now=115.0)
     elif kind == "reject":
         state.observe(resp(ev(5, "proposal.rejected", data={"proposalId": "prop_k", "reason": "no"})), now=115.0)
+    elif kind == "asset_accept":
+        state.observe(resp(*_asset_accept(5, "pa_k", board_proposal="pa_k")), now=115.0)
+    elif kind == "asset_reject":
+        state.observe(resp(ev(5, "proposal.rejected", data={"proposalId": "pa_k", "kind": "moodboard",
+                                                            "reason": "no"})), now=115.0)
     elif kind == "own_run_end":
         state.run_ended({"runId": "run_own", "status": "finished", "nodesExecuted": 1}, now=115.0)
     elif kind == "person_run_end":
@@ -1066,17 +1074,198 @@ def test_a_burst_of_33_wakes_never_abandons_a_long_poll():
     assert seen["cancelled"] == 0 and seen["most_open"] == 1 and seen["polls"] == 1
 
 
+# -- Review 2 of PR #114 (2026-10-26) ------------------------------------------------
+# M1: a pin waits only for the window it came in, not for every gated push the
+# person's later edits make. L1: the board write of its own accepted asset
+# proposal is not the person's edit. L2: asset proposals are its proposals.
+
+def test_a_pin_never_waits_behind_the_persons_continued_edits():
+    # Probe P1: a pin during a change turn's window, then an edit every 5 s
+    # and no Nebula call. Each gated change push restarted the window and
+    # left the pin behind: it first went 650 s later, after 17 of them. While
+    # a pin waits, gated pushes now wait too; the pin goes when the window
+    # ends, as a pin wake (never gated) carrying the edits.
+    state = ChannelState(now=0.0)
+    _young_window(state)  # a gated change push at 108: the window runs to 168
+    state.observe(resp(pin(2)), now=110.0)
+    seq, pushes, t = 3, [], 110.0
+    while t <= 900.0:
+        if t < 700.0 and t % 5 == 0:
+            state.observe(resp(edit(seq)), now=t)
+            seq += 1
+        if t == 121.0:
+            # The listener sleeps until the window's end, not until the edits are due.
+            assert state.next_check(t) == pytest.approx(168.0 - 121.0, abs=0.01)
+        push = state.take_push(t)
+        if push is not None:
+            pushes.append((t, push))
+        t = round(t + 0.5, 3)
+    at, first = pushes[0]
+    assert (at, first.wake, first.gate) == (168.5, "pin", False)
+    # The pin and the 12 edits made meanwhile (110 to 165), in one ungated push.
+    assert first.count == 13 and "pinned a note" in first.content and "changed the canvas (12 changes)" in first.content
+    assert "refused" not in first.content
+    # After it, the edits wake as before: gated, 30 s after the first of
+    # each batch (they never go 8 s quiet).
+    assert [(at, p.wake, p.gate) for at, p in pushes[1:3]] == [(200.0, "change", True), (235.0, "change", True)]
+
+
+def test_a_rejection_while_a_pin_waits_goes_with_the_pin():
+    state = ChannelState(now=0.0)
+    state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_r"}}, now=1.0)
+    _young_window(state)
+    state.observe(resp(pin(2)), now=110.0)
+    state.observe(resp(ev(3, "proposal.rejected", data={"proposalId": "prop_r", "reason": "no"})), now=112.0)
+    pushes = drain(state, 110.0, 300.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(168.5, "pin", False)]
+    assert "prop_r" in pushes[0][1].content and "was rejected" in pushes[0][1].content
+
+
+# A pin at 114, then a gated kind at 115, against the windows a pin waits for.
+_PIN_WAIT_TIMES = {"young": 168.5, "calling": 168.5, "in_flight": 170.5}
+
+
+@pytest.mark.parametrize("window", sorted(_PIN_WAIT_TIMES))
+@pytest.mark.parametrize("kind", ["reject", "change", "person_run_end"])
+def test_a_gated_push_waits_with_a_waiting_pin_and_goes_in_its_batch(kind, window):
+    state = ChannelState(now=0.0)
+    state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_k"}}, now=1.0)
+    state.observe(resp(run_started(1, "run_person")), now=50.0)
+    state.observe(resp(edit(2)), now=100.0)
+    assert state.take_push(108.0).gate
+    if window == "calling":
+        assert state.tool_started("look_at_canvas", {}, 113.0) is None
+        state.tool_finished("look_at_canvas", {}, {}, 113.2)
+    if window == "in_flight":
+        assert state.tool_started("get_proposal", {"proposal_id": "prop_wait", "wait_seconds": 60}, 113.0) is None
+    state.observe(resp(pin(4)), now=114.0)
+    if kind == "reject":
+        state.observe(resp(ev(5, "proposal.rejected", data={"proposalId": "prop_k", "reason": "no"})), now=115.0)
+    elif kind == "person_run_end":
+        state.run_ended({"runId": "run_person", "status": "finished", "nodesExecuted": 1}, now=115.0)
+    else:
+        state.observe(resp(edit(5, node="n8")), now=115.0)
+    pushes = []
+    t = 115.0
+    while t <= 300.0:
+        if window == "in_flight" and t == 150.0:
+            state.tool_finished("get_proposal", {"proposal_id": "prop_wait"}, {"proposal": {"status": "open"}}, 150.0)
+        push = state.take_push(t)
+        if push is not None:
+            pushes.append((t, push.wake, push.gate, push.count))
+        t += 0.5
+    assert pushes == [(_PIN_WAIT_TIMES[window], "pin", False, 2)]
+
+
+def _own_asset_proposal(state: ChannelState, proposal_id: str = "pa_1", now: float = 0.5) -> None:
+    assert state.tool_started("propose_asset_change", {"kind": "moodboard"}, now) is None
+    state.tool_finished("propose_asset_change", {"kind": "moodboard"},
+                        {"proposal": {"id": proposal_id, "status": "open"}}, now)
+
+
+def _asset_accept(seq: int, proposal_id: str, board_proposal: str | None = None) -> list[dict]:
+    """What accepting a board's Send notes proposal journals: the board write
+    (main._apply_asset_proposal, marked with the proposal), then the decision."""
+    board = {"boardId": "b1", "boardName": "Dusk", "scope": "global", "fields": ["sendNotes"]}
+    if board_proposal:
+        board["proposalId"] = board_proposal
+    return [ev(seq, "board.fields", data=board, summary="changed Send notes to generators on board Dusk"),
+            ev(seq + 1, "proposal.accepted", data={"proposalId": proposal_id, "kind": "moodboard",
+                                                   "targetId": "b1", "targetName": "Dusk", "note": "dusk",
+                                                   "applied": {"sendNotes": True}},
+               summary=f"accepted Claude Code's proposal {proposal_id} (send the notes of Dusk)")]
+
+
+def test_its_accepted_asset_proposals_board_write_never_gates_its_next_push():
+    # Probe P2: the board write an accept made rode on its own run's end as
+    # the person's edit and gated it ("the person made 1 edit"). It is now
+    # marked with the proposal, and the channel leaves its own out.
+    state = ChannelState(now=0.0)
+    _own_asset_proposal(state)
+    state.tool_finished("run_nodes", {}, [json.dumps({"status": "running", "runId": "run_o"})], now=1.0)
+    state.observe(resp(*_asset_accept(1, "pa_1", board_proposal="pa_1")), now=40.0)
+    state.run_ended({"runId": "run_o", "status": "finished", "nodesExecuted": 1}, now=60.0)
+    pushes = drain(state, 40.0, 200.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(40.0, "proposal", False), (70.0, "run", False)]
+    assert all("Send notes" not in p.content and "the person" not in p.content.lower() for _, p in pushes)
+    assert state.tool_started("run_nodes", {}, now=71.0) is None
+
+
+@pytest.mark.parametrize("proposal", [None, "pa_other"])
+def test_a_board_write_not_marked_with_its_own_proposal_is_still_the_persons(proposal):
+    # The same rule as canvas accepts: only its own proposal's mark hides a
+    # board write. The person's own write carries none (Nebula sets the
+    # field only in the accept route), and another agent's accept is a write
+    # the person made happen, so it stays a line.
+    state = ChannelState(now=0.0)
+    _own_asset_proposal(state)
+    state.observe(resp(_asset_accept(1, "pa_x", board_proposal=proposal)[0]), now=40.0)
+    state.observe(resp(edit(2)), now=41.0)
+    push = state.take_push(49.0)
+    assert push is not None and push.gate and "Send notes" in push.content
+
+
+@pytest.mark.parametrize("kind", ["project.cover", "commons.corrected", "commons.region", "commons.membership"])
+def test_the_other_writes_an_asset_accept_makes_never_wake_or_ride(kind):
+    # Every write an asset accept journals: a board's (marked, above), a
+    # project cover's and the Commons'. The last two aren't Q50 a edits, the
+    # person's own or an accept's, so they never wake it or ride a push.
+    state = ChannelState(now=0.0)
+    _own_asset_proposal(state)
+    state.observe(resp(ev(1, kind, data={"projectId": "p1"},
+                          summary="pinned a cover on project Dusk (accepted from Claude Code)")), now=10.0)
+    assert drain(state, 10.0, 100.0) == []
+    state.observe(resp(edit(2)), now=110.0)
+    push = state.take_push(118.0)
+    assert push is not None and push.count == 1 and "accepted from" not in push.content
+
+
+@pytest.mark.parametrize("decision,gated", [("accepted", False), ("rejected", True), ("expired", True),
+                                            ("invalidated", True)])
+def test_its_asset_proposals_decision_wakes_it_like_a_canvas_proposals(decision, gated):
+    # Probe asset: propose_asset_change's ids never reached own_proposals, so
+    # no decision on one pushed.
+    state = ChannelState(now=0.0)
+    _own_asset_proposal(state)
+    assert "pa_1" in state.own_proposals
+    events = (_asset_accept(1, "pa_1", board_proposal="pa_1") if decision == "accepted" else
+              [ev(1, f"proposal.{decision}", data={"proposalId": "pa_1", "kind": "moodboard", "targetId": "b1",
+                                                   "note": "dusk", "reason": "no"})])
+    state.observe(resp(*events), now=40.0)
+    pushes = drain(state, 40.0, 400.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(40.0, "proposal", gated)]
+    content = pushes[0][1].content
+    assert "pa_1" in content and decision in content
+    # An asset proposal adds no nodes and starts no run.
+    assert "nodes are on the canvas" not in content and "runs the ones" not in content
+    assert ("refused" in content) is gated
+
+
+def test_a_gated_turn_may_propose_an_asset_change():
+    # Q42 a lets a change-woken turn propose; a cover, a board's notes and
+    # the Commons are proposed with propose_asset_change.
+    state = ChannelState(now=0.0)
+    _young_window(state)
+    assert state.tool_started("moodboard_update", {}, 110.0) is not None
+    _own_asset_proposal(state, "pa_g", now=111.0)
+    for name in ("get_proposal", "withdraw_proposal"):  # both read and withdraw asset proposals too
+        assert state.tool_started(name, {"proposal_id": "pa_g"}, 112.0) is None
+        state.tool_finished(name, {"proposal_id": "pa_g"}, {"proposal": {"id": "pa_g", "status": "open"}}, 112.0)
+    assert "pa_g" in state.own_proposals
+
+
 def test_the_change_turn_allow_list_is_reads_and_the_change_turn_writes():
     tools = {tool.name: tool for tool in anyio.run(mcp_server.mcp.list_tools)}
     allowed = mcp_channel.CHANGE_TURN_TOOLS
     assert allowed <= set(tools)
     writes = {name for name in allowed if not tools[name].annotations.readOnlyHint}
     # Q42 a / Q51 a: look, point (and say), post an Update, answer a pin, propose.
-    assert writes == {"point_at", "post_note", "resolve_pin", "propose_change", "withdraw_proposal"}
+    assert writes == {"point_at", "post_note", "resolve_pin", "propose_change", "propose_asset_change",
+                      "withdraw_proposal"}
     for name in ("start_here", "look_at_canvas", "describe_node", "view_output", "get_run", "list_notes"):
         assert name in allowed, name
-    for name in ("edit_canvas", "run_nodes", "open_project", "moodboard_edit", "propose_asset_change", "ask_person",
-                 "set_status", "upload_file"):
+    for name in ("edit_canvas", "run_nodes", "open_project", "moodboard_edit", "moodboard_update",
+                 "set_project_cover", "ask_person", "set_status", "upload_file"):
         assert name not in allowed, name
 
 
@@ -1089,7 +1278,7 @@ def test_the_channel_instructions_say_what_each_wake_may_do_and_fit_the_cut():
     named = set(re.findall(r"\b([a-z]+(?:_[a-z]+)+)\b", text))
     assert named <= tools, named - tools
     for phrase in ('gate="change"', "rejected, expired or invalidated", "post_note", "propose_change",
-                   "resolve_pin", "a run they started", "another Nebula MCP server"):
+                   "propose_asset_change", "resolve_pin", "a run they started", "another Nebula MCP server"):
         assert phrase in text, phrase
 
 

@@ -876,6 +876,43 @@ def test_the_run_the_canvas_starts_for_an_accept_names_the_proposal(api, monkeyp
     assert result["approvalId"] not in json.dumps(api.journal.read(after=0, limit=100))
 
 
+@pytest.mark.parametrize("route", ["/api/execute", "/api/execute-node"])
+@pytest.mark.parametrize("refusal", ["claim", "register"])
+def test_a_run_refused_after_its_approval_is_taken_forgets_its_proposal(api, monkeypatch, route, refusal):
+    # Review 2 of PR #114 (L3b): a refusal inside _require_run_spend_approval
+    # forgot the run's proposal mark, but one after it (the paid-start claim,
+    # registering the run) kept it until it aged out. The refusal itself is
+    # unchanged: same status and text, and the approval stays used.
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(api.main, "validate_graph", lambda *args, **kwargs: [])
+    n1, new_img, result = _accept_cheap_image(api)
+    if refusal == "claim":
+        def refuse_claim(**_kwargs):
+            raise HTTPException(status_code=409, detail="a paid start is still settling")
+        monkeypatch.setattr(api.main, "_claim_fresh_paid_worldlabs_starts", refuse_claim)
+    else:
+        def refuse_register(*_args, **_kwargs):
+            raise ValueError("run already registered")
+        monkeypatch.setattr(api.main.execution_runs, "register", refuse_register)
+    state = _graph_state(api)
+    nodes = [{"id": node_id, "definitionId": node["definitionId"], "params": node.get("params") or {}, "outputs": {}}
+             for node_id, node in state["nodes"].items()]
+    edges = [{"id": edge["id"], "source": edge["source"], "sourceHandle": edge["sourceHandle"],
+              "target": edge["target"], "targetHandle": edge["targetHandle"]} for edge in state["edges"]]
+    body = {"nodes": nodes, "edges": edges, "approvalId": result["approvalId"], "runId": "run_refused"}
+    if route == "/api/execute-node":
+        body["targetNodeId"] = new_img
+    refused = api.client.post(route, headers=PERSON, json=body)
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["detail"] == ("a paid start is still settling" if refusal == "claim"
+                                        else "run already registered")
+    assert api.journal.run_proposal("run_refused") is None
+    # The approval was used up by the refused run, as before.
+    again = api.client.post(route, headers=PERSON, json={**body, "runId": "run_again"})
+    assert again.status_code == 409 and "already started" in again.json()["detail"]
+
+
 def test_an_abandoned_proposal_wait_frees_its_waiter_slot(api):
     # The same slots as /api/canvas/events (review 1, M2): get_proposal's
     # wait must free its slot when the agent's client goes away.
