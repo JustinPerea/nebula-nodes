@@ -96,7 +96,7 @@ import { usePricingStore } from './pricingStore';
 import { useInputSizeStore } from './inputSizeStore';
 import { useStoredAssetsStore } from './storedAssetsStore';
 import { repeatRun, runCostConfirmMessage, shouldConfirmRunCost, summarizeRunScope, type RunScope } from '../lib/runScope';
-import { placeholderRunConfirm, type PlaceholderRunConfirm } from '../lib/placeholderRunConfirm';
+import { placeholderRefusalOf, placeholderRunConfirm, withRefusalFlags, withRunEstimate, type PlaceholderRunConfirm, type RunEstimate } from '../lib/placeholderRunConfirm';
 import { placeholderRunDialogModule } from '../lib/placeholderRunDialogModule';
 import { useCreateDraftStore } from './createDraftStore';
 import { getCinemaUploadIssue, useCinemaUploadStore } from './cinemaUploadStore';
@@ -2487,15 +2487,20 @@ async function executeHistoricalRun(
 
   pendingStartRunIds.add(runId);
   try {
-    const result = source.cinemaShot
-      ? await apiGenerateShot(snapshot.nodes, snapshot.edges.map((edge) => ({ ...edge,
-        sourceHandle: edge.sourceHandle, targetHandle: edge.targetHandle })), source.cinemaShot.nodeId,
-        source.cinemaShot.shotId, source.cinemaShot.seed, source.cinemaShot.variations, runId,
-        agreed?.confirmedPlaceholders, agreed?.confirmedCost)
-      : targetNodeId
-      ? await apiExecuteNode(snapshot.nodes, snapshot.edges, targetNodeId, runId, true, undefined,
-        agreed?.confirmedPlaceholders, agreed?.confirmedCost)
+    const stillOurs = () => ownsRun(runId) && !cancellationRequestedRunIds.has(runId);
+    const shot = source.cinemaShot;
+    const result = agreed && directTarget
+      ? await sendDirectRun(agreed, directTarget, shot?.variations ?? 1, stillOurs, (placeholders, cost) => (shot
+        ? apiGenerateShot(snapshot.nodes, snapshot.edges.map((edge) => ({ ...edge,
+          sourceHandle: edge.sourceHandle, targetHandle: edge.targetHandle })), shot.nodeId,
+          shot.shotId, shot.seed, shot.variations, runId, placeholders, cost)
+        : apiExecuteNode(snapshot.nodes, snapshot.edges, targetNodeId!, runId, true, undefined, placeholders, cost)))
       : await apiExecuteGraph(snapshot.nodes, snapshot.edges, runId, true);
+    if (result === DECLINED) {
+      pendingStartRunIds.delete(runId);
+      settleTrackedExecutionStatus('cancelled', runId, set, get);
+      return;
+    }
     pendingStartRunIds.delete(runId);
     announcePendingSkips(result);
     if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
@@ -3417,25 +3422,73 @@ function confirmRunCost(nodes: Node<NodeData>[], edges: Edge[], scope: RunScope,
  * first, whatever the costly-run setting, in one dialog that replaces the
  * costly-run confirm (components/PlaceholderRunDialog.tsx). The dialog's
  * words, or null when no paid placeholder is in the run (then the costly-run
- * confirm applies as before).
+ * confirm applies as before). A price read from an input file asks the
+ * backend for its size (review 4, H1); the open dialog updates when it
+ * arrives. `estimate`: Nebula's own, from its refusal (review 4, M1).
  */
-function directRunConfirm(nodes: Node<NodeData>[], edges: Edge[], nodeId: string, passes = 1): PlaceholderRunConfirm | null {
+function directRunConfirm(
+  nodes: Node<NodeData>[], edges: Edge[], nodeId: string, passes = 1, estimate?: RunEstimate | null,
+): PlaceholderRunConfirm | null {
   if (typeof window === 'undefined') return null;
   const pricing = usePricingStore.getState().table;
   const { settingsCache } = useUIStore.getState();
-  const summary = repeatRun(summarizeRunScope(nodes, edges, { kind: 'node', nodeId },
+  let summary = repeatRun(summarizeRunScope(nodes, edges, { kind: 'node', nodeId },
     pricing ? { pricing, apiKeys: settingsCache.apiKeys, sizes: useInputSizeStore.getState().sizes } : undefined), passes);
+  const sizeRefs = summary.cost?.sizeRefs;
+  if (sizeRefs?.length) useInputSizeStore.getState().request(sizeRefs);
+  if (estimate) summary = withRunEstimate(summary, estimate, nodes);
   return placeholderRunConfirm(nodes, edges, nodeId, summary);
 }
 
-/** Shows that dialog: true runs. A dialog that can't load runs nothing. */
-async function askDirectRun(model: PlaceholderRunConfirm): Promise<boolean> {
+function sameConfirm(a: PlaceholderRunConfirm, b: PlaceholderRunConfirm): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/** Calls `onChange` whenever something the dialog's words read changes: the
+ * graph, the price table, a measured input, the keys. Returns its stop. */
+function watchRunInputs(onChange: () => void): () => void {
+  const stops = [
+    useGraphStore.subscribe((state, before) => {
+      if (state.nodes !== before.nodes || state.edges !== before.edges) onChange();
+    }),
+    usePricingStore.subscribe((state, before) => { if (state.table !== before.table) onChange(); }),
+    useInputSizeStore.subscribe((state, before) => { if (state.sizes !== before.sizes) onChange(); }),
+    useUIStore.subscribe((state, before) => { if (state.settingsCache !== before.settingsCache) onChange(); }),
+  ];
+  return () => { for (const stop of stops) stop(); };
+}
+
+/** Asks App to read the settings again (App.tsx, 'nebula:settings-refresh'),
+ * so the dialog prices with the keys the backend has, not ones this tab read
+ * at load (review 4, M1). The open dialog updates when they arrive. */
+function refreshSettingsCache(): void {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('nebula:settings-refresh'));
+}
+
+/**
+ * Shows that dialog and resolves with the words the person said yes to (the
+ * last ones it showed), or null. `changed`: asked again because the run
+ * changed (GM, round 5: its line, and Run held for 500 ms). `recompute`, when
+ * given, is the dialog's words now: the open dialog shows them as they change
+ * (a measured price, the keys read again). A dialog that can't load runs nothing.
+ */
+async function askDirectRun(
+  model: PlaceholderRunConfirm, changed: boolean, recompute?: () => PlaceholderRunConfirm | null,
+): Promise<PlaceholderRunConfirm | null> {
+  let shown = model;
   try {
     const dialog = await placeholderRunDialogModule.load();
-    return await dialog.askPlaceholderRun(model);
+    const watch = recompute && ((show: (next: PlaceholderRunConfirm) => void) => watchRunInputs(() => {
+      const next = recompute();
+      if (next && !sameConfirm(next, shown)) {
+        shown = next;
+        show(next);
+      }
+    }));
+    return await dialog.askPlaceholderRun(model, { changed, watch }) ? shown : null;
   } catch (error) {
     console.error("Couldn't open the run confirmation:", error);
-    return false;
+    return null;
   }
 }
 
@@ -3484,20 +3537,80 @@ async function askUntilSettled(
   passes: number,
   costlyOk: (graph: DirectRunGraph) => boolean,
 ): Promise<DirectRunConfirmed | null> {
+  refreshSettingsCache();
+  const recompute = () => {
+    const graph = read();
+    return graph && directRunConfirm(graph.nodes, graph.edges, nodeId, passes);
+  };
   let asked = first;
-  let graph: DirectRunGraph | null;
+  let changed = false;
   for (;;) {
-    if (!await askDirectRun(asked)) return null;
-    graph = read();
+    const shown = await askDirectRun(asked, changed, recompute);
+    if (!shown) return null;
+    const graph = read();
     if (!graph) return null;
     const now = directRunConfirm(graph.nodes, graph.edges, nodeId, passes);
-    // No paid placeholder left (an agent made them normal): the run is an
-    // ordinary direct run now, so the costly-run setting decides over it.
-    if (!now) return costlyOk(graph) ? graph : null;
-    if (JSON.stringify(now) === JSON.stringify(asked)) {
+    // No paid placeholder left (an agent made them normal): an ordinary
+    // direct run now. GM, round 5: never the browser's costly-run confirm
+    // after this dialog, so the total the person confirmed covers it; only a
+    // run that now costs more than that falls to the costly-run setting.
+    if (!now) return coveredBy(shown, graph, nodeId, passes) || costlyOk(graph) ? graph : null;
+    if (sameConfirm(now, shown)) {
       return { ...graph, confirmedPlaceholders: now.confirmIds, confirmedCost: now.confirmCost ?? undefined };
     }
     asked = now;
+    changed = true;
+  }
+}
+
+/** Whether the total the person just confirmed covers this run's list price. */
+function coveredBy(shown: PlaceholderRunConfirm, graph: DirectRunGraph, nodeId: string, passes: number): boolean {
+  const pricing = usePricingStore.getState().table;
+  if (!pricing || shown.confirmCost === null) return false;
+  const { settingsCache } = useUIStore.getState();
+  const summary = repeatRun(summarizeRunScope(graph.nodes, graph.edges, { kind: 'node', nodeId },
+    { pricing, apiKeys: settingsCache.apiKeys, sizes: useInputSizeStore.getState().sizes }), passes);
+  return Boolean(summary.cost) && summary.cost!.high <= shown.confirmCost + 1e-6;
+}
+
+/** The person said no when Nebula's refusal asked again: nothing ran. */
+const DECLINED = Symbol('declined');
+
+/**
+ * Sends the person's direct run (`send`, with the confirmation to carry). When
+ * Nebula refuses it over agents' paid placeholders (409
+ * `placeholder_confirm_required`: the confirmation is missing, or its total
+ * is below Nebula's own estimate, at the backend's keys and measured inputs),
+ * the canvas asks again itself in GM's dialog, priced at Nebula's numbers,
+ * with "This run changed since you last reviewed it." when the person had
+ * already confirmed, and sends the same run again with what they confirm.
+ * The refusal's own words ("Click “Run” again…") are only for a tab too old
+ * to do this (GM, round 5; review 4, M1). DECLINED: they said no, or the run
+ * was stopped meanwhile (`stillOurs`).
+ */
+async function sendDirectRun<T>(
+  agreed: DirectRunConfirmed,
+  nodeId: string,
+  passes: number,
+  stillOurs: () => boolean,
+  send: (placeholders?: string[], cost?: number) => Promise<T>,
+): Promise<T | typeof DECLINED> {
+  let placeholders = agreed.confirmedPlaceholders;
+  let cost = agreed.confirmedCost;
+  for (;;) {
+    try {
+      return await send(placeholders, cost);
+    } catch (error) {
+      const refusal = placeholderRefusalOf(error);
+      if (!refusal || !stillOurs()) throw error;
+      const nodes = withRefusalFlags(agreed.nodes, refusal);
+      const model = directRunConfirm(nodes, agreed.edges, nodeId, passes, refusal.estimate);
+      if (!model) throw error;
+      const shown = await askDirectRun({ ...model, confirmIds: [...refusal.placeholders].sort() }, placeholders !== undefined);
+      if (!shown || !stillOurs()) return DECLINED;
+      placeholders = shown.confirmIds;
+      cost = shown.confirmCost ?? undefined;
+    }
   }
 }
 
@@ -5181,8 +5294,16 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     }));
     pendingStartRunIds.add(runId);
     try {
-      const result = await apiExecuteNode(snapshot.nodes, snapshot.edges, nodeId, runId, undefined, options?.approvalId,
-        confirmedPlaceholders, confirmedCost);
+      const result = await sendDirectRun({ ...agreed, confirmedPlaceholders, confirmedCost }, nodeId, 1,
+        () => ownsRun(runId) && !cancellationRequestedRunIds.has(runId),
+        (placeholders, cost) => apiExecuteNode(snapshot.nodes, snapshot.edges, nodeId, runId, undefined,
+          options?.approvalId, placeholders, cost));
+      if (result === DECLINED) {
+        // The person said no when Nebula asked again: nothing ran, nothing changed.
+        pendingStartRunIds.delete(runId);
+        settleTrackedExecutionStatus('cancelled', runId, set, get);
+        return;
+      }
       pendingStartRunIds.delete(runId);
       announcePendingSkips(result);
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
@@ -5317,8 +5438,15 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       cinemaShot: { nodeId, shotId, seed, variations },
     })) }));
     try {
-      const result = await apiGenerateShot(graphNodes, graphEdges, nodeId, shotId, seed, variations, runId,
-        agreed.confirmedPlaceholders, agreed.confirmedCost);
+      const result = await sendDirectRun(agreed, nodeId, variations ?? 1,
+        () => ownsRun(runId) && !cancellationRequestedRunIds.has(runId),
+        (placeholders, cost) => apiGenerateShot(graphNodes, graphEdges, nodeId, shotId, seed, variations, runId,
+          placeholders, cost));
+      if (result === DECLINED) {
+        pendingStartRunIds.delete(runId);
+        settleTrackedExecutionStatus('cancelled', runId, set, get);
+        return;
+      }
       pendingStartRunIds.delete(runId);
       if (!ownsRun(runId)) return;
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;

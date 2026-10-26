@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type CSSProperties, type KeyboardEvent } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, type CSSProperties, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { PlaceholderRunConfirm } from '../lib/placeholderRunConfirm';
 import '../styles/prompt-dialog.css';
@@ -15,15 +15,46 @@ import '../styles/placeholder-run-dialog.css';
  * The app's own dialog, never window.confirm: focus on Cancel (Enter never
  * spends by accident), Escape is Cancel, Tab stays inside. Loaded only when
  * it is needed (askPlaceholderRun.tsx, lib/deferredChunks.ts placeholderRunDialogModule).
+ *
+ * GM - Design, round 5 (review 4, M3): a dialog back because the run changed
+ * (`changed`) says so above the rows, and Run takes no click for 500 ms after
+ * it opens or after a row, the total or the button changes while it is open,
+ * so a click already on its way can't confirm a price it didn't see. Focus
+ * stays where it was (the same buttons re-render in place).
  */
-export function PlaceholderRunDialog({ model, onDone }: {
+export const CHANGED_LINE = 'This run changed since you last reviewed it.';
+/** How long Run ignores clicks after the dialog's numbers change (GM: "~500 ms"). */
+export const RUN_CLICK_GUARD_MS = 500;
+
+/** What the person reads before Run: a change to any of it holds Run back. */
+function signature(model: PlaceholderRunConfirm): string {
+  return JSON.stringify([model.rows, model.freeLine, model.totalLine, model.notes, model.runLabel]);
+}
+
+export function PlaceholderRunDialog({ model, changed = false, onDone }: {
   model: PlaceholderRunConfirm;
+  /** Asked again because the run changed since the person last saw it. */
+  changed?: boolean;
   onDone: (ok: boolean) => void;
 }) {
   const headingId = useId();
   const bodyId = useId();
   const card = useRef<HTMLDivElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
+  const shown = useRef<string | null>(null);
+  const heldUntil = useRef(0);
+  const current = signature(model);
+  // Before any click can land: a layout effect runs in the same task as the commit.
+  useLayoutEffect(() => {
+    if (current === shown.current) return;
+    const opening = shown.current === null;
+    shown.current = current;
+    if (!opening || changed) heldUntil.current = Date.now() + RUN_CLICK_GUARD_MS;
+  }, [current, changed]);
+  const run = () => {
+    if (Date.now() < heldUntil.current) return;
+    onDone(true);
+  };
   useEffect(() => {
     const previous = document.activeElement;
     cancel.current?.focus();
@@ -55,6 +86,7 @@ export function PlaceholderRunDialog({ model, onDone }: {
         <h2 id={headingId} className="placeholder-run__heading">{model.heading}</h2>
         <div id={bodyId} className="placeholder-run__body">
           <p className="prompt-dialog__line">{model.intro}</p>
+          {changed && <p className="prompt-dialog__line placeholder-run__changed">{CHANGED_LINE}</p>}
           <ul className="placeholder-run__rows">
             {model.rows.map((row) => (
               <li key={row.nodeId} className="placeholder-run__row" style={{ '--prd-color': row.agent.color } as CSSProperties}>
@@ -70,7 +102,7 @@ export function PlaceholderRunDialog({ model, onDone }: {
         </div>
         <div className="prompt-dialog__actions">
           <button type="button" ref={cancel} onClick={() => onDone(false)}>Cancel</button>
-          <button type="button" className="prompt-dialog__confirm" onClick={() => onDone(true)}>{model.runLabel}</button>
+          <button type="button" className="prompt-dialog__confirm" onClick={run}>{model.runLabel}</button>
         </div>
       </div>
     </div>,

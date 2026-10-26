@@ -90,3 +90,23 @@ describe("the pill while its node has keyboard focus", () => {
     expect(shown.some((selector) => selector.includes("[data-focused='true']") && selector.includes('__status'))).toBe(true);
   });
 });
+
+// GM - Design, round 5 (2026-10-25), item 2: "Past 480 px, WRAP onto more
+// lines instead of truncating (keyboard users have no other way to read the rest)."
+describe('the focused pill past 480 px', () => {
+  const body = (selector: string) => rules.filter((rule) => rule.selectors.includes(selector)).map((rule) => rule.body).join('\n');
+
+  it('wraps its status onto more lines instead of cutting it', () => {
+    const status = body(".agent-node-mark[data-focused='true'] .agent-node-mark__status");
+    expect(status).toMatch(/white-space:\s*normal/);
+    expect(status).not.toMatch(/text-overflow:\s*ellipsis/);
+  });
+
+  it('lets the pill grow taller than 22 px, up from the node, at most 480 px wide', () => {
+    const pill = body(".agent-node-mark[data-focused='true'] .agent-node-mark__pill");
+    expect(pill).toMatch(/height:\s*auto/);
+    expect(pill).toMatch(/min-height:\s*22px/);
+    expect(pill).toMatch(/white-space:\s*normal/);
+    expect(body(".agent-node-mark[data-focused='true'] .agent-node-mark__row")).toMatch(/max-width:\s*max\(var\(--anm-max\),\s*480px\)/);
+  });
+});

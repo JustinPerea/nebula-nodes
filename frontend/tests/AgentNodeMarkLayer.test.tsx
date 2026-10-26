@@ -175,17 +175,28 @@ describe('AgentNodeMarkLayer', () => {
   // Review 3, finding 8: at 60% and up the pill takes no focus (no tab stop
   // on every node), so the node's own keyboard focus shows its whole text.
   describe("the node's keyboard focus", () => {
-    function focusNode(id: string, visible: boolean) {
+    // Review 4, L5: the keyboard is what brings focus there (a key pressed
+    // since the last pointer press), not :focus-visible, which a text field
+    // clicked with the mouse matches too.
+    function focusNode(id: string, keyboard: boolean, field = false) {
       const el = document.createElement('div');
       el.className = 'react-flow__node';
       el.dataset.id = id;
       el.tabIndex = 0;
+      const input = document.createElement('input');
+      el.appendChild(input);
       document.body.appendChild(el);
+      const target = field ? input : el;
       const matches = HTMLElement.prototype.matches;
       vi.spyOn(HTMLElement.prototype, 'matches').mockImplementation(function (this: HTMLElement, selector: string) {
-        return selector === ':focus-visible' ? visible && this === el : matches.call(this, selector);
+        // jsdom has no :focus-visible; a browser's matches a text field however it got focus.
+        return selector === ':focus-visible' ? (this === input || (keyboard && this === el)) : matches.call(this, selector);
       });
-      act(() => { fireEvent.focusIn(el); });
+      act(() => {
+        if (keyboard) fireEvent.keyDown(document, { key: 'Tab' });
+        else fireEvent.pointerDown(target);
+        fireEvent.focusIn(target);
+      });
       return el;
     }
     afterEach(() => { document.querySelectorAll('.react-flow__node').forEach((el) => el.remove()); vi.restoreAllMocks(); });
@@ -206,6 +217,20 @@ describe('AgentNodeMarkLayer', () => {
       const { container } = render(<AgentNodeMarkLayer />);
       focusNode('n4', false);
       expect(container.querySelector<HTMLElement>('.agent-node-mark')!.dataset.focused).toBeUndefined();
+    });
+
+    it('a text field in the node clicked with the mouse changes nothing (review 4, L5)', () => {
+      setStatus(CLAUDE, 'n4', 'Checking the crops on every still in the hero set');
+      const { container } = render(<AgentNodeMarkLayer />);
+      focusNode('n4', false, true);
+      expect(container.querySelector<HTMLElement>('.agent-node-mark')!.dataset.focused).toBeUndefined();
+    });
+
+    it('tabbing into a text field in the node shows the pill in full', () => {
+      setStatus(CLAUDE, 'n4', 'Checking the crops on every still in the hero set');
+      const { container } = render(<AgentNodeMarkLayer />);
+      focusNode('n4', true, true);
+      expect(container.querySelector<HTMLElement>('.agent-node-mark')!.dataset.focused).toBe('true');
     });
 
     it('another node\'s focus leaves this pill as it is', () => {

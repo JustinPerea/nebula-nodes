@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import re
 import secrets
 import time
@@ -49,7 +50,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping
 
 from services import pending_nodes
-from services.canvas_events import actor_record
+from services.canvas_events import MOVE_THRESHOLD_PX, actor_record
 
 UNDO_TTL_SECONDS = 3600
 MAX_EDITS = 100
@@ -224,9 +225,18 @@ def _ready_changed_since(ready: Mapping[str, Any], now: Mapping[str, Any], wires
         return True
     if "label" in ready and (now.get("label") or None) != ready["label"]:
         return True
-    if "position" in ready and ready["position"] is not None and _point(now.get("position")) != ready["position"]:
+    if "position" in ready and ready["position"] is not None and _moved_far(ready["position"], _point(now.get("position"))):
         return True
     return "wires" in ready and _node_wires(node_id, wires) != [list(wire) for wire in ready["wires"]]
+
+
+def _moved_far(before: Mapping[str, float], after: Mapping[str, float] | None) -> bool:
+    """A real move, as the layout route counts one (main._moved_far_enough,
+    MOVE_THRESHOLD_PX): a nudge under it isn't an edit, so it doesn't make
+    the node "changed since" (review 4, L4)."""
+    if after is None:
+        return True
+    return math.hypot(after["x"] - before["x"], after["y"] - before["y"]) >= MOVE_THRESHOLD_PX
 
 
 def describe(inverse: Mapping[str, Any]) -> str:

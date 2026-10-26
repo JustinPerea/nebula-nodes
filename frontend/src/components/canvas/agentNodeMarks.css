@@ -186,20 +186,40 @@
 
 /* The node has keyboard focus (review 3, finding 8): its pill shows the whole
    status, not cut at the node's width, so a sighted keyboard user can read
-   it; below 60% the dot shows its words as on its own focus. */
+   it; below 60% the dot shows its words as on its own focus. Past 480 px
+   the status wraps onto more lines (GM - Design, round 5: "keyboard users
+   have no other way to read the rest"); the row is anchored at its bottom,
+   so the pill grows up, away from the node. */
 .agent-node-mark[data-focused='true'] .agent-node-mark__row {
   max-width: max(var(--anm-max), 480px);
+  align-items: flex-end;
+}
+
+.agent-node-mark[data-focused='true'] .agent-node-mark__pill {
+  height: auto;
+  min-height: 22px;
+  padding-top: 3px;
+  padding-bottom: 3px;
+  border-radius: 11px;
+  align-items: flex-start;
+  white-space: normal;
+}
+
+.agent-node-mark[data-focused='true'] .agent-node-mark__dot {
+  margin-top: 4px; /* centred on the first line (16 px) */
 }
 
 .agent-node-mark[data-focused='true'] .agent-node-mark__status {
   overflow: visible;
   text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .agent-node-mark[data-collapsed='true'][data-focused='true'] .agent-node-mark__pill {
   width: auto;
   max-width: 480px;
-  padding: 0 9px 0 7px;
+  padding: 3px 9px 3px 7px;
   justify-content: flex-start;
 }
 

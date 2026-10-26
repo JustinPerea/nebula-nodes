@@ -82,25 +82,34 @@ function useClock(ticking: boolean): number {
 
 /**
  * The node that has keyboard focus now (React Flow's node, or a control in
- * it, at :focus-visible), or null. At 60% zoom and up the pill takes no
- * focus (a tab stop on every node would be too many), so the node's own
- * keyboard focus shows the pill's whole text (review 3, finding 8). A
- * pointer's focus changes nothing.
+ * it, reached from the keyboard), or null. At 60% zoom and up the pill takes
+ * no focus (a tab stop on every node would be too many), so the node's own
+ * keyboard focus shows the pill's whole text (review 3, finding 8). Keyboard
+ * means a key was pressed since the last pointer press (review 4, L5), not
+ * :focus-visible, which a text field clicked with the mouse matches too: a
+ * pointer's focus changes nothing, typing in a field included.
  */
 function useKeyboardFocusedNode(): string | null {
   const [focused, setFocused] = useState<string | null>(null);
   useEffect(() => {
+    let keyboard = false;
+    const onKeyDown = () => { keyboard = true; };
+    const onPointerDown = () => { keyboard = false; };
     const onFocusIn = (event: FocusEvent) => {
       const target = event.target instanceof HTMLElement ? event.target : null;
       const node = target?.closest<HTMLElement>('.react-flow__node[data-id]');
-      let visible = false;
-      try { visible = Boolean(target && node && target.matches(':focus-visible')); } catch { visible = false; }
-      setFocused(visible ? node!.dataset.id ?? null : null);
+      setFocused(keyboard && node ? node.dataset.id ?? null : null);
     };
     const onFocusOut = () => setFocused(null);
+    document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('mousedown', onPointerDown, true);
     document.addEventListener('focusin', onFocusIn);
     document.addEventListener('focusout', onFocusOut);
     return () => {
+      document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('mousedown', onPointerDown, true);
       document.removeEventListener('focusin', onFocusIn);
       document.removeEventListener('focusout', onFocusOut);
     };

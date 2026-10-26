@@ -21,6 +21,8 @@ from tests.test_pending_nodes import (  # noqa: F401 - fixture
 
 GM_ONE = ("Nothing ran. This run includes 1 paid node Claude Code is still setting up, and Nebula asks "
           "before running those. Click “Run” again to review it.")
+# A shot's refusal ends with the shot panel's words (GM - Design, round 5).
+GM_SHOT = GM_ONE.replace("Click “Run” again to review it.", "Generate again to review it.")
 
 
 def _cinema(pend, source: str) -> str:
@@ -58,7 +60,7 @@ def test_the_persons_shot_over_a_paid_placeholder_needs_their_confirmation(pend,
     detail = response.json()["detail"]
     assert detail["code"] == "placeholder_confirm_required"
     assert detail["placeholders"] == [ids["+i"]]
-    assert detail["message"] == GM_ONE
+    assert detail["message"] == GM_SHOT
     assert pend.priced == [] and pend.ran == []
     assert all(_owner(pend, node_id)["id"] == CLAUDE_ID for node_id in ids.values())
 
@@ -66,7 +68,8 @@ def test_the_persons_shot_over_a_paid_placeholder_needs_their_confirmation(pend,
 def test_the_persons_confirmed_shot_runs_them_and_turns_them_normal(pend):
     ids = _paid_chain(pend)
     cine = _cinema(pend, ids["+i"])
-    response = _shot(pend, cine, confirmedPlaceholders=[ids["+i"]])
+    cost = _shot(pend, cine).json()["detail"]["estimate"]["high"]
+    response = _shot(pend, cine, confirmedPlaceholders=[ids["+i"]], confirmedCost=cost)
     assert response.status_code == 200, response.text
     assert ids["+i"] in _priced_ids(pend)
     assert all(_owner(pend, node_id) is None for node_id in ids.values())

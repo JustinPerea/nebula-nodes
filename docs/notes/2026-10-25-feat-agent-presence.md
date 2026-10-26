@@ -323,3 +323,84 @@ Justin, Q133 b: the person's direct run makes the placeholders it needs normal a
 - `tsc` clean, lint clean.
 - Build budget: 389,238 bytes raw entry, 117,227 gzip (limit 512,000 raw).
 - MCP instructions: 2,957 characters with the commons guide (limit 3,000); `INSTRUCTIONS` alone 2,233.
+
+## Round 5: review 4 and GM - Design's round-5 rulings (2026-10-25)
+
+Justin, Q133 b, again the rule this round holds: a paid placeholder never runs without the person's confirmation, and what runs never costs more than the person was shown. Review 4 found three ways the second half could break: a price read from an input's size, a tab and server pricing with different keys, and a confirmation sent without a total. GM ruled the copy that was open. Each fix below was test-first.
+
+### What changed and why
+
+- **H1: a size-priced placeholder is priced at its measured input.** Before, Video Input → Codex's FLUX Video Upscale showed "price not listed" and "Run", sent `confirmedCost: 0`, and the backend counted the node as unpriced, so any cost passed. A 1080p minute at 2x is about $35.
+  - Backend: `_require_placeholder_confirmation` is now async. It measures the run's inputs off the event loop (`_measure_confirmed_run`, the same `input_sizes.measure_run` the spending check uses; a project switch meanwhile refuses), then compares with `_run_estimate(..., sizes=...)`. Shots and replays go through the same function, so they measure too.
+  - Canvas: the dialog asks for the sizes of the files its price reads (`directRunConfirm` requests `summary.cost.sizeRefs`). The open dialog updates in place when they arrive (see "the dialog watches" below). Seen live: "“Upscale” · SeedVR2 Video Upscale · price not listed" turned into "$9.95" and "Run for $9.95" while it was open.
+- **M1: Nebula's refusal carries its own estimate, and the canvas asks again with it.** A tab with no keys loaded priced FLUX.2 [pro] as "price not listed" and confirmed $0; the server priced it $0.03 and refused forever, with "Click “Run” again".
+  - The 409 now has `estimate` (`_run_estimate`: `low`, `high`, per-node `nodes`, `unpriced`, `plan`, `plus`, `unavailable`, `awaitingInput`, for this run times its passes) and `agents` (each paid placeholder's owner, for a tab that hasn't heard of the flag yet).
+  - The canvas (`sendDirectRun`) catches that 409 on a node's Run, a Cinema shot and a replay. It re-opens GM's dialog priced at Nebula's numbers (`withRunEstimate`, `withRefusalFlags`), with GM's "This run changed since you last reviewed it." when the person had confirmed before, and sends the same run (same run id) again with `estimate.high`. It never shows the refusal's words; those are for a tab too old to ask again. Cancel closes the run as cancelled, nodes back to idle, the placeholder untouched.
+  - The canvas also reads the keys again when the dialog opens (`nebula:settings-refresh`, App.tsx reuses the settings-saved handler), so the first dialog is usually right already.
+- **M4: `confirmedCost` is required with `confirmedPlaceholders`** whenever Nebula can price the run. Missing, it gets the same 409, which the canvas answers by asking again. When nothing in the run has a list price, there is nothing to hold it to, and the confirmed rows are enough. docs/MCP-SETUP.md now says exactly this.
+- **L1: the same arithmetic on both sides.** `_run_estimate` multiplies each node's price by the passes and then rounds the total to 6 places; the canvas sends its total rounded to 6 places (`roundUsd`). The check allows $0.000001. Review 4's probe (a $0.00001256 price, 4 variations) refused before and runs now.
+- **M2: "runs nothing until Codex finishes N nodes" counts the placeholders.** `skip_summary` adds `placeholders` (entries whose root is themselves) beside `count` (the skip line still counts what needs them). `proposalSummary` uses `placeholders`, falling back to `count` for an older backend. Live: "runs nothing until Codex finishes 1 node" where it said 2.
+- **M3 and GM's re-ask rules.** `PlaceholderRunDialog` takes `changed` (the line above the rows) and holds Run for 500 ms (`RUN_CLICK_GUARD_MS`) when it opens as a re-ask and whenever a row, the free line, the total, a note or the button changes while it is open. Cancel is never held. The buttons re-render in place, so focus stays where it was.
+- **The dialog watches** (new, needed for H1 and M1 to be honest). `askPlaceholderRun(model, {changed, watch})`: the store subscribes to the graph, the price table, measured sizes and the keys, recomputes the dialog's words and pushes newer ones. They are drawn at once (`flushSync`), so the guard starts with them and a click can't land on the old ones. The watch stops the moment the dialog is answered. The store keeps the last words it pushed and compares those with the run after the click, so a click confirms only what was on screen. Because of this, a change while the dialog is open now updates it in place; "This run changed…" shows when the run changed after the click (or Nebula refused).
+- **GM item 4: one dialog.** Every path checked (node Run, Inspector, context menu, Run selected of one node, Cinema "Generate shot" and "Generate N", Cinema "Generate all", replays): when the placeholder dialog shows, the browser's costly-run confirm doesn't. The one way it still could: an agent makes its placeholders normal while the dialog is open. Now the run goes ahead without a second dialog when the total the person confirmed covers it (`coveredBy`); only a run that now costs more than that falls to the costly-run setting (review 3's case 2). That last case is in Open items.
+- **GM item 3: "Accept" for a proposal that runs nothing.** I checked what Accept does there: it starts the proposal's run at once (`canvasProposalsStore.accept` → `runNodes`), and that run skips every node (the placeholders and everything needing them), so nothing runs, and nothing is queued for when the agent finishes. So the button reads "Accept" (`acceptLabel`, `runsNothing`). The skip notice and the nodes' "Skipped: needs …" badges still show what waited.
+- **GM item 2: the focused pill wraps past 480 px.** With the node's keyboard focus the pill grows up from its bottom edge (the row is anchored there), 11 px corners, the dot on the first line, status `white-space: normal`. Live: 480 px wide, 40 px tall, bottom edge unmoved, nothing cut.
+- **L3 (GM's answer): a shot's refusal ends "Generate again to review it."** Node runs keep "Click “Run” again to review it." (`_placeholder_confirm_refusal(shot=True)`).
+- **L2 (GM's answer): a dollar amount only when it covers every paid row.** Only Krea-plan rows, or every row "price not listed": no total line, button "Run". Krea-plan rows plus priced ones: the usual line and "Run for (up to) $X". A "price not listed" row plus priced ones: "The listed prices total up to $0.43." (or "…total $0.43." when fixed), button "Run" (`totalLineFor`, `runLabelFor`).
+- **L4:** an agent's undo of `pending: false` calls a node "changed since" only after a real move (8 px, `MOVE_THRESHOLD_PX`, as the layout route counts one), not a 0.5 px nudge (`canvas_undo._moved_far`).
+- **L5:** the pill widens on the node's keyboard focus only when a key was pressed since the last pointer press, not on `:focus-visible`, which a text field clicked with the mouse matches too. Tabbing into a field still widens it.
+- **L6:** "+2 more agents." approved by GM; no change.
+- **Agent support:** docs/MCP-SETUP.md (the dialog's lines, the live update and the 500 ms hold, `confirmedCost` required, measured sizes, the 409's `estimate` and `agents`, the shot's words, `pendingSkipped.placeholders`, "Accept", a move of 8 px for undo). No MCP tool or CLI change: confirming is the person's alone, agents already get `pendingSkipped` in a proposal's cost, and INSTRUCTIONS are untouched (2,233 characters).
+
+### Decisions not in the spec
+
+- The refusal re-ask resends the same run (same id, same snapshot) rather than starting a new one: nothing ran under that id, and the run history keeps one record. While the person decides, that record is "starting" and its nodes show Queued (visible behind the dialog in `r5-q133-reask.png`).
+- The canvas sends `confirmedCost` even when the dialog shows no total ($0, or just the listed prices), so Nebula can hold the run to it and ask again with its own numbers.
+- A Krea-plan placeholder can't be made by an agent today (agents can't choose plan billing, `_refuse_agent_billing_change`), so the live screenshot of that row flags a person-made Krea node as Codex's in that tab only. The rows' words are covered by unit tests either way.
+
+### Tests (first, each seen failing)
+
+- **Backend** (`tests/test_pending_nodes_round5.py`, 14 tests): 12 failed first, 2 passed (the node run's "Click “Run”" wording and "a real move still leaves the node"). How they failed:
+  - H1 (3): 200 "started" where a 409 belonged, then `KeyError: 'detail'`/`'estimate'`.
+  - M1 (2): `KeyError: 'estimate'`.
+  - M4 (2): 200 instead of 409.
+  - L1 (2): `5.2e-05 != 5e-05`, and the probe's `KeyError: 'estimate'`.
+  - L3: "Click “Run” again…" instead of "Generate again…".
+  - M2: `KeyError: 'placeholders'`.
+  - L4: still normal after the undo (`None is not None`).
+  - Then existing tests that sent placeholders without a total (2) and the `pendingSkipped` equalities (3) were updated to the new contract; GM_SHOT for the shot refusal (3 parametrized cases).
+- **Frontend:** 26 failed first.
+  - `lib/placeholderRunConfirm.round5.test.ts` (7): the old "This run could cost up to $0" lines, an unrounded total, `placeholderRefusalOf`/`withRunEstimate` missing.
+  - `PlaceholderRunDialog.round5.test.tsx` (4): no changed line, Run taken at once, no watch.
+  - `graphStore.placeholderRuns.round5.test.ts` (9): the 409 shown as the node's error with no second ask (node Run, shot, replay, unknown placeholder), no `changed` on a re-ask, no size request, the browser confirm after the dialog, no settings refresh.
+  - `lib/proposalPendingSummary.round5.test.ts` (2), `AgentNodeMarkLayer` L5 (1), `agentNodeMarksCss` wrap (2), and the round-4 "price not listed" case's total line (GM's new words).
+  - Passing before and after: a first ask has no changed line, Cancel is never held, the same words hold nothing back, Krea plus priced keeps its line, $0 is still sent, any other refusal still shows, tabbing into a field widens the pill, "Accept & run" when something runs.
+
+### Live check (1280x800)
+
+- Isolated backend on 8795 (temp HOME and every NEBULA_* root under scratch, no keys) and Vite on 5795 (`VITE_NEBULA_BACKEND_PORT=8795`); `/api/health` through Vite matched. Codex verified (an app token), Claude Code self-named. No key was set, so nothing paid could run. Run was clicked once (the re-ask): Nebula refused it with a 409, and nothing ran.
+- 21 of 21 checks passed (script `agent-presence/live-r5.mjs`):
+  - "· price not listed", "· on your Krea plan", no dollar line, plain "Run", no native dialog.
+  - "The listed prices total up to $0.43." with plain "Run".
+  - The re-ask: the tab couldn't price GPT Image 2 (its entry taken out of the tab's table) and showed "price not listed" and "Run"; Run → one 409 → the dialog came back with "This run changed since you last reviewed it.", "$0.0047–0.43" and "Run for up to $0.43". A click right after it reopened was held (no second request). Cancel: no refusal text anywhere, still a placeholder.
+  - Size: "price not listed" → "$9.95", "Run for $9.95" in the open dialog (SeedVR2 Video Upscale; FLUX Video Upscale has no price without a BFL key, which the backend test covers).
+  - Cinema "Generate shot" over a paid placeholder, with "Ask before costly runs" at $0.001: GM's dialog only, no browser confirm; Cancel left the shot as it was.
+  - The focused pill: 480 px, 40 px tall (wrapped), bottom edge unmoved, nothing cut; a mouse click into the node's text field left it at rest.
+  - The proposal: "runs nothing until Codex finishes 1 node", buttons Show / Reject / Accept.
+- Blocked requests: 2, both the canaries; 0 toward 8000-8010 or 5173. Console errors: the canary's and the expected 409. Servers stopped by PID; the state dir deleted.
+- Screenshots in the scratchpad `agent-presence/`: `r5-q133-unlisted-krea.png`, `r5-q133-mixed-unlisted.png`, `r5-q133-reask.png`, `r5-size-priced-before.png`, `r5-size-priced.png`, `r5-cinema-shot-dialog.png`, `r5-pill-wrap.png`, `r5-proposal-runs-nothing.png`.
+
+### Open items (round 5)
+
+- GM: a shot's refusal says "Generate again to review it." for one or several paid nodes; GM gave only that form ("them" for several would be new words).
+- GM: the one remaining two-dialog case: an agent makes its placeholders normal while the dialog is open AND the run now costs more than the person confirmed. The costly-run setting then asks in the browser's confirm (review 3's ruling). Moving that to the Nebula dialog is GM's item 7 follow-up.
+- While a refusal's re-ask is open, the run's nodes show Queued behind it.
+
+### Gates (round 5)
+
+- Backend full suite: 10,993 passed, 71 skipped (9 min 2 s).
+- Vitest full: 454 files, 5,796 tests. The first run had 21 failures in 10 files, all load timeouts and focus/findBy waits ("Test timed out in 5000ms", `toHaveFocus`, a role not found in time); none of them is a file this round touched. Rerun alone, those 10 files passed: 200 of 200.
+- errorCopy ratchets: 14 files, 173 tests passed.
+- `tsc -b` clean, lint clean.
+- Build budget: 389,437 bytes raw entry, 117,275 gzip (limit 512,000 raw).
+- MCP INSTRUCTIONS: 2,233 characters, unchanged (2,957 with the commons guide, limit 3,000).

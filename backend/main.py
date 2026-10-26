@@ -8710,13 +8710,22 @@ def _paid_placeholders(nodes: list[GraphNode], ready: Iterable[str]) -> list[str
     return sorted(paid, key=_node_order)
 
 
-def _run_estimate_high(nodes: list[GraphNode], edges: list[GraphEdge], *, passes: int = 1,
-                       api_keys: Mapping[str, Any] | None = None) -> float | None:
-    """The list-price upper total of running ``nodes`` ``passes`` times, as the
-    canvas's run cost reads it (lib/runScope.ts summarizeRunScope: fan-out,
-    a Cinema scene's shots, routes from the keys set). Sizes aren't measured
-    for the person's runs, so a price read from an input's size counts as no
-    price, never as more. None when the price table can't load."""
+def _run_estimate(nodes: list[GraphNode], edges: list[GraphEdge], *, passes: int = 1,
+                  api_keys: Mapping[str, Any] | None = None,
+                  sizes: Mapping[str, Mapping[str, Any]] | None = None) -> dict[str, Any] | None:
+    """Nebula's list-price estimate of running ``nodes`` ``passes`` times, as
+    the canvas's run cost reads it (lib/runScope.ts summarizeRunScope:
+    fan-out, a Cinema scene's shots, routes from the keys set, a price read
+    from an input's size at ``sizes``, measured by the caller). What the
+    person's confirmation of placeholders is held to, and what its refusal
+    carries so the canvas can ask again with these numbers (review 4, M1).
+
+    ``low``/``high`` are the whole run's, multiplied by ``passes`` and then
+    rounded to 6 places, the canvas's arithmetic (review 4, L1); ``nodes``
+    maps each priced node to its {low, high} for the run; ``unpriced``,
+    ``plan``, ``awaitingInput`` list node ids, ``unavailable`` maps a node id
+    to why its route can't run, ``plus`` the costs not included. ``high`` is
+    None when nothing is priced. None when the price table can't load."""
     try:
         pricing = model_pricing.load_pricing()
     except (OSError, ValueError):
@@ -8725,59 +8734,130 @@ def _run_estimate_high(nodes: list[GraphNode], edges: list[GraphEdge], *, passes
     items = [{"id": node.id, "definitionId": node.definition_id, "params": node.params or {}} for node in nodes]
     multipliers = model_pricing.run_multipliers(items, [(edge.source, edge.target) for edge in edges])
     wired = model_pricing.wired_counts(items, [(edge.source, edge.target, edge.target_handle) for edge in edges])
-    estimate = model_pricing.estimate_run(items, pricing, node_registry.get_all(), keys, multipliers, wired)
-    high = estimate.get("high")
-    return None if high is None else float(high) * max(1, passes)
+    estimate = model_pricing.estimate_run(items, pricing, node_registry.get_all(), keys, multipliers, wired,
+                                          sizes=sizes)
+    times = max(1, int(passes or 1))
+    priced = estimate.get("priced") or {}
+    lines = {node_id: {"low": float(line["low"]) * times, "high": float(line["high"]) * times}
+             for node_id, line in priced.items()}
+    return {
+        "low": round(sum(line["low"] for line in lines.values()), 6) if lines else None,
+        "high": round(sum(line["high"] for line in lines.values()), 6) if lines else None,
+        "nodes": lines,
+        "unpriced": list(estimate.get("unpriced") or []),
+        "plan": list(estimate.get("plan") or []),
+        "plus": list(estimate.get("plus") or []),
+        "unavailable": dict(estimate.get("unavailable") or {}),
+        "awaitingInput": list(estimate.get("awaitingInput") or []),
+    }
 
 
-def _placeholder_confirm_refusal(run_id: str, paid: list[str]) -> HTTPException:
+def _run_estimate_high(nodes: list[GraphNode], edges: list[GraphEdge], *, passes: int = 1,
+                       api_keys: Mapping[str, Any] | None = None,
+                       sizes: Mapping[str, Mapping[str, Any]] | None = None) -> float | None:
+    """The upper total of _run_estimate: None when nothing is priced or the
+    price table can't load."""
+    estimate = _run_estimate(nodes, edges, passes=passes, api_keys=api_keys, sizes=sizes)
+    return None if estimate is None else estimate["high"]
+
+
+def _placeholder_confirm_refusal(run_id: str, paid: list[str], estimate: Mapping[str, Any] | None = None, *,
+                                 shot: bool = False) -> HTTPException:
     """409 for the person's direct run of agents' paid placeholders without
     their confirmation (or at a higher cost than they confirmed): GM - Design's
-    round-4 words, 2026-10-25, verbatim, which the node shows as its run error."""
+    round-4 words, 2026-10-25, verbatim, which the node shows as its run error
+    in a tab too old to ask again itself. A shot's ends with the shot panel's
+    words (GM, round 5): "Generate again to review it."
+
+    It carries what the canvas needs to ask again at once (review 4, M1; GM
+    round 5: the canvas re-opens its dialog with "This run changed since you
+    last reviewed it." and never shows this message): the paid placeholders,
+    each one's agent (``agents``, for a tab that hasn't heard of the flag yet)
+    and Nebula's own ``estimate`` of the run (_run_estimate), which a
+    confirmation of its ``high`` passes."""
     canvas_events.forget_run(run_id)
     owners: list[str] = []
+    agents: dict[str, Any] = {}
     for node_id in paid:
-        name = (pending_nodes.owner(cli_graph.nodes.get(node_id)) or {}).get("name")
+        who = pending_nodes.owner(cli_graph.nodes.get(node_id)) or {}
+        if who:
+            agents[node_id] = dict(who)
+        name = who.get("name")
         if name and name not in owners:
             owners.append(name)
     who = f"{owners[0]} is" if len(owners) == 1 else "agents are"
     one = len(paid) == 1
+    again = ("Generate again to review it." if shot
+             else f"Click “Run” again to review {'it' if one else 'them'}.")
     return HTTPException(status_code=409, detail={
         "code": "placeholder_confirm_required",
         "message": (f"Nothing ran. This run includes {len(paid)} paid {'node' if one else 'nodes'} {who} still "
-                    "setting up, and Nebula asks before running those. "
-                    f"Click “Run” again to review {'it' if one else 'them'}."),
+                    f"setting up, and Nebula asks before running those. {again}"),
         "placeholders": paid,
+        "agents": agents,
+        "estimate": dict(estimate) if estimate is not None else None,
     })
 
 
-def _require_placeholder_confirmation(
+# The canvas sends its total rounded to 6 places (lib/placeholderRunConfirm.ts),
+# as _run_estimate rounds Nebula's: the two can differ in the last place.
+_CONFIRMED_COST_SLACK = 1e-6
+
+
+async def _require_placeholder_confirmation(
     run_id: str, nodes: list[GraphNode], edges: list[GraphEdge], ready: list[str], confirmed: list[str] | None,
     confirmed_cost: float | None = None, *, passes: int = 1, api_keys: Mapping[str, Any] | None = None,
+    shot: bool = False,
 ) -> None:
     """Q133 (Justin, 2026-10-25): the person's direct run that would make an
     agent's paid placeholder normal runs only with the person's confirmation
     for exactly those placeholders (the canvas's dialog sends them,
     components/PlaceholderRunDialog.tsx), so a missed dialog, a stale tab or
-    another client can't skip it. When the dialog showed a total
-    (``confirmed_cost``, its upper bound in USD), the run may not cost more
-    by Nebula's own estimate of what it runs (``passes`` times: a shot's
-    variations). 409 before anything is priced or changes. Every route that
-    runs the person's direct run calls this: /api/execute-node and
-    /api/cinema/generate-shot. Agents' runs of their own placeholders are
-    unchanged (their ``ready`` holds only their own, and they never confirm)."""
+    another client can't skip it, and at no more than the total they
+    confirmed (``confirmed_cost``, USD): Nebula's own estimate of what runs
+    (``passes`` times: a shot's variations), with every price read from an
+    input's size measured first (review 4, H1). The total is required
+    whenever Nebula can price the run (review 4, M4). 409 before anything is
+    priced or changes, carrying the estimate so the canvas asks again with
+    it. Every route that runs the person's direct run calls this:
+    /api/execute-node and /api/cinema/generate-shot. Agents' runs of their
+    own placeholders are unchanged (their ``ready`` holds only their own, and
+    they never confirm)."""
     if identify_agent(current_request_headers()) is not None or not _is_person_request():
         return
     paid = _paid_placeholders(nodes, ready)
     if not paid:
         return
+    sizes = await _measure_confirmed_run(nodes, edges)
+    estimate = _run_estimate(nodes, edges, passes=passes, api_keys=api_keys, sizes=sizes)
     if sorted(set(confirmed or [])) != sorted(paid):
-        raise _placeholder_confirm_refusal(run_id, paid)
-    if confirmed_cost is None:
-        return  # the dialog showed no total (no price table): the person confirmed the rows
-    high = _run_estimate_high(nodes, edges, passes=passes, api_keys=api_keys)
-    if high is not None and high > confirmed_cost * (1 + 1e-9) + 1e-6:
-        raise _placeholder_confirm_refusal(run_id, paid)
+        raise _placeholder_confirm_refusal(run_id, paid, estimate, shot=shot)
+    high = None if estimate is None else estimate["high"]
+    if high is None:
+        return  # nothing in it has a list price: the person confirmed the rows
+    if confirmed_cost is None or high > confirmed_cost + _CONFIRMED_COST_SLACK:
+        raise _placeholder_confirm_refusal(run_id, paid, estimate, shot=shot)
+
+
+async def _measure_confirmed_run(nodes: list[GraphNode], edges: list[GraphEdge]) -> dict[str, dict[str, Any]]:
+    """The input sizes a confirmed run's prices read (services/input_sizes.py),
+    measured off the event loop. The person's runs skip the spending check's
+    measuring (_measure_run_inputs), but a placeholder's confirmation is held
+    to its price, so it measures here. A project switch while it measured
+    refuses the run (409), as for the spending check."""
+    try:
+        pricing = model_pricing.load_pricing()
+    except (OSError, ValueError):
+        return {}
+    items = [{"id": n.id, "definitionId": n.definition_id, "params": n.params or {}} for n in nodes]
+    if not input_sizes.needs_measuring(items, pricing):
+        return {}
+    before = _workspace_context()["workspaceRevision"]
+    measured = await input_sizes.measure_run(
+        items, [(e.source, e.source_handle, e.target, e.target_handle) for e in edges], pricing,
+        node_registry.get_all(), {n.id: n for n in nodes})
+    _check_workspace_revision(before)
+    return dict(measured.sizes)
 
 
 async def _make_ready(node_ids: Iterable[str]) -> None:
@@ -8975,8 +9055,8 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     # proposal's run (approval_id) is not running it directly.
     sub_nodes, sub_edges, skips, ready = await _skip_placeholders(
         run_id, sub_nodes, sub_edges, direct=request.target_node_id if request.approval_id is None else None)
-    _require_placeholder_confirmation(run_id, sub_nodes, sub_edges, ready, request.confirmed_placeholders,
-                                      request.confirmed_cost, api_keys=api_keys)
+    await _require_placeholder_confirmation(run_id, sub_nodes, sub_edges, ready, request.confirmed_placeholders,
+                                            request.confirmed_cost, api_keys=api_keys)
 
     _validate_cinema_base_models(sub_nodes)
 
@@ -9631,8 +9711,9 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     if request.node_id in skips:
         canvas_events.forget_run(run_id)
         return {"status": "skipped", "runId": run_id, **_skip_reply(skips)}
-    _require_placeholder_confirmation(run_id, sub_nodes, sub_edges, ready, request.confirmed_placeholders,
-                                      request.confirmed_cost, passes=request.variations or 1, api_keys=api_keys)
+    await _require_placeholder_confirmation(run_id, sub_nodes, sub_edges, ready, request.confirmed_placeholders,
+                                            request.confirmed_cost, passes=request.variations or 1,
+                                            api_keys=api_keys, shot=True)
     fresh_paid_ancestors = _fresh_paid_worldlabs_claims(sub_nodes)
     if fresh_paid_ancestors:
         blocked_ids = ", ".join(node_id for _kind, node_id in fresh_paid_ancestors)

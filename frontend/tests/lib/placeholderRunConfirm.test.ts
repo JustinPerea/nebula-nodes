@@ -112,7 +112,8 @@ describe('placeholderRunConfirm', () => {
         low: 0.12, high: 0.12, lines: [line('i', 'Hero still', 0.12, 0.12)], unpriced: ['Alt still'] }))!;
       expect(model.rows.map((row) => row.price)).toEqual(['$0.12', 'price not listed']);
       expect(model.runLabel).toBe('Run');
-      expect(model.totalLine).toBe('This run could cost up to $0.12 at list prices.');
+      // GM, round 5: the amount doesn't cover the unlisted row, so it says what it is.
+      expect(model.totalLine).toBe('The listed prices total $0.12.');
     });
 
     it('a Krea-plan row: "on your Krea plan", which is not a missing price', () => {

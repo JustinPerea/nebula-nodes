@@ -197,7 +197,10 @@ def run_skips(scope: Iterable[str], edges: Iterable[tuple[str, str]], nodes: Map
 
 
 def skip_summary(skips: Mapping[str, Mapping[str, Any]]) -> dict[str, Any] | None:
-    """What the canvas says after Run: how many nodes it skipped and whose
+    """What the canvas says after Run: how many nodes it skipped (``count``,
+    the placeholders and what needs them, for the skip line), how many of
+    those are the placeholders themselves (``placeholders``, for a proposal's
+    "runs nothing until Codex finishes 2 nodes": review 4, M2) and whose
     placeholders they wait on (names, in order). None when nothing was skipped."""
     if not skips:
         return None
@@ -206,7 +209,8 @@ def skip_summary(skips: Mapping[str, Mapping[str, Any]]) -> dict[str, Any] | Non
         name = str((info.get("agent") or {}).get("name") or "")
         if name and name not in names:
             names.append(name)
-    return {"count": len(skips), "agents": names}
+    roots = sum(1 for node_id, info in skips.items() if info.get("root", node_id) == node_id)
+    return {"count": len(skips), "placeholders": roots, "agents": names}
 
 
 def skip_line(summary: Mapping[str, Any] | None) -> str | None:

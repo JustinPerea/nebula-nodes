@@ -451,7 +451,7 @@ def test_the_toolbar_run_skips_placeholders_and_whats_downstream(pend):
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["status"] == "started"
-    assert body["pendingSkipped"] == {"count": 3, "agents": ["Claude Code"]}
+    assert body["pendingSkipped"] == {"count": 3, "placeholders": 3, "agents": ["Claude Code"]}
     assert set(body["skipped"]) == set(ids.values())
     assert pend.ran == [[other]]
     assert pend.priced == [[other]]  # nothing priced, nothing spent, on a skipped node
@@ -526,11 +526,20 @@ def _paid_chain(api, headers=CLAUDE) -> dict[str, str]:
     return response.json()["idMap"]
 
 
-def _direct(pend, target, confirmed=None, headers=PERSON):
+def _direct(pend, target, confirmed=None, headers=PERSON, cost=None):
     body = {**_execute_body(pend), "targetNodeId": target}
     if confirmed is not None:
         body["confirmedPlaceholders"] = confirmed
+    if cost is not None:
+        body["confirmedCost"] = cost
     return pend.client.post("/api/execute-node", headers=headers, json=body)
+
+
+def _confirm_cost(response) -> float:
+    """The total Nebula's refusal says the run costs: what the canvas's dialog
+    asks again with, and the person confirms (review 4, M1)."""
+    assert response.status_code == 409, response.text
+    return response.json()["detail"]["estimate"]["high"]
 
 
 @pytest.mark.parametrize("confirmed", [None, [], ["+p"], ["+i", "+p"], ["+i", "other"]])
@@ -554,7 +563,8 @@ def test_the_persons_direct_run_of_a_paid_placeholder_needs_their_confirmation(p
 
 def test_the_confirmed_direct_run_runs_them_and_turns_them_normal(pend):
     ids = _paid_chain(pend)
-    response = _direct(pend, ids["+i"], [ids["+i"]])
+    cost = _confirm_cost(_direct(pend, ids["+i"]))
+    response = _direct(pend, ids["+i"], [ids["+i"]], cost=cost)
     assert response.status_code == 200, response.text
     assert pend.ran == [sorted(ids.values())]
     assert all(_owner(pend, node_id) is None for node_id in ids.values())
@@ -707,7 +717,7 @@ def test_run_skips_unit():
                                     label=lambda node_id: "Hero" if node_id == "n1" else node_id)
     assert set(skips) == {"n1", "n2", "n3"}
     assert skips["n3"]["root"] == "n1" and "“Hero”" in skips["n3"]["reason"]
-    assert pending_nodes.skip_summary(skips) == {"count": 3, "agents": ["Codex"]}
+    assert pending_nodes.skip_summary(skips) == {"count": 3, "placeholders": 1, "agents": ["Codex"]}
     assert pending_nodes.skip_summary({}) is None
 
 
@@ -766,7 +776,7 @@ def test_a_proposals_cost_leaves_out_what_its_run_will_skip(pend):
     cost = proposal.json()["proposal"]["cost"]
     assert [entry["ref"] for entry in cost["nodes"]] == ["+free"]
     assert cost["freeRuns"] == 1 and cost["paidRuns"] == 0
-    assert cost["pendingSkipped"] == {"count": 2, "agents": ["Codex"]}
+    assert cost["pendingSkipped"] == {"count": 2, "placeholders": 1, "agents": ["Codex"]}
 
 
 def _undo(api, token, headers=CLAUDE):

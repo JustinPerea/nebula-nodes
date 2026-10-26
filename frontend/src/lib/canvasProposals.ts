@@ -238,11 +238,12 @@ export function proposalSummary(view: ProposalView): string {
       parts.push(`runs ${upTo ? 'up to ' : ''}${plural(paidRuns, 'paid model')}${who}`);
       const amount = proposalEstimateLabel(view);
       if (amount) parts.push(amount);
-    } else if (freeRuns === 0 && view.cost.pendingSkipped && view.cost.pendingSkipped.count > 0) {
-      // Its whole run waits on agents' placeholders, which it skips (GM - Design, round 4, verbatim).
-      const { count, agents } = view.cost.pendingSkipped;
+    } else if (runsNothing(view)) {
+      // Its whole run waits on agents' placeholders, which it skips (GM - Design,
+      // round 4, verbatim), counting the placeholders themselves (review 4, M2).
+      const { count, placeholders, agents } = view.cost.pendingSkipped!;
       const who = agents.length === 1 && agents[0] ? `${agents[0]} finishes` : 'agents finish';
-      parts.push(`runs nothing until ${who} ${plural(count, 'node')}`);
+      parts.push(`runs nothing until ${who} ${plural(placeholders ?? count, 'node')}`);
     } else {
       parts.push(`runs ${upTo ? 'up to ' : ''}${plural(freeRuns, 'free node')}`);
     }
@@ -263,9 +264,19 @@ export function proposalEstimateLabel(view: ProposalView): string | null {
   return exact ? `~${amount}` : amount;
 }
 
-/** The primary button's words. */
+/** A proposal whose whole run waits on agents' placeholders: its run skips
+ * them and everything that needs them, so it runs nothing. */
+function runsNothing(view: ProposalView): boolean {
+  const { paidRuns, freeRuns, pendingSkipped } = view.cost;
+  return view.run.length > 0 && paidRuns === 0 && freeRuns === 0 && Boolean(pendingSkipped && pendingSkipped.count > 0);
+}
+
+/** The primary button's words. "Accept" when accepting runs nothing (GM -
+ * Design, round 5, item 3): the run Accept starts then skips every node
+ * (canvasProposalsStore.accept, backend main._skip_placeholders), and nothing
+ * is queued for when the agent finishes. */
 export function acceptLabel(view: ProposalView): string {
-  if (view.run.length === 0) return 'Accept';
+  if (view.run.length === 0 || runsNothing(view)) return 'Accept';
   return view.cost.paidRuns > 0 ? `Accept & run (${view.cost.paidRuns} paid)` : 'Accept & run';
 }
 

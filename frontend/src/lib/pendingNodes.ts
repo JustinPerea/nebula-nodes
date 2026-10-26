@@ -24,7 +24,12 @@ export interface PendingFlag {
 
 /** What a canvas run's reply says it skipped (backend pending_nodes.skip_summary). */
 export interface PendingSkipSummary {
+  /** The placeholders and every node that needs one (the skip line's count). */
   count: number;
+  /** The placeholders alone (a proposal's "runs nothing until Codex finishes
+   * 2 nodes", review 4, M2); absent from the canvas's own summaries and an
+   * older backend's. */
+  placeholders?: number;
   agents: string[];
 }
 
