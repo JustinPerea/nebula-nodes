@@ -1164,16 +1164,17 @@ class Listener:
         finally:
             self._watching.discard(run_id)
 
-    async def _ask_nebula(self, checked: list[str]) -> None:
+    async def _ask_nebula(self, checked: list[str], scope: anyio.CancelScope) -> None:
         """The pin check itself, as a task of its own: a slow or hanging
         Nebula holds only this, never the decisions (review 5, L1). Its
         answer (or what went wrong) waits for the next decision. Bounded
         whatever ``fetch_pins`` does: the decisions give up on it at
         ``_check_deadline``, PIN_CHECK_TIMEOUT after it started (review 6,
         LOW-3), on the listener's own clock and ``sleep`` like every other
-        wait it makes (review 7, item 3; _check_timed_out)."""
-        with anyio.CancelScope() as scope:
-            self._check_scope = scope
+        wait it makes (review 7, item 3; _check_timed_out). ``scope`` is made
+        by _start_check, so a deadline that passes before this task's first
+        step still cancels it (review 8)."""
+        with scope:
             try:
                 listing: Any = await self._fetch_pins()
             except Exception as exc:  # noqa: BLE001 - Nebula down, restarting, slow or refusing
@@ -1192,7 +1193,10 @@ class Listener:
         self._check_answer = None
         self._check_grace_until = now + PIN_CHECK_GRACE
         self._check_deadline = now + PIN_CHECK_TIMEOUT
-        group.start_soon(self._ask_nebula, checked)
+        # The task's scope exists from here, before the task runs at all:
+        # _check_timed_out can always cancel it (review 8).
+        self._check_scope = anyio.CancelScope()
+        group.start_soon(self._ask_nebula, checked, self._check_scope)
 
     def _check_timed_out(self, now: float) -> None:
         """The check out passed its deadline unanswered: it failed (and stops)."""

@@ -2358,6 +2358,61 @@ def test_the_listener_bounds_a_pin_check_that_never_answers():
     assert asked[1] == at + mcp_channel.PIN_RETRY_MIN and "pin_00000001" in state._pins, asked
 
 
+def test_a_check_whose_deadline_passes_before_its_task_starts_is_still_cancelled():
+    # Review 8, hardening: the check's cancel scope was made inside its task
+    # (_ask_nebula), so a deadline that passed before the task's first step
+    # found no scope to cancel. The task then ran its fetch anyway and its
+    # answer landed after the decisions had already called it failed, even
+    # on the next check out. Here the task group holds the task back until
+    # the deadline passed, the failure was taken and a new check went out.
+    state = ChannelState(now=0.0)
+    state.last_person = 100.0
+    state.observe(resp(pin(1)), now=100.0)
+    fetched: list[str] = []
+
+    async def fetch_pins():
+        await anyio.sleep(0)
+        fetched.append("returned")
+        return {"pins": []}
+
+    async def never(*args):
+        await anyio.sleep_forever()
+
+    async def push(content, meta):
+        pass
+
+    listener = mcp_channel.Listener(state, fetch_events=never, fetch_run=never, push=push, clock=lambda: 100.0,
+                                    log=lambda line: None, fetch_pins=fetch_pins)
+
+    class HeldGroup:
+        def __init__(self) -> None:
+            self.held: list = []
+
+        def start_soon(self, fn, *args):
+            self.held.append((fn, args))
+
+    group = HeldGroup()
+
+    async def main():
+        listener._start_check(group, ["pin_00000001"], 100.0)
+        # The deadline passes before the task's first step: the decision says it failed.
+        listener._check_timed_out(100.0 + mcp_channel.PIN_CHECK_TIMEOUT)
+        assert listener._check_answer is not None and listener._check_answer[0] == "failed"
+        assert listener._take_check_answer(100.0 + mcp_channel.PIN_CHECK_TIMEOUT)
+        # The next check goes out (its own task held too).
+        listener._start_check(group, ["pin_00000001"], 110.0)
+        assert listener._check_answer is None
+        fn, args = group.held[0]  # the timed-out check's task starts only now
+        with anyio.fail_after(1):
+            await fn(*args)
+
+    anyio.run(main)
+    # It was cancelled: its fetch never answered, and nothing landed on the new check.
+    assert fetched == [], fetched
+    assert listener._check_answer is None, listener._check_answer
+    assert listener._check_out == ["pin_00000001"]
+
+
 def test_the_pin_check_gives_up_after_a_few_seconds(nebula):
     # The real server against a Nebula whose pins listing hangs: the check
     # times out after PIN_CHECK_TIMEOUT (it was 15 s), and the person's edit

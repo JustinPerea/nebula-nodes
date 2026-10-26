@@ -40,6 +40,7 @@ class Race:
         self.browser: list[dict] = []
         self.done: dict[str, Any] = {}
         self.when: Callable[[dict], bool] = lambda data: True
+        self.after: Callable[[], None] | None = None
         self.armed = False
         monkeypatch.setattr(main_module, "canvas_proposals", ProposalBook())
         monkeypatch.setattr(main_module, "run_approvals", RunApprovals())
@@ -47,22 +48,28 @@ class Race:
         monkeypatch.setattr(main_module.manager, "broadcast_browser", self._hooked(self.browser))
         monkeypatch.setattr(main_module.manager, "broadcast_others", self._hooked(self.sent))
 
+    async def switch(self) -> None:
+        """The person opens the other project and pins a note there."""
+        from services.agent_presence import _request_headers
+
+        self.done["pin"] = None
+        held = _request_headers.set(PERSON)
+        try:
+            revision = self.store.read()["workspaceRevision"]
+            await self.main.open_saved_project(self.other, {"workspaceRevision": revision})
+            made = await self.main.create_canvas_pin({"text": "on B", "position": {"x": 1, "y": 1}})
+            self.done["pin"] = made["pin"]
+        finally:
+            _request_headers.reset(held)
+
     def _hooked(self, into: list[dict]):
         async def hook(data: dict) -> None:
             into.append(data)
             if self.armed and "pin" not in self.done and self.when(data):
-                from services.agent_presence import _request_headers
-
-                self.done["pin"] = None
                 self.done["at"] = data.get("type")
-                held = _request_headers.set(PERSON)
-                try:
-                    revision = self.store.read()["workspaceRevision"]
-                    await self.main.open_saved_project(self.other, {"workspaceRevision": revision})
-                    made = await self.main.create_canvas_pin({"text": "on B", "position": {"x": 1, "y": 1}})
-                    self.done["pin"] = made["pin"]
-                finally:
-                    _request_headers.reset(held)
+                await self.switch()
+                if self.after is not None:
+                    self.after()
         return hook
 
     def key(self, proposal_id: str) -> str:
@@ -71,9 +78,12 @@ class Race:
                 return message["acceptKey"]
         raise AssertionError("no proposalOpened message for the browser")
 
-    def run(self, call: Callable[[], Any], *, when: Callable[[dict], bool] | None = None) -> Any:
+    def run(self, call: Callable[[], Any], *, when: Callable[[dict], bool] | None = None,
+            after: Callable[[], None] | None = None) -> Any:
+        """``after``: runs right after the switch, inside the broadcast (it may raise)."""
         self.done.clear()
         self.when = when or (lambda data: True)
+        self.after = after
         self.armed = True
         try:
             answer = call()
@@ -346,3 +356,163 @@ def test_a_rename_is_journaled_before_a_switch(race):
                                               json={"name": "Renamed"}))
     assert answer.status_code == 200, answer.text
     race.check({"project.renamed"})
+
+
+# -- review 8 (round 9) ---------------------------------------------------------------
+# Item 1: an undo's link keeps every event it journaled. Round 8 took the
+# link's events in journal_done, before _undo_removals journaled pin.reattached
+# and proposal.reopened under the same link, so the link (and the person's
+# later Cmd+Z of that undo, edit.undone.data.events) missed them. Now the pins
+# go back before edit.undone, proposal.reopened may follow it (its fit check
+# awaits), and the link's events are taken again once the restore returns.
+
+def _pinned_and_proposed(race: Race, *, pin: bool, proposal: bool) -> tuple[str, str | None, str | None]:
+    keep = race.graph.add_node("text-input", {"value": "a lighthouse"}, position={"x": 0, "y": 0})
+    pin_id = _pin_on(race, keep) if pin else None
+    proposal_id = None
+    if proposal:
+        made = race.client.post("/api/canvas/proposals", headers=CLAUDE, json={
+            "note": "change it", "params": [{"nodeId": keep, "params": {"value": "a castle"}}]})
+        assert made.status_code == 201, made.text
+        proposal_id = made.json()["proposal"]["id"]
+    return keep, pin_id, proposal_id
+
+
+def _link_events(race: Race, link_id: str) -> list[tuple[int, str]]:
+    return [(e["seq"], e["kind"]) for e in race.events() if (e.get("edit") or {}).get("id") == link_id]
+
+
+def _check_link(race: Race, link_id: str, *, pin: bool, proposal: bool) -> dict[str, int]:
+    """The link's events are every event journaled under it but its own
+    closing edit.undone; pins come back before edit.undone, and only
+    proposal.reopened may follow it."""
+    tagged = _link_events(race, link_id)
+    seqs = {kind: seq for seq, kind in tagged}
+    closing = seqs["edit.undone"]
+    assert ("pin.reattached" in seqs) == pin and ("proposal.reopened" in seqs) == proposal, tagged
+    if pin:
+        assert seqs["pin.reattached"] < closing, tagged
+    assert {kind for seq, kind in tagged if seq > closing} <= {"proposal.reopened"}, tagged
+    link = race.main.canvas_undo_book.link_of(link_id)
+    assert link is not None
+    assert sorted(link.events) == sorted(seq for seq, kind in tagged if seq != closing), (link.events, tagged)
+    return seqs
+
+
+@pytest.mark.parametrize("what", ["pin", "proposal", "both"])
+def test_an_agents_undo_keeps_the_pins_and_proposals_it_put_back_in_its_link(race, what):
+    pin, proposal = what in ("pin", "both"), what in ("proposal", "both")
+    keep, pin_id, proposal_id = _pinned_and_proposed(race, pin=pin, proposal=proposal)
+    made = race.client.post("/api/graph/apply", headers=AGENT, json={"remove": [keep]})
+    assert made.status_code == 200, made.text
+    undo = race.client.post("/api/graph/apply/undo", headers=AGENT, json={"token": made.json()["undo"]["token"]})
+    assert undo.status_code == 200, undo.text
+    assert undo.json()["reattached"] == ([pin_id] if pin else [])
+    assert undo.json()["reopened"] == ([proposal_id] if proposal else [])
+    _check_link(race, undo.json()["undoId"], pin=pin, proposal=proposal)
+
+
+def test_the_persons_cmd_z_of_an_agents_undo_lists_the_undos_pins_and_proposals(race):
+    keep, _pin_id, _proposal_id = _pinned_and_proposed(race, pin=True, proposal=True)
+    made = race.client.post("/api/graph/apply", headers=AGENT, json={"remove": [keep]})
+    assert made.status_code == 200, made.text
+    undo = race.client.post("/api/graph/apply/undo", headers=AGENT, json={"token": made.json()["undo"]["token"]})
+    assert undo.status_code == 200, undo.text
+    undo_id = undo.json()["undoId"]
+    seqs = _check_link(race, undo_id, pin=True, proposal=True)
+    again = race.client.post("/api/graph/restore", headers=PERSON, json={
+        "action": "undo", "edit": undo_id, "remove": [keep], "nodes": []})
+    assert again.status_code == 200, again.text
+    undone = [e for e in race.events() if e["kind"] == "edit.undone"][-1]
+    assert undone["data"]["editId"] == undo_id
+    events = undone["data"]["events"]
+    assert seqs["pin.reattached"] in events and seqs["proposal.reopened"] in events, (events, seqs)
+    assert events == race.main.canvas_undo_book.link_of(undo_id).events
+
+
+def test_the_persons_linked_cmd_z_keeps_the_pins_and_proposals_it_put_back_in_its_link(race):
+    keep, pin_id, proposal_id = _pinned_and_proposed(race, pin=True, proposal=True)
+    made = race.client.post("/api/graph/apply", headers=AGENT, json={"remove": [keep]})
+    assert made.status_code == 200, made.text
+    sync = next(m for m in reversed(race.sent) if m.get("type") == "graphSync" and m.get("edit"))
+    answer = race.client.post("/api/graph/restore", headers=PERSON, json={
+        "action": "undo", "edit": sync["edit"]["id"], "removals": sync["edit"]["removals"],
+        "nodes": [{"id": keep, "definitionId": "text-input", "params": {"value": "a lighthouse"},
+                   "position": {"x": 0, "y": 0}}]})
+    assert answer.status_code == 200, answer.text
+    assert answer.json()["reattached"] == [pin_id] and answer.json()["reopened"] == [proposal_id]
+    undone = [e for e in race.events() if e["kind"] == "edit.undone"][-1]
+    _check_link(race, undone["data"]["undoId"], pin=True, proposal=True)
+
+
+# Item 2: an upload whose sync fails rolls its node back in the project it was
+# written to. Node ids restart per project, so the rollback by id on whatever
+# graph was live deleted B's n1 after a switch (review 8, P2).
+
+def _png() -> bytes:
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (64, 64), (200, 20, 20)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_a_failed_upload_sync_after_a_switch_never_touches_the_project_open(race):
+    def b_node() -> None:
+        race.done["b_node"] = race.graph.add_node("text-input", {"value": "B's own"}, position={"x": 5, "y": 5})
+        raise RuntimeError("socket gone")
+
+    answer = race.run(lambda: race.client.post("/api/uploads", headers=PERSON, data={"create_node": "true"},
+                                               files={"file": ("red.png", _png(), "image/png")}),
+                      when=lambda data: data.get("type") == "graphSync", after=b_node)
+    assert answer.status_code == 500, answer.text
+    assert "nodeId" not in answer.json()
+    b_node_id = race.done["b_node"]
+    # B's own node, which has the id the upload's node had on A, is untouched.
+    assert race.graph.nodes[b_node_id]["params"]["value"] == "B's own", race.graph.nodes
+    # A no longer holds the upload's node: rolled back in A's stored graph.
+    stored = race.store.read()["projects"][race.active]["snapshot"]
+    assert [node for node in stored["nodes"] if (node.get("data") or {}).get("definitionId") == "image-input"] == []
+    assert not [e for e in race.events() if e["kind"] == "node.added"], race.events()
+
+
+# Item 3: a proposal an undo would reopen, while another project opened during
+# its fit check's await: it stays closed (review 8, P3).
+
+@pytest.mark.parametrize("b_has_n1", [False, True])
+def test_an_undo_never_reopens_a_proposal_after_another_project_opened(race, monkeypatch, b_has_n1):
+    main = race.main
+    a = race.graph.add_node("text-input", {"value": "a lighthouse"}, position={"x": 0, "y": 0})
+    made = race.client.post("/api/canvas/proposals", headers=CLAUDE, json={
+        "note": "change it", "params": [{"nodeId": a, "params": {"value": "a castle"}}]})
+    assert made.status_code == 201, made.text
+    proposal_id = made.json()["proposal"]["id"]
+    gone = race.client.delete(f"/api/graph/node/{a}", headers=PERSON)
+    assert gone.status_code == 200, gone.text
+    assert main.canvas_proposals.get(proposal_id).status == "invalidated"
+    since = race.events()[-1]["seq"]
+    real = main._look_up_models
+
+    async def look_up(wanted):
+        if "pin" not in race.done:
+            await race.switch()
+            if b_has_n1:  # B has a node with the id the proposal reads, of the same model
+                race.graph.add_node("text-input", {"value": "a lighthouse"}, position={"x": 0, "y": 0})
+        return await real(wanted)
+
+    monkeypatch.setattr(main, "_look_up_models", look_up)
+    race.done.clear()
+    browser_before = len(race.browser)
+    answer = race.client.post("/api/graph/restore", headers=PERSON, json={
+        "action": "undo", "removals": [gone.json()["removal"]],
+        "nodes": [{"id": a, "definitionId": "text-input", "params": {"value": "a lighthouse"},
+                   "position": {"x": 0, "y": 0}}]})
+    assert answer.status_code == 200, answer.text
+    assert race.store.read()["activeProjectId"] == race.other
+    assert answer.json()["reopened"] == []
+    assert [row["id"] for row in answer.json()["notReopened"]] == [proposal_id]
+    assert main.canvas_proposals.get(proposal_id).status == "invalidated"
+    assert not [e for e in race.events() if e["seq"] > since and e["kind"] == "proposal.reopened"]
+    assert not [m for m in race.browser[browser_before:] if m.get("type") == "proposalOpened"]

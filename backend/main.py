@@ -2795,6 +2795,57 @@ def _upload_position(x: str | None, y: str | None) -> dict[str, float] | None:
     return spot
 
 
+def _is_upload_node(definition_id: Any, params: Any, node_type: str, file_name: str) -> bool:
+    """A node holding the file an upload just stored (by its content-hash name)."""
+    if definition_id != node_type or not isinstance(params, dict):
+        return False
+    return any(isinstance(params.get(key), str) and Path(params[key]).name == file_name
+               for key in ("filePath", "_previewUrl", "file"))
+
+
+def _roll_back_upload_node(project_id: str | None, epoch: int, node_id: str, node_type: str,
+                           file_name: str) -> None:
+    """Take back the node an upload added to ``project_id`` when its sync
+    failed. Node ids restart per project, so the id alone says nothing once
+    another project opened during the sync (review 8 of PR #114: the
+    rollback removed the other project's n1). Still open: from the live
+    graph, as before. Closed since: from its stored snapshot, where the
+    switch saved it with the node. Either way only while the project's ids
+    are the ones the upload saw (no clear or import since: its undo epoch)
+    and the id still holds this upload's node; otherwise nothing is
+    touched."""
+    if canvas_undo_book.epoch(project_id) != epoch:
+        return
+    if _open_project_id() == project_id:
+        node = cli_graph.nodes.get(node_id)
+        if node is not None and _is_upload_node(node.get("definitionId"), node.get("params"), node_type, file_name):
+            cli_graph.remove_node(node_id)
+        return
+    if project_id is None:
+        return
+    with project_store.transaction() as catalog:
+        project = catalog["projects"].get(project_id)
+        if project is None or catalog["activeProjectId"] == project_id:
+            return  # deleted since, or opened again in between (the live branch above reads it)
+        snapshot = project["snapshot"]
+        node = next((item for item in snapshot.get("nodes") or [] if item.get("id") == node_id), None)
+        data = node.get("data") if isinstance(node, dict) else None
+        if not isinstance(data, dict) or not _is_upload_node(data.get("definitionId"), data.get("params"),
+                                                              node_type, file_name):
+            return
+        edges = [edge for edge in snapshot.get("edges") or []
+                 if edge.get("source") == node_id or edge.get("target") == node_id]
+        gone_edges = {edge.get("id") for edge in edges}
+        project["snapshot"] = {**snapshot,
+                               "nodes": [item for item in snapshot["nodes"] if item.get("id") != node_id],
+                               "edges": [edge for edge in snapshot.get("edges") or [] if edge not in edges]}
+        project["_backendNodeIds"] = [item for item in project.get("_backendNodeIds") or [] if item != node_id]
+        project["_backendEdgeIds"] = [item for item in project.get("_backendEdgeIds") or []
+                                      if item not in gone_edges]
+        refresh_metadata(project)
+        project_store.commit(catalog)
+
+
 @app.post("/api/uploads")
 async def upload_file_consolidated(
     file: UploadFile,
@@ -2961,6 +3012,7 @@ async def upload_file_consolidated(
         # back), which may be after a switch (round 8 of PR #114).
         added_event = _node_added_event(node_id)
         written_to = _open_project_id()
+        written_epoch = canvas_undo_book.epoch(written_to)
         try:
             await _broadcast_graph_sync(edit=True)
         except Exception as exc:
@@ -2969,9 +3021,10 @@ async def upload_file_consolidated(
             # even if it errors, the caller still gets an error response with
             # no success fields. The uploaded file stays on disk (it is a
             # valid, content-addressed artifact, same as a create_node=false
-            # upload); only the graph mutation is rolled back.
+            # upload); only the graph mutation is rolled back, in the project
+            # it was made in, never in one opened during the sync (review 8).
             try:
-                cli_graph.remove_node(node_id)
+                _roll_back_upload_node(written_to, written_epoch, node_id, node_type, saved_path.name)
             except Exception:
                 pass
             raise HTTPException(
@@ -5376,10 +5429,11 @@ def _journal_detached(pins: list[dict[str, Any]], reason: str) -> None:
 # replaces?, pins, proposals}: the delete's answer carries it, so does the
 # edit's graphSync (edit.removals, for a canvas that didn't send it) and an
 # agent's undo record. The restore that brings the node back names it
-# (``removals``), and _undo_removals re-checks each pin and proposal rather
-# than trusting the list: a pin goes back only if this very removal detached
-# it from a node of this model (it keeps the id, persisted with the project,
-# canvas_pins.reattach), a proposal reopens only if this (removal, node) pair
+# (``removals``), and _reattach_removed_pins / _reopen_removed_proposals
+# re-check each pin and proposal rather than trusting the list: a pin goes
+# back only if this very removal detached it from a node of this model (it
+# keeps the id, persisted with the project, canvas_pins.reattach), a
+# proposal reopens only if this (removal, node) pair
 # closed it and the accept checks still pass (_proposal_reopen_misfit).
 #
 # Node ids are not unique over time (an import or a clear restarts the
@@ -5539,6 +5593,10 @@ async def _proposal_reopen_misfit(proposal: Proposal) -> str | None:
     if proposal.expires_at <= canvas_proposals.now():
         return "it expired"
     models = await _look_up_models(_spec_models_wanted(proposal.spec))
+    if proposal.project_id != _workspace_context()["activeProjectId"]:
+        # Another project opened during the lookup (review 8): the live graph
+        # is that project's now, so the checks below would read the wrong one.
+        return ANOTHER_PROJECT
     try:
         _refuse_overwriting_later_edits(proposal)
         candidate, id_map, _edge_ids, run_ids = _stage_proposal(proposal.spec, positions=proposal.positions,
@@ -5604,18 +5662,18 @@ def _note_restored(project_id: str | None, back: Mapping[str, str], consumed: Ma
         node_removals.restored(project_id, node_id, consumed.get(node_id))
 
 
-async def _undo_removals(records: list[dict[str, Any]], back: Mapping[str, str],
-                         project_id: str | None) -> dict[str, list[Any]]:
+def _reattach_removed_pins(records: list[dict[str, Any]], back: Mapping[str, str],
+                           project_id: str | None) -> dict[str, Any]:
     """The restore brought ``back`` these nodes (node id -> model) in
-    ``project_id``: undo what their deletes removed. Only records bound to
-    those very nodes count (_bound_removals), and only pins and proposals
-    those removals detached or closed: a pin by its ``detachedBy`` and
-    model, a proposal by a (removal, node) pair in its ``closed_by``. Returns
-    the restore's ``reattached`` (pin ids), ``pinsLeft`` ({id, reason, code}),
-    ``reopened`` (proposal ids) and ``notReopened`` ({id, reason}): a
-    proposal the delete closed that doesn't fit the restored graph, expired,
-    lost its tag to a clear, an import or a project switch, or that Nebula
-    no longer has (a restart; proposals live in memory)."""
+    ``project_id``: undo what their deletes removed, first half. Only
+    records bound to those very nodes count (_bound_removals), and only pins
+    and proposals those removals detached or closed: a pin by its
+    ``detachedBy`` and model, a proposal by a (removal, node) pair in its
+    ``closed_by``. Synchronous, in the restore's own step, before the
+    caller's edit.undone (review 8 of PR #114): the pins go back and are
+    journaled (pin.reattached) here. Returns what the second half
+    (_reopen_removed_proposals, after the sync) needs, with the restore's
+    ``reattached`` (pin ids) and ``pinsLeft`` ({id, reason, code}) so far."""
     out: dict[str, list[Any]] = {"reattached": [], "pinsLeft": [], "reopened": [], "notReopened": []}
     bound = _bound_removals(records, back, project_id)
     # Pins check their own persisted binding (detachedBy, detachedFrom,
@@ -5624,20 +5682,11 @@ async def _undo_removals(records: list[dict[str, Any]], back: Mapping[str, str],
     # the records not known to be another delete's.
     for_pins = [record for record, _verdict in bound]
     relevant = [record for record, verdict in bound if verdict is not False]
-    if _workspace_context()["activeProjectId"] != project_id:
-        # Another project opened while the restore was on its way: its pins
-        # and proposals aren't these; say so rather than touch them.
-        out["pinsLeft"] = [pin_left(pin_id, ANOTHER_PROJECT)
-                           for pin_id in dict.fromkeys(p for r in for_pins for p in r.get("pins") or [])]
-        out["notReopened"] = [{"id": proposal_id, "reason": ANOTHER_PROJECT}
-                              for proposal_id in dict.fromkeys(p for r in relevant for p in r.get("proposals") or [])]
-        return out
+    plan: dict[str, Any] = {"out": out, "relevant": relevant, "pins_back": False}
     consumed = {record["nodeId"]: record["id"] for record, verdict in bound if verdict}
     if not for_pins:
         _note_restored(project_id, back, consumed)
-        return out
-    pairs = {(record["id"], record["nodeId"]) for record in relevant}
-
+        return plan
     try:
         pins = canvas_pins.reattach(for_pins, back, project_id)
     except (PinError, ProjectStoreError):
@@ -5650,18 +5699,43 @@ async def _undo_removals(records: list[dict[str, Any]], back: Mapping[str, str],
         if verdict is None and any(by_pin.get(str(pin_id)) == record["nodeId"] for pin_id in record.get("pins") or []):
             consumed.setdefault(record["nodeId"], record["id"])
     _note_restored(project_id, back, consumed)
-    if pins["reattached"]:
-        # Journaled in the step that put them back, then broadcast (round 8 of PR #114).
-        for pin in pins["reattached"][:50]:
-            node_id = (pin.get("anchor") or {}).get("nodeId")
-            _journal(
-                "pin.reattached",
-                node_id=node_id if isinstance(node_id, str) else None,
-                data={"pinId": pin.get("id"), "text": pin.get("text"), "anchor": pin.get("anchor")},
-                summary=f"note {pin.get('id')} is back on {node_id}: the undo put its node back",
-                project_id=project_id,
-            )
+    # Journaled in the step that put them back, broadcast after the sync (round 8 of PR #114).
+    for pin in pins["reattached"][:50]:
+        node_id = (pin.get("anchor") or {}).get("nodeId")
+        _journal(
+            "pin.reattached",
+            node_id=node_id if isinstance(node_id, str) else None,
+            data={"pinId": pin.get("id"), "text": pin.get("text"), "anchor": pin.get("anchor")},
+            summary=f"note {pin.get('id')} is back on {node_id}: the undo put its node back",
+            project_id=project_id,
+        )
+    plan["pins_back"] = bool(pins["reattached"])
+    return plan
+
+
+async def _reopen_removed_proposals(plan: dict[str, Any], project_id: str | None) -> dict[str, list[Any]]:
+    """Second half, after the restore's sync: the pins put back
+    (_reattach_removed_pins) go to the canvases, and the proposals the
+    deletes closed reopen where they still fit. Returns the restore's
+    ``reattached``, ``pinsLeft``, ``reopened`` (proposal ids) and
+    ``notReopened`` ({id, reason}): a proposal the delete closed that
+    doesn't fit the restored graph, expired, lost its tag to a clear, an
+    import or a project switch, or that Nebula no longer has (a restart;
+    proposals live in memory). A proposal is reopened (and journaled) only
+    while its project is still the one open (review 8)."""
+    out: dict[str, list[Any]] = plan["out"]
+    relevant: list[dict[str, Any]] = plan["relevant"]
+    if plan["pins_back"]:
         await _broadcast_pins()
+    if not relevant:
+        return out
+    if _workspace_context()["activeProjectId"] != project_id:
+        # Another project opened while the restore was on its way: its
+        # proposals aren't these; say so rather than touch them.
+        out["notReopened"] = [{"id": proposal_id, "reason": ANOTHER_PROJECT}
+                              for proposal_id in dict.fromkeys(p for r in relevant for p in r.get("proposals") or [])]
+        return out
+    pairs = {(record["id"], record["nodeId"]) for record in relevant}
 
     named = {proposal_id for record in relevant for proposal_id in record.get("proposals") or []}
     found = sorted(canvas_proposals.closed_by_pairs(pairs, project_id), key=lambda p: p.created_at)
@@ -5676,6 +5750,9 @@ async def _undo_removals(records: list[dict[str, Any]], back: Mapping[str, str],
             # bring them back: it waits for that, closed, and isn't counted.
             continue
         reason = await _proposal_reopen_misfit(proposal)
+        if reason is None and proposal.project_id != _workspace_context()["activeProjectId"]:
+            # Another project opened during the check's await (review 8): no reopen, no event.
+            reason = ANOTHER_PROJECT
         if reason is None:
             try:
                 canvas_proposals.reopen(proposal.id)
@@ -5708,6 +5785,10 @@ async def _undo_removals(records: list[dict[str, Any]], back: Mapping[str, str],
         # delete's) isn't this undo's: it stays as it is and isn't counted.
     for proposal in reopened:
         out["reopened"].append(proposal.id)
+        if not proposal.is_open or proposal.project_id != _workspace_context()["activeProjectId"]:
+            # A switch after it reopened closed it again (the canvas was
+            # replaced): no ghost bar on the project open now.
+            continue
         try:
             await manager.broadcast_browser({
                 "type": "proposalOpened",
@@ -9886,7 +9967,7 @@ def _graph_edit_origin() -> dict[str, Any]:
         origin.update({key: link[key] for key in ("id", "undoes", "redoes") if key in link})
     # The nodes this edit deleted, with the pins and proposals each delete
     # removed: a canvas that didn't send the edit keeps them in its undo step,
-    # so its Cmd+Z puts them back too (_undo_removals).
+    # so its Cmd+Z puts them back too (_reattach_removed_pins).
     removals = _removals_ctx.get()
     if removals:
         origin["removals"] = copy.deepcopy(removals)
@@ -12136,12 +12217,35 @@ async def restore_graph_state(body: dict[str, Any]) -> dict[str, Any]:
     if link is None:
         return await _restore_graph(body)
     token = _canvas_edit_link.set(link)
+    closed: list[bool] = []
+
+    def journal_done(_done: dict[str, list[Any]]) -> None:
+        _journal_restored_edit(link, body.get("action", "undo"))
+        closed.append(True)
+
     try:
-        result = await _restore_graph(
-            body, journal_done=lambda _done: _journal_restored_edit(link, body.get("action", "undo")))
+        result = await _restore_graph(body, journal_done=journal_done)
     finally:
         _canvas_edit_link.reset(token)
+        if closed:
+            # The proposals it reopened are journaled after its edit.undone
+            # (their fit check awaits): the link lists them too (review 8).
+            _note_link_events(link["id"])
     return result
+
+
+def _note_link_events(link_id: str) -> None:
+    """Every event journaled under an undo's (or redo's) link but its own
+    closing edit.undone / edit.redone, kept with the link: what a later
+    edit.undone of that undo lists as its ``events``. Taken again once the
+    restore returns, since proposal.reopened can follow edit.undone (review
+    8 of PR #114); merged with what was taken before, in case those events
+    have left the journal's buffer since."""
+    link = canvas_undo_book.link_of(link_id)
+    if link is None:
+        return
+    seqs = canvas_events.seqs_of_edit(link_id, skip_kinds=frozenset({"edit.undone", "edit.redone"}))
+    canvas_undo_book.note_events(link_id, sorted(set(link.events) | set(seqs)))
 
 
 async def _restore_graph(
@@ -12161,7 +12265,10 @@ async def _restore_graph(
     edit.redone) with what changed ({added, removed, changed, renamed, moved,
     wired, unwired}), right after the restore's own events and before any
     await, so it too names the project the restore was made in (round 8 of
-    PR #114)."""
+    PR #114). The pins put back (pin.reattached) come before it; the
+    proposals reopened (proposal.reopened) can follow it, since their fit
+    check awaits, so a caller with a link takes its events again once this
+    returns (_note_link_events, review 8)."""
     _check_workspace_revision()
     _validate_graph_ingress_complexity(body)
     action = body.get("action", "undo")
@@ -12354,6 +12461,16 @@ async def _restore_graph(
         )
     for edge in wired:
         _journal_edge("edge.added", edge, note=note)
+    # The nodes it brought back: their pins on them again, in this step, so
+    # pin.reattached comes before the caller's edit.undone (review 8 of PR
+    # #114). The proposals their deletes closed reopen after the sync
+    # (_reopen_removed_proposals). A swapped id (in ``remove`` too) holds
+    # another node now, not the one deleted.
+    swapped = {gone["id"] for gone in removed}
+    putting_back = _reattach_removed_pins(named_removals, {node_id: added_models[node_id] for node_id in added
+                                                           if node_id not in swapped}, project_id)
+    for node_id in swapped & set(added):
+        node_removals.restored(project_id, node_id, None)
     if journal_done is not None:
         journal_done({"added": added, "removed": [gone["id"] for gone in removed], "changed": sorted(changed),
                       "renamed": sorted(renamed), "moved": moved, "wired": [_edge_data(edge) for edge in wired],
@@ -12368,14 +12485,8 @@ async def _restore_graph(
     await _announce_removed_nodes(entries)
     publish_action(f"{action.capitalize()} on the canvas: {len(added)} back, {len(removed)} removed, "
                    f"{len(changed)} changed, {len(wired)} connected, {len(unwired)} disconnected")
-    # The nodes it brought back: their pins on them again, and the proposals
-    # their deletes closed open again where they still fit (GM, 2026-10-23).
-    # A swapped id (in ``remove`` too) holds another node now, not the one deleted.
-    swapped = {gone["id"] for gone in removed}
-    undone = await _undo_removals(named_removals, {node_id: added_models[node_id] for node_id in added
-                                                   if node_id not in swapped}, project_id)
-    for node_id in swapped & set(added):
-        node_removals.restored(project_id, node_id, None)
+    # The proposals their deletes closed open again where they still fit (GM, 2026-10-23).
+    undone = await _reopen_removed_proposals(putting_back, project_id)
     return {
         "status": "restored",
         "action": action,
@@ -12653,6 +12764,10 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         skipped, done, left = said["skipped"], said["done"], said["left"]
     finally:
         _canvas_edit_link.reset(context)
+        if said:
+            # The proposals it reopened are journaled after its edit.undone
+            # (their fit check awaits): the link lists them too (review 8).
+            _note_link_events(undo_id)
     stays = [item["nodeId"] for item in skipped if item.get("reason") == "ran since"]
     publish_action(f"{identity.name} undid its edit: {done or 'no change'}{left}"
                    + (f" ({_listed(stays)} ran since, so {'it stays' if len(stays) == 1 else 'they stay'})"

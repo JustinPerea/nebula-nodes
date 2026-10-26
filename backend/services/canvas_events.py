@@ -514,9 +514,11 @@ class CanvasEventJournal:
             if result["events"] or result["gap"]:
                 return result
 
-    def seqs_of_edit(self, edit_id: str) -> list[int]:
-        """The buffered events of one canvas edit (``edit.id``), oldest first."""
-        return [event["seq"] for event in self._events if (event.get("edit") or {}).get("id") == edit_id]
+    def seqs_of_edit(self, edit_id: str, *, skip_kinds: frozenset[str] = frozenset()) -> list[int]:
+        """The buffered events of one canvas edit (``edit.id``), oldest first,
+        but those of a kind in ``skip_kinds``."""
+        return [event["seq"] for event in self._events
+                if (event.get("edit") or {}).get("id") == edit_id and event.get("kind") not in skip_kinds]
 
     @property
     def waiting(self) -> int:
