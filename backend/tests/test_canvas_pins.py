@@ -605,3 +605,171 @@ def test_any_commit_to_the_catalog_shows_in_the_next_listing(tmp_path):
     assert pins.list()["pins"] == []
     _activate(elsewhere, first)
     assert [pin["text"] for pin in pins.list()["pins"]] == ["warmer"]
+
+
+# -- Review 5 of PR #114: the journal names the project the catalog has open ---------
+# M1: a "Recovered canvas" (GET /api/projects) commits a new open project with
+# no graph broadcast, and the journal's project tag was set only in that
+# broadcast: the journal kept naming no project, so the --channel listener
+# believed none open and dropped every pin the person added at its check. A
+# pin added between a switch's commit and that broadcast's set_project was
+# tagged with the project left. The tag now comes from the catalog itself
+# (ProjectStore.projection), like the pins listing. M2: the pins listing
+# re-read, upgraded and deep-copied the whole catalog after every unrelated
+# commit (an autosave every 600 ms).
+
+def _channel_decides(client, journal) -> tuple:
+    """The --channel listener's decision after the person's pin: the journal's
+    answer, the pin check against GET /api/canvas/pins, then the push."""
+    import mcp_channel
+
+    answer = journal.read(after=0)
+    state = mcp_channel.ChannelState(now=0.0)
+    state.observe(answer, now=100.0)
+    checked = state.pins_to_check(110.0)
+    dropped = state.confirm_pins(checked, client.get("/api/canvas/pins").json())
+    push = state.take_push(110.0)
+    return answer, checked, dropped, push
+
+
+def _assert_pin_wake(answer, checked, dropped, push, pin_id, project_id) -> None:
+    assert answer["projectId"] == project_id
+    added = [e for e in answer["events"] if e["kind"] == "pin.added"]
+    assert [e["projectId"] for e in added] == [project_id]
+    assert checked == [pin_id] and dropped == 0
+    assert push is not None and (push.wake, push.gate) == ("pin", False), push and (push.wake, push.gate)
+    assert f'pin id="{pin_id}"' in push.content
+
+
+def test_a_pin_added_after_a_recovered_canvas_wakes_claude(api):
+    # Probe test_b3: the catalog lost its projects, the person's node add was
+    # journaled (so the tag was known: no project), then the canvas was filed.
+    client, _graph, journal, _sent, store, _ids = api
+    with store.transaction() as catalog:
+        catalog["projects"] = {}
+        catalog["activeProjectId"] = None
+        store.commit(catalog)
+    made = client.post("/api/graph/node", headers=PERSON, json={"definitionId": "text-input", "params": {"value": "x"}})
+    assert made.status_code == 200, made.text
+    recovered = client.get("/api/projects").json()["migratedProjectId"]
+    pinned = client.post("/api/canvas/pins", headers=PERSON, json={"text": "warmer", "position": {"x": 0, "y": 0}})
+    assert pinned.status_code == 201, pinned.text
+    _assert_pin_wake(*_channel_decides(client, journal), pinned.json()["pin"]["id"], recovered)
+
+
+def test_a_pin_added_after_deleting_every_project_and_recovering_wakes_claude(api):
+    # Probe test_b3b: the same, reached through the routes.
+    client, _graph, journal, _sent, store, (active, other) = api
+    for project_id in (active, other):
+        revision = store.read()["workspaceRevision"]
+        gone = client.request("DELETE", f"/api/projects/{project_id}", json={"workspaceRevision": revision})
+        assert gone.status_code == 200, gone.text
+    made = client.post("/api/graph/node", headers=PERSON, json={"definitionId": "text-input", "params": {"value": "x"}})
+    assert made.status_code == 200, made.text
+    recovered = client.get("/api/projects").json()["migratedProjectId"]
+    assert store.read()["activeProjectId"] == recovered
+    pinned = client.post("/api/canvas/pins", headers=PERSON, json={"text": "warmer", "position": {"x": 0, "y": 0}})
+    _assert_pin_wake(*_channel_decides(client, journal), pinned.json()["pin"]["id"], recovered)
+
+
+@pytest.mark.parametrize("path", ["open", "create"])
+def test_a_pin_added_between_a_switchs_commit_and_its_broadcast_wakes_claude(api, monkeypatch, path):
+    # Round 5's open item: the person pins on the project just opened while
+    # the switch still awaits its export, before canvas.replaced is journaled.
+    import main as main_module
+
+    client, _graph, journal, sent, store, (active, other) = api
+    added: dict = {}
+    capture = main_module.manager.broadcast_raw
+
+    async def pin_mid_switch(data):
+        await capture(data)
+        if data.get("type") == "graphSync" and data.get("graphReplaced") and not added:
+            added["at"] = store.read()["activeProjectId"]
+            # The pin route itself, as a request landing at this await would run it.
+            added["pin"] = (await main_module.create_canvas_pin(
+                {"text": "make it say hello", "position": {"x": 0, "y": 0}}))["pin"]
+
+    monkeypatch.setattr(main_module.manager, "broadcast_raw", pin_mid_switch)
+    # The person worked on the project open before (so the journal had named it).
+    made = client.post("/api/graph/node", headers=PERSON, json={"definitionId": "text-input", "params": {"value": "x"}})
+    assert made.status_code == 200, made.text
+    revision = store.read()["workspaceRevision"]
+    if path == "open":
+        answer = client.post(f"/api/projects/{other}/open", headers=PERSON, json={"workspaceRevision": revision})
+    else:
+        answer = client.post("/api/projects", headers=PERSON, json={"workspaceRevision": revision, "name": "Third"})
+    assert answer.status_code == 200, answer.text
+    now_open = store.read()["activeProjectId"]
+    assert now_open != active and added["at"] == now_open
+    _assert_pin_wake(*_channel_decides(client, journal), added["pin"]["id"], now_open)
+
+
+def _large_catalog(tmp_path, projects: int = 30, nodes: int = 200) -> ProjectStore:
+    """Probe probe_cache_perf's middle size: about 3 MB, every project with a pin."""
+    def node(i):
+        return {"id": f"n{i}", "type": "image-gen", "position": {"x": i, "y": i},
+                "data": {"definitionId": "flux-2-pro", "params": {"prompt": "a long prompt " * 20, "seed": i},
+                         "outputs": {"image": {"url": f"/api/outputs/x{i}.png"}}, "label": f"Node {i}"}}
+
+    store = ProjectStore(tmp_path / "projects")
+    with store.transaction() as catalog:
+        for p in range(projects):
+            project = make_project(f"P{p}", {"nodes": [node(i) for i in range(nodes)], "edges": [],
+                                             "viewport": {"x": 0, "y": 0, "zoom": 1}})
+            project["pins"] = [{"id": f"pin_{p:08x}", "text": "hi", "anchor": {"nodeId": "n1"}, "position": None,
+                                "status": "open", "createdAt": "2026-10-26T00:00:00+00:00", "detached": False,
+                                "reply": None}]
+            catalog["projects"][project["id"]] = project
+        catalog["activeProjectId"] = next(iter(catalog["projects"]))
+        store.commit(catalog)
+    return store
+
+
+def test_an_unrelated_commit_never_makes_the_pins_listing_reread_the_catalog(tmp_path, monkeypatch):
+    # Probe probe_cache_perf: 280 ms per listing after each autosave on an
+    # 11.6 MB catalog (43 ms at 3 MB): lock, parse, upgrade and deep copy.
+    import statistics
+    import time as _time
+
+    store = _large_catalog(tmp_path)
+    pins = CanvasPins(store)
+    journal = CanvasEventJournal()
+    journal.follow(lambda: store.projection().project_id)
+    expected = pins.list()
+    catalog = store.read()
+    timings = []
+    for _ in range(3):
+        started = _time.perf_counter()
+        store.read()
+        timings.append(_time.perf_counter() - started)
+    full_read = statistics.median(timings)  # what every listing after a commit cost before
+    reads: list[bool] = []
+    real = store._read
+    monkeypatch.setattr(store, "_read", lambda **kw: reads.append(True) or real(**kw))
+
+    costs = []
+    for n in range(8):
+        catalog["workspaceRevision"] = f"autosave-{n}"  # an autosave: nothing about pins
+        store.commit(catalog)
+        started = _time.perf_counter()
+        assert pins.list() == expected
+        costs.append(_time.perf_counter() - started)
+        assert pins.for_agents()["openCount"] == 1
+        assert store.workspace()["workspaceRevision"] == f"autosave-{n}"
+        assert journal.read(after=0)["projectId"] == expected["projectId"]
+    # A commit made here hands the store what it wrote: nothing is read back.
+    assert reads == [], f"{len(reads)} catalog reads after 8 unrelated commits"
+    assert statistics.median(costs) < full_read / 20, (statistics.median(costs), full_read)
+
+    # Another process's commit: read once, without upgrading or copying,
+    # and shared by the listing, the agents' view, the workspace and the journal.
+    elsewhere = ProjectStore(tmp_path / "projects")
+    with elsewhere.transaction() as theirs:
+        theirs["workspaceRevision"] = "from another process"
+        elsewhere.commit(theirs)
+    assert pins.list() == expected
+    pins.for_agents()
+    assert store.workspace()["workspaceRevision"] == "from another process"
+    journal.read(after=0)
+    assert len(reads) == 1

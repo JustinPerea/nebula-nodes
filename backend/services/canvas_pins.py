@@ -141,8 +141,6 @@ class CanvasPins:
         # A getter lets main.py follow `main.project_store` when tests swap it.
         self._store_source = store
         self._clock = clock
-        # (the catalog file it was read from, as (path, signature); project id; pins)
-        self._cache: tuple[tuple[Any, ...], str | None, list[dict[str, Any]]] | None = None
 
     @property
     def store(self) -> ProjectStore:
@@ -150,30 +148,24 @@ class CanvasPins:
         return source if isinstance(source, ProjectStore) else source()
 
     def forget_cache(self) -> None:
-        self._cache = None
+        """Nothing is kept here: the store's projection follows catalog.json."""
 
     # -- reading ---------------------------------------------------------
     def _active(self) -> tuple[str | None, list[dict[str, Any]]]:
-        """The open project and its pins, as catalog.json holds them now.
+        """The open project and its pins, as catalog.json holds them now
+        (a copy: callers may change it).
 
-        The copy kept is keyed on the file it was read from (ProjectStore.signature:
-        every commit replaces catalog.json, whichever route or process makes
-        it), so nothing has to remember to clear it. Clearing it only after a
-        project switch's broadcast let a listing taken meanwhile answer with
-        the project open before (review 4 of PR #114, H1). The signature is
-        taken before the read: a commit between the two leaves a newer catalog
-        under the older key, which the next call reads again."""
-        store = self.store
-        signature = store.signature()
-        key = (str(store.path), signature)
-        if self._cache is None or signature is None or self._cache[0] != key:
-            catalog = store.read()
-            project_id = catalog.get("activeProjectId")
-            project = catalog["projects"].get(project_id) if project_id else None
-            pins = [pin for pin in (project or {}).get("pins") or [] if isinstance(pin, dict)]
-            self._cache = (key, project_id, pins)
-        _key, project_id, pins = self._cache
-        return project_id, copy.deepcopy(pins)
+        From ProjectStore.projection, which follows the file itself (every
+        commit replaces catalog.json, whichever route or process makes it),
+        so nothing has to remember to clear anything. Clearing a cache only
+        after a project switch's broadcast let a listing taken meanwhile
+        answer with the project open before (review 4 of PR #114, H1); and
+        re-reading the whole catalog after every unrelated commit (an
+        autosave) cost a parse, an upgrade and a deep copy per listing
+        (review 5, M2). The store shares one projection per file with the
+        workspace and the journal's project tag."""
+        view = self.store.projection()
+        return view.project_id, copy.deepcopy(list(view.pins))
 
     @staticmethod
     def _ordered(pins: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -210,7 +202,6 @@ class CanvasPins:
                project: str | None | object = _ANY_PROJECT) -> tuple[str, Any]:
         """Run ``mutate(pins)`` on the active project's list inside one catalog
         transaction. With ``project``, only while that project is the open one."""
-        self._cache = None
         store = self.store
         with store.transaction() as catalog:
             project_id = catalog.get("activeProjectId")
@@ -226,7 +217,6 @@ class CanvasPins:
             result = mutate(pins)
             if pins != before:
                 store.commit(catalog)
-        self._cache = None
         return project_id, result
 
     def add(

@@ -283,6 +283,39 @@ cli_graph = CLIGraph(persist_path=_STATE_PATH)
 project_store = ProjectStore(_STATE_DIR / "projects")
 # Pins follow `main.project_store` through the getter (tests swap the store).
 canvas_pins = CanvasPins(lambda: project_store)
+
+
+def _open_project_id() -> str | None:
+    """The project catalog.json has open now (ProjectStore.projection: no
+    catalog copy, read again only once the file changes)."""
+    return project_store.projection().project_id
+
+
+def _journal_project() -> str | None:
+    """The journal's project tag: the open project as every canvas event
+    names it (_workspace_context, from ProjectStore.projection)."""
+    return _workspace_context()["activeProjectId"]
+
+
+def _project_written_to() -> Any:
+    """Right after a pin write: the project it went to (the one open now),
+    for its event's tag. ``...`` (the journal's own tag) when the catalog
+    can't be read: the journal never fails the route."""
+    try:
+        return _journal_project()
+    except ProjectStoreError:
+        return ...
+
+
+def _events_journal():
+    """The canvas event journal, tagging events and answers with the project
+    the catalog has open (CanvasEventJournal.follow). Through here so a
+    journal a test swaps in follows it too."""
+    if not canvas_events.following:
+        canvas_events.follow(_journal_project)
+    return canvas_events
+
+
 # Which delete of which node each removal record undoes (services/node_removals.py).
 node_removals = RemovalLedger()
 # Updates (plan section 5.9): the agent's and the reader's notices, kept with
@@ -4643,23 +4676,25 @@ def _journal(
     data: dict[str, Any] | None = None,
     summary: str = "",
     actor: dict[str, Any] | None = None,
+    project_id: str | None | Any = ...,
 ) -> None:
     """Record a canvas change for `nebula watch`; never fails the route that called it.
 
     The actor defaults to whoever sent the current request (agent, person or
     anonymous). Like presence, the journal is decoration on top of an edit
-    that already succeeded.
+    that already succeeded. The event names the project the catalog has open
+    as it is journaled (_events_journal), or ``project_id`` when the caller
+    knows where the change was made (a pin's own project).
     """
     try:
-        if not canvas_events.project_known:
-            canvas_events.set_project(_workspace_context()["activeProjectId"])
-        canvas_events.publish(
+        _events_journal().publish(
             kind,
             actor=actor or actor_for_headers(current_request_headers()),
             node_id=node_id,
             data=data,
             summary=summary,
             edit=_canvas_edit_link.get(),
+            **({"project_id": project_id} if project_id is not ... else {}),
         )
     except Exception:  # noqa: BLE001 - the journal is decoration, like presence
         pass
@@ -5145,7 +5180,7 @@ async def agent_start_here(request: Request, via: str = "mcp") -> dict[str, Any]
     caller = identify_agent(headers)
     selected = selection_context.snapshot(cli_graph, node_registry).get("selectedNodeIds", [])
     snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=selected)
-    catalog = project_store.read()
+    catalog = project_store.read()  # every project's name, for the boards part
     active_id = catalog.get("activeProjectId")
     projects = catalog.get("projects") or {}
     active = projects.get(active_id) if active_id else None
@@ -5225,9 +5260,10 @@ async def _journal_wait(request: Request, **kwargs: Any) -> dict[str, Any]:
     33 of them made every watcher's next poll a 429 (review 1 of PR #114).
     Now the wait stops and frees the slot at once (_ClientGone, a 499 nobody
     reads). A connected client sees no difference."""
+    journal = _events_journal()
     if not kwargs.get("wait"):
-        return await canvas_events.wait(**kwargs)
-    waiting = asyncio.ensure_future(canvas_events.wait(**kwargs))
+        return await journal.wait(**kwargs)
+    waiting = asyncio.ensure_future(journal.wait(**kwargs))
     gone = asyncio.ensure_future(_until_disconnected(request))
     try:
         await asyncio.wait({waiting, gone}, return_when=asyncio.FIRST_COMPLETED)
@@ -5517,7 +5553,7 @@ async def _reopen_update(ref: Mapping[str, Any] | None, proposal_id: str) -> Non
         result = await asyncio.to_thread(agent_notes.reopen_proposal, ref["projectId"], ref["id"], proposal_id)
     except (NoteError, ProjectStoreError):
         return
-    if result is not None and result["projectId"] == project_store.read().get("activeProjectId"):
+    if result is not None and result["projectId"] == _open_project_id():
         await _broadcast_raw_quietly(_notes_message("canvas", "changed", project_id=result["projectId"],
                                                     ids=[ref["id"]], note=result["note"], unread=result["unread"]))
 
@@ -5747,6 +5783,10 @@ async def create_canvas_pin(body: dict[str, Any]) -> dict[str, Any]:
             position=body.get("position"),
             graph_nodes=cli_graph.nodes,
         )
+        # The project it was written to (nothing on this loop commits in
+        # between), for its event: a switch during the broadcast below
+        # must not tag it with the project opened next.
+        project_id = _project_written_to()
     except PinError as exc:
         raise _pin_http_error(exc) from exc
     await _broadcast_pins()
@@ -5756,6 +5796,7 @@ async def create_canvas_pin(body: dict[str, Any]) -> dict[str, Any]:
         node_id=anchor.get("nodeId"),
         data={"pinId": pin["id"], "text": pin["text"], "anchor": anchor},
         summary=pin_summary(pin),
+        project_id=project_id,
     )
     return {"pin": pin}
 
@@ -5766,6 +5807,7 @@ async def delete_canvas_pin(pin_id: str) -> dict[str, Any]:
     require_person(current_request_headers())
     try:
         pin = canvas_pins.remove(pin_id)
+        project_id = _project_written_to()  # where it was deleted (see create_canvas_pin)
     except PinError as exc:
         raise _pin_http_error(exc) from exc
     await _broadcast_pins()
@@ -5774,6 +5816,7 @@ async def delete_canvas_pin(pin_id: str) -> dict[str, Any]:
         node_id=(pin.get("anchor") or {}).get("nodeId"),
         data={"pinId": pin_id, "text": pin.get("text")},
         summary=f"deleted the note {pin_id}",
+        project_id=project_id,
     )
     return {"status": "deleted"}
 
@@ -5786,6 +5829,7 @@ async def resolve_canvas_pin(pin_id: str, body: dict[str, Any]) -> dict[str, Any
         raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
     try:
         pin = canvas_pins.resolve(pin_id, body.get("reply"), identity)
+        project_id = _project_written_to()  # where it was answered (see create_canvas_pin)
     except PinError as exc:
         raise _pin_http_error(exc) from exc
     await _broadcast_pins()
@@ -5796,6 +5840,7 @@ async def resolve_canvas_pin(pin_id: str, body: dict[str, Any]) -> dict[str, Any
         node_id=anchor.get("nodeId"),
         data={"pinId": pin_id, "text": pin.get("text"), "reply": reply},
         summary=f'answered the note {pin_id} ("{str(pin.get("text"))[:40]}"): {reply}',
+        project_id=project_id,
     )
     try:
         target = anchor if anchor.get("nodeId") in cli_graph.nodes else (
@@ -7068,7 +7113,7 @@ async def _follow_question_updates(sets: list[QuestionSet]) -> None:
             continue
         if result is None:
             continue
-        if result["projectId"] == project_store.read().get("activeProjectId"):
+        if result["projectId"] == _open_project_id():
             await _broadcast_raw_quietly(_notes_message("canvas", "resolved", project_id=result["projectId"],
                                                         ids=[ref["id"]], note=result["note"], unread=result["unread"]))
 
@@ -7349,7 +7394,7 @@ async def _follow_asset_updates(proposals: list[AssetProposal]) -> None:
             continue
         # Only the open project's list is on the person's screen; another
         # project's reloads with it when they open it.
-        if result["projectId"] == project_store.read().get("activeProjectId"):
+        if result["projectId"] == _open_project_id():
             await _broadcast_raw_quietly(_notes_message("canvas", op, project_id=result["projectId"],
                                                         ids=[ref["id"]], note=result["note"], **extra))
 
@@ -7604,7 +7649,7 @@ async def _follow_canvas_updates(proposals: list[Proposal], *, actor: Mapping[st
             continue
         # Only the open project's list is on the person's screen; another
         # project's reloads with it when they open it.
-        if result["projectId"] == project_store.read().get("activeProjectId"):
+        if result["projectId"] == _open_project_id():
             await _broadcast_raw_quietly(_notes_message("canvas", "resolved", project_id=result["projectId"],
                                                         ids=[ref["id"]], note=result["note"], unread=result["unread"]))
 
@@ -8113,12 +8158,10 @@ async def current_project() -> dict[str, str]:
     """The project open on the canvas, ``{id, name}``: what "this project"
     means for project-scoped Characters, Moodboards and Styles, in the app,
     the CLI and MCP alike. 404 when no project is open."""
-    catalog = project_store.read()
-    active = catalog.get("activeProjectId")
-    project = catalog["projects"].get(active) if active else None
-    if project is None:
+    view = project_store.projection()  # no catalog copy
+    if view.project_id is None:
         raise HTTPException(status_code=404, detail="No project is open.")
-    return {"id": active, "name": str(project.get("name") or "")}
+    return {"id": view.project_id, "name": view.name}
 
 
 @app.get("/api/health/providers")
@@ -9846,11 +9889,9 @@ async def _broadcast_graph_sync(
                                     if edit and (not graph_replaced or reason == "import") else {})})
     if graph_replaced:
         # Tag, don't reset: seq stays monotonic, and the new project id rides
-        # on this event and every one after it.
-        try:
-            canvas_events.set_project(_workspace_context()["activeProjectId"])
-        except Exception:  # noqa: BLE001 - the journal must not break a project switch
-            pass
+        # on this event and every one after it. The journal takes it from the
+        # catalog (_events_journal), so events from the switch's commit on
+        # already carried it, a pin added meanwhile included (review 5 of PR #114).
         safe_reason = reason if reason in _REPLACE_REASONS else "import"
         data: dict[str, Any] = {"reason": safe_reason}
         summary = f"replaced the canvas ({safe_reason})"
@@ -9864,10 +9905,9 @@ async def _broadcast_graph_sync(
         _journal("canvas.replaced", data=data, summary=summary)
         # Pins belong to the project record. A project open or create brings
         # that project's pins; an import into the same project detaches pins
-        # whose nodes did not survive. (The pins cache already follows
-        # catalog.json, so a listing between the commit and here names the
-        # project open now: services/canvas_pins._active.)
-        canvas_pins.forget_cache()
+        # whose nodes did not survive. (The pins listing follows catalog.json,
+        # so one taken between the commit and here names the project open
+        # now: ProjectStore.projection.)
         detached: list[dict[str, Any]] = []
         if safe_reason == "import":
             try:
@@ -12265,10 +12305,8 @@ _canvas_edit_link: ContextVar[dict[str, Any] | None] = ContextVar("canvas_edit_l
 
 
 def _open_project_brief() -> tuple[str | None, str]:
-    catalog = project_store.read()
-    active = catalog.get("activeProjectId")
-    project = catalog["projects"].get(active) if active else None
-    return active, str((project or {}).get("name") or "")
+    view = project_store.projection()  # no catalog copy
+    return view.project_id, view.name
 
 
 def _canvas_undo_before(spec: EditSpec, shown: Mapping[str, Any]) -> dict[str, Any]:

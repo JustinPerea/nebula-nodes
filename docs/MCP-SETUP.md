@@ -783,15 +783,16 @@ with no Nebula call and none running. A Nebula call still running (a
 however long it waits. The cost: a pin you add during a gated turn's window
 waits for that window's end, at least a minute after the change push and
 longer while that turn keeps calling Nebula. While a pin waits, no other
-gated push goes: a proposal you reject meanwhile, and the edits you make
-meanwhile, go with the pin when it does, in one push that isn't gated (it
-holds a pin). Edits from your last 8 s before it goes are the exception:
-they aren't due yet (the 8 s quiet time), so they follow in a gated push of
-their own, at least 30 s later and once Claude has made no Nebula call for
-20 s. So a pin waits only for the window it came in, however long you keep
-editing. Claude Code wouldn't give it to the running turn anyway (pushes
-that arrive while Claude is busy are delivered together on its next turn),
-so sending it sooner could only have freed the change turn to edit.
+gated push goes, unless Nebula can't answer the check (below): a proposal
+you reject meanwhile, and the edits you make meanwhile, go with the pin
+when it does, in one push that isn't gated (it holds a pin). Edits from
+your last 8 s before it goes are the exception: they aren't due yet (the
+8 s quiet time), so they follow in a gated push of their own, at least
+30 s later and once Claude has made no Nebula call for 20 s. So a pin waits
+only for the window it came in, however long you keep editing. Claude
+Code wouldn't give it to the running turn anyway (pushes that arrive while
+Claude is busy are delivered together on its next turn), so sending it
+sooner could only have freed the change turn to edit.
 
 **Only a pin still open lifts the gate.** A pin wake needs a pin of yours
 that is still open when it goes. A pin you delete, one any agent answers
@@ -805,10 +806,13 @@ open. That catches what its event feed can't show: a pin answered with the
 `nebula` CLI under the same agent name (Nebula leaves an agent's own events
 out of its feed), a delete lost while Nebula restarted, or a pin of the
 project you just switched away from. A batch left with no pin goes gated,
-like any batch carrying your edits. If Nebula can't answer the check, only
-the pins wait: it checks again (after 5 s, doubling up to 60 s), every other
-push goes meanwhile by its own rules, without them, and the server's log
-says so once the check has failed for a minute. If Nebula refuses the check
+like any batch carrying your edits. The check is a local request that
+answers at once: a push waits for it a second at most, after which an
+accept or the end of Claude's own run goes without the pins, and past 4 s
+the check counts as failed. If Nebula can't answer the check, only the pins wait: it checks
+again (5 s after the failure, doubling up to 60 s), every other push goes
+meanwhile by its own rules, without them, and the server's log says so
+once the check has failed for a minute. If Nebula refuses the check
 (an error such as an agent token it no longer accepts), the pins are dropped
 without a wake, and the log says how many. "Still open" means still open
 when Nebula answered: a pin you delete in the moment between that answer and

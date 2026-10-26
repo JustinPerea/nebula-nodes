@@ -67,16 +67,19 @@ with a fake clock. What it follows, from Justin's answers of 2026-10-20 and
   pin leaves the batch when the person deletes it, when any agent answers it
   (its own resolve_pin included) and when another project opens (anyone's
   switch, its own open_project or new_project, or the open project's
-  delete); a pin that loses its node, or gets it back, keeps waiting. Each
-  push decision reads the clock once; when the push due then would hold
-  pins, the listener first asks Nebula which are still open (GET
-  /api/canvas/pins), and the push carries only the pins that answer lists
-  open on the project the channel believes open (review 4): its own
+  delete); a pin that loses its node, or gets it back, keeps waiting. The
+  listener decides at one time; the send is stamped when it goes. When the
+  push due would hold pins, the listener first asks Nebula which are still
+  open (GET /api/canvas/pins), and a push carries only the pins that answer
+  lists open on the project the channel believes open (review 4): its own
   answers made elsewhere (the `nebula` CLI under its name) never reach its
   feed, lost events can hide a delete, and an answer for another project
   was taken around a switch. A batch left with no pin goes gated, by the
-  rules above. When Nebula can't answer, only the pins wait (for a check
-  that does); every other push goes by its own rules without them. When it
+  rules above. The check runs on its own, with a 4 s timeout: a push due
+  waits for it a second at most, then one that doesn't wait for pins (an
+  accept, its own run's end) goes without them (review 5). When Nebula can't answer, only the pins
+  wait (for a check that does, tried again 5 s after the failure, doubling
+  to 60 s); every other push goes by its own rules without them. When it
   refuses (4xx), the pins are dropped and the log says so. "Live" is live
   when Nebula answered: a pin deleted between that answer and the push
   (milliseconds), or before Claude Code delivers it, still goes as a pin
@@ -281,6 +284,9 @@ class ChannelState:
         # When a check Nebula couldn't answer may be tried again; until then the
         # pins wait and hold nothing else up (review 4, M2).
         self._pin_retry_at = -math.inf
+        # A check is out (pin_check_started): no second one, and the pins
+        # aren't due again until it answers (review 5, L1).
+        self._pin_checking = False
         # The person's edits waiting: changes that wake (Q50 a), the ends of
         # their runs (which wake too), lines that only ride along (board
         # edits, a replaced or cleared canvas), and lost events (which wake).
@@ -385,7 +391,7 @@ class ChannelState:
         what goes (take_push). Only a pin a check confirmed for that decision
         can go: its own answers made elsewhere (the `nebula` CLI under its
         name) never reach its feed, and lost events may hide a delete."""
-        if self.off or not self._pins_wait(now) or self._window_open(now):
+        if self.off or self._pin_checking or not self._pins_wait(now) or self._window_open(now):
             return []
         if self._ready(now, pins_go=True) is None:
             return []
@@ -405,6 +411,7 @@ class ChannelState:
         arrived meanwhile wasn't checked: it stays, unconfirmed, for the next
         check. Returns how many pins left."""
         self._pin_retry_at = -math.inf
+        self._pin_checking = False
         named = listing.get("projectId") if isinstance(listing, Mapping) else None
         project = str(named) if named else None
         believed = str(self.project_id) if self.project_id else None
@@ -427,13 +434,30 @@ class ChannelState:
         self._confirmed = confirmed
         return dropped
 
+    def pin_check_started(self) -> None:
+        """The listener asked Nebula (pins_to_check's pins). Until it answers
+        (confirm_pins) or gives up (pin_check_failed), no other check starts
+        and the pins aren't counted as due (next_check); they still hold the
+        gated pushes, which go in their batch (_pins_wait), and every other
+        push goes on its own terms (review 5, L1)."""
+        self._pin_checking = True
+
     def pin_check_failed(self, retry_at: float) -> None:
         """Nebula couldn't answer the check (down, restarting, too busy): no
         pin is confirmed, and until retry_at the pins wait without holding
         anything else up; the other pushes go on their own terms without them
-        (review 4, M2). A pin still goes only once a check confirms it."""
+        (review 4, M2). A pin still goes only once a check confirms it.
+        ``retry_at`` counts from the failure (review 5, L1)."""
         self._confirmed = set()
         self._pin_retry_at = retry_at
+        self._pin_checking = False
+
+    def pins_waiting(self) -> bool:
+        """Whether any pin waits. With none, a later pin starts its checks
+        afresh: an old retry time no longer applies (review 5, L2)."""
+        if not self._pins:
+            self._pin_retry_at = -math.inf
+        return bool(self._pins)
 
     def _has_wake_edits(self) -> bool:
         return bool(self._changes or self._person_ends or self._lost)
@@ -800,7 +824,7 @@ class ChannelState:
             # A window closes just after its end; with a call running the end
             # isn't known (the listener hears when the call returns).
             free_at = end + 0.001 if end is not None and math.isfinite(end) else now + self.limits.window_idle
-        if self._pins:
+        if self._pins and not self._pin_checking:  # a check out says when it answers
             ready_times.append(max(self._last_pin + self.limits.pin_merge, free_at, self._pin_retry_at))
         # While a pin waits, gated pushes go only in its batch (see _ready).
         pins_wait = self._pins_wait(now)
@@ -1011,6 +1035,8 @@ MIN_POLL = 0.05      # the shortest sleep between push decisions
 RUN_WATCH_FAILURES = 10  # errors in a row (about 6 minutes with the backoff) before it stops following a run
 PIN_RETRY_MIN, PIN_RETRY_MAX = 5.0, 60.0  # a failed pin check is tried again after 5, 10, 20, 40, 60, 60... s
 PIN_CHECK_SAY_AFTER = 60.0  # a pin check failing this long is logged (once)
+PIN_CHECK_TIMEOUT = 4.0  # GET /api/canvas/pins is local and quick; past this it failed (mcp_server)
+PIN_CHECK_GRACE = 1.0    # decisions wait this long for a check out; then the rest goes without its pins
 
 
 class Listener:
@@ -1022,11 +1048,15 @@ class Listener:
     sleeps until a push may be due or something changed. Nothing but the end
     of listening cancels a long-poll: an abandoned one held a slot of
     Nebula's 32 waiters for the rest of its 25 s (review 1 of PR #114).
-    Each push decision reads the clock once: when the push due then would
-    hold pins, the pusher first asks Nebula which are still open
-    (``fetch_pins``), and the push carries only those (review 3, H1; review
-    4, M1). A check Nebula can't answer holds only the pins (review 4, M2).
-    ``sleep`` is every wait the listener makes (tests pass a fake clock's)."""
+    The pusher decides at one time; the send is stamped when it goes. When
+    the push due would hold pins, it first asks Nebula which are still open
+    (``fetch_pins``), and a push carries only those (review 3, H1; review
+    4, M1). That check is a task of its own: the decisions wait for it
+    ``PIN_CHECK_GRACE`` at most, then go on without its pins, which still
+    hold the gated pushes until it answers or fails (review 5, L1). A check
+    Nebula can't answer holds only the pins (review 4, M2), and the next one
+    counts from its failure. ``sleep`` is every wait the listener makes
+    (tests pass a fake clock's)."""
 
     def __init__(self, state: ChannelState, *, fetch_events: FetchEvents, fetch_run: FetchRun, push: PushFn,
                  fetch_pins: FetchPins, clock: Callable[[], float], log: Callable[[str], None] | None = None,
@@ -1038,6 +1068,11 @@ class Listener:
         self._pin_backoff = 0.0
         self._pins_failing_since: float | None = None
         self._pins_failing_said = False
+        # The check out (_start_check): the pins it asked about, when the
+        # decisions stop waiting for it, and its answer once it came.
+        self._check_out: list[str] | None = None
+        self._check_grace_until = -math.inf
+        self._check_answer: tuple[str, Any] | None = None
         self._push = push
         self._clock = clock
         self._sleep = sleep or anyio.sleep
@@ -1123,46 +1158,71 @@ class Listener:
         finally:
             self._watching.discard(run_id)
 
-    async def _check_pins(self, now: float) -> bool:
-        """When the push due at ``now`` would hold pins, ask Nebula which are
-        still open (confirm_pins), so that decision carries only those.
-        Returns whether it asked (time passed meanwhile)."""
-        checked = self.state.pins_to_check(now)
-        if not checked:
-            return False
+    async def _ask_nebula(self, checked: list[str]) -> None:
+        """The pin check itself, as a task of its own: a slow or hanging
+        Nebula holds only this, never the decisions (review 5, L1). Its
+        answer (or what went wrong) waits for the next decision."""
         try:
             listing: Any = await self._fetch_pins()
-        except Exception as exc:  # noqa: BLE001 - Nebula down, restarting or refusing
-            status = getattr(exc, "status", None)
-            if isinstance(status, int) and 400 <= status < 500 and status != 429:
-                # Nebula refused the check (this agent's token no longer
-                # accepted, say; with no project open it answers 200 and an
-                # empty list). None of the pins can be confirmed, so they
-                # leave, without a wake: say so (review 4, L1).
-                dropped = self.state.confirm_pins(checked, None)
-                self._pin_check_answered()
-                self._log(f"pins: Nebula refused the pin check (HTTP {status}): {dropped} "
-                          f"pin{'s' if dropped != 1 else ''} dropped without a wake")
-                return True
-            # It couldn't answer: the pins wait, unconfirmed, and nothing else
-            # waits for them (review 4, M2). Said once it has lasted a minute.
-            self._pin_backoff = min(PIN_RETRY_MAX, max(PIN_RETRY_MIN, self._pin_backoff * 2))
-            self.state.pin_check_failed(now + self._pin_backoff)
-            if self._pins_failing_since is None:
-                self._pins_failing_since = now
-            elif not self._pins_failing_said and now - self._pins_failing_since >= PIN_CHECK_SAY_AFTER:
-                self._pins_failing_said = True
-                self._log(f"pins: the pin check has failed for over {PIN_CHECK_SAY_AFTER:g} s ({exc}); pins wait "
-                          f"until it answers, other pushes go without them; checking again in "
-                          f"{self._pin_backoff:g} s")
+        except Exception as exc:  # noqa: BLE001 - Nebula down, restarting, slow or refusing
+            self._check_answer = ("failed", exc)
+        else:
+            self._check_answer = ("answered", listing)
+        self._nudge()
+
+    def _start_check(self, group: anyio.abc.TaskGroup, checked: list[str], now: float) -> None:
+        self.state.pin_check_started()
+        self._check_out = checked
+        self._check_answer = None
+        self._check_grace_until = now + PIN_CHECK_GRACE
+        group.start_soon(self._ask_nebula, checked)
+
+    def _take_check_answer(self, now: float) -> bool:
+        """Apply the answer of the check out, if it came, to the decision made
+        at ``now`` (that decision's take_push carries only the pins it
+        confirmed). Returns whether there was one."""
+        if self._check_out is None or self._check_answer is None:
+            return False
+        checked, (outcome, value) = self._check_out, self._check_answer
+        self._check_out, self._check_answer = None, None
+        if outcome == "answered":
+            self._pin_check_answered()
+            self.state.confirm_pins(checked, value)
             return True
-        self._pin_check_answered()
-        self.state.confirm_pins(checked, listing)
+        status = getattr(value, "status", None)
+        if isinstance(status, int) and 400 <= status < 500 and status != 429:
+            # Nebula refused the check (this agent's token no longer
+            # accepted, say; with no project open it answers 200 and an
+            # empty list). None of the pins can be confirmed, so they
+            # leave, without a wake: say so (review 4, L1).
+            dropped = self.state.confirm_pins(checked, None)
+            self._pin_check_answered()
+            self._log(f"pins: Nebula refused the pin check (HTTP {status}): {dropped} "
+                      f"pin{'s' if dropped != 1 else ''} dropped without a wake")
+            return True
+        # It couldn't answer: the pins wait, unconfirmed, and nothing else
+        # waits for them (review 4, M2). The next try counts from now, when
+        # this one failed, not from when it was asked (review 5, L1). Said
+        # once it has lasted a minute.
+        self._pin_backoff = min(PIN_RETRY_MAX, max(PIN_RETRY_MIN, self._pin_backoff * 2))
+        self.state.pin_check_failed(now + self._pin_backoff)
+        if self._pins_failing_since is None:
+            self._pins_failing_since = now
+        elif not self._pins_failing_said and now - self._pins_failing_since >= PIN_CHECK_SAY_AFTER:
+            self._pins_failing_said = True
+            self._log(f"pins: the pin check has failed for over {PIN_CHECK_SAY_AFTER:g} s ({value}); pins wait "
+                      f"until it answers, other pushes go without them; checking again in "
+                      f"{self._pin_backoff:g} s")
         return True
 
     def _pin_check_answered(self) -> None:
         if self._pins_failing_said:
             self._log("pins: Nebula answers the pin check again")
+        self._pin_episode_over()
+
+    def _pin_episode_over(self) -> None:
+        """A run of failed checks is over: it answered, or no pin waits any
+        more. The next pin's first failure starts afresh (review 5, L2)."""
         self._pin_backoff = 0.0
         self._pins_failing_since = None
         self._pins_failing_said = False
@@ -1180,20 +1240,51 @@ class Listener:
 
     async def _push_when_due(self) -> None:
         """Push what is due; otherwise sleep until a push may be due or something changed."""
+        try:
+            async with anyio.create_task_group() as checks:
+                await self._decide(checks)
+                checks.cancel_scope.cancel()  # a check still out (listening stopped)
+        except BaseExceptionGroup as group:
+            # The check task keeps its own errors (_ask_nebula), so one here
+            # came from the decisions: raise it as it was.
+            if len(group.exceptions) == 1:
+                raise group.exceptions[0] from None
+            raise
+
+    async def _decide(self, checks: anyio.abc.TaskGroup) -> None:
         while True:
             self._changed = anyio.Event()  # before deciding, so a nudge meanwhile isn't missed
-            # One time for the whole decision: the pins checked are the pins
-            # of the push due then, and only those confirmed can go (review 4, M1).
+            # One time for the whole decision: the pins a check confirmed are
+            # used up by this decision's take_push, and only those can go
+            # (review 4, M1); the push is stamped with it, when it goes.
             now = self._clock()
             if self.state.check_idle(now):
                 self._log(f"no activity from the person for {_duration(self.state.limits.idle_off)}: "
                           "stopped listening (Reconnect turns it back on)")
                 return
-            asked = await self._check_pins(now)
-            # Decided at `now`; when Nebula took a while to answer, the push
-            # is stamped when it goes, so the wake spacing and a gated window
-            # count from the send (that read decides nothing).
-            push = self.state.take_push(now, sent_at=self._clock() if asked else None)
+            if not self.state.pins_waiting():
+                self._pin_episode_over()
+            answered = self._take_check_answer(now)
+            if not answered:
+                if self._check_out is not None:
+                    if now < self._check_grace_until:
+                        # A check answers within the grace as a rule: until
+                        # then the push due waits for it, as one holding pins.
+                        await self._wait(self._check_grace_until - now)
+                        continue
+                    # It is slow: decide without its pins, which still hold
+                    # the gated pushes (they go in the pins' batch, or once
+                    # the check fails); the rest goes on its own terms.
+                else:
+                    checked = self.state.pins_to_check(now)
+                    if checked:
+                        # When the push due now would hold pins, ask Nebula
+                        # which are still open (review 3, H1), off the
+                        # decisions' path: then decide again.
+                        self._start_check(checks, checked, now)
+                        await anyio.sleep(0)  # a quick answer is in before deciding again
+                        continue
+            push = self.state.take_push(now)
             if push is not None:
                 try:
                     await self._push(push.content, push.meta)
@@ -1201,12 +1292,10 @@ class Listener:
                     return  # the session is gone
                 self.pushes += 1
                 continue
-            if asked:
-                continue  # time passed while Nebula answered: decide again from now
             delay = self.state.next_check(now)
             idle_in = self.state.last_person + self.state.limits.idle_off - now
             wait = min(idle_in, math.inf if delay is None else delay)
-            await self._wait(max(MIN_POLL, wait))
+            await self._wait(max(MIN_POLL, wait))  # a check's answer nudges it
 
     async def _poll_events(self) -> None:
         """The journal long-poll, always 25 s: an answer comes as soon as there are events."""

@@ -2073,6 +2073,341 @@ def test_fuzz_no_pin_goes_unless_live_on_the_open_project_when_nebula_answered()
     assert pushes > 3000 and checks > 1000, (pushes, checks)
 
 
+# -- Review 5 of PR #114 (2026-10-26) ------------------------------------------------
+# L1: a pin check that hung to its 15 s timeout held the push loop (195 s of
+# 600 in the probe; an accept 15 s late), and its retry counted from before
+# the request, so checks went back to back. L2: a failing-check episode that
+# ended because the pins left carried its backoff and "failing since" into
+# the next pin's first failure, hours later.
+
+class _Done(Exception):
+    pass
+
+
+def _until_done(listener) -> None:
+    async def main():
+        with anyio.fail_after(10):
+            try:
+                await listener._push_when_due()
+            except _Done:
+                pass
+            except BaseExceptionGroup as group:
+                if not group.subgroup(_Done):
+                    raise
+
+    anyio.run(main)
+
+
+def test_a_pin_check_that_hangs_never_holds_an_accept():
+    # Fake clock that moves only through the listener's waits, a second at
+    # most per wait: a check in flight blocks only itself.
+    state = ChannelState(now=0.0)
+    state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_a"}}, now=1.0)
+    clock = {"t": 100.0}
+    state.last_person = 100.0
+    state.observe(resp(pin(1)), now=100.0)
+    state.observe(resp(ev(2, "proposal.accepted", data={"proposalId": "prop_a", "idMap": {}})), now=100.0)
+    checks, pushes = [], []
+
+    async def fetch_pins():
+        started = clock["t"]
+        checks.append(started)
+        while clock["t"] < started + 15.0:  # hangs 15 s, then times out
+            await anyio.sleep(0)
+        raise TimeoutError("timed out")
+
+    async def push(content, meta):
+        pushes.append((clock["t"], dict(meta), content))
+
+    async def sleep(seconds):
+        clock["t"] += min(seconds, 1.0)
+        if clock["t"] > 200.0:
+            raise _Done()
+        await anyio.sleep(0)
+
+    async def never(*args):
+        await anyio.sleep_forever()
+
+    listener = mcp_channel.Listener(state, fetch_events=never, fetch_run=never, push=push, clock=lambda: clock["t"],
+                                    log=lambda line: None, sleep=sleep, fetch_pins=fetch_pins)
+    _until_done(listener)
+    assert checks and checks[0] == 100.0
+    accepts = [(at, meta.get("wake"), "gate" in meta) for at, meta, _ in pushes if meta.get("wake") == "proposal"]
+    # The accept goes while the check hangs (it waits only for the check's
+    # grace, as for any check), not when the check gives up at 115.
+    assert accepts and accepts[0][0] <= 100.0 + mcp_channel.PIN_CHECK_GRACE + 1.0 and not accepts[0][2], pushes
+    assert all("<pin" not in content for _, _, content in pushes)
+    # The next check counts its wait from when this one failed, not from when it started.
+    assert len(checks) >= 2 and checks[1] >= checks[0] + 15.0 + mcp_channel.PIN_RETRY_MIN, checks
+
+
+def test_a_failed_pin_check_is_tried_again_counting_from_its_failure():
+    # Probe probe_r5_hang_spacing: a check that takes 15 s to fail was tried
+    # again at once (gaps between check starts 15, 15, 20, 40, 60).
+    state = ChannelState(now=0.0)
+    clock = {"t": 100.0}
+    state.last_person = 100.0
+    state.observe(resp(pin(1)), now=100.0)
+    checks = []
+
+    async def fetch_pins():
+        checks.append(round(clock["t"], 1))
+        clock["t"] += 15.0
+        if clock["t"] > 700.0:
+            raise _Done()
+        raise TimeoutError("timed out")
+
+    async def push(content, meta):
+        pass
+
+    async def sleep(seconds):
+        clock["t"] += seconds
+        if clock["t"] > 700.0:
+            raise _Done()
+        await anyio.sleep(0)
+
+    async def never(*args):
+        await anyio.sleep_forever()
+
+    listener = mcp_channel.Listener(state, fetch_events=never, fetch_run=never, push=push, clock=lambda: clock["t"],
+                                    log=lambda line: None, sleep=sleep, fetch_pins=fetch_pins)
+    _until_done(listener)
+    gaps = [round(b - a, 1) for a, b in zip(checks, checks[1:])]
+    # 15 s to fail, then 5, 10, 20, 40, 60 s from the failure.
+    assert gaps[:6] == [20.0, 25.0, 35.0, 55.0, 75.0, 75.0], gaps
+
+
+def test_a_new_pin_after_a_failing_episode_starts_afresh():
+    # Probe probe_r5_episode: the person deleted the pin while the check kept
+    # failing; an hour later a new pin's first retry came 40 s after its
+    # first failure (not 5 s), and the first failure was logged as a minute's.
+    state = ChannelState(now=0.0)
+    clock = {"t": 100.0}
+    state.last_person = 100.0
+    state.observe(resp(pin(1)), now=100.0)
+    checks, logs = [], []
+
+    async def fetch_pins():
+        checks.append(round(clock["t"], 1))
+        raise ConnectionError("refused")
+
+    async def push(content, meta):
+        pass
+
+    async def sleep(seconds):
+        clock["t"] += seconds
+        t = clock["t"]
+        if t >= 130.0 and "pin_00000001" in state._pins:
+            state.observe(resp(ev(2, "pin.removed", data={"pinId": "pin_00000001"})), now=t)  # the person deletes it
+        if t >= 3600.0 and not state._pins and not getattr(sleep, "second", False):
+            sleep.second = True
+            clock["t"] = t = 3600.0
+            state.last_person = t
+            state.observe(resp(pin(3)), now=t)  # an hour later, a new pin
+        if t > 3800.0:
+            raise _Done()
+        await anyio.sleep(0)
+
+    async def never(*args):
+        await anyio.sleep_forever()
+
+    listener = mcp_channel.Listener(state, fetch_events=never, fetch_run=never, push=push, clock=lambda: clock["t"],
+                                    log=lambda line: logs.append((clock["t"], line)), sleep=sleep,
+                                    fetch_pins=fetch_pins)
+    _until_done(listener)
+    later = [c for c in checks if c >= 3600.0]
+    assert checks[:3] == [101.0, 106.0, 116.0], checks
+    assert later[:3] == [3601.0, 3606.0, 3616.0], later
+    # Said only once the new pin's own checks have failed for a minute.
+    assert logs and all(at >= 3601.0 + 60.0 for at, _ in logs), logs
+
+
+def test_the_pin_check_gives_up_after_a_few_seconds(nebula):
+    # The real server against a Nebula whose pins listing hangs: the check
+    # times out after PIN_CHECK_TIMEOUT (it was 15 s), and the person's edit
+    # that waited with the pin goes then, gated, without it.
+    pushes: list[dict] = []
+    nebula.pins_hang.set()
+
+    async def main():
+        async with _connected(channel=True, pushes=pushes) as (session, _, _done):
+            await _until(lambda: nebula.polls)
+            nebula.add("pin.added", node="n7", data={"pinId": "pin_aaaaaaaa", "text": "warmer", "anchor": {"nodeId": "n7"}})
+            nebula.add("node.params", node="n8", data={"keys": ["prompt"]}, summary="set prompt on Hero (n8)")
+            started = time.monotonic()
+            await _until(lambda: pushes, timeout=9.0)
+            return time.monotonic() - started
+
+    try:
+        took = anyio.run(main)
+    finally:
+        nebula.pins_hang.clear()
+        nebula.pins_released.set()
+    assert pushes[0]["meta"]["wake"] == "change" and pushes[0]["meta"]["gate"] == "change"
+    assert "<pin" not in pushes[0]["content"] and nebula.pin_checks >= 1
+    assert took < 9.0 and 3.0 <= mcp_channel.PIN_CHECK_TIMEOUT <= 5.0
+
+
+def _listener_check_fuzz(seed: int, horizon: float = 900.0) -> dict:
+    """The real Listener, its check a task of its own, against a fake Nebula
+    whose check answers at once, slowly (past the grace), hangs to the
+    timeout, fails (5xx) or refuses (401), while the person pins, deletes,
+    answers elsewhere, edits and switches projects and Claude's proposals are
+    decided. The fake clock moves through the listener's waits (0.5 s at
+    most per wait), and the world acts in them."""
+    rng = random.Random(seed)
+    s = ChannelState(now=0.0)
+    clock = {"t": 10.0}
+    truth = {"active": "proj_1", "pins": {"proj_1": {}, "proj_2": {}, "proj_3": {}}}
+    seq = [0]
+    queue = []
+    answers = []        # (time, project, open ids) per answer, in order
+    out = {"checks": 0, "pins": 0, "gated": 0, "ungated": 0, "slow": 0, "hung": 0, "violations": []}
+    s.last_person = 10.0
+    s.project_id = "proj_1"
+    s.tool_finished("propose_change", {}, {"proposal": {"id": "prop_0"}}, now=1.0)
+    proposals = [0]
+    lst = None
+
+    def publish(kind, data=None, node=None, actor=None):
+        seq[0] += 1
+        e = ev(seq[0], kind, actor=actor, node=node, data=data)
+        e["projectId"] = truth["active"]  # round 6: the tag is the catalog's
+        queue.append(e)
+
+    def deliver():
+        r = {"journal": "j", "cursor": seq[0], "events": list(queue), "gap": False, "reset": False,
+             "projectId": truth["active"]}
+        queue.clear()
+        s.observe(r, now=clock["t"])
+        if lst is not None:
+            lst._nudge()
+
+    def act():
+        t = clock["t"]
+        s.last_person = t
+        r = rng.random()
+        act_ = truth["active"]
+        if r < 0.2:
+            pid = f"pin_{rng.getrandbits(32):08x}"
+            truth["pins"][act_][pid] = "open"
+            publish("pin.added", data={"pinId": pid, "text": "x", "anchor": {"nodeId": "n1"}}, node="n1")
+        elif r < 0.28:
+            live = [p for p, st in truth["pins"][act_].items() if st == "open"]
+            if live:
+                p = rng.choice(live)
+                del truth["pins"][act_][p]
+                publish("pin.removed", data={"pinId": p})
+        elif r < 0.36:
+            live = [p for p, st in truth["pins"][act_].items() if st == "open"]
+            if live:
+                p = rng.choice(live)
+                truth["pins"][act_][p] = "resolved"
+                if rng.random() < 0.5:
+                    publish("pin.resolved", data={"pinId": p}, actor={"kind": "agent", "id": "agent:o", "name": "O"})
+        elif r < 0.52:
+            publish("node.params", data={"keys": ["prompt"]}, node="n8")
+        elif r < 0.58:
+            to = rng.choice([p for p in truth["pins"] if p != act_])
+            truth["active"] = to
+            if rng.random() < 0.3:
+                s.tool_finished("open_project", {"project_id": to}, {"project": {"id": to}}, now=t)
+            else:
+                publish("canvas.replaced", data={"reason": "project-open", "projectId": to})
+        elif r < 0.64:
+            pid = f"prop_{proposals[0]}"
+            publish(rng.choice(["proposal.accepted", "proposal.rejected"]), data={"proposalId": pid, "idMap": {}})
+            proposals[0] += 1
+            s.tool_finished("propose_change", {}, {"proposal": {"id": f"prop_{proposals[0]}"}}, now=t)
+        elif r < 0.7:
+            s.tool_started("look_at_canvas", {}, now=t)
+            s.tool_finished("look_at_canvas", {}, {}, now=t + 0.3)
+
+    class Status(Exception):  # noqa: N818
+        def __init__(self, status):
+            super().__init__(f"HTTP {status}")
+            self.status = status
+
+    async def fetch_pins():
+        out["checks"] += 1
+        start = clock["t"]
+        kind = rng.random()
+        delay = 0.0 if kind < 0.55 else 2.0 if kind < 0.75 else 6.0 if kind < 0.85 else 0.0
+        if delay:
+            out["slow" if delay < 4 else "hung"] += 1
+        while clock["t"] < start + min(delay, mcp_channel.PIN_CHECK_TIMEOUT):
+            await anyio.sleep(0)
+        if delay >= mcp_channel.PIN_CHECK_TIMEOUT:
+            raise TimeoutError("timed out")
+        if kind >= 0.95:
+            raise Status(401)
+        if kind >= 0.85:
+            raise Status(503)
+        act_ = truth["active"]
+        answers.append((clock["t"], act_, {p for p, st in truth["pins"][act_].items() if st == "open"}))
+        return {"projectId": act_, "pins": [{"id": p, "status": st} for p, st in truth["pins"][act_].items()]}
+
+    async def push(content, meta):
+        shown = re.findall(r'<pin id="([^"]+)"', content)
+        gated = meta.get("gate") == "change"
+        out["gated" if gated else "ungated"] += 1
+        if shown:
+            out["pins"] += 1
+            if gated:
+                out["violations"].append((seed, clock["t"], "a gated push carrying a pin"))
+            last = answers[-1] if answers else None
+            for p in shown:
+                if last is None or p not in last[2] or s.project_id != last[1]:
+                    out["violations"].append((seed, clock["t"], p, "not open in the answer that confirmed it"))
+        elif not gated and re.search(r"[Tt]he person (also )?(changed the canvas|made \d+ edit)|person's run|were lost", content):
+            out["violations"].append((seed, clock["t"], "ungated push with edits and no pin", meta, content))
+        if gated and lst._check_out is not None and s._pins and clock["t"] < lst._check_grace_until + 1e-9:
+            out["violations"].append((seed, clock["t"], "gated push inside a check's grace while pins wait"))
+
+    async def sleep(seconds):
+        clock["t"] += min(seconds, 0.5)
+        if clock["t"] > horizon:
+            raise _Done()
+        if rng.random() < 0.12:
+            act()
+        if rng.random() < 0.3:
+            deliver()
+        await anyio.sleep(0)
+
+    async def never(*a):
+        await anyio.sleep_forever()
+
+    lst = mcp_channel.Listener(s, fetch_events=never, fetch_run=never, push=push, clock=lambda: clock["t"],
+                               log=lambda line: None, sleep=sleep, fetch_pins=fetch_pins)
+
+    async def main():
+        with anyio.fail_after(60):
+            try:
+                await lst._push_when_due()
+            except _Done:
+                pass
+            except BaseExceptionGroup as group:
+                if not group.subgroup(_Done):
+                    raise
+    anyio.run(main)
+    return out
+
+def test_fuzz_the_listener_with_slow_hanging_and_failing_checks():
+    # Review 5, L1: (1) every pin an ungated push carries was open on the
+    # open project in the answer that confirmed it; (2) no push carrying a
+    # pin is gated; (3) no gated push goes inside a check's grace while pins
+    # wait; (4) an ungated push carrying edits holds a pin.
+    total = {"checks": 0, "pins": 0, "slow": 0, "hung": 0}
+    violations: list = []
+    for seed in range(60):
+        found = _listener_check_fuzz(seed)
+        violations += found["violations"]
+        for key in total:
+            total[key] += found[key]
+    assert violations == [], (len(violations), violations[:3])
+    assert total["checks"] > 500 and total["pins"] > 300 and total["slow"] > 80 and total["hung"] > 40, total
+
+
 def test_the_change_turn_allow_list_is_reads_and_the_change_turn_writes():
     tools = {tool.name: tool for tool in anyio.run(mcp_server.mcp.list_tools)}
     allowed = mcp_channel.CHANGE_TURN_TOOLS
@@ -2112,6 +2447,8 @@ class _Journal:
         self.runs: dict[str, dict] = {}  # GET /api/graph/runs/{id}: the answer, by run id
         self.run_polls: list[str] = []
         self.pin_checks = 0  # GET /api/canvas/pins: the listener's check before a push that holds pins
+        self.pins_hang = threading.Event()  # set: the pins listing hangs until pins_released
+        self.pins_released = threading.Event()
 
     def add(self, kind: str, actor=None, **kwargs) -> None:
         with self.cond:
@@ -2165,6 +2502,8 @@ def _fake_nebula(journal: _Journal):
                 return
             if url.path == "/api/canvas/pins":
                 journal.pin_checks += 1
+                if journal.pins_hang.is_set():
+                    journal.pins_released.wait(30)
                 with journal.cond:
                     status: dict = {}
                     for event in journal.events:
