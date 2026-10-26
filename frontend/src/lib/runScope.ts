@@ -65,7 +65,7 @@ export interface RunScopeSummary {
 
 /** A node's name in a run's confirm and summary: the name the person gave
  * it; a node still under its model's own name is named by the route the
- * run takes (GM - Design, round 15, item 3: "Grok Imagine 2.0 (xAI)" on the
+ * run takes (GM - Design, rounds 15 and 16: "Grok Imagine 2.0 via xAI" on the
  * person's xAI key, never the Krea copy's name). */
 export function runNodeName(node: Node<NodeData>, provider: string | null | undefined): string {
   const definition = node.data?.definitionId ? NODE_DEFINITIONS[node.data.definitionId] : undefined;

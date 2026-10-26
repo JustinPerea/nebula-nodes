@@ -458,6 +458,28 @@ export function modelNotChosenText(nodes: Node<NodeData>[], names?: Readonly<Rec
   return null;
 }
 
+/**
+ * GM - Design, round 16 (a), verbatim: a re-ask after a route change says
+ * why, in one line above the rows: "“Hero still” changed while this was
+ * open."; 2-3 nodes in row order, "“A”, “B” and “C” changed while this was
+ * open." ("“A” and “B” …" for two); 4 or more, "4 nodes changed while this
+ * was open." It names only the nodes whose route or price moved between
+ * what the person was shown (`shown`) and the rows now (`now`): the model a
+ * row runs on its route, its setting, or its price. Null when none moved.
+ */
+export function changedNodesLine(shown: PlaceholderRunConfirm, now: PlaceholderRunConfirm): string | null {
+  const before = new Map(shown.rows.map((row) => [row.nodeId, row]));
+  const moved = now.rows.filter((row) => {
+    const was = before.get(row.nodeId);
+    return was !== undefined && (was.modelKey !== row.modelKey || (was.setting ?? '') !== (row.setting ?? '')
+      || was.price !== row.price);
+  }).map((row) => before.get(row.nodeId)!.name);
+  if (moved.length === 0) return null;
+  const who = moved.length >= 4 ? `${moved.length} nodes`
+    : moved.length === 1 ? moved[0] : `${moved.slice(0, -1).join(', ')} and ${moved[moved.length - 1]}`;
+  return `${who} changed while this was open.`;
+}
+
 /** A row's segments, in order: the name, the model, each setting, the price
  * (GM - Design, round 12: the row wraps only between them, never inside one).
  * The dialog draws each as one unit, with the " · " between. */
@@ -631,7 +653,7 @@ export function placeholderRunConfirm(
   const byInput: string[] = [];
   // GM - Design, round 15, item 3: a row names the route the run actually
   // takes (summarizeRunScope's `routes`): a node under its model's own name,
-  // and the model, read "Grok Imagine 2.0 (xAI)" on the person's xAI key.
+  // and the model, read "Grok Imagine 2.0 via xAI" on the person's xAI key (round 16).
   const routeOf = (node: Node<NodeData>) => summary.routes?.[node.id] ?? null;
   const labelOf = (node: Node<NodeData>) => options.names?.[node.id] || runNodeName(node, routeOf(node));
   const row = (node: Node<NodeData>): PlaceholderRunRow => {

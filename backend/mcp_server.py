@@ -704,7 +704,8 @@ def propose_change(
 
     Returns {"proposal": {...}} with `id`, `status`, and `cost`: nodes are
     "free" (run locally) or "paid · <provider>" (the provider the run would
-    go through with the keys set, as its price is), and `cost.estimate` sums
+    go through with the keys set, as its price is; a Krea copy on its
+    maker's key names both: "paid · Grok Imagine 2.0 via xAI"), and `cost.estimate` sums
     list prices in USD where Nebula has them (null when none do; `open` when
     some paid node has none). `cost.notReady` lists the run's nodes that
     can't run here as set up (no key, no Krea sign-in), each with `missing`

@@ -96,10 +96,15 @@ function RowSegments({ row }: { row: PlaceholderRunRow }) {
   );
 }
 
-export function PlaceholderRunDialog({ model, changed = false, onDone }: {
+export function PlaceholderRunDialog({ model, changed = false, movedLine = null, onDone }: {
   model: PlaceholderRunConfirm;
   /** Asked again because the run changed since the person last saw it. */
   changed?: boolean;
+  /** GM - Design, round 16 (a): asked again because a route or price moved:
+   * "“Hero still” changed while this was open.", one line at the top of the
+   * body, in place of the round-5 line. Run is held for its first 500 ms
+   * (`changed`) and focus stays on Cancel, as for any re-ask. */
+  movedLine?: string | null;
   /** `shown`: the words on screen when Run or Cancel was clicked. */
   onDone: (ok: boolean, shown: PlaceholderRunConfirm) => void;
 }) {
@@ -177,10 +182,11 @@ export function PlaceholderRunDialog({ model, changed = false, onDone }: {
       <div ref={card} className="prompt-dialog__card placeholder-run__card">
         <h2 id={headingId} className="placeholder-run__heading">{model.heading}</h2>
         <div id={bodyId} className="placeholder-run__body">
+          {movedLine && <p className="prompt-dialog__line placeholder-run__changed">{movedLine}</p>}
           <p className="prompt-dialog__line">{model.intro}</p>
           {model.savedLine && <p className="prompt-dialog__line placeholder-run__saved">{model.savedLine}</p>}
           {model.leftLine && <p className="prompt-dialog__line placeholder-run__left">{model.leftLine}</p>}
-          {(changed || changes > 0) && <p className="prompt-dialog__line placeholder-run__changed">{CHANGED_LINE}</p>}
+          {((changed && !movedLine) || changes > 0) && <p className="prompt-dialog__line placeholder-run__changed">{CHANGED_LINE}</p>}
           <ul ref={list} className="placeholder-run__rows"
             {...(scrolls ? { tabIndex: 0, 'aria-labelledby': headingId } : {})}>
             {model.rows.map((row) => (

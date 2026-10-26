@@ -26,6 +26,8 @@ export function ContextMenu() {
   const duplicateNode = useGraphStore((s) => s.duplicateNode);
   const deleteNode = useGraphStore((s) => s.deleteNode);
   const isExecuting = useGraphStore((s) => s.isExecuting);
+  // A run waiting for its inputs counts as starting (review 15, M-B).
+  const runStarting = useGraphStore((s) => s.runStarting);
   const menuRef = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState<{ left: number; top: number } | null>(null);
 
@@ -100,7 +102,7 @@ export function ContextMenu() {
   const items: MenuItem[] = [
     {
       label: 'Run This Node',
-      disabled: isExecuting,
+      disabled: isExecuting || runStarting,
       action: () => {
         executeNode(nodeId);
         hideContextMenu();

@@ -88,7 +88,7 @@ import { MISSING_KEY_FAILURE, MODEL_SETTINGS_FAILURE, MODEL_SETTINGS_FAILURE_HEA
 import { cleanRemovals, deletedNoticeText, DROPPED_REDO_TEXT, DROPPED_UNDO_TEXT, skippedPressText, lateRestoreText, mergeRemovals, notRestoredText, pinsOnAnotherModel, restoredNoticeText, supersededBy, type RemovalRecord } from '../lib/deleteNotice';
 import { NOTHING_RAN_LINE, OTHER_NODE_LINE, SHOT_NOT_STARTED_LINE, validationReadings, writtenReading, type ValidationReading } from '../lib/validationCopy';
 import {
-  RUNTIME_FIELDS, applySlice, diffCanvas, edgeKey, editArrivedText, foldArrange, forgetClearedPlaceholders, foreignSource,
+  RUNTIME_FIELDS, applySlice, diffCanvas, edgeKey, stableJson, editArrivedText, foldArrange, forgetClearedPlaceholders, foreignSource,
   isForeignEdit, isOwnEcho,
   restoreRequest, undoNoticeText, type EditOrigin, type ForeignEdit, type RestoreBody,
 } from '../lib/canvasUndo';
@@ -99,7 +99,7 @@ import { usePricingStore } from './pricingStore';
 import { useInputSizeStore } from './inputSizeStore';
 import { useStoredAssetsStore } from './storedAssetsStore';
 import { nodesThatRun, repeatRun, runCostConfirmMessage, shouldConfirmRunCost, summarizeRunScope, type RunScope } from '../lib/runScope';
-import { PRICE_DEPENDS_ON_INPUT, PRICE_NOT_LISTED, mayBeRefused, modelNotChosenText, planDecidesRefusal, placeholderRefusalOf, placeholderRunConfirm, runPlaceholders, withRefusalFlags, withRunEstimate, type PlaceholderRunConfirm, type PlaceholderRunOptions, type RunEstimate } from '../lib/placeholderRunConfirm';
+import { PRICE_DEPENDS_ON_INPUT, PRICE_NOT_LISTED, changedNodesLine, mayBeRefused, modelNotChosenText, planDecidesRefusal, placeholderRefusalOf, placeholderRunConfirm, runPlaceholders, withRefusalFlags, withRunEstimate, type PlaceholderRunConfirm, type PlaceholderRunOptions, type RunEstimate } from '../lib/placeholderRunConfirm';
 import { placeholderRunDialogModule } from '../lib/placeholderRunDialogModule';
 import { useCreateDraftStore } from './createDraftStore';
 import { getCinemaUploadIssue, useCinemaUploadStore } from './cinemaUploadStore';
@@ -823,6 +823,11 @@ interface GraphState {
   nodes: Node<NodeData>[];
   edges: Edge[];
   isExecuting: boolean;
+  /** A run is waiting (at most RUN_INPUTS_WAIT_MS) for what its refusal
+   * reads before it asks or starts (review 15, M-B): it counts as starting,
+   * so the Run controls show their disabled state and a second Run does
+   * nothing, as during a run. */
+  runStarting: boolean;
   isCancelling: boolean;
   /** Import owns graph replacement without creating an execution/history record. */
   isImportingGraph: boolean;
@@ -1906,7 +1911,7 @@ function changeCanvasNodes(
     }
     breakUndoDebounce();
     const step = shared?.step ?? pushUndo(set, get);
-    markDeleteStep(step, removedIds);
+    markDeleteStep(step);
     const present = new Set(get().nodes.map((node) => node.id));
     applyCanvasNodeChanges(changes, set, get, step);
     const gone = removedIds.filter((nodeId) => present.has(nodeId) && !get().nodes.some((node) => node.id === nodeId));
@@ -1929,7 +1934,7 @@ function changeCanvasNodes(
   // What this step's deletes remove, and which step each node's delete
   // belongs to while it is on its way: its echo places the step (review 13, M-2).
   removedBy.set(undoStep, new Set([...(removedBy.get(undoStep) ?? []), ...cliRemovedIds]));
-  markDeleteStep(undoStep, removedIds);
+  markDeleteStep(undoStep);
   for (const nodeId of cliRemovedIds) deletesInFlight.set(nodeId, undoStep);
   const deleting = Promise.allSettled(cliRemovedIds.map(deleteCLIOriginNode)).then((results) => {
     try {
@@ -2702,7 +2707,7 @@ async function executeHistoricalRun(
   get: GraphGet,
 ): Promise<void> {
   const { isExecuting, resetExecution } = get();
-  if (isExecuting || get().isImportingGraph || source.status === 'running') return;
+  if (isExecuting || get().runStarting || get().isImportingGraph || source.status === 'running') return;
   if (isWorldLabsRecoveryReplayBlocked(source)) {
     console.warn(
       '[nebula] Saved replay blocked: a failed/cancelled World Labs snapshot may omit a paid operation recovery ID. Use the live node after checking Marble.',
@@ -2757,7 +2762,7 @@ async function executeHistoricalRun(
     let saved = snapshotCanvas(snapshot, get().nodes);
     // What the refusal reads is known first (review 14, M-B).
     if (runInputsUnknown(saved.nodes, saved.edges, { kind: 'graph' })) {
-      await knowRunInputs(saved.nodes, saved.edges, { kind: 'graph' });
+      await waitForRunInputs(saved.nodes, saved.edges, { kind: 'graph' }, CANVAS_RUN);
       if (get().isExecuting || get().isImportingGraph) return;
       saved = snapshotCanvas(snapshot, get().nodes);
     }
@@ -3253,18 +3258,67 @@ const deletesInFlight = new Map<string, UndoEntry>();
  * whatever its answer says (review 14, L-E). */
 const syncRemoved = new WeakMap<UndoEntry, Set<string>>();
 /**
- * Review 14, L-D: an undo only touches what its step touched. A delete step
- * (every delete path: changeCanvasNodes) takes no node in, so undoing it puts
- * back the nodes it removed and never takes one off: a node that came while
- * it was on its way (an agent's, by a reconnect's sync) stays. The step its
- * undo puts on the redo stack takes off only those nodes again
- * (`redeletes`), and the redo's own step is a delete step again.
+ * Review 14, L-D, and review 15 (M-A follow-up, L-1; the coordinator's
+ * decision): an undo takes off only the nodes its own step added, whatever
+ * the snapshot lacks. A node on the canvas that the step's snapshot doesn't
+ * hold stays when the step is undone or redone unless that step put it there.
+ *
+ * - `stepAdds`: what a step added, when that is known exactly. A delete step
+ *   (every delete path: changeCanvasNodes) and a clear add nothing. The step
+ *   an undo or redo puts on the other stack (its inverse) added what that
+ *   undo or redo brought back (`back` in applyHistory): a redo of a delete's
+ *   undo takes off only the nodes the undo restored.
+ * - Any other step (the person's typing, a paste, a duplicate, a connect,
+ *   an upload) added what the canvas has and its snapshot lacks, except the
+ *   nodes that came onto the canvas after it was taken from anywhere else
+ *   (`arrivedAfter`): a sync's (an agent's edit, a reconnect: X3, X4), an
+ *   undo's or redo's (a delete's undo applied above it: P1, P2, P6, P7).
+ *   While a step's own request is on its way, what arrives may be its own
+ *   (an upload's node, an accepted proposal's): `arrivedSince` keeps those,
+ *   and once it settles every one that isn't its own (`ownArrivals`, the
+ *   answer's ids) counts as someone else's.
  */
-const deleteTouches = new WeakMap<UndoEntry, Set<string>>();
-const redeletes = new WeakMap<UndoEntry, Set<string>>();
+const stepAdds = new WeakMap<UndoEntry, Set<string>>();
+const arrivedAfter = new WeakMap<UndoEntry, Set<string>>();
+const ownArrivals = new WeakMap<UndoEntry, Set<string>>();
 
-function markDeleteStep(step: UndoEntry, ids: string[]): void {
-  deleteTouches.set(step, new Set([...(deleteTouches.get(step) ?? []), ...ids]));
+function markDeleteStep(step: UndoEntry): void {
+  if (!stepAdds.has(step)) stepAdds.set(step, new Set());
+}
+
+/** Nodes that came onto the canvas from anywhere but `except`'s own change:
+ * every settled step on either stack whose additions are read off the
+ * canvas no longer counts them as its own. */
+function noteArrivedElsewhere(ids: Iterable<string>, get: GraphGet, except?: UndoEntry): void {
+  const arrived = [...ids];
+  if (arrived.length === 0) return;
+  const { undoStack, redoStack } = get();
+  for (const entry of [...undoStack, ...redoStack]) {
+    if (entry === except || isForeignEdit(entry) || stepAdds.has(entry) || stepsInFlight.has(entry)) continue;
+    const seen = arrivedAfter.get(entry) ?? new Set<string>();
+    for (const id of arrived) seen.add(id);
+    arrivedAfter.set(entry, seen);
+  }
+}
+
+/** A step whose request was on its way has settled: what arrived meanwhile
+ * that its answer doesn't name as its own came from elsewhere. */
+function settleArrivals(step: UndoEntry): void {
+  const own = ownArrivals.get(step);
+  const during = arrivedSince.get(step);
+  if (!own || !during || stepAdds.has(step) || isForeignEdit(step)) return;
+  const seen = arrivedAfter.get(step) ?? new Set<string>();
+  for (const id of during) if (!own.has(id)) seen.add(id);
+  arrivedAfter.set(step, seen);
+}
+
+/** The nodes undoing (or redoing) `entry` may take off the canvas: only those its step added. */
+function takenOffBy(entry: UndoSnapshot, nodes: Node<NodeData>[]): Set<string> {
+  const held = new Set(entry.nodes.map((node) => node.id));
+  const known = stepAdds.get(entry);
+  if (known) return new Set([...known].filter((id) => !held.has(id)));
+  const elsewhere = arrivedAfter.get(entry);
+  return new Set(nodes.map((node) => node.id).filter((id) => !held.has(id) && !elsewhere?.has(id)));
 }
 /** The settled steps a re-pushed delete step went above (placeDeleteStep).
  * The delete was sent before them, so it is no newer edit than they are: a
@@ -3386,6 +3440,8 @@ function placeDeleteStep(undoStep: UndoEntry | undefined, removed: string[], set
   if (!undoStep || at < 0) {
     // No step of its own on the stack (none taken, or it left it): one now.
     const successor = pushUndo(set, get);
+    // A delete's step: it adds nothing (review 15, M-A follow-up).
+    markDeleteStep(successor);
     if (undoStep) {
       if (undoStep.removals) successor.removals = undoStep.removals;
       keepRemovedNodes(successor, undoStep, nodes);
@@ -3458,8 +3514,8 @@ function succeed(step: UndoEntry, successor: UndoEntry, over: Set<UndoEntry>): v
   stepSuccessors.set(step, successor);
   const removes = removedBy.get(step);
   if (removes) removedBy.set(successor, new Set(removes));
-  const touches = deleteTouches.get(step);
-  if (touches) deleteTouches.set(successor, new Set(touches));
+  const adds = stepAdds.get(step);
+  if (adds) stepAdds.set(successor, new Set(adds));
   jumpedOver.set(successor, new Set([...(jumpedOver.get(step) ?? []), ...over]));
   if (stepsInFlight.has(step)) {
     stepsInFlight.add(successor);
@@ -3491,6 +3547,7 @@ function renewWithArrivals(step: UndoEntry, nodes: Node<NodeData>[], edges: Edge
 function settleStep(step: UndoEntry, set: GraphSet, get: GraphGet): void {
   // And the step it became, if its echo re-pushed it (placeEchoedDeletes).
   for (let current: UndoEntry | undefined = step; current; current = stepSuccessors.get(current)) {
+    if (stepsInFlight.has(current)) settleArrivals(current);
     stepsInFlight.delete(current);
     if (stepSuccessors.get(current) === current) break;
   }
@@ -3524,6 +3581,8 @@ function noteSyncArrivals(before: Node<NodeData>[], after: Node<NodeData>[], set
       const arrived = arrivedSince.get(step);
       if (arrived) for (const id of added) arrived.add(id);
     }
+    // No settled step added them (review 15, L-1: X3, X4).
+    noteArrivedElsewhere(added, get);
   }
   if (awaitingArrival.size === 0) return;
   const present = new Set(after.map((node) => node.id));
@@ -3568,7 +3627,7 @@ function announceDrop(set: GraphSet, { undos, redos, applied }: DroppedPresses):
   if (undos + redos === 0) return;
   if (!applied) {
     // GM, round 14, item 3: redos only, "Nothing was redone. …"; else the undo line.
-    set((state) => noticeLine(state, undos === 0 ? DROPPED_REDO_TEXT : DROPPED_UNDO_TEXT, 'info'));
+    set((state) => besideFailure(state, undos === 0 ? DROPPED_REDO_TEXT : DROPPED_UNDO_TEXT));
     return;
   }
   const sentence = skippedPressText(undos, redos);
@@ -3584,11 +3643,19 @@ function announceDrop(set: GraphSet, { undos, redos, applied }: DroppedPresses):
     }
     const offer = applied.action === 'undo' ? 'redo' as const : 'undo' as const;
     const stack = offer === 'redo' ? state.redoStack : state.undoStack;
-    if (stack[stack.length - 1] === applied.inverse && !shown?.offer) {
+    if (stack[stack.length - 1] === applied.inverse && !shown?.offer && shown?.tone !== 'error') {
       return { undoNotice: { id: ++undoNoticeSeq, text: sentence, offer, entry: applied.inverse } };
     }
-    return noticeLine(state, sentence, 'info');
+    return besideFailure(state, sentence);
   });
+}
+
+/** A skipped or dropped press's line (review 15, L-2): beside a failure the
+ * canvas notice shows (a refused delete's "Couldn't delete the node. …"),
+ * never over it, since that line says why the press had nothing to undo. */
+function besideFailure(state: Pick<GraphState, 'undoNotice'>, text: string): Partial<GraphState> {
+  if (state.undoNotice?.tone === 'error') return { messageNotice: { id: ++undoNoticeSeq, text, tone: 'info' } };
+  return noticeLine(state, text, 'info');
 }
 
 /** Another graph is on the canvas (a project opened, a graph loaded): the
@@ -3669,8 +3736,12 @@ function runHeldPresses(set: GraphSet, get: GraphGet): void {
     const press = heldPresses[0];
     const wanted = pressTarget(press);
     if (wanted === undefined) {
-      // An earlier press it would have reversed did nothing.
+      // An earlier press it would have reversed did nothing: neither does
+      // this one, and the line says so (review 15, L-2). A press with nothing
+      // to bind to when it was pressed (an empty stack) stays quiet, as
+      // Cmd+Z on an empty stack always is.
       heldPresses.shift();
+      if (press.target) skipPress(press);
       continue;
     }
     if (stepsInFlight.has(wanted)) {
@@ -3703,6 +3774,24 @@ function runHeldPresses(set: GraphSet, get: GraphGet): void {
     // again before the first answer), or under the person's own older delete
     // re-pushed by its late answer (L-1): it applies beneath them (applyHistory).
     if (at >= 0 && stack.slice(at + 1).every((above) => staysAbove(above, entry))) {
+      if (changesNothing(entry, state.nodes, state.edges)) {
+        // Nothing it changed is left to change (review 15, L-2): the step
+        // goes, and the press goes to the step below it, unless a later
+        // press is already bound to that one; then it counts as skipped.
+        // Never silent.
+        set(press.action === 'undo' ? { undoStack: stack.filter((step) => step !== entry) }
+          : { redoStack: stack.filter((step) => step !== entry) });
+        const below = at > 0 ? stack[at - 1] : undefined;
+        const taken = heldPresses.slice(1).some((held) => held.target && below
+          && sameTarget(held.target, { entry: below }));
+        if (below && !taken) {
+          press.target = { entry: below };
+          continue;
+        }
+        heldPresses.shift();
+        skipPress(press);
+        continue;
+      }
       heldPresses.shift();
       const done = applyHistory(press.action, set, get, entry);
       if (done) {
@@ -3717,12 +3806,20 @@ function runHeldPresses(set: GraphSet, get: GraphGet): void {
       return;
     }
     // Its step was taken off (the request failed, and said so): this press
-    // goes to nothing, the presses after it still count.
+    // goes to nothing, the presses after it still count. It counts in the
+    // skipped line, beside the failure's own (review 15, L-2: C7).
     heldPresses.shift();
+    skipPress(press);
   }
   // Presses a clear superseded while later ones waited: the line says so (L-B).
   if (batchSkipped.undos + batchSkipped.redos > 0) announceDrop(set, { ...batchSkipped, applied: batchLastApplied });
   endHeldBatch();
+}
+
+/** A held press that did nothing: counted into the line its batch ends with. */
+function skipPress(press: HeldPress): void {
+  batchSkipped = press.action === 'undo'
+    ? { ...batchSkipped, undos: batchSkipped.undos + 1 } : { ...batchSkipped, redos: batchSkipped.redos + 1 };
 }
 
 /** Whether this press waits for a step's answer (and is queued, bound to its target). */
@@ -3746,8 +3843,12 @@ function holdsHistory(action: 'undo' | 'redo', state: GraphState, set: GraphSet)
 function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): void {
   const state = get();
   if (state.isExecuting || state.providerRecoveries.length > 0 || state.providerStartAmbiguities.length > 0) return;
-  if (holdsHistory(action, state, set)) return;
+  // Review 15, L-2: a step with nothing left to change never takes a press.
+  dropDeadSteps(action, set, get);
+  if (holdsHistory(action, get(), set)) return;
   applyHistory(action, set, get);
+  // And none is left on top of it for the next one (the Undo control greys out).
+  dropDeadSteps(action, set, get);
 }
 
 /**
@@ -3776,15 +3877,9 @@ function applyHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet, tar
       : applySlice(nodes, edges, entry.after, entry.before);
     inverse = entry;
   } else {
-    next = { nodes: restoreWithOutputs(entry, nodes), edges: entry.edges.map((edge) => ({ ...edge })) };
-    // Review 14, L-D: a delete's undo takes no node off, and its redo only
-    // the nodes that undo put back.
-    const touched = deleteTouches.get(entry);
-    const takesOff = touched ? new Set<string>() : redeletes.get(entry);
-    if (takesOff) next = keepingOthers(next, nodes, edges, takesOff);
+    // Review 14, L-D, and review 15: it takes off only what its step added.
+    next = snapshotNext(entry, nodes, edges);
     inverse = createSnapshot(nodes, edges);
-    if (touched) redeletes.set(inverse, new Set(touched));
-    else if (takesOff) deleteTouches.set(inverse, new Set(takesOff));
   }
   if (above.length > 0) next = withoutRemovedAbove(next, nodes, above);
   const nextNodes = withFreshKeyStatus(next.nodes, nodes);
@@ -3796,6 +3891,9 @@ function applyHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet, tar
   const before = new Set(nodes.map((node) => node.id));
   const after = new Set(nextNodes.map((node) => node.id));
   const back = nextNodes.filter((node) => !before.has(node.id));
+  // What this undo or redo added is what its inverse takes off again; for
+  // every other step those nodes came from elsewhere (review 15).
+  if (!isForeignEdit(entry)) stepAdds.set(inverse, new Set(back.map((node) => node.id)));
   const gone = nodes.filter((node) => !after.has(node.id)).length;
   const ownLine: OwnStepLine | null = isForeignEdit(entry) ? null
     : back.length > 0 ? { kind: 'restored', count: back.length }
@@ -3830,9 +3928,56 @@ function applyHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet, tar
     } } : ownLine && !(ownLine.kind === 'restored' && waitsForBackend)
       ? { undoNotice: ownStepNotice(noticeId, ownLine, NOTHING_MISSED, action, inverse) } : {}),
   });
+  noteArrivedElsewhere(back.map((node) => node.id), get, inverse);
   void sendRestore(action, nodes, edges, nextNodes, next.edges, entry, inverse, set,
     { noticeId, ownLine: ownLine?.kind === 'restored' && waitsForBackend ? ownLine : null });
   return { inverse, noticeId };
+}
+
+/** The canvas a person's own step puts back: its snapshot (live results
+ * kept), with every node it didn't add left as it is (takenOffBy). */
+function snapshotNext(entry: UndoSnapshot, nodes: Node<NodeData>[], edges: Edge[]): { nodes: Node<NodeData>[]; edges: Edge[] } {
+  const next = { nodes: restoreWithOutputs(entry, nodes), edges: entry.edges.map((edge) => ({ ...edge })) };
+  return keepingOthers(next, nodes, edges, takenOffBy(entry, nodes));
+}
+
+/** What a node is on the canvas, for "does this change anything": all of it
+ * but React Flow's own view state and a run's live fields. */
+const VIEW_FIELDS = new Set(['selected', 'dragging', 'measured', 'resizing']);
+const LIVE_DATA_FIELDS = new Set<string>(RUNTIME_FIELDS);
+function nodeShape(node: Node<NodeData>): string {
+  const own = Object.fromEntries(Object.entries(node).filter(([key]) => !VIEW_FIELDS.has(key) && key !== 'data'));
+  const data = Object.fromEntries(Object.entries(node.data ?? {}).filter(([key]) => !LIVE_DATA_FIELDS.has(key)));
+  return stableJson({ ...own, data });
+}
+
+/**
+ * Review 15, L-2: a person's own step that would change nothing on the
+ * canvas now (its nodes already back, its typing already gone: a delete
+ * whose node a clear's undo restored, Q1; a delete made while a clear was on
+ * its way, Q3). Undoing it would be a Cmd+Z that silently does nothing.
+ */
+function changesNothing(entry: UndoEntry, nodes: Node<NodeData>[], edges: Edge[]): boolean {
+  if (isForeignEdit(entry)) return false;
+  const next = snapshotNext(entry, nodes, edges);
+  if (next.nodes.length !== nodes.length || next.edges.length !== edges.length) return false;
+  const now = new Map(nodes.map((node) => [node.id, nodeShape(node)]));
+  if (!next.nodes.every((node) => now.get(node.id) === nodeShape(node))) return false;
+  const wires = new Set(edges.map(edgeKey));
+  return next.edges.every((edge) => wires.has(edgeKey(edge)));
+}
+
+/** Drops the steps on top of the stack a press acts on that would change
+ * nothing (changesNothing), so the press goes to the next real step. Never
+ * one still on its way, and never while presses are held (their targets). */
+function dropDeadSteps(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): void {
+  if (heldPresses.length > 0) return;
+  const state = get();
+  const stack = action === 'undo' ? state.undoStack : state.redoStack;
+  let top = stack.length;
+  while (top > 0 && !stepsInFlight.has(stack[top - 1]) && changesNothing(stack[top - 1], state.nodes, state.edges)) top -= 1;
+  if (top === stack.length) return;
+  set(action === 'undo' ? { undoStack: stack.slice(0, top) } : { redoStack: stack.slice(0, top) });
 }
 
 /** The canvas `next` sets, with every node on the canvas now that it lacks
@@ -4445,8 +4590,49 @@ function runInputsUnknown(nodes: Node<NodeData>[], edges: Edge[], scope: RunScop
   if (refusable.length === 0) return false;
   const { settingsCache } = useUIStore.getState();
   if (!settingsCache.loaded) return true;
-  const status = settingsCache.kreaConnection?.status;
-  return (status === undefined || status === 'error') && planDecidesRefusal(refusable, edges, settingsCache.apiKeys);
+  return kreaSignInUnknown(settingsCache.kreaConnection?.status)
+    && planDecidesRefusal(refusable, edges, settingsCache.apiKeys);
+}
+
+/** The Krea plan's sign-in isn't known: not read, a failed read, or still
+ * connecting (review 15, L-3: it settles within moments, so it is waited
+ * for like an unread one). */
+function kreaSignInUnknown(status: string | undefined): boolean {
+  return status === undefined || status === 'error' || status === 'connecting';
+}
+
+/** How often a run waiting on a Krea sign-in still connecting reads it again. */
+const KREA_CONNECTING_POLL_MS = 500;
+
+/**
+ * Review 15, M-B: the runs waiting for what their refusal reads, each with
+ * what it would hold once started: 'canvas' (a run that holds the whole
+ * canvas: a node's Run, the canvas Run, Run selected, a replay, an accepted
+ * proposal's run), `shot:<node>:<shot>` (a Cinema shot) or `node:<id>` (each
+ * node of Creator's concurrent cluster). A waiting run counts as starting:
+ * the same Run while it waits does nothing, as during the run.
+ */
+const waitingRuns = new Map<object, readonly string[]>();
+
+/** Whether a run waiting for its inputs holds any of `keys`. */
+function runWaiting(keys: readonly string[]): boolean {
+  return [...waitingRuns.values()].some((held) => held.some((key) => keys.includes(key)));
+}
+
+const CANVAS_RUN = ['canvas'] as const;
+const shotRunKey = (nodeId: string, shotId: string) => `shot:${nodeId}:${shotId}`;
+
+/** knowRunInputs, held as starting (`holds`) while it waits. */
+async function waitForRunInputs(nodes: Node<NodeData>[], edges: Edge[], scope: RunScope, holds: readonly string[]): Promise<void> {
+  const token = {};
+  waitingRuns.set(token, holds);
+  useGraphStore.setState({ runStarting: true });
+  try {
+    await knowRunInputs(nodes, edges, scope);
+  } finally {
+    waitingRuns.delete(token);
+    useGraphStore.setState({ runStarting: waitingRuns.size > 0 });
+  }
 }
 
 /** How long a run waits for those to load before it leaves the refusal to the backend. */
@@ -4458,14 +4644,15 @@ const RUN_INPUTS_WAIT_MS = 4000;
 async function knowRunInputs(nodes: Node<NodeData>[], edges: Edge[], scope: RunScope): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const limit = new Promise<void>((resolve) => { timer = setTimeout(resolve, RUN_INPUTS_WAIT_MS); });
+  const deadline = Date.now() + RUN_INPUTS_WAIT_MS;
   try {
-    await Promise.race([readRunInputs(nodes, edges, scope), limit]);
+    await Promise.race([readRunInputs(nodes, edges, scope, deadline), limit]);
   } finally {
     if (timer !== undefined) clearTimeout(timer);
   }
 }
 
-async function readRunInputs(nodes: Node<NodeData>[], edges: Edge[], scope: RunScope): Promise<void> {
+async function readRunInputs(nodes: Node<NodeData>[], edges: Edge[], scope: RunScope, deadline: number): Promise<void> {
   if (!useUIStore.getState().settingsCache.loaded) {
     try {
       const settings = await apiGetSettings();
@@ -4478,13 +4665,21 @@ async function readRunInputs(nodes: Node<NodeData>[], edges: Edge[], scope: RunS
       return;
     }
   }
-  if (!runInputsUnknown(nodes, edges, scope)) return;
-  try {
-    const connection = await getKreaConnection();
-    const status = useUIStore.getState().settingsCache.kreaConnection?.status;
-    if (status === undefined || status === 'error') useUIStore.getState().setKreaConnection(connection);
-  } catch {
-    // Still unknown: the backend refuses on the route it knows.
+  // The sign-in, read again while it is still connecting (review 15, L-3),
+  // until the wait's deadline.
+  while (runInputsUnknown(nodes, edges, scope)) {
+    let connection: Awaited<ReturnType<typeof getKreaConnection>>;
+    try {
+      connection = await getKreaConnection();
+    } catch {
+      return; // Still unknown: the backend refuses on the route it knows.
+    }
+    // App's own read may have landed meanwhile: a settled one wins.
+    if (kreaSignInUnknown(useUIStore.getState().settingsCache.kreaConnection?.status)) {
+      useUIStore.getState().setKreaConnection(connection);
+    }
+    if (connection.status !== 'connecting' || Date.now() + KREA_CONNECTING_POLL_MS >= deadline) return;
+    await new Promise<void>((resolve) => { setTimeout(resolve, KREA_CONNECTING_POLL_MS); });
   }
 }
 
@@ -4566,6 +4761,7 @@ function refreshSettingsCache(): void {
  */
 async function askDirectRun(
   model: PlaceholderRunConfirm, changed: boolean, recompute?: () => PlaceholderRunConfirm | null,
+  movedLine?: string | null,
 ): Promise<PlaceholderRunConfirm | null> {
   let pushed = model;
   try {
@@ -4577,7 +4773,7 @@ async function askDirectRun(
         show(next);
       }
     }));
-    return await dialog.askPlaceholderRun(model, { changed, watch });
+    return await dialog.askPlaceholderRun(model, { changed, watch, ...(movedLine ? { movedLine } : {}) });
   } catch (error) {
     console.error("Couldn't open the run confirmation:", error);
     return null;
@@ -4616,8 +4812,8 @@ interface DirectRunConfirmed extends DirectRunGraph {
 function confirmDirectRun(
   read: () => DirectRunGraph | null,
   nodeId: string,
-  { passes = 1, costly = true, verb, names, busy }: { passes?: number; costly?: boolean; busy?: () => boolean }
-    & DirectRunWording = {},
+  { passes = 1, costly = true, verb, names, busy, holds = CANVAS_RUN }: { passes?: number; costly?: boolean;
+    busy?: () => boolean; holds?: readonly string[] } & DirectRunWording = {},
 ): DirectRunConfirmed | null | Promise<DirectRunConfirmed | null> {
   const graph = read();
   if (!graph) return null;
@@ -4635,7 +4831,7 @@ function confirmDirectRun(
   // What the refusal reads isn't known yet: read it first (review 14, M-B).
   if (!runInputsUnknown(graph.nodes, graph.edges, { kind: 'node', nodeId })) return decide(graph);
   return (async () => {
-    await knowRunInputs(graph.nodes, graph.edges, { kind: 'node', nodeId });
+    await waitForRunInputs(graph.nodes, graph.edges, { kind: 'node', nodeId }, holds);
     const now = read();
     if (!now) {
       announceDroppedYes(verb, busy);
@@ -4703,8 +4899,9 @@ async function askUntilSettled(
   };
   let asked = first;
   let changed = false;
+  let movedLine: string | null = null;
   for (;;) {
-    const answer = await askDirectRun(asked, changed, recompute);
+    const answer = await askDirectRun(asked, changed, recompute, movedLine);
     if (!answer) return null;
     const graph = read();
     if (!graph) {
@@ -4727,6 +4924,8 @@ async function askUntilSettled(
     }
     asked = now;
     changed = true;
+    // GM - Design, round 16 (a): which nodes' route or price moved, if any.
+    movedLine = changedNodesLine(answer, now);
   }
 }
 
@@ -4813,18 +5012,23 @@ async function sendDirectRun<T>(
       const confirmIds = [...refusal.placeholders].sort();
       let asked: PlaceholderRunConfirm = { ...model, confirmIds };
       let again = placeholders !== undefined;
+      let movedLine: string | null = null;
       let shown: PlaceholderRunConfirm | null;
       for (;;) {
-        shown = await askDirectRun(asked, again);
+        shown = await askDirectRun(asked, again, undefined, movedLine);
         if (!shown) return DECLINED;
         // Review 14, M-B: checked again on yes; a route that moved while the
         // dialog was open asks again with its new rows (their names and prices).
         if (refuseUnchosenModel(nodes, agreed.edges, { kind: 'node', nodeId }, wording.names)) return DECLINED;
-        const now = directRunConfirm(nodes, agreed.edges, nodeId, passes, null,
+        // Review 15, L-4: priced at this refusal's own estimate, the numbers
+        // Nebula holds the run to, so the yes it sends passes (never a third 409).
+        const now = directRunConfirm(nodes, agreed.edges, nodeId, passes, refusal.estimate,
           { ...wording, shown: agreed.shown, gone: agreed.gone, changed: agreed.changed });
         if (!now || sameRoutes(shown, now)) break;
         asked = { ...now, confirmIds };
         again = true;
+        // GM - Design, round 16 (a): which nodes' route or price moved.
+        movedLine = changedNodesLine(shown, asked);
       }
       if (!begin()) {
         // The person said yes but another run started first (or an import
@@ -4959,6 +5163,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   nodes: [],
   edges: [],
   isExecuting: activeRunOwners.size > 0,
+  runStarting: false,
   isCancelling: false,
   isImportingGraph: false,
   activeRuns: ownershipState().activeRuns,
@@ -4990,7 +5195,11 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     breakUndoDebounce();
     const step = pushUndo(set, get);
     holdStep(step);
-    if (options?.clear) clearSteps.set(step, ++historyOrder);
+    if (options?.clear) {
+      clearSteps.set(step, ++historyOrder);
+      // A clear adds nothing: its undo takes no node off (review 15, M-A follow-up).
+      stepAdds.set(step, new Set());
+    }
     return step;
   },
 
@@ -5006,6 +5215,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // An upload's node comes with its echo, which can land after the answer
     // (review 11, L-2): the step settles once that node is on the canvas.
     const ids = (options?.arrives ?? []).filter((id) => typeof id === 'string' && id.length > 0);
+    if (options?.arrives) ownArrivals.set(entry, new Set(ids));
     const present = new Set(get().nodes.map((node) => node.id));
     if (ids.length > 0 && stepsInFlight.has(entry) && !awaitingArrival.has(entry)
       && get().undoStack.includes(entry) && ids.some((id) => !present.has(id))) {
@@ -6388,10 +6598,11 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   },
 
   executeGraph: async () => {
-    if (get().isExecuting || get().isImportingGraph) return;
+    // A run waiting for its inputs counts as starting (review 15, M-B).
+    if (get().isExecuting || get().runStarting || get().isImportingGraph) return;
     // What the refusal reads is known first (review 14, M-B).
     if (runInputsUnknown(get().nodes, get().edges, { kind: 'graph' })) {
-      await knowRunInputs(get().nodes, get().edges, { kind: 'graph' });
+      await waitForRunInputs(get().nodes, get().edges, { kind: 'graph' }, CANVAS_RUN);
     }
     const { nodes, edges, isExecuting, resetExecution } = get();
     if (isExecuting || get().isImportingGraph) return;
@@ -6468,7 +6679,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
 
   executeNode: async (nodeId, options) => {
     const { nodes, edges, isExecuting, resetExecution } = get();
-    if (isExecuting || get().isImportingGraph) return;
+    // A run waiting for its inputs counts as starting (review 15, M-B).
+    if (isExecuting || get().runStarting || get().isImportingGraph) return;
     const uploadIssue = pendingCinemaUploadIssue(nodesInExecutionScope(nodes, edges, nodeId));
     if (uploadIssue) { warnPendingCinemaUpload(uploadIssue); return; }
     // An accepted proposal's run (approvalId) isn't the person's direct run:
@@ -6482,7 +6694,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       let graph = { nodes, edges };
       // What the refusal reads is known first (review 14, M-B).
       if (runInputsUnknown(nodes, edges, scope)) {
-        await knowRunInputs(nodes, edges, scope);
+        await waitForRunInputs(nodes, edges, scope, CANVAS_RUN);
         if (get().isExecuting || get().isImportingGraph) return;
         graph = { nodes: get().nodes, edges: get().edges };
       }
@@ -6618,6 +6830,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       if (!liveShot || liveShot.output?.status === 'running') return null;
       return { nodes: liveNodes, edges: liveEdges, scene: liveScene, shot: liveShot };
     };
+    // The same shot waiting for its inputs counts as running (review 15, M-B).
+    if (runWaiting([shotRunKey(nodeId, shotId)])) return;
     let live = admissible();
     if (!live) return;
     // A shot is the person's direct run of the scene (Q133; review 3, finding
@@ -6638,7 +6852,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     const answer = confirmDirectRun(() => {
       live = admissible();
       return live && { nodes: oneShotCanvas(live.nodes, nodeId, shotId), edges: live.edges };
-    }, nodeId, { passes: variations ?? 1, busy: shotBusy, ...wording });
+    }, nodeId, { passes: variations ?? 1, busy: shotBusy, holds: [shotRunKey(nodeId, shotId)], ...wording });
     const agreed = answer instanceof Promise ? await answer : answer;
     if (!agreed || !live) return;
     const { nodes, edges, scene, shot } = live;
@@ -6795,10 +7009,11 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   },
 
   executeCluster: async (nodeIds, options) => {
-    if (get().isExecuting || get().isImportingGraph) return;
+    // A run waiting for its inputs counts as starting (review 15, M-B).
+    if (get().isExecuting || get().runStarting || get().isImportingGraph) return;
     // What the refusal reads is known first (review 14, M-B).
     if (runInputsUnknown(get().nodes, get().edges, { kind: 'cluster', nodeIds })) {
-      await knowRunInputs(get().nodes, get().edges, { kind: 'cluster', nodeIds });
+      await waitForRunInputs(get().nodes, get().edges, { kind: 'cluster', nodeIds }, CANVAS_RUN);
     }
     const { nodes, edges, isExecuting, resetExecution } = get();
     if (isExecuting || get().isImportingGraph) return;
@@ -6888,10 +7103,12 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   },
 
   executeClusterConcurrent: async (nodeIds, createOrigin) => {
-    if (get().isImportingGraph) return;
+    // Its nodes waiting in another start count as running (review 15, M-B).
+    const holds = nodeIds.map((id) => `node:${id}`);
+    if (get().isImportingGraph || runWaiting(holds)) return;
     // What the refusal reads is known first (review 14, M-B).
     if (runInputsUnknown(get().nodes, get().edges, { kind: 'cluster', nodeIds })) {
-      await knowRunInputs(get().nodes, get().edges, { kind: 'cluster', nodeIds });
+      await waitForRunInputs(get().nodes, get().edges, { kind: 'cluster', nodeIds }, holds);
       if (get().isImportingGraph) return;
     }
     const { nodes, edges } = get();
@@ -7075,6 +7292,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     const state = get();
     const step = options?.undoStep as UndoEntry | undefined;
     if (step && !sameGraphAs(step)) return;
+    // Its own nodes: anything else that arrived while it was on its way came
+    // from elsewhere, and its undo leaves it (review 15, M-A follow-up).
+    if (step) ownArrivals.set(step, new Set(incoming.map((node) => node.id)));
     const updates = new Map(updatedNodes.map((node) => [node.id, node]));
     const merged = state.nodes.map((node) => {
       const update = updates.get(node.id);

@@ -231,7 +231,8 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
         // held run, and the approval goes back (review 5, L1).
         if (result.approvalId) await releaseApproval(result.approvalId);
       } else if (result.runNodeIds.length > 0) {
-        if (useGraphStore.getState().isExecuting) {
+        // A run waiting for its inputs counts as running (review 15, M-B).
+        if (useGraphStore.getState().isExecuting || useGraphStore.getState().runStarting) {
           set({ deferredRun: { agentName: entry.view.agent.name, nodeIds: result.runNodeIds, approvalId: result.approvalId } });
         } else {
           // The Accept click is the person's approval for these runs, at these values.
@@ -273,7 +274,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
 
   runDeferred: async () => {
     const deferred = get().deferredRun;
-    if (!deferred || useGraphStore.getState().isExecuting) return;
+    if (!deferred || useGraphStore.getState().isExecuting || useGraphStore.getState().runStarting) return;
     const live = new Set(useGraphStore.getState().nodes.map((node) => node.id));
     const nodeIds = deferred.nodeIds.filter((nodeId) => live.has(nodeId));
     set({ deferredRun: null });

@@ -113,7 +113,7 @@ export function undoNoticeText(action: 'undo' | 'redo', edit: ForeignEdit): stri
 
 // -- comparing nodes ----------------------------------------------------------
 
-function stableJson(value: unknown): string {
+export function stableJson(value: unknown): string {
   return JSON.stringify(value, (_key, item) => {
     if (item && typeof item === 'object' && !Array.isArray(item)) {
       return Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b)));

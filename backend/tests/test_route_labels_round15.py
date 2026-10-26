@@ -22,10 +22,12 @@ def test_cost_for_a_krea_copy_names_the_route_with_the_keys_set():
     from services.canvas_proposals import cost_for
 
     grok = _definitions()[GROK]
-    assert cost_for(grok, {}, None, {"XAI_API_KEY": "x"}) == {"kind": "paid", "provider": "xai", "label": "paid · xai"}
+    # GM - Design, round 16 (b): a label the route builds reads "<model> via <provider>".
+    assert cost_for(grok, {}, None, {"XAI_API_KEY": "x"}) == {"kind": "paid", "provider": "xai",
+                                                               "label": "paid · Grok Imagine 2.0 via xAI"}
     assert cost_for(grok, {}, None, {"XAI_API_KEY": "x", "KREA_API_TOKEN": "k"})["provider"] == "xai"
     assert cost_for(grok, {}, None, {"KREA_API_TOKEN": "k"})["provider"] == "krea"
-    assert cost_for(_definitions()[FLARE], {}, None, {"OPENAI_API_KEY": "o"})["label"] == "paid · openai"
+    assert cost_for(_definitions()[FLARE], {}, None, {"OPENAI_API_KEY": "o"})["label"] == "paid · GPT Image 2.5 Flare via OpenAI"
     # A Krea-only input that arrives by connection keeps it on Krea.
     assert cost_for(grok, {}, None, {"XAI_API_KEY": "x", "KREA_API_TOKEN": "k"},
                     wired={"style_images"})["provider"] == "krea"
@@ -41,6 +43,6 @@ def test_a_proposal_names_the_route_and_prices_it(api, monkeypatch):  # noqa: F8
             "run": ["+g"]}
     cost = _propose(api, body).json()["proposal"]["cost"]
     row = {node["ref"]: node for node in cost["nodes"]}["+g"]
-    assert (row["provider"], row["label"]) == ("xai", "paid · xai")
+    assert (row["provider"], row["label"]) == ("xai", "paid · Grok Imagine 2.0 via xAI")
     assert row["price"] == {"low": 0.06, "high": 0.06}
     assert cost["providers"] == ["xai"]

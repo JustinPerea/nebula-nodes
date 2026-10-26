@@ -854,10 +854,12 @@ export function providerLabel(provider: string | null | undefined): string {
  * on `provider` shows it. A display name that ends by naming its own
  * gateway ("Grok Imagine 2.0 (Krea)", "Nano Banana (FAL)") names the
  * provider the run actually goes through instead, by the label the running
- * card uses for that route ("xAI · 6s": providerLabel): "Grok Imagine 2.0
- * (xAI)". On the gateway itself, or a name that names no provider, it is
- * the display name. A proposal's cost names the same route to agents
- * (backend services/canvas_proposals.py cost_for).
+ * card uses for that route ("xAI · 6s": providerLabel). GM - Design, round
+ * 16 (b), verbatim: "when the dialog builds the label, no parens: "Grok
+ * Imagine 2.0 via xAI", "GPT Image 2.5 Flare via OpenAI"". On the gateway
+ * itself, or a name that names no provider, it is the display name (the
+ * card's own). A proposal's cost names the same route to agents (backend
+ * services/canvas_proposals.py cost_for; node_route.name_on_route).
  */
 export function nameOnRoute(definition: Pick<ModelNodeDefinition, 'displayName' | 'apiProvider'>,
   provider: string | null | undefined): string {
@@ -867,7 +869,7 @@ export function nameOnRoute(definition: Pick<ModelNodeDefinition, 'displayName' 
   if (!own) return name;
   const said = own[2].trim().toLowerCase();
   const gateway = [definition.apiProvider, providerLabel(definition.apiProvider)].map((word) => String(word).toLowerCase());
-  return gateway.includes(said) ? `${own[1]} (${providerLabel(provider)})` : name;
+  return gateway.includes(said) ? `${own[1]} via ${providerLabel(provider)}` : name;
 }
 
 function orList(items: string[]): string {

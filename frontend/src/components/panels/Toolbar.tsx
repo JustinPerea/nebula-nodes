@@ -51,6 +51,8 @@ export function Toolbar() {
   const executeGraph = useGraphStore((s) => s.executeGraph);
   const cancelExecution = useGraphStore((s) => s.cancelExecution);
   const isExecuting = useGraphStore((s) => s.isExecuting);
+  // A run waiting for its inputs counts as starting (review 15, M-B).
+  const runStarting = useGraphStore((s) => s.runStarting);
   const isImportingGraph = useGraphStore((s) => s.isImportingGraph);
   const isCancelling = useGraphStore((s) => s.isCancelling);
   const canSave = useGraphStore(canSaveGraph);
@@ -267,7 +269,7 @@ export function Toolbar() {
           type="button"
           className="toolbar__button toolbar__button--primary"
           onClick={() => executeGraph()}
-          disabled={nodeCount === 0 || isImportingGraph}
+          disabled={nodeCount === 0 || isImportingGraph || runStarting}
           aria-describedby={nodeCount > 0 ? runScopeId : undefined}
           title={isImportingGraph ? 'Wait for the graph import to finish' : `Run graph. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`}
         >

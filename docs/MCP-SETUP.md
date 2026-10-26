@@ -228,7 +228,12 @@ The server exposes these tools for building and running (see
   answer says, and undoing a delete puts back only what it removed (a node
   you added meanwhile stays). A clear the person issues after a Cmd+Z that
   is still waiting supersedes it: the Cmd+Z is dropped and the canvas ends
-  cleared; a Cmd+Z pressed after the clear undoes the clear once it lands,
+  cleared; an undo takes off only the nodes its own step added (a node you,
+  another agent or the person added while that step was on its way stays);
+  a Cmd+Z never does nothing without a word: a step that ended up changing
+  nothing is passed over (the press undoes the step below it), and a press
+  whose step was taken back meanwhile (a refused delete) counts in the
+  skipped line below; a Cmd+Z pressed after the clear undoes the clear once it lands,
   and a step taken while a clear was on its way never brings a cleared
   node back. If a newer edit has settled on top of its step by then
   (yours, another agent's, or the person's own later edit), it never undoes
@@ -574,7 +579,13 @@ Every one of these actions is also listed in the canvas's **Agent log**
 own eye-off button or Settings > Preferences > "Agent log"): the agent's
 name in its cursor colour, the cursor's words ("Added “Moodboard”", "Running
 “Krea 2”", "Connecting “Prompt” to “Krea 2”", "Accepted"; a node by its name in
-curly quotes, else its type's name), and the time. Moodboard writes are listed there too
+curly quotes, else its type's name), and the time. A params change names the
+fields by the labels the card shows them under, in the card's order: "Set
+“Aspect ratio”", "Set “Aspect ratio” and “Resolution”", "Set 3 settings" for
+three or more. A field the card shows no label for is left out of the bubble
+and its count (with none labelled the cursor moves without words), and the
+Agent log names it by its key instead ("Set “Aspect ratio” and seed_mode",
+"Set seed_mode"). Moodboard writes are listed there too
 (your edit batch's `say`, else the journal's words: "Set aside #1 on board
 Dusk"; "Analyzed board Dusk"), and so is a run of the
 whole canvas ("Running 4 nodes"); neither has one place on the canvas, so
@@ -1115,11 +1126,17 @@ expired or invalidated, and 2 on timeout (600 s default, still open).
 **Cost wording.** Proposals say how many paid model runs and free nodes
 would run, and from which providers: each entry in `cost.nodes` names the
 provider its run would go through with the keys set (`provider`, and
-`label` "paid · xai"), the route its `price` is for. A Krea copy that runs
+`label` "paid · krea"), the route its `price` is for. A Krea copy that runs
 on its maker's API with the person's key names the maker (Grok Imagine 2.0
-on an xAI key: `xai`, priced at xAI's price, never Krea's), and a connection
-into a Krea-only input (Grok's style images) keeps it on `krea`; the person's
-confirm rows name the same route ("Grok Imagine 2.0 (xAI) · $0.06").
+on an xAI key: `xai`, priced at xAI's price, never Krea's; its `label` is
+"paid · Grok Imagine 2.0 via xAI"), and a connection into a Krea-only input
+(Grok's style images) keeps it on `krea` ("paid · krea"); the person's
+confirm rows name the same route ("Grok Imagine 2.0 via xAI · $0.06"; a row
+on Krea's own gateway keeps the card's name, "Grok Imagine 2.0 (Krea)"). If
+a route or price has moved by the time the person says yes, the confirm asks
+again and says which node moved ("“Alt still” changed while this was open.";
+two or three by name, "4 nodes changed while this was open." past that), and
+its Run ignores clicks for half a second.
 Upstream nodes that have no outputs yet
 are counted too, and then the count reads "up to", because the run cache may
 skip some of them. `cost.estimate` adds up list prices in USD from

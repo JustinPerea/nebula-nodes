@@ -139,6 +139,7 @@ from services.agent_presence import (
     PresenceError,
     RequestHeadersContext,
     agent_presence,
+    clean_say,
     current_request_headers,
     identify as identify_agent,
     parse_target,
@@ -4606,18 +4607,24 @@ async def _show_agent(
     say: str = "",
     origin: dict[str, Any] | None = None,
     did: dict[str, Any] | None = None,
+    log: str | None = None,
 ) -> None:
     """Move the calling agent's cursor; a no-op for the browser's own requests.
 
-    ``did`` (_did) is what the action was, for the Agents panel. Never fails
-    the route that called it: presence is decoration on top of an edit that
-    already succeeded.
+    ``did`` (_did) is what the action was, for the Agents panel. ``log``: the
+    Agent log's words when they differ from the cursor's (``say``), e.g. a
+    field the card shows no label for, named there by its key while the
+    bubble leaves it out (GM - Design, round 16). Never fails the route that
+    called it: presence is decoration on top of an edit that already succeeded.
     """
     identity = identify_agent(current_request_headers())
     if identity is None:
         return
     try:
         event = _point(identity, target=target, origin=origin, action=action, say=say, did=did)
+        logged = clean_say(log)
+        if logged and logged != event.get("say"):
+            event["log"] = logged
         await manager.broadcast_raw(event)
     except Exception:  # noqa: BLE001 - decoration must not break graph edits
         pass
@@ -11483,10 +11490,62 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
             data=changes,
             summary=f"set {_listed(changes['keys'], 4)} on {_node_label(node_id)} ({node_id})",
         )
-    changed = ", ".join(sorted(str(key) for key in params)[:4])
-    await _show_agent({"nodeId": node_id}, say=f"Set {changed}" if changed else f"Updated {_quoted(_node_label(node_id))}",
-                      did=_did("Changed", node_id))
+    # What changed, as the card names it (GM - Design, round 16): never the raw keys.
+    # The fields the agent sent (that changed, when any did), not ones a default filled in after.
+    sent = [str(key) for key in params]
+    keys = [key for key in sent if key in set((changes or {}).get("keys") or [])] or sent
+    if keys:
+        say, log = _set_words(node_id, keys)
+        await _show_agent({"nodeId": node_id}, say=say, log=log, did=_did("Changed", node_id))
+    else:
+        await _show_agent({"nodeId": node_id}, say=f"Updated {_quoted(_node_label(node_id))}", did=_did("Changed", node_id))
     return cli_graph.nodes[node_id]
+
+
+def _card_label(definition: Mapping[str, Any] | None, node: Mapping[str, Any] | None, key: str) -> str | None:
+    """The label the node's card shows for the field ``key``: the definition's
+    own param label (node_route.all_param_definitions, the list the
+    Inspector draws from), else a configured model's own field (a universal
+    node's ``dynamicParams``). None for a field the card never shows (a
+    hidden one, or one no definition names)."""
+    for param in [*node_route.all_param_definitions(definition or {}),
+                  *((node or {}).get("dynamicParams") or [])]:
+        if not isinstance(param, Mapping) or param.get("key") != key:
+            continue
+        label = str(param.get("label") or "").strip()
+        return None if param.get("hidden") or not label else label
+    return None
+
+
+def _set_words(node_id: str, keys: list[str]) -> tuple[str, str]:
+    """The cursor's words for an agent setting fields (GM - Design, round 16,
+    verbatim): the card's labels in curly quotes, "Set “Aspect ratio”", "Set
+    “Aspect ratio” and “Seed”", "Set 3 settings" for three or more. A field
+    with no card label is left out of the list and the count; with none
+    labelled the bubble says nothing ("") and the cursor still moves. The
+    Agent log keeps the change: it names an unlabelled field by its key.
+    Returns (say, log), in the card's field order."""
+    node = cli_graph.nodes.get(node_id) or {}
+    definition = node_registry.get(str(node.get("definitionId") or ""))
+    order = {str(param.get("key")): index
+             for index, param in enumerate(node_route.all_param_definitions(definition or {}))}
+    ordered = sorted(dict.fromkeys(keys), key=lambda key: (order.get(key, len(order)), key))
+    labels = {key: _card_label(definition, node, key) for key in ordered}
+    named = [f"“{labels[key]}”" for key in ordered if labels[key]]
+    say = f"Set {_set_list(named)}" if named else ""
+    logged = [f"“{labels[key]}”" if labels[key] else key for key in ordered]
+    log = f"Set {_set_list(logged, cap=4)}"
+    return say, log
+
+
+def _set_list(items: list[str], cap: int | None = None) -> str:
+    """"“A”", "“A” and “B”", three or more "3 settings" (GM, round 16). With a
+    ``cap`` (the Agent log), up to that many named: "A, B, C and D", then "and N more"."""
+    if cap is None:
+        return items[0] if len(items) == 1 else " and ".join(items) if len(items) == 2 else f"{len(items)} settings"
+    if len(items) > cap:
+        return f"{', '.join(items[:cap])} and {len(items) - cap} more"
+    return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} and {items[-1]}"
 
 
 def _universal_request(body: Any, definition_id: str | None = None) -> tuple[str, str]:

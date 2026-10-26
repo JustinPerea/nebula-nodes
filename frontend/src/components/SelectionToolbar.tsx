@@ -29,6 +29,8 @@ export function SelectionToolbar() {
   const nodes = useGraphStore((state) => state.nodes);
   const edges = useGraphStore((state) => state.edges);
   const isExecuting = useGraphStore((state) => state.isExecuting);
+  // A run waiting for its inputs counts as starting (review 15, M-B).
+  const runStarting = useGraphStore((state) => state.runStarting);
   const executeNode = useGraphStore((state) => state.executeNode);
   const executeCluster = useGraphStore((state) => state.executeCluster);
   const copySelected = useGraphStore((state) => state.copySelected);
@@ -140,7 +142,7 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button selection-toolbar__button--primary"
         onClick={runSelection}
-        disabled={isExecuting}
+        disabled={isExecuting || runStarting}
         aria-label="Run selected nodes"
         aria-describedby={runScopeId}
         title={`Run selected nodes. ${describeRunScope(runScope)}`}

@@ -193,7 +193,7 @@ describe('review 14, M-B: the refusal is checked on what is known, and again on 
       expect(askMock).toHaveBeenCalledTimes(2);
       const first = askMock.mock.calls[0][0] as PlaceholderRunConfirm;
       const second = askMock.mock.calls[1][0] as PlaceholderRunConfirm;
-      expect(first.rows.find((row) => row.nodeId === 'n2')?.model).toBe('Grok Imagine 2.0 (xAI)');
+      expect(first.rows.find((row) => row.nodeId === 'n2')?.model).toBe('Grok Imagine 2.0 via xAI');
       expect(second.rows.find((row) => row.nodeId === 'n2')?.model).toBe('Grok Imagine 2.0 (Krea)');
       expect(askMock.mock.calls[1][1]).toMatchObject({ changed: true });
       expect(started).toHaveBeenCalledTimes(1);

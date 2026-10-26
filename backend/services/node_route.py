@@ -1385,6 +1385,30 @@ def provider_label(provider: Any) -> str:
     return PROVIDER_LABELS.get(str(provider or ""), str(provider or "provider"))
 
 
+_OWN_GATEWAY = re.compile(r"^(.*\S)\s+\(([^()]+)\)$")
+
+
+def name_on_route(definition: Mapping[str, Any], provider: Any) -> str:
+    """A node's model as a run on ``provider`` names it (GM - Design, round 15
+    item 3; round 16 (b), verbatim: "when the dialog builds the label, no
+    parens: "Grok Imagine 2.0 via xAI""). A display name that ends by naming
+    its own gateway ("Grok Imagine 2.0 (Krea)", "Nano Banana (FAL)") names the
+    route the run actually takes instead, by the card's label for it. On the
+    gateway itself, or a name that names no provider, it is the display name.
+    frontend/src/lib/directRoute.ts nameOnRoute is the same."""
+    name = str(definition.get("displayName") or "")
+    gateway = definition.get("apiProvider")
+    if not provider or provider == gateway:
+        return name
+    own = _OWN_GATEWAY.match(name)
+    if not own:
+        return name
+    said = own.group(2).strip().lower()
+    if said not in {str(gateway).lower(), provider_label(gateway).lower()}:
+        return name
+    return f"{own.group(1)} via {provider_label(provider)}"
+
+
 def _or_list(items: Iterable[str]) -> str:
     listed = list(items)
     return listed[0] if len(listed) == 1 else f"{', '.join(listed[:-1])} or {listed[-1]}"

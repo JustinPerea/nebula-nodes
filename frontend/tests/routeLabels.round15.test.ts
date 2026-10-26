@@ -15,7 +15,8 @@ import { placeholderRunConfirm, rowSegments } from '../src/lib/placeholderRunCon
  * uses for that route. If that route's price isn't known: "price not listed"
  * and the usual footnote. Never show the Krea price for a run that doesn't
  * go through Krea." The label the card uses for a route is the provider the
- * running card names ("xAI · 6s": providerLabel).
+ * running card names ("xAI · 6s": providerLabel). GM - Design, round 16 (b):
+ * when the dialog builds the label, no parens: "Grok Imagine 2.0 via xAI".
  */
 
 const PRICING = JSON.parse(readFileSync(resolve(__dirname, '../../backend/data/model_pricing.json'), 'utf8'));
@@ -46,9 +47,9 @@ function dialogRow(definitionId: string, label: string | null, apiKeys: Record<s
 
 describe('nameOnRoute: the gateway a display name names becomes the route that runs', () => {
   it('a Krea copy on its maker names the maker as the card does', () => {
-    expect(nameOnRoute(NODE_DEFINITIONS[GROK], 'xai')).toBe('Grok Imagine 2.0 (xAI)');
-    expect(nameOnRoute(NODE_DEFINITIONS[FLARE], 'openai')).toBe('GPT Image 2.5 Flare (OpenAI)');
-    expect(nameOnRoute(NODE_DEFINITIONS['nano-banana-fal'], 'google')).toBe('Nano Banana (Google)');
+    expect(nameOnRoute(NODE_DEFINITIONS[GROK], 'xai')).toBe('Grok Imagine 2.0 via xAI');
+    expect(nameOnRoute(NODE_DEFINITIONS[FLARE], 'openai')).toBe('GPT Image 2.5 Flare via OpenAI');
+    expect(nameOnRoute(NODE_DEFINITIONS['nano-banana-fal'], 'google')).toBe('Nano Banana via Google');
   });
   it('on the gateway itself, or a name that names no provider, it stays', () => {
     expect(nameOnRoute(NODE_DEFINITIONS[GROK], 'krea')).toBe('Grok Imagine 2.0 (Krea)');
@@ -58,16 +59,16 @@ describe('nameOnRoute: the gateway a display name names becomes the route that r
 });
 
 describe("GM round 15, item 3: the placeholder dialog's row names the route that runs, at its price", () => {
-  it('a named node on the xAI key: “Alt still” · Grok Imagine 2.0 (xAI) · $0.06', () => {
+  it('a named node on the xAI key: “Alt still” · Grok Imagine 2.0 via xAI · $0.06', () => {
     const { row } = dialogRow(GROK, 'Alt still', { XAI_API_KEY: 'x' });
-    expect(rowSegments(row)).toEqual(['“Alt still”', 'Grok Imagine 2.0 (xAI)', '$0.06']);
+    expect(rowSegments(row)).toEqual(['“Alt still”', 'Grok Imagine 2.0 via xAI', '$0.06']);
   });
   it('xAI key and a Krea token, nothing wired: still xAI', () => {
-    expect(dialogRow(GROK, 'Alt still', { XAI_API_KEY: 'x', KREA_API_TOKEN: 'k' }).row.model).toBe('Grok Imagine 2.0 (xAI)');
+    expect(dialogRow(GROK, 'Alt still', { XAI_API_KEY: 'x', KREA_API_TOKEN: 'k' }).row.model).toBe('Grok Imagine 2.0 via xAI');
   });
   it('an unnamed node names the route in its name, with no second model', () => {
     const { row } = dialogRow(GROK, null, { XAI_API_KEY: 'x' });
-    expect(row.name).toBe('“Grok Imagine 2.0 (xAI)”');
+    expect(row.name).toBe('“Grok Imagine 2.0 via xAI”');
     expect(row.model).toBeNull();
     expect(row.price).toBe('$0.06');
   });
@@ -79,7 +80,7 @@ describe("GM round 15, item 3: the placeholder dialog's row names the route that
   });
   it('GPT Image 2.5 Flare on an OpenAI key alone: the OpenAI name and "price not listed" (no total, so no footnote)', () => {
     const { row, model } = dialogRow(FLARE, 'Hero still', { OPENAI_API_KEY: 'o' });
-    expect(row.model).toBe('GPT Image 2.5 Flare (OpenAI)');
+    expect(row.model).toBe('GPT Image 2.5 Flare via OpenAI');
     expect(row.price).toBe('price not listed');
     expect(model.totalLine).toBeNull();
     expect(model.runLabel).toBe('Run');
@@ -95,11 +96,11 @@ describe("GM round 15, item 3: the placeholder dialog's row names the route that
     const model = placeholderRunConfirm(all, wires, 'n2', summary)!;
     const flare = model.rows.find((row) => row.nodeId === 'n2')!;
     const base = model.rows.find((row) => row.nodeId === 'n4')!;
-    expect(flare.name).toBe('“GPT Image 2.5 Flare (OpenAI)”');
+    expect(flare.name).toBe('“GPT Image 2.5 Flare via OpenAI”');
     expect(flare.price).toBe('price not listed');
-    expect(rowSegments(base)).toEqual(['“Base”', 'Grok Imagine 2.0 (xAI)', '$0.06']);
+    expect(rowSegments(base)).toEqual(['“Base”', 'Grok Imagine 2.0 via xAI', '$0.06']);
     expect(model.totalLine).toBe('The listed prices total $0.06.');
-    expect(model.notes).toContain('“GPT Image 2.5 Flare (OpenAI)” has no list price, so the run may cost more.');
+    expect(model.notes).toContain('“GPT Image 2.5 Flare via OpenAI” has no list price, so the run may cost more.');
   });
   it('the Krea plan stays Krea', () => {
     const { row } = dialogRow(KREA2, 'Hero', {}, { _kreaAuth: 'mcp', aspect_ratio: '1:1', resolution: '1K' });
@@ -112,14 +113,14 @@ describe('GM round 15, item 3: the costly-run confirm and the run summary', () =
   it('the costly-run confirm names an unnamed node on the route that runs', () => {
     const { nodes, edges } = canvas(GROK, null, {}, [], false);
     const summary = summarizeRunScope(nodes, edges, { kind: 'graph' }, { pricing: PRICING, apiKeys: { XAI_API_KEY: 'x' }, sizes: {} });
-    expect(runCostConfirmMessage(summary)).toContain('• Grok Imagine 2.0 (xAI): $0.06');
+    expect(runCostConfirmMessage(summary)).toContain('• Grok Imagine 2.0 via xAI: $0.06');
     expect(runCostConfirmMessage(summary)).not.toContain('(Krea)');
   });
   it('the run summary (the Run button) names it the same way', () => {
     const { nodes, edges } = canvas(GROK, null, {}, [], false);
     const summary = summarizeRunScope(nodes, edges, { kind: 'graph' }, { pricing: PRICING, apiKeys: { XAI_API_KEY: 'x' }, sizes: {} });
-    expect(describeRunScope(summary)).toContain('calls a paid provider: Grok Imagine 2.0 (xAI)');
-    expect(describeRunScope(summary)).toContain('Grok Imagine 2.0 (xAI) $0.06');
+    expect(describeRunScope(summary)).toContain('calls a paid provider: Grok Imagine 2.0 via xAI');
+    expect(describeRunScope(summary)).toContain('Grok Imagine 2.0 via xAI $0.06');
   });
   it('a named node keeps its name', () => {
     const { nodes, edges } = canvas(GROK, 'Alt still', {}, [], false);

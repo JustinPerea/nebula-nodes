@@ -515,7 +515,7 @@ def cost_for(
             spec = (node_route.route_by_id(definition, choice) if choice != node_route.AUTO
                     else node_route.maker_route(definition) or next(iter(node_route.routes_of(definition)), None))
             routed = str((spec or {}).get("provider") or "") or None
-        return {"kind": "paid", "provider": routed, "label": f"paid · {routed or 'provider'}"}
+        return {"kind": "paid", "provider": routed, "label": _paid_label(definition, routed)}
 
     if (definition or {}).get("id") == model_pricing.CINEMA_SCENE:
         nested = model_pricing.cinema_scene_base(params or {})
@@ -538,7 +538,21 @@ def cost_for(
                 "label": f"paid · {what} model{'' if priced else ', no list price'}"}
     if provider == "utility":
         return {"kind": "free", "provider": None, "label": "free · runs locally"}
-    return {"kind": "paid", "provider": provider, "label": f"paid · {provider or 'provider'}"}
+    return {"kind": "paid", "provider": provider, "label": _paid_label(definition, provider)}
+
+
+def _paid_label(definition: Mapping[str, Any] | None, provider: str | None) -> str:
+    """"paid · <provider>", or, for a run that leaves the gateway its name
+    says, the route built as the confirm dialog builds it (GM - Design, round
+    16 (b), verbatim: "Grok Imagine 2.0 via xAI"): "paid · Grok Imagine 2.0
+    via xAI". node_route.name_on_route is frontend nameOnRoute's twin."""
+    from services import node_route
+
+    name = str((definition or {}).get("displayName") or "")
+    built = node_route.name_on_route(definition or {}, provider) if definition else name
+    if built and built != name:
+        return f"paid · {built}"
+    return f"paid · {provider or 'provider'}"
 
 
 def summarize_cost(

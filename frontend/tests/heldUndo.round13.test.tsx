@@ -291,7 +291,10 @@ describe('a held Cmd+Z, round 13 (review 12)', () => {
     act(() => { store().clearGraph({ undoStep: a }); }); act(() => { store().endUndoStep(a); }); await settle();
     expect(notice()).not.toBe(DROPPED_UNDO_TEXT);
     act(() => { store().clearGraph({ undoStep: b }); }); act(() => { store().endUndoStep(b); }); await settle();
-    expect(stacks()).toEqual({ undo: 1, redo: 1 });
+    // Review 15, L-2 (round 16): the second clear changed nothing (the canvas
+    // was already empty), so its step goes and the press undoes the first.
+    expect(stacks()).toEqual({ undo: 0, redo: 1 });
+    expect(ids()).toEqual(['n1', 'n2']);
     await undo();
     expect(ids()).toEqual(['n1', 'n2']);
   });
@@ -308,7 +311,9 @@ describe('a held Cmd+Z, round 13 (review 12)', () => {
     expect(notice()).toBe(DROPPED_UNDO_TEXT);
     act(() => { store().undo(); });
     await act(async () => { await vi.advanceTimersByTimeAsync(50); });
-    expect(stacks()).toEqual({ undo: 0, redo: 1 });
+    // Review 15, L-2 (round 16): its node never came, so the step changed
+    // nothing and is dropped rather than taking the press silently.
+    expect(stacks()).toEqual({ undo: 0, redo: 0 });
   });
 
   it('P10 a configure held behind a failed request: its press goes to nothing, the next press undoes the edit below', async () => {

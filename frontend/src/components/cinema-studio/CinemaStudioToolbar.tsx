@@ -12,6 +12,8 @@ export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) 
   const exitCinemaEditor = useUIStore((s) => s.exitCinemaEditor);
   const executeNode = useGraphStore((s) => s.executeNode);
   const isExecuting = useGraphStore((s) => s.isExecuting);
+  // A run waiting for its inputs counts as starting (review 15, M-B).
+  const runStarting = useGraphStore((s) => s.runStarting);
   const isImportingGraph = useGraphStore((s) => s.isImportingGraph);
   const activeRuns = useGraphStore((s) => s.activeRuns);
   const cancelRun = useGraphStore((s) => s.cancelRun);
@@ -46,7 +48,7 @@ export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) 
         onClick={() => {
           if (!getCinemaUploadIssue(cinemaNodeId, undefined, true)) executeNode(cinemaNodeId, { verb: 'Generate' });
         }}
-        disabled={isExecuting || isImportingGraph || Boolean(referenceIssue)}
+        disabled={isExecuting || runStarting || isImportingGraph || Boolean(referenceIssue)}
         title={referenceIssue ?? 'Generate every shot using the current scene settings'}
       >
         {sceneRuns.length > 0 ? 'Generating…' : 'Generate all'}

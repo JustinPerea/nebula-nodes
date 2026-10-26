@@ -49,6 +49,8 @@ export function CommandPalette() {
   const addNode = useGraphStore((s) => s.addNode);
   const executeGraph = useGraphStore((s) => s.executeGraph);
   const isExecuting = useGraphStore((s) => s.isExecuting);
+  // A run waiting for its inputs counts as starting (review 15, M-B).
+  const runStarting = useGraphStore((s) => s.runStarting);
   const isImportingGraph = useGraphStore((s) => s.isImportingGraph);
   const canSave = useGraphStore(canSaveGraph);
   const canLoad = useGraphStore(canLoadGraph);
@@ -134,13 +136,13 @@ export function CommandPalette() {
           setMode('agent');
           setQuery('');
         },
-        canRun: nodeCount > 0 && !isExecuting && !isImportingGraph,
+        canRun: nodeCount > 0 && !isExecuting && !runStarting && !isImportingGraph,
         canSave,
         canLoad,
         canvasNodes,
         focusNode,
       }),
-    [open, addNodeAtCenter, executeGraph, fitCanvasView, enterCreateView, togglePanel, nodeCount, isExecuting, isImportingGraph, canSave, canLoad, canvasNodes, focusNode]
+    [open, addNodeAtCenter, executeGraph, fitCanvasView, enterCreateView, togglePanel, nodeCount, isExecuting, runStarting, isImportingGraph, canSave, canLoad, canvasNodes, focusNode]
   );
 
   // And kept in step with `open` after every render.

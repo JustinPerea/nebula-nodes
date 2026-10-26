@@ -1446,3 +1446,114 @@ Branch feat/agent-presence, base main (head f4c6f719 before this round).
 - tsc: clean.
 - Lint: clean (the inline-style and Slava-scope guards passed).
 - Build budget: 392,757 bytes raw / 118,209 gzip (limit 512,000).
+
+## Round 16: review 15 and GM - Design's round-16 rulings (2026-10-26)
+
+### What changed
+
+- **M-A follow-up and L-1: an undo takes off only the nodes its own step added** (`graphStore.ts`). Before, an undo restore removed every canvas node its snapshot didn't hold, so a step taken between a delete's echoes (typing, an agent's edit) or a node a reconnect sync brought could be removed by the wrong Cmd+Z. Now:
+  - each step knows what it added. A delete or clear step added nothing (`markDeleteStep`, `stepAdds` = ∅); an undo's inverse added exactly the nodes it put back (`stepAdds` = those ids); an upload or an accepted proposal owns the nodes it brought (`ownArrivals`).
+  - Every other step removes "canvas minus its snapshot minus what arrived after it from elsewhere" (`arrivedAfter`, filled by `noteArrivedElsewhere` from syncs and from other steps' restores; `settleArrivals` resolves a step's in-flight arrivals when it settles).
+  - The replaced pieces: `deleteTouches` / `redeletes`. The reviewer's other idea (carry `keepRemovedNodes` into jumped-over steps) isn't needed under this rule: a jumped-over step never removes a node it didn't add.
+- **L-2: a Cmd+Z never silently does nothing.**
+  - A step that ends up changing nothing (its snapshot equals the canvas, apart from view and run fields: `changesNothing`) is dropped before and after each press (`dropDeadSteps`), so the press goes to the next real step. Example: a delete answering 404 after a clear already took its node.
+  - A held press whose step turned out to change nothing moves to the step below (unless a later press is already bound there); otherwise it counts in the skipped line.
+  - A held press whose step was taken back (a refused delete or clear) counts in the existing skipped line ("1 undo was skipped while a change was saving.").
+  - When a red failure line is showing, the skipped line goes beside it (`messageNotice`), never over it.
+  - A press made on an empty stack stays quiet, as before.
+- **M-B: a run waiting for its inputs counts as starting** (`graphStore.ts`).
+  - While a run waits (at most 4 s) for the settings or the Krea sign-in, a second Run on any entry does nothing: a node's Run, the canvas Run, Run selected, a replay, an accepted proposal's run, Creator's concurrent cluster (when its nodes overlap), and the same Cinema shot.
+  - The new store flag `runStarting` drives the existing disabled state, with no new copy. It is used by the Toolbar Run, Run selected, the context menu's "Run This Node", the held-run notice's Run, Cinema's Generate and the command palette.
+  - An agent's accepted run that arrives during the wait is kept for the person to run, as during a run (`canvasProposalsStore`).
+  - Mechanism: `waitForRunInputs` registers what the waiting run would hold ('canvas', `shot:<node>:<shot>`, or `node:<id>`) around `knowRunInputs`.
+  - Spend approval, the 409 order and run admission are otherwise unchanged.
+- **L-3:** a Krea sign-in that is still "connecting" counts as unknown (`kreaSignInUnknown`). The run reads it again every 500 ms within the same 4 s, then decides. If it never settles, the run asks as before and the backend refuses.
+- **L-4:** when the 409 re-ask asks again after a route change, it prices at the 409's own estimate (`refusal.estimate`, was `null`). The yes it sends then carries Nebula's amount and can't earn a third 409.
+- **GM (a), the re-ask line, verbatim.**
+  - `changedNodesLine` names the nodes whose route or price moved, in row order: "“Hero still” changed while this was open." for one; "“A” and “B” …" or "“A”, “B” and “C” …" for two or three; "4 nodes changed while this was open." for four or more.
+  - The line is the first line of the body, in place of the round-5 line, and the heading is kept.
+  - Run ignores clicks for its first 500 ms, and focus stays on Cancel.
+  - It shows on both re-asks: the canvas's own re-ask after a yes, and the 409 re-ask.
+- **GM (b), "via":** when the dialog builds the label, it reads "Grok Imagine 2.0 via xAI" or "GPT Image 2.5 Flare via OpenAI". Rows on Krea's gateway keep the card's name, "Grok Imagine 2.0 (Krea)". The backend matches:
+  - `node_route.name_on_route` mirrors `directRoute.nameOnRoute`;
+  - `canvas_proposals.cost_for` labels a maker-key run "paid · Grok Imagine 2.0 via xAI" and a gateway run "paid · krea".
+- **Cursor bubble (GM's chip fallback), verbatim** (`main.update_graph_node`, `_card_label`, `_set_words`).
+  - A params change names the card's labels in curly quotes, in the card's order: "Set “Aspect ratio”", "Set “Aspect ratio” and “Resolution”", "Set 3 settings".
+  - A field with no card label (hidden, or no label) is left out of the list and the count. With none labelled the bubble has no words, and the cursor still moves.
+  - The Agent log keeps the change: the presence event carries `log` when it differs from the bubble, and `agentLogStore` uses it ("Set “Aspect ratio” and seed_mode", "Set seed_mode").
+- MCP/CLI/docs:
+  - `docs/MCP-SETUP.md`: the cost wording and confirm rows in the "via" form, the re-ask line, the cursor and Agent log rule, and the held-undo rules (an undo takes off only what its step added; no silent Cmd+Z).
+  - `backend/mcp_server.py`: the `propose_change` docstring now has the "via" label.
+  - `skills/nebula/SKILL.md` quotes none of these lines, so it is unchanged.
+
+### Decisions not in the spec
+
+- **The Agent log's words for a mix of labels and keys:** "Set “Aspect ratio” and seed_mode" (labels in quotes, keys bare, card order, up to 4 names then "and N more"). GM gave the rule ("uses the param key"), not the exact wording.
+- **The re-ask line only on a re-ask.** When the open dialog updates in place (its own watch), it keeps the round-6 line "This run changed since you last reviewed it.", which GM ruled verbatim in round 6. I tried naming the moved nodes there too; two round-6 tests failed, so I took it back and list it below for GM.
+- **A held press whose step changed nothing** goes to the step below (r13 P8: a second clear while the first was on its way now undoes the first clear), or counts as skipped if a later press already holds that step.
+- **Creator's concurrent cluster** waits on its own nodes only (it never waited on `isExecuting`), so a canvas run's wait doesn't block it; the canvas run then finds the cluster running after its wait and stops, as before.
+
+### Tests written first, and how they failed (on ef53bc8a)
+
+- `frontend/tests/heldUndo.round16.test.tsx`, 16 tests (a fake backend that applies deletes, syncs, restores and clears in arrival order; each test asserts the restore bodies and canvas = backend). The first 14 all failed. Examples:
+  - P1/P1b: the second restore removed the typed step's node;
+  - X3/X4: the typing's undo removed the agent's n3;
+  - Q1/Q1b: the first Cmd+Z hit a dead delete step;
+  - C7: the refused clear's press said nothing.
+  The last two (r14 C1, r14 D1 control) were written after the code; review 14's C1 probe failed on the old code.
+- `heldUndo.round13`: P8 and P9 were updated to the L-2 behaviour (the press now reaches the real step), with comments.
+- `frontend/tests/runWait.round16.test.ts`, now 14 tests. 8 failed first:
+  - MB1 sent twice (two dialogs);
+  - `runStarting` undefined;
+  - the held agent run timed out;
+  - the Cinema shot asked twice;
+  - MB5 read the sign-in 0 times; its bound had no `runStarting`;
+  - the 409 case asked twice, not three times;
+  - no `movedLine`.
+  Later fixes to the tests:
+  - The 409 case first moved the route by wiring Style images. The 409 re-ask prices the graph the refused run sent, so a wire can't move it; it now moves by the keys. It fails on the old code with "price not listed" instead of $0.06.
+  - The Cinema test first had no refusable node feeding the scene, so it never waited. It now has one: it asks twice without the shot guard and once with it.
+  - Added afterwards: a concurrent-cluster control, which passes without the guard (the second wait always met the first's owner), and the Krea-to-xAI direction of the 409 case.
+- `frontend/tests/runStartingControls.round16.test.tsx`, 2 tests (the Toolbar Run and the held-run notice's Run are disabled while starting). Both fail with the component change taken out.
+- `frontend/tests/PlaceholderRunDialog.round16.test.tsx`, 7 tests: `changedNodesLine` (1, 2, 3 and 4+ nodes, a price-only move, nothing moved), plus the dialog's top line, the 500 ms guard and focus on Cancel. They were written before the helper and the `movedLine` prop existed. The first run's output wasn't kept.
+- `frontend/tests/agentLogSetWords.round16.test.ts`, 3 tests: 2 failed (the log used `say`).
+- `backend/tests/test_round16_labels.py`, 12 tests: 11 failed:
+  - `name_on_route` was missing;
+  - `cost_for` said "paid · xai";
+  - the bubble said "Set aspect_ratio";
+  - `_card_label` was missing.
+  `test_route_labels_round15.py`, `test_agent_presence.py` ("Set “Quality”") and `test_connected_copy.py` ("Set “Text”") were updated to the new words. `routeLabels.round15` and `dialogRecheck.round15` were updated to "via"; their verbatim r15 quotes stay, with an r16 note.
+
+### Live check (8795/5795, isolated, `scratchpad/agent-presence/r16/live/live-r16.mjs`): 14 of 14
+
+- Same isolation as round 15:
+  - temp HOME, every `NEBULA_*` root under scratch, and every key, token, `NEBULA_*` and `VITE_*` variable dropped, behind a dead proxy;
+  - keys only as a stubbed `GET /api/settings` answer inside the page;
+  - every run request answered in the page.
+- **GM (a), (b) and L-4:** Codex's Grok Imagine 2.0 placeholder "Alt still", with aspect ratio and resolution set.
+  - With only a Krea token, the first confirm's row read "“Alt still” · Grok Imagine 2.0 (Krea) · price not listed".
+  - Run sent once. The page answered Nebula's 409 with a $0.06 estimate, and the canvas asked again ("This run changed since you last reviewed it.", "Run for $0.06").
+  - While that was open, an xAI key appeared (stub). Its yes asked once more:
+    - the first body line: "“Alt still” changed while this was open.";
+    - the row: "“Alt still” · Grok Imagine 2.0 via xAI · $0.06".
+  - A click as it appeared did nothing, and focus was on Cancel. After Cancel, only the one refused send had gone out.
+- **Cursor bubble:** Codex set Grok's aspect ratio over `PUT /api/graph/node/{id}`. The bubble and the Agent log read "Set “Aspect ratio”", with no raw key. Two fields read "Set “Aspect ratio” and “Resolution”".
+  - The log's "name" and "hero" rows are the script's own edit-batch notes (`note: 'name'`), not param keys.
+- **Blocked requests:** 2, both the canaries; none toward 8000-8010 or 5173.
+- **Screenshots** `r16-reask-via-xai` and `r16-cursor-set-aspect-ratio`, each at -1440 and -1280. The optional delete-and-type undo sequence was left to the unit tests (P1, P1b, P7) and not run live.
+
+### Open items (round 16)
+
+- **For GM:** should the open dialog's in-place update name the moved nodes too ("“X” changed while this was open.")? It now keeps round 6's "This run changed since you last reviewed it." for in-place updates.
+- **For GM:** the Agent log wording for mixed labels and keys (above).
+- `skills/nebula/SKILL.md` has no passage on proposal cost labels or cursor words. If agents should know the "via" label or the bubble rule, a line could go there.
+
+### Gates (round 16)
+
+- Backend full suite: 11,156 passed and 71 skipped (13 min 54 s).
+- Vitest full suite: 504 files and 6,376 tests. 488 files passed and 16 failed (45 tests: 38 "Test timed out in 5000ms", worker start timeouts, and focus or find waits under load). Three files never started a worker.
+  - Those 19 files rerun alone with `--no-file-parallelism`: 266 tests passed.
+- errorCopy ratchets: 14 files and 173 tests passed.
+- tsc: clean.
+- Lint: clean (the inline-style and Slava-scope guards passed).
+- Build budget: 392,924 bytes raw / 118,309 gzip (limit 512,000).

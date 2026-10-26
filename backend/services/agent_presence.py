@@ -248,6 +248,10 @@ def _clean_say(raw: Any) -> str:
     return text[:safe_cut(text, MAX_SAY_CHARS)]
 
 
+# The same cleaning for words said alongside the cursor's (main._show_agent's `log`).
+clean_say = _clean_say
+
+
 class AgentPresence:
     """In-memory cursor state and the browser's latest view report."""
 
