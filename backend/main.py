@@ -2179,11 +2179,16 @@ async def _require_run_spend_approval(
     limits checked after that, with no await between them."""
     try:
         measured = await _measure_run_inputs(nodes, edges)
-        _check_run_approval(approval_id, nodes, edges)
+        approval = _check_run_approval(approval_id, nodes, edges)
         _require_spend_approval(nodes, edges, run_id=run_id, measured=measured, **kwargs)
     except (HTTPException, PersonGateError):
         canvas_events.forget_run(run_id)
         raise
+    if approval is not None:
+        # The run an Accept approved: its run events name the proposal, so
+        # its agent knows the run as its own (nebula-mcp --channel), and a
+        # run the person starts by hand on the same nodes stays theirs.
+        canvas_events.note_run_proposal(run_id, approval.proposal_id)
 
 
 # What the person's Accept clicks approved, waiting for the canvas to run it.
@@ -2195,12 +2200,13 @@ def _approval_shape(graph: CLIGraph, run_ids: list[str]) -> dict[str, list[Any]]
     return approvals.shape(graph.nodes, graph.edges, approvals.run_scope(graph.edges, run_ids))
 
 
-def _check_run_approval(approval_id: str | None, nodes: list[GraphNode], edges: list[GraphEdge]) -> None:
+def _check_run_approval(approval_id: str | None, nodes: list[GraphNode], edges: list[GraphEdge]) -> Any:
     """A run that says it is the one the person approved on Accept must be
     exactly that run: the person's, the approved nodes and wires, and the
-    live graph still holding the approved values. It uses the approval up."""
+    live graph still holding the approved values. It uses the approval up,
+    and returns it (None for a run that carries none)."""
     if approval_id is None:
-        return
+        return None
     if not _is_person_request():
         raise _person_only_refusal(
             "Only the person's canvas starts a run they approved. Agents run through "
@@ -2225,6 +2231,7 @@ def _check_run_approval(approval_id: str | None, nodes: list[GraphNode], edges: 
         raise HTTPException(status_code=409, detail=(
             f"{_listed(names, 4)} changed since you accepted {approval.agent_name}'s proposal, so nothing ran. "
             "Look over the nodes, then click Run on them yourself."))
+    return approval
 
 
 def _refuse_agent_change_to_approved_runs(candidate: CLIGraph) -> None:
@@ -4725,6 +4732,9 @@ def _journal_execution_event(event: Any, run_id: str | None) -> None:
         if not canvas_events.first_run_event(run_id, node_id, kind):
             return
         data: dict[str, Any] = {"runId": run_id}
+        proposal_id = canvas_events.run_proposal(run_id)
+        if proposal_id:
+            data["proposalId"] = proposal_id  # the run an Accept approved (_require_run_spend_approval)
         # Agents read these (wait_for_canvas_change, `nebula watch`): hide a key
         # a provider quoted (services/key_echoes.py) before cutting to 200, so
         # a key cut short can't slip under the 8-character run check.
@@ -5185,6 +5195,55 @@ def _query_number(raw: str | None, name: str, *, integer: bool, low: float, high
     return value
 
 
+class _ClientGone(Exception):
+    """The client of a journal long-poll hung up (see _journal_wait)."""
+
+
+@app.exception_handler(_ClientGone)
+async def _client_gone(request, exc: _ClientGone):
+    # Nobody reads it: the connection is closed. 499 is the usual name for it.
+    return JSONResponse(status_code=499, content={"detail": "The client closed the request."})
+
+
+async def _until_disconnected(request: Request) -> None:
+    """Returns when the client hangs up. These routes are GETs with no body,
+    so after the (empty) request message the server's next message is the
+    disconnect (uvicorn sends it when the connection closes; test clients
+    once the response is complete)."""
+    while True:
+        message = await request.receive()
+        if message.get("type") == "http.disconnect":
+            return
+
+
+async def _journal_wait(request: Request, **kwargs: Any) -> dict[str, Any]:
+    """canvas_events.wait for a route's client, ended when that client hangs up.
+
+    Every long-poll on the journal holds one of its MAX_WAITERS (32) slots.
+    Without this, a client that gave up (an MCP client cancelling its poll,
+    a closed terminal) held its slot for the rest of the wait, up to 25 s, and
+    33 of them made every watcher's next poll a 429 (review 1 of PR #114).
+    Now the wait stops and frees the slot at once (_ClientGone, a 499 nobody
+    reads). A connected client sees no difference."""
+    if not kwargs.get("wait"):
+        return await canvas_events.wait(**kwargs)
+    waiting = asyncio.ensure_future(canvas_events.wait(**kwargs))
+    gone = asyncio.ensure_future(_until_disconnected(request))
+    try:
+        await asyncio.wait({waiting, gone}, return_when=asyncio.FIRST_COMPLETED)
+        if not waiting.done() and gone.exception() is not None:
+            await asyncio.wait({waiting})  # the server's receive failed: wait it out as before
+    finally:
+        gone.cancel()
+        abandoned = not waiting.done()
+        if abandoned:
+            waiting.cancel()
+    if abandoned:
+        await asyncio.wait({waiting})  # let its cancellation run: that frees the slot
+        raise _ClientGone()
+    return waiting.result()
+
+
 @app.get("/api/canvas/events")
 async def get_canvas_events(request: Request) -> dict[str, Any]:
     """Long-poll the canvas change journal (see services/canvas_events.py).
@@ -5216,7 +5275,8 @@ async def get_canvas_events(request: Request) -> dict[str, Any]:
     identity = identify_agent(current_request_headers())
     exclude = identity.id if identity is not None and include_self in {"0", "false"} else None
     try:
-        return await canvas_events.wait(
+        return await _journal_wait(
+            request,
             after=int(after) if after is not None else None,
             journal=journal,
             wait=wait,
@@ -6617,7 +6677,7 @@ async def get_canvas_proposal(proposal_id: str, request: Request) -> dict[str, A
     await _sweep_proposals()
     proposal = canvas_proposals.get(proposal_id)
     if proposal is None and asset_proposals.get(proposal_id) is not None:
-        return await _get_asset_proposal(proposal_id, wait)  # a project's or a board's (U16)
+        return await _get_asset_proposal(proposal_id, wait, request)  # a project's or a board's (U16)
     if proposal is None:
         raise refusal_copy.not_found(_gone_proposal_detail(proposal_id), "proposal", "proposals")
     loop = asyncio.get_running_loop()
@@ -6629,8 +6689,8 @@ async def get_canvas_proposal(proposal_id: str, request: Request) -> dict[str, A
         if remaining <= 0:
             break
         try:
-            result = await canvas_events.wait(after=cursor, journal=canvas_events.journal_id,
-                                              wait=remaining, kinds={"proposal"})
+            result = await _journal_wait(request, after=cursor, journal=canvas_events.journal_id,
+                                         wait=remaining, kinds={"proposal"})
         except TooManyWaiters as exc:
             raise HTTPException(status_code=429, detail=str(exc)) from exc
         cursor = result.get("cursor", cursor)
@@ -6815,7 +6875,9 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
         actor=person,
     )
     note = f" (accepted from {proposal.agent.name})"
-    _journal_cluster(list(id_map.values()), edge_ids, actor=person, note=note)
+    # Each names the proposal in data: nebula-mcp --channel leaves these out
+    # of the person's edits by that field, never by the summary's note.
+    _journal_cluster(list(id_map.values()), edge_ids, actor=person, note=note, proposal_id=proposal.id)
     for change in proposal.spec.params:
         before = (proposal.existing.get(change.node_id) or {}).get("params") or {}
         changes = param_changes(before, (cli_graph.nodes.get(change.node_id) or {}).get("params") or {})
@@ -6823,7 +6885,7 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
             _journal(
                 "node.params",
                 node_id=change.node_id,
-                data=changes,
+                data={**changes, "proposalId": proposal.id},
                 summary=f"set {_listed(changes['keys'], 4)} on {_node_label(change.node_id)} ({change.node_id}){note}",
                 actor=person,
             )
@@ -7089,8 +7151,8 @@ async def get_agent_questions(set_id: str, request: Request) -> dict[str, Any]:
         if remaining <= 0:
             break
         try:
-            result = await canvas_events.wait(after=cursor, journal=canvas_events.journal_id,
-                                              wait=remaining, kinds={"question"})
+            result = await _journal_wait(request, after=cursor, journal=canvas_events.journal_id,
+                                         wait=remaining, kinds={"question"})
         except TooManyWaiters as exc:
             raise HTTPException(status_code=429, detail=str(exc)) from exc
         cursor = result.get("cursor", cursor)
@@ -7747,7 +7809,7 @@ async def list_asset_proposals(kind: str | None = None, id: str | None = None) -
                           if await _commons_proposal_visible(p, headers)]}
 
 
-async def _get_asset_proposal(proposal_id: str, wait: float) -> dict[str, Any]:
+async def _get_asset_proposal(proposal_id: str, wait: float, request: Request) -> dict[str, Any]:
     """``GET /api/canvas/proposals/{id}`` for an asset proposal: with ``wait``
     (≤25 s), wait for the decision, or for its target to move on."""
     await _sweep_asset_proposals()
@@ -7762,8 +7824,8 @@ async def _get_asset_proposal(proposal_id: str, wait: float) -> dict[str, Any]:
         if remaining <= 0:
             break
         try:
-            result = await canvas_events.wait(after=cursor, journal=canvas_events.journal_id,
-                                              wait=remaining, kinds=set(_ASSET_WAIT_KINDS))
+            result = await _journal_wait(request, after=cursor, journal=canvas_events.journal_id,
+                                         wait=remaining, kinds=set(_ASSET_WAIT_KINDS))
         except TooManyWaiters as exc:
             raise HTTPException(status_code=429, detail=str(exc)) from exc
         cursor = result.get("cursor", cursor)
@@ -10348,7 +10410,8 @@ def _validate_params(definition_id: str, params: dict[str, Any]) -> None:
         )
 
 
-def _journal_node_added(node_id: str, *, actor: dict[str, Any] | None = None, note: str = "") -> None:
+def _journal_node_added(node_id: str, *, actor: dict[str, Any] | None = None, note: str = "",
+                        proposal_id: str | None = None) -> None:
     node = cli_graph.nodes.get(node_id) or {}
     data: dict[str, Any] = {
         "definitionId": str(node.get("definitionId") or ""),
@@ -10356,6 +10419,8 @@ def _journal_node_added(node_id: str, *, actor: dict[str, Any] | None = None, no
     }
     if isinstance(node.get("position"), dict):
         data["position"] = node["position"]
+    if proposal_id:
+        data["proposalId"] = proposal_id
     _journal(
         "node.added",
         node_id=node_id,
@@ -10365,8 +10430,11 @@ def _journal_node_added(node_id: str, *, actor: dict[str, Any] | None = None, no
     )
 
 
-def _journal_edge(kind: str, edge: dict[str, Any], *, actor: dict[str, Any] | None = None, note: str = "") -> None:
+def _journal_edge(kind: str, edge: dict[str, Any], *, actor: dict[str, Any] | None = None, note: str = "",
+                  proposal_id: str | None = None) -> None:
     data = _edge_data(edge)
+    if proposal_id:
+        data["proposalId"] = proposal_id
     verb = "connected" if kind == "edge.added" else "disconnected"
     _journal(
         kind,
@@ -10386,21 +10454,27 @@ def _journal_cluster(
     *,
     actor: dict[str, Any] | None = None,
     note: str = "",
+    proposal_id: str | None = None,
 ) -> None:
-    """One node.added per node and edge.added per wire, each capped at 50."""
+    """One node.added per node and edge.added per wire, each capped at 50.
+    With `proposal_id` (an accepted proposal's), each names it in data, so a
+    reader can tell what the accept applied from the person's own edits."""
     for node_id in node_ids[:50]:
-        _journal_node_added(node_id, actor=actor, note=note)
+        _journal_node_added(node_id, actor=actor, note=note, proposal_id=proposal_id)
     if len(node_ids) > 50:
         rest = node_ids[50:]
+        data: dict[str, Any] = {"count": len(rest), "nodeIds": rest[:50]}
+        if proposal_id:
+            data["proposalId"] = proposal_id
         _journal(
             "node.added",
-            data={"count": len(rest), "nodeIds": rest[:50]},
+            data=data,
             summary=f"added {len(rest)} more nodes{note}",
             actor=actor,
         )
     wanted = set(edge_ids)
     for edge in [edge for edge in cli_graph.edges if edge.get("id") in wanted][:50]:
-        _journal_edge("edge.added", edge, actor=actor, note=note)
+        _journal_edge("edge.added", edge, actor=actor, note=note, proposal_id=proposal_id)
 
 
 def _moved_far_enough(before: Any, after: dict[str, float]) -> bool:

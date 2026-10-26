@@ -567,13 +567,13 @@ your own edits; `--as NAME` sets your name for that filtering.
 
 | Kind | When | Data |
 |---|---|---|
-| `node.added` / `node.removed` | create, cluster, connect-and-create / delete | definition, name |
-| `node.params` | a param changed (only keys whose value changed) | `keys`, redacted `values` |
+| `node.added` / `node.removed` | create, cluster, connect-and-create / delete | definition, name; `proposalId` when an accepted proposal added it |
+| `node.params` | a param changed (only keys whose value changed) | `keys`, redacted `values`; `proposalId` when an accepted proposal set it |
 | `node.moved` | a drag ended, auto-layout or paste moved nodes 8 px or more | `nodeIds`, `count` |
 | `node.renamed` | a node got a new name on the canvas (or went back to its model name) | `from`, `to` |
-| `edge.added` / `edge.removed` | connected / disconnected | source, target and handles |
+| `edge.added` / `edge.removed` | connected / disconnected | source, target and handles; `proposalId` when an accepted proposal wired it |
 | `selection.changed` | the selected set changed | `nodeIds`, `count` |
-| `run.started` / `run.finished` / `run.failed` | per node, attributed to whoever started the run | `runId`, `error` |
+| `run.started` / `run.finished` / `run.failed` | per node, attributed to whoever started the run | `runId`, `error`; `proposalId` on the run the canvas starts for an accepted proposal |
 | `run.cancelled` | a run stopped, attributed to whoever pressed Stop or called `cancel_run` (the starter when another backend took the Stop) | `runId`, `startedBy` (`kind`, `name`) |
 | `run.skipped` | a gate upstream (Jev Decide's On Pass / On Fail) withheld the node's input, so it never ran | `runId`, `reason`, `gateNodeId` |
 | `canvas.replaced` | import, project opened or created; node ids restart | `reason` |
@@ -702,8 +702,10 @@ now; the experiment is tried on individual accounts.) It doesn't work with
   invalidated), unless it is already waiting for it in `get_proposal`;
 - the end of a run it started and stopped waiting for (`run_nodes` or
   `get_run` answered "running"), unless it is collecting it with `get_run`.
-  The run Nebula starts for its accepted proposal (the nodes the proposal
-  listed) counts as its own run;
+  The run the canvas starts for its accepted proposal counts as its own run:
+  Nebula names the proposal in that run's events. A run you start yourself,
+  even on the nodes the proposal listed, is yours. Reading your run with
+  `get_run` never makes it Claude's;
 - a change you make, 8 s after your last edit and 30 s at most after the
   first: a node added, removed, edited (its settings) or renamed, a connection
   made or removed, or a pin deleted;
@@ -718,13 +720,15 @@ Nebula call running, or one in the last 20 s).
 Some of your edits don't wake it on their own: a moodboard edit, and a
 replaced or cleared canvas (another project opened, a graph loaded, Clear).
 Each adds a line to the next push, whatever wakes it; a replaced or cleared
-canvas also tells Claude to call `start_here`. Board moves and resizes are
-left out, like node moves.
+canvas also tells Claude to call `start_here`. A board write that only moved
+cards is left out, like a node move; a card's weight (`board.resized`) is an
+edit.
 
 Selections and moves never wake it, nor do other agents, nor its own edits:
 the listener long-polls `/api/canvas/events` under the tools' own name and
-token, so Nebula leaves those out. The nodes and connections an accepted
-proposal adds are not counted as your edits. At most 20 wakes an
+token, so Nebula leaves those out. The nodes, connections and settings an
+accepted proposal applies are not counted as your edits (Nebula marks them
+with `proposalId`; a node's name can't pass for one). At most 20 wakes an
 hour, 30 s apart; anything past a limit arrives with the next one (`held` says
 how many waited), and past 100 waiting edits (or 100 pins) the push gives a
 count and asks for `look_at_canvas`; a pile of edits never pushes a pin out.
@@ -732,7 +736,9 @@ After 2 hours with no activity from you (selections
 and moves count) it stops listening, and the next Nebula tool result says so;
 in Claude Code, /mcp > nebula-listen > Reconnect starts it again. If the
 listener itself fails, it stops the same way (a stderr line, and the next
-result says so) and the tools keep working.
+result says so) and the tools keep working. If Nebula keeps failing to answer
+for one of Claude's runs (10 errors in a row, about 6 minutes), the listener
+stops following it and the next result says to read it with `get_run`.
 
 A push arrives as `<channel source="nebula-listen" wake="pin|proposal|run|change"
 count="…" cursor="…" journal="…" project_id="…">`, with `held="…"` and
@@ -753,7 +759,7 @@ turn, so it offers instead of editing under your hands. Which pushes:
 
 - **Never gated:** a push that holds a pin (whatever else it carries), and
   one for your accepting its proposal or for its own run's end. Those act
-  like any turn.
+  like any turn, and none of them ends a gated turn's window early.
 - **Always gated:** a push for a proposal you rejected, that expired or that
   was invalidated (it may only offer again), and a push carrying your edits:
   a change, the end of your run, a moodboard or canvas line, or lost events.
@@ -761,21 +767,36 @@ turn, so it offers instead of editing under your hands. Which pushes:
   run's end is gated, since the edits are your hands on the canvas.
 
 A gated push goes only when Claude isn't mid-turn, so the gate never lands
-on a turn already running; a push that isn't gated waits while a gated turn
-is still calling Nebula, so it never lifts that turn's gate. A Nebula call
-still running (a `get_proposal` or `wait_for_canvas_change` wait) keeps the
-gated turn open, however long it waits.
+on a turn already running. No push ever closes or shortens a gated turn's
+window: a push that isn't gated (a pin too) waits until the window has
+ended on its own terms, at least 60 s after the gated push and then 20 s
+with no Nebula call and none running. A Nebula call still running (a
+`get_proposal` or `wait_for_canvas_change` wait) keeps the window open,
+however long it waits. The cost: a pin you add right after a change push
+can wait up to about a minute. Claude Code wouldn't give it to the running
+turn anyway (pushes that arrive while Claude is busy are delivered together
+on its next turn), so sending it sooner could only have freed the change
+turn to edit.
 
 The gate lives in this MCP server process, and that has two gaps. Nebula
-can't see where a Claude Code turn ends, so the timing is guessed: a gated
-turn lasts at least 60 s after the push and until Nebula has had no call for
-20 s, and if you type a request to Claude in that minute it is refused the
-same way (in the live check Claude proposed the edit instead). And it covers
-only this server's tools, not the `nebula` CLI: Claude is told not to edit
-through the CLI in that turn, but nothing stops it. A later version moves the
-gate into Nebula itself, where it covers the CLI too. "5 minutes per turn"
-can't be enforced either; after 5 minutes a gated turn's tool results say to
-wrap up.
+can't see where a Claude Code turn ends, so the timing is guessed from when
+Nebula sends the push: the window lasts at least 60 s after it and until
+Nebula has had no call for 20 s. That guess can miss both ways:
+
+- A turn you type can be refused. If you type a request to Claude within
+  that minute, it is refused the same way (in the live check Claude proposed
+  the edit instead).
+- A change turn can go ungated. If Claude is busy with other work (no Nebula
+  call) when a gated push is sent, Claude Code hands it over on the next
+  turn; if that is more than a minute later, the window has already ended
+  and that turn may edit. The same happens when a woken turn, after its
+  first minute, pauses more than 20 s between Nebula calls.
+
+And it covers only this server's tools, not the `nebula` CLI or another
+Nebula MCP server in the same session: Claude is told not to edit through
+them in that turn, but nothing stops it. A later version moves the gate into
+Nebula itself, where it covers every client. "5 minutes per turn" can't be
+enforced either; after 5 minutes a gated turn's tool results say to wrap up.
 
 **Stop** by restarting Claude Code without the flag.
 

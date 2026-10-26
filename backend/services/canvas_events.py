@@ -317,6 +317,8 @@ class CanvasEventJournal:
         self._waiters: set[tuple[asyncio.AbstractEventLoop, asyncio.Event]] = set()
         self._run_actors: OrderedDict[str, dict[str, Any]] = OrderedDict()
         self._run_seen: OrderedDict[str, set[tuple[str, str]]] = OrderedDict()
+        # A run the person approved by accepting a proposal: run id -> proposal id.
+        self._run_proposals: OrderedDict[str, str] = OrderedDict()
 
     # -- project ----------------------------------------------------------
     @property
@@ -497,6 +499,18 @@ class CanvasEventJournal:
         while len(self._run_actors) > MAX_TRACKED_RUNS:
             self._run_actors.popitem(last=False)
 
+    def note_run_proposal(self, run_id: str | None, proposal_id: str) -> None:
+        """This run is the one an Accept approved: its run events name the proposal."""
+        if not run_id or not proposal_id:
+            return
+        self._run_proposals[run_id] = proposal_id
+        self._run_proposals.move_to_end(run_id)
+        while len(self._run_proposals) > MAX_TRACKED_RUNS:
+            self._run_proposals.popitem(last=False)
+
+    def run_proposal(self, run_id: str | None) -> str | None:
+        return self._run_proposals.get(run_id) if run_id else None
+
     def run_actor(self, run_id: str | None) -> dict[str, Any]:
         if run_id and run_id in self._run_actors:
             return dict(self._run_actors[run_id])
@@ -520,6 +534,7 @@ class CanvasEventJournal:
     def forget_run(self, run_id: str | None) -> None:
         if run_id:
             self._run_seen.pop(run_id, None)
+            self._run_proposals.pop(run_id, None)
 
 
 canvas_events = CanvasEventJournal()

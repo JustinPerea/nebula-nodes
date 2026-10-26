@@ -129,14 +129,17 @@ def test_selections_moves_runs_and_other_actors_never_wake_it():
 def test_nodes_an_accepted_proposal_adds_are_not_a_change():
     # Accept is the person's click, so the nodes and wires it adds are
     # journaled as theirs (main.py accept route); they must not also wake
-    # the agent as edits.
+    # the agent as edits. Nebula marks each with data.proposalId (review 1:
+    # matching the summary's "(accepted from X)" let a node name hide edits).
     state = ChannelState(now=0.0)
+    accepted = {"proposalId": "prop_x"}
     state.observe(resp(
         ev(1, "proposal.accepted", node="n9", data={"proposalId": "prop_x", "idMap": {"+a": "n9", "+b": "n10"}}),
-        ev(2, "node.added", node="n9", summary="added Text Input (n9) (accepted from Other)"),
-        ev(3, "node.added", node="n10", summary="added Nano Banana (n10) (accepted from Other)"),
-        ev(4, "edge.added", data={"source": "n9", "target": "n10"}, summary="wired n9 → n10"),
-        ev(5, "node.params", node="n4", summary="set prompt on Hero (n4) (accepted from Other)"),
+        ev(2, "node.added", node="n9", data=accepted, summary="added Text Input (n9) (accepted from Other)"),
+        ev(3, "node.added", node="n10", data=accepted, summary="added Nano Banana (n10) (accepted from Other)"),
+        ev(4, "edge.added", data={"source": "n9", "target": "n10", **accepted}, summary="wired n9 → n10"),
+        ev(5, "node.params", node="n4", data={"keys": ["prompt"], **accepted},
+           summary="set prompt on Hero (n4) (accepted from Other)"),
     ), now=1.0)
     assert drain(state, 1.0, 100.0) == []
 
@@ -149,7 +152,8 @@ def test_its_own_proposals_decision_wakes_it():
         ev(1, "proposal.rejected", data={"proposalId": "prop_other", "reason": "no"}),
         ev(2, "proposal.accepted", node="n9", data={"proposalId": "prop_1", "note": "warmer", "idMap": {"+a": "n9"}},
            summary="accepted Claude Code's proposal prop_1"),
-        ev(3, "node.added", node="n9", summary="added Text Input (n9) (accepted from Claude Code)"),
+        ev(3, "node.added", node="n9", data={"proposalId": "prop_1"},
+           summary="added Text Input (n9) (accepted from Claude Code)"),
     ), now=50.0)
     push = state.take_push(50.0)
     assert push is not None and push.wake == "proposal" and not push.gate
@@ -186,6 +190,9 @@ def test_the_end_of_a_run_it_stopped_waiting_for_wakes_it():
 
 def test_a_run_it_is_collecting_does_not_wake_it():
     state = ChannelState(now=0.0)
+    # Its own run (review 1: get_run alone never makes a run its own).
+    state.tool_finished("run_nodes", {"node_id": "n3"}, [json.dumps({"status": "running", "runId": "run_2"})],
+                        now=0.5)
     state.tool_finished("get_run", {"run_id": "run_2"}, [json.dumps({"status": "running", "runId": "run_2"})], now=1.0)
     state.tool_started("get_run", {"run_id": "run_2", "wait_seconds": 45}, now=2.0)
     state.run_ended({"runId": "run_2", "status": "finished", "nodesExecuted": 1}, now=10.0)
@@ -511,6 +518,13 @@ def test_a_replaced_or_cleared_canvas_only_adds_a_line(kind, summary):
     assert push.meta["count"] == "2"
 
 
+def proposal_run_started(seq: int, run_id: str, proposal_id: str, node: str = "n3") -> dict:
+    """The run the canvas starts for an accepted proposal: Nebula marks its
+    events with the proposal, from the run approval the canvas sends."""
+    return ev(seq, "run.started", node=node, data={"runId": run_id, "proposalId": proposal_id},
+              summary=f"Hero ({node}) started")
+
+
 def test_an_accepted_proposals_run_is_its_own_run_not_the_persons():
     # The canvas runs an accepted proposal's runNodeIds itself, as the
     # person (main.py accept route), so its run.started events are theirs.
@@ -520,7 +534,7 @@ def test_an_accepted_proposals_run_is_its_own_run_not_the_persons():
     state.observe(resp(ev(1, "proposal.accepted", node="n9",
                           data={"proposalId": "prop_r", "idMap": {"+a": "n9"}, "runNodeIds": ["n9"]})), now=50.0)
     assert state.take_push(50.0).wake == "proposal"
-    state.observe(resp(run_started(2, "run_acc", "n9")), now=52.0)
+    state.observe(resp(proposal_run_started(2, "run_acc", "prop_r", "n9")), now=52.0)
     assert state.person_runs == {} and state.tracked_runs == {"run_acc"}
     state.run_ended({"runId": "run_acc", "status": "finished", "nodesExecuted": 1}, now=90.0)
     push = state.take_push(92.0)
@@ -535,13 +549,13 @@ def test_another_agents_accepted_run_is_neither_its_run_nor_the_persons():
     state.observe(resp(ev(1, "proposal.accepted", node="n4",
                           data={"proposalId": "prop_other", "idMap": {"+a": "n4"}, "runNodeIds": ["n1", "n4"]})),
                   now=10.0)
-    # The canvas may start with a node upstream of the listed ones.
-    state.observe(resp(run_started(2, "run_x", "n0")), now=11.0)
-    assert set(state.person_runs) == {"run_x"}
-    state.observe(resp(run_started(3, "run_x", "n4")), now=12.0)
+    # The canvas may start with a node upstream of the listed ones; every
+    # event of that run carries the proposal.
+    state.observe(resp(proposal_run_started(2, "run_x", "prop_other", "n0")), now=11.0)
     assert state.person_runs == {} and state.tracked_runs == set()
-    state.observe(resp(run_started(4, "run_x", "n1")), now=13.0)
-    assert state.person_runs == {} and drain(state, 13.0, 400.0) == []
+    state.observe(resp(proposal_run_started(3, "run_x", "prop_other", "n4")), now=12.0)
+    state.observe(resp(proposal_run_started(4, "run_x", "prop_other", "n1")), now=13.0)
+    assert state.person_runs == {} and state.tracked_runs == set() and drain(state, 13.0, 400.0) == []
 
 
 # -- Q51 a: what a turn woken by its own proposal or run may do (Justin, 2026-10-26) --
@@ -552,14 +566,17 @@ def _open_change_window(state: ChannelState) -> None:
 
 
 def test_an_accepted_proposal_push_is_never_gated():
+    # Review 1 (H1, H2): it goes once the change turn's window has ended on
+    # its own (here 60 s after that push), never into it.
     state = ChannelState(now=0.0)
     state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_a"}}, now=1.0)
     _open_change_window(state)  # a change turn's window is open until 168 s at least
     state.observe(resp(ev(2, "proposal.accepted", data={"proposalId": "prop_a", "idMap": {}})), now=140.0)
-    push = state.take_push(140.0)
+    assert drain(state, 140.0, 168.0) == []
+    push = state.take_push(168.5)
     assert push is not None and push.wake == "proposal" and not push.gate and "gate" not in push.meta
     assert "refused" not in push.content
-    assert state.tool_started("edit_canvas", {}, now=141.0) is None
+    assert state.tool_started("edit_canvas", {}, now=169.0) is None
 
 
 def test_its_own_run_end_is_never_gated():
@@ -567,9 +584,10 @@ def test_its_own_run_end_is_never_gated():
     state.tool_finished("run_nodes", {}, [json.dumps({"status": "running", "runId": "run_o"})], now=1.0)
     _open_change_window(state)
     state.run_ended({"runId": "run_o", "status": "finished", "nodesExecuted": 1}, now=140.0)
-    push = state.take_push(142.0)
+    assert drain(state, 140.0, 168.0) == []  # review 1: never into the change turn's window
+    push = state.take_push(168.5)
     assert push is not None and push.wake == "run" and not push.gate
-    assert state.tool_started("run_nodes", {}, now=143.0) is None
+    assert state.tool_started("run_nodes", {}, now=169.0) is None
 
 
 def test_an_ungated_push_waits_for_a_change_turn_still_under_way():
@@ -583,10 +601,12 @@ def test_an_ungated_push_waits_for_a_change_turn_still_under_way():
     assert state.take_push(125.0) is None
     assert state.tool_started("edit_canvas", {}, now=126.0) is not None  # still the change turn
     state.tool_finished("look_at_canvas", {}, {}, now=127.0)
-    assert state.take_push(146.9) is None
-    push = state.take_push(147.0)  # 20 s without a call: that turn is over
+    # Review 1 (H2): 20 s without a call isn't the end while the window's
+    # 60 s minimum runs (to 168): a quiet agent may be a turn still thinking.
+    assert drain(state, 127.0, 168.0) == []
+    push = state.take_push(168.5)
     assert push is not None and push.wake == "proposal" and not push.gate
-    assert state.tool_started("edit_canvas", {}, now=148.0) is None
+    assert state.tool_started("edit_canvas", {}, now=169.0) is None
 
 
 @pytest.mark.parametrize("decision", ["rejected", "expired", "invalidated"])
@@ -657,6 +677,395 @@ def test_a_board_line_riding_on_an_accept_gates_it_too():
     assert push is not None and push.wake == "proposal" and push.gate and "note changed on Moods" in push.content
 
 
+# -- Review 1 of PR #114 (2026-10-26): no push ever closes or shortens a gated window --
+# Claude Code queues pushes that arrive while Claude is busy and hands them
+# over together on the next turn (channels reference), so a push sent while a
+# gated turn is still running never reaches that turn. Lifting the gate when
+# it is sent only freed the running change turn to edit (probes A, A2, B, B2, G).
+
+def _young_window(state: ChannelState) -> None:
+    """A change push at 108: its window lasts until 168 at least."""
+    state.observe(resp(edit(1)), now=100.0)
+    push = state.take_push(108.0)
+    assert push is not None and push.gate
+
+
+def test_a_pin_never_lifts_the_gate_of_a_change_turn_still_running():
+    # Probe A: the change turn looks at 110 and edits at 139; a pin at 120.
+    state = ChannelState(now=0.0)
+    _young_window(state)
+    assert state.tool_started("look_at_canvas", {}, 110.0) is None
+    state.tool_finished("look_at_canvas", {}, {}, 110.5)
+    state.observe(resp(pin(2)), now=120.0)
+    assert drain(state, 120.0, 138.5) == []
+    # The listener sleeps until the window ends on its own (60 s after the push).
+    assert state.next_check(121.0) == pytest.approx(168.0 - 121.0, abs=0.01)
+    assert state.tool_started("edit_canvas", {}, 139.0) is not None
+    pushes = drain(state, 139.0, 200.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(168.5, "pin", False)]
+    assert state.tool_started("edit_canvas", {}, 169.0) is None  # the pin's own turn acts as any turn
+
+
+def test_a_pin_during_a_wait_in_a_change_turn_never_lifts_its_gate():
+    # Probe A2: the change turn proposes and waits in get_proposal; a pin comes meanwhile.
+    state = ChannelState(now=0.0)
+    state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_x"}}, now=1.0)
+    _young_window(state)
+    assert state.tool_started("propose_change", {}, 110.0) is None
+    state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_y"}}, 110.5)
+    assert state.tool_started("get_proposal", {"proposal_id": "prop_y", "wait_seconds": 120}, 111.0) is None
+    state.observe(resp(pin(2)), now=120.0)
+    assert drain(state, 120.0, 149.5) == []
+    state.tool_finished("get_proposal", {"proposal_id": "prop_y"}, {"proposal": {"status": "rejected"}}, 150.0)
+    assert state.tool_started("edit_canvas", {}, 151.0) is not None
+    pushes = drain(state, 151.0, 250.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(171.5, "pin", False)]  # 20 s after the last call
+
+
+def test_an_accept_never_closes_a_young_change_window():
+    # Probe B: the accept comes before the change turn's first call.
+    state = ChannelState(now=0.0)
+    state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_b"}}, now=1.0)
+    _young_window(state)
+    state.observe(resp(ev(2, "proposal.accepted", data={"proposalId": "prop_b", "idMap": {}})), now=115.0)
+    assert drain(state, 115.0, 139.5) == []
+    assert state.tool_started("edit_canvas", {}, 140.0) is not None
+    pushes = drain(state, 140.0, 250.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(168.5, "proposal", False)]
+
+
+def test_its_own_run_end_never_closes_a_young_change_window():
+    # Probe B2.
+    state = ChannelState(now=0.0)
+    state.tool_finished("run_nodes", {}, [json.dumps({"status": "running", "runId": "run_o"})], now=1.0)
+    _young_window(state)
+    state.run_ended({"runId": "run_o", "status": "finished", "nodesExecuted": 1}, now=112.0)
+    assert drain(state, 112.0, 139.5) == []
+    assert state.tool_started("edit_canvas", {}, 140.0) is not None
+    pushes = drain(state, 140.0, 250.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(168.5, "run", False)]
+
+
+def test_an_accept_after_a_rejection_push_waits_for_that_turn():
+    # Probe G: a rejection's gated turn hasn't called yet when another proposal is accepted.
+    state = ChannelState(now=0.0)
+    for pid in ("prop_r", "prop_a"):
+        state.tool_finished("propose_change", {}, {"proposal": {"id": pid}}, now=1.0)
+    state.observe(resp(ev(1, "proposal.rejected", data={"proposalId": "prop_r", "reason": "no"})), now=100.0)
+    first = state.take_push(100.0)
+    assert first is not None and first.wake == "proposal" and first.gate
+    state.observe(resp(ev(2, "proposal.accepted", data={"proposalId": "prop_a", "idMap": {}})), now=105.0)
+    assert drain(state, 105.0, 130.5) == []
+    assert state.tool_started("edit_canvas", {}, 131.0) is not None
+    pushes = drain(state, 131.0, 250.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(160.5, "proposal", False)]
+
+
+# Every push kind against every window state: when it goes, and whether it is gated.
+_KIND_TIMES = {
+    # kind:            (no window, young window, a call at 113, a call in flight 113-150)
+    "pin":             ((116.0, False), (168.5, False), (168.5, False), (170.5, False)),
+    "accept":          ((115.0, False), (168.5, False), (168.5, False), (170.5, False)),
+    "own_run_end":     ((117.0, False), (168.5, False), (168.5, False), (170.5, False)),
+    "reject":          ((115.0, True), (138.0, True), (138.0, True), (170.0, True)),
+    "change":          ((123.0, True), (138.0, True), (138.0, True), (170.0, True)),
+    "person_run_end":  ((123.0, True), (138.0, True), (138.0, True), (170.0, True)),
+}
+_WINDOWS = ("none", "young", "calling", "in_flight")
+
+
+@pytest.mark.parametrize("window", _WINDOWS)
+@pytest.mark.parametrize("kind", sorted(_KIND_TIMES))
+def test_every_push_kind_against_every_window_state(kind, window):
+    state = ChannelState(now=0.0)
+    state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_k"}}, now=1.0)
+    state.tool_finished("run_nodes", {}, [json.dumps({"status": "running", "runId": "run_own"})], now=1.0)
+    state.observe(resp(run_started(1, "run_person")), now=50.0)
+    if window != "none":
+        state.observe(resp(edit(2)), now=100.0)
+        assert state.take_push(108.0).gate
+    if window == "calling":
+        assert state.tool_started("look_at_canvas", {}, 113.0) is None
+        state.tool_finished("look_at_canvas", {}, {}, 113.2)
+    if window == "in_flight":
+        assert state.tool_started("get_proposal", {"proposal_id": "prop_wait", "wait_seconds": 60}, 113.0) is None
+    if kind == "pin":
+        state.observe(resp(pin(5)), now=115.0)
+    elif kind == "accept":
+        state.observe(resp(ev(5, "proposal.accepted", data={"proposalId": "prop_k", "idMap": {}})), now=115.0)
+    elif kind == "reject":
+        state.observe(resp(ev(5, "proposal.rejected", data={"proposalId": "prop_k", "reason": "no"})), now=115.0)
+    elif kind == "own_run_end":
+        state.run_ended({"runId": "run_own", "status": "finished", "nodesExecuted": 1}, now=115.0)
+    elif kind == "person_run_end":
+        state.run_ended({"runId": "run_person", "status": "finished", "nodesExecuted": 1}, now=115.0)
+    else:
+        state.observe(resp(edit(5, node="n8")), now=115.0)
+    pushes = []
+    t = 115.0
+    while t <= 300.0:
+        if window == "in_flight" and t == 150.0:
+            state.tool_finished("get_proposal", {"proposal_id": "prop_wait"}, {"proposal": {"status": "open"}}, 150.0)
+        push = state.take_push(t)
+        if push is not None:
+            pushes.append((t, push.gate))
+        t += 0.5
+    assert pushes == [_KIND_TIMES[kind][_WINDOWS.index(window)]]
+
+
+# -- Review 1: get_run never makes the person's run its own (probe H) -------------------
+
+def test_get_run_on_the_persons_run_never_makes_it_its_own():
+    # The 5-minute push says "get_run('rid') follows it"; doing so mustn't
+    # turn the person's run into "your run", whose end is never gated.
+    state = ChannelState(now=0.0)
+    state.observe(resp(run_started(1, "run_person")), now=100.0)
+    first = drain(state, 100.0, 420.0)
+    assert [(at, p.wake, p.gate) for at, p in first] == [(408.0, "change", True)]
+    assert state.tool_started("get_run", {"run_id": "run_person"}, 421.0) is None
+    state.tool_finished("get_run", {"run_id": "run_person"}, [json.dumps({"runId": "run_person", "status": "running"})],
+                        421.5)
+    assert state.tracked_runs == set()
+    state.run_ended({"runId": "run_person", "status": "finished", "nodesExecuted": 3}, now=600.0)
+    assert drain(state, 600.0, 700.0) == []
+
+
+def test_get_run_on_a_running_persons_run_leaves_it_the_persons():
+    # Probe H2: read before its end; the end still goes as the person's, gated.
+    state = ChannelState(now=0.0)
+    state.observe(resp(run_started(1, "run_p2")), now=100.0)
+    assert state.tool_started("get_run", {"run_id": "run_p2"}, 110.0) is None
+    state.tool_finished("get_run", {"run_id": "run_p2"}, [json.dumps({"runId": "run_p2", "status": "running"})], 110.5)
+    assert state.tracked_runs == set() and set(state.person_runs) == {"run_p2"}
+    state.run_ended({"runId": "run_p2", "status": "finished", "nodesExecuted": 1}, now=200.0)
+    pushes = drain(state, 200.0, 300.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(208.0, "change", True)]
+
+
+def test_get_run_still_follows_and_drops_its_own_runs():
+    state = ChannelState(now=0.0)
+    state.tool_finished("run_nodes", {}, [json.dumps({"status": "running", "runId": "run_mine"})], now=1.0)
+    state.tool_finished("get_run", {"run_id": "run_mine"}, [json.dumps({"runId": "run_mine", "status": "running"})],
+                        now=2.0)
+    assert state.tracked_runs == {"run_mine"}
+    state.tool_finished("get_run", {"run_id": "run_mine"}, [json.dumps({"runId": "run_mine", "status": "finished"})],
+                        now=3.0)
+    assert state.tracked_runs == set()
+    # A run it saw finish and then reads again as running (Nebula restarted it,
+    # or a later read) is followed again: it is still its own.
+    state.tool_finished("get_run", {"run_id": "run_mine"}, [json.dumps({"runId": "run_mine", "status": "running"})],
+                        now=4.0)
+    assert state.tracked_runs == {"run_mine"}
+
+
+# -- Review 1, low findings ------------------------------------------------------------
+
+@pytest.mark.parametrize("kinds,summary", [
+    (["board.resized"], "resized #3 on board Dusk"),
+    (["board.resized", "board.noted"], "resized #3 on board Dusk"),
+    (["board.moved", "board.cover"], "moved #2 on board Dusk"),
+])
+def test_a_board_write_that_does_more_than_move_cards_is_a_line(kinds, summary):
+    # Probe I: board.resized is a card's weight (services/moodboard_edits.py),
+    # and the event's kind is only the first of data.kinds.
+    state = ChannelState(now=0.0)
+    state.observe(resp(ev(1, kinds[0], data={"boardId": "b1", "kinds": kinds}, summary=summary)), now=100.0)
+    assert drain(state, 100.0, 300.0) == []
+    state.observe(resp(pin(2)), now=300.0)
+    push = state.take_push(301.0)
+    assert push is not None and summary in push.content
+
+
+@pytest.mark.parametrize("data", [{"boardId": "b1", "kinds": ["board.moved"]}, {"boardId": "b1"}])
+def test_a_board_write_that_only_moved_cards_is_left_out(data):
+    state = ChannelState(now=0.0)
+    state.observe(resp(ev(1, "board.moved", data=data, summary="moved #2 on board Dusk")), now=100.0)
+    state.observe(resp(pin(2)), now=300.0)
+    push = state.take_push(301.0)
+    assert push is not None and "moved #2" not in push.content
+
+
+def test_its_accepted_proposals_run_is_its_own_after_get_proposal_saw_the_accept():
+    # Probe J: it learned of the accept while waiting in get_proposal.
+    state = ChannelState(now=0.0)
+    state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_j"}}, now=1.0)
+    state.tool_started("get_proposal", {"proposal_id": "prop_j", "wait_seconds": 120}, now=2.0)
+    state.tool_finished("get_proposal", {"proposal_id": "prop_j"}, {"proposal": {"status": "accepted"}}, now=50.0)
+    state.observe(resp(ev(1, "proposal.accepted", data={"proposalId": "prop_j", "idMap": {}, "runNodeIds": ["n9"]})),
+                  now=50.5)
+    state.observe(resp(ev(2, "run.started", node="n9", data={"runId": "run_j", "proposalId": "prop_j"},
+                          summary="n9 started")), now=51.0)
+    assert state.tracked_runs == {"run_j"} and state.person_runs == {}
+    assert drain(state, 51.0, 100.0) == []  # the accept itself was already seen in get_proposal
+    state.run_ended({"runId": "run_j", "status": "finished", "nodesExecuted": 1}, now=100.0)
+    pushes = drain(state, 100.0, 200.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(102.0, "run", False)]
+
+
+def test_a_node_named_like_an_accept_note_still_wakes_it():
+    # Probe K: the accept's own events are told apart by a field Nebula sets
+    # (data.proposalId), never by summary text a node name can imitate.
+    state = ChannelState(now=0.0)
+    state.observe(resp(ev(1, "node.params", node="n4", data={"keys": ["prompt"]},
+                          summary="set prompt on Sky (accepted from X) (n4)")), now=100.0)
+    pushes = drain(state, 100.0, 200.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(108.0, "change", True)]
+
+
+def test_the_persons_edit_on_a_node_an_accept_just_added_still_wakes_it():
+    # idMap no longer hides events: the person may wire or edit the new node
+    # in the same long-poll answer, and that is their edit.
+    state = ChannelState(now=0.0)
+    state.observe(resp(
+        ev(1, "proposal.accepted", node="n9", data={"proposalId": "prop_o", "idMap": {"+a": "n9"}}),
+        ev(2, "node.added", node="n9", data={"proposalId": "prop_o"}, summary="added Text Input (n9) (accepted from O)"),
+        ev(3, "node.params", node="n9", data={"keys": ["value"]}, summary="set value on Text Input (n9)"),
+        ev(4, "edge.added", data={"source": "n9", "target": "n2"}, summary="connected n9.text → n2.prompt"),
+    ), now=100.0)
+    push = state.take_push(108.0)
+    assert push is not None and push.wake == "change" and push.meta["count"] == "2"
+    assert "set value on Text Input (n9)" in push.content and "connected n9.text" in push.content
+    assert "added Text Input" not in push.content
+
+
+def test_a_run_the_person_starts_on_an_accepted_proposals_node_is_theirs():
+    # L5: only the run the canvas starts for the accept carries the proposal
+    # (Nebula marks it from the run approval); a run the person starts by
+    # hand on a listed node, even seconds later, is their own run.
+    state = ChannelState(now=0.0)
+    state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_q"}}, now=1.0)
+    state.observe(resp(ev(1, "proposal.accepted", node="n9",
+                          data={"proposalId": "prop_q", "idMap": {"+a": "n9"}, "runNodeIds": ["n9"]})), now=50.0)
+    assert state.take_push(50.0).wake == "proposal"
+    state.observe(resp(run_started(2, "run_hand", "n9")), now=55.0)
+    assert set(state.person_runs) == {"run_hand"} and state.tracked_runs == set()
+    state.observe(resp(ev(3, "run.started", node="n9", data={"runId": "run_auto", "proposalId": "prop_q"})), now=56.0)
+    assert state.tracked_runs == {"run_auto"} and set(state.person_runs) == {"run_hand"}
+
+
+def test_its_own_run_watch_gives_up_after_repeated_errors():
+    # L4: a non-404 error used to retry every 60 s forever.
+    class Broken(Exception):
+        status = 500
+
+    sleeps: list[float] = []
+
+    async def main():
+        state = ChannelState(now=0.0)
+        state.tool_finished("run_nodes", {}, [json.dumps({"status": "running", "runId": "run_x"})], now=1.0)
+        calls = []
+
+        async def fetch_run(run_id):
+            calls.append(run_id)
+            raise Broken("nebula said 500")
+
+        async def fake_sleep(seconds):
+            sleeps.append(seconds)
+
+        async def nothing(*_args):
+            return {}
+
+        listener = mcp_channel.Listener(state, fetch_events=nothing, fetch_run=fetch_run, push=nothing,
+                                        clock=lambda: 2.0, log=lambda line: None, sleep=fake_sleep)
+        with anyio.fail_after(2):
+            await listener._watch_run("run_x")
+        return state, calls
+
+    state, calls = anyio.run(main)
+    assert len(calls) == mcp_channel.RUN_WATCH_FAILURES
+    assert state.tracked_runs == set()
+    assert max(sleeps) <= 60.0
+
+
+# -- Review 1, M2: an abandoned long-poll held one of Nebula's 32 waiter slots ----------
+
+def _listener_rig(limits: Limits):
+    """A Listener on the real clock with a fake Nebula whose long-polls never answer early."""
+    record = {"polls": 0, "open": 0, "most_open": 0, "cancelled": 0, "pushes": []}
+    ends: dict[str, anyio.Event] = {}
+
+    async def fetch_events(params):
+        record["polls"] += 1
+        record["open"] += 1
+        record["most_open"] = max(record["most_open"], record["open"])
+        try:
+            await anyio.sleep(float(params["wait"]))
+        except anyio.get_cancelled_exc_class():
+            record["cancelled"] += 1
+            raise
+        finally:
+            record["open"] -= 1
+        return {"journal": "abc123", "cursor": 0, "events": []}
+
+    async def fetch_run(run_id):
+        await ends.setdefault(run_id, anyio.Event()).wait()
+        return {"runId": run_id, "status": "finished", "nodesExecuted": 1}
+
+    async def push(content, meta):
+        record["pushes"].append(dict(meta))
+
+    state = ChannelState(limits=limits, now=time.monotonic())
+    listener = mcp_channel.Listener(state, fetch_events=fetch_events, fetch_run=fetch_run, push=push,
+                                    clock=time.monotonic, log=lambda line: None)
+    return listener, record, ends
+
+
+def test_a_run_end_never_abandons_the_events_long_poll():
+    limits = Limits(run_gather=0.05, min_gap=0.0, agent_quiet=0.1, pin_merge=0.05)
+    listener, record, ends = _listener_rig(limits)
+
+    async def main():
+        async with anyio.create_task_group() as group:
+            group.start_soon(listener.run)
+            await _until(lambda: record["polls"] == 1)
+
+            async def started():
+                return [json.dumps({"status": "running", "runId": "run_1"})]
+
+            await listener.call("run_nodes", {}, started)
+            await anyio.sleep(0.2)
+            began = time.monotonic()
+            ends.setdefault("run_1", anyio.Event()).set()
+            await _until(lambda: record["pushes"], timeout=3.0)
+            took = time.monotonic() - began
+            seen = dict(record)
+            group.cancel_scope.cancel()
+        return seen, took
+
+    seen, took = anyio.run(main)
+    assert seen["pushes"][0]["wake"] == "run" and took < 1.0, took
+    assert seen["cancelled"] == 0 and seen["polls"] == 1  # the 25 s poll went on, untouched
+
+
+def test_a_burst_of_33_wakes_never_abandons_a_long_poll():
+    # Live, review 1: 33 abandoned polls filled Nebula's 32 waiter slots and
+    # the next poll got HTTP 429 for ~26 s.
+    limits = Limits(run_gather=0.0, min_gap=0.0, agent_quiet=0.0, pin_merge=0.0, per_hour=1000)
+    listener, record, ends = _listener_rig(limits)
+
+    async def main():
+        async with anyio.create_task_group() as group:
+            group.start_soon(listener.run)
+            await _until(lambda: record["polls"] == 1)
+            for n in range(33):
+                run_id = f"run_{n}"
+
+                async def started(run_id=run_id):
+                    return [json.dumps({"status": "running", "runId": run_id})]
+
+                await listener.call("run_nodes", {}, started)
+                await _until(lambda: run_id in listener._watching)
+                ends.setdefault(run_id, anyio.Event()).set()
+                await anyio.sleep(0.02)
+            await _until(lambda: sum(int(p["count"]) for p in record["pushes"]) == 33, timeout=5.0)
+            seen = dict(record)
+            group.cancel_scope.cancel()
+        return seen
+
+    seen = anyio.run(main)
+    assert seen["cancelled"] == 0 and seen["most_open"] == 1 and seen["polls"] == 1
+
+
 def test_the_change_turn_allow_list_is_reads_and_the_change_turn_writes():
     tools = {tool.name: tool for tool in anyio.run(mcp_server.mcp.list_tools)}
     allowed = mcp_channel.CHANGE_TURN_TOOLS
@@ -680,7 +1089,7 @@ def test_the_channel_instructions_say_what_each_wake_may_do_and_fit_the_cut():
     named = set(re.findall(r"\b([a-z]+(?:_[a-z]+)+)\b", text))
     assert named <= tools, named - tools
     for phrase in ('gate="change"', "rejected, expired or invalidated", "post_note", "propose_change",
-                   "resolve_pin", "a run they started"):
+                   "resolve_pin", "a run they started", "another Nebula MCP server"):
         assert phrase in text, phrase
 
 

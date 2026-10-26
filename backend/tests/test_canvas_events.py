@@ -23,7 +23,7 @@ from services.canvas_events import (
 )
 from services.cli_graph import CLIGraph
 from services.selection_context import SelectionContextStore
-from tests.conftest import FORGED_ORIGIN, PERSON as PERSON_HEADERS
+from tests.conftest import FORGED_ORIGIN, PERSON as PERSON_HEADERS, asgi_get
 
 PERSON = {"kind": "person"}
 CODEX = {"kind": "agent", "id": "codex", "name": "Codex", "color": "#5B9DFF", "verified": True}
@@ -459,6 +459,58 @@ def test_events_endpoint_returns_an_event_published_during_the_wait(api):
     body = response.json()
     assert response.status_code == 200 and body["timedOut"] is False
     assert [e["kind"] for e in body["events"]] == ["pin.added"]
+
+
+def test_an_abandoned_long_poll_frees_its_waiter_slot_at_once(api):
+    # Review 1 of PR #114, live: 33 long-polls whose clients went away held
+    # every one of the 32 slots for the rest of their 25 s, and the next poll
+    # got 429. A client that hangs up now frees its slot at once.
+    _client, _graph, journal, main_module = api
+
+    async def scenario():
+        gone = asyncio.Event()
+        polls = [asyncio.create_task(asgi_get(main_module.app, "/api/canvas/events", "wait=25", AGENT, gone))
+                 for _ in range(MAX_WAITERS)]
+        for _ in range(500):
+            if journal.waiting == MAX_WAITERS:
+                break
+            await asyncio.sleep(0.01)
+        assert journal.waiting == MAX_WAITERS
+        # Connected clients see the cap as before.
+        full = await asgi_get(main_module.app, "/api/canvas/events", "wait=1", AGENT)
+        gone.set()
+        ended = await asyncio.wait_for(asyncio.gather(*polls), 2.0)
+        freed = journal.waiting
+        # The next poll waits, then times out normally: no 429.
+        after = await asgi_get(main_module.app, "/api/canvas/events", "wait=0.2", AGENT)
+        return full, ended, freed, after
+
+    full, ended, freed, after = asyncio.run(scenario())
+    assert full["status"] == 429
+    assert {answer["status"] for answer in ended} == {499}
+    assert freed == 0
+    assert after["status"] == 200 and json.loads(after["body"])["timedOut"] is True
+
+
+def test_a_connected_long_poll_still_gets_its_event_through_the_disconnect_watch(api):
+    # The same raw client, staying connected: the event published during the
+    # wait comes back, exactly as through TestClient.
+    _client, _graph, journal, main_module = api
+
+    async def scenario():
+        async def later():
+            await asyncio.sleep(0.1)
+            journal.publish("pin.added", actor=PERSON, summary="left a note")
+
+        task = asyncio.create_task(later())
+        answer = await asgi_get(main_module.app, "/api/canvas/events", "wait=5", AGENT)
+        await task
+        return answer
+
+    answer = asyncio.run(scenario())
+    body = json.loads(answer["body"])
+    assert answer["status"] == 200 and [e["kind"] for e in body["events"]] == ["pin.added"]
+    assert journal.waiting == 0
 
 
 def test_events_endpoint_refuses_beyond_the_waiter_cap(api, monkeypatch):

@@ -30,7 +30,7 @@ from services.project_store import ProjectStore, make_project
 from services.provider_recovery import ProviderRecoveryStore
 from services.provider_start_guard import ProviderStartGuard
 from services.execution_runs import ExecutionRunRegistry
-from tests.conftest import stored_image_urls
+from tests.conftest import asgi_get, stored_image_urls
 
 CLAUDE = {"X-Nebula-Agent": "Claude Code"}
 CODEX = {"X-Nebula-Agent": "Codex"}
@@ -209,6 +209,33 @@ def test_an_agent_cover_on_the_open_project_reads_the_live_canvas(api):
 
 
 # -- proposing a cover ----------------------------------------------------------
+
+def test_an_abandoned_asset_proposal_wait_frees_its_waiter_slot(api):
+    # Review 1 of PR #114 (M2): the same 32 slots as /api/canvas/events.
+    import asyncio
+
+    from services.canvas_events import MAX_WAITERS
+
+    _pin(api, A, api.person)
+    proposal_id = _propose(api, {"cover": C}).json()["proposal"]["id"]
+
+    async def scenario():
+        gone = asyncio.Event()
+        waits = [asyncio.create_task(asgi_get(api.main.app, f"/api/canvas/proposals/{proposal_id}", "wait=25", CLAUDE,
+                                              gone)) for _ in range(MAX_WAITERS)]
+        for _ in range(500):
+            if api.journal.waiting == MAX_WAITERS:
+                break
+            await asyncio.sleep(0.01)
+        full = api.journal.waiting
+        gone.set()
+        ended = await asyncio.wait_for(asyncio.gather(*waits), 2.0)
+        return full, ended, api.journal.waiting
+
+    full, ended, freed = asyncio.run(scenario())
+    assert full == MAX_WAITERS and freed == 0
+    assert {answer["status"] for answer in ended} == {499}
+
 
 def test_an_agent_proposes_a_new_cover_for_a_pinned_project(api):
     _pin(api, A, api.person)

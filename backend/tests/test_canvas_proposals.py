@@ -33,7 +33,7 @@ from services.provider_recovery import ProviderRecoveryStore
 from services.provider_start_guard import ProviderStartGuard
 from services.run_approvals import APPROVAL_TTL_SECONDS, RunApprovals
 from services.selection_context import SelectionContextStore
-from tests.conftest import FORGED_ORIGIN, PERSON, PERSON_HELLO
+from tests.conftest import FORGED_ORIGIN, PERSON, PERSON_HELLO, asgi_get
 
 CLAUDE = {"X-Nebula-Agent": "Claude Code"}
 CODEX = {"X-Nebula-Agent": "Codex"}
@@ -819,6 +819,89 @@ def test_a_run_of_several_approved_nodes_goes_through_execute(api, runs):
     started = api.client.post("/api/execute", headers=PERSON, json=request)
     assert started.status_code == 200, started.text
     assert runs == [sorted([n1, *result["runNodeIds"]])]
+
+
+def test_everything_an_accept_journals_carries_its_proposal(api):
+    # Review 1 of PR #114 (L3): nebula-mcp --channel told the accept's own
+    # node, wire and param events apart from the person's edits by the
+    # summary's " (accepted from X)", which a node name can imitate. Each
+    # now names the proposal in data, which only the accept route sets.
+    n1 = api.graph.add_node("text-input", {"value": "a cat"}, position={"x": 0, "y": 0})
+    n2 = api.graph.add_node("text-input", {"value": "old"}, position={"x": 0, "y": 200})
+    body = {
+        "note": "Generate and retitle",
+        "nodes": [{"ref": "+img", "definitionId": "nano-banana"}],
+        "edges": [{"source": n1, "sourceHandle": "text", "target": "+img", "targetHandle": "prompt"}],
+        "params": [{"nodeId": n2, "params": {"value": "new"}}],
+    }
+    proposal_id = _propose(api, body).json()["proposal"]["id"]
+    accepted = api.client.post(f"/api/canvas/proposals/{proposal_id}/accept",
+                               headers={**PERSON, KEY: _key(api, proposal_id)}, json={})
+    assert accepted.status_code == 200, accepted.text
+    events = api.journal.read(after=0, limit=100)["events"]
+    applied = [e for e in events if e["kind"] in ("node.added", "edge.added", "node.params")]
+    assert {e["kind"] for e in applied} == {"node.added", "edge.added", "node.params"}
+    assert all(e["data"].get("proposalId") == proposal_id for e in applied), applied
+    # The person's own edit afterwards carries none.
+    assert api.client.put(f"/api/graph/node/{n2}", headers=PERSON, json={"params": {"value": "mine"}}).status_code == 200
+    mine = api.journal.read(after=0, limit=100)["events"][-1]
+    assert mine["kind"] == "node.params" and "proposalId" not in mine["data"]
+
+
+def test_the_run_the_canvas_starts_for_an_accept_names_the_proposal(api, monkeypatch):
+    # Review 1 of PR #114 (L5): the channel took any run of a listed node in
+    # the 120 s after an accept for the proposal's own run, so a run the
+    # person started by hand there counted as the agent's. The run that
+    # carries the accept's approval now names the proposal in its run events.
+    from models.events import ExecutingEvent
+
+    async def fake_execute_graph(*, nodes, run_id=None, **kwargs):
+        for node in nodes:
+            api.main._journal_execution_event(ExecutingEvent(node_id=node.id, run_id=run_id), run_id)
+
+    monkeypatch.setattr(api.main, "execute_graph", fake_execute_graph)
+    monkeypatch.setattr(api.main, "validate_graph", lambda *args, **kwargs: [])
+    n1, new_img, result = _accept_cheap_image(api)
+    proposal_id = result["proposalId"]
+    approved = _canvas_run(api, new_img, result["approvalId"])
+    assert approved.status_code == 200, approved.text
+    by_hand = _canvas_run(api, new_img, None)
+    assert by_hand.status_code == 200, by_hand.text
+    events = [e for e in api.journal.read(after=0, limit=100)["events"] if e["kind"] == "run.started"]
+    runs: dict[str, set] = {}
+    for event in events:
+        runs.setdefault(event["data"]["runId"], set()).add(event["data"].get("proposalId"))
+    assert runs == {approved.json()["runId"]: {proposal_id}, by_hand.json()["runId"]: {None}}
+    # Never the approval id itself.
+    assert result["approvalId"] not in json.dumps(api.journal.read(after=0, limit=100))
+
+
+def test_an_abandoned_proposal_wait_frees_its_waiter_slot(api):
+    # The same slots as /api/canvas/events (review 1, M2): get_proposal's
+    # wait must free its slot when the agent's client goes away.
+    from services.canvas_events import MAX_WAITERS
+
+    n1 = api.graph.add_node("text-input", {"value": "a cat"})
+    body = {"note": "Retitle", "params": [{"nodeId": n1, "params": {"value": "new"}}]}
+    proposal_id = _propose(api, body).json()["proposal"]["id"]
+
+    async def scenario():
+        gone = asyncio.Event()
+        waits = [asyncio.create_task(asgi_get(api.main.app, f"/api/canvas/proposals/{proposal_id}", "wait=25",
+                                              CLAUDE, gone)) for _ in range(MAX_WAITERS)]
+        for _ in range(500):
+            if api.journal.waiting == MAX_WAITERS:
+                break
+            await asyncio.sleep(0.01)
+        full = api.journal.waiting
+        gone.set()
+        ended = await asyncio.wait_for(asyncio.gather(*waits), 2.0)
+        return full, ended, api.journal.waiting
+
+    full, ended, freed = asyncio.run(scenario())
+    assert full == MAX_WAITERS and freed == 0
+    assert {answer["status"] for answer in ended} == {499}
+    assert api.client.get(f"/api/canvas/proposals/{proposal_id}?wait=0.1", headers=CLAUDE).status_code == 200
 
 
 def test_accept_refuses_when_what_it_runs_changed_after_it_was_proposed(api):
