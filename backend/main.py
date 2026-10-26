@@ -9864,7 +9864,9 @@ async def _broadcast_graph_sync(
         _journal("canvas.replaced", data=data, summary=summary)
         # Pins belong to the project record. A project open or create brings
         # that project's pins; an import into the same project detaches pins
-        # whose nodes did not survive.
+        # whose nodes did not survive. (The pins cache already follows
+        # catalog.json, so a listing between the commit and here names the
+        # project open now: services/canvas_pins._active.)
         canvas_pins.forget_cache()
         detached: list[dict[str, Any]] = []
         if safe_reason == "import":

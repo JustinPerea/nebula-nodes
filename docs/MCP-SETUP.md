@@ -798,14 +798,22 @@ that is still open when it goes. A pin you delete, one any agent answers
 (Claude's own `resolve_pin` included, even in a gated turn), and the pins
 of a project that is no longer open (anyone's switch, or the open project's
 delete) leave the waiting batch at once. A pin whose node is deleted stays:
-it keeps its place on the canvas. Right before a push that holds pins, the
-listener also asks Nebula which of them are still open (`GET
-/api/canvas/pins`). That catches what its event feed can't show: a pin
-answered with the `nebula` CLI under the same agent name (Nebula leaves an
-agent's own events out of its feed), or a delete lost while Nebula
-restarted. A batch left with no pin goes gated, like any batch carrying
-your edits. If Nebula can't answer the check, the pin and the push wait and
-it checks again (after 5 s, doubling up to 60 s).
+it keeps its place on the canvas. When a push would hold pins, the listener
+first asks Nebula which of them are still open (`GET /api/canvas/pins`), and
+the push carries only the pins Nebula lists open on the project that is
+open. That catches what its event feed can't show: a pin answered with the
+`nebula` CLI under the same agent name (Nebula leaves an agent's own events
+out of its feed), a delete lost while Nebula restarted, or a pin of the
+project you just switched away from. A batch left with no pin goes gated,
+like any batch carrying your edits. If Nebula can't answer the check, only
+the pins wait: it checks again (after 5 s, doubling up to 60 s), every other
+push goes meanwhile by its own rules, without them, and the server's log
+says so once the check has failed for a minute. If Nebula refuses the check
+(an error such as an agent token it no longer accepts), the pins are dropped
+without a wake, and the log says how many. "Still open" means still open
+when Nebula answered: a pin you delete in the moment between that answer and
+the push, or before Claude Code hands the push over, still arrives as a pin
+wake.
 
 The gate lives in this MCP server process, and that has two gaps. Nebula
 can't see where a Claude Code turn ends, so the timing is guessed from when

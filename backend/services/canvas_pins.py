@@ -141,7 +141,8 @@ class CanvasPins:
         # A getter lets main.py follow `main.project_store` when tests swap it.
         self._store_source = store
         self._clock = clock
-        self._cache: tuple[str | None, list[dict[str, Any]]] | None = None
+        # (the catalog file it was read from, as (path, signature); project id; pins)
+        self._cache: tuple[tuple[Any, ...], str | None, list[dict[str, Any]]] | None = None
 
     @property
     def store(self) -> ProjectStore:
@@ -153,13 +154,25 @@ class CanvasPins:
 
     # -- reading ---------------------------------------------------------
     def _active(self) -> tuple[str | None, list[dict[str, Any]]]:
-        if self._cache is None:
-            catalog = self.store.read()
+        """The open project and its pins, as catalog.json holds them now.
+
+        The copy kept is keyed on the file it was read from (ProjectStore.signature:
+        every commit replaces catalog.json, whichever route or process makes
+        it), so nothing has to remember to clear it. Clearing it only after a
+        project switch's broadcast let a listing taken meanwhile answer with
+        the project open before (review 4 of PR #114, H1). The signature is
+        taken before the read: a commit between the two leaves a newer catalog
+        under the older key, which the next call reads again."""
+        store = self.store
+        signature = store.signature()
+        key = (str(store.path), signature)
+        if self._cache is None or signature is None or self._cache[0] != key:
+            catalog = store.read()
             project_id = catalog.get("activeProjectId")
             project = catalog["projects"].get(project_id) if project_id else None
             pins = [pin for pin in (project or {}).get("pins") or [] if isinstance(pin, dict)]
-            self._cache = (project_id, pins)
-        project_id, pins = self._cache
+            self._cache = (key, project_id, pins)
+        _key, project_id, pins = self._cache
         return project_id, copy.deepcopy(pins)
 
     @staticmethod

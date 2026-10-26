@@ -500,3 +500,108 @@ def test_mcp_resolve_pin_sends_a_named_request(monkeypatch):
     assert calls[0]["json"] == {"reply": "Done"}
     assert calls[0]["headers"]["X-Nebula-Agent"]
     assert json.dumps(calls[0]).count("Origin") == 0
+
+
+# -- Review 4 of PR #114: the listing names the project open at that moment ---------
+# The pins cache was cleared only at the end of _broadcast_graph_sync, so a
+# GET /api/canvas/pins landing while a switch awaited its export and
+# broadcast answered with the old project's pins (its pin still open), and
+# the --channel listener confirmed that pin. The cache now holds only while
+# catalog.json is the file it was read from: every commit, by any route or
+# process, replaces it.
+
+def _listing_mid_switch(monkeypatch, store, journal) -> dict:
+    """GET /api/canvas/pins as it answers while a switch awaits its export
+    and broadcast: the catalog already names the new project, canvas.replaced
+    isn't journaled yet."""
+    import main as main_module
+
+    seen: dict = {}
+    original = main_module._broadcast_graph_sync
+
+    async def spy(**kwargs):
+        if kwargs.get("graph_replaced"):
+            seen["listing"] = await main_module.list_canvas_pins()
+            seen["active"] = store.read()["activeProjectId"]
+            seen["journaled"] = bool(journal.read(after=0, kinds={"canvas.replaced"})["events"])
+        return await original(**kwargs)
+
+    monkeypatch.setattr(main_module, "_broadcast_graph_sync", spy)
+    return seen
+
+
+@pytest.mark.parametrize("path", ["open", "create", "delete-open"])
+def test_the_pins_listing_names_the_open_project_all_through_a_switch(api, monkeypatch, path):
+    import mcp_channel
+
+    client, _graph, journal, _sent, store, (active, other) = api
+    made = client.post("/api/canvas/pins", headers=PERSON,
+                       json={"text": "make it say hello", "position": {"x": 0, "y": 0}})
+    assert made.status_code == 201, made.text
+    pin_id = made.json()["pin"]["id"]
+    assert client.get("/api/canvas/pins").json()["pins"][0]["status"] == "open"  # read, so cached
+    seen = _listing_mid_switch(monkeypatch, store, journal)
+    revision = store.read()["workspaceRevision"]
+    if path == "open":
+        answer = client.post(f"/api/projects/{other}/open", json={"workspaceRevision": revision})
+    elif path == "create":
+        answer = client.post("/api/projects", json={"workspaceRevision": revision, "name": "Third"})
+    else:
+        answer = client.request("DELETE", f"/api/projects/{active}", json={"workspaceRevision": revision})
+    assert answer.status_code == 200, answer.text
+    now_open = store.read()["activeProjectId"]
+    assert now_open != active and seen["active"] == now_open and not seen["journaled"]
+    assert seen["listing"]["projectId"] == now_open
+    assert pin_id not in {pin["id"] for pin in seen["listing"]["pins"]}
+
+    # The --channel listener with that pin waiting and a held edit: the
+    # check answered mid-switch confirms nothing, so the batch goes gated.
+    state = mcp_channel.ChannelState(now=0.0)
+    state.observe({"journal": "j", "cursor": 2, "projectId": active, "events": [
+        {"seq": 1, "kind": "pin.added", "actor": {"kind": "person"}, "projectId": active, "summary": "",
+         "data": {"pinId": pin_id, "text": "make it say hello", "anchor": {"x": 0, "y": 0}}},
+        {"seq": 2, "kind": "node.params", "actor": {"kind": "person"}, "projectId": active, "nodeId": "n8",
+         "data": {"keys": ["prompt"]}, "summary": "set prompt on n8"}]}, now=100.0)
+    checked = state.pins_to_check(110.0)
+    assert checked == [pin_id]
+    state.confirm_pins(checked, seen["listing"])
+    push = state.take_push(110.0)
+    assert push is not None and push.gate and push.wake != "pin" and "<pin" not in push.content
+
+
+def test_a_recovered_canvas_shows_in_the_pins_listing_at_once(api):
+    # GET /api/projects files a live canvas with no catalog project as
+    # "Recovered canvas" and opens it, with no graph broadcast: nothing
+    # cleared the cache there.
+    client, graph, _journal, _sent, store, _ids = api
+    with store.transaction() as catalog:
+        catalog["projects"] = {}
+        catalog["activeProjectId"] = None
+        store.commit(catalog)
+    graph.add_node("text-input", {"value": "hi"}, position={"x": 0, "y": 0})
+    assert client.get("/api/canvas/pins").json() == {"projectId": None, "pins": []}
+    listing = client.get("/api/projects").json()
+    recovered = listing["migratedProjectId"]
+    assert listing["activeProjectId"] == recovered
+    assert client.get("/api/canvas/pins").json() == {"projectId": recovered, "pins": []}
+
+
+def test_any_commit_to_the_catalog_shows_in_the_next_listing(tmp_path):
+    # Another writer (a second process, or a route that never clears the
+    # cache) switches the project, then changes its pins.
+    store, (first, second) = _store_with_projects(tmp_path, "First", "Second")
+    pins = CanvasPins(store)
+    pins.add("warmer", position={"x": 1, "y": 2}, graph_nodes={})
+    assert pins.list()["projectId"] == first
+    elsewhere = ProjectStore(tmp_path / "projects")
+    _activate(elsewhere, second)
+    assert pins.list() == {"projectId": second, "pins": []}
+    other = CanvasPins(elsewhere)
+    added = other.add("cooler", position={"x": 0, "y": 0}, graph_nodes={})
+    assert [(pin["id"], pin["status"]) for pin in pins.list()["pins"]] == [(added["id"], "open")]
+    other.resolve(added["id"], "done", CODEX)
+    assert [pin["status"] for pin in pins.list()["pins"]] == ["resolved"]
+    other.remove(added["id"])
+    assert pins.list()["pins"] == []
+    _activate(elsewhere, first)
+    assert [pin["text"] for pin in pins.list()["pins"]] == ["warmer"]

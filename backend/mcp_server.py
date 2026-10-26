@@ -2796,7 +2796,7 @@ async def serve_channel(read_stream: Any, write_stream: Any, *, clock: Any = _ti
         return await _channel_fetch(f"/api/graph/runs/{quote(run_id, safe='')}", {"wait": 25}, 35, agent["name"])
 
     async def fetch_pins() -> dict[str, Any]:
-        # Which pins are still open, right before a push that holds pins.
+        # Which pins are still open, before a push decision that would hold pins.
         return await _channel_fetch("/api/canvas/pins", {}, 15, agent["name"])
 
     state = mcp_channel.ChannelState(limits=mcp_channel.Limits.from_env(), now=clock())

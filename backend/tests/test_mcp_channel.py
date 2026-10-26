@@ -64,11 +64,28 @@ def edit(seq: int, node: str = "n7") -> dict:
               summary=f"set prompt on Hero shot ({node})")
 
 
+def nebula_agrees(state: ChannelState, now: float) -> None:
+    """The listener's check before a decision (pins_to_check, then
+    confirm_pins), against a Nebula that lists every pin asked about open in
+    the project the channel believes open. Only a pin a check confirmed for
+    that very decision can go (review 4 of PR #114, M1)."""
+    checked = state.pins_to_check(now)
+    if checked:
+        state.confirm_pins(checked, {"projectId": state.project_id,
+                                     "pins": [{"id": pin_id, "status": "open"} for pin_id in checked]})
+
+
+def take(state: ChannelState, now: float) -> mcp_channel.Push | None:
+    """One decision as the listener makes it: the pin check, then take_push, at one time."""
+    nebula_agrees(state, now)
+    return state.take_push(now)
+
+
 def drain(state: ChannelState, start: float, end: float, step: float = 0.5) -> list[tuple[float, mcp_channel.Push]]:
     pushes = []
     t = start
     while t <= end:
-        push = state.take_push(t)
+        push = take(state, t)
         if push is not None:
             pushes.append((t, push))
         t = round(t + step, 3)
@@ -81,22 +98,22 @@ def test_a_pin_pushes_at_once():
     state = ChannelState(now=0.0)
     state.observe(resp(pin(1)), now=10.0)
     # Pins under 1 s apart go as one push, so it leaves 1 s after the pin.
-    assert state.take_push(10.5) is None
-    push = state.take_push(11.0)
+    assert take(state, 10.5) is None
+    push = take(state, 11.0)
     assert push is not None and push.wake == "pin" and not push.gate
     assert push.meta["wake"] == "pin" and push.meta["cursor"] == "1" and push.meta["count"] == "1"
     assert '<pin id="pin_00000001" node="n7">warmer</pin>' in push.content
     assert "resolve_pin" in push.content
-    assert state.take_push(12.0) is None
+    assert take(state, 12.0) is None
 
 
 def test_a_burst_of_person_edits_pushes_once_after_the_quiet_time():
     state = ChannelState(now=0.0)
     for seq, t in enumerate([100.0, 103.0, 106.0], start=1):
         state.observe(resp(edit(seq)), now=t)
-        assert state.take_push(t) is None
-    assert state.take_push(113.9) is None
-    push = state.take_push(114.0)  # 8 s after the last edit
+        assert take(state, t) is None
+    assert take(state, 113.9) is None
+    push = take(state, 114.0)  # 8 s after the last edit
     assert push is not None and push.wake == "change" and push.gate
     assert push.meta["count"] == "3" and push.meta["gate"] == "change"
     assert drain(state, 114.5, 400.0) == []
@@ -108,7 +125,7 @@ def test_edits_that_never_stop_still_push_by_30_seconds():
     for seq, t in enumerate(range(0, 59, 2), start=1):
         state.observe(resp(edit(seq)), now=float(t))
         for step in (0.0, 1.0):
-            push = state.take_push(t + step)
+            push = take(state, t + step)
             if push is not None:
                 pushes.append(t + step)
     assert pushes == [30.0]
@@ -157,7 +174,7 @@ def test_its_own_proposals_decision_wakes_it():
         ev(3, "node.added", node="n9", data={"proposalId": "prop_1"},
            summary="added Text Input (n9) (accepted from Claude Code)"),
     ), now=50.0)
-    push = state.take_push(50.0)
+    push = take(state, 50.0)
     assert push is not None and push.wake == "proposal" and not push.gate
     assert "prop_1" in push.content and "accepted" in push.content and "prop_other" not in push.content
     assert drain(state, 50.5, 200.0) == []
@@ -181,8 +198,8 @@ def test_the_end_of_a_run_it_stopped_waiting_for_wakes_it():
     state.run_ended({"runId": "run_1", "targetNodeId": "n3", "status": "failed", "error": "n3 failed: sk-live-secret",
                      "errors": {"n3": "sk-live-secret"}, "nodesExecuted": 2,
                      "results": {"n2": {"text": {"value": "private output"}}}}, now=60.0)
-    assert state.take_push(61.0) is None  # run ends are gathered over 2 s
-    push = state.take_push(62.0)
+    assert take(state, 61.0) is None  # run ends are gathered over 2 s
+    push = take(state, 62.0)
     assert push is not None and push.wake == "run" and not push.gate
     assert "run_1" in push.content and "failed" in push.content and "get_run" in push.content
     # Nothing from the run's payload but its status and counts.
@@ -207,11 +224,11 @@ def test_a_run_it_is_collecting_does_not_wake_it():
 def test_pushes_are_30_seconds_apart_and_what_waits_is_held_not_lost():
     state = ChannelState(now=0.0)
     state.observe(resp(pin(1)), now=0.0)
-    first = state.take_push(1.0)
+    first = take(state, 1.0)
     assert first is not None
     state.observe(resp(pin(2, "cooler")), now=10.0)
     assert drain(state, 10.0, 30.5) == []
-    second = state.take_push(31.0)  # 30 s after the first push started
+    second = take(state, 31.0)  # 30 s after the first push started
     assert second is not None and "cooler" in second.content
     assert second.meta["held"] == "1"
 
@@ -222,11 +239,11 @@ def test_a_push_that_waited_for_the_limit_says_held_when_the_listener_sleeps_unt
     # for the spacing arrived without held.
     state = ChannelState(now=0.0)
     state.observe(resp(pin(1)), now=0.0)
-    assert state.take_push(1.0) is not None
+    assert take(state, 1.0) is not None
     state.observe(resp(pin(2, "cooler")), now=10.0)
-    assert state.take_push(10.0) is None  # inside the 1 s pin merge
+    assert take(state, 10.0) is None  # inside the 1 s pin merge
     assert state.next_check(10.0) == pytest.approx(21.0)
-    push = state.take_push(31.0)
+    push = take(state, 31.0)
     assert push is not None and push.meta["held"] == "1"
 
 
@@ -239,7 +256,7 @@ def test_at_most_20_pushes_an_hour_and_every_pin_still_arrives():
         if seq < 25 and t >= seq * 31.0:
             seq += 1
             state.observe(resp(pin(seq, f"note {seq}")), now=t)
-        push = state.take_push(t)
+        push = take(state, t)
         if push is not None:
             pushes.append((t, push))
         t += 1.0
@@ -258,7 +275,7 @@ def test_at_most_20_pushes_an_hour_and_every_pin_still_arrives():
 def test_a_big_pile_of_held_events_becomes_a_count():
     state = ChannelState(now=0.0)
     state.observe(resp(*[edit(n, node=f"n{n}") for n in range(1, 151)]), now=0.0)
-    push = state.take_push(8.0)
+    push = take(state, 8.0)
     assert push is not None
     assert push.meta["count"] == "150"
     assert push.content.count("- Person:") == 20
@@ -272,7 +289,7 @@ def test_listening_turns_itself_off_after_two_hours_without_the_person():
     assert state.check_idle(3000.0 + 7200.0)
     assert state.off
     state.observe(resp(pin(2)), now=10300.0)
-    assert state.take_push(10400.0) is None
+    assert take(state, 10400.0) is None
     first = state.annotate({"ok": True}, now=10400.0)
     assert "after 2 hours" in first["channelNote"] and "Reconnect" in first["channelNote"]
     assert "channelNote" not in state.annotate({"ok": True}, now=10401.0)
@@ -281,7 +298,7 @@ def test_listening_turns_itself_off_after_two_hours_without_the_person():
 def test_lost_events_say_to_look_again():
     state = ChannelState(now=0.0)
     state.observe(resp(gap=True), now=5.0)
-    push = state.take_push(13.0)
+    push = take(state, 13.0)
     assert push is not None and "look_at_canvas" in push.content and "lost" in push.content
 
 
@@ -297,7 +314,7 @@ def test_a_push_carries_only_redacted_summaries():
         ev(3, "board.noted", data={"boardId": "b1", "boardName": "Moods", "kinds": ["noted"]},
            summary="private note changed on Moods"),
     ), now=0.0)
-    push = state.take_push(8.0)
+    push = take(state, 8.0)
     assert push is not None and push.wake == "pin"
     content = push.content
     assert content.count("<pin ") == 1 and content.count("</pin>") == 1
@@ -315,7 +332,7 @@ def test_a_push_carries_only_redacted_summaries():
 def test_a_change_woken_turn_can_look_and_propose_but_not_edit():
     state = ChannelState(now=0.0)
     state.observe(resp(edit(1)), now=100.0)
-    assert state.take_push(108.0).gate
+    assert take(state, 108.0).gate
     refusal = state.tool_started("edit_canvas", {}, now=115.0)
     assert refusal is not None and "propose_change" in refusal
     for name in ("look_at_canvas", "point_at", "resolve_pin", "propose_change", "get_proposal", "describe_node"):
@@ -331,7 +348,7 @@ def test_a_change_woken_turn_can_look_and_propose_but_not_edit():
 def test_a_pin_turn_acts_like_any_turn():
     state = ChannelState(now=0.0)
     state.observe(resp(pin(1), edit(2)), now=100.0)
-    push = state.take_push(108.0)
+    push = take(state, 108.0)
     assert push.wake == "pin" and not push.gate and "gate" not in push.meta
     assert state.tool_started("edit_canvas", {}, now=110.0) is None
 
@@ -343,8 +360,8 @@ def test_a_change_push_waits_for_the_agent_to_be_quiet():
     state.tool_started("look_at_canvas", {}, now=100.0)
     state.tool_finished("look_at_canvas", {}, {}, now=100.1)
     state.observe(resp(edit(1)), now=101.0)
-    assert state.take_push(115.0) is None
-    assert state.take_push(120.1) is not None
+    assert take(state, 115.0) is None
+    assert take(state, 120.1) is not None
 
 
 def test_no_change_push_while_one_of_its_calls_is_running():
@@ -354,8 +371,8 @@ def test_no_change_push_while_one_of_its_calls_is_running():
     state.observe(resp(edit(1)), now=101.0)
     assert drain(state, 101.0, 219.5) == []
     state.tool_finished("get_proposal", {"proposal_id": "prop_9"}, {"proposal": {"status": "open"}}, now=220.0)
-    assert state.take_push(239.0) is None
-    assert state.take_push(240.0) is not None
+    assert take(state, 239.0) is None
+    assert take(state, 240.0) is not None
 
 
 def test_a_change_woken_turn_cant_wait_out_the_gate():
@@ -366,7 +383,7 @@ def test_a_change_woken_turn_cant_wait_out_the_gate():
     # rejection.
     state = ChannelState(now=0.0)
     state.observe(resp(edit(1)), now=100.0)
-    assert state.take_push(108.0).gate
+    assert take(state, 108.0).gate
     assert state.tool_started("propose_change", {"note": "warmer"}, now=110.0) is None
     state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_5"}}, now=110.5)
     assert state.tool_started("get_proposal", {"proposal_id": "prop_5", "wait_seconds": 120}, now=111.0) is None
@@ -393,7 +410,7 @@ def test_an_accept_pushed_mid_turn_doesnt_gate_that_turn():
     state.observe(resp(edit(1)), now=100.0)
     assert state.tool_started("run_nodes", {"node_id": "n3"}, now=101.0) is None  # a long run, in flight
     state.observe(resp(ev(2, "proposal.accepted", data={"proposalId": "prop_7", "idMap": {}})), now=120.0)
-    push = state.take_push(120.0)
+    push = take(state, 120.0)
     assert push is not None and push.wake == "proposal" and not push.gate and "gate" not in push.meta
     assert "changed the canvas" not in push.content
     state.tool_finished("run_nodes", {"node_id": "n3"}, [json.dumps({"status": "finished", "runId": "r1"})],
@@ -411,7 +428,7 @@ def test_a_pin_is_never_crowded_out_by_a_pile_of_edits():
     state = ChannelState(now=0.0)
     state.observe(resp(*[edit(n, node=f"n{n}") for n in range(1, 121)]), now=0.0)
     state.observe(resp(pin(121, "make it warmer")), now=1.0)
-    push = state.take_push(8.0)
+    push = take(state, 8.0)
     assert push is not None and push.wake == "pin" and "make it warmer" in push.content
     assert push.meta["count"] == "121"
     assert "120 changes" in push.content
@@ -422,7 +439,7 @@ def test_limits_from_the_env_never_break_the_limiter():
     assert limits.per_hour >= 1
     state = ChannelState(limits=limits, now=0.0)
     state.observe(resp(pin(1)), now=0.0)
-    assert state.take_push(2.0) is not None
+    assert take(state, 2.0) is not None
 
 
 # -- Q50 a: what counts as a change (Justin, 2026-10-26) -----------------------------
@@ -439,8 +456,8 @@ def run_started(seq: int, run_id: str, node: str = "n3") -> dict:
 def test_each_q50_change_wakes_it_after_the_quiet_time(kind, data):
     state = ChannelState(now=0.0)
     state.observe(resp(ev(1, kind, node="n2", data=data, summary=f"{kind} on Hero (n2)")), now=100.0)
-    assert state.take_push(107.9) is None
-    push = state.take_push(108.0)
+    assert take(state, 107.9) is None
+    push = take(state, 108.0)
     assert push is not None and push.wake == "change" and push.gate and push.meta["count"] == "1"
     assert f"{kind} on Hero (n2)" in push.content
 
@@ -500,7 +517,7 @@ def test_a_board_edit_only_adds_a_line_to_the_next_push():
     ), now=100.0)
     assert drain(state, 100.0, 400.0) == []
     state.observe(resp(pin(3, "warmer")), now=400.0)
-    push = state.take_push(401.0)
+    push = take(state, 401.0)
     assert push is not None and push.wake == "pin" and not push.gate
     assert "added 2 images to Moods" in push.content
     assert "moved Moods" not in push.content  # board layout is like a node move
@@ -514,7 +531,7 @@ def test_a_replaced_or_cleared_canvas_only_adds_a_line(kind, summary):
     state.observe(resp(ev(1, kind, summary=summary)), now=100.0)
     assert drain(state, 100.0, 400.0) == []
     state.observe(resp(edit(2)), now=400.0)
-    push = state.take_push(408.0)
+    push = take(state, 408.0)
     assert push is not None and push.wake == "change" and push.gate
     assert "start_here" in push.content
     assert push.meta["count"] == "2"
@@ -535,11 +552,11 @@ def test_an_accepted_proposals_run_is_its_own_run_not_the_persons():
     state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_r"}}, now=1.0)
     state.observe(resp(ev(1, "proposal.accepted", node="n9",
                           data={"proposalId": "prop_r", "idMap": {"+a": "n9"}, "runNodeIds": ["n9"]})), now=50.0)
-    assert state.take_push(50.0).wake == "proposal"
+    assert take(state, 50.0).wake == "proposal"
     state.observe(resp(proposal_run_started(2, "run_acc", "prop_r", "n9")), now=52.0)
     assert state.person_runs == {} and state.tracked_runs == {"run_acc"}
     state.run_ended({"runId": "run_acc", "status": "finished", "nodesExecuted": 1}, now=90.0)
-    push = state.take_push(92.0)
+    push = take(state, 92.0)
     assert push is not None and push.wake == "run" and not push.gate
     # A later run of the same node is the person's.
     state.observe(resp(run_started(3, "run_again", "n9")), now=200.0)
@@ -564,7 +581,7 @@ def test_another_agents_accepted_run_is_neither_its_run_nor_the_persons():
 
 def _open_change_window(state: ChannelState) -> None:
     state.observe(resp(edit(1)), now=100.0)
-    assert state.take_push(108.0).gate
+    assert take(state, 108.0).gate
 
 
 def test_an_accepted_proposal_push_is_never_gated():
@@ -575,7 +592,7 @@ def test_an_accepted_proposal_push_is_never_gated():
     _open_change_window(state)  # a change turn's window is open until 168 s at least
     state.observe(resp(ev(2, "proposal.accepted", data={"proposalId": "prop_a", "idMap": {}})), now=140.0)
     assert drain(state, 140.0, 168.0) == []
-    push = state.take_push(168.5)
+    push = take(state, 168.5)
     assert push is not None and push.wake == "proposal" and not push.gate and "gate" not in push.meta
     assert "refused" not in push.content
     assert state.tool_started("edit_canvas", {}, now=169.0) is None
@@ -587,7 +604,7 @@ def test_its_own_run_end_is_never_gated():
     _open_change_window(state)
     state.run_ended({"runId": "run_o", "status": "finished", "nodesExecuted": 1}, now=140.0)
     assert drain(state, 140.0, 168.0) == []  # review 1: never into the change turn's window
-    push = state.take_push(168.5)
+    push = take(state, 168.5)
     assert push is not None and push.wake == "run" and not push.gate
     assert state.tool_started("run_nodes", {}, now=169.0) is None
 
@@ -600,13 +617,13 @@ def test_an_ungated_push_waits_for_a_change_turn_still_under_way():
     _open_change_window(state)
     assert state.tool_started("look_at_canvas", {}, now=120.0) is None
     state.observe(resp(ev(2, "proposal.accepted", data={"proposalId": "prop_b", "idMap": {}})), now=121.0)
-    assert state.take_push(125.0) is None
+    assert take(state, 125.0) is None
     assert state.tool_started("edit_canvas", {}, now=126.0) is not None  # still the change turn
     state.tool_finished("look_at_canvas", {}, {}, now=127.0)
     # Review 1 (H2): 20 s without a call isn't the end while the window's
     # 60 s minimum runs (to 168): a quiet agent may be a turn still thinking.
     assert drain(state, 127.0, 168.0) == []
-    push = state.take_push(168.5)
+    push = take(state, 168.5)
     assert push is not None and push.wake == "proposal" and not push.gate
     assert state.tool_started("edit_canvas", {}, now=169.0) is None
 
@@ -617,7 +634,7 @@ def test_a_rejected_expired_or_invalidated_proposal_push_is_gated(decision):
     state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_n"}}, now=1.0)
     state.observe(resp(ev(1, f"proposal.{decision}", data={"proposalId": "prop_n", "note": "warmer", "reason": "no"})),
                   now=100.0)
-    push = state.take_push(100.0)
+    push = take(state, 100.0)
     assert push is not None and push.wake == "proposal" and push.gate and push.meta["gate"] == "change"
     assert "propose_change" in push.content and "refused" in push.content
     refusal = state.tool_started("edit_canvas", {}, now=101.0)
@@ -645,7 +662,7 @@ def test_a_batch_holding_a_pin_is_a_pin_wake():
     state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_p"}}, now=1.0)
     state.observe(resp(ev(1, "proposal.rejected", data={"proposalId": "prop_p", "reason": "no"}), pin(2), edit(3)),
                   now=100.0)
-    push = state.take_push(108.0)
+    push = take(state, 108.0)
     assert push is not None and push.wake == "pin" and not push.gate and "gate" not in push.meta
     assert "prop_p" in push.content and "warmer" in push.content and "changed the canvas" in push.content
     assert state.tool_started("edit_canvas", {}, now=109.0) is None
@@ -658,11 +675,11 @@ def test_a_mixed_batch_of_the_persons_change_and_an_accept_is_gated_as_a_change(
     # They meet when both wait for the 30 s spacing after a pin's push.
     state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_m"}}, now=1.0)
     state.observe(resp(pin(1)), now=94.0)
-    assert state.take_push(95.0).wake == "pin"
+    assert take(state, 95.0).wake == "pin"
     state.observe(resp(edit(2)), now=100.0)
     state.observe(resp(ev(3, "proposal.accepted", data={"proposalId": "prop_m", "idMap": {}})), now=103.0)
     assert drain(state, 103.0, 124.5) == []
-    push = state.take_push(125.0)
+    push = take(state, 125.0)
     assert push is not None and push.wake == "proposal" and push.gate and push.meta["gate"] == "change"
     assert "accepted" in push.content and "changed the canvas" in push.content and push.meta["held"] == "2"
     assert state.tool_started("edit_canvas", {}, now=126.0) is not None
@@ -675,7 +692,7 @@ def test_a_board_line_riding_on_an_accept_gates_it_too():
     state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_l"}}, now=1.0)
     state.observe(resp(ev(1, "board.noted", data={"boardId": "b1"}, summary="note changed on Moods")), now=100.0)
     state.observe(resp(ev(2, "proposal.accepted", data={"proposalId": "prop_l", "idMap": {}})), now=110.0)
-    push = state.take_push(110.0)
+    push = take(state, 110.0)
     assert push is not None and push.wake == "proposal" and push.gate and "note changed on Moods" in push.content
 
 
@@ -688,7 +705,7 @@ def test_a_board_line_riding_on_an_accept_gates_it_too():
 def _young_window(state: ChannelState) -> None:
     """A change push at 108: its window lasts until 168 at least."""
     state.observe(resp(edit(1)), now=100.0)
-    push = state.take_push(108.0)
+    push = take(state, 108.0)
     assert push is not None and push.gate
 
 
@@ -754,7 +771,7 @@ def test_an_accept_after_a_rejection_push_waits_for_that_turn():
     for pid in ("prop_r", "prop_a"):
         state.tool_finished("propose_change", {}, {"proposal": {"id": pid}}, now=1.0)
     state.observe(resp(ev(1, "proposal.rejected", data={"proposalId": "prop_r", "reason": "no"})), now=100.0)
-    first = state.take_push(100.0)
+    first = take(state, 100.0)
     assert first is not None and first.wake == "proposal" and first.gate
     state.observe(resp(ev(2, "proposal.accepted", data={"proposalId": "prop_a", "idMap": {}})), now=105.0)
     assert drain(state, 105.0, 130.5) == []
@@ -788,7 +805,7 @@ def test_every_push_kind_against_every_window_state(kind, window):
     state.observe(resp(run_started(1, "run_person")), now=50.0)
     if window != "none":
         state.observe(resp(edit(2)), now=100.0)
-        assert state.take_push(108.0).gate
+        assert take(state, 108.0).gate
     if window == "calling":
         assert state.tool_started("look_at_canvas", {}, 113.0) is None
         state.tool_finished("look_at_canvas", {}, {}, 113.2)
@@ -816,7 +833,7 @@ def test_every_push_kind_against_every_window_state(kind, window):
     while t <= 300.0:
         if window == "in_flight" and t == 150.0:
             state.tool_finished("get_proposal", {"proposal_id": "prop_wait"}, {"proposal": {"status": "open"}}, 150.0)
-        push = state.take_push(t)
+        push = take(state, t)
         if push is not None:
             pushes.append((t, push.gate))
         t += 0.5
@@ -882,7 +899,7 @@ def test_a_board_write_that_does_more_than_move_cards_is_a_line(kinds, summary):
     state.observe(resp(ev(1, kinds[0], data={"boardId": "b1", "kinds": kinds}, summary=summary)), now=100.0)
     assert drain(state, 100.0, 300.0) == []
     state.observe(resp(pin(2)), now=300.0)
-    push = state.take_push(301.0)
+    push = take(state, 301.0)
     assert push is not None and summary in push.content
 
 
@@ -891,7 +908,7 @@ def test_a_board_write_that_only_moved_cards_is_left_out(data):
     state = ChannelState(now=0.0)
     state.observe(resp(ev(1, "board.moved", data=data, summary="moved #2 on board Dusk")), now=100.0)
     state.observe(resp(pin(2)), now=300.0)
-    push = state.take_push(301.0)
+    push = take(state, 301.0)
     assert push is not None and "moved #2" not in push.content
 
 
@@ -932,7 +949,7 @@ def test_the_persons_edit_on_a_node_an_accept_just_added_still_wakes_it():
         ev(3, "node.params", node="n9", data={"keys": ["value"]}, summary="set value on Text Input (n9)"),
         ev(4, "edge.added", data={"source": "n9", "target": "n2"}, summary="connected n9.text → n2.prompt"),
     ), now=100.0)
-    push = state.take_push(108.0)
+    push = take(state, 108.0)
     assert push is not None and push.wake == "change" and push.meta["count"] == "2"
     assert "set value on Text Input (n9)" in push.content and "connected n9.text" in push.content
     assert "added Text Input" not in push.content
@@ -946,7 +963,7 @@ def test_a_run_the_person_starts_on_an_accepted_proposals_node_is_theirs():
     state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_q"}}, now=1.0)
     state.observe(resp(ev(1, "proposal.accepted", node="n9",
                           data={"proposalId": "prop_q", "idMap": {"+a": "n9"}, "runNodeIds": ["n9"]})), now=50.0)
-    assert state.take_push(50.0).wake == "proposal"
+    assert take(state, 50.0).wake == "proposal"
     state.observe(resp(run_started(2, "run_hand", "n9")), now=55.0)
     assert set(state.person_runs) == {"run_hand"} and state.tracked_runs == set()
     state.observe(resp(ev(3, "run.started", node="n9", data={"runId": "run_auto", "proposalId": "prop_q"})), now=56.0)
@@ -976,7 +993,8 @@ def test_its_own_run_watch_gives_up_after_repeated_errors():
             return {}
 
         listener = mcp_channel.Listener(state, fetch_events=nothing, fetch_run=fetch_run, push=nothing,
-                                        clock=lambda: 2.0, log=lambda line: None, sleep=fake_sleep)
+                                        clock=lambda: 2.0, log=lambda line: None, sleep=fake_sleep,
+                                        fetch_pins=nothing)
         with anyio.fail_after(2):
             await listener._watch_run("run_x")
         return state, calls
@@ -1014,9 +1032,12 @@ def _listener_rig(limits: Limits):
     async def push(content, meta):
         record["pushes"].append(dict(meta))
 
+    async def fetch_pins():
+        return {"projectId": None, "pins": []}
+
     state = ChannelState(limits=limits, now=time.monotonic())
     listener = mcp_channel.Listener(state, fetch_events=fetch_events, fetch_run=fetch_run, push=push,
-                                    clock=time.monotonic, log=lambda line: None)
+                                    clock=time.monotonic, log=lambda line: None, fetch_pins=fetch_pins)
     return listener, record, ends
 
 
@@ -1098,7 +1119,7 @@ def test_a_pin_never_waits_behind_the_persons_continued_edits():
         if t == 121.0:
             # The listener sleeps until the window's end, not until the edits are due.
             assert state.next_check(t) == pytest.approx(168.0 - 121.0, abs=0.01)
-        push = state.take_push(t)
+        push = take(state, t)
         if push is not None:
             pushes.append((t, push))
         t = round(t + 0.5, 3)
@@ -1134,7 +1155,7 @@ def test_a_gated_push_waits_with_a_waiting_pin_and_goes_in_its_batch(kind, windo
     state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_k"}}, now=1.0)
     state.observe(resp(run_started(1, "run_person")), now=50.0)
     state.observe(resp(edit(2)), now=100.0)
-    assert state.take_push(108.0).gate
+    assert take(state, 108.0).gate
     if window == "calling":
         assert state.tool_started("look_at_canvas", {}, 113.0) is None
         state.tool_finished("look_at_canvas", {}, {}, 113.2)
@@ -1152,7 +1173,7 @@ def test_a_gated_push_waits_with_a_waiting_pin_and_goes_in_its_batch(kind, windo
     while t <= 300.0:
         if window == "in_flight" and t == 150.0:
             state.tool_finished("get_proposal", {"proposal_id": "prop_wait"}, {"proposal": {"status": "open"}}, 150.0)
-        push = state.take_push(t)
+        push = take(state, t)
         if push is not None:
             pushes.append((t, push.wake, push.gate, push.count))
         t += 0.5
@@ -1203,7 +1224,7 @@ def test_a_board_write_not_marked_with_its_own_proposal_is_still_the_persons(pro
     _own_asset_proposal(state)
     state.observe(resp(_asset_accept(1, "pa_x", board_proposal=proposal)[0]), now=40.0)
     state.observe(resp(edit(2)), now=41.0)
-    push = state.take_push(49.0)
+    push = take(state, 49.0)
     assert push is not None and push.gate and "Send notes" in push.content
 
 
@@ -1218,7 +1239,7 @@ def test_the_other_writes_an_asset_accept_makes_never_wake_or_ride(kind):
                           summary="pinned a cover on project Dusk (accepted from Claude Code)")), now=10.0)
     assert drain(state, 10.0, 100.0) == []
     state.observe(resp(edit(2)), now=110.0)
-    push = state.take_push(118.0)
+    push = take(state, 118.0)
     assert push is not None and push.count == 1 and "accepted from" not in push.content
 
 
@@ -1510,7 +1531,7 @@ def _pin_fuzz(seed: int) -> tuple[list, int]:
             state.tool_finished(name, args, result, t)
             in_flight = None
         window_before = state._window_open(t)
-        push = state.take_push(t)
+        push = take(state, t)
         if push is not None:
             shown = _pins_shown(push)
             if not push.gate and window_before:
@@ -1572,7 +1593,7 @@ def test_a_decision_on_its_proposal_an_undo_reopened_wakes_it():
     state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_u"}}, now=1.0)
     state.observe(resp(ev(1, "proposal.invalidated", actor={"kind": "system"}, data={"proposalId": "prop_u"})),
                   now=10.0)
-    first = state.take_push(30.0)
+    first = take(state, 30.0)
     assert first is not None and first.wake == "proposal" and first.gate
     state.observe(resp(ev(2, "proposal.reopened", data={"proposalId": "prop_u"})), now=200.0)
     state.observe(resp(ev(3, "proposal.accepted", data={"proposalId": "prop_u", "idMap": {}})), now=220.0)
@@ -1624,8 +1645,10 @@ def test_an_edit_in_the_last_8_s_before_a_pin_goes_follows_in_a_gated_push():
 
 def _pin_check_rig(responses: list[dict], fetch_pins, sleeps: list | None = None):
     # The quiet time is under the pin merge, so the edit is due when the pin goes.
-    limits = Limits(quiet=0.02, max_hold=2.0, min_gap=0.0, agent_quiet=0.0, pin_merge=0.05, run_gather=0.05)
-    record: dict = {"pushes": [], "pin_checks": 0}
+    # The change turn's window is short, so a pin that waits for one goes within the test.
+    limits = Limits(quiet=0.02, max_hold=2.0, min_gap=0.0, agent_quiet=0.0, pin_merge=0.05, run_gather=0.05,
+                    window_min=0.3, window_idle=0.1)
+    record: dict = {"pushes": [], "pin_checks": 0, "logs": []}
     queue = list(responses)
 
     async def fetch_events(params):
@@ -1651,7 +1674,7 @@ def _pin_check_rig(responses: list[dict], fetch_pins, sleeps: list | None = None
 
     state = ChannelState(limits=limits, now=time.monotonic())
     listener = mcp_channel.Listener(state, fetch_events=fetch_events, fetch_run=fetch_run, push=push,
-                                    clock=time.monotonic, log=lambda line: None, sleep=fast_sleep,
+                                    clock=time.monotonic, log=record["logs"].append, sleep=fast_sleep,
                                     fetch_pins=counted_pins)
     return listener, record
 
@@ -1714,37 +1737,340 @@ def test_a_pin_that_arrives_during_the_check_is_never_dropped_by_it():
     assert 'pin id="pin_00000009"' in record["pushes"][0][1] and "pin_00000001" not in record["pushes"][0][1]
 
 
-def test_a_pin_check_nebula_cant_answer_holds_the_pin_and_retries():
-    sleeps: list[float] = []
+def test_a_pin_check_nebula_cant_answer_holds_only_the_pin(monkeypatch):
+    # Review 4, M2: a check that failed held every push. Now only the pin
+    # waits (it goes only once a check confirms it); the edit goes on its own
+    # terms, gated, and the pin follows as a pin wake once Nebula answers.
+    monkeypatch.setattr(mcp_channel, "PIN_RETRY_MIN", 0.05)
 
     class Down(Exception):
         status = 503
 
     async def flaky(record):
-        if record["pin_checks"] < 3:
+        if not record["pushes"]:
             raise Down("nebula is restarting")
         return _listing("pin_00000001")
 
-    listener, record = _pin_check_rig([resp(pin(1), edit(2, node="n8"))], flaky, sleeps)
-    _run_rig(listener, record, lambda r: r["pushes"])
-    assert record["pin_checks"] == 3 and len(sleeps) == 2
-    meta, content = record["pushes"][0]
-    assert meta["wake"] == "pin" and "set prompt" in content
-    assert len(record["pushes"]) == 1
+    listener, record = _pin_check_rig([resp(pin(1), edit(2, node="n8"))], flaky)
+    _run_rig(listener, record, lambda r: len(r["pushes"]) >= 2)
+    (first, first_content), (second, second_content) = record["pushes"][:2]
+    assert first["wake"] == "change" and first["gate"] == "change"
+    assert "set prompt" in first_content and "<pin" not in first_content
+    assert second["wake"] == "pin" and "gate" not in second and 'pin id="pin_00000001"' in second_content
+    assert len(record["pushes"]) == 2 and record["pin_checks"] >= 2
 
 
-def test_a_pin_check_nebula_refuses_drops_the_pins():
-    # A 4xx (no project open, say) is an answer: none of them can be confirmed.
-    class NoProject(Exception):
-        status = 409
+def test_a_pin_check_nebula_refuses_drops_the_pins_and_says_so():
+    # A 4xx is Nebula refusing the check (its token no longer accepted, say;
+    # with no project open it answers 200 and an empty list): none of the
+    # pins can be confirmed, so they leave, and the log says so (review 4, L1).
+    class Refused(Exception):
+        status = 401
 
     async def refused(record):
-        raise NoProject("Open or create a project before leaving notes")
+        raise Refused("this agent's token isn't accepted")
 
     listener, record = _pin_check_rig([resp(pin(1), edit(2, node="n8"))], refused)
     _run_rig(listener, record, lambda r: r["pushes"])
     meta, content = record["pushes"][0]
     assert meta["wake"] == "change" and meta["gate"] == "change" and "<pin" not in content
+    dropped = [line for line in record["logs"] if "refused" in line and "1 pin" in line]
+    assert dropped, record["logs"]
+    assert "warmer" not in dropped[0]  # never the person's text in a log
+
+
+# -- Review 4 of PR #114 (2026-10-26) ------------------------------------------------
+# H1: a check answered from the project open before a switch confirmed its
+# pin. M1: the clock was read twice, so a pin could go with no check. M2: a
+# failing check held every push. L1: a refused check dropped pins silently.
+
+def test_take_push_never_carries_a_pin_no_check_confirmed_for_that_decision():
+    # Probe R1: pins_to_check(100.9999) saw nothing due; take_push(101.0001)
+    # then took the pin, never checked, as an ungated pin wake.
+    state = ChannelState(now=0.0)
+    state.observe(resp(edit(1, node="n8")), now=92.5)
+    state.observe(resp(pin(2)), now=100.0)
+    assert state.pins_to_check(100.9999) == []
+    unchecked = state.take_push(101.0001)
+    assert unchecked is None or (unchecked.gate and "<pin" not in unchecked.content)
+    checked = state.pins_to_check(101.5)
+    assert checked == ["pin_00000002"]
+    state.confirm_pins(checked, _listing("pin_00000002"))
+    push = state.take_push(101.5)
+    assert (push.wake, push.gate) == ("pin", False) and _pins_shown(push) == {"pin_00000002"}
+
+    # A confirmation holds for the decision it was made for, never a later one.
+    state = ChannelState(now=0.0)
+    state.observe(resp(pin(1)), now=100.0)
+    state.confirm_pins(["pin_00000001"], _listing("pin_00000001"))
+    assert state.take_push(100.2) is None  # not due yet (the pin merge)
+    later = state.take_push(101.5)
+    assert later is None or "<pin" not in later.content
+
+
+def test_a_pin_that_arrives_during_a_check_still_holds_the_gated_pushes():
+    # The pin checked was answered elsewhere, and the person pinned again
+    # while Nebula answered. The accept due goes, alone and ungated; the
+    # edit waits with the new pin, which goes after its own check.
+    state = ChannelState(now=0.0)
+    state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_a"}}, now=1.0)
+    state.observe(resp(edit(1, node="n8")), now=90.0)
+    state.observe(resp(pin(2), ev(3, "proposal.accepted", data={"proposalId": "prop_a", "idMap": {}})), now=100.0)
+    checked = state.pins_to_check(101.5)
+    assert checked == ["pin_00000002"]
+    state.observe(resp(pin(4, "cooler")), now=101.6)  # while Nebula answers
+    state.confirm_pins(checked, _listing("pin_00000004", resolved=("pin_00000002",)))
+    push = state.take_push(101.5)
+    assert (push.wake, push.gate) == ("proposal", False) and "set prompt" not in push.content
+    assert "<pin" not in push.content
+    pushes = drain(state, 102.0, 300.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(131.5, "pin", False)]
+    assert _pins_shown(pushes[0][1]) == {"pin_00000004"} and "set prompt" in pushes[0][1].content
+
+
+def test_the_listener_reads_the_clock_once_per_decision():
+    # Probe R1 through the listener: the clock moves past the pin's merge
+    # between the check and the push. The pin goes only if a check confirmed it.
+    state = ChannelState(now=0.0)
+    state.observe(resp(edit(1, node="n8")), now=92.5)
+    state.observe(resp(pin(2)), now=100.0)
+    times = iter([100.9999, 101.0001] + [200.0] * 100)
+    checks, pushes = [], []
+
+    async def fetch_pins():
+        checks.append(1)
+        return _listing(resolved=("pin_00000002",))  # answered under its own name elsewhere
+
+    async def push(content, meta):
+        pushes.append((dict(meta), content))
+        raise anyio.ClosedResourceError()
+
+    async def never(*args):
+        await anyio.sleep_forever()
+
+    listener = mcp_channel.Listener(state, fetch_events=never, fetch_run=never, push=push,
+                                    clock=lambda: next(times), log=lambda line: None, fetch_pins=fetch_pins)
+
+    async def main():
+        with anyio.fail_after(5):
+            await listener._push_when_due()
+
+    anyio.run(main)
+    assert len(pushes) == 1
+    meta, content = pushes[0]
+    assert not (meta["wake"] == "pin" and "gate" not in meta), meta
+    assert "<pin" not in content and len(checks) == 1
+
+
+def test_a_failing_pin_check_never_holds_an_accept_or_an_edit():
+    # Probe R2: with GET /api/canvas/pins failing, 7,215 s passed with no
+    # push while an accept and an edit were due. Fake clock: the listener's
+    # sleeps move it.
+    state = ChannelState(now=0.0)
+    state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_a"}}, now=1.0)
+    clock = {"t": 100.0}
+    state.last_person = 100.0
+    state.observe(resp(pin(1)), now=100.0)
+    state.observe(resp(ev(2, "proposal.accepted", data={"proposalId": "prop_a", "idMap": {}})), now=100.0)
+    state.observe(resp(edit(3, node="n8")), now=100.0)
+    checks, pushes, logs = [], [], []
+
+    class Down(Exception):
+        status = 500
+
+    class Done(Exception):
+        pass
+
+    async def fetch_pins():
+        checks.append(clock["t"])
+        if clock["t"] < 200.0:
+            raise Down("catalog unreadable")
+        return _listing("pin_00000001")
+
+    async def push(content, meta):
+        pushes.append((clock["t"], dict(meta), content))
+        if "<pin" in content or clock["t"] >= 200.0:
+            raise Done()
+
+    async def sleep(seconds):
+        clock["t"] += seconds
+        await anyio.sleep(0)
+
+    async def never(*args):
+        await anyio.sleep_forever()
+
+    listener = mcp_channel.Listener(state, fetch_events=never, fetch_run=never, push=push, clock=lambda: clock["t"],
+                                    log=logs.append, sleep=sleep, fetch_pins=fetch_pins)
+
+    async def main():
+        with anyio.fail_after(5):
+            try:
+                await listener._push_when_due()
+            except Done:
+                pass
+
+    anyio.run(main)
+    assert pushes, "no push at all"
+    before = [(at, meta.get("wake"), "gate" in meta) for at, meta, content in pushes if at < 200.0]
+    # The accept at once (ungated, no window open), the edit at the 30 s spacing (gated).
+    assert before == [(100.0, "proposal", False), (130.0, "change", True)], before
+    assert all("<pin" not in content for at, _, content in pushes if at < 200.0)
+    at, meta, content = pushes[-1]
+    assert at >= 200.0 and meta["wake"] == "pin" and "gate" not in meta and 'pin id="pin_00000001"' in content
+    # Said once the check has failed for a minute (not on every failure), and when it answers again.
+    assert len(logs) == 2, logs
+    assert "pin check has failed for over 60 s" in logs[0] and "answers the pin check again" in logs[1]
+
+
+def test_a_pin_check_for_another_project_confirms_none_of_its_pins():
+    # Review 4, H1 (b): an answer for a project other than the pins' (or than
+    # the one the channel believes open) confirms nothing, even pins it lists open.
+    def waiting() -> ChannelState:
+        state = ChannelState(now=0.0)
+        state.observe(resp(pin(1), edit(2, node="n8")), now=100.0)
+        return state
+
+    for listing in (_listing("pin_00000001", project="proj_2"),
+                    {"projectId": None, "pins": [{"id": "pin_00000001", "status": "open"}]},
+                    {"pins": [{"id": "pin_00000001", "status": "open"}]}):
+        state = waiting()
+        checked = state.pins_to_check(110.0)
+        assert checked == ["pin_00000001"]
+        state.confirm_pins(checked, listing)
+        push = state.take_push(110.0)
+        assert push.gate and "<pin" not in push.content, listing
+    # The channel believes proj_2 is open (its own open_project): an answer
+    # for proj_1, the pin's project, is from before the switch.
+    state = waiting()
+    checked = state.pins_to_check(110.0)
+    state.project_id = "proj_2"
+    state.confirm_pins(checked, _listing("pin_00000001", project="proj_1"))
+    push = state.take_push(110.0)
+    assert push.gate and "<pin" not in push.content
+    # Its own open_project moves what it believes open (the switch never reaches its feed).
+    state = waiting()
+    assert state.tool_started("open_project", {"project_id": "proj_2"}, 101.0) is None
+    state.tool_finished("open_project", {"project_id": "proj_2"}, {"project": {"id": "proj_2"}}, 101.5)
+    assert state.project_id == "proj_2"
+
+
+def _stale_check_fuzz(seed: int) -> tuple[list, int, int]:
+    """Probe R4's fuzz, plus the H1 race: Nebula's truth against what the
+    feed shows, with answers the feed never carries (its own CLI answers and
+    switches, lost events, restarts) and pin checks that sometimes answer
+    for the project open before a switch."""
+    rnd = random.Random(seed)
+    state = ChannelState(now=0.0)
+    truth: dict[str, dict[str, str]] = {"proj_1": {}, "proj_2": {}}
+    open_project, before = "proj_1", "proj_1"
+    pending: list[dict] = []
+    seq, t, pids, in_flight = 0, 0.0, [], None
+    violations: list = []
+    pushes = checks = 0
+
+    def event(kind, actor=None, data=None, summary="", node=None):
+        nonlocal seq
+        seq += 1
+        e = ev(seq, kind, actor=actor, node=node, data=data, summary=summary)
+        e["projectId"] = open_project
+        return e
+
+    def deliver(gap=False, reset=False):
+        nonlocal pending
+        batch, pending = pending, []
+        answer = resp(*batch, gap=gap, reset=reset)
+        answer["projectId"] = open_project
+        state.observe(answer, now=t)
+
+    def switch():
+        nonlocal open_project, before
+        before, open_project = open_project, ("proj_2" if open_project == "proj_1" else "proj_1")
+
+    while t < 1500.0:
+        r = rnd.random()
+        live = [p for p, status in truth[open_project].items() if status == "open"]
+        if r < 0.04:
+            pid = f"pin_{seq + 1:08x}"
+            truth[open_project][pid] = "open"
+            pending.append(event("pin.added", data={"pinId": pid, "text": "do it", "anchor": {"nodeId": "n7"}},
+                                 node="n7"))
+        elif r < 0.055 and live:
+            p = rnd.choice(live)
+            del truth[open_project][p]
+            pending.append(event("pin.removed", data={"pinId": p}, summary=f"deleted the note {p}"))
+        elif r < 0.065 and live:
+            p = rnd.choice(live)
+            truth[open_project][p] = "resolved"
+            pending.append(event("pin.resolved", actor=OTHER_AGENT, data={"pinId": p}))
+        elif r < 0.075 and live:  # its own CLI answer: never in its feed
+            truth[open_project][rnd.choice(live)] = "resolved"
+        elif r < 0.17:
+            pending.append(event("node.params", node="n8", data={"keys": ["prompt"]}, summary="set prompt"))
+        elif r < 0.18:  # the person switches project
+            switch()
+            pending.append(event("canvas.replaced", data={"reason": "project-open", "projectId": open_project}))
+        elif r < 0.185:  # its own CLI switch: no event, the next answer names the project
+            switch()
+        elif r < 0.19 and state.tool_started("open_project", {}, t) is None:
+            switch()
+            state.tool_finished("open_project", {}, {"project": {"id": open_project}}, t)
+        elif r < 0.21 and state.tool_started("propose_change", {}, t) is None:
+            pid = f"prop_{seq}"
+            state.tool_finished("propose_change", {}, {"proposal": {"id": pid}}, t)
+            pids.append(pid)
+        elif r < 0.23 and pids:
+            pending.append(event(rnd.choice(sorted(mcp_channel.DECISIONS)), data={"proposalId": pids.pop(0)}))
+        elif r < 0.24:
+            pending = []
+            deliver(gap=True)
+        elif r < 0.245:
+            pending = []
+            deliver(reset=True)
+        elif r < 0.28 and in_flight is None:
+            name = rnd.choice(["look_at_canvas", "edit_canvas", "get_proposal", "run_nodes"])
+            if state.tool_started(name, {"proposal_id": "x"}, t) is None:
+                in_flight = (name, t + rnd.choice([0.2, 5.0, 40.0]))
+        if in_flight and t >= in_flight[1]:
+            state.tool_finished(in_flight[0], {"proposal_id": "x"}, {}, t)
+            in_flight = None
+        if pending and rnd.random() < 0.6:
+            deliver()
+        window_before = state._window_open(t)
+        checked = state.pins_to_check(t)
+        if checked:
+            checks += 1
+            # The H1 race: now and then the answer comes from the project open
+            # before the last switch, which the channel already knows of (its
+            # own open_project, or the journal's answer naming the new one).
+            # One it can't know of yet is review 4's L2: live when Nebula answered.
+            stale = state.project_id == open_project and rnd.random() < 0.3
+            listed = before if stale else open_project
+            state.confirm_pins(checked, {"projectId": listed,
+                                         "pins": [{"id": k, "status": v} for k, v in truth[listed].items()]})
+        push = state.take_push(t)
+        if push is not None:
+            pushes += 1
+            shown = _pins_shown(push)
+            if not push.gate and window_before:
+                violations.append((seed, t, "ungated into an open window"))
+            dead = [p for p in shown if truth[open_project].get(p) != "open"]
+            if dead:
+                violations.append((seed, t, "a pin not live on the open project", dead))
+            if not push.gate and push.wake == "pin" and not shown:
+                violations.append((seed, t, "a pin wake with no pin"))
+        t = round(t + 0.5, 3)
+    return violations, pushes, checks
+
+
+def test_fuzz_no_pin_goes_unless_live_on_the_open_project_when_nebula_answered():
+    violations, pushes, checks = [], 0, 0
+    for seed in range(300):
+        found, p, c = _stale_check_fuzz(seed)
+        violations += found
+        pushes += p
+        checks += c
+    assert violations == [], (len(violations), violations[:5])
+    assert pushes > 3000 and checks > 1000, (pushes, checks)
 
 
 def test_the_change_turn_allow_list_is_reads_and_the_change_turn_writes():
@@ -1820,7 +2146,9 @@ def _fake_nebula(journal: _Journal):
                             break
                         journal.cond.wait(left)
                     cursor = len(journal.events)
-                self._send({"journal": "abc123", "cursor": cursor, "events": fresh, "gap": False, "reset": False})
+                # Like Nebula's journal, the answer names the open project.
+                self._send({"journal": "abc123", "cursor": cursor, "events": fresh, "gap": False, "reset": False,
+                            "projectId": "proj_1"})
                 return
             if url.path.startswith("/api/graph/runs/"):
                 run_id = url.path.rsplit("/", 1)[-1]
