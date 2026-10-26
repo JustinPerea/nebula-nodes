@@ -38,6 +38,7 @@ import type { WorldNavigationMode, WorldViewerStatus } from './WorldEnvironmentV
 import { InvalidWorldFace, WorldPreviewFace } from './WorldPreviewFace';
 import { safeWorldAsset as safeAsset, worldCaption, worldThumbnail } from '../../lib/worldCard';
 import '../../styles/world-preview.css';
+import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
 import { failureMessage } from '../../lib/errorCopy';
 
 const LazyWorldEnvironmentViewer = lazy(() =>
@@ -129,6 +130,8 @@ function WorldPreviewComponent({ value, compact = false }: WorldPreviewProps) {
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closeRef.current?.focus({ preventScroll: true });
     const onKeyDown = (event: KeyboardEvent) => {
+      // A modal dialog opened over the preview owns the keys (review 8, L-d).
+      if (keyBlockedByModal(dialogRef.current)) return;
       if (event.key === 'Escape') {
         event.preventDefault();
         close();

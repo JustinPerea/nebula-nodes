@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import type { PlaceholderRunConfirm } from '../lib/placeholderRunConfirm';
+import { returnFocusOnSlip } from '../lib/modalFocus';
 import '../styles/prompt-dialog.css';
 import '../styles/placeholder-run-dialog.css';
 
@@ -36,6 +37,8 @@ import '../styles/placeholder-run-dialog.css';
  * the changed line, the total, the footnotes and the buttons stay on screen.
  * A list that scrolls is a Tab stop named by the heading; one that fits isn't.
  * Review 6, L-b: the line for placeholders that left the run sits under the intro.
+ * GM - Design on review 8 L-b: on a replay still being set up, the line that
+ * says the replay uses the saved settings sits between them.
  * Review 7, M-1: focus never leaves it while it is open (the rows that stop
  * scrolling hand focus to Cancel; a slip to the page comes back to Cancel),
  * and no canvas shortcut acts behind it (lib/canvasShortcutScope.ts
@@ -47,7 +50,7 @@ export const RUN_CLICK_GUARD_MS = 500;
 
 /** What the person reads before Run: a change to any of it holds Run back. */
 function signature(model: PlaceholderRunConfirm): string {
-  return JSON.stringify([model.heading, model.intro, model.leftLine, model.rows, model.freeLine, model.totalLine,
+  return JSON.stringify([model.heading, model.intro, model.savedLine, model.leftLine, model.rows, model.freeLine, model.totalLine,
     model.notes, model.runLabel]);
 }
 
@@ -123,13 +126,7 @@ export function PlaceholderRunDialog({ model, changed = false, onDone }: {
   }, [scrolls]);
   // Any other slip to the page (a click on the backdrop, an element that
   // went away) comes back to Cancel, once the browser has settled where focus is.
-  const onBlur = (event: FocusEvent<HTMLDivElement>) => {
-    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
-    window.setTimeout(() => {
-      const active = document.activeElement;
-      if (cancel.current?.isConnected && (active === document.body || active === null)) cancel.current.focus();
-    }, 0);
-  };
+  const onBlur = (event: FocusEvent<HTMLDivElement>) => returnFocusOnSlip(event, () => cancel.current);
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -157,6 +154,7 @@ export function PlaceholderRunDialog({ model, changed = false, onDone }: {
         <h2 id={headingId} className="placeholder-run__heading">{model.heading}</h2>
         <div id={bodyId} className="placeholder-run__body">
           <p className="prompt-dialog__line">{model.intro}</p>
+          {model.savedLine && <p className="prompt-dialog__line placeholder-run__saved">{model.savedLine}</p>}
           {model.leftLine && <p className="prompt-dialog__line placeholder-run__left">{model.leftLine}</p>}
           {(changed || changes > 0) && <p className="prompt-dialog__line placeholder-run__changed">{CHANGED_LINE}</p>}
           <ul ref={list} className="placeholder-run__rows"

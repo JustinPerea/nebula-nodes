@@ -7,6 +7,7 @@ import {
   useReactFlow,
   useInternalNode,
   useStore,
+  useStoreApi,
   type Connection,
   type OnConnectEnd,
   type OnConnectStart,
@@ -36,7 +37,7 @@ import { CANVAS_FIT_DURATION, CANVAS_ZOOM_DURATION, computeCanvasFitPadding } fr
 import { useFitCanvasView } from '../hooks/useFitCanvasView';
 import { cameraMoveIsCanvasOwn, cameraMoveStarted, claimCameraMove } from '../lib/canvasCameraOwner';
 import { CANVAS_LOD_ZOOM } from '../lib/canvasOverview';
-import { isCanvasShortcutTarget } from '../lib/canvasShortcutScope';
+import { isCanvasShortcutTarget, isModalDialogOpen } from '../lib/canvasShortcutScope';
 import { boundingRect, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
 import { visibleFlowRect } from '../lib/visibleFlowRect';
 import type { NodeData } from '../types';
@@ -459,9 +460,14 @@ export function Canvas() {
   // anything, so its wires stay too; one notice per press. Otherwise it
   // deletes at once, and the store says "Deleted the node." with Undo: undo
   // puts back everything a delete removed (GM, 2026-10-23, lib/deleteNotice.ts).
+  // Never behind an open modal dialog (review 8, M-1): the Delete key is the
+  // canvas's own (onKeyDown below), and this refuses any delete that would
+  // still reach React Flow while one is open.
   const onBeforeDelete = useCallback(async ({ nodes: doomed }: { nodes: { id: string }[] }) => (
-    doomed.length === 0 || useGraphStore.getState().allowCanvasDelete(doomed.map((node) => node.id))
+    !isModalDialogOpen()
+    && (doomed.length === 0 || useGraphStore.getState().allowCanvasDelete(doomed.map((node) => node.id)))
   ), []);
+  const flowStore = useStoreApi();
 
   const onConnectStart: OnConnectStart = useCallback((_event, params) => {
     connectionSucceededRef.current = false;
@@ -606,8 +612,8 @@ export function Canvas() {
   );
 
   // Keyboard shortcuts: Ctrl+Enter, Ctrl+A, Ctrl+D, Ctrl+Z, Ctrl+Shift+Z, Ctrl+C, Ctrl+V,
-  // and zoom: Ctrl/⌘ = and −, Shift+1 to fit, Shift+0 for 100%. Ctrl+S and
-  // Ctrl+O belong to GraphFileActions, which listens app-wide.
+  // Delete and Backspace, and zoom: Ctrl/⌘ = and −, Shift+1 to fit, Shift+0
+  // for 100%. Ctrl+S and Ctrl+O belong to GraphFileActions, which listens app-wide.
   // On the document, not the wrapper, so they still work after a click on the
   // bottom bar, rail or header; isCanvasShortcutTarget keeps them out of text
   // fields, dialogs and other panels.
@@ -641,6 +647,27 @@ export function Canvas() {
       if (isCtrlOrCmd && event.key === 'Enter' && !isExecuting) {
         event.preventDefault();
         executeGraph();
+        return;
+      }
+
+      // Delete or Backspace — delete the selected nodes and wires. Review 8,
+      // M-1: this was React Flow's own deleteKeyCode, which listens on the
+      // document, takes a focused button (a dialog's Cancel) as fair game and
+      // never asked whether a modal dialog is open, so a node behind the
+      // placeholder dialog was deleted. Here it goes through the same guard as
+      // every canvas key (isCanvasShortcutTarget, above), keeps React Flow's
+      // rules (bare key only, nothing in `.nokey`, not while a run goes, one
+      // delete per press) and deletes through React Flow, so onBeforeDelete
+      // (a node holding World Labs state stays) and the Undo notice still apply.
+      if ((event.key === 'Delete' || event.key === 'Backspace') && !isCtrlOrCmd && !event.altKey && !event.shiftKey) {
+        if (event.repeat || isExecuting) return;
+        if (event.target instanceof Element && event.target.closest('.nokey')) return;
+        const doomedNodes = reactFlow.getNodes().filter((node) => node.selected);
+        const doomedEdges = reactFlow.getEdges().filter((edge) => edge.selected);
+        if (doomedNodes.length === 0 && doomedEdges.length === 0) return;
+        event.preventDefault();
+        void reactFlow.deleteElements({ nodes: doomedNodes, edges: doomedEdges });
+        flowStore.setState({ nodesSelectionActive: false });
         return;
       }
 
@@ -708,7 +735,7 @@ export function Canvas() {
         return;
       }
     },
-    [executeGraph, fitCanvasView, fitView, isExecuting, reactFlow, screenToFlowPosition, zoomIn, zoomOut, zoomTo]
+    [executeGraph, fitCanvasView, fitView, flowStore, isExecuting, reactFlow, screenToFlowPosition, zoomIn, zoomOut, zoomTo]
   );
 
   useEffect(() => {
@@ -749,7 +776,9 @@ export function Canvas() {
         maxZoom={4}
         defaultEdgeOptions={{ type: 'typed-edge' }}
         proOptions={{ hideAttribution: true }}
-        deleteKeyCode={isExecuting ? null : ['Backspace', 'Delete']}
+        // The Delete key is the canvas's own (onKeyDown): React Flow's never
+        // asked whether a modal dialog is open (review 8, M-1).
+        deleteKeyCode={null}
         onBeforeDelete={onBeforeDelete}
         {...CANVAS_INTERACTION_PROPS}
         onlyRenderVisibleElements={canvasPerfMode && !arrangeMeasuring}

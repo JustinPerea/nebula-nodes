@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ViewableMedia } from '../../lib/createGallery';
 import { usePanelFocus } from '../../hooks/usePanelFocus';
+import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
 
 export interface LightboxProps {
   items: ViewableMedia[];
@@ -44,6 +45,8 @@ export function Lightbox({ items, index, onClose, onIndexChange }: LightboxProps
     if (!visible) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || !panelRef.current?.contains(e.target as globalThis.Node)) return;
+      // A modal dialog over the lightbox owns the keys (review 8, L-d).
+      if (keyBlockedByModal(panelRef.current)) return;
       // Keep the native video player's arrow-key controls intact.
       if (e.target instanceof HTMLVideoElement) return;
       if (e.key === 'ArrowLeft') { e.preventDefault(); goPrev(); }

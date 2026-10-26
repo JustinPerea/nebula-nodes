@@ -3,7 +3,8 @@
 Python indexes code points, so a plain ``text[:n]`` can still cut through
 what a person reads as one character: a letter and its combining accent,
 an emoji ZWJ sequence (a family), an emoji and its variation selector or
-skin tone, a flag's two regional indicators, a Hangul syllable's jamo.
+skin tone, a flag's two regional indicators, a Hangul syllable's jamo,
+an Indic conjunct (क्ष: a consonant, a virama and the consonant after it).
 ``safe_cut`` moves a cut back to the start of that character instead
 (review 7, L5: "the hard cut must never split a character"). It covers the
 grapheme rules that matter for one line of agent text; it is not a full
@@ -42,6 +43,12 @@ def safe_cut(text: str, end: int) -> int:
     end = max(0, min(end, len(text)))
     while 0 < end < len(text):
         if _extends(text[end]) or text[end - 1] == ZWJ:
+            end -= 1
+            continue
+        # An Indic conjunct (क्ष: a consonant, a virama, the consonant after
+        # it) is one character: a cut after its virama backs off to its start
+        # (review 8, nit; UAX #29 GB9c, read through the virama's combining class).
+        if unicodedata.combining(text[end - 1]) == 9 and unicodedata.category(text[end]) == "Lo":
             end -= 1
             continue
         if _regional(text[end]) and _regional(text[end - 1]):

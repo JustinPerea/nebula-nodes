@@ -4,6 +4,7 @@ import { X } from 'lucide-react';
 import type { ResultContext } from '../../lib/resultContext';
 import { ResultDetails, ResultMetadata } from './ResultDetails';
 import '../../styles/result-comparison.css';
+import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
 
 export interface ComparisonResult {
   key: string;
@@ -65,6 +66,8 @@ export function ResultComparison({ items, onClose, onReuseSettings }: ResultComp
       if (event.target instanceof Node && !overlay.contains(event.target)) focusClose();
     };
     const containKey = (event: KeyboardEvent) => {
+      // A modal dialog opened over the comparison owns the keys (review 8, L-d).
+      if (keyBlockedByModal(panel)) return;
       // Keep global Canvas shortcuts out of the modal, including a body-level
       // event after browser focus loss. Native video/disclosure defaults remain.
       event.stopImmediatePropagation();

@@ -18,7 +18,8 @@ import { runCostNotes, type RunCost, type RunScopeSummary } from './runScope';
  * round 6 for the footnotes, the other paid nodes' rows, Cinema's Generate and
  * the heading once no placeholder is left, round 7 for "this node", the
  * input-priced footnotes, placeholders that left the run and the amounts in
- * cents), verbatim.
+ * cents, and the ruling on review 8 L-b for a replay of a placeholder its
+ * agent changed after the run was saved), verbatim.
  * The backend refuses the run unless it carries these exact paid
  * placeholders and a total no lower than its own estimate (main.execute_node
  * and main.generate_cinema_shot, `confirmedPlaceholders` and
@@ -46,6 +47,12 @@ export interface PlaceholderRunRow {
 export interface PlaceholderRunConfirm {
   heading: string;
   intro: string;
+  /** Under the intro on a replay that still has placeholders being set up,
+   * when its agents changed some after the run was saved (GM - Design on
+   * review 8 L-b): "Codex changed this node after the run was saved. The
+   * replay uses the saved settings."; else null (with none left being set
+   * up, that sentence is the intro, under "Replay the saved version?"). */
+  savedLine: string | null;
   /** Under the intro when placeholders the dialog showed left the run
    * (deleted or disconnected) while others finished (GM - Design, round 7,
    * review 6 L-b) or are still being set up (round 8, item 2): "1 node Codex
@@ -99,6 +106,12 @@ export interface PlaceholderRunOptions {
    * node of the run with a muted row; the agent's placeholder counts as one
    * that left the run, never as "finished". */
   gone?: ReadonlySet<string>;
+  /** A replay's nodes whose live settings differ from the saved ones it
+   * sends (snapshotCanvas `changed`). One that is, or was, an agent's
+   * placeholder is a version its agent changed after the run was saved: the
+   * replay uses the saved settings, and says so (GM - Design on review 8
+   * L-b: "Replay the saved version?"). Its saved version is a muted row. */
+  changed?: ReadonlySet<string>;
 }
 
 /** A row's price words (GM - Design, rounds 4 and 6, verbatim). */
@@ -106,20 +119,34 @@ export const PRICE_NOT_LISTED = 'price not listed';
 export const PRICE_DEPENDS_ON_INPUT = 'price depends on its input';
 export const PRICE_ON_KREA_PLAN = 'on your Krea plan';
 
-/** The model a node runs, as its card's model picker labels it (backend
- * main._run_model_name): the chosen model option's label, else the node type.
- * A node that runs another model's handler (a Cinema scene) names that model. */
+/** The params that pick the model a node runs (backend main._MODEL_SELECT_KEYS
+ * and _MODEL_TEXT_KEYS): a select labelled Model, or a free-text model id. */
+const MODEL_SELECT_KEYS = new Set(['model', 'model_id', 'ai_model']);
+const MODEL_TEXT_KEYS = new Set(['model', 'model_id', 'endpoint_id']);
+
+/** The model a node runs, as Nebula shows it (backend main._run_model_name):
+ * the chosen option of its model picker, by its label; the model id a
+ * free-text model param names, as the node card shows it ("openai/gpt-4o-mini"
+ * on an OpenRouter node: review 8, L-a, so a switch is a changed row); else
+ * the node type. A node that runs another model's handler (a Cinema scene)
+ * names that model. */
 function modelName(node: Node<NodeData>): string {
   const definition = NODE_DEFINITIONS[node.data?.definitionId];
   if (!definition) return node.data?.definitionId ?? node.id;
   const params = (node.data?.params ?? {}) as Record<string, unknown>;
   const via = definition.providerVia?.kind === 'model' ? modelChoice(definition, params) : null;
   if (via && NODE_DEFINITIONS[via]) return NODE_DEFINITIONS[via].displayName;
-  for (const spec of [...(definition.params ?? []), ...(definition.sharedParams ?? [])]) {
-    if ((spec.key !== 'model' && spec.key !== 'model_id') || spec.type !== 'enum') continue;
+  const specs = [...(definition.params ?? []), ...(definition.sharedParams ?? [])];
+  for (const spec of specs) {
+    if (!MODEL_SELECT_KEYS.has(spec.key) || spec.type !== 'enum') continue;
     const value = params[spec.key] ?? spec.default;
     const option = spec.options?.find((candidate) => typeof candidate === 'object' && candidate.value === value);
     if (option && typeof option === 'object' && option.label) return String(option.label);
+  }
+  for (const spec of specs) {
+    if (!MODEL_TEXT_KEYS.has(spec.key) || spec.type !== 'string') continue;
+    const value = params[spec.key] ?? spec.default;
+    if (typeof value === 'string' && value.trim()) return value.trim().slice(0, 80);
   }
   return definition.displayName;
 }
@@ -275,8 +302,16 @@ export function placeholderRunConfirm(
   const inScope = new Set(scope.filter((node) => !gone(node)).map((node) => node.id));
   const left = [...(options.shown ?? [])].filter(([id]) => !inScope.has(id)).map(([, agent]) => agent);
   if (paid.length === 0 && !(options.shown && options.shown.size > 0)) return null;
-  // A saved copy that is no longer its agent's node has no dot (review 7, L1).
-  const agentOf = new Map<string, PendingAgent>([...finished, ...placeholders].map(({ node, agent }) => [node.id, agent]));
+  // A replay's placeholders whose agents changed them after the run was saved
+  // (GM - Design on review 8 L-b): the replay sends the saved version, so it
+  // says so. Placeholders still being set up and ones finished meanwhile.
+  const changedByAgent = [...placeholders, ...finished].filter(({ node }) => options.changed?.has(node.id) === true);
+  const finishedChanged = new Set(finished.filter(({ node }) => options.changed?.has(node.id)).map(({ node }) => node.id));
+  // A saved copy that is no longer its agent's node has no dot (review 7, L1),
+  // nor does the saved version of one its agent changed and finished (GM:
+  // "the saved versions as muted rows").
+  const agentOf = new Map<string, PendingAgent>([...finished.filter(({ node }) => !finishedChanged.has(node.id)), ...placeholders]
+    .map(({ node, agent }) => [node.id, agent]));
   let anyMissing = false;
   const unlisted: string[] = [];
   const byInput: string[] = [];
@@ -308,6 +343,14 @@ export function placeholderRunConfirm(
   const leftLine = left.length === 0 ? null : left.length === 1
     ? `1 node ${leftWho} was setting up is no longer in this run.`
     : `${left.length} nodes ${leftWho} ${leftAgents.length === 1 ? 'was' : 'were'} setting up are no longer in this run.`;
+  // GM - Design on review 8 L-b, verbatim: "Codex changed this node after
+  // the run was saved. The replay uses the saved settings." and its forms.
+  let savedSentence: string | null = null;
+  if (changedByAgent.length > 0) {
+    const agents = agentNames(changedByAgent.map(({ agent }) => agent));
+    const these = changedByAgent.length === 1 ? 'this node' : 'these nodes';
+    savedSentence = `${agents.length === 1 ? agents[0] : 'The agents'} changed ${these} after the run was saved. The replay uses the saved settings.`;
+  }
   if (count > 0) {
     const agents = agentNames(placeholders.map(({ agent }) => agent));
     const one = agents.length === 1 ? agents[0] : null;
@@ -315,6 +358,11 @@ export function placeholderRunConfirm(
     intro = one
       ? `${one} hasn't finished ${count === 1 ? 'this, so its settings' : 'these, so their settings'} may not be final.`
       : `Agents haven't finished ${count === 1 ? 'this, so its settings' : 'these, so their settings'} may not be final.`;
+  } else if (finishedChanged.size > 0 && savedSentence) {
+    // A replay whose placeholders' agents finished them with other settings
+    // than the saved ones: the saved version runs (GM - Design on review 8 L-b).
+    heading = 'Replay the saved version?';
+    intro = savedSentence;
   } else if (finished.length > 0) {
     // No placeholder left: their agents finished them while the dialog was
     // open (GM - Design, round 6, copy answer to review 5 H1; round 7, item 1
@@ -341,6 +389,8 @@ export function placeholderRunConfirm(
   return {
     heading,
     intro,
+    // Under the still-setting-up heading's body, before the left line (GM).
+    savedLine: count > 0 ? savedSentence : null,
     // The heading already says they left: no second line under it.
     leftLine: count === 0 && finished.length === 0 ? null : leftLine,
     rows,

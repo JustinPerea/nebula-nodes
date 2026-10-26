@@ -5,6 +5,7 @@ import { useCanvasPinsStore } from '../store/canvasPinsStore';
 import { isBackendNodeId } from '../lib/canvasPins';
 import { floatingBottomLimit } from '../lib/bottomBar';
 import '../styles/panels.css';
+import { keyBlockedByModal } from '../lib/canvasShortcutScope';
 
 /** How close the menu may come to the window's edges. */
 const MENU_EDGE = 8;
@@ -58,7 +59,8 @@ export function ContextMenu() {
     }
 
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
+      // A modal dialog over the menu owns Escape (review 8, L-d).
+      if (e.key === 'Escape' && !keyBlockedByModal(menuRef.current)) {
         hideContextMenu();
       }
     }

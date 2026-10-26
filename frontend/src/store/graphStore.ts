@@ -37,6 +37,7 @@ import {
   recordRunSkip,
   sanitizeVariantScopes,
   snapshotWithLatestPaperSources,
+  sameRecipeParams,
   providerRecoveryWarningText,
   isWorldLabsRecoveryReplayBlocked,
   runIncludesFreshPaidWorldLabsStart,
@@ -1697,6 +1698,21 @@ const layoutWritesInFlight = new Map<string, number>();
 type WireWrite = { want: boolean; sending: number; agreed?: boolean; grace?: boolean };
 const wireWrites = new Map<string, WireWrite>();
 
+/**
+ * A written line on the canvas (review 7, L3): the canvas notice, except
+ * while it offers an agent's (or the person's) Undo or Redo; then the line
+ * goes beside it (`messageNotice`), so the button stays. Every writer of a
+ * plain line goes through here: notify, a refused wire, a held delete
+ * (review 8, L-d). `tone` as notify gives it; none keeps the notice's default.
+ */
+function noticeLine(state: Pick<GraphState, 'undoNotice'>, text: string, tone?: 'error' | 'info'): Partial<GraphState> {
+  const toned = tone ? { tone } : {};
+  return state.undoNotice?.offer
+    // No tone reads as a status in either place (CanvasUndoNotice's role).
+    ? { messageNotice: { id: ++undoNoticeSeq, text, tone: tone ?? 'info' } }
+    : { undoNotice: { id: ++undoNoticeSeq, text, offer: null, ...toned } };
+}
+
 /** Send one wire write (after `after`); a refusal puts the canvas back and says why. */
 function sendWire(edge: Edge, want: boolean, set: GraphSet, after?: Promise<unknown>): Promise<unknown> {
   const done = holdWire(edge, want);
@@ -1715,7 +1731,8 @@ function sendWire(edge: Edge, want: boolean, set: GraphSet, after?: Promise<unkn
     set((state) => ({
       edges: want ? state.edges.filter((e) => e.id !== edge.id)
         : state.edges.some((e) => edgeKey(e) === edgeKey(edge)) ? state.edges : [...state.edges, edge],
-      undoNotice: { id: ++undoNoticeSeq, text, offer: null },
+      // Beside an agent's Undo, never over it (review 8, L-d: through notify's rule).
+      ...noticeLine(state, text),
     }));
   }, (err) => {
     done(false);
@@ -2216,7 +2233,7 @@ function refuseHeldNodeDelete(state: GraphState, ids: string[], set: GraphSet): 
   if (held.length === 0) return false;
   // The backend's order: an unconfirmed start before a recovery record.
   const unlock = held.some((nodeId) => state.providerStartAmbiguities.some((ambiguity) => ambiguity.nodeId === nodeId));
-  set({ undoNotice: { id: ++undoNoticeSeq, text: heldDeleteText(ids.length, unlock, held.length), offer: null } });
+  set(noticeLine(state, heldDeleteText(ids.length, unlock, held.length)));
   return true;
 }
 
@@ -3548,8 +3565,9 @@ async function askDirectRun(
 
 /** The graph a direct run would send, as the canvas reads it for its cost and
  * dialog; for a replay, the saved nodes that are no longer their agent's
- * (snapshotCanvas `gone`, review 7 L1). */
-interface DirectRunGraph { nodes: Node<NodeData>[]; edges: Edge[]; gone?: ReadonlySet<string> }
+ * (snapshotCanvas `gone`, review 7 L1) and those whose live settings differ
+ * from the saved ones it sends (`changed`, GM - Design on review 8 L-b). */
+interface DirectRunGraph { nodes: Node<NodeData>[]; edges: Edge[]; gone?: ReadonlySet<string>; changed?: ReadonlySet<string> }
 
 /** How the dialog words this run: "Generate" from Cinema, a shot's name. */
 type DirectRunWording = Pick<PlaceholderRunOptions, 'verb' | 'names'>;
@@ -3582,7 +3600,8 @@ function confirmDirectRun(
 ): DirectRunConfirmed | null | Promise<DirectRunConfirmed | null> {
   const graph = read();
   if (!graph) return null;
-  const asked = directRunConfirm(graph.nodes, graph.edges, nodeId, passes, null, { verb, names, gone: graph.gone });
+  const asked = directRunConfirm(graph.nodes, graph.edges, nodeId, passes, null,
+    { verb, names, gone: graph.gone, changed: graph.changed });
   // No dialog: answered at once, so the caller starts its run in the same
   // turn (a second click can't slip in), as before.
   if (!asked) {
@@ -3639,7 +3658,8 @@ async function askUntilSettled(
   };
   const build = (graph: DirectRunGraph) => {
     remember(graph);
-    return directRunConfirm(graph.nodes, graph.edges, nodeId, passes, null, { ...wording, shown, gone: graph.gone });
+    return directRunConfirm(graph.nodes, graph.edges, nodeId, passes, null,
+      { ...wording, shown, gone: graph.gone, changed: graph.changed });
   };
   remember(firstGraph);
   const recompute = () => {
@@ -3746,7 +3766,7 @@ async function sendDirectRun<T>(
       if (!refusal || !stillOurs()) throw error;
       const nodes = withRefusalFlags(agreed.nodes, refusal);
       const model = directRunConfirm(nodes, agreed.edges, nodeId, passes, refusal.estimate,
-        { ...wording, shown: agreed.shown, gone: agreed.gone });
+        { ...wording, shown: agreed.shown, gone: agreed.gone, changed: agreed.changed });
       if (!model) throw error;
       withdraw();
       const shown = await askDirectRun({ ...model, confirmIds: [...refusal.placeholders].sort() }, placeholders !== undefined);
@@ -3844,14 +3864,22 @@ function oneShotCanvas(nodes: Node<NodeData>[], cinemaId: string, shotId: string
  * of the run, and an agent's placeholder there counts as one that left the
  * run, never as "finished". `names` keeps each node's name as the dialog
  * last showed it, for a node deleted since.
+ *
+ * GM - Design on review 8 L-b: a saved node whose live one is the same type
+ * with other settings is `changed`: the replay sends the saved settings, so
+ * an agent's placeholder there is worded as its saved version ("Replay the
+ * saved version?"), never as the agent's changes.
  */
 function snapshotCanvas(snapshot: RunGraphSnapshot, live: Node<NodeData>[], names = new Map<string, string>()): DirectRunGraph {
   const byId = new Map(live.map((node) => [node.id, node]));
   const gone = new Set<string>();
+  const changed = new Set<string>();
   const nodes = snapshot.nodes.map((saved) => {
     const now = byId.get(saved.id);
     const flag = now ? cleanPending(now.data.pending) : null;
     if (!flag && (!now || now.data.definitionId !== saved.definitionId)) gone.add(saved.id);
+    else if (now && now.data.definitionId === saved.definitionId
+      && !sameRecipeParams(saved.definitionId, saved.params, (now.data.params ?? {}) as Record<string, unknown>)) changed.add(saved.id);
     if (now) names.set(saved.id, now.data.label ?? '');
     return {
       id: saved.id, type: now?.type ?? 'model-node', position: now?.position ?? { x: 0, y: 0 },
@@ -3861,7 +3889,7 @@ function snapshotCanvas(snapshot: RunGraphSnapshot, live: Node<NodeData>[], name
   });
   const edges = snapshot.edges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target,
     sourceHandle: edge.sourceHandle ?? null, targetHandle: edge.targetHandle ?? null })) as Edge[];
-  return { nodes, edges, gone };
+  return { nodes, edges, gone, changed };
 }
 
 export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get) => ({
@@ -3912,9 +3940,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   dismissLateNotice: () => set({ lateNotice: null }),
   messageNotice: null,
   dismissMessageNotice: () => set({ messageNotice: null }),
-  notify: (text, tone = 'error') => set((state) => (state.undoNotice?.offer
-    ? { messageNotice: { id: ++undoNoticeSeq, text, tone } }
-    : { undoNotice: { id: ++undoNoticeSeq, text, offer: null, tone } })),
+  notify: (text, tone = 'error') => set((state) => noticeLine(state, text, tone)),
 
   // ---------------------------------------------------------------------------
   // Clipboard: copy/paste with UUID regeneration

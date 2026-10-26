@@ -16,6 +16,7 @@ import { ProviderReadinessBadge } from './ProviderReadinessBadge';
 import { ScrollFade } from './ScrollFade';
 import { floatingBottomLimit } from '../lib/bottomBar';
 import '../styles/canvas-next-steps.css';
+import { keyBlockedByModal } from '../lib/canvasShortcutScope';
 
 const CATEGORY_LABELS: Record<string, string> = {
   'image-gen': 'Image Generation',
@@ -105,7 +106,8 @@ export function ConnectionPopup() {
     }
 
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
+      // A modal dialog over the popup owns Escape (review 8, L-d).
+      if (e.key === 'Escape' && !keyBlockedByModal(menuRef.current)) {
         hideConnectionPopup();
         if (opener.current?.isConnected) opener.current.focus();
       }

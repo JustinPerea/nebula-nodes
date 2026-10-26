@@ -34,6 +34,30 @@ export function isModalDialogOpen(): boolean {
   return typeof document !== 'undefined' && document.querySelector('[aria-modal="true"]') !== null;
 }
 
+/** The modal dialog on top: the last one on the page (dialogs portal to the
+ * end of the page in the order they open), or null. */
+function topModalDialog(): Element | null {
+  if (typeof document === 'undefined') return null;
+  const open = document.querySelectorAll('[aria-modal="true"]');
+  return open.length > 0 ? open[open.length - 1] : null;
+}
+
+/**
+ * Whether a document- or window-wide key listener yields because a modal
+ * dialog is open (review 8, L-d: one guard for every one of them, so no key
+ * acts behind an open dialog, focus on the page included). With no `owner`
+ * (the canvas, Moodboard Studio, the video editors, the rail), any open modal
+ * dialog blocks it. With one (a dialog's or a popup's own Escape, Tab or
+ * arrows: the element it belongs to), only a modal dialog on top that isn't
+ * its own does: its own is the one it sits in, or the one it holds (the
+ * tour's overlay holds its modal card).
+ */
+export function keyBlockedByModal(owner?: Element | null): boolean {
+  const top = topModalDialog();
+  if (!top) return false;
+  return !(owner && (top.contains(owner) || owner.contains(top)));
+}
+
 export function isCanvasShortcutTarget(target: EventTarget | null): boolean {
   if (isModalDialogOpen()) return false;
   if (!(target instanceof Element)) return true;

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ONBOARDING_HELP_SELECTOR, ONBOARDING_TOUR, placeOnboardingTooltip, type OnboardingPlacement } from '../../lib/onboarding';
 import { useUIStore } from '../../store/uiStore';
 import './onboarding.css';
+import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
 
 const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -60,6 +61,8 @@ export function OnboardingOverlay() {
     document.addEventListener('focusin', containFocus);
     const containUnfocusedKey = (event: globalThis.KeyboardEvent) => {
       if (event.target instanceof Node && overlay.contains(event.target)) return;
+      // A modal dialog opened over the tour owns the keys (review 8, L-d).
+      if (keyBlockedByModal(overlay)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       if (event.key === 'Escape') finish();

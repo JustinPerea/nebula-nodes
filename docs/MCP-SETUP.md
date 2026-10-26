@@ -1392,7 +1392,10 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   from Run history), the canvas always asks first (whatever "Ask before
   costly runs" is set to), in one dialog that replaces the costly-run
   confirm: "Run 2 nodes Codex is still setting up?", a row per paid
-  placeholder with its agent's dot ("“Hero still” · FLUX · $0.04", "price
+  placeholder with its agent's dot ("“Hero still” · FLUX · $0.04"; a node
+  whose model is a free-text param names the chosen model as its card
+  shows it, "“Writer” · openai/gpt-4o-mini · price not listed", so a switch
+  to another model is a changed row; a Meshy node names its Model option), "price
   not listed", "price depends on its input" while an input's size is
   measured, "on your Krea plan"), then a muted row with no dot for every
   other paid node in the run ("“Shot 1” · Nano Banana · $0.07"), so every
@@ -1438,7 +1441,15 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   turned into another type and finished, counts as one that left (never
   "finished"), and its saved copy runs as a muted row priced in the total;
   one still a placeholder under another type is asked about, as Nebula
-  does (it reads placeholders by id). If anything changed by the time the
+  does (it reads placeholders by id). A placeholder its agent changed after
+  the run was saved (same type, other settings) runs at its saved settings,
+  so the dialog says so: "Replay the saved version?" / "Codex changed this
+  node after the run was saved. The replay uses the saved settings." ("…
+  these nodes …"; several agents, "The agents changed …"), with the saved
+  version as a muted row; if placeholders are still being set up, the
+  still-setting-up heading stays and that sentence goes under its body,
+  before the left line. One finished with the saved settings reads "Run
+  with Codex's changes?" as above. If anything changed by the time the
   person clicks, it asks again over the new run; a run with no placeholder
   left goes ahead without asking again only if its total is no higher than
   the one the person saw, every row in it was on screen exactly as it is
@@ -1453,8 +1464,10 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   that arrives while "Codex changed the canvas" offers its Undo shows above
   it and leaves the Undo in place. While the dialog is open, focus stays in
   it (if the rows stop scrolling while they have focus, focus moves to
-  Cancel) and no canvas shortcut acts behind it: not Cmd+Enter, Cmd+K, Cmd+O
-  or any other, wherever focus is (the same for every modal dialog).
+  Cancel) and no key acts behind it: not Cmd+Enter, Delete or Backspace,
+  Cmd+K, Cmd+O or any other canvas shortcut, nor Moodboard Studio's or the
+  video editors' keys, wherever focus is (the same for every modal dialog,
+  the keyboard shortcuts and the mask painter included).
   The costly-run setting's browser confirm never follows it.
   `/api/execute-node` and `/api/cinema/generate-shot` enforce it: the
   person's run carries `confirmedPlaceholders` (exactly those paid
@@ -1503,8 +1516,11 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   it, which is `skipped` with reason "changed since"). An agent's restore
   never sets or clears one otherwise.
 - **The run mark:** while a run an agent started is on a node, the canvas
-  shows that agent's pill above it ("Running FLUX.2 [pro] · 0:41", or a
-  node name in quotes, "Running “Text Input” · 0:03", once the run has
+  shows that agent's pill above it ("Running FLUX.2 [pro] · 0:41": the
+  chosen Model option, or the model id a free-text model param names, such
+  as "openai/gpt-4o-mini" or a fal endpoint; else the node name in quotes,
+  "Running “Text Input” · 0:03"; the person's paid-placeholder dialog names
+  a row's model the same way), once the run has
   gone 1 s; `model` carries the quotes), from
   `agentRun` socket events (`change`: started or ended, with `agent`,
   `runId`, `nodeId`, `model`, `projectId`, `secondsAgo`). A status line on

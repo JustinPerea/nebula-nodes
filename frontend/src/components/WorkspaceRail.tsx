@@ -13,6 +13,7 @@ import { useUIStore, type LeftDock } from '../store/uiStore';
 import type { OnboardingTarget } from '../lib/onboarding';
 import { COMMAND_PALETTE_OPEN_EVENT } from '../lib/commandPaletteKeys';
 import '../styles/workspace-rail.css';
+import { keyBlockedByModal } from '../lib/canvasShortcutScope';
 
 interface RailItemProps {
   label: string;
@@ -78,7 +79,9 @@ export function WorkspaceRail() {
   useEffect(() => {
     function onEscape(event: KeyboardEvent) {
       if (event.key !== 'Escape' || event.defaultPrevented || !useUIStore.getState().leftDock) return;
-      if (document.querySelector('[role="dialog"], .command-palette, .context-menu, .connection-popup')) return;
+      // Any open dialog, menu or popup owns Escape; a modal one (an
+      // alertdialog too) wherever focus is (review 8, L-d).
+      if (keyBlockedByModal() || document.querySelector('[role="dialog"], .command-palette, .context-menu, .connection-popup')) return;
       useUIStore.getState().setLeftDock(null);
     }
     document.addEventListener('keydown', onEscape);

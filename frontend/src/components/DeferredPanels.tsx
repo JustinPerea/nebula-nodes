@@ -18,6 +18,7 @@ import { CHAT_SEND_EVENT, type ChatSendDetail } from '../lib/chatSend';
 import { COMMAND_PALETTE_OPEN_EVENT, isPaletteHotkey, paletteOpenRequestApplies } from '../lib/commandPaletteKeys';
 import { dropIntent, heldIntent, holdIntent, isIntentClaimed } from '../lib/heldIntents';
 import { DeferredBoundary } from './DeferredBoundary';
+import { useMaskPainterDialog } from './panels/maskPainterDialog';
 import { CONNECTION_LOST_SHORT_COPY } from '../lib/errorCopy';
 
 /**
@@ -144,8 +145,9 @@ export function ConnectionPopup() {
  * Paint Mask mounts it afresh, which fetches again too.
  */
 function MaskPainterShell({ children, onClose, busy = false }: { children: ReactNode; onClose: () => void; busy?: boolean }) {
+  const dialog = useMaskPainterDialog(onClose);
   return (
-    <div className="mask-painter__overlay" role="dialog" aria-label="Mask painter" aria-busy={busy || undefined}>
+    <div {...dialog} className="mask-painter__overlay" role="dialog" aria-modal="true" aria-label="Mask painter" aria-busy={busy || undefined}>
       <div className="mask-painter__panel">
         <div className="mask-painter__header">
           <span className="mask-painter__title">Paint Mask</span>

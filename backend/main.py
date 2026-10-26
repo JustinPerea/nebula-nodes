@@ -10361,16 +10361,28 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
 # identified agent starts, on any route, are kept in agent_runs while they
 # go (services/run_done_cards.py); the person's runs get neither.
 
+# The params that pick the model a node runs (review 8, L-a), the same on the
+# canvas (lib/placeholderRunConfirm.ts MODEL_SELECT_KEYS / MODEL_TEXT_KEYS):
+# a select labelled Model names its chosen option; a free-text one names the
+# model id typed or picked, as the node card shows it.
+_MODEL_SELECT_KEYS = ("model", "model_id", "ai_model")
+_MODEL_TEXT_KEYS = ("model", "model_id", "endpoint_id")
+
+
 def _run_model_name(node: GraphNode) -> str:
     """The model a running node shows on its mark, in the provider's own
     spelling ("FLUX.2 [pro]"): the label of the node's chosen model option,
-    a universal node's model id, else the node's name, quoted (GM - Design,
-    2026-10-25: "A node name in the run pill is quoted: Running “Text
-    Input” · 0:00 ... Provider model names stay unquoted")."""
+    the model id a free-text model param names (a universal node's model,
+    fal's endpoint, Krea Agent's model), else the node's name, quoted (GM -
+    Design, 2026-10-25: "A node name in the run pill is quoted: Running “Text
+    Input” · 0:00 ... Provider model names stay unquoted"). The person's
+    paid-placeholder dialog names a row's model the same way."""
     definition = node_registry.get(node.definition_id) or {}
     params = node.params or {}
-    for spec in [*(definition.get("params") or []), *(definition.get("sharedParams") or [])]:
-        if not isinstance(spec, dict) or spec.get("key") not in ("model", "model_id") or spec.get("type") != "enum":
+    specs = [spec for spec in [*(definition.get("params") or []), *(definition.get("sharedParams") or [])]
+             if isinstance(spec, dict)]
+    for spec in specs:
+        if spec.get("key") not in _MODEL_SELECT_KEYS or spec.get("type") != "enum":
             continue
         value = params.get(spec["key"], spec.get("default"))
         for option in spec.get("options") or []:
@@ -10380,6 +10392,12 @@ def _run_model_name(node: GraphNode) -> str:
         model = universal_ports.model_of(node.definition_id, params)
         if model:
             return str(model)[:80]
+    for spec in specs:
+        if spec.get("key") not in _MODEL_TEXT_KEYS or spec.get("type") != "string":
+            continue
+        value = params.get(spec["key"], spec.get("default"))
+        if isinstance(value, str) and value.strip():
+            return value.strip()[:80]
     return f"“{str(definition.get('displayName') or node.definition_id)[:78]}”"
 
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Brush, Eraser, Trash2, X } from 'lucide-react';
 import '../../styles/mask-painter.css';
+import { useMaskPainterDialog } from './maskPainterDialog';
 
 /** Mask Painter modal — paints WHITE strokes on a transparent canvas over the
  *  upstream image, exported as a white-on-black PNG data URI at the image's
@@ -31,6 +32,7 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
   const [brushSize, setBrushSize] = useState(48);
   const [hasStrokes, setHasStrokes] = useState(false);
   const drawingRef = useRef(false);
+  const dialog = useMaskPainterDialog(onClose);
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
 
   // Load the image to learn its natural size (the canvas paints at full res).
@@ -158,7 +160,7 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
   })();
 
   return (
-    <div className="mask-painter__overlay" role="dialog" aria-label="Mask painter">
+    <div {...dialog} className="mask-painter__overlay" role="dialog" aria-modal="true" aria-label="Mask painter">
       <div className="mask-painter__panel">
         <div className="mask-painter__header">
           <span className="mask-painter__title">Paint Mask</span>

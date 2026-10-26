@@ -14,6 +14,7 @@ import { downloadWorldAsset, worldAssetFilename } from '../../lib/worldDownload'
 import { oneLine, requestError, requestSucceeded, FailureNotice, failureMessage } from '../../lib/errorCopy';
 import { isSafeWorldUrl } from '../../lib/worldValue';
 import { isSplatExport, meshFormatLabel } from '../../lib/meshFormat';
+import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
 
 interface MeshPreviewProps {
   src: string;
@@ -215,6 +216,8 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closeRef.current?.focus({ preventScroll: true });
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      // A modal dialog opened over the preview owns the keys (review 8, L-d).
+      if (keyBlockedByModal(dialogRef.current)) return;
       if (e.key === 'Escape') {
         e.preventDefault();
         handleClose();
