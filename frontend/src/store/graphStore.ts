@@ -95,7 +95,7 @@ import { useUIStore } from './uiStore';
 import { usePricingStore } from './pricingStore';
 import { useInputSizeStore } from './inputSizeStore';
 import { useStoredAssetsStore } from './storedAssetsStore';
-import { runCostConfirmMessage, shouldConfirmRunCost, summarizeRunScope, type RunScope } from '../lib/runScope';
+import { repeatRun, runCostConfirmMessage, shouldConfirmRunCost, summarizeRunScope, type RunScope } from '../lib/runScope';
 import { placeholderRunConfirm, type PlaceholderRunConfirm } from '../lib/placeholderRunConfirm';
 import { placeholderRunDialogModule } from '../lib/placeholderRunDialogModule';
 import { useCreateDraftStore } from './createDraftStore';
@@ -2440,6 +2440,27 @@ async function executeHistoricalRun(
     return;
   }
 
+  // A replay of a node's run or a shot is the person's direct run again
+  // (Q133; review 3, finding 7): the placeholders still feeding it run, so a
+  // paid one asks first in GM's dialog over what the replay sends, and the
+  // replay carries the confirmation (the backend refuses it without). A
+  // whole-canvas replay skips them. Replays never asked the costly-run
+  // question, and still don't.
+  const directTarget = source.cinemaShot?.nodeId ?? targetNodeId;
+  let agreed: DirectRunConfirmed | null = null;
+  if (directTarget) {
+    let first = true;
+    const shot = source.cinemaShot;
+    const answer = confirmDirectRun(() => {
+      if (!first && (get().isExecuting || get().isImportingGraph)) return null;
+      first = false;
+      const graph = snapshotCanvas(snapshot, get().nodes);
+      return shot ? { nodes: oneShotCanvas(graph.nodes, shot.nodeId, shot.shotId), edges: graph.edges } : graph;
+    }, directTarget, { passes: shot?.variations ?? 1, costly: false });
+    agreed = answer instanceof Promise ? await answer : answer;
+    if (!agreed) return;
+  }
+
   resetExecution();
   const runId = uuidv4();
   const scopeIds = snapshotExecutionScopeIds(snapshot, targetNodeId);
@@ -2469,9 +2490,11 @@ async function executeHistoricalRun(
     const result = source.cinemaShot
       ? await apiGenerateShot(snapshot.nodes, snapshot.edges.map((edge) => ({ ...edge,
         sourceHandle: edge.sourceHandle, targetHandle: edge.targetHandle })), source.cinemaShot.nodeId,
-        source.cinemaShot.shotId, source.cinemaShot.seed, source.cinemaShot.variations, runId)
+        source.cinemaShot.shotId, source.cinemaShot.seed, source.cinemaShot.variations, runId,
+        agreed?.confirmedPlaceholders, agreed?.confirmedCost)
       : targetNodeId
-      ? await apiExecuteNode(snapshot.nodes, snapshot.edges, targetNodeId, runId, true)
+      ? await apiExecuteNode(snapshot.nodes, snapshot.edges, targetNodeId, runId, true, undefined,
+        agreed?.confirmedPlaceholders, agreed?.confirmedCost)
       : await apiExecuteGraph(snapshot.nodes, snapshot.edges, runId, true);
     pendingStartRunIds.delete(runId);
     announcePendingSkips(result);
@@ -3376,13 +3399,14 @@ currentRunId = initialRunHistory.find((record) => record.status === 'running' &&
 
 /** Asks before a run whose list-price estimate reaches the user's threshold
  * (Settings > Interface). Every run path goes through the execute actions,
- * so the check lives here rather than on each button. Unpriced runs pass. */
-function confirmRunCost(nodes: Node<NodeData>[], edges: Edge[], scope: RunScope): boolean {
+ * so the check lives here rather than on each button. Unpriced runs pass.
+ * `passes`: the run done that many times (a Cinema shot's variations). */
+function confirmRunCost(nodes: Node<NodeData>[], edges: Edge[], scope: RunScope, passes = 1): boolean {
   const pricing = usePricingStore.getState().table;
   if (!pricing || typeof window === 'undefined') return true;
   const { runCostConfirmUsd, settingsCache } = useUIStore.getState();
-  const summary = summarizeRunScope(nodes, edges, scope,
-    { pricing, apiKeys: settingsCache.apiKeys, sizes: useInputSizeStore.getState().sizes });
+  const summary = repeatRun(summarizeRunScope(nodes, edges, scope,
+    { pricing, apiKeys: settingsCache.apiKeys, sizes: useInputSizeStore.getState().sizes }), passes);
   if (!shouldConfirmRunCost(summary, runCostConfirmUsd)) return true;
   return window.confirm(runCostConfirmMessage(summary));
 }
@@ -3395,12 +3419,12 @@ function confirmRunCost(nodes: Node<NodeData>[], edges: Edge[], scope: RunScope)
  * words, or null when no paid placeholder is in the run (then the costly-run
  * confirm applies as before).
  */
-function directRunConfirm(nodes: Node<NodeData>[], edges: Edge[], nodeId: string): PlaceholderRunConfirm | null {
+function directRunConfirm(nodes: Node<NodeData>[], edges: Edge[], nodeId: string, passes = 1): PlaceholderRunConfirm | null {
   if (typeof window === 'undefined') return null;
   const pricing = usePricingStore.getState().table;
   const { settingsCache } = useUIStore.getState();
-  const summary = summarizeRunScope(nodes, edges, { kind: 'node', nodeId },
-    pricing ? { pricing, apiKeys: settingsCache.apiKeys, sizes: useInputSizeStore.getState().sizes } : undefined);
+  const summary = repeatRun(summarizeRunScope(nodes, edges, { kind: 'node', nodeId },
+    pricing ? { pricing, apiKeys: settingsCache.apiKeys, sizes: useInputSizeStore.getState().sizes } : undefined), passes);
   return placeholderRunConfirm(nodes, edges, nodeId, summary);
 }
 
@@ -3413,6 +3437,103 @@ async function askDirectRun(model: PlaceholderRunConfirm): Promise<boolean> {
     console.error("Couldn't open the run confirmation:", error);
     return false;
   }
+}
+
+/** The graph a direct run would send, as the canvas reads it for its cost and dialog. */
+interface DirectRunGraph { nodes: Node<NodeData>[]; edges: Edge[] }
+
+/** What the person agreed to: the graph to run as it stood after the last
+ * question, and, when the dialog asked, the placeholders and total confirmed. */
+interface DirectRunConfirmed extends DirectRunGraph {
+  confirmedPlaceholders?: string[];
+  confirmedCost?: number;
+}
+
+/**
+ * Every way the canvas starts the person's direct run of a node (its Run,
+ * the Inspector, a Cinema shot, a replay from Run history) asks here
+ * (Q133; review 3 findings 1, 2 and 7). `read` is the graph that run would
+ * send now, re-read after each question (an agent may have changed it while
+ * the dialog was open), or null when the run can no longer start. A paid
+ * placeholder asks in GM's dialog; the person's Run re-reads the graph and,
+ * when anything the dialog said (each row's model and price, the total, the
+ * free line, the button) changed, asks again over the new one. When no paid
+ * placeholder is left, the costly-run confirm decides (`costly`; replays
+ * never asked it). Null: the person said no, or the run can't start.
+ */
+function confirmDirectRun(
+  read: () => DirectRunGraph | null,
+  nodeId: string,
+  { passes = 1, costly = true }: { passes?: number; costly?: boolean } = {},
+): DirectRunConfirmed | null | Promise<DirectRunConfirmed | null> {
+  const graph = read();
+  if (!graph) return null;
+  const costlyOk = (current: DirectRunGraph) =>
+    !costly || confirmRunCost(current.nodes, current.edges, { kind: 'node', nodeId }, passes);
+  const asked = directRunConfirm(graph.nodes, graph.edges, nodeId, passes);
+  // No dialog: answered at once, so the caller starts its run in the same
+  // turn (a second click can't slip in), as before.
+  if (!asked) return costlyOk(graph) ? graph : null;
+  return askUntilSettled(read, nodeId, asked, passes, costlyOk);
+}
+
+async function askUntilSettled(
+  read: () => DirectRunGraph | null,
+  nodeId: string,
+  first: PlaceholderRunConfirm,
+  passes: number,
+  costlyOk: (graph: DirectRunGraph) => boolean,
+): Promise<DirectRunConfirmed | null> {
+  let asked = first;
+  let graph: DirectRunGraph | null;
+  for (;;) {
+    if (!await askDirectRun(asked)) return null;
+    graph = read();
+    if (!graph) return null;
+    const now = directRunConfirm(graph.nodes, graph.edges, nodeId, passes);
+    // No paid placeholder left (an agent made them normal): the run is an
+    // ordinary direct run now, so the costly-run setting decides over it.
+    if (!now) return costlyOk(graph) ? graph : null;
+    if (JSON.stringify(now) === JSON.stringify(asked)) {
+      return { ...graph, confirmedPlaceholders: now.confirmIds, confirmedCost: now.confirmCost ?? undefined };
+    }
+    asked = now;
+  }
+}
+
+/** The scene with only `shotId` in it: what a Cinema shot runs and is priced
+ * as (backend main.generate_cinema_shot runs a single-shot copy). */
+function oneShotCanvas(nodes: Node<NodeData>[], cinemaId: string, shotId: string): Node<NodeData>[] {
+  return nodes.map((node) => {
+    if (node.id !== cinemaId) return node;
+    const params = (node.data.params ?? {}) as Record<string, unknown>;
+    const scene = params.scene as CinemaSceneSpec | undefined;
+    if (!scene || !Array.isArray(scene.shots)) return node;
+    return { ...node, data: { ...node.data,
+      params: { ...params, scene: { ...scene, shots: scene.shots.filter((shot) => shot.id === shotId) } } } };
+  });
+}
+
+/**
+ * A saved run's snapshot as canvas nodes for its cost and dialog: what the
+ * replay sends (its params, its connections), with the live canvas's names
+ * and placeholder flags, since the backend reads which nodes are still
+ * placeholders from the canvas as it is now (main._skip_placeholders).
+ */
+function snapshotCanvas(snapshot: RunGraphSnapshot, live: Node<NodeData>[]): DirectRunGraph {
+  const byId = new Map(live.map((node) => [node.id, node]));
+  const nodes = snapshot.nodes.map((saved) => {
+    const now = byId.get(saved.id);
+    const flag = now && now.data.definitionId === saved.definitionId ? cleanPending(now.data.pending) : null;
+    return {
+      id: saved.id, type: now?.type ?? 'model-node', position: now?.position ?? { x: 0, y: 0 },
+      data: { definitionId: saved.definitionId, label: now?.data.label ?? '', params: saved.params,
+        state: 'idle', outputs: {}, ...(flag ? { pending: flag } : {}) },
+    } as Node<NodeData>;
+  });
+  const edges = snapshot.edges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target,
+    sourceHandle: edge.sourceHandle ?? null, targetHandle: edge.targetHandle ?? null })) as Edge[];
+  return { nodes, edges };
 }
 
 export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get) => ({
@@ -5015,25 +5136,21 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // The person's direct run over agents' paid placeholders always asks
     // first, in one dialog in place of the costly-run confirm (Q133); the
     // run sends the ones confirmed, and the backend refuses it without them.
-    let placeholderConfirm = options?.approvalId ? null : directRunConfirm(nodes, edges, nodeId);
-    let runNodes = nodes;
-    let runEdges = edges;
-    let confirmedPlaceholders: string[] | undefined;
-    if (!placeholderConfirm && !confirmRunCost(nodes, edges, { kind: 'node', nodeId, direct: !options?.approvalId })) return;
-    while (placeholderConfirm) {
-      if (!await askDirectRun(placeholderConfirm)) return;
-      // The dialog waited for the person: another run may have started, and
-      // an agent may have changed its placeholders. Ask again over new ones.
-      if (get().isExecuting || get().isImportingGraph) return;
-      ({ nodes: runNodes, edges: runEdges } = get());
-      const now = directRunConfirm(runNodes, runEdges, nodeId);
-      if (!now) break;
-      if (now.confirmIds.join('\n') === placeholderConfirm.confirmIds.join('\n')) {
-        confirmedPlaceholders = now.confirmIds;
-        break;
-      }
-      placeholderConfirm = now;
+    let agreed: DirectRunConfirmed | null;
+    if (options?.approvalId) {
+      agreed = confirmRunCost(nodes, edges, { kind: 'node', nodeId, direct: false }) ? { nodes, edges } : null;
+    } else {
+      // The dialog waits for the person: another run may start meanwhile.
+      let first = true;
+      const answer = confirmDirectRun(() => {
+        if (!first && (get().isExecuting || get().isImportingGraph)) return null;
+        first = false;
+        return { nodes: get().nodes, edges: get().edges };
+      }, nodeId);
+      agreed = answer instanceof Promise ? await answer : answer;
     }
+    if (!agreed) return;
+    const { nodes: runNodes, edges: runEdges, confirmedPlaceholders, confirmedCost } = agreed;
     resetExecution();
     const snapshot = captureRunSnapshot(runNodes, runEdges);
     const heldStart = blockedProviderStart(
@@ -5065,7 +5182,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     pendingStartRunIds.add(runId);
     try {
       const result = await apiExecuteNode(snapshot.nodes, snapshot.edges, nodeId, runId, undefined, options?.approvalId,
-        confirmedPlaceholders);
+        confirmedPlaceholders, confirmedCost);
       pendingStartRunIds.delete(runId);
       announcePendingSkips(result);
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
@@ -5117,19 +5234,36 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   },
 
   executeShot: async (nodeId, shotId, seed, variations) => {
-    const { nodes, edges } = get();
-    // Check IDs before looking at the live graph: deleting a node cannot erase
+    // The shot as the live graph holds it, or null when it can't start: check
+    // IDs before looking at the live graph, so deleting a node cannot erase
     // its outstanding owner and allow a second paid launch for that same shot.
-    if (get().isShotAdmissionBlocked(nodeId, shotId)) return;
-    const node = nodes.find((n) => n.id === nodeId);
-    if (!node || node.data.definitionId !== 'cinema-scene') return;
-    const scene = (node.data.params as { scene?: CinemaSceneSpec }).scene;
-    if (!scene || !Array.isArray(scene.shots)) return;
-    const shot = scene.shots.find((s) => s.id === shotId);
-    if (!shot) return;
-    // The shot's own 'running' status doubles as the in-flight guard — no global
-    // isExecuting lock, so other shots (and the rest of the canvas) stay usable.
-    if (shot.output?.status === 'running') return;
+    // The shot's own 'running' status doubles as the in-flight guard — no
+    // global isExecuting lock, so other shots (and the rest of the canvas)
+    // stay usable.
+    const admissible = () => {
+      if (get().isShotAdmissionBlocked(nodeId, shotId)) return null;
+      const { nodes: liveNodes, edges: liveEdges } = get();
+      const liveNode = liveNodes.find((n) => n.id === nodeId);
+      if (!liveNode || liveNode.data.definitionId !== 'cinema-scene') return null;
+      const liveScene = (liveNode.data.params as { scene?: CinemaSceneSpec }).scene;
+      if (!liveScene || !Array.isArray(liveScene.shots)) return null;
+      const liveShot = liveScene.shots.find((s) => s.id === shotId);
+      if (!liveShot || liveShot.output?.status === 'running') return null;
+      return { nodes: liveNodes, edges: liveEdges, scene: liveScene, shot: liveShot };
+    };
+    let live = admissible();
+    if (!live) return;
+    // A shot is the person's direct run of the scene (Q133; review 3, finding
+    // 1): a paid placeholder feeding it asks first in GM's dialog, else the
+    // costly-run setting decides, priced as the one shot it generates times
+    // its variations (each a full pass), as the backend checks it.
+    const answer = confirmDirectRun(() => {
+      live = admissible();
+      return live && { nodes: oneShotCanvas(live.nodes, nodeId, shotId), edges: live.edges };
+    }, nodeId, { passes: variations ?? 1 });
+    const agreed = answer instanceof Promise ? await answer : answer;
+    if (!agreed || !live) return;
+    const { nodes, edges, scene, shot } = live;
 
     // Helper to patch just this one shot's output, leaving siblings untouched.
     const patchShot = (
@@ -5183,7 +5317,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       cinemaShot: { nodeId, shotId, seed, variations },
     })) }));
     try {
-      const result = await apiGenerateShot(graphNodes, graphEdges, nodeId, shotId, seed, variations, runId);
+      const result = await apiGenerateShot(graphNodes, graphEdges, nodeId, shotId, seed, variations, runId,
+        agreed.confirmedPlaceholders, agreed.confirmedCost);
       pendingStartRunIds.delete(runId);
       if (!ownsRun(runId)) return;
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;

@@ -170,8 +170,9 @@ def build_inverse(before: Mapping[str, Any], nodes: Mapping[str, dict[str, Any]]
         "moved": [],
         "removed": [copy.deepcopy(node) for node in before["removed"] if node["id"] not in nodes],
         "removedWires": sorted(wires_before - wires_after),
-        # Placeholders the edit made ready: undo makes them placeholders again.
-        "ready": [{"id": node_id, "pending": copy.deepcopy(flag)}
+        # Placeholders the edit made ready: undo makes them placeholders again,
+        # but only while the node is as the edit left it (_ready_changed_since).
+        "ready": [{"id": node_id, "pending": copy.deepcopy(flag), **_ready_state(nodes[node_id], node_id, edges)}
                   for node_id, flag in (before.get("ready") or {}).items()
                   if node_id in nodes and not pending_nodes.is_pending(nodes[node_id])],
     }
@@ -192,6 +193,40 @@ def build_inverse(before: Mapping[str, Any], nodes: Mapping[str, dict[str, Any]]
     if not any(inverse.values()):
         return None
     return inverse
+
+
+def _node_wires(node_id: str, edges: list[dict[str, Any]] | set[Wire]) -> list[list[str]]:
+    """The connections to and from a node, sorted."""
+    wires = edges if isinstance(edges, set) else {wire_key(edge) for edge in edges}
+    return sorted(list(wire) for wire in wires if node_id in (wire[0], wire[2]))
+
+
+def _ready_state(node: Mapping[str, Any], node_id: str, edges: list[dict[str, Any]]) -> dict[str, Any]:
+    """A node as an agent's ``pending: false`` left it: what the person
+    changing since would change (GM: "the person edits it (params, label,
+    wiring, a real move)" turns it normal), so the agent's undo can tell."""
+    return {
+        "definitionId": str(node.get("definitionId") or ""),
+        "params": copy.deepcopy(node.get("params") or {}),
+        "label": node.get("label") or None,
+        "position": _point(node.get("position")),
+        "wires": _node_wires(node_id, edges),
+    }
+
+
+def _ready_changed_since(ready: Mapping[str, Any], now: Mapping[str, Any], wires: set[Wire]) -> bool:
+    """Whether a node an agent made ready was changed since (params, name, a
+    move, a connection to or from it), by anyone. An entry kept before these
+    fields were (none survives a restart) compares nothing."""
+    node_id = str(ready["id"])
+    if "params" in ready and (authored(str(ready.get("definitionId") or ""), now.get("params") or {})
+                              != authored(str(ready.get("definitionId") or ""), ready["params"])):
+        return True
+    if "label" in ready and (now.get("label") or None) != ready["label"]:
+        return True
+    if "position" in ready and ready["position"] is not None and _point(now.get("position")) != ready["position"]:
+        return True
+    return "wires" in ready and _node_wires(node_id, wires) != [list(wire) for wire in ready["wires"]]
 
 
 def describe(inverse: Mapping[str, Any]) -> str:
@@ -432,8 +467,10 @@ def plan_undo(
         item(node_id)["position"] = dict(move["before"])
 
     # Placeholders the edit made ready turn placeholders again, unless the
-    # node is one again already or someone else ran it since (a run makes a
-    # placeholder normal for good).
+    # node is one again already, someone else ran it since (a run makes a
+    # placeholder normal for good), or it changed since: the person's edit
+    # made it theirs (GM: "turns normal ... on any edit by the person"), and
+    # undo never takes that back, as for params, names and moves.
     for ready in inverse.get("ready") or []:
         node_id = ready["id"]
         now = nodes.get(node_id)
@@ -441,6 +478,10 @@ def plan_undo(
             continue
         if node_id in ran:
             leave(node_id, "placeholder")
+            continue
+        if _ready_changed_since(ready, now, current_wires):
+            skipped.append({"nodeId": node_id, "part": "placeholder", "reason": "changed since",
+                            "message": f"{node_id} changed since, so it stays a normal node"})
             continue
         item(node_id)["pending"] = copy.deepcopy(ready["pending"])
 

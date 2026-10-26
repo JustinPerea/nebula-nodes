@@ -168,13 +168,21 @@ export async function executeNode(
    * components/PlaceholderRunDialog.tsx): the backend refuses the person's
    * direct run over any without exactly these. */
   confirmedPlaceholders?: string[],
+  /** The upper total (USD) that dialog showed: the backend refuses a run it prices higher. */
+  confirmedCost?: number,
 ): Promise<ExecutionStartResult> {
   const response = await startRequest("Couldn't run the node.", '/api/execute-node', {
     nodes, edges, targetNodeId, runId,
     ...(preserveGraphParams ? { preserveGraphParams } : {}), ...(approvalId ? { approvalId } : {}),
-    ...(confirmedPlaceholders?.length ? { confirmedPlaceholders } : {}),
+    ...confirmedFields(confirmedPlaceholders, confirmedCost),
   });
   return response.json();
+}
+
+/** What the person confirmed in the placeholder dialog, for the run's body. */
+function confirmedFields(placeholders?: string[], cost?: number): Record<string, unknown> {
+  if (!placeholders?.length) return {};
+  return { confirmedPlaceholders: placeholders, ...(typeof cost === 'number' && Number.isFinite(cost) ? { confirmedCost: cost } : {}) };
 }
 
 export async function generateCinemaShot(
@@ -185,9 +193,12 @@ export async function generateCinemaShot(
   seed?: number,
   variations?: number,
   runId?: string,
+  /** A shot is the person's direct run of the scene (Q133): as executeNode. */
+  confirmedPlaceholders?: string[],
+  confirmedCost?: number,
 ): Promise<{ status: string; shotId?: string; variations?: number; errorCount?: number; errors?: ExecutionValidationError[] }> {
   const response = await startRequest("Couldn't start the shot.", '/api/cinema/generate-shot',
-    { nodes, edges, nodeId, shotId, seed, variations, runId });
+    { nodes, edges, nodeId, shotId, seed, variations, runId, ...confirmedFields(confirmedPlaceholders, confirmedCost) });
   return response.json();
 }
 

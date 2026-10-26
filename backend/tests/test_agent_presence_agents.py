@@ -50,10 +50,12 @@ def test_edit_canvas_takes_pending_and_says_what_it_does():
     assert "node_ids" in doc and "run" in doc.lower()
 
 
-def test_the_instructions_mention_pending_within_the_budget():
-    text = mcp_server.INSTRUCTIONS
-    assert "pending" in text
-    assert len(text) <= 3000
+def test_pending_lives_in_edit_canvas_and_the_instructions_keep_their_headroom():
+    """Review 3: the step-2 clause on `pending` pushed the first-turn text to
+    3,039 of its 3,000 characters. edit_canvas's docstring says what
+    `pending` does (the test above); the instructions keep 40 to spare."""
+    assert "`pending`" not in mcp_server.INSTRUCTIONS
+    assert len(mcp_server.mcp.instructions) <= 3000 - 40
 
 
 def test_edit_canvas_pending_over_mcp(tools):

@@ -229,6 +229,9 @@ export interface ProposalView {
     /** Run nodes that can't run here as set up, when the proposal was made
      * (backend main._not_ready_nodes, in find_nodes' words). Accept still runs. */
     notReady?: ProposalNotReady[];
+    /** Agents' placeholders (and what needs them) its run will skip, left out
+     * of the counts above (backend main._proposal_cost, Q125 item 3). */
+    pendingSkipped?: import('./pendingNodes').PendingSkipSummary;
     note: string;
   };
   references: string[];

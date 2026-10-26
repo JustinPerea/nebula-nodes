@@ -47,17 +47,17 @@ Call start_here first: the canvas, open pins and proposals, every moodboard, the
 
 The loop:
 1. describe_node: a node type's ports, params and prices (find_nodes searches them).
-2. edit_canvas: new nodes ("+img" refs), connections, params, names, moves and removals in one call, all or nothing (or send `steps`; `pending` makes new nodes placeholders runs skip). remove_from_canvas deletes nodes or connections. Each edit returns an undo token: undo_canvas_edit takes your own edit back.
+2. edit_canvas: new nodes ("+img" refs), connections, params, names, moves and removals in one call, all or nothing (or send `steps`). remove_from_canvas deletes nodes or connections. Each edit returns an undo token: undo_canvas_edit takes your own edit back.
 3. run_nodes: runs a node and what feeds it, within the person's spend limits.
 4. view_output: look at what it made.
-5. propose_change instead, for a run over a limit or without a list price, or reworking their graph: the person accepts or rejects it in Nebula; agents cannot accept.
+5. propose_change instead, for a run over a limit or without a list price, or reworking their graph: the person decides in Nebula; agents cannot accept.
 Off the canvas (a pinned cover, a board's Send notes, Commons curation): propose_asset_change.
 A decision only the person makes: ask_person; get_answers waits.
 
 Pins are the person's requests: act on one, then answer it with resolve_pin. wait_for_canvas_change waits for the next change instead of polling.
 When you start on a request, call point_at with a short say naming your own next step (under 8 words). What you noticed, a report or a suggestion goes in post_note: the person reads those in Updates, top right, not at your cursor.
 set_status: your current work (clear it when done). list_agents: who else is working, on what.
-Moodboards: moodboard_get; moodboard_update(cover=...) picks the image a board opens on; moodboard_edit moves, resizes and groups cards (with `undo`). New work goes in a new project (new_project), not over theirs.
+Moodboards: moodboard_get; moodboard_update(cover=...) sets its cover; moodboard_edit moves, resizes and groups cards (with `undo`). New work goes in a new project (new_project), not over theirs.
 get_project reads a project unopened, project_size its size, rename_project renames it. Working keys: get_settings, provider_status.
 Styles: style_list, style_get, style_create, style_update, style_delete.
 cancel_run stops agents' runs only; a run the person started is theirs to Stop.
@@ -1357,7 +1357,8 @@ def undo_canvas_edit(token: str | list[str], ctx: Context | None = None) -> dict
     they expired, are in `notReopened` with the reason).
     A placeholder you removed comes back as your placeholder, and undoing
     your `pending=False` makes those nodes placeholders again (`placeholders`),
-    unless someone else ran one since.
+    unless someone else ran one since or anyone changed it since (params,
+    name, a move, a connection: `skipped`, reason "changed since").
     Returns `{status, added, removed, changed, renamed, moved, wired, unwired,
     placeholders, skipped, reattached, pinsLeft, reopened, notReopened, message}`
     (`message` says what went back and what was left, and why);

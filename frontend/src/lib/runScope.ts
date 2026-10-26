@@ -357,6 +357,17 @@ export function summarizeRunScope(
   return summary;
 }
 
+/** The same run done `passes` times (a Cinema shot's variations, each a
+ * full pass with the cache off): every price and run count multiplied. */
+export function repeatRun(summary: RunScopeSummary, passes: number): RunScopeSummary {
+  const times = Number.isFinite(passes) && passes > 1 ? Math.floor(passes) : 1;
+  if (times === 1 || !summary.cost) return summary;
+  const { cost } = summary;
+  return { ...summary, cost: { ...cost, low: cost.low * times, high: cost.high * times,
+    lines: cost.lines.map((line) => ({ ...line, low: line.low * times, high: line.high * times,
+      runs: [line.runs[0] * times, line.runs[1] * times] as [number, number] })) } };
+}
+
 /** The Run chip: "~$0.04", "$0.0047–0.43", "$0.04+" when part of the run
  * has no list price, "N paid" when none of it does. Null when nothing is paid. */
 export function runChipLabel({ paid, cost }: RunScopeSummary): string | null {

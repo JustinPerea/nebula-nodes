@@ -72,3 +72,21 @@ describe('the pill at every zoom (GM - Design, 2026-10-25)', () => {
     expect(scaling).toEqual([]);
   });
 });
+
+// Review 3, finding 8: the node's keyboard focus shows the pill's whole text
+// (AgentNodeMarkLayer sets data-focused), so a sighted keyboard user can read
+// a truncated status without a tab stop on every pill.
+describe("the pill while its node has keyboard focus", () => {
+  const body = (selector: string) => rules.filter((rule) => rule.selectors.includes(selector)).map((rule) => rule.body).join('\n');
+
+  it('lifts the truncation at the node\'s width', () => {
+    expect(body(".agent-node-mark[data-focused='true'] .agent-node-mark__row")).toMatch(/max-width:/);
+    expect(body(".agent-node-mark[data-focused='true'] .agent-node-mark__status")).toMatch(/text-overflow:\s*clip/);
+  });
+
+  it('brings the words back on the low-zoom dot too', () => {
+    const shown = rules.filter((rule) => /display:\s*inline/.test(rule.body)).flatMap((rule) => rule.selectors);
+    expect(shown.some((selector) => selector.includes("[data-focused='true']") && selector.includes('__name'))).toBe(true);
+    expect(shown.some((selector) => selector.includes("[data-focused='true']") && selector.includes('__status'))).toBe(true);
+  });
+});

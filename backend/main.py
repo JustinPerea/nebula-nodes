@@ -4774,8 +4774,10 @@ def _custom_node_label(raw: Any, definition_id: str) -> str | None:
     return label
 
 
-def _node_label(node_id: str) -> str:
-    node = cli_graph.nodes.get(node_id) or {}
+def _node_label(node_id: str, graph: CLIGraph | None = None) -> str:
+    """A node's name: its label, else its type's name, else its id. ``graph``
+    is a staged copy (a proposal's), else the live canvas."""
+    node = (graph or cli_graph).nodes.get(node_id) or {}
     if isinstance(node.get("label"), str) and node["label"]:
         return node["label"]
     definition = node_registry.get_all().get(str(node.get("definitionId", "")), {})
@@ -4988,7 +4990,7 @@ def _clear_pending(node_ids: Iterable[str]) -> list[str]:
 
 
 def _person_touched(node_ids: Iterable[str]) -> list[str]:
-    """The person edited these nodes (params, name, position, a wire): any
+    """The person edited these nodes (params, name, position, a connection): any
     placeholder among them turns normal (GM: "on any edit by the person").
     Agents' edits through the same routes leave them as they are."""
     if not _is_person_request():
@@ -6385,8 +6387,7 @@ def _proposal_run_scope(
                 up_to = True
             chosen.append(node.id)
     skips = pending_nodes.run_skips(scope, [(edge.source, edge.target) for edge in edges], candidate.nodes,
-                                    label=lambda node_id: str((candidate.nodes.get(node_id) or {}).get("label")
-                                                              or node_id))
+                                    label=lambda node_id: _node_label(node_id, candidate))
     chosen = [node_id for node_id in chosen if node_id not in skips]
     scope = [node_id for node_id in scope if node_id not in skips]
     items = [
@@ -8709,35 +8710,74 @@ def _paid_placeholders(nodes: list[GraphNode], ready: Iterable[str]) -> list[str
     return sorted(paid, key=_node_order)
 
 
-def _require_placeholder_confirmation(
-    run_id: str, nodes: list[GraphNode], ready: list[str], confirmed: list[str] | None,
-) -> None:
-    """Q133 (Justin, 2026-10-25): the person's direct run that would make an
-    agent's paid placeholder normal runs only with the person's confirmation
-    for exactly those placeholders (the canvas's dialog sends them,
-    components/PlaceholderRunDialog.tsx), so a missed dialog, a stale tab or
-    another client can't skip it. 409 before anything is priced or changes.
-    Agents' runs of their own placeholders are unchanged (their ``ready``
-    holds only their own, and they never confirm)."""
-    if identify_agent(current_request_headers()) is not None or not _is_person_request():
-        return
-    paid = _paid_placeholders(nodes, ready)
-    if not paid or sorted(set(confirmed or [])) == sorted(paid):
-        return
+def _run_estimate_high(nodes: list[GraphNode], edges: list[GraphEdge], *, passes: int = 1,
+                       api_keys: Mapping[str, Any] | None = None) -> float | None:
+    """The list-price upper total of running ``nodes`` ``passes`` times, as the
+    canvas's run cost reads it (lib/runScope.ts summarizeRunScope: fan-out,
+    a Cinema scene's shots, routes from the keys set). Sizes aren't measured
+    for the person's runs, so a price read from an input's size counts as no
+    price, never as more. None when the price table can't load."""
+    try:
+        pricing = model_pricing.load_pricing()
+    except (OSError, ValueError):
+        return None
+    keys = api_keys if api_keys is not None else (load_settings().get("apiKeys", {}) or {})
+    items = [{"id": node.id, "definitionId": node.definition_id, "params": node.params or {}} for node in nodes]
+    multipliers = model_pricing.run_multipliers(items, [(edge.source, edge.target) for edge in edges])
+    wired = model_pricing.wired_counts(items, [(edge.source, edge.target, edge.target_handle) for edge in edges])
+    estimate = model_pricing.estimate_run(items, pricing, node_registry.get_all(), keys, multipliers, wired)
+    high = estimate.get("high")
+    return None if high is None else float(high) * max(1, passes)
+
+
+def _placeholder_confirm_refusal(run_id: str, paid: list[str]) -> HTTPException:
+    """409 for the person's direct run of agents' paid placeholders without
+    their confirmation (or at a higher cost than they confirmed): GM - Design's
+    round-4 words, 2026-10-25, verbatim, which the node shows as its run error."""
     canvas_events.forget_run(run_id)
-    owners = []
+    owners: list[str] = []
     for node_id in paid:
         name = (pending_nodes.owner(cli_graph.nodes.get(node_id)) or {}).get("name")
         if name and name not in owners:
             owners.append(name)
     who = f"{owners[0]} is" if len(owners) == 1 else "agents are"
-    count = f"{len(paid)} paid {'node' if len(paid) == 1 else 'nodes'}"
-    raise HTTPException(status_code=409, detail={
+    one = len(paid) == 1
+    return HTTPException(status_code=409, detail={
         "code": "placeholder_confirm_required",
-        "message": (f"Nothing ran: this run includes {count} {who} still setting up, "
-                    "and Nebula asks before running those. Click Run again to see them."),
+        "message": (f"Nothing ran. This run includes {len(paid)} paid {'node' if one else 'nodes'} {who} still "
+                    "setting up, and Nebula asks before running those. "
+                    f"Click “Run” again to review {'it' if one else 'them'}."),
         "placeholders": paid,
     })
+
+
+def _require_placeholder_confirmation(
+    run_id: str, nodes: list[GraphNode], edges: list[GraphEdge], ready: list[str], confirmed: list[str] | None,
+    confirmed_cost: float | None = None, *, passes: int = 1, api_keys: Mapping[str, Any] | None = None,
+) -> None:
+    """Q133 (Justin, 2026-10-25): the person's direct run that would make an
+    agent's paid placeholder normal runs only with the person's confirmation
+    for exactly those placeholders (the canvas's dialog sends them,
+    components/PlaceholderRunDialog.tsx), so a missed dialog, a stale tab or
+    another client can't skip it. When the dialog showed a total
+    (``confirmed_cost``, its upper bound in USD), the run may not cost more
+    by Nebula's own estimate of what it runs (``passes`` times: a shot's
+    variations). 409 before anything is priced or changes. Every route that
+    runs the person's direct run calls this: /api/execute-node and
+    /api/cinema/generate-shot. Agents' runs of their own placeholders are
+    unchanged (their ``ready`` holds only their own, and they never confirm)."""
+    if identify_agent(current_request_headers()) is not None or not _is_person_request():
+        return
+    paid = _paid_placeholders(nodes, ready)
+    if not paid:
+        return
+    if sorted(set(confirmed or [])) != sorted(paid):
+        raise _placeholder_confirm_refusal(run_id, paid)
+    if confirmed_cost is None:
+        return  # the dialog showed no total (no price table): the person confirmed the rows
+    high = _run_estimate_high(nodes, edges, passes=passes, api_keys=api_keys)
+    if high is not None and high > confirmed_cost * (1 + 1e-9) + 1e-6:
+        raise _placeholder_confirm_refusal(run_id, paid)
 
 
 async def _make_ready(node_ids: Iterable[str]) -> None:
@@ -8935,7 +8975,8 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     # proposal's run (approval_id) is not running it directly.
     sub_nodes, sub_edges, skips, ready = await _skip_placeholders(
         run_id, sub_nodes, sub_edges, direct=request.target_node_id if request.approval_id is None else None)
-    _require_placeholder_confirmation(run_id, sub_nodes, ready, request.confirmed_placeholders)
+    _require_placeholder_confirmation(run_id, sub_nodes, sub_edges, ready, request.confirmed_placeholders,
+                                      request.confirmed_cost, api_keys=api_keys)
 
     _validate_cinema_base_models(sub_nodes)
 
@@ -9581,6 +9622,17 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     if not sub_nodes:
         raise _node_gone(request.node_id, f"Node '{request.node_id}' not found in graph")
     _note_run_nodes(run_id, sub_nodes)
+    # A shot is the person's direct run of the scene (Q133, as /api/execute-node):
+    # the placeholders feeding it run and turn normal, a paid one only with the
+    # person's confirmation; an agent's shot skips other agents' placeholders.
+    # Before anything is priced, so nothing is spent on a skipped one.
+    sub_nodes, sub_edges, skips, ready = await _skip_placeholders(
+        run_id, sub_nodes, sub_edges, direct=request.node_id)
+    if request.node_id in skips:
+        canvas_events.forget_run(run_id)
+        return {"status": "skipped", "runId": run_id, **_skip_reply(skips)}
+    _require_placeholder_confirmation(run_id, sub_nodes, sub_edges, ready, request.confirmed_placeholders,
+                                      request.confirmed_cost, passes=request.variations or 1, api_keys=api_keys)
     fresh_paid_ancestors = _fresh_paid_worldlabs_claims(sub_nodes)
     if fresh_paid_ancestors:
         blocked_ids = ", ".join(node_id for _kind, node_id in fresh_paid_ancestors)
@@ -9619,8 +9671,11 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     # each one counts in full. Checked after validation, so a request that
     # can't run doesn't count.
     spend_nodes, spend_edges = get_subgraph(request.nodes, request.edges, request.node_id)
+    spend_nodes = [node for node in spend_nodes if node.id not in skips]
+    spend_edges = [edge for edge in spend_edges if edge.source not in skips and edge.target not in skips]
     await _require_run_spend_approval(run_id, spend_nodes, spend_edges, run_ids=[request.node_id], passes=count,
                                 settings=settings)
+    await _make_ready(ready)  # admitted: the placeholders it runs turn normal
 
     # A per-shot run does not acquire the frontend's Canvas-wide ``isExecuting``
     # gate, so sibling work remains available. It does register its background

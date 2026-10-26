@@ -1347,8 +1347,8 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   your own once it starts: a run refused before it starts, by the pre-call
   check, a cycle or the spending check, leaves them pending), after 10
   minutes with no request from you (the status line's rule and clock), when
-  the person edits one (params, the model picker, name, a real move, a wire
-  to or from it), or when the person runs one directly (its own Run; an
+  the person edits one (params, the model picker, name, a real move, a
+  connection to or from it), or when the person runs one directly (its own Run; an
   accepted proposal's run is not that). The person's direct Run of a node
   runs what feeds it too, so every placeholder in that run turns normal and
   runs. Another agent's edit to it, or yours, leaves it pending.
@@ -1358,27 +1358,50 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   anything is priced: nothing is spent on them. Each gets a `skipped`
   event with an agent-readable reason ("Codex is still setting this up.",
   which the canvas's Skipped badge shows as "Skipped: Codex is still
-  setting this up.", or "needs n3 (“Hero prompt”), which Codex is still
-  setting up"); run results list them in `skipped` beside a gate's skips;
+  setting this up.", or "needs “Hero prompt”, which Codex is still setting
+  up." for a node downstream, naming the placeholder by its name, or its
+  type's name when it has none); run results list them in `skipped` beside
+  a gate's skips;
   a canvas run's reply adds `pendingSkipped` ({count, agents}) for the line
   under Run ("Skipped 3 nodes Codex is still setting up.", "agents" when
   they are more than one agent's), and the run's Agent log line ends with
   the same sentence. The cost the person sees before a run matches what it
   runs: a whole-canvas Run, Run selected and an accepted proposal's run
-  leave the skipped nodes out (a proposal's `cost` adds `pendingSkipped`),
-  and the person's direct Run of a node counts the placeholders it runs,
-  with "Includes 2 nodes Codex is still setting up." under the cost.
-- **The person confirms paid ones:** when the person's direct Run would
-  make a placeholder that calls a paid model normal, the canvas always
-  asks first (whatever "Ask before costly runs" is set to), in one dialog
-  that replaces the costly-run confirm: "Run 2 nodes Codex is still
-  setting up?", a row per paid placeholder with its price, the free ones
-  in one line, the run's total, "Run for $X" / "Cancel". Cancel changes
-  nothing. `/api/execute-node` enforces it: the person's run carries
-  `confirmedPlaceholders` (exactly those paid placeholder ids) or gets
-  409 `placeholder_confirm_required` (with `placeholders`) before anything
-  is priced or changes. Free placeholders need no confirmation. Agents'
-  runs are unchanged: your own placeholders run when you run them.
+  leave the skipped nodes out (a proposal's `cost` adds `pendingSkipped`;
+  a proposal whose whole run waits on them reads "runs nothing until Codex
+  finishes 2 nodes", or "agents finish" for several), and the person's
+  direct Run of a node counts the placeholders it runs, with "Includes 2
+  nodes Codex is still setting up." under the cost. A proposal's run is
+  priced when it is made, so a placeholder in it that turns normal before
+  the run starts (its owner's `pending: false`, the idle rule) changes what
+  it runs: Accept refuses it (409, "what it runs changed after it was
+  proposed"), the approved run refuses it ("changed since you accepted"),
+  and while an approved run waits to start, its placeholders can't be made
+  ready (409). A placeholder's owner is part of the run's fingerprint.
+- **The person confirms paid ones:** when the person's direct run would
+  make a placeholder that calls a paid model normal (a node's Run, the
+  Inspector, a Cinema shot's Generate, a replay of a node run or a shot
+  from Run history), the canvas always asks first (whatever "Ask before
+  costly runs" is set to), in one dialog that replaces the costly-run
+  confirm: "Run 2 nodes Codex is still setting up?", a row per paid
+  placeholder ("“Hero still” · FLUX · $0.04", "price not listed", "on your
+  Krea plan"), the free ones in one line, the run's total, then "Cancel"
+  and "Run for $0.12" ("Run for up to $0.86" for a range, just "Run" when
+  a row's price isn't listed). Cancel changes nothing. If anything the
+  dialog said changed while it was open (an agent changed a row's model,
+  connected another paid node), it asks again over the new run; if the
+  placeholders turned normal meanwhile, the costly-run setting decides.
+  `/api/execute-node` and `/api/cinema/generate-shot` enforce it: the
+  person's run carries `confirmedPlaceholders` (exactly those paid
+  placeholder ids) and `confirmedCost` (the total the dialog showed, USD)
+  or gets 409 `placeholder_confirm_required` (with `placeholders` and the
+  message "Nothing ran. This run includes 1 paid node Codex is still
+  setting up, and Nebula asks before running those. Click “Run” again to
+  review it.") before anything is priced or changes; Nebula's own
+  estimate of the run (a shot: one shot times its variations) above
+  `confirmedCost` gets the same 409. Free placeholders need no
+  confirmation. Agents' runs are unchanged: your own placeholders run when
+  you run them, and a Cinema shot you start skips another agent's.
 - **Saved with the graph:** the flag lives on the node with its owner
   (`{agent: {id, name, color, verified}, at}`), in the persisted graph, the
   export (`data.pending`) and the project, so it survives a reload and a
@@ -1389,7 +1412,9 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   (`undo_canvas_edit`, `nebula undo`) does the same from what the server
   kept: a placeholder you removed comes back as one, and undoing your
   `pending: false` makes those nodes placeholders again (the reply's
-  `placeholders`; not a node someone else ran since). An agent's restore
+  `placeholders`; not a node someone else ran since, nor one changed since
+  by anyone: params, name, a move, a connection to or from it, which is
+  `skipped` with reason "changed since"). An agent's restore
   never sets or clears one otherwise.
 - **The run mark:** while a run an agent started is on a node, the canvas
   shows that agent's pill above it ("Running FLUX.2 [pro] · 0:41", or a

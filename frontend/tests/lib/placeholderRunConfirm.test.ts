@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Edge, Node } from '@xyflow/react';
 import type { NodeData } from '../../src/types';
 import { placeholderRunConfirm } from '../../src/lib/placeholderRunConfirm';
-import { summarizeRunScope } from '../../src/lib/runScope';
+import { summarizeRunScope, type RunCost, type RunScopeSummary } from '../../src/lib/runScope';
 import type { PricingTable } from '../../src/lib/pricing';
 
 // Q133 (Justin, 2026-10-25): the person's direct run always asks first when a
@@ -78,6 +78,49 @@ describe('placeholderRunConfirm', () => {
     const model = placeholderRunConfirm(nodes, [], 'i', summary)!;
     expect(model.totalLine).toBeNull();
     expect(model.runLabel).toBe('Run');
-    expect(model.rows[0].price).toBe('no list price');
+    expect(model.rows[0].price).toBe('price not listed');
+    expect(model.confirmCost).toBeNull();
+  });
+
+  // GM - Design, round 4 (2026-10-25), verbatim.
+  describe("GM's round-4 copy", () => {
+    const line = (nodeId: string, name: string, low: number, high: number) =>
+      ({ nodeId, name, low, high, runs: [1, 1] as [number, number] });
+    const summaryOf = (cost: Partial<RunCost>): RunScopeSummary => ({ total: 1, paid: ['Hero still'], cost: {
+      low: 0, high: 0, lines: [], unpriced: [], plan: [], plus: [], awaitingInput: [], sizeRefs: [], ...cost } });
+
+    it('one placeholder: "Codex hasn\'t finished this, so its settings may not be final."', () => {
+      const model = confirmFor([node('i', 'nano-banana', 'Hero still', codex)], [], 'i')!;
+      expect(model.intro).toBe("Codex hasn't finished this, so its settings may not be final.");
+    });
+
+    it('a fixed total: "Run for $0.12"; a range: "Run for up to $0.86"', () => {
+      const nodes = [node('i', 'nano-banana', 'Hero still', codex)];
+      const fixed = placeholderRunConfirm(nodes, [], 'i', summaryOf({ low: 0.12, high: 0.12, lines: [line('i', 'Hero still', 0.12, 0.12)] }))!;
+      expect(fixed.runLabel).toBe('Run for $0.12');
+      expect(fixed.confirmCost).toBe(0.12);
+      const range = placeholderRunConfirm(nodes, [], 'i', summaryOf({ low: 0.0094, high: 0.86, lines: [line('i', 'Hero still', 0.0094, 0.86)] }))!;
+      expect(range.runLabel).toBe('Run for up to $0.86');
+      // The total line keeps its words.
+      expect(range.totalLine).toBe('This run could cost up to $0.86 at list prices.');
+      expect(range.confirmCost).toBe(0.86);
+    });
+
+    it('a row with no list price: "price not listed", and the button is just "Run"', () => {
+      const nodes = [node('i', 'nano-banana', 'Hero still', codex), node('j', 'nano-banana', 'Alt still', codex)];
+      const model = placeholderRunConfirm(nodes, [wire('j', 'i', 'images')], 'i', summaryOf({
+        low: 0.12, high: 0.12, lines: [line('i', 'Hero still', 0.12, 0.12)], unpriced: ['Alt still'] }))!;
+      expect(model.rows.map((row) => row.price)).toEqual(['$0.12', 'price not listed']);
+      expect(model.runLabel).toBe('Run');
+      expect(model.totalLine).toBe('This run could cost up to $0.12 at list prices.');
+    });
+
+    it('a Krea-plan row: "on your Krea plan", which is not a missing price', () => {
+      const nodes = [node('i', 'nano-banana', 'Hero still', codex), node('k', 'nano-banana', 'Krea still', codex)];
+      const model = placeholderRunConfirm(nodes, [wire('k', 'i', 'images')], 'i', summaryOf({
+        low: 0.12, high: 0.12, lines: [line('i', 'Hero still', 0.12, 0.12)], plan: ['Krea still'] }))!;
+      expect(model.rows.map((row) => row.price)).toEqual(['$0.12', 'on your Krea plan']);
+      expect(model.runLabel).toBe('Run for $0.12');
+    });
   });
 });

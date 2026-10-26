@@ -238,6 +238,11 @@ export function proposalSummary(view: ProposalView): string {
       parts.push(`runs ${upTo ? 'up to ' : ''}${plural(paidRuns, 'paid model')}${who}`);
       const amount = proposalEstimateLabel(view);
       if (amount) parts.push(amount);
+    } else if (freeRuns === 0 && view.cost.pendingSkipped && view.cost.pendingSkipped.count > 0) {
+      // Its whole run waits on agents' placeholders, which it skips (GM - Design, round 4, verbatim).
+      const { count, agents } = view.cost.pendingSkipped;
+      const who = agents.length === 1 && agents[0] ? `${agents[0]} finishes` : 'agents finish';
+      parts.push(`runs nothing until ${who} ${plural(count, 'node')}`);
     } else {
       parts.push(`runs ${upTo ? 'up to ' : ''}${plural(freeRuns, 'free node')}`);
     }

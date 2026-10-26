@@ -151,6 +151,79 @@ describe('run cost confirmation', () => {
         expect(confirm).not.toHaveBeenCalled();
         expect(execute).toHaveBeenCalledOnce();
         expect(execute.mock.calls[0][6]).toEqual(['a']);
+        // The total the dialog showed: the backend refuses a run it prices higher.
+        expect(execute.mock.calls[0][7]).toBeCloseTo(1.2);
+      });
+
+      // Review 3, finding 2: the re-check after the dialog compares the whole
+      // confirmation, not only which placeholders are in it.
+      const paidX = () => {
+        const state = useGraphStore.getState();
+        useGraphStore.setState({ nodes: [...state.nodes, imageNode('x')],
+          edges: [...state.edges, { id: 'e2', source: 'x', target: 'b', sourceHandle: 'image', targetHandle: 'image_input' }] });
+      };
+
+      it('asks again when an agent made the run cost more while the dialog was open, same placeholders', async () => {
+        useUIStore.setState({ runCostConfirmUsd: 0.01 });
+        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+        const execute = vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'started' } as never);
+        askMock.mockImplementationOnce(async () => { paidX(); return true; }).mockResolvedValueOnce(true);
+        await useGraphStore.getState().executeNode('b');
+        expect(askMock).toHaveBeenCalledTimes(2);
+        expect(askMock.mock.calls[0][0].runLabel).toBe('Run for $1.20');
+        expect(askMock.mock.calls[1][0].runLabel).toBe('Run for $1.80');
+        expect(confirm).not.toHaveBeenCalled();
+        expect(execute).toHaveBeenCalledOnce();
+        expect((execute.mock.calls[0][0] as Array<{ id: string }>).map((node) => node.id)).toContain('x');
+        expect(execute.mock.calls[0][6]).toEqual(['a']);
+        expect(execute.mock.calls[0][7]).toBeCloseTo(1.8);
+      });
+
+      it('asks again when an agent changed the placeholder\'s model while the dialog was open', async () => {
+        usePricingStore.setState({ table: { currencies: {}, nodes: {
+          'nano-banana': { currency: 'usd', per: 'image', rows: [
+            { match: { model: 'gemini-3-pro-image' }, price: 0.9 }, { match: {}, price: 0.6 }] },
+        } } });
+        const execute = vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'started' } as never);
+        askMock.mockImplementationOnce(async () => {
+          useGraphStore.setState({ nodes: useGraphStore.getState().nodes.map((node) => node.id === 'a'
+            ? { ...node, data: { ...node.data, params: { model: 'gemini-3-pro-image' } } } : node) });
+          return true;
+        }).mockResolvedValueOnce(false);
+        await useGraphStore.getState().executeNode('b');
+        expect(askMock).toHaveBeenCalledTimes(2);
+        expect(askMock.mock.calls[1][0].rows[0].model).not.toBe(askMock.mock.calls[0][0].rows[0].model);
+        expect(execute).not.toHaveBeenCalled();
+      });
+
+      it('falls through to the costly-run confirm when an agent made it normal and added a paid node meanwhile', async () => {
+        useUIStore.setState({ runCostConfirmUsd: 0.01 });
+        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+        const execute = vi.spyOn(api, 'executeNode');
+        askMock.mockImplementation(async () => {
+          paidX();
+          useGraphStore.setState({ nodes: useGraphStore.getState().nodes.map((node) => node.id === 'a'
+            ? { ...node, data: { ...node.data, pending: undefined } } : node) });
+          return true;
+        });
+        await useGraphStore.getState().executeNode('b');
+        expect(askMock).toHaveBeenCalledOnce();
+        expect(confirm).toHaveBeenCalledOnce();
+        expect(confirm.mock.calls[0][0]).toContain('could cost up to $1.80');
+        expect(execute).not.toHaveBeenCalled();
+      });
+
+      it('with the costly-run setting off, that run goes ahead without a confirmation to send', async () => {
+        useUIStore.setState({ runCostConfirmUsd: null });
+        const execute = vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'started' } as never);
+        askMock.mockImplementation(async () => {
+          useGraphStore.setState({ nodes: useGraphStore.getState().nodes.map((node) => node.id === 'a'
+            ? { ...node, data: { ...node.data, pending: undefined } } : node) });
+          return true;
+        });
+        await useGraphStore.getState().executeNode('b');
+        expect(execute).toHaveBeenCalledOnce();
+        expect(execute.mock.calls[0][6]).toBeUndefined();
       });
 
       it("an accepted proposal's run never asks (it skips the placeholder)", async () => {

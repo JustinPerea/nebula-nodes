@@ -20,7 +20,7 @@ is ever deleted by any of these:
 - the owning agent runs it, or says ``pending: false`` for it;
 - the owning agent goes quiet for IDLE_SECONDS (the status line's rule,
   services/agent_status.py: any identified request is a sign);
-- the person edits it in any way (params, name, position, a wire);
+- the person edits it in any way (params, name, position, a connection to or from it);
 - the person runs it directly (GM: "counts as their edit").
 
 Another agent can't clear or claim it. A run skips pending nodes, and every
@@ -153,14 +153,18 @@ def pending_reason(agent_name: str) -> str:
     return f"{agent_name} is still setting this up."
 
 
-def downstream_reason(root: str, root_label: str, agent_name: str) -> str:
-    return f"needs {root} (“{root_label}”), which {agent_name} is still setting up"
+def downstream_reason(root_label: str, agent_name: str) -> str:
+    """A node downstream of a placeholder: GM - Design's round-4 line,
+    2026-10-25, verbatim ("needs “Hero prompt”, which Codex is still setting
+    up."), naming the placeholder by its name (its type's name when it has
+    no label; the caller's ``label``), never its id."""
+    return f"needs “{root_label}”, which {agent_name} is still setting up."
 
 
 def run_skips(scope: Iterable[str], edges: Iterable[tuple[str, str]], nodes: Mapping[str, Mapping[str, Any]],
               label: Callable[[str], str], *, ready: Iterable[str] = ()) -> dict[str, dict[str, Any]]:
     """The nodes a run must skip: each pending node in ``scope``, and every
-    node in scope downstream of one (a wire from it, directly or further on).
+    node in scope downstream of one (connected from it, directly or further on).
     ``edges`` are (source, target) pairs. ``ready`` are placeholders this run
     turns normal once it is admitted (its owner's run, the person's direct
     run): they count as normal here, though nothing changes until then. Per
@@ -186,7 +190,7 @@ def run_skips(scope: Iterable[str], edges: Iterable[tuple[str, str]], nodes: Map
         for child in out.get(current, []):
             if child in skips:
                 continue
-            skips[child] = {"reason": downstream_reason(root, label(root), str(who.get("name"))),
+            skips[child] = {"reason": downstream_reason(label(root), str(who.get("name"))),
                             "agent": who, "root": root}
             queue.append(child)
     return skips

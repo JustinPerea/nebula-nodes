@@ -184,6 +184,29 @@
   display: inline;
 }
 
+/* The node has keyboard focus (review 3, finding 8): its pill shows the whole
+   status, not cut at the node's width, so a sighted keyboard user can read
+   it; below 60% the dot shows its words as on its own focus. */
+.agent-node-mark[data-focused='true'] .agent-node-mark__row {
+  max-width: max(var(--anm-max), 480px);
+}
+
+.agent-node-mark[data-focused='true'] .agent-node-mark__status {
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.agent-node-mark[data-collapsed='true'][data-focused='true'] .agent-node-mark__pill {
+  width: auto;
+  max-width: 480px;
+  padding: 0 9px 0 7px;
+  justify-content: flex-start;
+}
+
+.agent-node-mark[data-collapsed='true'][data-focused='true'] .agent-node-mark__pill .agent-node-mark__name,
+.agent-node-mark[data-collapsed='true'][data-focused='true'] .agent-node-mark__pill .agent-node-mark__status {
+  display: inline;
+}
 
 @keyframes agent-node-mark-in {
   from { opacity: 0; transform: translateY(3px) scale(0.96); }

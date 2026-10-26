@@ -204,3 +204,122 @@ After Q133 (the last code change):
 - `npm run -s lint`: clean (inline style guard, Slava CSS scope guard).
 - `npx vite build && node scripts/check-build-budget.mjs`: passed, 389,002 bytes raw and 117,136 gzip.
 - Surprise on the way: importing the dialog's loader from `lib/deferredChunks.ts` into the store hung `DeferredHeldIntentFailure.test.tsx` (its `vi.doMock` of deferredChunks imports the store graph inside the mock factory). The loader moved to its own `lib/placeholderRunDialogModule.ts`.
+
+## Round 4: review 3 and GM - Design's round-4 rulings (2026-10-25)
+
+Justin, Q133 b: the person's direct run makes the placeholders it needs normal and runs them, "but if any is a paid model Nebula always asks first", whatever the costly-run setting. Review 3 found paths that skipped that rule, and GM gave the copy that was still open. Each fix below was test-first.
+
+### What changed and why
+
+- **Every route that runs or prices canvas nodes now keeps the Q133 rule (finding 1).** The Cinema shot route (`POST /api/cinema/generate-shot`) skipped every placeholder rule: a paid placeholder feeding a Cinema Scene was priced and run with no dialog and no 409. A shot is the person's direct run of the scene, so the route now does what `/api/execute-node` does:
+  - `_skip_placeholders(direct=nodeId)`;
+  - `_require_placeholder_confirmation` with `confirmedPlaceholders`/`confirmedCost` on `GenerateShotRequest`;
+  - skipped nodes left out of the spend check;
+  - `_make_ready` only after the last gate.
+  An agent's shot skips other agents' placeholders. When that skips the scene itself, the reply is `{"status": "skipped", skipped, pendingSkipped}` and nothing is priced. On the canvas, `executeShot` asks through the same helper as a node's Run (below).
+- **The route table** (every caller of `execute_graph`, plus the routes that price a run). Each row has a test in `tests/test_pending_nodes_round4.py`:
+
+  | Route | Who | Placeholders | Test |
+  |---|---|---|---|
+  | `POST /api/execute` (toolbar Run, Run selected, replay of a whole run) | person | skipped with what needs them | `route_table_..._for_the_person[execute-skips]` |
+  | same | agent | other agents' skipped; its own run | `route_table_another_agent...[execute]` |
+  | `POST /api/execute-node` (a node's Run, Inspector, context menu, replay of a node run) | person | asks: 409 `placeholder_confirm_required` without the confirmation | `...[execute-node-asks]`, Q133 tests |
+  | same, with `approvalId` (accepted proposal) | person | skipped (even a made-up id) | `route_table_an_approved_proposal_run_with_a_made_up_approval_skips` |
+  | `POST /api/cinema/generate-shot` (Generate, shot replay) | person | asks: 409 without the confirmation | `...[cinema-shot-asks]`, `test_the_persons_shot_over_a_paid_placeholder_needs_their_confirmation` |
+  | same | agent | other agents' skipped (`status: skipped`); its own run and turn normal | `test_another_agents_shot_skips...`, `test_the_owning_agents_shot_runs_its_own_placeholders` |
+  | `POST /api/graph/run` (MCP `run_nodes`, `nebula run`) | person token | skipped (not the canvas's direct Run) | `...[graph-run-skips]` |
+  | same | agent | other agents' skipped; its own run | `...another_agent...[graph-run]` |
+  | `POST /api/quick` | anyone | n/a: temp nodes only, never a canvas node | (no canvas node to hold a flag) |
+  | proposal create (`_proposal_cost`), Accept, the approved run | person/agent | priced without them; Accept and the run refuse once one turned normal (finding 3) | `test_accept_refuses_...`, `test_the_approved_run_refuses_...` |
+
+- **The dialog's re-check compares everything it said (finding 2).** It compared only the placeholder ids before, so these two cases slipped through:
+  - Same ids at a new cost (an agent connected another paid node, or changed the placeholder's model) ran at the new cost with no second ask.
+  - An agent clearing `pending` meanwhile skipped even the costly-run confirm.
+
+  Now `confirmDirectRun` in `graphStore.ts` asks again when anything the dialog said changed: the rows (model and price), the total, the free line, the button. When no paid placeholder is left, the costly-run setting decides over what runs now. The run sends `confirmedCost` (the total the dialog showed). The backend (`_run_estimate_high`, the same estimator as the proposal's cost) refuses with the same 409 and copy when its own estimate is higher. For a shot, that estimate is one shot times its variations.
+- **One helper for every direct run on the canvas.** `confirmDirectRun(read, nodeId, {passes, costly})` serves a node's Run, the Inspector, a Cinema shot and a replay. When no dialog is needed it answers in the same turn, so a second click can't slip in, as before.
+- **Replays (finding 7).** A replay of a node run or a shot over a live paid placeholder sent no confirmation, so it got a 409 whose words led back to the same 409. Replays now ask in the same dialog, over what the replay sends: its snapshot's params, with the live canvas's names and flags, since the backend reads the flags live. A whole-canvas replay skips placeholders, as before. Replays still never ask the costly-run question.
+- **A proposal's run goes stale once a placeholder turns normal (finding 3).** I chose to put the placeholder's owner into the run fingerprint (`run_approvals.fingerprint`), rather than storing the skip set on the proposal, because it covers every case:
+  - proposal to Accept: `_refuse_changed_runs` gives the existing "what it runs changed after it was proposed" 409;
+  - Accept to the run starting: `_check_run_approval` gives "changed since you accepted";
+  - while an approved run waits: `_refuse_agent_change_to_approved_runs` refuses the owner's `pending: false` (409);
+  - the idle sweep turning one normal is caught by both checks.
+
+  A stored skip set would only have covered the first window.
+- **INSTRUCTIONS (finding 4).** They were at 3,039 of 3,000 characters after the merge. Cuts:
+  - the `pending` clause (edit_canvas's docstring covers it);
+  - "the person accepts or rejects it in Nebula" → "the person decides in Nebula";
+  - "picks the image a board opens on" → "sets its cover".
+
+  Now 2,957 with the commons guide (43 to spare); INSTRUCTIONS alone are 2,233.
+- **An agent's undo vs the person's later edit (finding 5).** `canvas_undo` ready entries now keep the node's params, label, position and connections as the `pending: false` edit left it. The agent's undo leaves a node anyone changed since: it is `skipped` with reason "changed since", like params, names and moves.
+- **"Connected" wording (finding 6).** Fixed in `pending_nodes.py`, `main._person_touched` and `docs/MCP-SETUP.md`. The ratchet in `test_connected_copy_sweep.py` now also reads the prose of `docs/MCP-SETUP.md` and `skills/nebula/SKILL.md`. It leaves out fenced code, backtick spans, the `--wire` flags and the one line that names the old word to retire it. It found exactly the one hit.
+- **Pill keyboard access (finding 8).** A node's own keyboard focus (`:focus-visible` on the React Flow node or a control in it) sets `data-focused` on its mark. The pill then shows its whole status instead of cutting it at the node's width, and the low-zoom dot shows its words. There is no new tab stop, and a pointer's focus changes nothing. The "+N" chip's accessible name now starts with its visible text ("+2 more agents. …", WCAG 2.5.3).
+- **GM round 4, built verbatim:**
+  1. One placeholder: "Codex hasn't finished this, so its settings may not be final." The code already said this; its test passed before any change.
+  2. Rows: "price not listed" and "on your Krea plan". Any "price not listed" row makes the button just "Run"; Krea-plan rows don't count as missing. The total line is unchanged.
+  3. "Run for up to $0.86" when the total is a range, "Run for $0.12" when it is fixed.
+  4. The backend refusal: "Nothing ran. This run includes 1 paid node Codex is still setting up, and Nebula asks before running those. Click “Run” again to review it." (plural "…them", "agents are" for several).
+  5. The proposal bar: "runs nothing until Codex finishes 2 nodes" / "runs nothing until agents finish 3 nodes" (`proposalSummary`, from `cost.pendingSkipped`).
+  6. Downstream reason: `needs “Hero prompt”, which Codex is still setting up.`, the type's name only when there's no label. Proposals now use the same fallback (`_node_label(id, candidate)`).
+- **Agent support:** MCP `undo_canvas_edit` docstring ("changed since"); `docs/MCP-SETUP.md` (the routes that enforce the confirmation, `confirmedCost`, the refusal's words, the re-ask, replays and shots, the fingerprint, the proposal line, the downstream reason); `skills/nebula/SKILL.md` (undo after a change, proposals that wait on your placeholders). No CLI change: `nebula run` already skips, and the confirmation is the person's alone.
+
+### Decisions not in the spec
+
+- A Cinema shot now asks the costly-run question too, when no paid placeholder is in it. It never asked before. Justin's setting says "Ask before costly runs", and the store's own comment says every run path checks it. It is priced as the one shot it makes, times its variations. Replays keep not asking it.
+- The backend's cost check is skipped when the dialog showed no total (no price table loaded): the person confirmed the rows without one.
+- A size-priced node isn't measured for the person's runs, so the backend counts it as unpriced (lower), never higher than the canvas. The check can't refuse a run for a price the canvas couldn't show.
+
+### Tests (first, each seen failing)
+
+- **Backend:** 25 failed first.
+  - Cinema: 8. Each shot returned 200 "started" instead of 409, or left the placeholders pending; an agent's shot returned "started", not "skipped".
+  - Cost check: 3. A 200 where a 409 belonged, and `_run_estimate_high` missing.
+  - Proposals: 3. Accept returned 200, and `pending: false` under an approval returned 200.
+  - Undo: 5. Still a placeholder after the person's edit, and the ready entry had no `params`.
+  - GM refusal: 2 (the old words).
+  - Downstream reason: 3.
+  - `test_first_turn_instructions` (3,039).
+  - Then the docs ratchet (1 hit).
+
+  Two downstream tests first failed for a fixture reason: the whole chain was pending. I fixed their setup before the code.
+- **Frontend:** 22 failed first.
+  - `placeholderRunConfirm`: 4 ("no list price", "Krea plan", no `confirmCost`).
+  - The store: 10. Shots asked nothing; replays asked nothing; the re-ask, the model-change re-ask and the fall-through each asked once; no `confirmedCost`.
+  - `proposalPendingSummary`: 3.
+  - The pill: 5 (2 CSS rules, 2 chip labels, node focus).
+
+  Passing before and after: the one-placeholder intro, the setting-off fall-through with no confirmation to send, the replay with no placeholder left, and "keeps its old line when something still runs".
+
+### Live check (1280x800)
+
+- Isolated backend on 8795 (temp HOME and every NEBULA_* root under scratch, no keys) and Vite on 5795 (`VITE_NEBULA_BACKEND_PORT=8795`); `/api/health` through Vite matched. Codex verified (an app token made through the person's route); Cursor and Claude Code self-named. No key was set, so nothing paid could run. Run was clicked once, in the re-ask check, and the dialog asked again (then Cancel).
+- 23 of 23 checks passed (script `agent-presence/live-r4.mjs`):
+  - **One agent:** "“Hero still” · GPT Image 2 · $0.0047–0.43", "Run for up to $0.43", the total line unchanged, Cancel changed nothing.
+  - **The re-ask:** Codex set quality low while the dialog was open. Run then opened a second dialog: "$0.0047–0.012", "Run for up to $0.012".
+  - **The backend's 409:** GM's exact words, and the same 409 for a `confirmedCost` below Nebula's estimate.
+  - **Several agents:** one dialog, "Run for up to $0.44".
+  - **Downstream badge:** "Skipped: needs “Hero still”, which Codex is still setting up."
+  - **The pill:** cut off at the node's width at rest (186 px). The node's keyboard focus showed the whole status (419 px). Blur and a click changed nothing. The chip read "+1 more agent. Claude Code, unverified, Checking the crop."
+  - **The proposal bar:** "Adds 1 node · 1 connection · runs nothing until Codex finishes 2 nodes".
+- Blocked requests: 2, both the canaries; 0 toward 8000-8010 or 5173. The one console error was the canary's. Servers stopped by PID; the state dir deleted.
+- Screenshots in the scratchpad `agent-presence/`: `r4-q133-one-agent.png`, `r4-q133-several-agents.png`, `r4-q133-reask.png`, `r4-pill.png`, `r4-pill-node-focus.png`, `r4-downstream-reason.png`, `r4-proposal-waits.png`.
+- Not checked live: a Cinema shot's dialog (opening the Cinema panel headless wasn't worth the time; the store and route tests cover it).
+
+### Open items (round 4)
+
+- For GM:
+  - The chip's accessible name now starts "+2 more agents." (GM's words were "2 more agents."). The "+" is the visible text, for WCAG 2.5.3.
+  - The node's keyboard focus widens its pill past the node, up to 480 px: new visible behaviour, no new words.
+  - A proposal that runs nothing still has the button "Accept & run" (`acceptLabel`).
+  - The shot's costly-run confirm is the browser's dialog, as for the other runs (GM's item 7 moves those later).
+- A screen reader reaches the pill by its own label, not from the node's focus. React Flow owns the node's `aria-describedby`.
+
+### Gates (round 4)
+
+- Backend full suite: 10,979 passed, 71 skipped (14 min 31 s).
+- Vitest full: 450 files, 5,761 tests. The first run, during the backend suite, had 29 failures in 10 files, all timeouts under load ("Test timed out in 5000ms" and findBy/focus waits). Rerun alone, those 10 files passed: 200 of 200. None of them is a file this round touched.
+- errorCopy ratchets: 14 files, 173 tests passed.
+- `tsc` clean, lint clean.
+- Build budget: 389,238 bytes raw entry, 117,227 gzip (limit 512,000 raw).
+- MCP instructions: 2,957 characters with the commons guide (limit 3,000); `INSTRUCTIONS` alone 2,233.

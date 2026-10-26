@@ -28,6 +28,8 @@ import './agentNodeMarks.css';
  * - Below 60% zoom: the dot alone, the same size on screen; name and status
  *   on hover (and on keyboard focus). The "+N" chip stays, so every agent
  *   on the node can still be found from the overview.
+ * - The node's keyboard focus shows its pill's whole text at any zoom
+ *   (review 3): the full-size pill is no tab stop of its own.
  * - Placeholders: a dashed outline in the owning agent's colour.
  *
  * Draws only what the socket and the roster read bring in, so it mounts at
@@ -78,11 +80,41 @@ function useClock(ticking: boolean): number {
   return now;
 }
 
+/**
+ * The node that has keyboard focus now (React Flow's node, or a control in
+ * it, at :focus-visible), or null. At 60% zoom and up the pill takes no
+ * focus (a tab stop on every node would be too many), so the node's own
+ * keyboard focus shows the pill's whole text (review 3, finding 8). A
+ * pointer's focus changes nothing.
+ */
+function useKeyboardFocusedNode(): string | null {
+  const [focused, setFocused] = useState<string | null>(null);
+  useEffect(() => {
+    const onFocusIn = (event: FocusEvent) => {
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      const node = target?.closest<HTMLElement>('.react-flow__node[data-id]');
+      let visible = false;
+      try { visible = Boolean(target && node && target.matches(':focus-visible')); } catch { visible = false; }
+      setFocused(visible ? node!.dataset.id ?? null : null);
+    };
+    const onFocusOut = () => setFocused(null);
+    document.addEventListener('focusin', onFocusIn);
+    document.addEventListener('focusout', onFocusOut);
+    return () => {
+      document.removeEventListener('focusin', onFocusIn);
+      document.removeEventListener('focusout', onFocusOut);
+    };
+  }, []);
+  return focused;
+}
+
 function Dot({ mark }: { mark: NodeMark }) {
   return <span className="agent-node-mark__dot" data-verified={String(mark.agent.verified)} aria-hidden="true" />;
 }
 
-function NodeMarkView({ nodeId, box, marks, zoom }: { nodeId: string; box: NodeBox; marks: NodeMark[]; zoom: number }) {
+function NodeMarkView({ nodeId, box, marks, zoom, focused }: {
+  nodeId: string; box: NodeBox; marks: NodeMark[]; zoom: number; focused: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [first, ...rest] = marks;
   const collapsed = isLowZoom(zoom);
@@ -96,7 +128,8 @@ function NodeMarkView({ nodeId, box, marks, zoom }: { nodeId: string; box: NodeB
   const show = () => setOpen(true);
   const hide = () => setOpen(false);
   return (
-    <div className="agent-node-mark" data-node={nodeId} data-collapsed={collapsed ? 'true' : undefined} style={style}>
+    <div className="agent-node-mark" data-node={nodeId} data-collapsed={collapsed ? 'true' : undefined}
+      data-focused={focused ? 'true' : undefined} style={style}>
       <div className="agent-node-mark__row">
         <span
           className="agent-node-mark__pill"
@@ -148,6 +181,7 @@ export function AgentNodeMarkLayer() {
   const statuses = useAgentRosterStore((state) => state.statuses);
   const runs = useAgentRosterStore((state) => state.runs);
   const pendingLines = useStore(pendingSelector);
+  const focusedNode = useKeyboardFocusedNode();
 
   // A tab that opens mid-run (or after a reload) reads who is on which node.
   useEffect(() => { void refreshAgentRoster(); }, []);
@@ -184,7 +218,8 @@ export function AgentNodeMarkLayer() {
           );
         })}
         {drawnMarks.map((id) => (
-          <NodeMarkView key={id} nodeId={id} box={markBoxes.get(id)!} marks={marks.get(id)!} zoom={zoom} />
+          <NodeMarkView key={id} nodeId={id} box={markBoxes.get(id)!} marks={marks.get(id)!} zoom={zoom}
+            focused={focusedNode === id} />
         ))}
       </div>
     </ViewportPortal>

@@ -151,7 +151,8 @@ describe('AgentNodeMarkLayer', () => {
     expect(pill.tabIndex).toBe(0);
     const chip = mark.querySelector<HTMLButtonElement>('.agent-node-mark__more')!;
     expect(chip.textContent).toBe('+1');
-    expect(chip.getAttribute('aria-label')).toBe('1 more agent. Codex, unverified, Running FLUX.2 [pro] · 0:30.');
+    // WCAG 2.5.3: the name starts with the chip's visible text.
+    expect(chip.getAttribute('aria-label')).toBe('+1 more agent. Codex, unverified, Running FLUX.2 [pro] · 0:30.');
     act(() => { fireEvent.focus(chip); });
     expect(container.querySelector('.agent-node-mark__other')?.textContent).toContain('Codex');
   });
@@ -169,6 +170,50 @@ describe('AgentNodeMarkLayer', () => {
       expect(mark.style.getPropertyValue('--anm-max')).toBe(max);
       unmount();
     }
+  });
+
+  // Review 3, finding 8: at 60% and up the pill takes no focus (no tab stop
+  // on every node), so the node's own keyboard focus shows its whole text.
+  describe("the node's keyboard focus", () => {
+    function focusNode(id: string, visible: boolean) {
+      const el = document.createElement('div');
+      el.className = 'react-flow__node';
+      el.dataset.id = id;
+      el.tabIndex = 0;
+      document.body.appendChild(el);
+      const matches = HTMLElement.prototype.matches;
+      vi.spyOn(HTMLElement.prototype, 'matches').mockImplementation(function (this: HTMLElement, selector: string) {
+        return selector === ':focus-visible' ? visible && this === el : matches.call(this, selector);
+      });
+      act(() => { fireEvent.focusIn(el); });
+      return el;
+    }
+    afterEach(() => { document.querySelectorAll('.react-flow__node').forEach((el) => el.remove()); vi.restoreAllMocks(); });
+
+    it('shows its pill in full while the node has keyboard focus, and not after', () => {
+      setStatus(CLAUDE, 'n4', 'Checking the crops on every still in the hero set');
+      const { container } = render(<AgentNodeMarkLayer />);
+      const mark = () => container.querySelector<HTMLElement>('.agent-node-mark[data-node="n4"]')!;
+      expect(mark().dataset.focused).toBeUndefined();
+      const el = focusNode('n4', true);
+      expect(mark().dataset.focused).toBe('true');
+      act(() => { fireEvent.focusOut(el); });
+      expect(mark().dataset.focused).toBeUndefined();
+    });
+
+    it("a pointer's focus (a click on the node) changes nothing", () => {
+      setStatus(CLAUDE, 'n4', 'Checking the crops');
+      const { container } = render(<AgentNodeMarkLayer />);
+      focusNode('n4', false);
+      expect(container.querySelector<HTMLElement>('.agent-node-mark')!.dataset.focused).toBeUndefined();
+    });
+
+    it('another node\'s focus leaves this pill as it is', () => {
+      setStatus(CLAUDE, 'n4', 'Checking the crops');
+      const { container } = render(<AgentNodeMarkLayer />);
+      focusNode('n7', true);
+      expect(container.querySelector<HTMLElement>('.agent-node-mark')!.dataset.focused).toBeUndefined();
+    });
   });
 
   it('leaves the full-size pill out of the tab order', () => {

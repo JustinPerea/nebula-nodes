@@ -107,9 +107,11 @@ function sentence(text: string): string {
 /**
  * The "+N" chip's accessible name: the count, then each other agent as its
  * own sentence (GM, verbatim: "2 more agents. Codex, Writing the hero
- * prompt. Claude Code, Checking the crop."; "1 more agent." for one).
+ * prompt. Claude Code, Checking the crop."; "1 more agent." for one). It
+ * starts with the chip's visible "+2" (WCAG 2.5.3, review 3), so a voice
+ * user who says what they see reaches it.
  */
 export function othersLabel(marks: Array<Pick<NodeMark, 'agent' | 'text'>>): string {
-  const count = `${marks.length} more ${marks.length === 1 ? 'agent' : 'agents'}.`;
+  const count = `${moreLabel(marks.length)} more ${marks.length === 1 ? 'agent' : 'agents'}.`;
   return [count, ...marks.map((mark) => sentence(markLabel(mark)))].join(' ');
 }

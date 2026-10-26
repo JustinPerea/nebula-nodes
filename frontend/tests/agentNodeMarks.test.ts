@@ -132,12 +132,12 @@ describe('accessible names (GM - Design, 2026-10-25, verbatim)', () => {
     expect(othersLabel([
       { agent: VERIFIED_CODEX, text: 'Writing the hero prompt' },
       { agent: VERIFIED_CLAUDE, text: 'Checking the crop' },
-    ])).toBe('2 more agents. Codex, Writing the hero prompt. Claude Code, Checking the crop.');
+    ])).toBe('+2 more agents. Codex, Writing the hero prompt. Claude Code, Checking the crop.');
     expect(othersLabel([{ agent: VERIFIED_CODEX, text: 'Writing the hero prompt' }]))
-      .toBe('1 more agent. Codex, Writing the hero prompt.');
+      .toBe('+1 more agent. Codex, Writing the hero prompt.');
     // A status that already ends a sentence isn't given a second full stop.
     expect(othersLabel([{ agent: CODEX, text: 'Checking the crop.' }]))
-      .toBe('1 more agent. Codex, unverified, Checking the crop.');
+      .toBe('+1 more agent. Codex, unverified, Checking the crop.');
   });
 });
 

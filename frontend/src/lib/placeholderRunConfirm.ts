@@ -13,10 +13,12 @@ import { runCostNotes, type RunScopeSummary } from './runScope';
  * to. Free placeholders just run, with the cost line. When both apply this
  * one dialog replaces the costly-run confirm and carries the total.
  *
- * Copy is GM - Design's, 2026-10-25, verbatim. The backend refuses the run
- * unless it carries these exact paid placeholders (main.execute_node,
- * ``confirmedPlaceholders``), so a missed dialog, a stale tab or another
- * client can't skip it.
+ * Copy is GM - Design's, 2026-10-25 (round 4 for the rows' prices and the
+ * button), verbatim. The backend refuses the run unless it carries these
+ * exact paid placeholders and a total no lower than its own estimate
+ * (main.execute_node and main.generate_cinema_shot, `confirmedPlaceholders`
+ * and `confirmedCost`), so a missed dialog, a stale tab or another client
+ * can't skip it.
  */
 
 export interface PlaceholderRunRow {
@@ -25,7 +27,7 @@ export interface PlaceholderRunRow {
   name: string;
   /** The model it runs, unquoted, in the provider's spelling; null when it is the name. */
   model: string | null;
-  /** "$0.04", "$0.0047–0.43", or what stands for a price it has none of. */
+  /** "$0.04", "$0.0047–0.43", "price not listed" or "on your Krea plan" (GM, round 4). */
   price: string;
   agent: PendingAgent;
 }
@@ -40,10 +42,14 @@ export interface PlaceholderRunConfirm {
   totalLine: string | null;
   /** The costly-run confirm's notes (no list price, gates, not included). */
   notes: string[];
-  /** "Run for $0.12" (the total), or "Run" with no price table. */
+  /** "Run for $0.12" (a fixed total), "Run for up to $0.86" (a range), or
+   * "Run" when a row's price isn't listed or no price table loaded (GM, round 4). */
   runLabel: string;
   /** The paid placeholders the person confirms; the run sends them. */
   confirmIds: string[];
+  /** The run's upper total the dialog shows (USD), or null without one: the
+   * run sends it, and the backend refuses a run its own estimate puts higher. */
+  confirmCost: number | null;
 }
 
 /** The model a node runs, as its card's model picker labels it (backend
@@ -83,11 +89,21 @@ function nodeScope(nodes: Node<NodeData>[], edges: Edge[], nodeId: string): Node
   return nodes.filter((node) => ids.has(node.id));
 }
 
-function rowPrice(nodeId: string, summary: RunScopeSummary, name: string): string {
+/** A row's price (GM - Design, round 4, verbatim): the list price, "on your
+ * Krea plan", or "price not listed" (`missing`, which makes the button "Run"). */
+function rowPrice(nodeId: string, summary: RunScopeSummary, name: string): { text: string; missing: boolean } {
   const line = summary.cost?.lines.find((candidate) => candidate.nodeId === nodeId);
-  if (line) return formatUsdRange(line.low, line.high);
-  if (summary.cost?.plan.includes(name)) return 'Krea plan';
-  return 'no list price';
+  if (line) return { text: formatUsdRange(line.low, line.high), missing: false };
+  if (summary.cost?.plan.includes(name)) return { text: 'on your Krea plan', missing: false };
+  return { text: 'price not listed', missing: true };
+}
+
+/** "Run for $0.12" when the total is fixed, "Run for up to $0.86" when it is a
+ * range (matching "could cost up to"), "Run" when a row has no listed price
+ * or there is no total (GM - Design, round 4, verbatim). */
+function runLabelFor(cost: RunScopeSummary['cost'], anyMissing: boolean): string {
+  if (!cost || anyMissing) return 'Run';
+  return formatUsd(cost.low) === formatUsd(cost.high) ? `Run for ${formatUsd(cost.high)}` : `Run for up to ${formatUsd(cost.high)}`;
 }
 
 /**
@@ -113,12 +129,14 @@ export function placeholderRunConfirm(
   const one = agents.length === 1 ? agents[0] : null;
   const count = placeholders.length;
   const free = count - paid.length;
+  let anyMissing = false;
   const rows = paid.map(({ node, agent }) => {
     const definition = NODE_DEFINITIONS[node.data?.definitionId];
     const label = node.data?.label || definition?.displayName || node.id;
     const model = modelName(node);
-    return { nodeId: node.id, name: `“${label}”`, model: model === label ? null : model,
-      price: rowPrice(node.id, summary, label), agent };
+    const price = rowPrice(node.id, summary, label);
+    if (price.missing) anyMissing = true;
+    return { nodeId: node.id, name: `“${label}”`, model: model === label ? null : model, price: price.text, agent };
   });
   const cost = summary.cost;
   return {
@@ -130,7 +148,8 @@ export function placeholderRunConfirm(
     freeLine: free > 0 ? `Plus ${free} free ${free === 1 ? 'node' : 'nodes'}.` : null,
     totalLine: cost ? `This run could cost up to ${formatUsd(cost.high)} at list prices.` : null,
     notes: runCostNotes(summary),
-    runLabel: cost ? `Run for ${formatUsd(cost.high)}` : 'Run',
+    runLabel: runLabelFor(cost, anyMissing),
     confirmIds: paid.map(({ node }) => node.id).sort(),
+    confirmCost: cost ? cost.high : null,
   };
 }
