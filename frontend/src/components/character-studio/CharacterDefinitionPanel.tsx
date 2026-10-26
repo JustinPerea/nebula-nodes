@@ -1,5 +1,8 @@
 import { useRef, useState } from 'react';
-import { apiFetch, backendAssetUrlSync } from '../../lib/backend';
+import { apiRequest } from '../../lib/apiRequest';
+import { failureMessage } from '../../lib/errorCopy';
+import { storedImageView } from '../../lib/storedImage';
+import { OutsideImageNote } from '../OutsideImageNote';
 import type { CharacterDraft } from './CharacterStudioView';
 
 interface CharacterDefinitionPanelProps {
@@ -59,28 +62,32 @@ export function CharacterDefinitionPanel({
     const uploads = Array.from(files).map((file) => {
       const fd = new FormData();
       fd.append('file', file);
-      return apiFetch('/api/uploads', { method: 'POST', body: fd })
-        .then((r) => {
-          if (!r.ok) throw new Error(`Upload failed: ${r.status}`);
-          return r.json();
-        })
+      // GM, error-copy round 2: "Couldn't upload {filename}." then the reason.
+      return apiRequest(`Couldn't upload ${file.name}.`, '/api/uploads', { method: 'POST', body: fd })
+        .then((r) => r.json())
         .then((data: { filePath: string; url: string }) => data.url);
     });
     Promise.all(uploads)
       .then((urls) => addReferenceViews(urls.filter(Boolean)))
       .catch((err) => {
         console.error('[character] reference view upload failed:', err);
-        setUploadError('Upload failed — retry.');
+        setUploadError(failureMessage(err, "Couldn't upload the image."));
       })
       .finally(() => setUploading(false));
   };
+
+  // Only Nebula's own files are loaded (lib/storedImage.ts): a view saved
+  // before Nebula checked them can be an outside link, kept but never drawn.
+  const cover = storedImageView(thumbnail);
 
   return (
     <div className="character-def">
       <section className="character-def__head">
         <div className="character-def__thumb">
-          {thumbnail ? (
-            <img src={backendAssetUrlSync(thumbnail)} alt="" draggable={false} />
+          {cover.src ? (
+            <img src={cover.src} alt="" draggable={false} />
+          ) : cover.outside ? (
+            <OutsideImageNote />
           ) : (
             <span className="character-def__thumb-empty">no thumbnail</span>
           )}
@@ -128,21 +135,24 @@ export function CharacterDefinitionPanel({
           <span className="character-def__hint">≥3 required · first view = thumbnail</span>
         </div>
         <div className="character-def__refs">
-          {draft.referenceViews.map((url, idx) => (
-            <div key={`${url}-${idx}`} className="character-def__ref">
-              <img src={backendAssetUrlSync(url)} alt="" draggable={false} />
-              {idx === 0 && <span className="character-def__ref-badge">cover</span>}
-              <button
-                type="button"
-                className="character-def__ref-remove"
-                title="Remove view"
-                aria-label="Remove reference view"
-                onClick={() => removeReferenceView(idx)}
-              >
-                ×
-              </button>
-            </div>
-          ))}
+          {draft.referenceViews.map((url, idx) => {
+            const view = storedImageView(url);
+            return (
+              <div key={`${url}-${idx}`} className={`character-def__ref${view.src ? '' : ' character-def__ref--empty'}`}>
+                {view.src ? <img src={view.src} alt="" draggable={false} /> : view.outside ? <OutsideImageNote /> : null}
+                {idx === 0 && <span className="character-def__ref-badge">cover</span>}
+                <button
+                  type="button"
+                  className="character-def__ref-remove"
+                  title="Remove view"
+                  aria-label="Remove reference view"
+                  onClick={() => removeReferenceView(idx)}
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
           <button
             type="button"
             className="character-def__ref-add"

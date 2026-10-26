@@ -85,6 +85,13 @@ function allowedBackend(origin: string): boolean {
   return originAllowedByPin(origin, backendPortEnv());
 }
 
+/** Whether this page runs in the desktop app (its shell hands over the
+ * person token), not a plain browser tab. Error copy reads it (GM,
+ * error-copy round 2): a reload helps in the app, a fresh link in a tab. */
+export function inDesktopShell(): boolean {
+  return hasDesktopBridge();
+}
+
 function hasDesktopBridge(): boolean {
   return typeof window !== 'undefined' && typeof window.nebulaDesktop?.apiBaseUrl === 'string'
     && Boolean(window.nebulaDesktop.apiBaseUrl);
@@ -234,17 +241,29 @@ export function personUnavailableReason(): PersonUnavailableReason {
 
 export function personRequiredMessage(reason: PersonUnavailableReason = personUnavailableReason()): string {
   switch (reason) {
+    // GM, round 4 (2026-10-23), verbatim: a banner stays up, so it fits one
+    // line at the region's 560 px (the dev-renderer one is developer-only and
+    // may wrap). Line 3 on the refusal still says what to do.
     case 'debug-port':
-      return 'Debug mode: a remote-debugging port is open, so actions only you can take (Settings, proposals, chats) are off.';
+      return 'Debug mode: a debugging port is open, so Settings, proposals and chats are off.';
     case 'dev-renderer':
-      return 'Desktop dev mode: the Vite renderer is not trusted with your token, so Settings, proposals and chats are off. '
-        + 'Set NEBULA_DESKTOP_DEV_PERSON=1 to opt in.';
+      return "Dev mode: the Vite renderer can't use your token. Set NEBULA_DESKTOP_DEV_PERSON=1 to allow it.";
     case 'untrusted-sender':
     case 'desktop-unavailable':
-      return "Nebula couldn't confirm this window is yours, so Settings, proposals and chats are off. Restart the app.";
+      // GM, round 4 (2026-10-23), verbatim: one line, ending like the app
+      // banner, since the window can close while Nebula keeps running in the Dock.
+      return "Nebula couldn't confirm this window is yours. Quit Nebula and open it again.";
     default:
-      return "This tab isn't connected as you, so Settings, proposals and chats are locked. "
-        + 'Open the link the backend printed at launch (or restart it with --open).';
+      // The desktop app gets here when its backend refuses the token the
+      // shell handed over (desktopReason stays null then): GM's app banner
+      // (round 4, 2026-10-23, verbatim). A quit and reopen starts a fresh
+      // backend with a fresh token; a reload asks the same shell for the same
+      // token, which the same backend refuses again.
+      if (hasDesktopBridge()) {
+        return "This window isn't connected as you. Quit Nebula and open it again.";
+      }
+      // GM - Design, round 4 (2026-10-23), verbatim.
+      return "This tab isn't connected as you. Open the link Nebula printed when it started.";
   }
 }
 

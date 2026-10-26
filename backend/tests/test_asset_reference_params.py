@@ -29,14 +29,14 @@ from services.project_store import ProjectStore, make_project
 from services.provider_recovery import ProviderRecoveryStore
 from services.provider_start_guard import ProviderStartGuard
 from services.retired_nodes import migrate_params
-from tests.conftest import PERSON
+from tests.conftest import PERSON, stored_image_urls
 
 AGENT = {"X-Nebula-Agent": "GM - Design"}
 MCP = {"X-Nebula-Client": "nebula-mcp"}
 
 CHARACTER = {
     "name": "Rina", "subjectType": "human",
-    "referenceViews": ["/api/outputs/c/a.png", "/api/outputs/c/b.png", "/api/outputs/c/c.png"],
+    "referenceViews": stored_image_urls(),
     "frozenTraitString": "short silver hair", "seed": 7, "consistencyStrength": 0.6,
 }
 
@@ -44,6 +44,8 @@ CHARACTER = {
 @pytest.fixture
 def api(tmp_path, monkeypatch, person):
     import main as main_module
+
+    stored_image_urls()
 
     monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path / "moodboards"))
     monkeypatch.setenv("NEBULA_CHARACTER_ROOT", str(tmp_path / "characters"))

@@ -45,6 +45,7 @@ from typing import Any
 
 from models.graph import GraphNode, PortValueDict
 from services import node_route
+from execution.person_line import as_person_line, field_label, with_person_line
 
 # The fal node's model choice -> ModelArk model id (image-generation-api and
 # model-list, 2026-10-14). 5.0 lite: the model list names "seedream-5-0-260128
@@ -97,11 +98,11 @@ def _limits(definition_id: str) -> dict[str, Any]:
 
 def _wxh(width: Any, height: Any, limits: dict[str, Any], what: str) -> str:
     if not node_route.size_fits(width, height, limits):
-        raise ValueError(
+        raise as_person_line(ValueError(
             f"BytePlus can't render {what} {width!r}x{height!r} exactly: it takes whole-pixel sizes with "
             f"{limits.get('minPixels', 0):,} to {limits.get('maxPixels', 0):,} pixels and a ratio up to "
             f"1:{limits.get('maxAspect', 16)}. Choose a size in that range, or run it on the copy."
-        )
+        ))
     return f"{int(width)}x{int(height)}"
 
 
@@ -142,7 +143,9 @@ def seedream_fal_to_byteplus(
     if isinstance(size_value, dict):
         size = _wxh(size_value.get("width"), size_value.get("height"), _limits(node.definition_id), "the size")
     elif size_value == "auto_3K" and model_choice != "5.0-lite":
-        raise ValueError("Seedream 4.5 does not support image_size auto_3K; choose a supported size or Seedream 5.0 Lite")
+        raise with_person_line(
+            ValueError("Seedream 4.5 does not support image_size auto_3K; choose a supported size or Seedream 5.0 Lite"),
+            "Seedream 4.5 can't make the Auto 3K size. Choose another size, or use Seedream 5.0 Lite.")
     elif size_value in _TIERS:
         size = _TIERS[str(size_value)]
     elif size_value in _SHAPED:
@@ -151,12 +154,15 @@ def seedream_fal_to_byteplus(
         raise ValueError(f"BytePlus has no size for Seedream image_size {size_value!r}; it runs on fal")
     refs = _port_values(inputs, "images", "image")
     if len(refs) > MAX_REFERENCES:
-        raise ValueError(f"Seedream accepts at most {MAX_REFERENCES} reference images (received {len(refs)})")
+        raise with_person_line(ValueError(f"Seedream accepts at most {MAX_REFERENCES} reference images (received {len(refs)})"), f"Seedream on BytePlus takes at most {MAX_REFERENCES} reference images, and {len(refs)} are "
+                         f"connected. Disconnect the extra ones, then run the node again.")
     max_images = _count(params.get("max_images"), "max_images", 6)
     if len(refs) + max_images > MAX_IMAGES_PER_REQUEST:
-        raise ValueError(
+        raise with_person_line(ValueError(
             f"BytePlus takes at most {MAX_IMAGES_PER_REQUEST} images per request, references plus outputs "
-            f"({len(refs)} references + max_images {max_images})")
+            f"({len(refs)} references + max_images {max_images})"),
+            f"BytePlus makes at most {MAX_IMAGES_PER_REQUEST} images per request, counting references and results. "
+            f"Use fewer references, or lower “{field_label(node.definition_id, 'max_images', 'Images per Generation')}”.")
     out = {"model": model, "size": size, "num_images": _count(params.get("num_images"), "num_images", 6),
            "max_images": max_images}
     routed: dict[str, PortValueDict] = {}
@@ -180,12 +186,13 @@ def krea_seedream_to_byteplus(model: str):
     def translate(node: GraphNode, inputs: dict[str, PortValueDict]) -> tuple[GraphNode, dict[str, PortValueDict]]:
         params = node.params
         if _port_values(inputs, "style_images"):
-            raise ValueError(
+            raise with_person_line(ValueError(
                 "Krea's style images (with their strength) have no BytePlus equivalent. Remove the style "
-                "images, or remove the BytePlus key to run this on Krea.")
+                "images, or remove the BytePlus key to run this on Krea."), "Krea's style images and their strength have no BytePlus equivalent. Remove the style images, or "
+                "remove the BytePlus key to run this on Krea.")
         width, height = params.get("width"), params.get("height")
         if width in (None, "") or height in (None, ""):
-            raise ValueError("Seedream needs a width and a height")
+            raise with_person_line(ValueError("Seedream needs a width and a height"), "Seedream needs a width and a height. Fill in “Width” and “Height”, then run the node again.")
         size = _wxh(width, height, _limits(node.definition_id), "width x height")
         routed: dict[str, PortValueDict] = {}
         prompt = inputs.get("prompt")
@@ -223,7 +230,7 @@ def request_body(node: GraphNode, inputs: dict[str, PortValueDict]) -> dict[str,
     prompt = inputs.get("prompt")
     text = str(prompt.value).strip() if prompt is not None and prompt.value not in (None, "") else ""
     if not text:
-        raise ValueError("Seedream needs a prompt")
+        raise with_person_line(ValueError("Seedream needs a prompt"), "Seedream needs a prompt. Connect one, then run the node again.")
     params = node.params
     body: dict[str, Any] = {"model": params["model"], "prompt": text, "size": params["size"],
                             "response_format": "b64_json", "watermark": False}

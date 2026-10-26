@@ -4,8 +4,11 @@ import { storedAssetId, useStoredAsset } from '../../store/storedAssetsStore';
 import { NodeSettingsAction } from './NodeSettingsAction';
 import { RestoreTrashedAsset } from './RestoreTrashedAsset';
 import { PORT_COLORS } from '../../lib/portCompatibility';
-import { backendAssetUrlSync } from '../../lib/backend';
+import { storedImageView } from '../../lib/storedImage';
+import { OutsideImageNote } from '../OutsideImageNote';
 import { useOpenOnDoubleClick } from './useOpenOnDoubleClick';
+import { NodeRunError } from './NodeError';
+import type { NodeData } from '../../types';
 import '../../styles/character-node.css';
 
 // The node stores only the Character's id (its `character` param, which agents
@@ -23,7 +26,9 @@ export function CharacterNode({ id, data, selected }: NodeProps) {
   const character = entry?.summary ?? null;
   const status = characterId ? entry?.status ?? 'loading' : 'empty';
   const name = character?.name.trim() || (status === 'missing' ? 'Character not found' : 'Character');
-  const thumbUrl = character?.thumbnail ? backendAssetUrlSync(character.thumbnail) : null;
+  // Only Nebula's own files are loaded (lib/storedImage.ts).
+  const thumb = storedImageView(character?.thumbnail);
+  const thumbUrl = thumb.src;
 
   // Surface the id (short) so an unnamed-but-attached character is still
   // identifiable on the canvas.
@@ -46,11 +51,13 @@ export function CharacterNode({ id, data, selected }: NodeProps) {
         {thumbUrl ? (
           <img src={thumbUrl} alt="" className="character-node__thumb-img" draggable={false} />
         ) : (
-          <div className="character-node__thumb-placeholder">character</div>
+          <div className="character-node__thumb-placeholder">{thumb.outside ? <OutsideImageNote /> : 'character'}</div>
         )}
       </div>
 
       <div className="character-node__summary">{summary}</div>
+
+      <NodeRunError data={data as unknown as NodeData} className="character-node__run-error" />
 
       {status === 'trashed' && (
         <RestoreTrashedAsset kind="character" id={characterId} className="character-node__open" />

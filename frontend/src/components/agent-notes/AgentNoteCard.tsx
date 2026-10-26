@@ -1,7 +1,7 @@
 import { type CSSProperties, type Ref } from 'react';
 import { X } from 'lucide-react';
 import type { AgentNote, AgentNoteAction } from '../../lib/agentNotes';
-import { aboutLabel, noteText } from '../../lib/agentNotesView';
+import { noteLabel, noteText } from '../../lib/agentNotesView';
 import { AuthorDot, NoteButtons, type AgentNotesAdapter } from './AgentNoteParts';
 
 interface HoldHandlers {
@@ -34,10 +34,10 @@ export function AgentNoteCard({
   hold: HoldHandlers;
   onRead: () => void;
   onDismiss: () => void;
-  onAction: (action: AgentNoteAction) => void;
-  onShow: () => void;
+  onAction: (action: AgentNoteAction, anchor?: HTMLElement) => void;
+  onShow: (anchor?: HTMLElement) => void;
 }) {
-  const label = aboutLabel(note.about);
+  const label = noteLabel(note);
   return (
     <div
       ref={cardRef}
@@ -66,14 +66,14 @@ export function AgentNoteCard({
           <X size={14} strokeWidth={1.75} aria-hidden="true" focusable="false" />
         </button>
       </div>
-      <p className="agent-note-card__text" onClick={() => { onRead(); if (note.refs.length > 0) onShow(); }}>
-        {noteText(note)}
+      <p className="agent-note-card__text" onClick={(event) => { onRead(); if (note.refs.length > 0) onShow(event.currentTarget); }}>
+        {noteText(note, adapter.numberFor)}
       </p>
       <NoteButtons
         note={note}
         adapter={adapter}
-        onAction={(action) => { onRead(); onAction(action); }}
-        onShow={() => { onRead(); onShow(); }}
+        onAction={(action, anchor) => { onRead(); onAction(action, anchor); }}
+        onShow={(anchor) => { onRead(); onShow(anchor); }}
       />
     </div>
   );

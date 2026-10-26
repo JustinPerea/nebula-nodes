@@ -21,16 +21,23 @@ import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { canLoadGraph, canSaveGraph, requestGraphLoad, requestGraphSave } from '../../lib/graphFileActions';
 import { fetchCLIGraph } from '../../lib/api';
-import { apiFetch } from '../../lib/backend';
+import { apiRequest } from '../../lib/apiRequest';
+import { failureMessage, failureUnder } from '../../lib/errorCopy';
+import { showNotice } from '../../lib/canvasNotice';
+import { BOTTOM_BAR_ATTR, BOTTOM_BAR_PANEL } from '../../lib/bottomBar';
+import { useBottomBarClearance } from '../../hooks/useBottomBarClearance';
 import { CANVAS_FIT_DURATION, CANVAS_ZOOM_DURATION, computeCanvasFitPadding } from '../../lib/canvasFit';
 import { displayKey } from '../../lib/keyboardShortcuts';
 import { describeRunScope, runChipLabel, summarizeRunScope } from '../../lib/runScope';
 import { usePricingStore } from '../../store/pricingStore';
+import { useInputSizeStore } from '../../store/inputSizeStore';
 import type { NodeData } from '../../types';
 import { useFitCanvasView } from '../../hooks/useFitCanvasView';
 import type { Edge, Node } from '@xyflow/react';
 import '../../styles/panels.css';
 import '../../styles/canvas-toolbar.css';
+
+const CLEAR_CANVAS = "Couldn't clear the canvas.";
 
 
 export function Toolbar() {
@@ -55,10 +62,14 @@ export function Toolbar() {
   const graphEdges = useGraphStore((s) => s.edges);
   const pricing = usePricingStore((s) => s.table);
   const apiKeys = useUIStore((s) => s.settingsCache.apiKeys);
+  const sizes = useInputSizeStore((s) => s.sizes);
+  const requestSizes = useInputSizeStore((s) => s.request);
   const runScope = useMemo(
-    () => summarizeRunScope(graphNodes ?? [], graphEdges ?? [], { kind: 'graph' }, { pricing, apiKeys }),
-    [graphNodes, graphEdges, pricing, apiKeys],
+    () => summarizeRunScope(graphNodes ?? [], graphEdges ?? [], { kind: 'graph' }, { pricing, apiKeys, sizes }),
+    [graphNodes, graphEdges, pricing, apiKeys, sizes],
   );
+  const sizeRefs = runScope.cost?.sizeRefs;
+  useEffect(() => { if (sizeRefs?.length) requestSizes(sizeRefs); }, [sizeRefs, requestSizes]);
   const runChip = runChipLabel(runScope);
   const runScopeId = useId();
   const autoLayout = useGraphStore((s) => s.autoLayout);
@@ -77,7 +88,7 @@ export function Toolbar() {
       : 'Wait for the active run to finish.';
   const saveBlockedReason = !canLoad
     ? loadBlockedReason
-    : 'Resolve the World Labs paid-start review before saving.';
+    : 'Check the waiting World Labs run before you save.';
 
   const closeActions = useCallback((restoreFocus = false) => {
     setActionsOpen(false);
@@ -100,6 +111,14 @@ export function Toolbar() {
       unsubscribe();
     };
   }, []);
+
+  // Where the bar starts, its open Canvas actions panel included, for the
+  // notices above it and the floating panels that end above it (GM - Design,
+  // 2026-10-23). Measured again whenever the bar, its panel or the window
+  // changes size.
+  const barRoot = useRef<HTMLDivElement>(null);
+  const actionsPanel = useRef<HTMLElement>(null);
+  useBottomBarClearance([barRoot, actionsPanel], actionsOpen);
 
   useEffect(() => {
     if (!actionsOpen) return;
@@ -160,21 +179,15 @@ export function Toolbar() {
     try {
       // force: the person just confirmed, and a project with nodes needs it
       // (the backend refuses a clear without it, 409).
-      const response = await apiFetch('/api/graph?force=true', { method: 'DELETE' });
-      if (!response.ok) {
-        let detail = '';
-        try { detail = (await response.json()).detail ?? ''; } catch {
-          /* Status fallback below. */
-        }
-        throw new Error(detail || `Clear failed: HTTP ${response.status}.`);
-      }
+      // GM, error-copy round 2: "Couldn't clear the canvas." then the reason.
+      await apiRequest(CLEAR_CANVAS, '/api/graph?force=true', { method: 'DELETE' });
       // A successful backend clear proves no provider safety record remains;
       // unlike ordinary snapshot hydration, this is authoritative removal.
       useGraphStore.setState({ providerRecoveries: [], providerStartAmbiguities: [] });
       useGraphStore.getState().clearGraph({ undoStep });
     } catch (error) {
       useGraphStore.getState().cancelUndoStep(undoStep);
-      alert(error instanceof Error ? error.message : 'Could not clear the graph.');
+      showNotice(failureMessage(error, CLEAR_CANVAS));
     }
   }, []);
 
@@ -207,7 +220,7 @@ export function Toolbar() {
       const data = await fetchCLIGraph();
       if (!mounted.current || !canLoadGraph(useGraphStore.getState())) return;
       if (data.empty) {
-        alert('CLI graph is empty — build one with the nebula CLI first.');
+        showNotice('The CLI graph is empty. Build one with the nebula CLI first.', 'info');
         return;
       }
       useGraphStore.getState().loadGraph(
@@ -226,13 +239,14 @@ export function Toolbar() {
         if (current.canvasFocusRevision !== focusRevision || current.canvasViewportRevision !== viewportRevision) return;
         void fitView({ padding: computeCanvasFitPadding(), duration: CANVAS_FIT_DURATION });
       }, 50);
-    } catch {
-      if (mounted.current) alert('Could not fetch CLI graph — is the backend running?');
+    } catch (error) {
+      if (mounted.current) showNotice(failureUnder(error, "Couldn't import the CLI graph."));
     }
   }, [fitView]);
 
   return (
-    <div className={`toolbar toolbar--grouped${actionsOpen ? ' toolbar--actions-open' : ''}`} role="group" aria-label="Canvas controls">
+    <div ref={barRoot} className={`toolbar toolbar--grouped${actionsOpen ? ' toolbar--actions-open' : ''}`} role="group" aria-label="Canvas controls"
+      {...{ [BOTTOM_BAR_ATTR]: '' }}>
       {isExecuting ? (
         <button
           type="button"
@@ -272,7 +286,8 @@ export function Toolbar() {
           <ChevronUp className="toolbar__actions-chevron" size={12} aria-hidden="true" />
         </button>
         {actionsOpen && (
-          <section id={actionsId} className="toolbar__actions-panel" aria-label="Canvas actions">
+          <section ref={actionsPanel} id={actionsId} className="toolbar__actions-panel" aria-label="Canvas actions"
+            {...{ [BOTTOM_BAR_ATTR]: BOTTOM_BAR_PANEL }}>
             {!canLoad && <p className="toolbar__blocked" id={blockedId} role="status">{loadBlockedReason}</p>}
             {canLoad && !canSave && providerStartAmbiguities.length > 0 && (
               <p className="toolbar__blocked" id={blockedId} role="status">{saveBlockedReason}</p>

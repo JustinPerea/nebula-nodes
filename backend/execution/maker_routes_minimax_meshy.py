@@ -32,6 +32,7 @@ import json
 from typing import Any, Awaitable, Callable
 
 from models.graph import GraphNode, PortValueDict
+from execution.person_line import as_person_line, it_was, model_name, with_call_facts, with_person_line
 
 Handler = Callable[..., Awaitable[dict[str, Any]]]
 Translate = Callable[
@@ -105,26 +106,28 @@ def krea_hailuo_to_minimax(model: str) -> Translate:
         params = node.params
         prompt = " ".join(str(v) for v in _values(inputs, params, "prompt")).strip()
         if not prompt:
-            raise ValueError("Prompt input is required")
+            raise with_person_line(ValueError("Prompt input is required"), "Connect a prompt to this node, then run it again.")
         first = _one(inputs, params, "start_image")
         last = _one(inputs, params, "end_image")
         resolution = HAILUO_RESOLUTIONS.get(str(params.get("resolution") or "768p"))
         if resolution is None:
-            raise ValueError(f"MiniMax has no resolution {params.get('resolution')!r}")
+            raise with_person_line(ValueError(f"MiniMax has no resolution {params.get('resolution')!r}"), "MiniMax doesn't offer this resolution. Pick another in “Resolution”, then run the node again.")
         duration = _whole(params.get("duration", 6), "Duration")
         if duration not in (6, 10):
-            raise ValueError(f"MiniMax makes 6 or 10 second clips (received {params.get('duration')!r}).")
+            raise with_person_line(ValueError(f"MiniMax makes 6 or 10 second clips (received {params.get('duration')!r})."), f"MiniMax makes 6 or 10 second clips. Set “Duration” to 6 or 10. {it_was(params.get('duration'))}")
         if resolution == "1080P" and duration != 6:
-            raise ValueError("MiniMax makes 1080P clips at 6 seconds only.")
+            raise with_person_line(ValueError("MiniMax makes 1080P clips at 6 seconds only."), "MiniMax makes 1080p clips at 6 seconds only.")
         if last and model not in FIRST_LAST_FRAME_MODELS:
-            raise ValueError(f"MiniMax's first-and-last-frame mode is Hailuo 02 only, so {model} can't take an "
-                             f"end image on your MiniMax key. Disconnect End image. {KREA_ONLY_HINT}")
+            raise with_person_line(ValueError(f"MiniMax's first-and-last-frame mode is Hailuo 02 only, so {model} can't take an "
+                             f"end image on your MiniMax key. Disconnect End image. {KREA_ONLY_HINT}"), f"MiniMax's first-and-last-frame mode is Hailuo 02 only, so {model_name(model)} can't take an end "
+                             f"image on your MiniMax key. Disconnect “End image”. {KREA_ONLY_HINT}")
         if model in IMAGE_ONLY_MODELS and not first:
-            raise ValueError(f"{model} is image-to-video only on MiniMax's API. Connect a start image. "
-                             f"{KREA_ONLY_HINT}")
+            raise with_person_line(ValueError(f"{model} is image-to-video only on MiniMax's API. Connect a start image. "
+                             f"{KREA_ONLY_HINT}"), f"{model_name(model)} is image-to-video only on MiniMax's API. Connect a start image. {KREA_ONLY_HINT}")
         if resolution == "512P" and (not first or last):
-            raise ValueError("MiniMax renders 512P only from a start image, without an end image. Connect a start "
-                             f"image or pick 768p. {KREA_ONLY_HINT}")
+            raise with_person_line(ValueError("MiniMax renders 512P only from a start image, without an end image. Connect a start "
+                             f"image or pick 768p. {KREA_ONLY_HINT}"), "MiniMax renders 512p only from a start image, without an "
+                             f"end image. Connect a start image or pick 768p. {KREA_ONLY_HINT}")
         out: dict[str, Any] = {"model": model, "duration": duration, "resolution": resolution}
         if isinstance(params.get("expand_prompt"), bool):
             out["prompt_optimizer"] = params["expand_prompt"]
@@ -228,7 +231,7 @@ def krea_meshy_to_meshy(model: str) -> Translate:
         if mode == "text":
             prompt = " ".join(str(v) for v in _values(inputs, params, "prompt")).strip()
             if not prompt:
-                raise ValueError("Meshy text-to-3D needs a prompt")
+                raise with_person_line(ValueError("Meshy text-to-3D needs a prompt"), "Meshy text-to-3D needs a prompt. Connect one, then run the node again.")
             seed = _whole(params.get("seed"), "Seed")
             if seed is not None:
                 out["seed"] = seed
@@ -242,10 +245,11 @@ def krea_meshy_to_meshy(model: str) -> Translate:
         # URIs (as the Krea route uploads them); Meshy can't fetch Nebula's served URLs.
         images = [resolve_output_ref(str(value)) for value in _values(inputs, params, "image_urls")]
         if not images:
-            raise ValueError("Meshy image-to-3D needs an image. Connect one, or set Input mode to text.")
+            raise with_person_line(ValueError("Meshy image-to-3D needs an image. Connect one, or set Input mode to text."), "Meshy image-to-3D needs an image. Connect one, or set “Input mode” to text.")
         if len(images) > MESHY_MAX_IMAGES:
-            raise ValueError(f"Meshy's own API takes 1 to {MESHY_MAX_IMAGES} images of one object "
-                             f"(got {len(images)}). {MESHY_KREA_HINT}")
+            raise with_person_line(ValueError(f"Meshy's own API takes 1 to {MESHY_MAX_IMAGES} images of one object "
+                             f"(got {len(images)}). {MESHY_KREA_HINT}"), f"Meshy's own API takes 1 to {MESHY_MAX_IMAGES} images of one object, and {len(images)} are "
+                             f"connected. Disconnect the extra ones. {MESHY_KREA_HINT}")
         out["should_texture"] = texture
         if len(images) == 1:
             out[_MESHY_TASK] = "image"
@@ -273,9 +277,10 @@ async def krea_meshy(node: GraphNode, inputs: dict[str, PortValueDict], api_keys
         result = await handler(call, inputs, api_keys, emit=emit)
     except RuntimeError as exc:
         if any(f"submit failed ({code})" in str(exc) for code in (401, 402, 403)):
-            raise RuntimeError(f"{exc}. Meshy documents that {params.get('ai_model')} \"require[s] account "
-                               f"entitlement\" (https://docs.meshy.ai/openapi.yaml), and API access comes with "
-                               f"Pro and above (https://www.meshy.ai/pricing). {MESHY_KREA_HINT}") from exc
+            raise with_call_facts(RuntimeError(
+                f"{exc}. Meshy documents that {params.get('ai_model')} \"require[s] account "
+                f"entitlement\" (https://docs.meshy.ai/openapi.yaml), and API access comes with "
+                f"Pro and above (https://www.meshy.ai/pricing). {MESHY_KREA_HINT}"), exc) from exc
         raise
     return _krea_ports("Mesh", result)
 

@@ -9,6 +9,7 @@ import {
   type ConnectedApp,
   type OutsideSpend,
 } from '../../../lib/api';
+import { failureMessage } from '../../../lib/errorCopy';
 
 const APP_LIMIT_CHOICES = [1, 2, 5, 10, 25, 50] as const;
 /** Cursor colors on offer. Bright enough to read on the dark canvas; null keeps the one derived from the app's id. */
@@ -170,7 +171,7 @@ export function ConnectedApps({ view, loadError, onChanged }: {
       await work();
       onChanged();
     } catch (exc) {
-      setError(exc instanceof Error ? exc.message : String(exc));
+      setError(failureMessage(exc, "Couldn't update the connected apps."));
     } finally {
       setBusy(false);
     }

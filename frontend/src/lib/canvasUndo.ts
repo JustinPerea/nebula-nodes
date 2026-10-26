@@ -23,6 +23,7 @@
  */
 import type { Edge, Node } from '@xyflow/react';
 import type { CinemaSceneSpec, NodeData } from '../types';
+import type { RemovalRecord } from './deleteNotice';
 
 /** Backend (cli_graph) node ids: n1, n2, ... Everything else is frontend-only. */
 export const CLI_NODE_ID_RE = /^n\d+$/;
@@ -44,6 +45,9 @@ export interface EditOrigin {
   tab?: string;
   id?: string;
   undoes?: string;
+  /** The nodes the edit deleted, with the pins and proposals each delete
+   * removed (lib/deleteNotice.ts), so undoing it here puts those back too. */
+  removals?: unknown;
 }
 
 export interface GraphSlice {
@@ -63,6 +67,9 @@ export interface ForeignEdit {
   editId?: string;
   /** Set when the edit is an agent undoing its own earlier edit. */
   undoes?: string;
+  /** What the edit's deletes removed (from its graphSync), or what this
+   * step's last redo removed: undo names them in its restore. */
+  removals?: RemovalRecord[];
   at: number;
   before: GraphSlice;
   after: GraphSlice;
@@ -211,7 +218,7 @@ export function diffCanvas(
 /** Runtime fields a node keeps from the live canvas when an undo restores its recipe. */
 export const RUNTIME_FIELDS = [
   'outputs', 'state', 'progress', 'runStartedAt', 'batchOutputs', 'batchVariants', 'batchRunId',
-  'runNotes', 'outputFreshness', 'error', 'errorCategory', 'errorFriendly', 'skipReason',
+  'runNotes', 'outputFreshness', 'error', 'errorCategory', 'errorFriendly', 'errorPerson', 'errorProviderText', 'errorProvider', 'skipReason',
   'skipGateNodeId', 'withheldPorts', 'keyStatus', 'streamingText', 'streamingPartials', 'streamingSvg',
 ] as const;
 
@@ -291,6 +298,9 @@ export interface RestoreBody {
   unwire: WireBody[];
   /** The edit this step undoes or redoes (ForeignEdit.editId). */
   edit?: string;
+  /** The deletes this step undoes, for the nodes it brings back: the
+   * backend puts their pins back and reopens their proposals that still fit. */
+  removals?: RemovalRecord[];
 }
 
 function wire(edge: Edge): WireBody {

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
 import type { DragEvent as ReactDragEvent, ReactNode } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { X } from 'lucide-react';
@@ -8,6 +7,8 @@ import { useGraphStore } from '../../store/graphStore';
 import { fetchCharacters, fetchMoodboards, moveStoredAsset } from '../../lib/api';
 import { fetchPresets, type Preset } from '../../lib/createPresets';
 import { backendAssetUrlSync } from '../../lib/backend';
+import { storedImageView } from '../../lib/storedImage';
+import { OutsideImageNote } from '../OutsideImageNote';
 import { CHARACTER_DRAG_MIME, MOODBOARD_DRAG_MIME } from '../../lib/dragMime';
 import { NEW_CHARACTER_SENTINEL, NEW_MOODBOARD_SENTINEL } from '../../lib/studioSentinels';
 import { findAvailableNodePosition } from '../../lib/nodePlacement';
@@ -22,6 +23,8 @@ import { useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
 import { RecentlyDeletedAssets, UndoDeleteToast } from '../asset-trash/AssetTrash';
 import { useAssetDelete } from '../../hooks/useAssetDelete';
 import '../../styles/panels.css';
+import { FailureLines } from '../failure/FailureLines';
+import { failureMessage } from '../../lib/errorCopy';
 import '../../styles/character-studio.css';
 import '../../styles/moodboard-studio.css';
 
@@ -113,7 +116,8 @@ export function AssetsPanel() {
     };
     load()
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load assets.');
+        // Each list's request names itself ("Couldn't load the boards. <reason>").
+        if (!cancelled) setError(failureMessage(err, "Couldn't load your assets."));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -182,7 +186,7 @@ export function AssetsPanel() {
       useAssetStudioDraftStore.getState().rehome(kind, id, result.to);
       setRelistKey((value) => value + 1);
     } catch (err) {
-      setMoveError(err instanceof Error ? err.message : 'Move failed.');
+      setMoveError(failureMessage(err, kind === 'moodboard' ? "Couldn't move the board." : "Couldn't move the character."));
     }
     setMovingId(null);
   };
@@ -282,8 +286,8 @@ export function AssetsPanel() {
           {moveError && (
             <div className="character-palette__empty character-palette__empty--error" role="alert">{moveError}</div>
           )}
-          {tab === 'styles' && deleting.error && !deleting.lastDeleted && (
-            <div className="character-palette__empty character-palette__empty--error" role="alert">{deleting.error}</div>
+          {tab === 'styles' && deleting.deleteError && (
+            <div className="character-palette__empty character-palette__empty--error" role="alert"><FailureLines failure={deleting.deleteError} /></div>
           )}
 
           {!noProject && !busy && !failed && tab === 'characters' && (
@@ -296,6 +300,7 @@ export function AssetsPanel() {
                   name={c.name}
                   sub={`${c.referenceViews.length} views`}
                   thumbnail={c.thumbnail}
+                  localOnly
                   emptyThumb="◐"
                   selected={selected === `characters:${c.id}`}
                   onSelect={() => setSelected(`characters:${c.id}`)}
@@ -321,6 +326,7 @@ export function AssetsPanel() {
                   name={m.name}
                   sub={`${moodboardImagesLabel(m.images.length, setAsideCount(m.images))} · ${m.mode}`}
                   thumbnail={m.thumbnail}
+                  localOnly
                   emptyThumb="▦"
                   selected={selected === `moodboards:${m.id}`}
                   onSelect={() => setSelected(`moodboards:${m.id}`)}
@@ -348,6 +354,7 @@ export function AssetsPanel() {
                   name={p.name}
                   sub={p.category}
                   thumbnail={p.thumbnail}
+                  localOnly
                   emptyThumb="✦"
                   selected={selected === `styles:${p.id}`}
                   onSelect={() => setSelected(`styles:${p.id}`)}
@@ -365,13 +372,11 @@ export function AssetsPanel() {
           )}
         </ScrollFade>
       </ScrollFade>
-      {/* On the page, not in the panel: the dock panel is a containing block
-          for fixed children, which would pin the toast to the panel's edge. */}
-      {deleting.lastDeleted && createPortal(
+      {/* The toast draws in the app's notice region (UndoDeleteToast), never in the panel. */}
+      {deleting.lastDeleted && (
         <UndoDeleteToast key={deleting.lastDeleted.id} name={deleting.lastDeleted.name} busy={deleting.busy}
-          error={deleting.error} onDismiss={deleting.dismiss}
-          onUndo={() => { void deleting.undo().then((asset) => { if (asset) relist(); }); }} />,
-        document.body,
+          error={deleting.undoError} onDismiss={deleting.dismiss}
+          onUndo={() => { void deleting.undo().then((asset) => { if (asset) relist(); }); }} />
       )}
     </div>
   );
@@ -385,6 +390,7 @@ function AssetItem({
   name,
   sub,
   thumbnail,
+  localOnly = false,
   emptyThumb,
   selected,
   onSelect,
@@ -399,6 +405,9 @@ function AssetItem({
   name: string;
   sub: ReactNode;
   thumbnail?: string;
+  /** A Style's or Character's thumbnail: loaded only when it is one of
+   *  Nebula's own files (lib/storedImage.ts). */
+  localOnly?: boolean;
   emptyThumb: string;
   selected: boolean;
   onSelect: () => void;
@@ -413,6 +422,8 @@ function AssetItem({
   deleteBusy?: boolean;
 }) {
   const label = name || 'Untitled';
+  const stored = localOnly ? storedImageView(thumbnail) : null;
+  const src = stored ? stored.src : thumbnail ? backendAssetUrlSync(thumbnail) : null;
   return (
     <div className={`assets-item${selected ? ' assets-item--selected' : ''}`}>
       <button
@@ -426,8 +437,8 @@ function AssetItem({
         title={onAdd ? 'Double-click to open · drag onto the canvas to add' : 'Double-click to use in Create'}
       >
         <span className="character-palette__thumb">
-          {thumbnail ? (
-            <img src={backendAssetUrlSync(thumbnail)} alt="" draggable={false} />
+          {src ? (
+            <img src={src} alt="" draggable={false} />
           ) : (
             <span className="character-palette__thumb-empty" aria-hidden="true">{emptyThumb}</span>
           )}
@@ -435,6 +446,7 @@ function AssetItem({
         <span className="character-palette__meta">
           <span className="character-palette__name">{label}</span>
           <span className="character-palette__sub">{sub}</span>
+          {stored?.outside && <OutsideImageNote />}
         </span>
       </button>
       {selected && (

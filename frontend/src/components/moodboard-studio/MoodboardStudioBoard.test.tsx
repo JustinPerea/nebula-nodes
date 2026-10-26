@@ -54,12 +54,14 @@ vi.mock('./BoardCanvas', () => ({
 
 import { MoodboardStudioView } from './MoodboardStudioView';
 import { GraphFileActions } from '../GraphFileActions';
+import { NoticeRegion } from '../NoticeRegion';
 import { MoodboardVersionConflict, type MoodboardOp } from '../../lib/moodboardEdits';
 import { setOpenProject } from '../../test/projectState';
 import { useUIStore } from '../../store/uiStore';
 import { useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
 import { MOODBOARD_VIEW_KEY, useBoardCanvasStore } from '../../store/boardCanvasStore';
 import { useBoardUndoStore } from '../../lib/boardUndo';
+import { RequestFailedError } from '../../lib/errorCopy';
 
 const card = (id: string, x = 0, y = 0): MoodboardPlacement => ({ id: `c-${id}`, frameId: null, x, y, w: 480, h: 270,
   weight: 1, placedBy: 'person', placedAt: '2026-10-20T00:00:00+00:00' });
@@ -162,19 +164,21 @@ beforeEach(() => {
   });
   useAssetStudioDraftStore.setState({ entries: {}, aliases: {} });
   useBoardUndoStore.setState({ histories: {} });
-  useBoardCanvasStore.setState({ view: 'list', selection: {}, viewports: {} });
+  useBoardCanvasStore.setState({ view: 'list', selection: {}, viewports: {}, studioBoard: null, showRequest: null, frameRequest: null });
   try { window.localStorage.removeItem(MOODBOARD_VIEW_KEY); } catch { /* jsdom */ }
   setOpenProject(['p1', 'Project']);
 });
 afterEach(() => cleanup());
 
-async function openStudio({ view = 'list' as 'list' | 'board', withGraphActions = false } = {}) {
+async function openStudio({ view = 'list' as 'list' | 'board', withGraphActions = false, withRegion = false } = {}) {
   useBoardCanvasStore.setState({ view });
   act(() => { useUIStore.getState().enterMoodboardEditor('g1', 'global'); });
   render(
     <ReactFlowProvider>
       {withGraphActions && <GraphFileActions />}
       <MoodboardStudioView />
+      {/* App mounts the notice region beside the screens, outside the Studio's tree. */}
+      {withRegion && <NoticeRegion screen="studio" />}
     </ReactFlowProvider>,
   );
   await screen.findByDisplayValue('Global board');
@@ -240,6 +244,70 @@ describe('a drag on the board', () => {
     press('z', { metaKey: true, shiftKey: true });
     await waitFor(() => expect(server.edits[2]).toEqual([{ op: 'restore', slices: [{ part: 'tag', tag: 'u2' }] }]));
     expect(await screen.findByText('card #1 at 300,40')).toBeTruthy();
+  });
+
+  // Round 3 (GM): "Make Retry redo the failed action, never a different one."
+  // A failed undo names its own action, and the toolbar's Retry undoes the
+  // same step again (so the reason is GM's short line: the button is the
+  // retry). On 867f254e the Retry saved the board and never undid.
+  const undoNotice = async () => waitFor(() => {
+    const shown = document.querySelector('.moodboard-studio__notice--error');
+    expect(shown).not.toBeNull();
+    return shown!;
+  });
+  const parts = (shown: Element) => [shown.querySelector('.failure-lines__heading')?.textContent,
+    shown.querySelector('.failure-lines__reason')?.textContent];
+
+  it('a failed undo says "Couldn\'t undo the change." over GM\'s short line, and Retry undoes that step again', async () => {
+    await openStudio({ view: 'board' });
+    act(() => board.props!.onMove([{ placement: 'c-i1', x: 300, y: 40 }]));
+    await waitFor(() => expect(server.edits).toHaveLength(1), { timeout: 400 });
+    api.editMoodboard.mockRejectedValueOnce(new RequestFailedError("Couldn't save the board.", 503));
+    press('z', { metaKey: true });
+    expect(parts(await undoNotice())).toEqual(["Couldn't undo the change.", "Nebula didn't respond."]);
+    const restores = () => api.editMoodboard.mock.calls.filter(([, ops]) => (ops as MoodboardOp[])[0]?.op === 'restore');
+    expect(restores()).toHaveLength(1);
+    const puts = api.updateMoodboard.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(restores()).toHaveLength(2));
+    // The same step's restore, sent again; never a save of the board.
+    expect(restores()[1][1]).toEqual(restores()[0][1]);
+    expect(api.updateMoodboard.mock.calls.length).toBe(puts);
+    expect(await screen.findByText('card #1 at 0,0')).toBeTruthy();
+    await waitFor(() => expect(document.querySelector('.moodboard-studio__notice--error')).toBeNull());
+  });
+
+  it('a failed redo: Retry redoes that step again', async () => {
+    await openStudio({ view: 'board' });
+    act(() => board.props!.onMove([{ placement: 'c-i1', x: 300, y: 40 }]));
+    await waitFor(() => expect(server.edits).toHaveLength(1), { timeout: 400 });
+    press('z', { metaKey: true });
+    await waitFor(() => expect(server.edits).toHaveLength(2));
+    api.editMoodboard.mockRejectedValueOnce(new RequestFailedError("Couldn't save the board.", 503));
+    press('z', { metaKey: true, shiftKey: true });
+    expect(parts(await undoNotice())).toEqual(["Couldn't redo the change.", "Nebula didn't respond."]);
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(server.edits).toHaveLength(3));
+    expect(await screen.findByText('card #1 at 300,40')).toBeTruthy();
+  });
+
+  it('once the failed step is no longer the next one, Retry is hidden and the line keeps "Try again"', async () => {
+    await openStudio({ view: 'board' });
+    act(() => board.props!.onMove([{ placement: 'c-i1', x: 300, y: 40 }]));
+    await waitFor(() => expect(server.edits).toHaveLength(1), { timeout: 400 });
+    api.editMoodboard.mockRejectedValueOnce(new RequestFailedError("Couldn't save the board.", 503));
+    press('z', { metaKey: true });
+    await undoNotice();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+    // The step goes (another window's edit forgot it, say): there is nothing the same to undo.
+    act(() => {
+      const undo = useBoardUndoStore.getState();
+      for (const [key, history] of Object.entries(undo.histories)) {
+        for (const step of history.done) undo.forget(key, step.id);
+      }
+    });
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull());
+    expect(parts(await undoNotice())).toEqual(["Couldn't undo the change.", "Nebula didn't respond. Try again."]);
   });
 
   it('a step whose cards changed since says so instead of moving them', async () => {
@@ -466,6 +534,25 @@ describe("the Studio's keys", () => {
     expect(server.board.images.map((img) => img.id)).toEqual(['i1', 'i2']);
   });
 
+  // The toast portals into the app's notice region, outside the Studio's tree
+  // (round 2). It holds while focus is in it, and the Studio's keys still work
+  // from there, as they did when it rendered inside the Studio.
+  it('with focus on the toast in the notice region, Cmd+Z is still the Studio\'s', async () => {
+    await openStudio({ view: 'board', withRegion: true });
+    select('c-i1');
+    press('Delete');
+    await waitFor(() => expect(server.edits).toEqual([[{ op: 'remove', images: ['i1'] }]]), { timeout: 400 });
+    const toast = await screen.findByRole('status', { name: 'Board undo' });
+    expect(toast.closest('[data-notice-slot="board"]')).not.toBeNull();
+    expect(toast.closest('.moodboard-studio-view')).toBeNull();
+    const dismiss = within(toast).getByRole('button', { name: 'Dismiss' });
+    act(() => dismiss.focus());
+    const undo = press('z', { metaKey: true }, dismiss);
+    expect(undo.defaultPrevented).toBe(true);
+    await waitFor(() => expect(server.edits[1]).toEqual([{ op: 'restore', slices: [{ part: 'tag', tag: 'u1' }] }]));
+    expect(await screen.findByText('card #1 at 0,0')).toBeTruthy();
+  });
+
   it('keys typed in a text field stay the field\'s: Delete edits the note, Cmd+Z is the field\'s own', async () => {
     await openStudio({ view: 'board' });
     select('c-i1');
@@ -487,5 +574,33 @@ describe("the Studio's keys", () => {
     press('Delete');
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(server.edits).toEqual([]);
+  });
+});
+
+describe('the board\'s Updates in the corner (Q113 c)', () => {
+  it('the Studio says which saved board is open, with its images in board order, and forgets it on leaving', async () => {
+    await openStudio();
+    await waitFor(() => expect(useBoardCanvasStore.getState().studioBoard).toMatchObject({ boardId: 'g1', imageIds: ['i1', 'i2'] }));
+    expect(useBoardCanvasStore.getState().studioBoard!.boardKey).toBe(JSON.stringify(['moodboard', 'global', 'g1']));
+    cleanup();
+    expect(useBoardCanvasStore.getState().studioBoard).toBeNull();
+  });
+
+  it('Show from an update opens the Board view, selects the cards it names and frames them', async () => {
+    await openStudio();
+    act(() => useBoardCanvasStore.getState().requestShow('g1', ['i2']));
+    expect(await screen.findByTestId('board-canvas')).toBeTruthy();
+    const key = board.props!.boardKey;
+    expect(useBoardCanvasStore.getState().selection[key]).toEqual(['c-i2']);
+    expect(useBoardCanvasStore.getState().frameRequest).toMatchObject({ boardKey: key, placementIds: ['c-i2'] });
+    expect(useBoardCanvasStore.getState().showRequest).toBeNull();
+  });
+
+  it('a Show meant for another board is left alone', async () => {
+    await openStudio();
+    act(() => useBoardCanvasStore.getState().requestShow('other', ['i2']));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByTestId('board-canvas')).toBeNull();
+    expect(useBoardCanvasStore.getState().frameRequest).toBeNull();
   });
 });

@@ -17,6 +17,8 @@ from services.media_input import checked_local_file, read_local_media
 from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir
 from execution.missing_credential import MissingCredentialError
+from execution.person_line import (and_list, as_job_failure, as_person_line, missing_file_line, slow_job_line,
+                                   with_api_status, with_call_facts, with_person_line, with_provider_line)
 
 ELEVENLABS_API_BASE = "https://api.elevenlabs.io/v1/text-to-speech"
 DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"  # Rachel
@@ -48,7 +50,9 @@ def _voice_id(node: GraphNode) -> str:
     """The voice id, checked and escaped as one URL path segment."""
     voice = str(node.params.get("voice_id") or DEFAULT_VOICE_ID).strip()
     if not _VOICE_ID.fullmatch(voice):
-        raise ValueError(f"voice_id must be an ElevenLabs voice ID (letters and digits), received {voice!r}")
+        raise with_person_line(
+            ValueError(f"voice_id must be an ElevenLabs voice ID (letters and digits), received {voice!r}"),
+            "“Voice ID” must be an ElevenLabs voice ID, letters and digits only.")
     return quote(voice, safe="")
 
 
@@ -77,7 +81,7 @@ async def handle_elevenlabs_tts(
     voice settings, so they don't override the voice either."""
     text_input = inputs.get("text")
     if not text_input or not text_input.value:
-        raise ValueError("Text input is required but was not provided")
+        raise with_person_line(ValueError("Text input is required but was not provided"), "Connect text to this node, then run it again.")
 
     text = str(text_input.value)
 
@@ -124,7 +128,8 @@ async def handle_elevenlabs_tts(
         )
         if response.status_code != 200:
             error_detail = response.text
-            raise RuntimeError(f"ElevenLabs API error {response.status_code}: {error_detail}")
+            raise with_api_status(
+                RuntimeError(f"ElevenLabs API error {response.status_code}: {error_detail}"), response.status_code)
 
     run_dir = get_run_dir()
     ext = _audio_extension(output_format)
@@ -214,28 +219,32 @@ def parse_dialogue_script(script: str) -> list[tuple[str, str]]:
         speaker, colon, text = raw.partition(":")
         speaker, text = speaker.strip(), text.strip()
         if not colon or not speaker:
-            raise ValueError(
+            raise with_person_line(ValueError(
                 f"Dialogue line {number} has no speaker. Start each line with a voice name from your "
                 f"ElevenLabs voices and a colon, e.g. 'Rachel: Hello there.' Received {raw.strip()[:60]!r}"
-            )
+            ), f"Dialogue line {number} has no speaker. Start each line with a voice name from your ElevenLabs "
+                "voices and a colon, like “Rachel: Hello there.”")
         if not text:
-            raise ValueError(f"Dialogue line {number} ({speaker}) has no text after the colon.")
+            raise with_person_line(ValueError(f"Dialogue line {number} ({speaker}) has no text after the colon."), f"Dialogue line {number} has no text after the colon. Add what {speaker} says, then run the node again.")
         turns.append((speaker, text))
     if not turns:
-        raise ValueError("The dialogue script is empty. Write one line per turn, e.g. 'Rachel: Hello.' then 'Adam: Hi!'")
+        raise with_person_line(ValueError("The dialogue script is empty. Write one line per turn, e.g. 'Rachel: Hello.' then 'Adam: Hi!'"), "The dialogue script is empty. Write one line per turn, each starting with a voice name and a "
+                             "colon, like “Rachel: Hello.”")
     speakers = _distinct_speakers(turns)
     if len(speakers) > DIALOGUE_MAX_VOICES:
-        raise ValueError(
+        raise with_person_line(ValueError(
             f"The script has {len(speakers)} speakers ({', '.join(speakers)}). ElevenLabs allows at most "
             f"{DIALOGUE_MAX_VOICES} different voices in one Text to Dialogue request. Split it across two nodes."
-        )
+        ), f"The script has {len(speakers)} speakers: {and_list(speakers)}. ElevenLabs allows at most "
+            f"{DIALOGUE_MAX_VOICES} different voices in one Text to Dialogue request. Split it across two nodes.")
     total = sum(len(text) for _, text in turns)
     if total > DIALOGUE_MAX_CHARS:
-        raise ValueError(
+        raise with_person_line(ValueError(
             f"The dialogue is {total:,} characters. ElevenLabs asks for at most {DIALOGUE_MAX_CHARS:,} "
             "characters per Text to Dialogue request for reliable generation (longer ones can stop early "
             "or be refused). Split the script across two nodes."
-        )
+        ), f"The dialogue is {total:,} characters. ElevenLabs asks for at most {DIALOGUE_MAX_CHARS:,} characters per "
+            "Text to Dialogue request, and longer ones can stop early or be refused. Split the script across two nodes.")
     return turns
 
 
@@ -273,14 +282,18 @@ def build_dialogue_request(node: GraphNode, script: str) -> tuple[str, dict[str,
     if language is not None and str(language).strip():
         code = str(language).strip().lower()
         if not _LANGUAGE_CODE.fullmatch(code):
-            raise ValueError(f"language_code must be an ISO 639-1 code like en or es, received {language!r}")
+            raise with_person_line(
+                ValueError(f"language_code must be an ISO 639-1 code like en or es, received {language!r}"),
+                "Set “Language Code” to a two-letter code like en or es, or clear it.")
         body["language_code"] = code
 
     seed = node.params.get("seed")
     if seed is not None and seed != "":
         value = int(seed)
         if not 0 <= value <= DIALOGUE_SEED_MAX:
-            raise ValueError(f"seed must be between 0 and {DIALOGUE_SEED_MAX}, received {value}")
+            raise with_person_line(
+                ValueError(f"seed must be between 0 and {DIALOGUE_SEED_MAX}, received {value}"),
+                f"Set “Seed” to a whole number from 0 to {DIALOGUE_SEED_MAX}, or clear it.")
         body["seed"] = value
 
     output_format = node.params.get("output_format", "mp3_44100_128")
@@ -333,18 +346,20 @@ async def _get_voices_page(client: Any, api_key: str, params: dict[str, Any]) ->
         timeout=VOICES_TIMEOUT,
     )
     if response.status_code == 401 and _is_missing_permission(response):
-        raise VoicesPermissionError(f"{response.status_code}: {_error_detail(response)}")
+        raise with_api_status(
+            VoicesPermissionError(f"{response.status_code}: {_error_detail(response)}"), response.status_code)
     if response.status_code == 401:
-        raise RuntimeError(
+        raise with_api_status(RuntimeError(
             f"ElevenLabs rejected the API key while listing voices (error 401: {_error_detail(response)}). "
-            "Check ELEVENLABS_API_KEY in Settings.")
+            "Check ELEVENLABS_API_KEY in Settings."), 401)
     if response.status_code == 403:
-        raise VoicesPermissionError(f"{response.status_code}: {_error_detail(response)}")
+        raise with_api_status(
+            VoicesPermissionError(f"{response.status_code}: {_error_detail(response)}"), response.status_code)
     if response.status_code != 200:
-        raise RuntimeError(
+        raise with_api_status(RuntimeError(
             f"ElevenLabs couldn't list your voices to look up the speaker names "
             f"(error {response.status_code}: {_error_detail(response)})."
-        )
+        ), response.status_code)
     return response.json()
 
 
@@ -368,10 +383,10 @@ async def list_elevenlabs_voices(client: Any, api_key: str) -> list[dict[str, An
             return voices
         seen_tokens.add(str(token))
         params = {**params, "next_page_token": token}
-    raise RuntimeError(
+    raise as_person_line(RuntimeError(
         f"Your ElevenLabs account has more than {VOICES_PAGE_SIZE * VOICES_MAX_PAGES:,} voices, more than "
         "Nebula reads in one run. Write voice IDs in the script in place of the names."
-    )
+    ))
 
 
 def _voice_line(voice: dict[str, Any]) -> str:
@@ -415,13 +430,14 @@ async def resolve_dialogue_voices(client: Any, api_key: str, speakers: list[str]
         # dialogue call rejects a bad one); any other label stops here.
         names = [s for s in speakers if not _VOICE_ID_SHAPE.fullmatch(s.strip())]
         if names:
-            raise ValueError(
+            raise with_provider_line(with_call_facts(ValueError(
                 f"Your ElevenLabs API key can't list your voices ({exc}), so Nebula can't look up "
                 f"{', '.join(repr(n) for n in names)}. Give the key Voices read access (voices_read) under "
                 "Developers > API Keys in ElevenLabs, or write each voice's ID in place of its name, "
                 "e.g. '21m00Tcm4TlvDq8ikWAM: Hello.' A label of exactly 20 letters and digits is used as a "
                 "voice ID."
-            ) from None
+            ), exc),
+                "Your ElevenLabs API key can't list your voices, so Nebula can't look up the speaker names. Give the key Voices read access under Developers > API Keys in ElevenLabs, or write each voice's ID in place of its name.") from None
         return {_speaker_key(s): s.strip() for s in speakers}
 
     by_name: dict[str, list[dict[str, Any]]] = {}
@@ -473,7 +489,7 @@ async def handle_elevenlabs_dialogue(
     """
     script_input = inputs.get("script")
     if not script_input or not script_input.value:
-        raise ValueError("Script input is required but was not provided")
+        raise with_person_line(ValueError("Script input is required but was not provided"), "Connect a script to this node, then run it again.")
 
     api_key = api_keys.get("ELEVENLABS_API_KEY")
     if not api_key:
@@ -491,7 +507,9 @@ async def handle_elevenlabs_dialogue(
             json=body,
         )
         if response.status_code != 200:
-            raise RuntimeError(f"ElevenLabs Text to Dialogue error {response.status_code}: {response.text}")
+            raise with_api_status(
+                RuntimeError(f"ElevenLabs Text to Dialogue error {response.status_code}: {response.text}"),
+                response.status_code)
 
     return {"audio": {"type": "Audio", "value": _save_audio(response.content, output_format)}}
 
@@ -552,10 +570,10 @@ async def _poll_dubbing(
         if status_resp.status_code != 200:
             poll_errors += 1
             if poll_errors >= 5:
-                raise RuntimeError(
+                raise with_api_status(RuntimeError(
                     f"ElevenLabs Dubbing poll failed {poll_errors} times: "
                     f"{status_resp.status_code} {status_resp.text}"
-                )
+                ), status_resp.status_code)
             continue
         # Reset on successful response; threshold of 5 requires CONSECUTIVE failures.
         poll_errors = 0
@@ -583,15 +601,16 @@ async def _poll_dubbing(
             if dl_resp.status_code == 200:
                 file_path = _save_audio(dl_resp.content, "mp3_44100_128")
                 return {"audio": {"type": "Audio", "value": file_path}}
+            # no API status: a download of the dubbed audio, after the job finished.
             raise RuntimeError(
                 f"ElevenLabs Dubbing download failed: {dl_resp.status_code}"
             )
         if status_data.get("status") == "failed":
-            raise RuntimeError(
+            raise as_job_failure(RuntimeError(
                 f"ElevenLabs Dubbing failed: {status_data.get('error', 'Unknown')}"
-            )
+            ))
 
-    raise RuntimeError("ElevenLabs Dubbing timed out")
+    raise with_person_line(RuntimeError("ElevenLabs Dubbing timed out"), slow_job_line("ElevenLabs"))
 
 
 async def handle_elevenlabs_sfx(
@@ -601,7 +620,7 @@ async def handle_elevenlabs_sfx(
 ) -> dict[str, Any]:
     text_input = inputs.get("text")
     if not text_input or not text_input.value:
-        raise ValueError("Text input is required for sound effects")
+        raise with_person_line(ValueError("Text input is required for sound effects"), "Connect text to this node, then run it again.")
 
     api_key = api_keys.get("ELEVENLABS_API_KEY")
     if not api_key:
@@ -635,7 +654,8 @@ async def handle_elevenlabs_sfx(
             json=body,
         )
         if response.status_code != 200:
-            raise RuntimeError(f"ElevenLabs SFX error {response.status_code}: {response.text}")
+            raise with_api_status(
+                RuntimeError(f"ElevenLabs SFX error {response.status_code}: {response.text}"), response.status_code)
 
     file_path = _save_audio(response.content, output_format)
     return {"audio": {"type": "Audio", "value": file_path}}
@@ -648,7 +668,7 @@ async def handle_elevenlabs_sts(
 ) -> dict[str, Any]:
     audio_input = inputs.get("audio")
     if not audio_input or not audio_input.value:
-        raise ValueError("Audio input is required for speech-to-speech")
+        raise with_person_line(ValueError("Audio input is required for speech-to-speech"), "Connect audio to this node, then run it again.")
 
     api_key = api_keys.get("ELEVENLABS_API_KEY")
     if not api_key:
@@ -662,7 +682,7 @@ async def handle_elevenlabs_sts(
     # Read audio file
     audio_path = Path(str(audio_input.value))
     if not audio_path.exists():
-        raise ValueError(f"Audio file not found: {audio_path}")
+        raise with_person_line(ValueError(f"Audio file not found: {audio_path}"), missing_file_line("audio file"))
     _checked, audio_bytes = read_local_media(audio_path, label="Speech-to-speech audio", max_bytes=MAX_STS_AUDIO_BYTES)
 
     # STS uses multipart/form-data
@@ -704,7 +724,8 @@ async def handle_elevenlabs_sts(
             data=data,
         )
         if response.status_code != 200:
-            raise RuntimeError(f"ElevenLabs STS error {response.status_code}: {response.text}")
+            raise with_api_status(
+                RuntimeError(f"ElevenLabs STS error {response.status_code}: {response.text}"), response.status_code)
 
     file_path = _save_audio(response.content, output_format)
     return {"audio": {"type": "Audio", "value": file_path}}
@@ -717,7 +738,7 @@ async def handle_elevenlabs_isolation(
 ) -> dict[str, Any]:
     audio_input = inputs.get("audio")
     if not audio_input or not audio_input.value:
-        raise ValueError("Audio input is required for audio isolation")
+        raise with_person_line(ValueError("Audio input is required for audio isolation"), "Connect audio to this node, then run it again.")
 
     api_key = api_keys.get("ELEVENLABS_API_KEY")
     if not api_key:
@@ -725,7 +746,7 @@ async def handle_elevenlabs_isolation(
 
     audio_path = Path(str(audio_input.value))
     if not audio_path.exists():
-        raise ValueError(f"Audio file not found: {audio_path}")
+        raise with_person_line(ValueError(f"Audio file not found: {audio_path}"), missing_file_line("audio file"))
     audio_bytes = require_allowed_path(audio_path).read_bytes()
 
     files = {"audio": (audio_path.name, audio_bytes, "audio/mpeg")}
@@ -737,7 +758,9 @@ async def handle_elevenlabs_isolation(
             files=files,
         )
         if response.status_code != 200:
-            raise RuntimeError(f"ElevenLabs Isolation error {response.status_code}: {response.text}")
+            raise with_api_status(
+                RuntimeError(f"ElevenLabs Isolation error {response.status_code}: {response.text}"),
+                response.status_code)
 
     file_path = _save_audio(response.content, "mp3_44100_128")
     return {"audio": {"type": "Audio", "value": file_path}}
@@ -751,7 +774,7 @@ async def handle_elevenlabs_dubbing(
 ) -> dict[str, Any]:
     audio_input = inputs.get("audio")
     if not audio_input or not audio_input.value:
-        raise ValueError("Audio input is required for dubbing")
+        raise with_person_line(ValueError("Audio input is required for dubbing"), "Connect audio to this node, then run it again.")
 
     api_key = api_keys.get("ELEVENLABS_API_KEY")
     if not api_key:
@@ -761,7 +784,7 @@ async def handle_elevenlabs_dubbing(
 
     audio_path = Path(str(audio_input.value))
     if not audio_path.exists():
-        raise ValueError(f"Audio file not found: {audio_path}")
+        raise with_person_line(ValueError(f"Audio file not found: {audio_path}"), missing_file_line("audio file"))
     checked = checked_local_file(audio_path, label="Dubbing audio", max_bytes=MAX_DUBBING_FILE_BYTES)
 
     data: dict[str, str] = {
@@ -794,7 +817,8 @@ async def handle_elevenlabs_dubbing(
                 data=data,
             )
         if resp.status_code != 200:
-            raise RuntimeError(f"ElevenLabs Dubbing submit error {resp.status_code}: {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"ElevenLabs Dubbing submit error {resp.status_code}: {resp.text}"), resp.status_code)
 
         dub_data = resp.json()
         dubbing_id = dub_data.get("dubbing_id")
@@ -821,7 +845,7 @@ async def handle_elevenlabs_stt(
     """
     audio_input = inputs.get("audio")
     if not audio_input or not audio_input.value:
-        raise ValueError("Audio input is required for transcription")
+        raise with_person_line(ValueError("Audio input is required for transcription"), "Connect audio to this node, then run it again.")
 
     api_key = api_keys.get("ELEVENLABS_API_KEY")
     if not api_key:
@@ -829,7 +853,7 @@ async def handle_elevenlabs_stt(
 
     audio_path = Path(str(audio_input.value))
     if not audio_path.exists():
-        raise ValueError(f"Audio file not found: {audio_path}")
+        raise with_person_line(ValueError(f"Audio file not found: {audio_path}"), missing_file_line("audio file"))
 
     model_id = node.params.get("model_id", "scribe_v1") or "scribe_v1"
 
@@ -868,7 +892,8 @@ async def handle_elevenlabs_stt(
             data=data,
         )
         if response.status_code != 200:
-            raise RuntimeError(f"ElevenLabs STT error {response.status_code}: {response.text}")
+            raise with_api_status(
+                RuntimeError(f"ElevenLabs STT error {response.status_code}: {response.text}"), response.status_code)
 
     result_data = response.json()
     text = result_data.get("text", "")
@@ -907,7 +932,7 @@ async def handle_elevenlabs_music(
     the length) and ``force_instrumental``."""
     prompt_input = inputs.get("prompt")
     if not prompt_input or prompt_input.value in (None, ""):
-        raise ValueError("Prompt input is required for ElevenLabs Music")
+        raise with_person_line(ValueError("Prompt input is required for ElevenLabs Music"), "Connect a prompt to this node, then run it again.")
 
     api_key = api_keys.get("ELEVENLABS_API_KEY")
     if not api_key or not str(api_key).strip():
@@ -921,14 +946,20 @@ async def handle_elevenlabs_music(
     length = node.params.get("music_length_ms")
     if length is not None and length != "":
         if isinstance(length, bool):
-            raise ValueError("music_length_ms must be a whole number of milliseconds")
+            raise with_person_line(
+                ValueError("music_length_ms must be a whole number of milliseconds"),
+                "Set “Duration (ms)” to a whole number of milliseconds.")
         try:
             length_ms = int(length)
         except (TypeError, ValueError) as exc:
-            raise ValueError("music_length_ms must be a whole number of milliseconds") from exc
+            raise with_person_line(
+                ValueError("music_length_ms must be a whole number of milliseconds"),
+                "Set “Duration (ms)” to a whole number of milliseconds.") from exc
         low, high = MUSIC_LENGTH_MS
         if not low <= length_ms <= high:
-            raise ValueError(f"music_length_ms must be between {low} and {high} (received {length_ms})")
+            raise with_person_line(
+                ValueError(f"music_length_ms must be between {low} and {high} (received {length_ms})"),
+                f"Set “Duration (ms)” to a number from {low} to {high}.")
         body["music_length_ms"] = length_ms
 
     if node.params.get("force_instrumental"):
@@ -943,7 +974,8 @@ async def handle_elevenlabs_music(
             json=body,
         )
         if response.status_code != 200:
-            raise RuntimeError(f"ElevenLabs Music error {response.status_code}: {response.text}")
+            raise with_api_status(
+                RuntimeError(f"ElevenLabs Music error {response.status_code}: {response.text}"), response.status_code)
 
     file_path = _save_audio(response.content, "mp3_44100_128")
     return {"audio": {"type": "Audio", "value": file_path}}

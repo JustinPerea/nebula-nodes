@@ -44,6 +44,7 @@ vi.mock('../src/components/commons/CommonsView', async () => {
   return { CommonsView: () => <button onClick={() => useUIStore.getState().exitCommons()}>Return from Commons</button> };
 });
 import App from '../src/App';
+import { DeferredChatPanel } from '../src/lib/deferredChunks';
 import { useUIStore } from '../src/store/uiStore';
 import { useProjectStore } from '../src/store/projectStore';
 const initialUI = useUIStore.getState();
@@ -52,8 +53,11 @@ beforeEach(() => { useUIStore.setState(initialUI, true); useProjectStore.setStat
 afterEach(() => { cleanup(); useUIStore.setState(initialUI, true); useProjectStore.setState(initialProjects, true); });
 
 it('lazy navigation retains the shared chat instance and inerts its hidden controls until returning', async () => {
+  // The chat is a deferred chunk (lib/deferredChunks.ts), preloaded on idle in
+  // the app; loaded first here so a slow module transform can't race the test.
+  await DeferredChatPanel.preload();
   const { container } = render(<App />);
-  fireEvent.click(screen.getByRole('button', { name: 'Saved conversation' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Saved conversation' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Open Commons' }));
   expect(await screen.findByRole('button', { name: 'Return from Commons' })).toBeTruthy();
   const overlay = container.querySelector('.workspace-overlays')!;

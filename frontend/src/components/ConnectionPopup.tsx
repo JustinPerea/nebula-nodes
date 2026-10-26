@@ -14,6 +14,7 @@ import { getKreaConnection } from '../lib/kreaConnection';
 import { matchesModelSearch } from '../lib/modelDiscovery';
 import { ProviderReadinessBadge } from './ProviderReadinessBadge';
 import { ScrollFade } from './ScrollFade';
+import { floatingBottomLimit } from '../lib/bottomBar';
 import '../styles/canvas-next-steps.css';
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -169,8 +170,11 @@ export function ConnectionPopup() {
     const measure = () => {
       const bounds = menuRef.current?.getBoundingClientRect();
       if (!bounds) return;
-      setAnchor({ x: Math.max(8, Math.min(position.x, window.innerWidth - bounds.width - 8)),
-        y: Math.max(8, Math.min(position.y, window.innerHeight - bounds.height - 8)) });
+      // Inside the window and above the canvas's bottom bar (lib/bottomBar.ts).
+      // The Canvas actions panel pushes it up only when it is over the panel.
+      const x = Math.max(8, Math.min(position.x, window.innerWidth - bounds.width - 8));
+      const bottom = floatingBottomLimit(8, window.innerHeight, { left: x, right: x + bounds.width });
+      setAnchor({ x, y: Math.max(8, Math.min(position.y, bottom - bounds.height)) });
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -216,14 +220,14 @@ export function ConnectionPopup() {
           : edge.source === newId && edge.target === nodeId && edge.sourceHandle === node.matchingPortId)) newId = null;
       }
       if (useUIStore.getState().connectionPopup !== popup) return;
-      if (!newId) { setError('Could not confirm the connected step. Check the canvas before trying again.'); return; }
+      if (!newId) { setError("Couldn't confirm the connected step. Check the canvas before trying again."); return; }
       hideConnectionPopup();
       if (nextStep) {
         const ui = useUIStore.getState();
         ui.requestCanvasNodeFocus(newId); ui.setLeftDock(null); ui.setInspectorVisible(true);
       }
     } catch {
-      if (useUIStore.getState().connectionPopup === popup) setError('Could not add the step. Check the canvas before trying again.');
+      if (useUIStore.getState().connectionPopup === popup) setError("Couldn't add the step. Check the canvas before trying again.");
     } finally { busy.current = false; setPending(false); }
   };
 

@@ -51,6 +51,19 @@
   border-color: var(--sr-accent-border, #777);
 }
 
+.prompt-dialog__line {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.prompt-dialog__actions .prompt-dialog__danger {
+  font-weight: 600;
+  color: #fff;
+  border-color: var(--sr-danger, #c0392b);
+  background: var(--sr-danger, #c0392b);
+}
+
 .prompt-dialog__field input:focus-visible,
 .prompt-dialog__actions button:focus-visible {
   outline: var(--sr-focus-outline, 2px solid #9ab8ff);

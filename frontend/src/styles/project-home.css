@@ -44,7 +44,7 @@ body.app-slava-restraint .project-home__intro { margin-top: 14px; color: var(--s
 body.app-slava-restraint .project-home button { font-family: var(--sr-ui); cursor: pointer; }
 body.app-slava-restraint .project-home button:disabled { opacity: var(--sr-disabled-opacity); cursor: default; }
 body.app-slava-restraint .project-home button:focus-visible,
-body.app-slava-restraint .project-home input:focus-visible { outline: 2px solid var(--sr-accent); outline-offset: 4px; }
+body.app-slava-restraint .project-home input:focus-visible { outline: var(--sr-focus-outline); outline-offset: 4px; }
 body.app-slava-restraint .project-home__new { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; gap: 8px; min-height: 44px; padding: 0 18px; border: 1px solid var(--sr-ink); border-radius: var(--sr-node-media-radius); background: var(--sr-ink); color: var(--sr-canvas); font-size: 13px; font-weight: 600; transition: background var(--sr-motion-fast), border-color var(--sr-motion-fast); }
 body.app-slava-restraint .project-home__new:hover:not(:disabled) { background: var(--sr-ink-bold); border-color: var(--sr-ink-bold); }
 body.app-slava-restraint .project-home__new svg,
@@ -127,16 +127,16 @@ body.app-slava-restraint .project-home__confirm-prompt { color: var(--sr-ink-lig
 body.app-slava-restraint .project-home__confirm .project-home__danger { border-color: var(--sr-danger); background: var(--sr-danger); color: #fff; font-weight: 600; }
 body.app-slava-restraint .project-home__confirm .project-home__danger:hover:not(:disabled) { border-color: var(--sr-danger); background: var(--sr-danger); filter: brightness(1.08); }
 /* Critically damped-ish spring (k 380, c 30, m 1): ~2% overshoot, settles in 420ms. */
-body.app-slava-restraint .project-home__toast { --project-home-spring: linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1); position: fixed; z-index: 40; left: 50%; bottom: 24px; display: flex; align-items: center; gap: 4px; max-width: calc(100vw - 32px); padding: 6px 6px 6px 16px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-node-media-radius); background: var(--sr-canvas-elevated); color: var(--sr-ink); font-size: 13px; box-shadow: 0 12px 32px rgb(0 0 0 / 0.35); transform: translateX(-50%); animation: project-home-toast-in 420ms var(--project-home-spring) both; }
+body.app-slava-restraint .project-home__toast { --project-home-spring: linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1); display: flex; align-items: center; gap: 4px; max-width: min(var(--notice-max-w, 560px), calc(100vw - 32px)); padding: 6px 6px 6px 16px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-node-media-radius); background: var(--sr-canvas-elevated); color: var(--sr-ink); font-size: 13px; box-shadow: 0 12px 32px rgb(0 0 0 / 0.35); animation: project-home-toast-in 420ms var(--project-home-spring) both; }
 body.app-slava-restraint .project-home__toast-text { min-width: 0; margin-right: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 body.app-slava-restraint .project-home__toast-undo { flex-shrink: 0; min-height: 32px; padding: 0 12px; border: 1px solid var(--sr-ink); border-radius: var(--sr-radius-control); background: var(--sr-ink); color: var(--sr-canvas); font-size: 12px; font-weight: 600; }
 body.app-slava-restraint .project-home__toast-close { display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; border: 0; border-radius: var(--sr-radius-control); background: transparent; color: var(--sr-ink-meta); }
 body.app-slava-restraint .project-home__toast-close:hover { background: var(--sr-surface-control-hover); color: var(--sr-ink); }
 body.app-slava-restraint .project-home__toast-close svg { width: 14px; height: 14px; }
 @keyframes project-home-toast-in {
-  from { opacity: 0; transform: translate(-50%, 16px) scale(0.96); }
+  from { opacity: 0; transform: translateY(16px) scale(0.96); }
   30% { opacity: 1; }
-  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  to { opacity: 1; transform: none; }
 }
 body.app-slava-restraint .project-home__empty { display: grid; justify-items: center; align-content: center; min-height: 344px; padding: 36px 24px; border: 1px dashed var(--sr-edge-strong); border-radius: var(--sr-node-media-radius); text-align: center; }
 body.app-slava-restraint .project-home__empty-graph { width: 200px; margin-bottom: 12px; opacity: 0.8; }
@@ -149,7 +149,28 @@ body.app-slava-restraint .project-home__loading { display: flex; align-items: ce
 body.app-slava-restraint .project-home__loading-dot { width: 6px; height: 6px; border-radius: var(--sr-radius-pill); background: var(--sr-ink-light); }
 body.app-slava-restraint .project-home__error { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; margin-bottom: 28px; border: 1px solid var(--sr-error-border); border-radius: var(--sr-node-media-radius); background: var(--sr-error-soft); color: var(--sr-ink); font-size: 13px; line-height: 1.5; }
 body.app-slava-restraint .project-home__error > span { overflow-wrap: anywhere; }
+/* GM, Q116 a: a person-only refusal's line, with the agents' text behind the
+   shared collapsed Details toggle (components/failure/ErrorDetails) under it. */
+body.app-slava-restraint .project-home__error-text { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+body.app-slava-restraint .project-home__error-details summary { width: fit-content; color: var(--sr-ink-light); font-size: 12px; cursor: pointer; }
+body.app-slava-restraint .project-home__error-details summary:focus-visible { outline: var(--sr-focus-outline); outline-offset: 2px; }
+body.app-slava-restraint .project-home__error-details .error-details__raw { display: block; margin-top: 4px; max-height: 8.5em; overflow-y: auto; color: var(--sr-ink-light); font-family: var(--sr-mono); font-size: var(--sr-type-label); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 body.app-slava-restraint .project-home__error button { flex-shrink: 0; min-height: 34px; padding: 0 10px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: var(--sr-surface-control); color: var(--sr-ink); font-size: 12px; }
+/* Q116 a): a stale tab's unsaved edits Nebula refused for good. The error's
+   box, with GM's heading over the reason and the two choices under it. */
+body.app-slava-restraint .project-home__edits { align-items: flex-start; flex-direction: column; gap: 12px; }
+body.app-slava-restraint .project-home__edits-text { display: grid; gap: 2px; }
+body.app-slava-restraint .project-home__edits-heading { font-weight: 600; }
+body.app-slava-restraint .project-home__edits-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+body.app-slava-restraint .project-home__error .project-home__edits-primary { border-color: var(--sr-ink); background: var(--sr-ink); color: var(--sr-canvas); font-weight: 600; }
+body.app-slava-restraint .project-home__error .project-home__edits-primary:hover:not(:disabled) { border-color: var(--sr-ink-bold); background: var(--sr-ink-bold); }
+body.app-slava-restraint .project-home__error button:disabled { opacity: 0.55; cursor: default; }
+/* Focus lands on the saved line or the heading when the held edits' notice
+   goes (ProjectHome useFocusAfterHeldEdits): the neutral ring from the
+   keyboard; a click shows none, since the browser rings :focus-visible only. */
+body.app-slava-restraint .project-home__notice:focus-visible,
+body.app-slava-restraint .project-home #project-home-title:focus-visible { outline: var(--sr-focus-outline); outline-offset: 4px; }
+body.app-slava-restraint .project-home__notice { padding: 14px 16px; margin-bottom: 28px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-node-media-radius); background: var(--sr-canvas-elevated); color: var(--sr-ink); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
 body.app-slava-restraint .project-home__sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 @media (max-width: 1000px) {
   body.app-slava-restraint .project-home__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

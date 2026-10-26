@@ -112,10 +112,10 @@ def test_a_plan_file_lands_in_one_step_and_prints_the_new_ids(api):
     assert apply_cmd.run_apply(api.client, _args(file=_plan_file(api, PLAN)), out=out) == 0
 
     lines = out.getvalue().splitlines()
-    assert lines[0] == "Applied: added 3, wired 2, renamed 2."
+    assert lines[0] == "Applied: added 3, connected 2, renamed 2."
     assert lines[1:4] == ["  +p → n2  Text Input", "  +wide → n3  Wide", "  +tight → n4  Tight"]
     # The last line says how to take it back.
-    assert re.fullmatch(r"  Undo: nebula undo [0-9a-f]{40}  \(for 60 minutes; parts changed since stay\)", lines[4])
+    assert re.fullmatch(r"  Undo: nebula undo [0-9a-f]{40}  \(for 60 minutes; parts changed or run since stay\)", lines[4])
     assert len(lines) == 5
     assert sorted(api.graph.nodes) == ["n1", "n2", "n3", "n4"]
     assert {(e["source"], e["target"]) for e in api.graph.edges} == {("n2", "n3"), ("n2", "n4")}
@@ -242,7 +242,7 @@ def test_a_later_step_wires_refs_an_earlier_step_created(api):
     lines = out.getvalue().splitlines()
     assert lines[0] == "Step 1 of 2. Applied: added 1."
     assert lines[1] == "  +p → n2  Text Input"
-    assert lines[2] == "Step 2 of 2. Applied: added 2, wired 2, renamed 1."
+    assert lines[2] == "Step 2 of 2. Applied: added 2, connected 2, renamed 1."
     assert {(e["source"], e["target"]) for e in api.graph.edges} == {("n2", "n3"), ("n2", "n4")}
     assert api.graph.nodes["n2"]["label"] == "Prompt"
 
@@ -389,6 +389,96 @@ def test_nebula_undo_lists_what_it_left_as_is(api):
     assert lines[0] == "Undone: removed 1."
     assert lines[1] == "  Left as is: n1's value changed since, left as is"
     assert api.graph.nodes[keep]["params"]["value"] == "the person's"
+
+
+def test_nebula_undo_says_a_node_the_person_ran_since_stays(api):
+    """Q82: the person's run counts as changed since; `nebula undo` says so."""
+    import time
+
+    from tests.conftest import PERSON
+
+    source = api.graph.add_node("text-input", {"value": "keep"})
+    applied = _applied_json(api, {"nodes": [{"ref": "+b", "definitionId": "combine-text"},
+                                            {"ref": "+c", "definitionId": "reroute"}],
+                                  "edges": [{"source": source, "sourceHandle": "text", "target": "+b",
+                                             "targetHandle": "text1"}]})
+    combined, rerouted = applied["idMap"]["+b"], applied["idMap"]["+c"]
+    nodes = [{"id": node_id, "definitionId": node["definitionId"], "params": node.get("params") or {}, "outputs": {}}
+             for node_id, node in api.graph.nodes.items()]
+    edges = [{key: edge[key] for key in ("id", "source", "sourceHandle", "target", "targetHandle")}
+             for edge in api.graph.edges]
+    response = api.client._client.post("/api/execute-node", headers=PERSON,
+                                       json={"nodes": nodes, "edges": edges, "targetNodeId": combined})
+    assert response.status_code == 200, response.text
+    deadline = time.monotonic() + 10
+    while not api.graph.nodes[combined].get("outputs") and time.monotonic() < deadline:
+        time.sleep(0.02)
+    assert api.graph.nodes[combined].get("outputs")
+    out = io.StringIO()
+    assert apply_cmd.run_undo(api.client, _undo_args(applied["undo"]["token"]), out=out) == 0
+    assert out.getvalue().splitlines() == [
+        "Undone: removed 1.", f"  Left as is: {combined} ran since (run by the person), so it stays"]
+    assert combined in api.graph.nodes and rerouted not in api.graph.nodes
+
+
+def test_nebula_undo_counts_a_wire_it_took_away_and_lists_each_part_once(api):
+    """The edit added +r wired into a reroute that was already there; the
+    person ran +r. The undo only unwires: it says so, and lists +r once."""
+    import time
+
+    from tests.conftest import PERSON
+
+    rerouted = api.graph.add_node("reroute", {})
+    applied = _applied_json(api, {"nodes": [{"ref": "+r", "definitionId": "text-input", "params": {"value": "x"}}],
+                                  "edges": [{"source": "+r", "sourceHandle": "text", "target": rerouted,
+                                             "targetHandle": "input"}]})
+    added = applied["idMap"]["+r"]
+    nodes = [{"id": node_id, "definitionId": node["definitionId"], "params": node.get("params") or {}, "outputs": {}}
+             for node_id, node in api.graph.nodes.items()]
+    response = api.client._client.post("/api/execute-node", headers=PERSON,
+                                       json={"nodes": nodes, "edges": [], "targetNodeId": added})
+    assert response.status_code == 200, response.text
+    deadline = time.monotonic() + 10
+    while not api.graph.nodes[added].get("outputs") and time.monotonic() < deadline:
+        time.sleep(0.02)
+    assert api.graph.nodes[added].get("outputs")
+    out = io.StringIO()
+    assert apply_cmd.run_undo(api.client, _undo_args(applied["undo"]["token"]), out=out) == 0
+    assert out.getvalue().splitlines() == [
+        "Undone: disconnected 1.", f"  Left as is: {added} ran since (run by the person), so it stays"]
+    assert api.graph.edges == [] and added in api.graph.nodes
+
+
+def test_nebula_undo_lists_each_part_once_when_nothing_went_back(api):
+    """Status "skipped": the first line says nothing went back, then each part
+    left is listed once (not again inside the first line)."""
+    import time
+
+    from tests.conftest import PERSON
+
+    keep = api.graph.add_node("text-input", {"value": "keep"})
+    applied = _applied_json(api, {"params": [{"nodeId": keep, "params": {"value": "changed"}}],
+                                  "nodes": [{"ref": "+n", "definitionId": "text-input", "params": {"value": "x"}}]})
+    added = applied["idMap"]["+n"]
+    api.graph.update_params(keep, {"value": "the person's"})
+    nodes = [{"id": node_id, "definitionId": node["definitionId"], "params": node.get("params") or {}, "outputs": {}}
+             for node_id, node in api.graph.nodes.items()]
+    response = api.client._client.post("/api/execute-node", headers=PERSON,
+                                       json={"nodes": nodes, "edges": [], "targetNodeId": added})
+    assert response.status_code == 200, response.text
+    deadline = time.monotonic() + 10
+    while not api.graph.nodes[added].get("outputs") and time.monotonic() < deadline:
+        time.sleep(0.02)
+    assert api.graph.nodes[added].get("outputs")
+    out = io.StringIO()
+    assert apply_cmd.run_undo(api.client, _undo_args(applied["undo"]["token"]), out=out) == 0
+    text = out.getvalue()
+    lines = text.splitlines()
+    assert lines[0].startswith("Nothing went back")
+    assert "Left as is" not in lines[0]
+    assert sorted(lines[1:]) == sorted([f"  Left as is: {added} ran since (run by the person), so it stays",
+                                        f"  Left as is: {keep}'s value changed since, left as is"])
+    assert text.count("ran since (run by the person)") == 1 and text.count("value changed since") == 1
 
 
 def test_nebula_undo_of_a_steps_plan_goes_newest_first_and_stops_at_a_refusal(api, capsys):

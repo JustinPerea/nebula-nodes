@@ -4,7 +4,8 @@ import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import { shotPortId } from '../../constants/ports';
 import { missingKeyTitle } from '../../lib/nodeKeys';
-import type { CinemaSceneSpec, CinemaShot } from '../../types';
+import type { CinemaSceneSpec, CinemaShot, NodeData } from '../../types';
+import { NodeRunError } from './NodeError';
 import '../../styles/cinema-node.css';
 
 interface CinemaSceneNodeData {
@@ -59,6 +60,10 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
       </div>
 
       <div className="cinema-scene-node__summary">{summary}</div>
+
+      {/* The scene node's own run error (error copy round 3e); each shot's
+          shows in its panel and as the ⚠ beside its port. */}
+      <NodeRunError data={data as unknown as NodeData} className="cinema-scene-node__run-error" />
 
       <div className="cinema-scene-node__input-ports">
         {inputPorts.map((port) => (

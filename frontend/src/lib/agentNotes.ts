@@ -1,4 +1,4 @@
-import { apiFetch } from './backend';
+import { apiRequest } from './apiRequest';
 
 /**
  * Updates: what an agent or the board reader noticed, saved with the project
@@ -8,7 +8,7 @@ import { apiFetch } from './backend';
  */
 
 export type AgentNoteAbout =
-  | 'sinceLastTurn' | 'analyze' | 'suggestion' | 'removedLook' | 'changedWords' | 'proposal' | 'other';
+  | 'sinceLastTurn' | 'analyze' | 'suggestion' | 'removedLook' | 'changedWords' | 'proposal' | 'question' | 'other';
 
 export interface AgentNoteAuthor {
   kind: 'agent' | 'reader';
@@ -41,6 +41,13 @@ export interface AgentNote {
   actedAt: string | null;
   /** The label of the action that ran ("Undo the sort"), once one did. */
   actedWith: string | null;
+  /** An asset proposal's Update (Q92 a), once the proposal closed: when, and
+   * how it ended in one short line ("Accepted: the cover changed"). */
+  resolvedAt?: string | null;
+  outcome?: string | null;
+  /** A question set's Update (Q125 item 1): the set it asks. Its questions
+   * and answers are never on the Update (store/agentQuestionsStore.ts). */
+  questionsId?: string | null;
 }
 
 export type AgentNotesSurface = { kind: 'canvas' } | { kind: 'board'; boardId: string };
@@ -57,7 +64,7 @@ export interface AgentNotesListing {
 export interface AgentNotesEvent {
   type: 'agentNotes';
   surface: 'canvas' | 'board';
-  op: 'sync' | 'added' | 'read' | 'dismissed' | 'acted';
+  op: 'sync' | 'added' | 'read' | 'dismissed' | 'acted' | 'resolved' | 'changed';
   projectId?: string | null;
   boardId?: string;
   note?: unknown;
@@ -76,7 +83,7 @@ export const MAX_NOTE_BUTTONS = 2;
 
 const SAFE_COLOR = /^#[0-9a-fA-F]{6}$/;
 const ABOUT: readonly AgentNoteAbout[] = [
-  'sinceLastTurn', 'analyze', 'suggestion', 'removedLook', 'changedWords', 'proposal', 'other',
+  'sinceLastTurn', 'analyze', 'suggestion', 'removedLook', 'changedWords', 'proposal', 'question', 'other',
 ];
 
 function str(value: unknown): string | null {
@@ -148,6 +155,10 @@ export function sanitizeNote(raw: unknown): AgentNote | null {
     dismissedAt: str(note.dismissedAt),
     actedAt: str(note.actedAt),
     actedWith: str(note.actedWith),
+    resolvedAt: str(note.resolvedAt),
+    outcome: typeof note.outcome === 'string' && note.outcome ? note.outcome.slice(0, 80) : null,
+    questionsId: note.questions && typeof note.questions === 'object'
+      ? str((note.questions as Record<string, unknown>).id) : null,
   };
 }
 
@@ -171,19 +182,8 @@ function base(surface: AgentNotesSurface): string {
     : `/api/moodboards/${encodeURIComponent(surface.boardId)}/agent-notes`;
 }
 
-async function detailOf(response: Response, fallback: string): Promise<string> {
-  try {
-    const body = (await response.json()) as { detail?: unknown };
-    if (typeof body?.detail === 'string' && body.detail) return body.detail;
-  } catch {
-    /* not JSON */
-  }
-  return fallback;
-}
-
 export async function fetchAgentNotes(surface: AgentNotesSurface): Promise<AgentNotesListing> {
-  const response = await apiFetch(base(surface));
-  if (!response.ok) throw new Error(await detailOf(response, `Couldn't load updates (${response.status})`));
+  const response = await apiRequest("Couldn't load the updates.", base(surface));
   return (await response.json()) as AgentNotesListing;
 }
 
@@ -193,12 +193,11 @@ export async function markAgentNotesRead(
   upTo?: string,
   ids?: string[],
 ): Promise<{ ids: string[]; unread: number; projectId?: string | null }> {
-  const response = await apiFetch(`${base(surface)}/read`, {
+  const response = await apiRequest("Couldn't mark the updates as read.", `${base(surface)}/read`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(ids ? { ids } : upTo ? { upTo } : {}),
   });
-  if (!response.ok) throw new Error(await detailOf(response, `Couldn't mark updates read (${response.status})`));
   return (await response.json()) as { ids: string[]; unread: number; projectId?: string | null };
 }
 
@@ -206,7 +205,6 @@ export async function dismissAgentNote(
   surface: AgentNotesSurface,
   id: string,
 ): Promise<{ note?: unknown; unread: number }> {
-  const response = await apiFetch(`${base(surface)}/${encodeURIComponent(id)}/dismiss`, { method: 'POST' });
-  if (!response.ok) throw new Error(await detailOf(response, `Couldn't dismiss the update (${response.status})`));
+  const response = await apiRequest("Couldn't dismiss the update.", `${base(surface)}/${encodeURIComponent(id)}/dismiss`, { method: 'POST' });
   return (await response.json()) as { note?: unknown; unread: number };
 }

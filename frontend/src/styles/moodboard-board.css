@@ -217,7 +217,7 @@ html body .moodboard-studio-view.moodboard-studio-view--board {
 
 .moodboard-board__control:focus-visible,
 .moodboard-board__control:has(.moodboard-board__file:focus-visible) {
-  outline: 2px solid var(--mb-board-select);
+  outline: var(--sr-focus-outline, 2px solid var(--mb-board-select));
   outline-offset: 1px;
 }
 
@@ -402,7 +402,7 @@ html body .moodboard-board-panel .moodboard-def__row {
 }
 
 .moodboard-view-switch__option:focus-visible {
-  outline: 2px solid var(--mb-board-select);
+  outline: var(--sr-focus-outline, 2px solid var(--mb-board-select));
   outline-offset: 1px;
 }
 
@@ -415,16 +415,13 @@ html body .moodboard-board-panel .moodboard-def__row {
   text-transform: uppercase;
 }
 
-/* The undo toast: bottom centre of the canvas, springs up. */
+/* The undo toast, in the app's notice region (NoticeRegion), which places
+   it on the Board and in the List view alike. Springs up. */
 .moodboard-board-toast {
-  position: absolute;
-  bottom: 18px;
-  left: 50%;
-  z-index: 7;
   display: flex;
   align-items: center;
   gap: 8px;
-  max-width: min(560px, calc(100% - 32px));
+  max-width: min(var(--notice-max-w, 560px), calc(100vw - 32px));
   box-sizing: border-box;
   padding: 6px 6px 6px 12px;
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -436,14 +433,7 @@ html body .moodboard-board-panel .moodboard-def__row {
   -webkit-backdrop-filter: blur(22px);
   font-family: var(--mb-board-font);
   font-size: 12px;
-  transform: translateX(-50%);
   animation: moodboard-board-toast-in 420ms var(--mb-board-spring) both;
-}
-
-/* In the List view there is no canvas: the toast sits at the window's foot. */
-.moodboard-board-toast--window {
-  position: fixed;
-  z-index: 60;
 }
 
 .moodboard-board-toast__text {
@@ -500,14 +490,14 @@ html body .moodboard-board-panel .moodboard-def__row {
 
 .moodboard-board-toast__action:focus-visible,
 .moodboard-board-toast__close:focus-visible {
-  outline: 2px solid var(--mb-board-select);
+  outline: var(--sr-focus-outline, 2px solid var(--mb-board-select));
   outline-offset: 1px;
 }
 
 @keyframes moodboard-board-toast-in {
-  from { opacity: 0; transform: translate(-50%, 12px) scale(0.96); }
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
   30% { opacity: 1; }
-  to { opacity: 1; transform: translate(-50%, 0); }
+  to { opacity: 1; transform: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,16 +1,14 @@
 /* After an agent switches the open project (projectStore followProjectSwitch).
-   Same spring as the Projects screen's Undo toast. */
+   Same spring as the Projects screen's Undo toast. In the app's notice region
+   (NoticeRegion), which stacks it above the notices and the bar, so Run and a
+   notice's buttons stay reachable (GM - Design, 2026-10-23: "One region, one
+   stack, and nothing else draws toasts"). */
 .project-switch-toast {
   --project-switch-spring: linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1);
-  position: fixed;
-  z-index: 60;
-  left: 50%;
-  /* Above the canvas toolbar, so Run stays reachable. */
-  bottom: 96px;
   display: flex;
   align-items: center;
   gap: 4px;
-  max-width: min(640px, calc(100vw - 32px));
+  max-width: min(var(--notice-max-w, 560px), calc(100vw - 32px));
   padding: 6px 6px 6px 16px;
   border: 1px solid var(--sr-edge-strong, rgb(255 255 255 / 0.16));
   border-radius: var(--sr-node-media-radius, 14px);
@@ -19,7 +17,6 @@
   font-size: 13px;
   line-height: 1.4;
   box-shadow: 0 12px 32px rgb(0 0 0 / 0.35);
-  transform: translateX(-50%);
   animation: project-switch-toast-in 420ms var(--project-switch-spring) both;
 }
 .project-switch-toast__text { min-width: 0; margin-right: 8px; }
@@ -55,10 +52,18 @@
 .project-switch-toast__close:hover { background: var(--sr-surface-control-hover, rgb(255 255 255 / 0.08)); color: var(--sr-ink, #ecece9); }
 .project-switch-toast__close svg { width: 14px; height: 14px; }
 @keyframes project-switch-toast-in {
-  from { opacity: 0; transform: translate(-50%, 16px) scale(0.96); }
+  from { opacity: 0; transform: translateY(16px) scale(0.96); }
   30% { opacity: 1; }
-  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  to { opacity: 1; transform: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .project-switch-toast { animation: none; }
+}
+/* Over the Commons (a switch held behind unsaved labels, commons-leave) it
+ * stays clear of the labeling panels' form column, where Save is (at most
+ * 390 px plus the panel's 28 px padding on the right; commons-evaluation.css),
+ * so its centered width leaves that room on both sides. The leave popover
+ * sits above it (commons.css). */
+body:has(.commons-view) .project-switch-toast {
+  max-width: min(var(--notice-max-w, 560px), calc(100vw - 2 * (418px + 8px)));
 }

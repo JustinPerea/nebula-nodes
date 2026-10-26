@@ -35,6 +35,7 @@ from services.output import (
     materialize_media_value,
     portable_output_ref,
     resolve_output_ref,
+    seal_run_dir,
     write_manifest,
 )
 from services.document_extract import extract_text
@@ -43,7 +44,7 @@ from services.port_contracts import (
     ContractNode,
     validate_edge_contracts,
 )
-from services.provider_capabilities import gemini_omni_capability_error
+from services.provider_capabilities import GEMINI_OMNI_EXTENSION_LINE, gemini_omni_capability_error
 from services.provider_operation_policy import bypasses_output_cache, operation_policy
 from services.retired_nodes import migrate_params
 from services.worldlabs_capabilities import worldlabs_capability_gate
@@ -64,6 +65,9 @@ from models.events import (
 from execution import gating, provider_calls
 from services.moodboard_brief import apply_to_generator as apply_board_to_generator
 from execution.missing_credential import MissingCredentialError
+from execution.person_line import (carries_provider_text, is_job_failure, missing_file_line, missing_key_line,
+                                   person_line, port_line, with_person_line)
+from execution.provider_status import card_line
 
 CycleError = _GraphlibCycleError
 
@@ -310,10 +314,11 @@ def _image_input_output(params: dict) -> dict:
     # zero references. An empty path (unconfigured node) and remote/data values
     # pass through untouched.
     if file_path and not is_remote_or_data_uri(file_path) and not Path(file_path).exists():
-        raise ValueError(
+        raise with_person_line(ValueError(
             f"Image Input file not found: {file_path!r}. Set a valid path — "
             "downstream nodes would otherwise receive a reference no model can load."
-        )
+        ),
+            "The node's file can't be found. Choose it again, then run the node again.")
     return {"image": {"type": "Image", "value": file_path}}
 
 
@@ -667,6 +672,19 @@ def get_subgraph(
 
 _ITERATOR_NODE_IDS = {"iterator-image", "iterator-text"}
 _FANOUT_NODE_IDS = _ITERATOR_NODE_IDS | {"batch"}
+
+
+def _fanout_over_cap(definition_id: str, planned: int, cap: Any) -> ValueError:
+    """A fan-out downstream of another one went over its cap across all its
+    contexts. The card names the cap by the node's own field label: a Batch's
+    "Item cap", an iterator's "Batch Size Cap"."""
+    noun, label = ("Batch", "Item cap") if definition_id == "batch" else ("iterator", "Batch Size Cap")
+    return with_person_line(ValueError(
+        f"Nested iterator expands to {planned} items, exceeding "
+        f"this iterator's batch_size_cap of {cap}. Reduce the batch "
+        "before running; no downstream generation was started."
+    ), f"This {noun} would make {planned} items, more than its “{label}” of {cap}. Make the batch smaller, "
+       "then run it again. Nothing after it was generated.")
 InvocationContext = tuple[tuple[str, int], ...]
 
 # ECMAScript TrimString: WhiteSpace union LineTerminator. Python's default
@@ -698,7 +716,9 @@ def _batch_items(params: dict[str, Any]) -> list[str]:
         raise ValueError("Batch split_mode must be 'by_line' or 'none'")
     cap = params.get("batch_size_cap", 10)
     if isinstance(cap, bool) or not isinstance(cap, int) or not 1 <= cap <= 25:
-        raise ValueError("Batch batch_size_cap must be an integer from 1 to 25")
+        raise with_person_line(
+            ValueError("Batch batch_size_cap must be an integer from 1 to 25"),
+            "Set “Item cap” to a whole number from 1 to 25.")
     text = params.get("items_text", "")
     if mode == "none":
         items = [text] if text else []
@@ -706,10 +726,11 @@ def _batch_items(params: dict[str, Any]) -> list[str]:
         items = [trimmed for line in text.split("\n")
                  if (trimmed := line.strip(_JS_TRIM_WHITESPACE))]
     if len(items) > cap:
-        raise ValueError(
+        raise with_person_line(ValueError(
             f"Batch has {len(items)} items, exceeding its batch_size_cap of {cap}. "
             "Reduce the list or raise the cap before running; no generation was started."
-        )
+        ),
+            f"This Batch has {len(items)} items, more than its “Item cap” of {cap}. Remove items or raise the cap, then run it again. Nothing was generated.")
     return items
 
 
@@ -731,8 +752,10 @@ def _iterator_validation_errors(
             try:
                 _batch_items(node.params)
             except ValueError as exc:
+                # The run-time check's own line (with_person_line), or None
+                # for the checks only an agent reaches (a non-string field).
                 errors.append(ValidationErrorDetail(
-                    node_id=node.id, port_id="set", message=str(exc),
+                    node_id=node.id, port_id="set", message=str(exc), person=person_line(exc),
                 ))
             continue
         if node.definition_id not in _ITERATOR_NODE_IDS:
@@ -742,6 +765,7 @@ def _iterator_validation_errors(
             errors.append(ValidationErrorDetail(
                 node_id=node.id, port_id="array",
                 message="Iterator batch_size_cap must be an integer from 1 to 25",
+                person="Set “Batch Size Cap” to a whole number from 1 to 25.",
             ))
     try:
         order = topological_sort(nodes, edges)
@@ -766,6 +790,9 @@ def _iterator_validation_errors(
                 message="Joining independent iterator batches is unsupported. "
                         "Use one iterator for the shared downstream workflow; "
                         "Nebula will not implicitly multiply generation requests.",
+                person="This node takes items from two separate Batch or iterator nodes. Nebula won't "
+                       "combine them, because that would multiply the paid runs. Feed it from one of "
+                       "them, then run it again.",
             ))
         policy = operation_policy(node_map[nid].definition_id)
         if upstream and policy is not None and policy.provider == "worldlabs":
@@ -773,6 +800,8 @@ def _iterator_validation_errors(
                 node_id=nid, port_id="",
                 message="World Labs recovery-aware operations cannot run inside an iterator. "
                         "Use separate tracked nodes so every operation retains its own recovery ID.",
+                person="A World Labs node can't run once for each item of a Batch or iterator. Give "
+                       "each World Labs run its own node, then run them one at a time.",
             ))
         ancestors[nid] = upstream | ({nid} if node_map[nid].definition_id in _FANOUT_NODE_IDS else set())
     return errors
@@ -810,6 +839,7 @@ def validate_graph(
             node_id=issue.node_id,
             port_id=issue.port_id,
             message=issue.message,
+            person=issue.person,
         )
         for issue in edge_contracts.issues
     )
@@ -840,6 +870,7 @@ def validate_graph(
                         node_id=node.id,
                         port_id="",
                         message=f"Missing API key: {env_key}",
+                        person=missing_key_line([env_key]),
                     )
                 )
             continue
@@ -852,6 +883,7 @@ def validate_graph(
                             node_id=node.id,
                             port_id=port["id"],
                             message=f"Required input port '{port['id']}' is not connected",
+                            person=port_line(port.get("label") or ""),
                         )
                     )
 
@@ -876,8 +908,10 @@ def validate_graph(
         if krea_account:
             from services.krea_connector import is_krea_connected
             if not is_krea_connected():
-                errors.append(ValidationErrorDetail(node_id=node.id, port_id="",
-                                                   message="Connect your Krea account in Settings before running this recipe"))
+                errors.append(ValidationErrorDetail(
+                    node_id=node.id, port_id="",
+                    message="Connect your Krea account in Settings before running this recipe",
+                    person="Connect your Krea account in Settings, then run the node again."))
         from services import node_route
         if node_route.has_routes(node_def) and not krea_account:
             # A route-table node runs on its chosen route (or Auto's), never
@@ -886,7 +920,9 @@ def validate_graph(
             routed = node_route.with_wired_blockers(node_def, node.params, wired)
             unavailable = node_route.route_unavailable(node_def, routed, api_keys)
             if unavailable is not None:
-                errors.append(ValidationErrorDetail(node_id=node.id, port_id="", message=unavailable["message"]))
+                errors.append(ValidationErrorDetail(
+                    node_id=node.id, port_id="", message=unavailable["message"],
+                    person=node_route.route_unavailable_line(node_def, routed, api_keys)))
         elif key_names and not krea_account and not any(api_keys.get(k) for k in key_names):
             key_display = " or ".join(key_names)
             errors.append(
@@ -894,6 +930,7 @@ def validate_graph(
                     node_id=node.id,
                     port_id="",
                     message=f"Missing API key: {key_display}",
+                    person=missing_key_line(key_names),
                 )
             )
 
@@ -932,6 +969,9 @@ def validate_graph(
                         node_id=node.id,
                         port_id="prompt",
                         message=capability_error,
+                        # The card's line in GM's rules (round 3f); agents
+                        # read the guardrail's text as it is.
+                        person=GEMINI_OMNI_EXTENSION_LINE,
                     )
                 )
 
@@ -993,6 +1033,9 @@ async def execute_graph(
         execution_run_dir.reset(run_dir_token)
         execution_run_id.reset(token)
         execution_variant.reset(variant_token)
+        # Its handlers are done writing: a price may now be measured from
+        # what they made (services/input_sizes.py, output.is_being_written).
+        seal_run_dir(run_dir)
 
 
 async def _execute_graph(
@@ -1346,7 +1389,7 @@ async def _execute_graph(
                 elif node.definition_id == "frame-extractor":
                     video_input = resolved_inputs.get("video")
                     if not video_input or not video_input.value:
-                        raise ValueError("Video input is required for frame extraction")
+                        raise with_person_line(ValueError("Video input is required for frame extraction"), "Connect a video to this node, then run it again.")
                     try:
                         from services.ffmpeg import ffprobe_video, run_ffmpeg
                         from services.output import get_run_dir
@@ -1355,7 +1398,7 @@ async def _execute_graph(
                         video_path = resolve_output_ref(str(video_input.value))
                         is_remote = video_path.startswith(("http://", "https://"))
                         if not is_remote and not Path(video_path).is_file():
-                            raise ValueError("Video source file not found; restore or upload the source video before extracting frames")
+                            raise with_person_line(ValueError("Video source file not found; restore or upload the source video before extracting frames"), missing_file_line("video file"))
                         mode = node.params.get("mode", "first_frame")
                         timestamp = float(node.params.get("timestamp", 0))
 
@@ -1381,7 +1424,7 @@ async def _execute_graph(
                         )
                         node_outputs = {"image": {"type": "Image", "value": str(out_path)}}
                     except FileNotFoundError:
-                        raise ValueError("ffmpeg not found — install ffmpeg to use Frame Extractor")
+                        raise with_person_line(ValueError("ffmpeg not found — install ffmpeg to use Frame Extractor"), "Frame Extractor needs ffmpeg, which isn't installed on this computer. Install ffmpeg, then run the node again.")
                 elif node.definition_id == "array-builder":
                     items = []
                     for port_id in ("item1", "item2", "item3", "item4", "item5", "item6", "item7", "item8"):
@@ -1415,7 +1458,7 @@ async def _execute_graph(
                 elif node.definition_id == "svg-rasterize":
                     svg_input = resolved_inputs.get("svg")
                     if not svg_input or not svg_input.value:
-                        raise ValueError("SVG input is required")
+                        raise with_person_line(ValueError("SVG input is required"), "Connect an SVG to this node, then run it again.")
                     svg_value = str(svg_input.value)
                     width = int(node.params.get("width", 1024))
                     height = int(node.params.get("height", 1024))
@@ -1457,10 +1500,10 @@ async def _execute_graph(
                     #   black-edit (Ideogram)   -> inverted, painted becomes black
                     mask_data = node.params.get("_maskData")
                     if not mask_data or not str(mask_data).startswith("data:image"):
-                        raise ValueError("No mask painted yet — open the Mask Painter node and paint one")
+                        raise with_person_line(ValueError("No mask painted yet — open the Mask Painter node and paint one"), "No mask is painted yet. Open the Mask Painter node and paint one, then run the node again.")
                     image_input = resolved_inputs.get("image")
                     if not image_input or not image_input.value:
-                        raise ValueError("Image input is required (the mask must match its dimensions)")
+                        raise with_person_line(ValueError("Image input is required (the mask must match its dimensions)"), "Mask Painter needs the image the mask is painted on. Connect one, then run the node again.")
 
                     import base64 as _b64
                     import io as _io
@@ -1582,7 +1625,11 @@ async def _execute_graph(
             return nid, True, 1
 
         except Exception as exc:
-            category, friendly, retryable = classify_error(str(exc))
+            category, friendly, retryable = classify_error(str(exc), job_failure=is_job_failure(exc))
+            # The handler's own line, else GM's for a provider's answer from
+            # the shared table, naming the provider this run called (error
+            # copy round 3d, execution/provider_status.py).
+            card = card_line(exc, node.definition_id, node.params, api_keys)
             await emit(
                 ErrorEvent(
                     node_id=nid,
@@ -1592,6 +1639,9 @@ async def _execute_graph(
                     friendly=friendly,
                     missing_credential=isinstance(exc, MissingCredentialError)
                     and handler_calls.get(nid, 0) <= 1,
+                    person=card.person,
+                    provider_text=card.provider_text,
+                    provider=card.provider,
                 )
             )
             return nid, False, 0
@@ -1626,16 +1676,12 @@ async def _execute_graph(
                     else:
                         source = resolve_inputs(nid, context).get("array")
                         if source is None or not isinstance(source.value, list):
-                            raise ValueError("Iterator requires an Array input")
+                            raise with_person_line(ValueError("Iterator requires an Array input"), "Connect an array to this node, then run it again.")
                         items = source.value[:cap]
                     planned.extend((context + ((nid, index),), item)
                                    for index, item in enumerate(items))
                 if len(planned) > cap:
-                    raise ValueError(
-                        f"Nested iterator expands to {len(planned)} items, exceeding "
-                        f"this iterator's batch_size_cap of {cap}. Reduce the batch "
-                        "before running; no downstream generation was started."
-                    )
+                    raise _fanout_over_cap(node.definition_id, len(planned), cap)
                 out_type, out_key = (
                     ("Text", "set") if node.definition_id == "batch" else
                     ("Image", "image") if node.definition_id == "iterator-image" else ("Text", "text")
@@ -1650,9 +1696,10 @@ async def _execute_graph(
                     await record_outputs(nid, context, {out_key: {"type": out_type, "value": item}}, node.params)
                 return nid, True, len(contexts)
             except Exception as exc:
-                category, friendly, retryable = classify_error(str(exc))
+                category, friendly, retryable = classify_error(str(exc), job_failure=is_job_failure(exc))
                 await emit(ErrorEvent(node_id=nid, error=str(exc), category=category,
-                                      friendly=friendly, retryable=retryable))
+                                      friendly=friendly, retryable=retryable,
+                                      person=person_line(exc), provider_text=carries_provider_text(exc)))
                 return nid, False, 0
 
         executed_count = 0

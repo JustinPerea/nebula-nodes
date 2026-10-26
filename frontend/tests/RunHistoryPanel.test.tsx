@@ -10,6 +10,7 @@ import {
   WORLD_LABS_RECOVERY_READY_NOTE,
   type RunRecord,
 } from '../src/lib/runHistory';
+import { noticeSpy } from './helpers/noticeSpy';
 
 const INITIAL_GRAPH_STATE = { ...useGraphStore.getState() };
 const INITIAL_UI_STATE = { ...useUIStore.getState() };
@@ -211,6 +212,8 @@ describe('RunHistoryPanel replay actions', () => {
     const safeguards = screen.getByRole('region', {
       name: 'World Labs recovery safeguards',
     });
+    // Error copy round 3c (GM): "World Labs run" where it said "paid start".
+    expect(safeguards).toHaveTextContent('These IDs prevent an accidental second World Labs run.');
     expect(safeguards).toHaveTextContent('world-environment · operation operation-accepted');
     expect(safeguards).toHaveTextContent('world-export · world world-complete');
     expect(screen.getByTitle('world-environment · operation-accepted')).toBeInTheDocument();
@@ -288,7 +291,7 @@ describe('RunHistoryPanel replay actions', () => {
 
   it('keeps a recovery visible and reports the failure when exact deletion fails', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
-    const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const alert = noticeSpy();
     const deleteProviderRecovery = vi.fn().mockRejectedValue(
       new Error('Backend still has an active provider task.'),
     );
@@ -308,8 +311,10 @@ describe('RunHistoryPanel replay actions', () => {
       name: 'Checked Marble; forget recovery for world-node',
     }));
 
+    // Error copy round 3b: an error that isn't a request's never shows its
+    // own message; it says GM's general line under the button's heading.
     await waitFor(() => expect(alert).toHaveBeenCalledWith(
-      'Backend still has an active provider task.',
+      "Couldn't forget the recovery safeguard. Try again, or reload if it keeps happening.",
     ));
     expect(screen.getByTitle('world-node · operation-saved')).toBeInTheDocument();
     expect(screen.getByRole('button', {

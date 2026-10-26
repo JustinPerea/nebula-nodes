@@ -15,8 +15,10 @@ import {
   fetchPersonalAgents,
   acknowledgePersonalAgentWarning,
   isPersonalAgent,
+  parsePersonalSessionOptions,
   type ChatAgentId,
   type PersonalAgentList,
+  type PersonalSessionOption,
   type ClaudeStatus,
   type CodexChatGPTLoginState,
   type CodexStatus,
@@ -26,10 +28,15 @@ import {
 import { ChatModelPicker } from './ChatModelPicker';
 import { PermissionCard, type PermissionRequestPart, type PermissionStatus } from './PermissionCard';
 import { PersonalAgentWarning } from './PersonalAgentWarning';
-import { PERSONAL_AGENTS_CHANGED_EVENT } from './settings/PersonalAgentsSection';
+import { PERSONAL_AGENTS_CHANGED_EVENT } from '../../lib/personalAgentsEvents';
+import { CHAT_SEND_EVENT, type ChatSendDetail } from '../../lib/chatSend';
+import { claimIntent } from '../../lib/heldIntents';
 import '../../styles/personal-agents.css';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl, personTokenForSocket } from '../../lib/backend';
 import { DEFAULT_BACKEND_PORT, devProxyPort } from '../../lib/devBackendPort';
+import { CONNECTION_LOST_COPY, NO_ANSWER_STATUS, PERSON_REQUIRED_CODE, isBackendUnreachable, personRequiredCopy, readDetail, warnFailure, failureMessage, failureCopy, oneLine } from '../../lib/errorCopy';
+import { ErrorDetails } from '../failure/ErrorDetails';
+import { chatUploadChipError } from '../../lib/chatUploadCopy';
 import { chatAuthority } from '../../lib/commonsChatAuthority';
 import { onPersonConnected, reportPersonRequired } from '../../lib/personSession';
 import { normalizeAgentEventSource } from '../../lib/agentEvents';
@@ -89,18 +96,17 @@ const CHAT_PANEL_RESIZE_CURSORS: Record<string, string> = {
   bl: 'nesw-resize',
 };
 
-function isBackendUnavailableError(message: string | null): boolean {
-  if (!message) return false;
-  const lower = message.toLowerCase();
-  return (
-    lower.includes('failed to fetch') ||
-    lower.includes('load failed') ||
-    lower.includes('network') ||
-    lower.includes('status failed: 500') ||
-    lower.includes('status failed: 502') ||
-    lower.includes('status failed: 503') ||
-    lower.includes('status failed: 504')
-  );
+/** Whether a failed status check means the Nebula backend itself is down.
+ * Read from the error's kind and status, never its words (typeerror2,
+ * 2026-10-24): no answer (isBackendUnreachable: a ConnectionLostError or an
+ * AbortError nobody asked for), any error that carries the no-answer status
+ * (a Commons call's), or a gateway's 502/503/504 with no reason of the
+ * backend's (the Vite proxy for a stopped backend). A refusal whose reason
+ * says "network" is the backend answering. */
+function isBackendUnavailableError(error: unknown): boolean {
+  if (!error) return false;
+  if (isBackendUnreachable(error)) return true;
+  return (error as { status?: unknown }).status === NO_ANSWER_STATUS;
 }
 
 type ToolCall = {
@@ -121,6 +127,9 @@ type SystemLine = {
   kind: 'system';
   text: string;
   tone?: 'neutral' | 'error' | 'success';
+  /** Text behind a collapsed Details toggle under the line: a person-only
+   * refusal's own words, written for agents (GM, Q116 a). */
+  details?: string;
 };
 
 type ThoughtChunk = {
@@ -339,7 +348,7 @@ function AssistantBubble({ message, agentName, onPermission }: {
               className={`chat__system chat__system--${tone}`}
               data-chat-system-tone={tone}
             >
-              {part.text}
+              {part.details ? <><span>{part.text}</span><ErrorDetails raw={part.details} className="chat__system-details" /></> : part.text}
             </div>
           );
         }
@@ -479,12 +488,17 @@ export function ChatPanel() {
 
   const [claudeStatus, setClaudeStatus] = useState<ClaudeStatus | null>(null);
   const [claudeStatusError, setClaudeStatusError] = useState<string | null>(null);
+  const [claudeBackendOffline, setClaudeBackendOffline] = useState(false);
   const [codexStatus, setCodexStatus] = useState<CodexStatus | null>(null);
   const [codexStatusError, setCodexStatusError] = useState<string | null>(null);
+  const [codexBackendOffline, setCodexBackendOffline] = useState(false);
   const [codexLoginState, setCodexLoginState] = useState<CodexChatGPTLoginState | null>(null);
   const [codexLoginError, setCodexLoginError] = useState<string | null>(null);
   const [codexLoginBusy, setCodexLoginBusy] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  // The models (or thinking levels) a personal agent offers for its session.
+  const [personalOptions, setPersonalOptions] = useState<PersonalSessionOption[]>([]);
+  useEffect(() => { if (!sessionId) setPersonalOptions([]); }, [sessionId]);
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
   const [cancelState, setCancelState] = useState<ChatCancellationState>('idle');
@@ -522,7 +536,7 @@ export function ChatPanel() {
         .catch((error: unknown) => {
           if (!cancelled) {
             setModelCatalog(null);
-            setCatalogError(error instanceof Error ? error.message : String(error));
+            setCatalogError(failureMessage(error, "Couldn't load the models."));
           }
         })
         .finally(() => { if (!cancelled) setCatalogLoading(false); });
@@ -553,6 +567,7 @@ export function ChatPanel() {
     const refresh = () => {
       if (cancelled) return;
       setClaudeStatusError(null);
+      setClaudeBackendOffline(false);
       fetchClaudeStatus()
         .then((status) => {
           if (cancelled) return;
@@ -564,7 +579,8 @@ export function ChatPanel() {
         .catch((err: unknown) => {
           if (cancelled) return;
           setClaudeStatus(null);
-          setClaudeStatusError(err instanceof Error ? err.message : String(err));
+          setClaudeStatusError(failureMessage(err, "Couldn't check Claude status."));
+          setClaudeBackendOffline(isBackendUnavailableError(err));
           retryTimer = window.setTimeout(refresh, 3000);
         });
     };
@@ -584,6 +600,7 @@ export function ChatPanel() {
     const refresh = () => {
       if (cancelled) return;
       setCodexStatusError(null);
+      setCodexBackendOffline(false);
       fetchCodexStatus()
         .then((status) => {
           if (cancelled) return;
@@ -595,7 +612,8 @@ export function ChatPanel() {
         .catch((err: unknown) => {
           if (cancelled) return;
           setCodexStatus(null);
-          setCodexStatusError(err instanceof Error ? err.message : String(err));
+          setCodexStatusError(failureMessage(err, "Couldn't check Codex status."));
+          setCodexBackendOffline(isBackendUnavailableError(err));
           retryTimer = window.setTimeout(refresh, 3000);
         });
     };
@@ -615,7 +633,7 @@ export function ChatPanel() {
       setCodexLoginState(state);
       setNotice(deviceAuth ? 'Codex device login started.' : 'ChatGPT account login started.');
     } catch (err) {
-      setCodexLoginError(err instanceof Error ? err.message : String(err));
+      setCodexLoginError(failureMessage(err, "Couldn't start the ChatGPT sign-in."));
     } finally {
       setCodexLoginBusy(false);
     }
@@ -636,6 +654,7 @@ export function ChatPanel() {
         setCodexLoginState(loginState);
         setCodexStatus(status);
         setCodexStatusError(null);
+        setCodexBackendOffline(false);
         if (!loginState.running && status.loggedIn && status.mode === 'chatgpt') {
           setCatalogRefresh((value) => value + 1);
         } else {
@@ -643,7 +662,7 @@ export function ChatPanel() {
         }
       } catch (err) {
         if (cancelled) return;
-        setCodexLoginError(err instanceof Error ? err.message : String(err));
+        setCodexLoginError(failureMessage(err, "Couldn't check the ChatGPT sign-in."));
         retryTimer = window.setTimeout(poll, 2500);
       }
     };
@@ -656,7 +675,7 @@ export function ChatPanel() {
   }, [agent, codexLoginState?.running]);
 
   const claudeStatusLabel = useMemo(() => {
-    if (isBackendUnavailableError(claudeStatusError)) return 'Nebula backend offline';
+    if (claudeBackendOffline) return 'Nebula backend offline';
     if (claudeStatusError) return 'Claude status unavailable';
     if (!claudeStatus) return 'Checking Claude…';
     if (!claudeStatus.installed) return 'Claude not installed';
@@ -665,10 +684,10 @@ export function ChatPanel() {
     if (claudeStatus.subscriptionType) return `Claude · ${claudeStatus.subscriptionType}`;
     if (claudeStatus.authMethod) return `Claude · ${claudeStatus.authMethod}`;
     return 'Claude logged in';
-  }, [claudeStatus, claudeStatusError, activeCatalog]);
+  }, [claudeStatus, claudeStatusError, claudeBackendOffline, activeCatalog]);
 
   const codexStatusLabel = useMemo(() => {
-    if (isBackendUnavailableError(codexStatusError)) return 'Nebula backend offline';
+    if (codexBackendOffline) return 'Nebula backend offline';
     if (codexStatusError) return 'Codex status unavailable';
     if (!codexStatus) return 'Checking Codex…';
     if (!codexStatus.installed) return 'Codex not installed';
@@ -677,11 +696,11 @@ export function ChatPanel() {
     if (codexStatus.mode === 'api') return 'Codex · API billing';
     if (codexStatus.mode === 'access_token') return 'Codex · access token';
     return 'Codex logged in';
-  }, [codexStatus, codexStatusError]);
+  }, [codexStatus, codexStatusError, codexBackendOffline]);
 
   const agentConnectHint = useMemo(() => {
     if (agent === 'claude') {
-      const backendUnavailable = isBackendUnavailableError(claudeStatusError);
+      const backendUnavailable = claudeBackendOffline;
       const needsConnection = Boolean(claudeStatusError || !claudeStatus?.installed || !claudeStatus?.loggedIn);
       if (backendUnavailable) {
         return {
@@ -711,7 +730,7 @@ export function ChatPanel() {
       };
     }
     if (agent === 'codex') {
-      const backendUnavailable = isBackendUnavailableError(codexStatusError);
+      const backendUnavailable = codexBackendOffline;
       const needsConnection = Boolean(
         codexStatusError ||
         !codexStatus?.installed ||
@@ -747,7 +766,7 @@ export function ChatPanel() {
       };
     }
     return null;
-  }, [agent, claudeStatus, claudeStatusError, claudeStatusLabel, codexStatus, codexStatusError, codexStatusLabel, activeCatalog]);
+  }, [agent, claudeStatus, claudeStatusError, claudeBackendOffline, claudeStatusLabel, codexStatus, codexStatusError, codexBackendOffline, codexStatusLabel, activeCatalog]);
 
   useEffect(() => {
     if (!notice) return;
@@ -827,13 +846,9 @@ export function ChatPanel() {
         const resp = await apiFetch('/api/uploads', { method: 'POST', body: form });
         if (!resp.ok) {
           useGraphStore.getState().cancelUndoStep(undoStep);
-          const detail = await resp.text().catch(() => '');
-          const errMsg =
-            resp.status === 413
-              ? 'Image > 20MB'
-              : resp.status === 415
-              ? 'Not an image'
-              : (detail || `Upload failed (${resp.status})`);
+          const detail = await readDetail(resp);
+          warnFailure("Couldn't upload the image.", resp.status, detail);
+          const errMsg = chatUploadChipError(resp.status, detail);
           setPendingImages((prev) => {
             const prior = prev.find((p) => p.id === chipId);
             // URL.revokeObjectURL is idempotent — safe inside a StrictMode-
@@ -1004,6 +1019,12 @@ export function ChatPanel() {
           const type = event.type;
           if (type === 'session') {
             setSessionId(String(event.sessionId));
+            setPersonalOptions(parsePersonalSessionOptions(event.options));
+            return;
+          }
+          if (type === 'personal_options') {
+            setPersonalOptions(parsePersonalSessionOptions(event.options));
+            if (event.error) setNotice(String(event.error));
             return;
           }
           if (type === 'thinking') {
@@ -1126,7 +1147,10 @@ export function ChatPanel() {
           }
           if (type === 'error') {
             const errText = String(event.message ?? 'unknown error');
-            if (event.code === 'person_required') reportPersonRequired();
+            // A person-only refusal says GM's line, by its code; the backend's
+            // words, written for agents, go behind Details (Q116 a).
+            const personRequired = event.code === PERSON_REQUIRED_CODE;
+            if (personRequired) reportPersonRequired();
             // The personal agent stopped (crash, idle timeout, closed): the next send starts a new one.
             if (event.code === 'personal_session_ended') setSessionId(null);
             if (event.code === 'personal_agent_warning_required') {
@@ -1144,7 +1168,9 @@ export function ChatPanel() {
                     ? { ...p, result: '(stream ended before this tool returned)', isError: true }
                     : p,
                 ),
-                { kind: 'system', text: `Warning: ${errText}`, tone: 'error' },
+                personRequired
+                  ? { kind: 'system', text: personRequiredCopy(), tone: 'error', details: errText }
+                  : { kind: 'system', text: `Warning: ${errText}`, tone: 'error' },
               ],
               streaming: false,
             }));
@@ -1183,10 +1209,9 @@ export function ChatPanel() {
               return;
             }
             const active = Boolean(event.active);
-            const notice = chatCancellationNotice(
-              'failed',
-              String(event.message ?? 'unknown error'),
-            );
+            // The backend's text is for the console; the person reads GM's line.
+            console.warn('[nebula] chat stop failed:', event.message);
+            const notice = chatCancellationNotice('failed');
             applyCancellationEvent({ type: 'failed', active });
             upsertAssistant((msg) => ({
               ...msg,
@@ -1260,10 +1285,15 @@ export function ChatPanel() {
   // `nebula:chat-send` with a pre-composed message. We open the panel if it's
   // closed, drop the message into the input, and auto-send when the socket is
   // ready and not already streaming. If busy, the user can hit Send themselves.
+  // The panel is a deferred chunk: a send that came before it arrived was held
+  // by its wrapper (DeferredPanels.tsx, which also opened the panel) and is
+  // handed over here, where the panel takes the event over (lib/heldIntents.ts).
   const sendRef = useRef<() => void>(() => {});
   useEffect(() => {
     function onChatSend(e: Event) {
-      const detail = (e as CustomEvent<{ message?: string; sourceNodeId?: string }>).detail;
+      receive((e as CustomEvent<ChatSendDetail | undefined>).detail);
+    }
+    function receive(detail: ChatSendDetail | undefined) {
       const msg = String(detail?.message ?? '').trim();
       if (!msg) return;
       if (!useUIStore.getState().panels.chat.visible) {
@@ -1281,8 +1311,13 @@ export function ChatPanel() {
         }
       }, 120);
     }
-    window.addEventListener('nebula:chat-send', onChatSend);
-    return () => window.removeEventListener('nebula:chat-send', onChatSend);
+    window.addEventListener(CHAT_SEND_EVENT, onChatSend);
+    const claim = claimIntent<ChatSendDetail>('chat-send');
+    if (claim.held) receive(claim.held);
+    return () => {
+      claim.release();
+      window.removeEventListener(CHAT_SEND_EVENT, onChatSend);
+    };
   }, []);
 
   // DEV-only window bridge for scripted UI capture (the nebula-nodes-visuals
@@ -1449,7 +1484,8 @@ export function ChatPanel() {
     authorityPendingRef.current = true;
     if (commonsEnabled) setAuthorizing(true);
     try { authority = await chatAuthority(ws.url, commonsEnabled, brand); }
-    catch (error) { setNotice((error as Error).message); reportPersonRequired(); return; }
+    // The session line on its own (a FailureNotice with no heading, GM round 2).
+    catch (error) { setNotice(oneLine(failureCopy(error))); reportPersonRequired(); return; }
     finally { authorityPendingRef.current = false; if (commonsEnabled) setAuthorizing(false); }
     if (busyRef.current || ws.readyState !== WebSocket.OPEN || useUIStore.getState().commonsEnabled !== commonsEnabled) return;
 
@@ -1512,6 +1548,17 @@ export function ChatPanel() {
     sendRef.current = send;
   }, [send]);
 
+  const choosePersonalOption = useCallback((configId: string, value: string) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN || !sessionId) return;
+    setPersonalOptions((current) => current.map((option) => option.id === configId ? { ...option, current: value } : option));
+    void personTokenForSocket(ws.url).then((personToken) => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      ws.send(JSON.stringify({ type: 'personal_option', sessionId, configId, value,
+        ...(personToken ? { personToken } : {}) }));
+    });
+  }, [sessionId]);
+
   const answerPermission = useCallback((requestId: string, decision: 'allow' | 'deny') => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -1545,7 +1592,7 @@ export function ChatPanel() {
     const ws = wsRef.current;
     if (cancelStateRef.current === 'requested') return;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
-      const notice = chatCancellationNotice('failed', 'backend is disconnected.');
+      const notice = chatCancellationNotice('failed', CONNECTION_LOST_COPY);
       applyCancellationEvent({ type: 'failed', active: false });
       upsertAssistant((msg) => ({
         ...msg,
@@ -1561,10 +1608,8 @@ export function ChatPanel() {
       ws.send(JSON.stringify({ type: 'cancel' }));
       applyCancellationEvent({ type: 'request' });
     } catch (error) {
-      const notice = chatCancellationNotice(
-        'failed',
-        error instanceof Error ? error.message : String(error),
-      );
+      console.warn('[nebula] chat stop could not be sent:', error);
+      const notice = chatCancellationNotice('failed', CONNECTION_LOST_COPY);
       applyCancellationEvent({ type: 'failed', active: false });
       upsertAssistant((msg) => ({
         ...msg,
@@ -1824,6 +1869,21 @@ export function ChatPanel() {
               </span>
             )}
           </div>
+          {personal && personalOptions.length > 0 && (
+            // The models (or thinking levels) the agent offers, on their own row
+            // so they never split the status line above.
+            <div className="chat-panel__personal-options" onMouseDown={(e) => e.stopPropagation()}>
+              {personalOptions.map((option) => (
+                <select key={option.id} className="chat-panel__personal-option" value={option.current ?? ''}
+                  aria-label={`${option.name} for this conversation`} disabled={busy}
+                  title={`${option.name}: ${agentDisplayName} offers these for this conversation`}
+                  onChange={(event) => choosePersonalOption(option.id, event.target.value)}>
+                  {option.current === null && <option value="" disabled>{option.name}</option>}
+                  {option.options.map((item) => <option key={item.value} value={item.value}>{item.name}</option>)}
+                </select>
+              ))}
+            </div>
+          )}
         </div>
         <button
           type="button"

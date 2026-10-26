@@ -1,6 +1,8 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useUIStore } from '../../store/uiStore';
 import type { VideoGraphManifest } from '../../types/video';
+import type { NodeData } from '../../types';
+import { NodeRunError } from './NodeError';
 
 interface RemotionNodeData {
   params?: {
@@ -38,6 +40,7 @@ export function RemotionNode({ id, data, selected }: NodeProps) {
           Open Editor
         </button>
       )}
+      <NodeRunError data={data as unknown as NodeData} className="remotion-node__run-error" />
       <Handle type="source" position={Position.Right} id="video" />
     </div>
   );

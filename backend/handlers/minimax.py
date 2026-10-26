@@ -12,6 +12,8 @@ from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent, ProgressEvent
 from services.output import get_run_dir, image_to_data_uri, resolve_output_ref, save_video_from_url
 from execution.missing_credential import MissingCredentialError
+from execution.person_line import (as_job_failure, missing_file_line, slow_job_line, status_line, with_api_status,
+                                   with_person_line, with_provider_line)
 
 MINIMAX_API_BASE = "https://api.minimaxi.com"
 # MiniMax keys belong to one region: "The API host and key vary by region and
@@ -26,6 +28,9 @@ MINIMAX_API_BASES = (MINIMAX_API_BASE, MINIMAX_GLOBAL_API_BASE)
 # "1004, Account authentication failed", "2049, Invalid API Key"
 # (platform.minimax.io/docs/api-reference/errorcode).
 _AUTH_ERROR_CODES = {1004, 2049}
+# "1008, insufficient balance", "2053, insufficient credit" (same page, read
+# 2026-10-22).
+_NO_BALANCE_CODES = {1008, 2053}
 
 
 def _log(msg: str) -> None:
@@ -82,7 +87,7 @@ def _resolve_image_url(value: str) -> str:
         return value
     image_path = Path(value)
     if not image_path.exists():
-        raise ValueError(f"Image file not found: {value}")
+        raise with_person_line(ValueError(f"Image file not found: {value}"), missing_file_line("image file"))
     return image_to_data_uri(image_path)
 
 
@@ -158,7 +163,7 @@ async def handle_minimax_video(
         }
 
     if not prompt:
-        raise ValueError("Prompt input is required")
+        raise with_person_line(ValueError("Prompt input is required"), "Connect a prompt to this node, then run it again.")
     # "Whether to automatically optimize the `prompt`. Defaults to `true`." Sent
     # only when a node sets it (the Krea copies' expand_prompt).
     if isinstance(node.params.get("prompt_optimizer"), bool):
@@ -181,13 +186,24 @@ async def handle_minimax_video(
         api_base, resp = await submit_task(client, "/v1/video_generation", headers, body)
         _log(f"submit response: {resp.status_code}")
         if resp.status_code not in (200, 201, 202):
-            raise RuntimeError(f"MiniMax submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"MiniMax submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         submit_data = resp.json()
         _log(f"submit_data: {submit_data}")
         task_id = submit_data.get("task_id")
         if not task_id:
-            raise RuntimeError(f"MiniMax did not return task_id: {submit_data}")
+            # V1 says a refused key (after every region) or an empty balance
+            # with its own code in an HTTP 200, so the card reads the code,
+            # not the missing task id (error copy 3d review).
+            base_resp = submit_data.get("base_resp") if isinstance(submit_data, dict) else None
+            code = base_resp.get("status_code") if isinstance(base_resp, dict) else None
+            exc = RuntimeError(f"MiniMax did not return task_id: {submit_data}")
+            if code in _AUTH_ERROR_CODES:
+                raise with_provider_line(exc, status_line("key", "MiniMax"))
+            if code in _NO_BALANCE_CODES:
+                raise with_provider_line(exc, status_line("credits", "MiniMax"))
+            raise exc
 
         # Step 2: Poll for completion
         _log(f"polling task_id={task_id}")
@@ -206,7 +222,9 @@ async def handle_minimax_video(
             )
             if poll_resp.status_code != 200:
                 _log(f"poll FAILED: {poll_resp.status_code} {poll_resp.text}")
-                raise RuntimeError(f"MiniMax poll failed ({poll_resp.status_code}): {poll_resp.text}")
+                raise with_api_status(
+                    RuntimeError(f"MiniMax poll failed ({poll_resp.status_code}): {poll_resp.text}"),
+                    poll_resp.status_code)
 
             poll_data = poll_resp.json()
             status = poll_data.get("status", "")
@@ -228,9 +246,9 @@ async def handle_minimax_video(
                     headers={"Authorization": f"Bearer {api_key}"},
                 )
                 if retrieve_resp.status_code != 200:
-                    raise RuntimeError(
+                    raise with_api_status(RuntimeError(
                         f"MiniMax file retrieve failed ({retrieve_resp.status_code}): {retrieve_resp.text}"
-                    )
+                    ), retrieve_resp.status_code)
 
                 retrieve_data = retrieve_resp.json()
                 download_url = retrieve_data.get("file", {}).get("download_url", "")
@@ -247,9 +265,9 @@ async def handle_minimax_video(
             elif status == "Fail":
                 error = poll_data.get("message") or poll_data.get("err_msg") or "Unknown error"
                 _log(f"Fail: {error}")
-                raise RuntimeError(f"MiniMax task failed: {error}")
+                raise as_job_failure(RuntimeError(f"MiniMax task failed: {error}"))
 
             # Queueing / Processing — keep polling
 
         _log("TIMED OUT")
-        raise RuntimeError(f"MiniMax task timed out after {max_polls} polls")
+        raise with_person_line(RuntimeError(f"MiniMax task timed out after {max_polls} polls"), slow_job_line("MiniMax"))

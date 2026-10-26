@@ -30,8 +30,96 @@ from services.file_access import require_allowed_path
 from services.output import get_run_dir, resolve_output_ref
 from services.provider_start_guard import AMBIGUITY_MESSAGE
 from execution.missing_credential import MissingCredentialError
+from execution.person_line import as_job_failure, with_api_status, with_call_facts, with_person_line
 
 logger = logging.getLogger(__name__)
+
+# What the person reads on the node when a run fails (error copy round 3c,
+# GM - Design): "the person reads these on the node, so their lines
+# shouldn't carry ids or record names. ... If a fact helps the person act,
+# put it in words, like "the node's Resume Operation ID field"." Each raise
+# keeps its specific text, word for word, for agents, the run record and MCP;
+# the line rides beside it (execution/person_line.py), and the card shows it
+# under "Couldn't run the node.". GM: "People never see the word "start";
+# they ran a World Labs job." Round 3f (GM's rule 5, "whatever round wrote
+# it"): a field is named as the node shows it, in quotes, “Resume Operation
+# ID”, not "the node's Resume Operation ID field".
+#
+# The node's recovery fields, by the labels the person sees on the node
+# (node_definitions.json; pinned equal by tests/test_error_copy_round3c.py).
+RECOVERY_FIELD_LABELS = {
+    ("worldlabs-environment", "resume_operation_id"): "Resume Operation ID",
+    ("worldlabs-environment", "existing_world_id"): "Existing World ID",
+    ("worldlabs-world-export", "resume_operation_id"): "Resume Export Operation ID",
+}
+UNLOCK_BUTTON = "“Checked Marble — unlock”"
+PERSON_LINES = {
+    # The answer to the paid request never came (or can't prove World Labs
+    # didn't take it): the node is held until the person checks Marble.
+    "locked": (
+        "World Labs didn't answer this run, so Nebula locked the node to avoid paying twice. "
+        f"Check the job in Marble, then use {UNLOCK_BUTTON} before you run it again."
+    ),
+    "ply_lost": "World Labs didn't answer this export. PLY exports are free, so you can run the node again.",
+    "key_rejected": "World Labs didn't accept your API key. Check it in Settings, then run the node again.",
+    "no_credits": "Your World Labs account is out of API credits. Add credits, then run the node again.",
+    "busy": "World Labs is busy. Wait a moment, then run the node again.",
+    "missing_key": "Add your World Labs API key in Settings, then run the node again.",
+    "both_recovery_ids": "Fill in “Resume Operation ID” or “Existing World ID”, not both.",
+    "images_or_video": "Connect images or a video to this node, not both.",
+    "nothing_connected": "Connect a prompt, one or more images, or a video, then run the node again.",
+    "export_needs_world": (
+        "This node exports worlds made by a World Labs Environment node. Connect one, then run it again."
+    ),
+    # The node's own fields and inputs, by the labels the person sees (review
+    # of round 3c: each check a person can reach from the Inspector or the
+    # wiring has a line; enum checks only an agent or an old graph can reach
+    # keep the general line with the text behind Details).
+    "bad_seed": "Set “Seed” to a whole number from 0 to 4294967295, or clear it for a random seed.",
+    "long_name": "“World Name” is too long. Keep it to 64 characters or fewer.",
+    "bad_tags": "“Tags” takes up to 10 tags of 32 characters each, separated by commas.",
+    "bad_azimuths": (
+        "Write “Image Azimuths” as numbers separated by commas, one for each connected "
+        "image, or clear the field."
+    ),
+    "too_many_images": (
+        "This node takes up to 4 images. Turn on “Reconstruct Image Set” for up to 8, "
+        "or disconnect some."
+    ),
+    "too_many_reconstruct_images": "This node takes up to 8 images. Disconnect some, then run the node again.",
+    "image_not_found": "A connected image file can't be found. Connect it again, then run the node again.",
+    "video_not_found": "A connected video file can't be found. Connect it again, then run the node again.",
+    "image_empty": "A connected image file is empty. Connect another one, then run the node again.",
+    "video_empty": "A connected video file is empty. Connect another one, then run the node again.",
+    "image_too_large": "A connected image is over World Labs' 1 GB limit. Connect a smaller one.",
+    "video_too_large": "The connected video is over World Labs' 100 MB limit. Connect a shorter or smaller one.",
+}
+
+
+def _recovery_field(definition_id: str, key: str) -> str:
+    return RECOVERY_FIELD_LABELS.get((definition_id, key), "Resume Operation ID")
+
+
+def _job_kept_line(field: str) -> str:
+    """World Labs took the paid request and the node's field holds the job."""
+    return ("World Labs accepted this run, and it may be billed, but Nebula couldn't finish it here. "
+            f"Check the job in Marble. “{field}” keeps the job, so running the node "
+            "again picks it up without paying twice.")
+
+
+def _job_failed_line(field: str) -> str:
+    """World Labs itself failed the job: running again would read the same failure."""
+    return ("World Labs couldn't finish this run. Check the job in Marble to see why. To run it "
+            f"from scratch, clear “{field}” first.")
+
+
+def _bad_recovery_id_line(field: str) -> str:
+    return (f"“{field}” doesn't hold a World Labs job. "
+            "Copy the job's ID from Marble, or clear the field.")
+
+
+class WorldLabsOperationError(RuntimeError):
+    """World Labs reported the operation itself failed (its own `error`)."""
 
 WORLDLABS_API_BASE = "https://api.worldlabs.ai/marble/v1"
 WORLDLABS_MODELS = frozenset(
@@ -230,7 +318,9 @@ def _raise_api_error(
             detail += f"; retry after {retry_after} seconds"
     else:
         detail = excerpt if excerpt is not None else _response_excerpt(response)
-    raise RuntimeError(f"World Labs {action} failed ({status}): {detail}")
+    error = with_api_status(RuntimeError(f"World Labs {action} failed ({status}): {detail}"), status)
+    person = {401: "key_rejected", 402: "no_credits", 429: "busy"}.get(status)
+    raise with_person_line(error, PERSON_LINES[person]) if person else error
 
 
 async def _raise_streamed_api_error(action: str, response: httpx.Response) -> None:
@@ -402,11 +492,13 @@ async def _upload_local_media(
     path = require_allowed_path(path)
     size = path.stat().st_size
     if size <= 0:
-        raise ValueError(f"{kind.capitalize()} file is empty: {path}")
+        raise with_person_line(ValueError(f"{kind.capitalize()} file is empty: {path}"),
+                               PERSON_LINES[f"{kind}_empty"])
     limit = _MAX_VIDEO_BYTES if kind == "video" else _MAX_UPLOAD_BYTES
     if size > limit:
         label = "100 MB video" if kind == "video" else "1 GB media upload"
-        raise ValueError(f"{kind.capitalize()} file exceeds World Labs' {label} limit: {path}")
+        raise with_person_line(ValueError(f"{kind.capitalize()} file exceeds World Labs' {label} limit: {path}"),
+                               PERSON_LINES[f"{kind}_too_large"])
 
     suffix = path.suffix.lstrip(".").lower()
     extension = suffix if re.fullmatch(r"[a-z0-9]{1,10}", suffix) else None
@@ -482,7 +574,8 @@ async def _content_reference(
             if parsed.path.startswith("/api/outputs/"):
                 resolved = Path(resolve_output_ref(unquote(parsed.path))).expanduser()
                 if not resolved.is_file():
-                    raise ValueError(f"{kind.capitalize()} file not found: {raw}")
+                    raise with_person_line(ValueError(f"{kind.capitalize()} file not found: {raw}"),
+                                           PERSON_LINES[f"{kind}_not_found"])
                 return await _upload_local_media(client, resolved, kind, headers)
             raise ValueError(
                 f"Localhost {kind} URLs are not reachable by World Labs; "
@@ -496,7 +589,8 @@ async def _content_reference(
 
     resolved = Path(resolve_output_ref(raw)).expanduser()
     if not resolved.is_file():
-        raise ValueError(f"{kind.capitalize()} file not found: {raw}")
+        raise with_person_line(ValueError(f"{kind.capitalize()} file not found: {raw}"),
+                               PERSON_LINES[f"{kind}_not_found"])
     return await _upload_local_media(client, resolved, kind, headers)
 
 
@@ -512,11 +606,13 @@ def _parse_azimuths(raw: Any, count: int) -> list[float | None]:
             try:
                 values = json.loads(stripped)
             except json.JSONDecodeError as exc:
-                raise ValueError("Azimuths must be comma-separated numbers or a JSON array") from exc
+                raise with_person_line(ValueError("Azimuths must be comma-separated numbers or a JSON array"),
+                                       PERSON_LINES["bad_azimuths"]) from exc
         else:
             values = [item.strip() for item in stripped.split(",")]
     if not isinstance(values, list) or len(values) != count:
-        raise ValueError(f"Azimuth count must match the {count} connected images")
+        raise with_person_line(ValueError(f"Azimuth count must match the {count} connected images"),
+                               PERSON_LINES["bad_azimuths"])
 
     result: list[float | None] = []
     for value in values:
@@ -526,9 +622,10 @@ def _parse_azimuths(raw: Any, count: int) -> list[float | None]:
         try:
             number = float(value)
         except (TypeError, ValueError) as exc:
-            raise ValueError(f"Invalid azimuth: {value!r}") from exc
+            raise with_person_line(ValueError(f"Invalid azimuth: {value!r}"),
+                                   PERSON_LINES["bad_azimuths"]) from exc
         if not math.isfinite(number):
-            raise ValueError(f"Invalid azimuth: {value!r}")
+            raise with_person_line(ValueError(f"Invalid azimuth: {value!r}"), PERSON_LINES["bad_azimuths"])
         result.append(number)
     return result
 
@@ -552,21 +649,26 @@ def _generation_options(node: GraphNode) -> dict[str, Any]:
     display_name = str(node.params.get("display_name") or "").strip()
     if display_name:
         if len(display_name) > 64:
-            raise ValueError("World Labs display name must be 64 characters or fewer")
+            raise with_person_line(ValueError("World Labs display name must be 64 characters or fewer"),
+                                   PERSON_LINES["long_name"])
         body["display_name"] = display_name
 
     seed = node.params.get("seed")
     if seed not in (None, ""):
+        def bad_seed() -> ValueError:
+            return with_person_line(ValueError("World Labs seed must be an integer from 0 to 4294967295"),
+                                    PERSON_LINES["bad_seed"])
+
         if isinstance(seed, bool):
-            raise ValueError("World Labs seed must be an integer from 0 to 4294967295")
+            raise bad_seed()
         try:
             parsed_seed = int(seed)
         except (TypeError, ValueError) as exc:
-            raise ValueError("World Labs seed must be an integer from 0 to 4294967295") from exc
+            raise bad_seed() from exc
         if str(parsed_seed) != str(seed).strip() and not isinstance(seed, int):
-            raise ValueError("World Labs seed must be an integer from 0 to 4294967295")
+            raise bad_seed()
         if not 0 <= parsed_seed <= 4_294_967_295:
-            raise ValueError("World Labs seed must be an integer from 0 to 4294967295")
+            raise bad_seed()
         body["seed"] = parsed_seed
 
     tags_raw = node.params.get("tags")
@@ -576,9 +678,11 @@ def _generation_options(node: GraphNode) -> dict[str, Any]:
         elif isinstance(tags_raw, list):
             tags = [str(item).strip() for item in tags_raw if str(item).strip()]
         else:
-            raise ValueError("World Labs tags must be a comma-separated string or list")
+            raise with_person_line(ValueError("World Labs tags must be a comma-separated string or list"),
+                                   PERSON_LINES["bad_tags"])
         if len(tags) > 10 or any(len(tag) > 32 for tag in tags):
-            raise ValueError("World Labs accepts at most 10 tags of 32 characters each")
+            raise with_person_line(ValueError("World Labs accepts at most 10 tags of 32 characters each"),
+                                   PERSON_LINES["bad_tags"])
         body["tags"] = tags
     return body
 
@@ -605,7 +709,8 @@ async def _build_world_prompt(
     video_value = inputs.get("video")
     video = video_value.value if video_value and video_value.value else None
     if raw_images and video:
-        raise ValueError("Connect images or a video to World Labs Environment, not both")
+        raise with_person_line(ValueError("Connect images or a video to World Labs Environment, not both"),
+                               PERSON_LINES["images_or_video"])
 
     disable_recaption = node.params.get("disable_recaption") is True
     if video:
@@ -633,10 +738,10 @@ async def _build_world_prompt(
         reconstruct = node.params.get("reconstruct_images") is True
         max_images = 8 if reconstruct else 4
         if len(raw_images) > max_images:
-            raise ValueError(
+            raise with_person_line(ValueError(
                 f"World Labs accepts at most {max_images} images when "
                 f"reconstruct_images is {'enabled' if reconstruct else 'disabled'}"
-            )
+            ), PERSON_LINES["too_many_reconstruct_images" if reconstruct else "too_many_images"])
         upload_tasks = [
             asyncio.create_task(_content_reference(client, value, "image", headers))
             for value in raw_images
@@ -664,7 +769,8 @@ async def _build_world_prompt(
         prompt_type = "multi-image"
     else:
         if not prompt:
-            raise ValueError("Connect a prompt, one or more images, or a video")
+            raise with_person_line(ValueError("Connect a prompt, one or more images, or a video"),
+                                   PERSON_LINES["nothing_connected"])
         world_prompt = {"type": "text", "text_prompt": prompt}
         prompt_type = "text"
 
@@ -683,7 +789,7 @@ def _operation_error(operation: dict[str, Any]) -> RuntimeError | None:
         message = error.get("message") or error.get("detail") or json.dumps(error, default=str)
     else:
         message = str(error)
-    return RuntimeError(f"World Labs operation failed: {message}")
+    return as_job_failure(WorldLabsOperationError(f"World Labs operation failed: {message}"))
 
 
 def _operation_progress(operation: dict[str, Any], fallback: float) -> float:
@@ -1304,7 +1410,10 @@ def _optional_recovery_id(node: GraphNode, key: str, label: str) -> str | None:
     value = node.params.get(key)
     if value is None or (isinstance(value, str) and not value.strip()):
         return None
-    return _provider_id(value, label)
+    try:
+        return _provider_id(value, label)
+    except ValueError as exc:
+        raise with_person_line(exc, _bad_recovery_id_line(_recovery_field(node.definition_id, key)))
 
 
 def _remember_generation_operation(node: GraphNode, operation_id: str) -> None:
@@ -1374,6 +1483,7 @@ def _post_accept_failure(
     operation_id: str | None,
     world_id: str | None,
     recovery_param: str,
+    definition_id: str,
 ) -> RuntimeError:
     identifiers: list[str] = []
     if operation_id:
@@ -1387,12 +1497,24 @@ def _post_accept_failure(
         if recovery_value
         else " Recover from the operation/world identifier shown in Marble;"
     )
-    return RuntimeError(
+    failure = RuntimeError(
         f"World Labs {action} was already accepted or is being recovered "
         f"({identifier_text}), but Nebula could not finish locally. Provider work may "
         "have completed and may be billable. Check World Labs Marble before taking "
         f"action; do not blindly rerun this node.{recovery_hint} cause: {error}"
     )
+    field = _recovery_field(definition_id, recovery_param)
+    if isinstance(error, WorldLabsOperationError):
+        person = _job_failed_line(field)
+    elif recovery_value:
+        person = _job_kept_line(field)
+    else:
+        person = ("World Labs may have accepted this run, and it may be billed, but Nebula couldn't "
+                  "finish it here. Check the job in Marble before you run the node again.")
+    # The wrapper rewrites the cause's text for agents: it keeps what the call
+    # said (World Labs' status, the job-failure mark), so a failed job is
+    # never classified "auth"; its own person line replaces the cause's.
+    return with_person_line(with_call_facts(failure, error), person)
 
 
 def _validated_world_input(inputs: dict[str, PortValueDict]) -> tuple[dict[str, Any], str]:
@@ -1427,7 +1549,8 @@ async def handle_worldlabs_environment(
 ) -> dict[str, Any]:
     api_key = api_keys.get("WORLDLABS_API_KEY")
     if not api_key:
-        raise MissingCredentialError("WORLDLABS_API_KEY is required")
+        raise with_person_line(MissingCredentialError("WORLDLABS_API_KEY is required"),
+                               PERSON_LINES["missing_key"])
     headers = _api_headers(api_key)
     resume_operation_id = _optional_recovery_id(
         node, "resume_operation_id", "World Labs resume operation ID"
@@ -1436,9 +1559,9 @@ async def handle_worldlabs_environment(
         node, "existing_world_id", "World Labs existing world ID"
     )
     if resume_operation_id and existing_world_id:
-        raise ValueError(
+        raise with_person_line(ValueError(
             "Set either resume_operation_id or existing_world_id, not both"
-        )
+        ), PERSON_LINES["both_recovery_ids"])
 
     operation_id: str | None = None
     world_id: str | None = existing_world_id
@@ -1489,12 +1612,12 @@ async def handle_worldlabs_environment(
                         )
                         if stop_requested:
                             raise asyncio.CancelledError from start_error
-                        raise RuntimeError(
+                        raise with_person_line(RuntimeError(
                             "World Labs generation start response was not received. Nebula "
                             "safety-locked this node because the public API has no "
                             "idempotency key and a retry could create a second paid world; "
                             "check World Labs Marble before explicitly unlocking it."
-                        ) from start_error
+                        ), PERSON_LINES["locked"]) from start_error
                     if response is None:
                         raise RuntimeError("World Labs generation start did not settle")
                     try:
@@ -1509,12 +1632,16 @@ async def handle_worldlabs_environment(
                     except asyncio.CancelledError:
                         raise
                     except Exception as exc:
-                        if _paid_start_response_is_ambiguous(response):
+                        ambiguous = _paid_start_response_is_ambiguous(response)
+                        if ambiguous:
                             await _publish_start_ambiguity(
                                 node, "worldlabs-environment", event_emit
                             )
                         if stop_requested:
                             raise asyncio.CancelledError from exc
+                        if ambiguous:
+                            # The node is held now: the line says how to clear it.
+                            raise with_person_line(exc, PERSON_LINES["locked"])
                         raise
                     if stop_requested:
                         raise asyncio.CancelledError
@@ -1567,6 +1694,7 @@ async def handle_worldlabs_environment(
                     operation_id=operation_id,
                     world_id=world_id,
                     recovery_param=recovery_param,
+                    definition_id=node.definition_id,
                 ) from exc
             raise
 
@@ -1590,8 +1718,12 @@ async def handle_worldlabs_export(
 ) -> dict[str, Any]:
     api_key = api_keys.get("WORLDLABS_API_KEY")
     if not api_key:
-        raise MissingCredentialError("WORLDLABS_API_KEY is required")
-    _world_value, world_id = _validated_world_input(inputs)
+        raise with_person_line(MissingCredentialError("WORLDLABS_API_KEY is required"),
+                               PERSON_LINES["missing_key"])
+    try:
+        _world_value, world_id = _validated_world_input(inputs)
+    except ValueError as exc:
+        raise with_person_line(exc, PERSON_LINES["export_needs_world"])
     resume_operation_id = _optional_recovery_id(
         node, "resume_operation_id", "World Labs resume export operation ID"
     )
@@ -1641,16 +1773,16 @@ async def handle_worldlabs_export(
                     if stop_requested:
                         raise asyncio.CancelledError from start_error
                     if output_format == "glb":
-                        raise RuntimeError(
+                        raise with_person_line(RuntimeError(
                             "World Labs export start response was not received. Nebula "
                             "safety-locked this node because a retry could duplicate a paid "
                             "HQ mesh operation; check World Labs Marble before explicitly "
                             "unlocking it."
-                        ) from start_error
-                    raise RuntimeError(
+                        ), PERSON_LINES["locked"]) from start_error
+                    raise with_person_line(RuntimeError(
                         "World Labs free PLY export start response was not received; no "
                         "paid-start safety hold was created."
-                    ) from start_error
+                    ), PERSON_LINES["ply_lost"]) from start_error
                 if response is None:
                     raise RuntimeError("World Labs export start did not settle")
                 try:
@@ -1665,14 +1797,17 @@ async def handle_worldlabs_export(
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
-                    if output_format == "glb" and _paid_start_response_is_ambiguous(
+                    held = output_format == "glb" and _paid_start_response_is_ambiguous(
                         response
-                    ):
+                    )
+                    if held:
                         await _publish_start_ambiguity(
                             node, "worldlabs-world-export", event_emit
                         )
                     if stop_requested:
                         raise asyncio.CancelledError from exc
+                    if held:
+                        raise with_person_line(exc, PERSON_LINES["locked"])
                     raise
                 if stop_requested:
                     raise asyncio.CancelledError
@@ -1737,6 +1872,7 @@ async def handle_worldlabs_export(
                     operation_id=operation_id,
                     world_id=world_id,
                     recovery_param="resume_operation_id",
+                    definition_id=node.definition_id,
                 ) from exc
             raise
 

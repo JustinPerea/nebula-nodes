@@ -12,6 +12,7 @@ from services.output import get_run_dir, portable_output_ref, save_base64_image
 from execution.missing_credential import MissingCredentialError
 from services.retired_nodes import GPT_IMAGE_1_SHUTDOWN, default_until
 from handlers.openai_image import check_background
+from execution.person_line import missing_file_line, with_api_status, with_person_line
 
 OPENAI_IMAGE_EDIT_URL = "https://api.openai.com/v1/images/edits"
 # gpt-image-1 shuts down 2026-10-23; OpenAI names gpt-image-2.5-sunburst or
@@ -30,7 +31,7 @@ def _resolve_image_bytes(value: Any) -> bytes:
     image_path = Path(str(value))
     if image_path.exists():
         return read_local_media(image_path, label="Image input", max_bytes=MAX_IMAGE_BYTES)[1]
-    raise ValueError(f"Image file not found: {value}")
+    raise with_person_line(ValueError(f"Image file not found: {value}"), missing_file_line("image file"))
 
 
 async def handle_openai_image_edit(
@@ -41,11 +42,11 @@ async def handle_openai_image_edit(
     # --- required inputs ---
     image_input = inputs.get("image")
     if not image_input or not image_input.value:
-        raise ValueError("Image input is required but was not provided")
+        raise with_person_line(ValueError("Image input is required but was not provided"), "Connect an image to this node, then run it again.")
 
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
-        raise ValueError("Prompt input is required but was not provided")
+        raise with_person_line(ValueError("Prompt input is required but was not provided"), "Connect a prompt to this node, then run it again.")
 
     api_key = api_keys.get("OPENAI_API_KEY")
     if not api_key:
@@ -107,7 +108,8 @@ async def handle_openai_image_edit(
         )
         if response.status_code != 200:
             error_detail = response.text
-            raise RuntimeError(f"OpenAI API error {response.status_code}: {error_detail}")
+            raise with_api_status(
+                RuntimeError(f"OpenAI API error {response.status_code}: {error_detail}"), response.status_code)
         response.raise_for_status()
 
     data = response.json()

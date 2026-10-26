@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { X } from 'lucide-react';
 import type { CreateDraftUpload } from '../../store/createDraftStore';
+import { shortLine } from '../../lib/errorCopy';
 
 export interface AttachedRef {
   filePath: string;
@@ -29,7 +30,8 @@ function UploadChip({ upload, canRetry, onRetry, onRemove }: {
       <div>
         <span className="reference-tray__name">{upload.name}</span>
         <span className="reference-tray__status" role={uploading ? 'status' : 'alert'}>
-          {uploading ? 'Uploading…' : upload.error ?? 'Could not upload this image. Please try again.'}
+          {/* GM's WRAP rule: the chip's Retry / Attach again is the retry. */}
+          {uploading ? 'Uploading…' : shortLine(upload.error ?? "Couldn't upload this image.")}
         </span>
       </div>
       {!uploading && <button type="button" className="reference-tray__retry"

@@ -16,6 +16,7 @@ import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useCreateDraftStore } from '../src/store/createDraftStore';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
+import { noticeSpy } from './helpers/noticeSpy';
 
 function node(value = 'Current', id = 'n1'): Node<NodeData> {
   return { id, type: 'model-node', position: { x: 0, y: 100 },
@@ -64,6 +65,15 @@ describe('project graph replacement', () => {
     expect(Object.isFrozen(useGraphStore.getState().runHistory[0].snapshot)).toBe(true);
     setProjectContext({ id: 'A', revision: 'a-next' });
     expect(loadRunHistory().map((run) => run.id)).toEqual(['run-A']);
+  });
+
+  it('clears the canvas notice, so the old project\'s line and its buttons do not follow onto the new canvas', () => {
+    // Review, 2026-10-23: only Dismiss or the hold cleared it, so after an agent's
+    // switch the old project's edit notice stayed under the switch toast.
+    useGraphStore.getState().notify('An agent changed the canvas.', 'info');
+    expect(useGraphStore.getState().undoNotice).not.toBeNull();
+    expect(useGraphStore.getState().loadProjectGraph([node('B')], [], [])).toBe(true);
+    expect(useGraphStore.getState().undoNotice).toBeNull();
   });
 
   it('preserves paid-run ownership on reload and refuses replacement until a terminal backend status', () => {
@@ -238,7 +248,7 @@ describe('copy in one project, paste in another (Justin, P2: "copy the node mood
   });
 
   it('a node with a provider-start ambiguity when copied still refuses after the switch, with the same warning', () => {
-    const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const alert = noticeSpy();
     openProject('A', [worldNode('n1', { existing_world_id: 'world-A' })]);
     useGraphStore.setState({ providerStartAmbiguities: [{ runId: 'paid-A', nodeId: 'n1', kind: 'worldlabs-environment',
       message: 'The paid start may have been accepted.', durable: true }] });
@@ -250,7 +260,8 @@ describe('copy in one project, paste in another (Justin, P2: "copy the node mood
     useGraphStore.getState().pasteClipboard();
 
     expect(useGraphStore.getState().nodes).toEqual([]);
-    expect(alert).toHaveBeenCalledWith(expect.stringContaining('separate paid operation'));
+    // GM - Design, round 4: the duplicate refusal in one line.
+    expect(alert).toHaveBeenCalledWith("Couldn't duplicate a paid World Labs node. Add a new one from the Nodes rail instead.");
   });
 
   it("B's checkpoint for its own node with the same id never lands on A's pasted node", () => {
@@ -278,7 +289,7 @@ describe('copy in one project, paste in another (Justin, P2: "copy the node mood
   });
 
   it('a blank paid World Labs node is never cloned into a new paid start, here or after a switch', () => {
-    const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const alert = noticeSpy();
     openProject('A', [worldNode('n1', {})]);
     useGraphStore.getState().copySelected();
     useGraphStore.getState().pasteClipboard();

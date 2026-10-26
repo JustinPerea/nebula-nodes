@@ -4,13 +4,26 @@ import { createPortal } from 'react-dom';
 import { Pin, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { Inspector } from './Inspector';
+import { InspectorFootContext } from './inspectorFootContext';
 import { ScrollFade } from '../ScrollFade';
+import { floatingBottomLimit, floatingTopLimit } from '../../lib/bottomBar';
 
 const POPOVER_GAP = 10;
 const POPOVER_WIDTH = 260;
 const POPOVER_MIN_WIDTH = 228;
 const POPOVER_MAX_HEIGHT = 300;
-const POPOVER_MIN_HEIGHT = 220;
+/**
+ * One more line of the body (GM - Design, 2026-10-23, round 3: "give the
+ * body room for one more line before it scrolls"): when the body's content is
+ * at most this much longer than a 300 px panel leaves room for, the panel
+ * takes it, inside the top line and the band, so the body doesn't scroll and
+ * no line sits under the fade. One body line (the State value: 16 px text,
+ * 21 px tall) plus what follows the last line, the last section's 10 px margin
+ * and the body's 12 px bottom padding (43 px, measured live in GM's cover
+ * setup, where the body lacked 34). More than that scrolls under the fade, as
+ * before.
+ */
+const POPOVER_SPARE_LINE = 44;
 const PINNED_WIDTH = 300;
 const PINNED_MIN_WIDTH = 260;
 const PINNED_MAX_HEIGHT = 440;
@@ -18,7 +31,6 @@ const PINNED_RESIZE_MIN_WIDTH = 240;
 const PINNED_RESIZE_MIN_HEIGHT = 260;
 const PINNED_GAP = 12;
 const VIEWPORT_GUTTER = 16;
-const BOTTOM_GUTTER = 80;
 
 type PopoverFrame = {
   nodeId: string;
@@ -52,27 +64,47 @@ function frameEquals(a: PopoverFrame | null, b: PopoverFrame) {
   );
 }
 
-function measurePopoverFrame(nodeId: string, anchor: HTMLElement): PopoverFrame {
+/**
+ * Where the floating Inspector opens beside its node: right of it, else left,
+ * else under it, flipped above it when under would cross the bottom (GM -
+ * Design, 2026-10-23: "When there's no room below the node, flip it up or
+ * shift it, so its foot row is always whole"). Every placement then stays
+ * between two measured lines (lib/bottomBar.ts): below the workspace header
+ * and the selection toolbar, whichever is lower, and above the notice
+ * region's reserved band over the bottom bar, so a notice never covers its
+ * foot row and it never moves when a notice comes or goes (GM, round 2).
+ * When the room between them is shorter than the panel, the panel gets
+ * shorter and its body scrolls. Runs every frame while open, so a resize, a
+ * pan, the toolbar coming or going, or the bar growing moves it at once.
+ */
+/**
+ * How much taller the body's content is than the body's viewport (scrollHeight
+ * against clientHeight: exact, layout sizes only), 0 while it fits, or null
+ * before the body is in the page.
+ */
+function bodyOverflow(popover: HTMLElement | null): number | null {
+  const body = popover?.querySelector<HTMLElement>('.node-inspector-popover__body');
+  if (!body) return null;
+  return Math.max(0, body.scrollHeight - body.clientHeight);
+}
+
+/**
+ * `panelNeed`: the height the panel would need to show its whole body, or
+ * null when not yet known. Within one spare line over 300 px, the panel takes
+ * it (POPOVER_SPARE_LINE).
+ */
+function measurePopoverFrame(nodeId: string, anchor: HTMLElement, panelNeed: number | null = null): PopoverFrame {
   const rect = anchor.getBoundingClientRect();
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
-  const maxHeight = Math.max(
-    POPOVER_MIN_HEIGHT,
-    viewportHeight - VIEWPORT_GUTTER - BOTTOM_GUTTER,
-  );
-  const height = Math.min(POPOVER_MAX_HEIGHT, maxHeight);
+  const topLimit = floatingTopLimit(VIEWPORT_GUTTER);
   const rightSpace = viewportWidth - rect.right - POPOVER_GAP - VIEWPORT_GUTTER;
   const leftSpace = rect.left - POPOVER_GAP - VIEWPORT_GUTTER;
 
+  // Which side, and so how wide and where across: none of it depends on height.
   let placement: PopoverFrame['placement'] = 'right';
   let width = Math.min(POPOVER_WIDTH, Math.max(POPOVER_MIN_WIDTH, rightSpace));
   let left = rect.right + POPOVER_GAP;
-  let top = clamp(
-    rect.top - 8,
-    VIEWPORT_GUTTER,
-    viewportHeight - height - VIEWPORT_GUTTER,
-  );
-
   if (rightSpace < POPOVER_MIN_WIDTH && leftSpace >= POPOVER_MIN_WIDTH) {
     placement = 'left';
     width = Math.min(POPOVER_WIDTH, leftSpace);
@@ -80,17 +112,28 @@ function measurePopoverFrame(nodeId: string, anchor: HTMLElement): PopoverFrame 
   } else if (rightSpace < POPOVER_MIN_WIDTH) {
     const availableWidth = viewportWidth - VIEWPORT_GUTTER * 2;
     width = Math.max(240, Math.min(POPOVER_WIDTH, availableWidth));
-    left = clamp(rect.left + rect.width / 2 - width / 2, VIEWPORT_GUTTER, viewportWidth - width - VIEWPORT_GUTTER);
-    top = rect.bottom + POPOVER_GAP;
+    left = rect.left + rect.width / 2 - width / 2;
     placement = 'bottom';
+  }
+  left = clamp(left, VIEWPORT_GUTTER, Math.max(VIEWPORT_GUTTER, viewportWidth - width - VIEWPORT_GUTTER));
 
-    if (top + height > viewportHeight - BOTTOM_GUTTER) {
+  // Above the bar across the whole width, and above the Canvas actions panel
+  // only where it is over that panel (lib/bottomBar.ts).
+  const bottomLimit = floatingBottomLimit(VIEWPORT_GUTTER, viewportHeight, { left, right: left + width });
+  // Its own height (one spare line more when that is all the body lacks), or
+  // all the room there is: the body scrolls, the foot stays.
+  const own = panelNeed !== null && panelNeed > POPOVER_MAX_HEIGHT && panelNeed <= POPOVER_MAX_HEIGHT + POPOVER_SPARE_LINE
+    ? Math.ceil(panelNeed) : POPOVER_MAX_HEIGHT;
+  const height = Math.max(0, Math.min(own, bottomLimit - topLimit));
+  // Beside the node, level with its top, shifted up when that would cross the bottom.
+  let top = rect.top - 8;
+  if (placement === 'bottom') {
+    top = rect.bottom + POPOVER_GAP;
+    if (top + height > bottomLimit) {
       const aboveTop = rect.top - POPOVER_GAP - height;
-      if (aboveTop >= VIEWPORT_GUTTER) {
+      if (aboveTop >= topLimit) {
         top = aboveTop;
         placement = 'top';
-      } else {
-        top = clamp(top, VIEWPORT_GUTTER, viewportHeight - height - VIEWPORT_GUTTER);
       }
     }
   }
@@ -100,7 +143,7 @@ function measurePopoverFrame(nodeId: string, anchor: HTMLElement): PopoverFrame 
     placement,
     style: {
       left,
-      top,
+      top: clamp(top, topLimit, Math.max(topLimit, bottomLimit - height)),
       width,
       height,
     },
@@ -128,19 +171,25 @@ function measurePinnedFrame(nodeId: string, preference: PinnedPreference | null)
   if (suspended) leftBound = railLeft;
 
   const availableWidth = Math.max(0, rightBound - leftBound);
-  const bottomGutter = Math.min(
-    BOTTOM_GUTTER,
-    Math.max(VIEWPORT_GUTTER, viewportHeight - VIEWPORT_GUTTER - PINNED_RESIZE_MIN_HEIGHT),
-  );
-  const bottomBound = viewportHeight - bottomGutter;
-  const availableHeight = Math.max(0, bottomBound - VIEWPORT_GUTTER);
   const minWidth = Math.min(PINNED_RESIZE_MIN_WIDTH, availableWidth);
-  const minHeight = Math.min(PINNED_RESIZE_MIN_HEIGHT, availableHeight);
   const maxWidth = Math.min(520, availableWidth);
   const width = clamp(preference?.width ?? PINNED_WIDTH, minWidth, maxWidth);
-  const height = clamp(preference?.height ?? PINNED_MAX_HEIGHT, minHeight, availableHeight);
   const left = clamp(preference?.left ?? leftBound, leftBound, rightBound - width);
-  const top = clamp(preference?.top ?? bottomBound - height, VIEWPORT_GUTTER, bottomBound - height);
+  // Between the same measured lines as the floating Inspector
+  // (lib/bottomBar.ts): below the header and the selection toolbar, above
+  // the notice band over the bottom bar, and above the Canvas actions panel
+  // only where it is over it. In a window too short for that, the lines give
+  // way (the bottom one first) so the Inspector keeps its smallest size.
+  const topBound = Math.min(floatingTopLimit(VIEWPORT_GUTTER),
+    Math.max(VIEWPORT_GUTTER, viewportHeight - VIEWPORT_GUTTER - PINNED_RESIZE_MIN_HEIGHT));
+  const bottomBound = Math.max(
+    floatingBottomLimit(VIEWPORT_GUTTER, viewportHeight, { left, right: left + width }),
+    Math.min(viewportHeight - VIEWPORT_GUTTER, topBound + PINNED_RESIZE_MIN_HEIGHT),
+  );
+  const availableHeight = Math.max(0, bottomBound - topBound);
+  const minHeight = Math.min(PINNED_RESIZE_MIN_HEIGHT, availableHeight);
+  const height = clamp(preference?.height ?? PINNED_MAX_HEIGHT, minHeight, availableHeight);
+  const top = clamp(preference?.top ?? bottomBound - height, topBound, bottomBound - height);
 
   return {
     nodeId,
@@ -166,6 +215,8 @@ export function NodeInspectorPopover() {
   const setInspectorVisible = useUIStore((s) => s.setInspectorVisible);
   const setInspectorPinned = useUIStore((s) => s.setInspectorPinned);
   const [frame, setFrame] = useState<PopoverFrame | null>(null);
+  // The foot under the scrolling body that holds the Run / Duplicate / Delete row (InspectorFoot.tsx).
+  const [foot, setFoot] = useState<HTMLDivElement | null>(null);
   const frameRef = useRef<PopoverFrame | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const pinnedPreferenceRef = useRef<PinnedPreference | null>(null);
@@ -173,7 +224,11 @@ export function NodeInspectorPopover() {
 
   useLayoutEffect(() => {
     if (!pinned) pinnedPreferenceRef.current = null;
-    if (!visible || !selectedNodeId) return;
+    // Closed: the next open measures afresh (at 300 px, before any spare line).
+    if (!visible || !selectedNodeId) {
+      frameRef.current = null;
+      return;
+    }
 
     let raf = 0;
     let stopped = false;
@@ -200,7 +255,16 @@ export function NodeInspectorPopover() {
       } else {
         const anchor = getInspectorAnchor(selectedNodeId);
         if (anchor) {
-          const nextFrame = measurePopoverFrame(selectedNodeId, anchor);
+          // What the body lacks at the height it has now. While the body fits,
+          // the panel keeps the height it has (the spare line too, once taken),
+          // so it settles in one frame and never goes back and forth; a new
+          // node, or the Inspector opened again, starts from 300 px.
+          const shown = frameRef.current;
+          const overflow = bodyOverflow(popoverRef.current);
+          const shownHeight = shown?.nodeId === selectedNodeId && shown.placement !== 'pinned-left'
+            ? Number(shown.style.height) : null;
+          const panelNeed = shownHeight !== null && overflow !== null ? shownHeight + overflow : null;
+          const nextFrame = measurePopoverFrame(selectedNodeId, anchor, panelNeed);
           if (!frameEquals(frameRef.current, nextFrame)) {
             frameRef.current = nextFrame;
             setFrame(nextFrame);
@@ -327,9 +391,12 @@ export function NodeInspectorPopover() {
           </button>
         </div>
       </div>
-      <ScrollFade className="node-inspector-popover__body">
-        <Inspector embedded />
-      </ScrollFade>
+      <InspectorFootContext.Provider value={foot}>
+        <ScrollFade className="node-inspector-popover__body">
+          <Inspector embedded />
+        </ScrollFade>
+      </InspectorFootContext.Provider>
+      <div ref={setFoot} className="node-inspector-popover__foot" />
     </div>,
     document.body,
   );

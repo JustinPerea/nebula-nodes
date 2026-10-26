@@ -41,6 +41,15 @@ function saveMoodboardView(view: MoodboardView): void {
 const sameIds = (a: readonly string[] | undefined, b: readonly string[]) =>
   a !== undefined && a.length === b.length && a.every((id, index) => id === b[index]);
 
+/** The saved board Moodboard Studio has open: its id, its draft key, and its
+ *  image ids in board order (an image's number is its place + 1, plan C7).
+ *  The Updates corner reads it to show that board's own Updates (Q113 c). */
+export interface StudioBoard {
+  boardId: string;
+  boardKey: string;
+  imageIds: string[];
+}
+
 interface BoardCanvasState {
   view: MoodboardView;
   setView: (view: MoodboardView) => void;
@@ -50,7 +59,22 @@ interface BoardCanvasState {
   /** The camera per board draft key, for this visit: back to List and to Board keeps it. */
   viewports: Record<string, Viewport>;
   setViewport: (boardKey: string, viewport: Viewport) => void;
+  /** Published by the Studio while it has a saved board open; null otherwise. */
+  studioBoard: StudioBoard | null;
+  setStudioBoard: (board: StudioBoard | null) => void;
+  /** An Update's Show (Q113 c): the Studio on `boardId` selects these images'
+   *  cards in the Board view and frames them. Taken (set to null) once handled. */
+  showRequest: { boardId: string; imageIds: string[]; seq: number } | null;
+  requestShow: (boardId: string, imageIds: string[]) => void;
+  /** The Board view on `boardKey` springs its camera to these cards, then clears it. */
+  frameRequest: { boardKey: string; placementIds: string[]; seq: number } | null;
+  requestFrame: (boardKey: string, placementIds: string[]) => void;
 }
+
+let requestSeq = 0;
+const sameBoard = (a: StudioBoard | null, b: StudioBoard | null) => (a === null || b === null
+  ? a === b
+  : a.boardId === b.boardId && a.boardKey === b.boardKey && sameIds(a.imageIds, b.imageIds));
 
 export const useBoardCanvasStore = create<BoardCanvasState>((set, get) => ({
   view: loadMoodboardView(),
@@ -66,6 +90,15 @@ export const useBoardCanvasStore = create<BoardCanvasState>((set, get) => ({
   viewports: {},
   setViewport: (boardKey, viewport) => set((state) => ({ viewports: { ...state.viewports,
     [boardKey]: { x: viewport.x, y: viewport.y, zoom: viewport.zoom } } })),
+  studioBoard: null,
+  setStudioBoard: (board) => {
+    if (!sameBoard(get().studioBoard, board)) set({ studioBoard: board });
+  },
+  showRequest: null,
+  requestShow: (boardId, imageIds) => set({ showRequest: { boardId, imageIds: [...imageIds], seq: ++requestSeq } }),
+  frameRequest: null,
+  requestFrame: (boardKey, placementIds) => set({
+    frameRequest: { boardKey, placementIds: [...placementIds], seq: ++requestSeq } }),
 }));
 
 const NO_SELECTION: string[] = [];

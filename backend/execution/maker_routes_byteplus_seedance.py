@@ -64,6 +64,7 @@ from execution.byteplus_seedance_prices import (
 from models.events import add_run_note
 from models.graph import GraphNode, PortValueDict
 from services import maker_sizes, node_route
+from execution.person_line import as_person_line, it_was, model_name, or_list, with_person_line
 
 # The fal nodes -> their ModelArk model. seedance-v1-5 picks by its model param.
 FAL_NODE_MODELS: dict[str, str] = {
@@ -191,22 +192,25 @@ def _setting(node: GraphNode, key: str) -> Any:
 def _whole_seconds(value: Any, model: str) -> int:
     shortest, longest = DURATIONS[model]
     if isinstance(value, bool) or not isinstance(value, (int, float, str)):
-        raise ValueError(f"duration must be whole seconds from {shortest} to {longest} (received {value!r})")
+        raise with_person_line(ValueError(f"duration must be whole seconds from {shortest} to {longest} (received {value!r})"), f"Set “Duration” to whole seconds from {shortest} to {longest}. {it_was(value)}")
     try:
         seconds = float(value)
     except ValueError:
-        raise ValueError(f"duration must be whole seconds from {shortest} to {longest} (received {value!r})") from None
+        raise with_person_line(ValueError(f"duration must be whole seconds from {shortest} to {longest} (received {value!r})"), f"Set “Duration” to whole seconds from {shortest} to {longest}. {it_was(value)}") from None
     if not seconds.is_integer() or not shortest <= seconds <= longest:
-        raise ValueError(
+        raise with_person_line(ValueError(
             f"BytePlus takes whole seconds from {shortest} to {longest} for this model (received {value!r}). "
-            "Change the duration, or run it on the copy.")
+            "Change the duration, or run it on the copy."), f"Set “Duration” to whole seconds from {shortest} to {longest}. {it_was(value)}")
     return int(seconds)
 
 
 def _resolution(value: Any, model: str) -> str:
     resolution = str(value or "720p")
     if resolution not in RESOLUTIONS[model]:
-        raise ValueError(f"BytePlus's {model} renders {', '.join(RESOLUTIONS[model])}, not {resolution!r}")
+        choices = RESOLUTIONS[model]
+        raise with_person_line(
+            ValueError(f"BytePlus's {model} renders {', '.join(RESOLUTIONS[model])}, not {resolution!r}"),
+            f"{model_name(model)} on BytePlus renders {or_list(choices)}. Pick one in “Resolution”.")
     return resolution
 
 
@@ -222,18 +226,19 @@ def _task(model: str, *, ratio: str | None, duration: int, resolution: str, audi
             out["camera_fixed"] = camera_fixed
         if seed not in (None, ""):
             if isinstance(seed, bool) or not isinstance(seed, int) or not -1 <= seed <= 2147483647:
-                raise ValueError(f"BytePlus takes a seed from -1 to 2147483647 (received {seed!r})")
+                raise with_person_line(ValueError(f"BytePlus takes a seed from -1 to 2147483647 (received {seed!r})"), f"Set “Seed” to a whole number from -1 to 2147483647. {it_was(seed)}")
             out["seed"] = seed
     return out
 
 
 def _frames(model: str, first: list[str], last: list[str]) -> dict[str, PortValueDict]:
     if len(first) > 1 or len(last) > 1:
-        raise ValueError("Seedance takes one start image and one end image")
+        raise with_person_line(ValueError("Seedance takes one start image and one end image"), "Seedance takes one start image and one end image. Disconnect the extra ones, then run the node again.")
     if last and not first:
-        raise ValueError("BytePlus needs a start image to use an end image (first and last frames)")
+        raise with_person_line(ValueError("BytePlus needs a start image to use an end image (first and last frames)"), "BytePlus needs a start image to use an end image. Connect one, then run the node again.")
     if last and model not in _LAST_FRAME_MODELS:
-        raise ValueError(f"BytePlus's {model} takes a start image only, not an end image")
+        raise with_person_line(ValueError(f"BytePlus's {model} takes a start image only, not an end image"), f"{model_name(model)} on BytePlus takes a start image only. Disconnect the end image, then run the "
+                         "node again.")
     routed: dict[str, PortValueDict] = {}
     if first:
         routed["first_frame"] = PortValueDict(type="Image", value=first[0])
@@ -268,7 +273,7 @@ def fal_to_byteplus(node: GraphNode, inputs: dict[str, PortValueDict]) -> tuple[
     aspect = str(_setting(node, "aspect_ratio") or "auto")
     ratio = "adaptive" if aspect == "auto" else aspect
     if ratio != "adaptive" and ratio not in RATIOS:
-        raise ValueError(f"BytePlus has no {aspect!r} ratio")
+        raise with_person_line(ValueError(f"BytePlus has no {aspect!r} ratio"), "BytePlus doesn't offer this aspect ratio. Pick another one, then run the node again.")
     raw_duration = _setting(node, "duration")
     duration = -1 if raw_duration in (None, "", "auto") else _whole_seconds(raw_duration, model)
     task = _task(model, ratio=ratio, duration=duration, resolution=_resolution(_setting(node, "resolution"), model),
@@ -280,7 +285,8 @@ def fal_to_byteplus(node: GraphNode, inputs: dict[str, PortValueDict]) -> tuple[
     if refs:
         limit = _REFERENCE_LIMITS[model][0]
         if len(refs) > limit:
-            raise ValueError(f"BytePlus's Seedance 2.0 takes 1 to {limit} reference images (received {len(refs)})")
+            raise with_person_line(ValueError(f"BytePlus's Seedance 2.0 takes 1 to {limit} reference images (received {len(refs)})"), f"{model_name(model)} on BytePlus takes 1 to {limit} reference images, and {len(refs)} are "
+                f"connected. Disconnect the extra ones, then run the node again.")
         routed["reference_images"] = PortValueDict(type="Image", value=refs)
     return node.model_copy(update={"params": task}), routed
 
@@ -303,35 +309,40 @@ def krea_to_byteplus(model: str):
         params = node.params
         for port in ("start_video", "effects"):
             if _port_values(inputs, port):
-                raise ValueError(
+                raise with_person_line(ValueError(
                     f"Krea's {port.replace('_', ' ')} has no BytePlus equivalent. Remove it, or remove the "
-                    "BytePlus key (or choose the Krea plan) to run this on Krea.")
+                    "BytePlus key (or choose the Krea plan) to run this on Krea."), f"Krea's {port.replace('_', ' ')} has no BytePlus equivalent. Remove it, or remove the BytePlus key or "
+                    "choose the Krea plan to run this on Krea.")
         images = _port_or_param(inputs, params, "reference_images")
         videos = _port_or_param(inputs, params, "reference_videos")
         audios = _port_or_param(inputs, params, "reference_audios")
         if model not in _REFERENCE_LIMITS and (images or videos or audios):
-            raise ValueError(
+            raise with_person_line(ValueError(
                 f"BytePlus's {model} takes no reference images. Remove them, or remove the BytePlus key (or "
-                "choose the Krea plan) to run this on Krea.")
+                "choose the Krea plan) to run this on Krea."), f"{model_name(model)} on BytePlus takes no reference images. Remove them, or remove the BytePlus key "
+                "or choose the Krea plan to run this on Krea.")
         first = _port_or_param(inputs, params, "start_image")
         last = _port_or_param(inputs, params, "end_image")
         if (first or last) and (images or videos or audios):
-            raise ValueError(
+            raise with_person_line(ValueError(
                 "BytePlus can't mix start/end frames with reference images, videos or audio (they are "
-                "\"mutually exclusive scenarios\"). Use one or the other, or run this on Krea.")
+                "\"mutually exclusive scenarios\"). Use one or the other, or run this on Krea."), "BytePlus can't mix start and end frames with reference images, videos or audio. Use one or the "
+                "other, or run this on Krea.")
         if model in _REFERENCE_LIMITS:
             max_images, max_videos, max_audios = _REFERENCE_LIMITS[model]
             for what, values, limit in (("reference images", images, max_images),
                                         ("reference videos", videos, max_videos),
                                         ("reference audio clips", audios, max_audios)):
                 if len(values) > limit:
-                    raise ValueError(f"BytePlus's {model} takes at most {limit} {what} (received {len(values)})")
+                    raise with_person_line(ValueError(f"BytePlus's {model} takes at most {limit} {what} (received {len(values)})"), f"{model_name(model)} on BytePlus takes at most {limit} {what}, and {len(values)} are "
+                        f"connected. Disconnect the extra ones, then run the node again.")
             if audios and not (images or videos) and model != SEEDANCE_2_5:
-                raise ValueError("Seedance 2.0 needs a reference image or video with reference audio "
-                                 "(audio-only input is a Seedance 2.5 feature)")
+                raise with_person_line(ValueError("Seedance 2.0 needs a reference image or video with reference audio "
+                                 "(audio-only input is a Seedance 2.5 feature)"), f"{model_name(model)} needs a reference image or video with reference audio. Audio on its own is "
+                "a Seedance 2.5 feature.")
         aspect = str(_setting(node, "aspect_ratio") or "16:9")
         if aspect not in RATIOS:
-            raise ValueError(f"BytePlus has no {aspect!r} ratio; run this on Krea")
+            raise with_person_line(ValueError(f"BytePlus has no {aspect!r} ratio; run this on Krea"), "BytePlus doesn't offer this aspect ratio, so run this node on Krea.")
         ratio = "adaptive" if model == SEEDANCE_2_5 and first else aspect
         if ratio == "adaptive" and model in maker_sizes.START_SHAPES:
             # The aspect ratio the node shows isn't used: say so beside the
@@ -394,10 +405,12 @@ def _video(value: str) -> str:
             host = ""
         if host and host not in _LOCAL_HOSTS and not is_loopback_host(host):
             return value
-    raise ValueError(
+    raise with_person_line(ValueError(
         "BytePlus takes reference videos only as a public URL (or a ModelArk asset ID), and this one is a local "
         "file. Use a video at a public URL, or remove the BytePlus key (or choose the Krea plan) to run this on "
-        "Krea.")
+        "Krea."), "BytePlus takes reference videos only as a public URL or a ModelArk asset ID, and this one is a local "
+        "file. Use a video at a public URL, or remove the BytePlus key or choose the Krea plan to run this "
+        "on Krea.")
 
 
 _AUDIO_FORMATS = {"wav": "wav", "mp3": "mp3"}
@@ -415,7 +428,9 @@ def _audio(value: str) -> str:
 
     fmt = _AUDIO_FORMATS.get(Path(value).suffix.lstrip(".").lower())
     if fmt is None:
-        raise ValueError(f"BytePlus takes reference audio as wav or mp3 (received {Path(value).name!r})")
+        raise with_person_line(
+            ValueError(f"BytePlus takes reference audio as wav or mp3 (received {Path(value).name!r})"),
+            "BytePlus takes reference audio as WAV or MP3. Connect a WAV or MP3 file.")
     _path, data = read_local_media(value, label="BytePlus reference audio", max_bytes=MAX_AUDIO_BYTES)
     return f"data:audio/{fmt};base64,{base64.b64encode(data).decode('ascii')}"
 
@@ -438,15 +453,15 @@ def task_body(node: GraphNode, inputs: Mapping[str, PortValueDict]) -> dict[str,
     for value in _port_values(inputs, "reference_audios"):
         content.append({"type": "audio_url", "audio_url": {"url": _audio(value)}, "role": "reference_audio"})
     if not content:
-        raise ValueError("Seedance needs a prompt or an image")
+        raise with_person_line(ValueError("Seedance needs a prompt or an image"), "Seedance needs a prompt or an image. Connect one, then run the node again.")
     from handlers.byteplus import TASK_EXPIRES_AFTER
 
     inline = sum(len(item[item["type"]]["url"]) for item in content
                  if item["type"] != "text" and item[item["type"]]["url"].startswith("data:"))
     if inline > MAX_BODY_BYTES:
-        raise ValueError(f"BytePlus takes a request of up to {MAX_BODY_BYTES // 1_000_000} MB, and these local "
+        raise as_person_line(ValueError(f"BytePlus takes a request of up to {MAX_BODY_BYTES // 1_000_000} MB, and these local "
                          f"files make it about {inline // 1_000_000} MB once encoded. Use public URLs for the "
-                         "larger files.")
+                         "larger files."))
     return {**params, "content": content, "watermark": False, "execution_expires_after": TASK_EXPIRES_AFTER}
 
 

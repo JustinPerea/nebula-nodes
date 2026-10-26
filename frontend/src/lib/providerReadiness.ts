@@ -70,7 +70,7 @@ function checkedReadiness(provider: string, target: ProviderSetupTarget, health:
     case 'rate_limited': return { ...base, label: 'Check rate limited', tone: 'warning',
       detail: `${provider} limited the credential check. Try Check connections again later.` };
     case 'error': return { ...base, label: 'Check unavailable', tone: 'warning',
-      detail: `${provider} could not be checked. The saved connection is unchanged; retry Check connections.` };
+      detail: `Couldn't check ${provider}. The saved connection is unchanged. Use Check connections to try again.` };
   }
 }
 
@@ -85,7 +85,7 @@ export function keyReadiness(key: string, cache: CredentialReadiness, health: Pr
   const checked = checkedReadiness(provider, target, health);
   if (checked) return checked;
   return { label: health.error ? 'Check unavailable' : 'Configured · not checked', tone: health.error ? 'warning' : 'neutral',
-    detail: health.error ? `${provider} is configured, but connections could not be checked. Retry Check connections.`
+    detail: health.error ? `${provider} is configured, but Nebula couldn't check the connections. Use Check connections to try again.`
       : `${provider} API credential is saved. Use Check connections to verify it without generating.`, setupTarget: target };
 }
 

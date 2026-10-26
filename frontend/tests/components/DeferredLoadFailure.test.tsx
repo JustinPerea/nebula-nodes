@@ -53,7 +53,7 @@ describe('a deferred chunk that fails to load', () => {
     render(<div><p>Inspector</p><MaskPainterModal imageUrl="/api/outputs/a.png" initialMask={null} onSave={() => {}} onClose={onClose} /></div>);
     await flush();
     expect(screen.getByText('Inspector')).toBeInTheDocument();
-    expect(screen.getByRole('alert')).toHaveTextContent(/could not load the mask painter/i);
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load the mask painter. Nebula's server isn't answering. Make sure it's running."); // round 3b: Try again is beside it
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
     // The header's close and the footer's Close next to Try again both close it.
     const closes = screen.getAllByRole('button', { name: 'Close' });

@@ -26,10 +26,11 @@ vi.mock('../src/lib/backend', () => ({ apiFetch: net.apiFetch }));
 vi.mock('../src/store/graphStore', () => {
   const useGraphStore = (selector: (state: typeof graph.state) => unknown) => selector(graph.state);
   useGraphStore.getState = () => graph.state;
-  return { useGraphStore };
+  return { useGraphStore, watchGraphSyncs: () => ({ seen: new Set<string>(), stop: () => {} }) };
 });
 
 const { ProposalBar } = await import('../src/components/canvas/ProposalBar');
+const { DeferredRunNotice } = await import('../src/components/canvas/DeferredRunNotice');
 const { useCanvasProposalsStore } = await import('../src/store/canvasProposalsStore');
 const { useUIStore } = await import('../src/store/uiStore');
 
@@ -74,12 +75,29 @@ describe('ProposalBar', () => {
     expect(container.innerHTML).toBe('');
   });
 
+  // GM - Design, 2026-10-23: "Proposal-bar notices and every 3g canvas notice"
+  // go to the app-level notice region (tests/noticeRegion.test.tsx), so the
+  // bar's panel holds only the bar.
+  it('leaves its notices to the app\'s notice region', () => {
+    const state = graph.state as typeof graph.state & { undoNotice?: unknown };
+    state.undoNotice = { id: 1, text: 'Imported. One note.', offer: null, tone: 'info' };
+    useCanvasProposalsStore.setState({ deferredRun: { agentName: 'Codex', nodeIds: ['n7'] } as never });
+    try {
+      const { container } = render(<ProposalBar />);
+      expect(container.innerHTML).toBe('');
+      expect(screen.queryByText(/Run them when the current run finishes/)).toBeNull();
+      expect(screen.queryByText('Imported. One note.')).toBeNull();
+    } finally {
+      delete state.undoNotice;
+    }
+  });
+
   it('shows who, what and the paid run label', () => {
     open(proposal('p_a'));
     render(<ProposalBar />);
     expect(screen.getByText('Codex')).toBeTruthy();
     expect(screen.getByText('Generate the warm take')).toBeTruthy();
-    expect(screen.getByText('Adds 1 node · 1 wire · changes n1 · runs up to 1 paid model (google)')).toBeTruthy();
+    expect(screen.getByText('Adds 1 node · 1 connection · changes n1 · runs up to 1 paid model (google)')).toBeTruthy();
     expect(screen.getByText(/No list price ·/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Accept & run (1 paid)' })).toBeTruthy();
   });
@@ -88,7 +106,7 @@ describe('ProposalBar', () => {
     open(proposal('p_a', { cost: { paidRuns: 1, freeRuns: 0, upTo: true, providers: ['google'], nodes: [], note: '',
       estimate: { currency: 'usd', low: 0.067, high: 0.067, open: false, unpriced: [], plan: [], plus: [] } } }));
     render(<ProposalBar />);
-    expect(screen.getByText('Adds 1 node · 1 wire · changes n1 · runs up to 1 paid model (google) · ~$0.067')).toBeTruthy();
+    expect(screen.getByText('Adds 1 node · 1 connection · changes n1 · runs up to 1 paid model (google) · ~$0.067')).toBeTruthy();
     expect(screen.getByText(/List prices, not a quote ·/)).toBeTruthy();
   });
 
@@ -115,7 +133,7 @@ describe('ProposalBar', () => {
     expect((init.headers as Record<string, string>)['X-Nebula-Proposal-Key']).toBe('key-a');
     expect(JSON.parse(init.body as string)).toEqual({ positions: { '+up': { x: 900, y: -40 } } });
     expect(graph.state.adoptAcceptedProposal).toHaveBeenCalledWith(expect.objectContaining({ nodes: [{ id: 'n7' }] }),
-      { undoStep: expect.any(Object) });
+      { undoStep: expect.any(Object), synced: expect.any(Set) });
     expect(graph.state.executeNode).toHaveBeenCalledWith('n7', { approvalId: 'ra_a' });
     // Released after the run call (a no-op once the run used it up).
     expect(net.apiFetch.mock.calls[1][0]).toBe('/api/canvas/approvals/ra_a');
@@ -138,7 +156,8 @@ describe('ProposalBar', () => {
     open(proposal('p_a'));
     graph.state.isExecuting = true;
     net.apiFetch.mockResolvedValue(respond(200, { idMap: {}, runNodeIds: ['n7'], nodes: [], edges: [], updatedNodes: [] }));
-    render(<ProposalBar />);
+    // The offer is a notice in the app's notice region (NoticeRegion), beside the bar.
+    render(<><ProposalBar /><DeferredRunNotice /></>);
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Accept & run (1 paid)' }));
     });
@@ -174,6 +193,21 @@ describe('ProposalBar', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Accept & run (1 paid)' }));
     });
     expect(screen.getByRole('alert').textContent).toBe('Only the canvas can accept this. Reload the page.');
+  });
+
+  it("shows the proposal its Update's Review asked for, and paging moves on from it (Q112 a)", () => {
+    open(proposal('p_a', { createdAt: 1 }));
+    open(proposal('p_b', { createdAt: 2, note: 'Make the cold take' }), 'key-b');
+    render(<ProposalBar />);
+    expect(screen.getByText('Generate the warm take')).toBeTruthy();
+    act(() => useCanvasProposalsStore.getState().focus('p_b'));
+    expect(screen.getByText('Make the cold take')).toBeTruthy();
+    expect(screen.getByText(/2 of 2/)).toBeTruthy();
+    // The bar can take the keyboard (Review focuses it), never Accept itself.
+    expect(document.querySelector('.proposal-bar')?.getAttribute('tabindex')).toBe('-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Next proposal' }));
+    expect(screen.getByText('Generate the warm take')).toBeTruthy();
+    expect(useCanvasProposalsStore.getState().focusedId).toBeNull();
   });
 
   it('pages between several proposals and frames ghosts with Show', () => {

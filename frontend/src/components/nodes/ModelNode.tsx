@@ -38,12 +38,18 @@ import '../../styles/nodes.css';
 import { NodeLabel } from './NodeLabel';
 import { NodeRunStatus } from './NodeRunStatus';
 import { MoodboardAdapterRow } from './MoodboardAdapterRow';
+import { inputFileName, middleTruncate } from '../../lib/fileName';
 import { OverviewImage, OverviewVideoStill } from './OverviewImage';
 import { StructuredOutputs } from './StructuredValuePreview';
 import { JevResultView, type JevResultInputs } from './JevResult';
 import { JevCardField } from './JevCardField';
 import { isJevNode, jevBrandStyle, parseJevOutputs, JEV_BOX, JEV_BRAND, JEV_DECIDE, JEV_PICK_BEST } from '../../lib/jev';
 import { JEV_CARD_FIELDS, jevCardText, jevResultKey, upstreamPortValues } from '../../lib/jevView';
+import { failureMessage } from '../../lib/errorCopy';
+import { showNotice } from '../../lib/canvasNotice';
+
+// Input cards that name the file they hold, under the picture for an image.
+const INPUT_FILE_CARDS = new Set(['image-input', 'video-input', 'audio-input', 'document-input']);
 
 // Trigger a browser download for a URL produced by the backend. We fetch the
 // blob ourselves so the `download` attribute is honoured even across localhost
@@ -51,14 +57,16 @@ import { JEV_CARD_FIELDS, jevCardText, jevResultKey, upstreamPortValues } from '
 async function downloadOutput(url: string, filename: string): Promise<void> {
   try {
     await downloadWorldAsset(url, filename, {
+      heading: "Couldn't download the output.",
       tooLargeMessage:
         'This output is too large for a safe in-browser download. Use the local Nebula output folder instead.',
     });
   } catch (err) {
-    console.error('Download failed:', err);
-    window.alert(
-      `Download failed: ${err instanceof Error ? err.message : 'The output could not be downloaded.'}`,
-    );
+    console.error('[nebula] output download', err);
+    // "Couldn't download the output. <reason>" (downloadWorldAsset's own
+    // lines keep their reason; anything else reads GM's general line).
+    // A canvas notice, not a window.alert (round 3f).
+    showNotice(failureMessage(err, "Couldn't download the output."));
   }
 }
 
@@ -271,6 +279,11 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const isImageInput = nodeData.definitionId === 'image-input';
   const isMaskPainter = nodeData.definitionId === 'mask-painter';
   const imageInputPreview = isImageInput && nodeData.params._previewUrl ? String(nodeData.params._previewUrl) : null;
+  // Every input card names the file it holds, an image under its picture
+  // (GM - Design, 2026-10-24: similar images are hard to tell apart).
+  const inputFile = INPUT_FILE_CARDS.has(nodeData.definitionId)
+    ? inputFileName(nodeData.params)
+    : null;
   const maskOverlayData = isMaskPainter && typeof nodeData.params._maskData === 'string'
     ? nodeData.params._maskData
     : null;
@@ -598,6 +611,10 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
+      {inputFile && (
+        <div className="model-node__file-name" title={inputFile}>{middleTruncate(inputFile)}</div>
+      )}
+
       {showMaskComposite && maskSourcePreview && maskOverlayData && (
         <div className="model-node__preview model-node__mask-composite model-node__preview--overview">
           <OverviewImage
@@ -862,7 +879,8 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
 
       {isStructuredSurface && (
         <div className="model-node__preview model-node__preview--structured model-node__preview--overview">
-          <StructuredOutputs outputs={structuredOutputs} labels={portLabels(definition)} />
+          <StructuredOutputs outputs={structuredOutputs} labels={portLabels(definition)}
+            definitionId={nodeData.definitionId} />
         </div>
       )}
 
@@ -870,6 +888,9 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         <NodeError
           category={nodeData.errorCategory}
           friendly={nodeData.errorFriendly}
+          person={nodeData.errorPerson}
+          providerText={nodeData.errorProviderText}
+          provider={nodeData.errorProvider}
           raw={nodeData.error}
         />
       )}

@@ -33,6 +33,7 @@ from handlers.xai_image import XAI_API_BASE, xai_image_url
 from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
 from services.output import get_run_dir
+from execution.person_line import as_job_failure, slow_job_line, with_api_status, with_person_line
 
 # Canonical xAI model id for the grok-imagine-video node
 # (https://docs.x.ai/developers/models/grok-imagine-video: "Model name: `grok-imagine-video`").
@@ -74,7 +75,8 @@ async def run_xai_video(
         resp = await client.post(ENDPOINTS[endpoint], headers=headers, json=body)
         _log(f"submit response: {resp.status_code}")
         if resp.status_code not in (200, 201, 202):
-            raise RuntimeError(f"Grok submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Grok submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         result = resp.json()
         gen_id = result.get("request_id")
@@ -91,7 +93,9 @@ async def run_xai_video(
             await asyncio.sleep(POLL_INTERVAL)
             poll_resp = await poll_request(lambda: client.get(poll_url, headers=headers))
             if poll_resp.status_code not in (200, 202):
-                raise RuntimeError(f"Grok poll failed ({poll_resp.status_code}): {poll_resp.text}")
+                raise with_api_status(
+                    RuntimeError(f"Grok poll failed ({poll_resp.status_code}): {poll_resp.text}"),
+                    poll_resp.status_code)
 
             poll_data = poll_resp.json()
             status = poll_data.get("status", "")
@@ -113,9 +117,9 @@ async def run_xai_video(
                 raise RuntimeError(f"Grok completed but no video URL: {poll_data}")
             if status in ("failed", "expired"):
                 err = poll_data.get("error") or {}
-                raise RuntimeError(f"Grok failed: {err.get('message', status)}")
+                raise as_job_failure(RuntimeError(f"Grok failed: {err.get('message', status)}"))
 
-        raise RuntimeError("Grok timed out")
+        raise with_person_line(RuntimeError("Grok timed out"), slow_job_line("xAI"))
 
 
 async def handle_grok_video(
@@ -130,7 +134,7 @@ async def handle_grok_video(
 
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
-        raise ValueError("Prompt is required")
+        raise with_person_line(ValueError("Prompt is required"), "Connect a prompt to this node, then run it again.")
 
     body: dict[str, Any] = {"model": DEFAULT_MODEL, "prompt": str(prompt_input.value)}
     duration = node.params.get("duration")

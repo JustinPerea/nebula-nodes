@@ -2,6 +2,7 @@ import type { PortValue, NodeState } from '../../types';
 import { findStructuredRepresentation } from '../../lib/representationViewerRegistry';
 import { MeshPreview } from '../nodes/DeferredViewers';
 import { RepresentationViewer } from '../nodes/RepresentationViewer';
+import { NodeError } from '../nodes/NodeError';
 
 function urlOf(v: PortValue['value']): string | null {
   if (typeof v === 'string') return v;
@@ -19,6 +20,11 @@ export function OutputRenderer({
   outputs,
   state,
   error,
+  errorCategory,
+  errorFriendly,
+  errorPerson,
+  errorProviderText,
+  errorProvider,
   streamingText,
   streamingPartials,
   streamingSvg,
@@ -26,6 +32,13 @@ export function OutputRenderer({
   outputs: Record<string, PortValue>;
   state: NodeState;
   error?: string;
+  /** The node's run error readings (error copy round 3c): the card's lines, not the raw text. */
+  errorCategory?: string;
+  errorFriendly?: string;
+  errorPerson?: string;
+  errorProviderText?: boolean;
+  /** The provider the run called (round 3f): GM's general line names it. */
+  errorProvider?: string;
   streamingText?: string;
   streamingPartials?: { index: number; src: string }[];
   streamingSvg?: { index: number; svg: string; isFinal: boolean };
@@ -51,7 +64,11 @@ export function OutputRenderer({
     );
   }
   if (state === 'error') {
-    return <div className="create-output create-output--error">{error ?? 'Generation failed'}</div>;
+    // The same lines as the canvas card (lib/nodeErrorCopy.ts): the person's
+    // line or GM's, the raw provider text only behind Details.
+    return <NodeError className="create-output create-output--error" raw={error ?? 'Generation failed'}
+      category={errorCategory} friendly={errorFriendly} person={errorPerson} providerText={errorProviderText}
+      provider={errorProvider} />;
   }
 
   const isComplete = state === 'complete';

@@ -26,6 +26,7 @@ from handlers.jev_decide import handle_jev_decide
 from handlers.jev_pick_best import handle_jev_pick_best
 from handlers.moodboard import handle_moodboard_node
 from handlers.paper_source import handle_paper_source
+from execution.person_line import count_field, with_call_facts, with_person_line
 
 
 SYNC_HANDLERS: dict[
@@ -172,10 +173,11 @@ def _validate_ideogram_fal_params(node: GraphNode) -> None:
         or not isinstance(num_images, int)
         or not 1 <= num_images <= max_images
     ):
-        raise ValueError(
+        raise with_person_line(ValueError(
             f"{node.definition_id} num_images must be an integer from 1 to {max_images} "
             f"(received {num_images!r})"
-        )
+        ),
+            f"Set {count_field(node.definition_id)} to a whole number from 1 to {max_images}.")
 
     if node.definition_id == "ideogram-v4":
         expansion = params.get("expansion_model")
@@ -212,10 +214,11 @@ def _validate_ideogram_fal_params(node: GraphNode) -> None:
                 or not isinstance(value, int)
                 or not 1 <= value <= 100
             ):
-                raise ValueError(
+                raise with_person_line(ValueError(
                     f"Ideogram Upscale FAL {key} must be an integer from 1 to 100 "
                     f"(received {value!r})"
-                )
+                ),
+                    f"Set “{key.capitalize()}” to a whole number from 1 to 100.")
 
 
 def _nano_banana_fal_node(node: GraphNode, *, edit: bool) -> GraphNode:
@@ -513,7 +516,7 @@ def get_handler_registry(
             try:
                 return await handle_fal_universal(routed_node, routed_inputs, api_keys, emit=emit)
             except RuntimeError as exc:
-                raise RuntimeError(with_vertex_hint(str(exc))) from exc
+                raise with_call_facts(RuntimeError(with_vertex_hint(str(exc))), exc) from exc
 
         async def _gemini_omni_flash_handler(
             node: GraphNode,
@@ -723,10 +726,11 @@ def get_handler_registry(
             if isinstance(prompt, PortValueDict) and isinstance(prompt.value, str):
                 prompt_length = len(prompt.value)
                 if prompt_length > HUNYUAN3D_PROMPT_MAX_CHARS:
-                    raise ValueError(
+                    raise with_person_line(ValueError(
                         "Hunyuan3D prompt exceeds FAL's 1024-character limit "
                         f"(received {prompt_length})."
-                    )
+                    ), f"Hunyuan3D on fal.ai takes a prompt of up to {HUNYUAN3D_PROMPT_MAX_CHARS:,} characters, and this one "
+                        f"is {prompt_length:,}. Shorten it, then run the node again.")
             routed_node = _fal_wrapper_node(
                 node,
                 "fal-ai/hunyuan3d-v3/text-to-3d",
@@ -992,7 +996,7 @@ def get_handler_registry(
             try:
                 return await handle_fal_universal(routed_node, modified_inputs, api_keys, emit=emit)
             except RuntimeError as exc:
-                raise RuntimeError(with_vertex_hint(str(exc))) from exc
+                raise with_call_facts(RuntimeError(with_vertex_hint(str(exc))), exc) from exc
 
         async def _ltx_23_handler(
             node: GraphNode,
@@ -1321,10 +1325,11 @@ def get_handler_registry(
                 # Switching from 5 Lite can retain its saved size. The 4.5 text
                 # and edit schemas do not declare auto_3K; reject before billing
                 # rather than silently changing the recipe or posting a 422.
-                raise ValueError(
+                raise with_person_line(ValueError(
                     "Seedream 4.5 does not support image_size auto_3K; "
                     "choose a supported size or Seedream 5.0 Lite"
-                )
+                ),
+                    "Seedream 4.5 can't make the Auto 3K size. Choose another size, or use Seedream 5.0 Lite.")
             images_input = inputs.get("images")
             raw_refs = images_input.value if images_input and images_input.value else None
             if not raw_refs:
@@ -1334,9 +1339,9 @@ def get_handler_registry(
             if len(refs) > 10:
                 # Both supported edit routes silently use only the last ten.
                 # Reject before submission so explicit references cannot vanish.
-                raise ValueError(
+                raise with_person_line(ValueError(
                     f"Seedream accepts at most 10 reference images (received {len(refs)})"
-                )
+                ), f"Seedream takes at most 10 reference images, and {len(refs)} are connected. Disconnect the extra ones, then run the node again.")
             operation = "edit" if refs else "text-to-image"
             if str(model) == "5.0-lite":
                 endpoint_id = f"fal-ai/bytedance/seedream/v5/lite/{operation}"
@@ -1511,17 +1516,18 @@ def get_handler_registry(
             expanded = expand_character_inputs(routed_node, inputs)
             refs = expanded.get("reference_images")
             if not refs or not refs.value:
-                raise ValueError(
+                raise with_person_line(ValueError(
                     "Ideogram Character needs reference images — connect Character Refs "
                     "or attach a Character node"
-                )
+                ), "Ideogram Character needs reference images. Connect “Character Refs” or a Character node, then run the node again.")
             raw_refs = refs.value if isinstance(refs.value, list) else [refs.value]
             reference_count = sum(1 for value in raw_refs if value)
             if reference_count != 1:
-                raise ValueError(
+                raise with_person_line(ValueError(
                     "Ideogram Character supports exactly one character reference image per request "
                     f"(received {reference_count})"
-                )
+                ), f"Ideogram Character takes one character reference image per request, and {reference_count} are "
+                    "connected. Connect just one, then run the node again.")
             return await _ideogram_character_route(routed_node, expanded, api_keys)
 
         # Direct-only Ideogram capabilities (no FAL equivalents) — these require

@@ -85,8 +85,16 @@ body.app-slava-restraint .react-flow__minimap {
 }
 
 /* Contextual actions for the current canvas selection. This intentionally
-   floats above the graph instead of becoming another persistent mode bar. */
+   floats above the graph instead of becoming another persistent mode bar.
+   The Panel keeps the toolbar's height while it is empty (nothing selected),
+   0 px wide, so it covers nothing: floating panels stop below the toolbar's
+   line whether or not the toolbar shows (lib/bottomBar.ts floatingTopLimit;
+   GM - Design, round 3: "The Inspector jumping on deselect: hold it. A panel
+   shouldn't move unless someone moves it."). Both read one token, the
+   toolbar's own height: 38 px buttons, 5 px padding, a 1 px border. */
 .selection-toolbar-panel.react-flow__panel {
+  --selection-toolbar-h: 50px;
+  min-height: var(--selection-toolbar-h);
   margin-top: 92px;
   pointer-events: none;
 }
@@ -101,7 +109,8 @@ body.app-slava-restraint .react-flow__minimap {
   align-items: center;
   gap: 4px;
   max-width: calc(100vw - 32px);
-  min-height: 48px;
+  box-sizing: border-box;
+  min-height: var(--selection-toolbar-h);
   padding: 5px 7px 5px 14px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: var(--sr-node-media-radius, 14px);
@@ -154,7 +163,7 @@ body.app-slava-restraint .react-flow__minimap {
 }
 
 .selection-toolbar__button:focus-visible {
-  outline: 2px solid var(--sr-accent, #ff5a1f);
+  outline: var(--sr-focus-outline, 2px solid #e8e6e1);
   outline-offset: 1px;
 }
 

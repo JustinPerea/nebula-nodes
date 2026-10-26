@@ -213,6 +213,32 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
     springTo(getViewportForBounds(getNodesBounds(nodesRef.current), width, height, MIN_ZOOM, 1, FIT_PADDING));
   }, [flowStore, getNodesBounds, springTo]);
 
+  // An Update's Show (Q113 c): spring the camera to the cards it names, once
+  // the view has its size (a Show from List mounts this view first).
+  const frameRequest = useBoardCanvasStore((state) => state.frameRequest);
+  useEffect(() => {
+    if (!frameRequest || frameRequest.boardKey !== boardKey) return;
+    let frame = 0;
+    let tries = 0;
+    const attempt = () => {
+      frame = 0;
+      const { width, height } = flowStore.getState();
+      if ((!width || !height) && tries++ < 60) {
+        frame = window.requestAnimationFrame(attempt);
+        return;
+      }
+      if (useBoardCanvasStore.getState().frameRequest?.seq === frameRequest.seq) {
+        useBoardCanvasStore.setState({ frameRequest: null });
+      }
+      const wanted = new Set(frameRequest.placementIds);
+      const targets = nodesRef.current.filter((node) => wanted.has(node.id));
+      if (!width || !height || targets.length === 0) return;
+      springTo(getViewportForBounds(getNodesBounds(targets), width, height, MIN_ZOOM, 1, FIT_PADDING));
+    };
+    frame = window.requestAnimationFrame(attempt);
+    return () => { if (frame) window.cancelAnimationFrame(frame); };
+  }, [frameRequest, boardKey, flowStore, getNodesBounds, springTo]);
+
   const zoomBy = useCallback((factor: number) => {
     const { width, height } = flowStore.getState();
     const from = getViewport();

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Pin } from '../src/lib/wsClient';
+import { RequestFailedError } from '../src/lib/errorCopy';
 
 const ws = vi.hoisted(() => ({ handlers: [] as Array<(event: unknown) => void> }));
 const api = vi.hoisted(() => ({
@@ -69,7 +70,9 @@ describe('canvas pins store', () => {
   });
 
   it('puts a pin back when the delete fails', async () => {
-    api.deletePin.mockRejectedValue(new Error('Only the person can do this from the Nebula canvas.'));
+    // Round 3e: a refusal arrives as the API's typed error (apiRequest), not a plain Error,
+    // whose own text no surface shows any more.
+    api.deletePin.mockRejectedValue(new RequestFailedError("Couldn't delete the note.", 403, { reason: 'Only the person can do this from the Nebula canvas.' }));
     useCanvasPinsStore.setState({ pins: [pin('pin_a')] });
     await useCanvasPinsStore.getState().remove('pin_a');
     expect(useCanvasPinsStore.getState().pins.map((p) => p.id)).toEqual(['pin_a']);

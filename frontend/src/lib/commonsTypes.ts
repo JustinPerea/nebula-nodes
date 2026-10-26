@@ -56,7 +56,11 @@ export interface EffectiveFields {
 }
 export interface AssetDetail {
   asset: { id: string; media: 'image' | 'video'; width: number | null; height: number | null; made_by: string;
-    analysis_state: AnalysisState; last_error: string | null; measurements: Record<string, unknown> | null };
+    analysis_state: AnalysisState; last_error: string | null;
+    /** Why the analysis failed, for the person's line (backend commons/analysis_errors.py):
+     * 'unavailable' | 'unreadable' | 'other'; absent from a backend before error-copy round 3. */
+    last_error_kind?: string | null;
+    measurements: Record<string, unknown> | null };
   effective: { fields: EffectiveFields; sources: Record<string, string>; corrected_paths: string[];
     analysis: { model_id: string; prompt_version: string; created_at: string } | null };
   corrections: { id: string; field_path: string; op: string; value: unknown; actor: string; reason: string | null; at: string }[];

@@ -8,7 +8,9 @@ must compute the same specs, so this snapshot of the Python side (over the
 registry and the inline route-table nodes in route_cases.json) is
 deep-equalled by frontend/tests/lib/routeTables.test.ts, and
 backend/tests/test_node_route.py checks it is current. It also pins the two
-KEY_PROVIDERS and PROVIDER_LABELS tables to each other.
+KEY_PROVIDERS and PROVIDER_LABELS tables to each other, and
+execution/person_line.py KEY_NAMES (how the card names each key) to
+directRoute.ts KEY_NAMES.
 
 Usage:
   backend/.venv/bin/python scripts/generate-route-tables.py          # rewrite
@@ -30,6 +32,15 @@ OUT = ROOT / "backend" / "tests" / "fixtures" / "route_tables.json"
 def _node_route():
     """backend/services/node_route.py (stdlib only), loaded without the backend's imports."""
     spec = importlib.util.spec_from_file_location("node_route", ROOT / "backend" / "services" / "node_route.py")
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def _person_line():
+    """backend/execution/person_line.py (stdlib only), loaded the same way."""
+    spec = importlib.util.spec_from_file_location("person_line", ROOT / "backend" / "execution" / "person_line.py")
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)
@@ -77,6 +88,8 @@ def build() -> str:
                   "directRoute.ts routesOf / allParamDefinitions against it."),
         "keyProviders": node_route.KEY_PROVIDERS,
         "providerLabels": node_route.PROVIDER_LABELS,
+        # How the card names each key: [provider, kind] (person_line.key_phrase).
+        "keyNames": {key: list(name) for key, name in _person_line().KEY_NAMES.items()},
         "nodes": {
             node_id: {
                 "routes": [_route(route) for route in node_route.routes_of(definition)],

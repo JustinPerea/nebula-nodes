@@ -2,13 +2,32 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useReactFlow, type Edge, type Node } from '@xyflow/react';
 import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
-import { loadFromFile, saveToFile } from '../lib/graphFile';
+import { useProjectStore } from '../store/projectStore';
+// Save and open load lib/graphFile.ts at the moment of use (preloaded on idle).
+import { graphFileModule } from '../lib/deferredChunks';
 import { canLoadGraph, canSaveGraph, GRAPH_LOAD_EVENT, GRAPH_SAVE_EVENT } from '../lib/graphFileActions';
-import { apiFetch } from '../lib/backend';
+import { apiRequest } from '../lib/apiRequest';
+import { rewriteBackendAssetUrls } from '../lib/backend';
+import { failureMessage, RequestFailedError } from '../lib/errorCopy';
+import { showNotice } from '../lib/canvasNotice';
 import { computeCanvasFitPadding } from '../lib/canvasFit';
 import { providerKeyWarnings } from '../lib/providerSwitch';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
+import { projectNameForFile } from '../lib/projectSize';
+import type { LoadedGraph } from '../lib/graphFile';
 import type { NodeData } from '../types';
+
+/** The Toolbar's "Load graph" (GM's heading pattern, error-copy round 2). */
+const LOAD_GRAPH = "Couldn't load the graph.";
+
+/** Until Projects finishes what it is doing (a rename, a save's answer), so
+ * a create for Load graph isn't turned away for being busy. */
+function projectsIdle(): Promise<void> {
+  return new Promise((resolve) => {
+    if (!useProjectStore.getState().busy) { resolve(); return; }
+    const stop = useProjectStore.subscribe((state) => { if (!state.busy) { stop(); resolve(); } });
+  });
+}
 
 /** Mount once inside the app's ReactFlowProvider, independently of Canvas. */
 export function GraphFileActions() {
@@ -25,30 +44,33 @@ export function GraphFileActions() {
       const ui = useUIStore.getState();
       const canvasActive = ui.viewMode === 'canvas' || (ui.viewMode === 'commons' && !ui.commonsEnabled);
       const viewport = canvasActive ? getViewport() : ui.canvasViewport ?? getViewport();
-      await saveToFile(state.nodes, state.edges, viewport);
+      const { saveToFile } = await graphFileModule.load();
+      const projects = useProjectStore.getState();
+      await saveToFile(state.nodes, state.edges, viewport,
+        projects.initialized ? projects.activeProject?.name : undefined);
     } catch (error) {
       console.error('Graph save failed:', error);
-      alert(error instanceof Error ? error.message : 'Graph save failed.');
+      showNotice(failureMessage(error, "Couldn't save the graph."));
     } finally {
       actionInFlight.current = false;
     }
   }, [getViewport]);
 
-  const load = useCallback(async () => {
-    if (actionInFlight.current || !canLoadGraph(useGraphStore.getState())) return;
-    actionInFlight.current = true;
+  /** The file's graph into the open project's canvas, replacing it. With
+   * `refuseOverLimit`, 'over' when the backend refused it, before anything
+   * changed, for being over the save limit as a project of its own (Q120).
+   * `asNewProject`: the project was just made for it, which its line says. */
+  const importGraph = useCallback(async (result: LoadedGraph, refuseOverLimit = false,
+    asNewProject = false): Promise<'over' | void> => {
+    if (!canLoadGraph(useGraphStore.getState())) return;
     let importReserved = false;
     try {
-      const result = await loadFromFile();
-      if (!result || !canLoadGraph(useGraphStore.getState())) return;
-      if (result.warnings.length > 0) console.warn('[nebula] Load warnings:', result.warnings);
-
       // graphSync can publish the imported graph before this HTTP response.
       // Fence every local generation admission through that entire interval.
       importReserved = useGraphStore.getState().reserveGraphImport();
       if (!importReserved) return;
       // Preserve the current graph until the entire backend import succeeds.
-      const response = await apiFetch('/api/graph/import', {
+      const response = await apiRequest(LOAD_GRAPH, '/api/graph/import', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           nodes: result.nodes.map((node) => ({
@@ -62,13 +84,9 @@ export function GraphFileActions() {
           })),
           // 0 for a file saved before the marker: the backend upgrades it once.
           paramsVersion: result.paramsVersion,
+          ...(refuseOverLimit ? { refuseOverSaveLimit: true } : {}),
         }),
       });
-      if (!response.ok) {
-        let detail = '';
-        try { detail = (await response.json()).detail ?? ''; } catch { /* status fallback */ }
-        throw new Error(detail || `Import failed: ${response.status}`);
-      }
       const imported = await response.json() as { nodes: Node<NodeData>[]; edges: Edge[]; warnings?: string[] };
       // Read from what the backend loaded: a node folded into another
       // (services/retired_nodes.py MERGED) arrives as its new node.
@@ -84,7 +102,13 @@ export function GraphFileActions() {
       // ownership through WebSocket reconciliation. Preserve its workspace.
       const state = useGraphStore.getState();
       if (state.isExecuting || state.createLaunchingIds.length > 0) return;
-      useGraphStore.getState().loadGraph(imported.nodes, imported.edges);
+      // Shown like every other read of the graph (applyProject, fetchCLIGraph):
+      // this backend's links resolved, so a file:// desktop tab can draw them.
+      // A World keeps its relative links; saves canonicalize the rest again.
+      useGraphStore.getState().loadGraph(rewriteBackendAssetUrls(imported.nodes), rewriteBackendAssetUrls(imported.edges));
+      // A file over the save limit opens (Q118): the project store says so
+      // with GM's Load graph line and pauses saving until it is trimmed.
+      useProjectStore.getState().noteLoadedGraph(result.fileName ?? 'the graph', asNewProject);
       // The old focused target may no longer exist after replacement. Clear
       // its UI state without running exit cleanup against the newly loaded IDs.
       useUIStore.setState({
@@ -110,15 +134,55 @@ export function GraphFileActions() {
         notes.push(`Set to a provider you have no key for:\n${providerWarnings.map((line) => `• ${line}`).join('\n')}`
           + '\nAdd the key in Settings > Providers, or pick another provider on the node.');
       }
-      if (notes.length > 0) alert(`Imported.\n${notes.join('\n')}`);
+      if (notes.length > 0) showNotice(`Imported.\n${notes.join('\n')}`, 'info');
     } catch (error) {
+      if (refuseOverLimit && error instanceof RequestFailedError && error.overSaveLimit) return 'over';
       console.error('Graph import failed; existing graph preserved:', error);
-      alert(error instanceof Error ? error.message : 'Graph import failed. Existing graph was preserved.');
+      showNotice(failureMessage(error, LOAD_GRAPH));
     } finally {
       if (importReserved) useGraphStore.getState().releaseGraphImport();
-      actionInFlight.current = false;
     }
   }, [fitView]);
+
+  const load = useCallback(async () => {
+    if (actionInFlight.current || !canLoadGraph(useGraphStore.getState())) return;
+    actionInFlight.current = true;
+    try {
+      const { loadFromFile } = await graphFileModule.load();
+      const result = await loadFromFile();
+      if (!result || !canLoadGraph(useGraphStore.getState())) return;
+      if (result.warnings.length > 0) console.warn('[nebula] Load warnings:', result.warnings);
+      // Q120 (Justin): "Files over the limit open as a new project named
+      // after the file. The open project is left as it was. Files under the
+      // limit still replace the canvas, as today." The backend's save check
+      // decides, exactly: the import into the open project asks to be
+      // refused, before anything changes, when the file is over the limit as
+      // a project of its own. (This tab's measure can't: the import adds
+      // fields and changes ids.) The load runs once the new project is open,
+      // after #178's screen when saving is paused with unsaved edits.
+      const projects = useProjectStore.getState();
+      if (!projects.initialized || !projects.activeProject) {
+        await importGraph(result);
+        return;
+      }
+      if (await importGraph(result, true) !== 'over') return;
+      await projectsIdle();
+      let loading = false;
+      await useProjectStore.getState().createProject(projectNameForFile(result.fileName), async () => {
+        loading = true;
+        await importGraph(result, false, true);
+      });
+      // Neither opened, nor waiting behind #178's screen, nor turned away with
+      // its own line on Projects: say the file didn't open.
+      const after = useProjectStore.getState();
+      if (!loading && !after.unsavedEdits && !after.error) showNotice(failureMessage(null, LOAD_GRAPH));
+    } catch (error) {
+      console.error('Graph load failed:', error);
+      showNotice(failureMessage(error, LOAD_GRAPH));
+    } finally {
+      actionInFlight.current = false;
+    }
+  }, [importGraph]);
 
   useEffect(() => {
     const onSave = () => { void save(); };

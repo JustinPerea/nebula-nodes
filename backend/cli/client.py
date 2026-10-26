@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import quote
 
 import httpx
@@ -37,19 +37,37 @@ class NebulaClient:
             headers.setdefault("X-Nebula-Agent", agent_name)
         return headers
 
+    def _fail(self, exc: NebulaAPIError, what: str) -> None:
+        if exc.kind == "connect":
+            message = f"cannot connect to Nebula backend at {self.base_url} — is the server running?"
+        elif exc.kind == "timeout":
+            message = (f"Nebula didn't answer {what} in time. A run keeps going on the "
+                       "backend; `nebula graph` shows what finished.")
+        else:
+            message = exc.detail
+        print(f"error: {message}", file=sys.stderr)
+        sys.exit(1)
+
     def _request(self, method: str, path: str, *, binary: bool = False, **kwargs: Any) -> Any:
         kwargs["headers"] = self._identity_headers(kwargs.get("headers"))
         try:
             return self.api.request(method, path, binary=binary, **kwargs)
         except NebulaAPIError as exc:
-            if exc.kind == "connect":
-                message = f"cannot connect to Nebula backend at {self.base_url} — is the server running?"
-            elif exc.kind == "timeout":
-                message = (f"Nebula didn't answer {method} {path} in time. A run keeps going on the "
-                           "backend; `nebula graph` shows what finished.")
-            else:
-                message = exc.detail
-            print(f"error: {message}", file=sys.stderr)
+            self._fail(exc, f"{method} {path}")
+
+    def shared(self, call: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        """Run one of the reads and writes the MCP tools share (project_client)
+        as this client: its identity headers, and a refusal printed as
+        `error: <detail>` with exit 1, as every other command does. Pass
+        via="cli" to calls that word a hint."""
+        import project_client
+
+        try:
+            return call(self.api, *args, headers=self._identity_headers(), **kwargs)
+        except NebulaAPIError as exc:
+            self._fail(exc, "the request")
+        except project_client.ProjectRefError as exc:
+            print(f"error: {exc}", file=sys.stderr)
             sys.exit(1)
 
     def commons_enabled(self) -> bool:
@@ -73,8 +91,28 @@ class NebulaClient:
     def get_nodes(self) -> dict[str, Any]:
         return self._request("GET", "/api/nodes")
 
+    # Every match: GET /api/agent/nodes' largest limit (main.AGENT_NODES_MAX).
+    ALL_NODES = 2000
+
+    def find_nodes(self, query: str = "", category: str = "", *, ready_only: bool = True,
+                   limit: int | None = None) -> dict[str, Any]:
+        """GET /api/agent/nodes, the route MCP's find_nodes reads: node types
+        best matches first, whether each runs here (`runsWith`, else
+        `missing`) and its list price. No `limit` asks for every match."""
+        return self._request("GET", "/api/agent/nodes", params={
+            "query": query, "category": category, "ready_only": str(bool(ready_only)).lower(),
+            "limit": max(1, min(int(limit), self.ALL_NODES)) if limit is not None else self.ALL_NODES,
+        })
+
     def get_node(self, node_id: str) -> dict[str, Any]:
-        return self._request("GET", f"/api/nodes/{node_id}")
+        # An id, or a node type's display name (spaces, a slash: "Jev Decide (judge / classify / yes-no)").
+        return self._request("GET", f"/api/nodes/{quote(node_id, safe='')}")
+
+    def get_agent_node(self, node_id: str) -> dict[str, Any]:
+        """describe_node's answer: readiness and list prices (main.agent_describe_node)."""
+        from urllib.parse import quote
+
+        return self._request("GET", f"/api/agent/nodes/{quote(node_id, safe='')}")
 
     def get_settings(self) -> dict[str, Any]:
         return self._request("GET", "/api/settings")
@@ -204,6 +242,40 @@ class NebulaClient:
 
     def list_proposals(self) -> dict[str, Any]:
         return self._request("GET", "/api/canvas/proposals")
+
+    # -- Questions for the person (only the person answers, in Nebula) --
+    def ask(self, body: dict[str, Any], agent_name: str | None = None) -> dict[str, Any]:
+        """POST a question set. A refusal raises NebulaAPIError (its payload
+        carries the open sets at the cap), so `nebula ask` can word it."""
+        headers = self._identity_headers({"X-Nebula-Agent": agent_name} if agent_name else None)
+        return self.api.request("POST", "/api/canvas/questions", json=body, headers=headers)
+
+    def get_questions(self, set_id: str, wait: float = 0.0, agent_name: str | None = None, *,
+                      raise_errors: bool = False) -> dict[str, Any]:
+        """GET your question set; `wait` (≤25 s) blocks until the person answers.
+        With `raise_errors` a failure raises NebulaAPIError (the wait loop
+        retries one Nebula never answered) instead of printing and exiting."""
+        headers = {"X-Nebula-Agent": agent_name} if agent_name else None
+        params = {"wait": round(wait, 1)} if wait > 0 else None
+        path = f"/api/canvas/questions/{quote(set_id, safe='')}"
+        if raise_errors:
+            return self.api.request("GET", path, params=params, headers=self._identity_headers(headers),
+                                    timeout=wait + 15)
+        return self._request("GET", path, params=params, headers=headers, timeout=wait + 15)
+
+    def withdraw_questions(self, set_id: str, agent_name: str | None = None) -> dict[str, Any]:
+        headers = {"X-Nebula-Agent": agent_name} if agent_name else None
+        return self._request("DELETE", f"/api/canvas/questions/{quote(set_id, safe='')}", headers=headers)
+
+    # -- the Agents panel (Q125 item 2) --
+    def set_status(self, body: dict[str, Any], agent_name: str | None = None) -> dict[str, Any]:
+        """POST your status line ({text, nodeId?}; empty text clears it)."""
+        headers = {"X-Nebula-Agent": agent_name} if agent_name else None
+        return self._request("POST", "/api/canvas/status", json=body, headers=headers)
+
+    def get_agents(self) -> dict[str, Any]:
+        """The roster: the agents around in the open project (MCP list_agents)."""
+        return self._request("GET", "/api/canvas/agents")
 
     def point_cursor(self, body: dict[str, Any], agent_name: str | None = None) -> dict[str, Any]:
         headers = {"X-Nebula-Agent": agent_name} if agent_name else None

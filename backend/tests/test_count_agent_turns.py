@@ -114,7 +114,10 @@ def test_mcp_lookups_are_orientation(counter, tool):
 
 
 @pytest.mark.parametrize("command,tool", [("nebula spend", "Bash"), ("nebula keys", "Bash"),
-                                          (None, "mcp__nebula__get_spend_limits")])
+                                          ("nebula providers", "Bash"), ("nebula providers --refresh", "Bash"),
+                                          (None, "mcp__nebula__get_spend_limits"),
+                                          (None, "mcp__nebula__get_settings"),
+                                          (None, "mcp__nebula__provider_status")])
 def test_reading_limits_or_keys_is_orientation(counter, command, tool):
     t = Transcript().call(command, tool=tool, tool_input=None if command else {})
     assert _kinds(counter.count(t.lines())) == ["limits"]

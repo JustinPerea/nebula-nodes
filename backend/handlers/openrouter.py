@@ -10,6 +10,7 @@ from execution.stream_runner import StreamConfig, stream_execute
 from services.image_input import load_local_image
 from services.output import get_run_dir, save_base64_image
 from execution.missing_credential import MissingCredentialError
+from execution.person_line import with_api_status, with_person_line
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -26,12 +27,12 @@ async def handle_openrouter_universal(
 
     model = node.params.get("model", "")
     if not model:
-        raise ValueError("No model selected — choose a model from the Inspector panel")
+        raise with_person_line(ValueError("No model selected — choose a model from the Inspector panel"), "Pick a model in “Model”, then run the node again.")
 
     # Build messages from input
     messages_input = inputs.get("messages")
     if not messages_input or not messages_input.value:
-        raise ValueError("Messages input is required")
+        raise with_person_line(ValueError("Messages input is required"), "Connect messages to this node, then run it again.")
 
     messages_text = str(messages_input.value)
     content: list[dict[str, Any]] = [{"type": "text", "text": messages_text}]
@@ -150,7 +151,8 @@ async def _handle_image_generation(
             json=request_body,
         )
         if resp.status_code != 200:
-            raise RuntimeError(f"OpenRouter API error {resp.status_code}: {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"OpenRouter API error {resp.status_code}: {resp.text}"), resp.status_code)
 
     data = resp.json()
 

@@ -1,4 +1,5 @@
-import type { CSSProperties } from 'react';
+import { useContext, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
+import { LeaveBusyContext } from './leaveBusy';
 import type { AgentNote, AgentNoteAction, AgentNoteAuthor } from '../../lib/agentNotes';
 import { authorInitials, noteControls, type NoteButton } from '../../lib/agentNotesView';
 
@@ -11,31 +12,75 @@ export interface AgentNotesAdapter {
   /** "kept with this project" / "kept with this board". */
   keptWith: string;
   showLabel: (note: AgentNote) => string;
-  /** Show and a row click: bring the refs into view and outline them. Writes nothing. */
-  show: (note: AgentNote) => void;
+  /**
+   * Show and a row click: bring the refs into view and outline them. Writes
+   * nothing. From another screen it returns the way there: it resolves once
+   * there, or rejects with the reason it can't go (the corner shows it).
+   */
+  show: (note: AgentNote) => void | Promise<void>;
   /** Run an edit action as the person, through the route its button uses elsewhere. */
   runAction: (note: AgentNote, action: AgentNoteAction) => void | Promise<void>;
   /** Why an action can't run any more ("Expired"), or null while it can. */
   actionState?: (action: AgentNoteAction) => string | null;
+  /** A board image's number now (the Studio's board), to draw `#n` in the text. */
+  numberFor?: (ref: string) => number | null;
+  /** Whether hovering an entry or a card outlines its refs (the canvas's
+   *  outline layer draws nodes only; a board's refs are images). */
+  outlines?: boolean;
+  /** The Agents panel's Working row (Q125 item 2): these nodes in view and
+   *  outlined, as Show does; from another screen, the canvas first. */
+  showNodes?: (nodeIds: string[], color: string) => void | Promise<void>;
+  /** The Agents panel's Needs-you row: open a proposal where it is decided, as Review does. */
+  reviewProposal?: (proposal: { proposalId: string; target: string; targetId: string | null }) => Promise<void>;
 }
+
+/** The hollow ring's tooltip (Q125 item 2, GM): an agent that named itself, with no token. */
+export const NAMED_ITSELF = 'This agent named itself.';
 
 export function AuthorDot({
   author,
   lit,
+  verified,
 }: {
   author: Pick<AgentNoteAuthor, 'kind' | 'name' | 'color'>;
   /** The chip's dots brighten while their author has unread updates. */
   lit?: boolean;
+  /** False draws a hollow ring in the agent's colour (the Agents panel and
+   *  the question form): it named itself. Left out, the dot is as before. */
+  verified?: boolean;
 }) {
+  const unverified = verified === false;
   return (
     <span
-      className={`agent-notes-dot agent-notes-dot--${author.kind}`}
+      className={`agent-notes-dot agent-notes-dot--${author.kind}${unverified ? ' agent-notes-dot--unverified' : ''}`}
       data-lit={lit === undefined ? undefined : String(lit)}
       style={{ '--an-dot': author.color } as CSSProperties}
+      title={unverified ? NAMED_ITSELF : undefined}
       aria-hidden="true"
     >
       {authorInitials(author)}
     </span>
+  );
+}
+
+/**
+ * A corner button that reads "Saving…" while the Commons' save in progress
+ * holds the leave it asked for (commons-leave, LeaveBusyContext).
+ */
+export function BusyButton({ className, onClick, children, op }: {
+  className: string;
+  onClick: (event: MouseEvent<HTMLButtonElement>) => void;
+  children: ReactNode;
+  /** The action's kind, for the corner to find this button again (focus after a popover). */
+  op?: string;
+}) {
+  const [element, setElement] = useState<HTMLButtonElement | null>(null);
+  const busy = useContext(LeaveBusyContext) === element && element !== null;
+  return (
+    <button ref={setElement} type="button" className={className} aria-busy={busy || undefined} data-op={op}
+      onClick={onClick}>
+      {busy ? 'Saving…' : children}
+    </button>
   );
 }
 
@@ -48,8 +93,9 @@ export function NoteButtons({
 }: {
   note: AgentNote;
   adapter: AgentNotesAdapter;
-  onAction: (action: AgentNoteAction) => void;
-  onShow: () => void;
+  /** `anchor`: the clicked button, where the Commons asks before leaving. */
+  onAction: (action: AgentNoteAction, anchor: HTMLElement) => void;
+  onShow: (anchor: HTMLElement) => void;
 }) {
   const controls = noteControls(note, { showLabel: adapter.showLabel(note), actionState: adapter.actionState });
   if (controls.buttons.length === 0 && !controls.state) return null;
@@ -57,18 +103,18 @@ export function NoteButtons({
     <div className="agent-notes-acts">
       {controls.state && <span className="agent-notes-acts__state">{controls.state}</span>}
       {controls.buttons.map((button: NoteButton) => (
-        <button
+        <BusyButton
           key={button.kind === 'show' ? 'show' : button.label}
-          type="button"
           className={`agent-notes-btn${button.kind === 'action' && button.primary ? ' agent-notes-btn--primary' : ''}`}
+          op={button.kind === 'action' ? button.action.op.kind : undefined}
           onClick={(event) => {
             event.stopPropagation();
-            if (button.kind === 'show') onShow();
-            else onAction(button.action);
+            if (button.kind === 'show') onShow(event.currentTarget);
+            else onAction(button.action, event.currentTarget);
           }}
         >
           {button.label}
-        </button>
+        </BusyButton>
       ))}
     </div>
   );

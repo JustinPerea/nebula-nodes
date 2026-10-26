@@ -1,3 +1,4 @@
+import type { Ref } from 'react';
 import type { Node } from '@xyflow/react';
 import { TimelineRuler } from './TimelineRuler';
 import { TimelineTrack } from './TimelineTrack';
@@ -8,9 +9,17 @@ import { useUIStore } from '../../store/uiStore';
 interface Props {
   editNode: Node;
   sourceUrl: string;
+  /** The timeline's box, for the editor's bottom-bar clearance (EditorView). */
+  ref?: Ref<HTMLDivElement>;
 }
 
-export function Timeline({ editNode, sourceUrl }: Props) {
+/** The trim editor's timeline. With the transport row above it, it is the
+ * screen's bottom bar (`data-bottom-bar`): EditorView publishes their top
+ * edge, so the app's notices never sit over it (GM - Design, round 4: "A
+ * notice should never sit over a timeline being edited, even one that shares
+ * its column."; round 4b: the transport publishes too, so notices sit above
+ * it, over the preview's bottom edge). */
+export function Timeline({ editNode, sourceUrl, ref }: Props) {
   const params = (editNode.data as { params?: Record<string, unknown> }).params ?? {};
   const clips: EditClip[] = (params.clips as EditClip[]) ?? [];
   const sourceDuration: number = typeof params.sourceDuration === 'number' ? params.sourceDuration : 1;
@@ -19,7 +28,7 @@ export function Timeline({ editNode, sourceUrl }: Props) {
   const timelineZoom = useUIStore((s) => s.timelineZoom);
 
   return (
-    <div className="editor-tl">
+    <div ref={ref} className="editor-tl" data-bottom-bar="">
       <div className="editor-tl__viewport">
         <div className="editor-tl__scroll-content" style={{ width: `${timelineZoom * 100}%` }}>
           <TimelineRuler

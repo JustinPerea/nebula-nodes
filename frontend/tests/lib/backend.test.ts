@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { getBackendBaseUrl, backendAssetUrlSync, rewriteExecutionAssetUrls } from '../../src/lib/backend';
 
+const LOST_CONNECTION = "Nebula's server isn't answering. Make sure it's running, then try again.";
+
 // In test mode discovery resolves to http://localhost:8000 and caches it, so
 // backendAssetUrlSync can rewrite server-relative asset paths to an absolute
 // backend origin (the real-world case: frontend and backend on different ports).
@@ -136,7 +138,9 @@ describe('apiFetch rediscovery replay safety', () => {
       ))).toEqual([['http://old.example:8000/api/execute', { method: 'POST', headers: expect.any(Headers) }]]);
 
       await expect(backend.apiFetch('/api/execute-node', { method: 'POST' }))
-        .rejects.toThrow('connection reset after mutation');
+        // No answer is said in words (error-copy); the browser's error is the cause.
+        .rejects.toMatchObject({ name: 'ConnectionLostError', message: LOST_CONNECTION,
+          cause: expect.objectContaining({ message: 'connection reset after mutation' }) });
       expect(fetchMock.mock.calls.filter(([input]) => (
         String(input).endsWith('/api/execute-node')
       ))).toEqual([['http://old.example:8000/api/execute-node', { method: 'POST', headers: expect.any(Headers) }]]);
@@ -199,6 +203,29 @@ describe('backendWebSocketUrl with injected endpoint (VAL-TRANSPORT-005)', () =>
     expect(fetchSpy.mock.calls.flat().some((value) => String(value).includes('connectorSession'))).toBe(false);
   });
 
+  // GM's question (round 2, Q116): can the app's backend answer before the
+  // shell's token lookup lands? No: nothing is sent until it does, so no
+  // refusal can come back while the lookup is pending, and the banner never
+  // reads a half-finished one.
+  it('sends nothing to its sidecar until a slow shell lookup lands, then sends the token', async () => {
+    let answer: (value: unknown) => void = () => {};
+    const token = vi.fn(() => new Promise((resolve) => { answer = resolve; }));
+    const backend = await importWithBridge({ apiBaseUrl: 'http://127.0.0.1:56789',
+      wsBaseUrl: 'ws://127.0.0.1:56789', person: { token } } as unknown as Record<string, string>);
+    fetchSpy.mockResolvedValue({ ok: true, status: 200 });
+    const read = backend.apiFetch('/api/projects');
+    const write = backend.apiFetch('/api/settings', { method: 'PUT', body: '{}' });
+    const hello = backend.personTokenForSocket('ws://127.0.0.1:56789/ws');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(fetchSpy).not.toHaveBeenCalled();
+    answer({ ok: true, token: DESKTOP_TOKEN });
+    await Promise.all([read, write]);
+    await expect(hello).resolves.toBe(DESKTOP_TOKEN);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    for (const [, init] of fetchSpy.mock.calls) expect(new Headers(init.headers).get('X-Nebula-Person')).toBe(DESKTOP_TOKEN);
+    expect(token).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the token out of every socket URL', async () => {
     const token = vi.fn().mockResolvedValue({ ok: true, token: DESKTOP_TOKEN });
     const backend = await importWithBridge({ apiBaseUrl: 'http://127.0.0.1:56789',
@@ -218,7 +245,8 @@ describe('backendWebSocketUrl with injected endpoint (VAL-TRANSPORT-005)', () =>
     expect(new Headers(fetchSpy.mock.calls[0][1].headers).get('X-Nebula-Person')).toBeNull();
     const session = await import('../../src/lib/personSession');
     expect(session.personUnavailableReason()).toBe('debug-port');
-    expect(session.personRequiredMessage()).toMatch(/remote-debugging port/);
+    expect(session.personRequiredMessage()).toBe(
+      'Debug mode: a debugging port is open, so Settings, proposals and chats are off.');
   });
 
   afterEach(() => {
@@ -386,7 +414,8 @@ describe('no retry, rediscovery, or replay with injected endpoint (VAL-TRANSPORT
     vi.stubGlobal('fetch', fetchSpy);
 
     const backend = await import('../../src/lib/backend');
-    await expect(backend.apiFetch('/api/read')).rejects.toThrow('connection reset after send');
+    await expect(backend.apiFetch('/api/read')).rejects.toMatchObject({ name: 'ConnectionLostError', message: LOST_CONNECTION,
+      cause: expect.objectContaining({ message: 'connection reset after send' }) });
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(String(fetchSpy.mock.calls[0][0])).toBe(`${INJECTED_API}/api/read`);
   });
@@ -515,6 +544,18 @@ describe('browser/Vite mode unchanged when bridge absent (VAL-TRANSPORT-010)', (
     expect(window.localStorage.getItem('nebula:backendBaseUrl')).toBe('http://127.0.0.1:8000');
   });
 
+  it('round 2: not found says GM\'s line (plain tab), the ports stay in the error\'s detail for the console', async () => {
+    vi.stubEnv('MODE', 'production');
+    window.localStorage.removeItem('nebula:backendBaseUrl');
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) }) as Response));
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const backend = await import('../../src/lib/backend');
+    const error = await backend.getBackendBaseUrl().catch((e: unknown) => e) as Error & { detail?: unknown; status?: number };
+    expect(error.message).toBe("Nebula's backend isn't running. Start it, then reload.");
+    expect(error.status).toBe(0);
+    expect(String(error.detail)).toMatch(/Nebula backend not found on localhost ports 8000/);
+  });
+
   it('a fully failing probe set rejects with the existing not-found message', async () => {
     vi.stubEnv('MODE', 'production');
     window.localStorage.removeItem('nebula:backendBaseUrl');
@@ -526,7 +567,8 @@ describe('browser/Vite mode unchanged when bridge absent (VAL-TRANSPORT-010)', (
     }) as Response));
 
     const backend = await import('../../src/lib/backend');
-    await expect(backend.getBackendBaseUrl()).rejects.toThrow(/Nebula backend not found/);
+    // The ports message is the console's (round 2): the person reads GM's line.
+    await expect(backend.getBackendBaseUrl()).rejects.toMatchObject({ detail: expect.stringMatching(/Nebula backend not found/) });
   });
 });
 
@@ -766,29 +808,33 @@ describe('browser person link', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('sends the token on writes and the spend view, never on other reads', async () => {
+  it('sends the token on writes, the spend view and Settings, never on other reads', async () => {
     sessionStorage.setItem('nebula.person', JSON.stringify({ token: TOKEN, backend: 'http://127.0.0.1:8131' }));
     const backend = await importFresh();
-    await backend.apiFetch('/api/settings');
+    await backend.apiFetch('/api/graph');
     await backend.apiFetch('/api/agent/spend');
     await backend.apiFetch('/api/settings', { method: 'PUT', body: '{}' });
     await backend.apiFetch('/api/canvas/proposals/p_1/accept', { method: 'POST', body: '{}' });
+    // Only the app gets saved keys' endings (Justin, Q55 a), so its Settings read says it is the person.
+    await backend.apiFetch('/api/settings');
     const header = (index: number) => {
       const init = fetchSpy.mock.calls[index][1] as RequestInit | undefined;
       return init?.headers ? new Headers(init.headers).get('X-Nebula-Person') : null;
     };
-    expect(fetchSpy.mock.calls[0][0]).toBe('http://127.0.0.1:8131/api/settings');
+    expect(fetchSpy.mock.calls[0][0]).toBe('http://127.0.0.1:8131/api/graph');
     expect(header(0)).toBeNull();
     expect(header(1)).toBe(TOKEN);
     expect(header(2)).toBe(TOKEN);
     expect(header(3)).toBe(TOKEN);
+    expect(fetchSpy.mock.calls[4][0]).toBe('http://127.0.0.1:8131/api/settings');
+    expect(header(4)).toBe(TOKEN);
   });
 
   it('never rediscovers another backend after a failed read while pinned', async () => {
     sessionStorage.setItem('nebula.person', JSON.stringify({ token: TOKEN, backend: 'http://127.0.0.1:8131' }));
     const backend = await importFresh();
     fetchSpy.mockRejectedValue(new TypeError('Failed to fetch'));
-    await expect(backend.apiFetch('/api/settings')).rejects.toThrow('Failed to fetch');
+    await expect(backend.apiFetch('/api/settings')).rejects.toThrow(LOST_CONNECTION);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(fetchSpy.mock.calls.every(([url]) => String(url).startsWith('http://127.0.0.1:8131/'))).toBe(true);
   });
@@ -928,7 +974,7 @@ describe('dev frontend pinned to one backend port', () => {
     vi.stubEnv('VITE_NEBULA_BACKEND_PORT', '8155');
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) }) as Response));
     const backend = await import('../../src/lib/backend');
-    await expect(backend.getBackendBaseUrl()).rejects.toThrow(/port 8155 .*not scanning/);
+    await expect(backend.getBackendBaseUrl()).rejects.toMatchObject({ detail: expect.stringMatching(/port 8155 .*not scanning/) });
   });
 
   it('with nothing set, still scans 8000-8010 and still uses a stored URL', async () => {
@@ -936,9 +982,9 @@ describe('dev frontend pinned to one backend port', () => {
     const fetchMock = vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) }) as Response);
     vi.stubGlobal('fetch', fetchMock);
     const backend = await import('../../src/lib/backend');
-    await expect(backend.getBackendBaseUrl()).rejects.toThrow(
-      'Nebula backend not found on localhost ports 8000, 8001, 8002, 8003, 8004, 8005, 8006, 8007, 8008, 8009, 8010',
-    );
+    await expect(backend.getBackendBaseUrl()).rejects.toMatchObject({
+      detail: 'Nebula backend not found on localhost ports 8000, 8001, 8002, 8003, 8004, 8005, 8006, 8007, 8008, 8009, 8010',
+    });
     const probed = fetchMock.mock.calls.map(([url]) => String(url));
     expect(probed[0]).toBe('http://127.0.0.1:8003/api/health');
     for (const port of [8000, 8005, 8010]) {

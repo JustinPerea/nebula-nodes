@@ -14,7 +14,8 @@ import {
   withAncestors,
 } from '../lib/canvasProposals';
 import type { Point } from '../lib/agentCursorMotion';
-import { useGraphStore } from './graphStore';
+import { useGraphStore, watchGraphSyncs } from './graphStore';
+import { PERSON_REQUIRED_CODE, failureMessage } from '../lib/errorCopy';
 
 /** How long a closed proposal's ghosts fade before they go. Matches canvasProposals.css. */
 export const PROPOSAL_EXIT_MS = 220;
@@ -207,11 +208,13 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
     // Accepting is one undo step: the canvas before the proposal's nodes
     // arrive, taken before the backend's graphSync can bring them.
     const undoStep = useGraphStore.getState().beginUndoStep();
+    const synced = watchGraphSyncs();
     let accepted = false;
     try {
       const result = await acceptProposal(id, entry.acceptKey, get().drag[id] ?? {});
       accepted = true;
-      useGraphStore.getState().adoptAcceptedProposal(result, { undoStep });
+      synced.stop();
+      useGraphStore.getState().adoptAcceptedProposal(result, { undoStep, synced: synced.seen });
       get().close({ proposalId: id, status: 'accepted' });
       if (result.runNodeIds.length > 0) {
         if (useGraphStore.getState().isExecuting) {
@@ -223,11 +226,14 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
       }
     } catch (error) {
       if (!accepted) useGraphStore.getState().cancelUndoStep(undoStep);
-      const message = error instanceof ProposalRequestError && error.status === 403
+      // A person-only refusal (this tab isn't connected as the person) says
+      // GM's line, by its code (Q116 a); a refused accept key, the canvas line.
+      const message = error instanceof ProposalRequestError && error.status === 403 && error.code !== PERSON_REQUIRED_CODE
         ? 'Only the canvas can accept this. Reload the page.'
-        : error instanceof Error ? error.message : String(error);
+        : failureMessage(error, "Couldn't accept the proposal.");
       set((state) => ({ errors: { ...state.errors, [id]: message } }));
     } finally {
+      synced.stop();
       set((state) => ({ pending: without(state.pending, id) }));
     }
   },
@@ -240,9 +246,9 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
       await rejectProposal(id, entry.acceptKey, reason);
       get().close({ proposalId: id, status: 'rejected' });
     } catch (error) {
-      const message = error instanceof ProposalRequestError && error.status === 403
+      const message = error instanceof ProposalRequestError && error.status === 403 && error.code !== PERSON_REQUIRED_CODE
         ? 'Only the canvas can reject this. Reload the page.'
-        : error instanceof Error ? error.message : String(error);
+        : failureMessage(error, "Couldn't reject the proposal.");
       set((state) => ({ errors: { ...state.errors, [id]: message } }));
     } finally {
       set((state) => ({ pending: without(state.pending, id) }));

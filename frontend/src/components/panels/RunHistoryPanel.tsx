@@ -6,6 +6,9 @@ import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { PaperRunInspection } from './PaperRunInspection';
 import { BatchRunInspection } from './BatchRunInspection';
 import { ScrollFade } from '../ScrollFade';
+import { FORGET_RECOVERY_HEADING } from '../../lib/api';
+import { failureMessage } from '../../lib/errorCopy';
+import { showNotice } from '../../lib/canvasNotice';
 import type { PaperSourceRecord } from '../../lib/paperSource';
 import {
   formatRunAge,
@@ -63,7 +66,9 @@ export function RunHistoryPanel() {
     try {
       await deleteProviderRecovery(runId, nodeId);
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Could not clear the recovery safeguard.');
+      // Round 3b: a request's line or the store's written one; any other
+      // error says GM's general line, never its own message.
+      showNotice(failureMessage(error, FORGET_RECOVERY_HEADING));
     } finally {
       setClearingRecovery(null);
     }
@@ -134,7 +139,7 @@ export function RunHistoryPanel() {
           <section className="run-history__safeguards" aria-label="World Labs recovery safeguards">
             <div className="run-history__safeguards-title">World Labs recovery safeguards</div>
             <p>
-              These IDs prevent an accidental second paid start. Keep them unless you have
+              These IDs prevent an accidental second World Labs run. Keep them unless you have
               checked Marble and intentionally want to forget recovery.
             </p>
             <ul>

@@ -27,6 +27,7 @@ from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.output import OUTPUT_ROOT, get_run_dir
+from execution.person_line import field_label, missing_file_line, with_person_line
 
 
 _OUTPUTS_URL_PREFIX = "/api/outputs/"
@@ -106,10 +107,10 @@ async def handle_cinema_color(
 
     ref = _input_image_ref(node, inputs)
     if not ref:
-        raise ValueError("Cinema Color needs an input image (connect the image port)")
+        raise with_person_line(ValueError("Cinema Color needs an input image (connect the image port)"), "Cinema Color needs an input image. Connect one, then run the node again.")
     abs_path = _resolve_local_path(ref)
     if abs_path is None:
-        raise ValueError(f"Input image not found: {ref}")
+        raise with_person_line(ValueError(f"Input image not found: {ref}"), missing_file_line("image file"))
 
     swatches = _coerce_swatches(params.get("palette"))
 
@@ -120,7 +121,9 @@ async def handle_cinema_color(
         if source_ref:
             source_path = _resolve_local_path(str(source_ref))
             if source_path is None:
-                raise ValueError(f"Source image not found: {source_ref}")
+                raise with_person_line(
+                    ValueError(f"Source image not found: {source_ref}"),
+                    "The node's palette source image can't be found. Choose it again, or clear it.")
             with Image.open(require_allowed_path(source_path)) as src_img:
                 swatches = extract_palette(src_img.convert("RGB"))
 
@@ -129,11 +132,13 @@ async def handle_cinema_color(
     # silent no-op. (The scene path uses cinema.color directly and is unaffected:
     # there an empty palette is a deliberate skip of the optional colour stage.)
     if not swatches:
-        raise ValueError(
+        raise with_person_line(ValueError(
             "Cinema Color needs a target palette. Add hex swatches in the Palette "
             "field (or click 'Extract from reference'), or set a Source Image to "
             "pull a palette from. With no palette the image passes through unchanged."
-        )
+        ), f"Cinema Color needs a target palette. Add hex swatches to “{field_label('cinema-color', 'palette')}”, click "
+           f"“Extract from reference”, or set “{field_label('cinema-color', 'source_image')}” to pull a palette from an "
+           "image. With no palette the image passes through unchanged.")
 
     try:
         strength = float(params.get("strength", 0.7))

@@ -230,6 +230,26 @@ async def test_handler_empty_palette_raises() -> None:
 
 
 @pytest.mark.asyncio
+async def test_handler_empty_palette_card_line_quotes_the_nodes_labels() -> None:
+    # Error copy round 3g review (GM rule 5): fields by the label the node
+    # shows, in quotes ("Palette Source", not "Source Image"). Agents keep the text.
+    from execution.person_line import person_line
+    from handlers.cinema_color import handle_cinema_color
+    from models.graph import GraphNode, PortValueDict
+
+    node = GraphNode(id="c1", definitionId="cinema-color", params={})
+    inputs = {"image": PortValueDict(type="Image", value=_write_input_image())}
+    with pytest.raises(ValueError) as caught:
+        await handle_cinema_color(node, inputs, api_keys={}, emit=None)
+    assert person_line(caught.value) == (
+        "Cinema Color needs a target palette. Add hex swatches to “Palette”, click “Extract from reference”, "
+        "or set “Palette Source” to pull a palette from an image. With no palette the image passes through unchanged.")
+    assert str(caught.value) == (
+        "Cinema Color needs a target palette. Add hex swatches in the Palette field (or click 'Extract from "
+        "reference'), or set a Source Image to pull a palette from. With no palette the image passes through unchanged.")
+
+
+@pytest.mark.asyncio
 async def test_handler_with_palette_returns_image() -> None:
     from handlers.cinema_color import handle_cinema_color
     from models.graph import GraphNode, PortValueDict

@@ -47,9 +47,29 @@
   /* The Updates chip in the canvas's top right, level with the header pill. */
   --agent-notes-chip-top: 24px;
   --agent-notes-chip-h: 40px;
+  /* Off the canvas each screen's header keeps a slot this size for the chip
+   * (Q107 a); the corner writes the chip's measured width here. Below about
+   * 1360 px the chip drops the word "Updates" (agentNotes.css) and the slot
+   * and the header padding reserve its compact width (GM review: a header
+   * must not wrap at 1280). Measured 2026-10-21 (p157, the count as plain
+   * figures after a 4 px gap, GM review): dots 38 + gap 8 + count 4 + 7,
+   * padding 15, border 2 = 74; the word 52 + its gap 8 = 134. A two-digit
+   * count widens the chip, and the corner writes its measured width here. */
+  --agent-notes-chip-w-full: 134px;
+  --agent-notes-chip-w-compact: 74px;
+  --agent-notes-chip-w: var(--agent-notes-chip-w-full);
+  --agent-notes-slot-h: 32px;
   --chat-launcher-size: 42px;
   /* A short, slightly underdamped spring, the undo notice's. */
   --agent-log-spring: linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1);
+}
+
+/* The compact Updates chip (its author dots and the count): the same
+ * breakpoint as the chip's own rule in agentNotes.css. */
+@media (max-width: 1359px) {
+  :root {
+    --agent-notes-chip-w: var(--agent-notes-chip-w-compact);
+  }
 }
 
 /* Height the docked log takes, by state (read by .agent-log and the chat). */
@@ -188,6 +208,53 @@ body.agent-notes-reserved .chat-panel {
   --chat-dock-top: calc(var(--agent-notes-chip-top) + var(--agent-notes-chip-h) + var(--stack-gap-sm));
 }
 
+/* The Updates chip on every other screen (Q107 a): the header of Projects,
+ * the studios and the Commons keeps a slot for it (beside Settings on
+ * Projects; pinned in the header's right padding elsewhere, see
+ * workspace-header.css), so it never sits over that screen's own controls.
+ * The slot takes room only while the chip shows (no project open: none). The
+ * chip centres on it and its card and list drop below the header
+ * (components/agent-notes). */
+.agent-notes-slot {
+  display: none;
+}
+
+body.agent-notes-shown .agent-notes-slot {
+  display: block;
+  flex: 0 0 var(--agent-notes-chip-w);
+  width: var(--agent-notes-chip-w);
+  height: var(--agent-notes-slot-h);
+  pointer-events: none;
+}
+
+/* The full-screen studios and the Commons sit on the workspace layer (50),
+ * above the canvas's 46: off the canvas the corner joins the workspace
+ * overlays (chat, Settings), still below modals. */
+body.agent-notes-shown:not(.agent-notes-reserved) .agent-notes-chip,
+body.agent-notes-shown:not(.agent-notes-reserved) .agent-note-card,
+body.agent-notes-shown:not(.agent-notes-reserved) .agent-notes-panel {
+  z-index: var(--sr-layer-workspace-overlay, 55);
+}
+
+/* A chat left open on the canvas stays up in the studios and the Commons
+ * (.workspace-overlays--studio). Docked, it starts below the line the corner
+ * drops its card and list from (the header's foot, written by the corner),
+ * so the chip in its header slot never sits over the chat's own controls.
+ * A chat dragged free keeps its own top; the card and the list move left of
+ * it (components/agent-notes). Until the corner has placed itself, the
+ * canvas's chip line stands in. */
+body.agent-notes-shown:not(.agent-notes-reserved) .workspace-overlays--studio .chat-panel {
+  --chat-dock-top: var(--agent-notes-drop-top, calc(var(--agent-notes-chip-top) + var(--agent-notes-chip-h) + var(--stack-gap-sm)));
+}
+
+body.agent-notes-shown .project-home__header .agent-notes-slot {
+  margin-left: auto;
+}
+
+body.agent-notes-shown .project-home__header .agent-notes-slot + .project-home__settings {
+  margin-left: 0;
+}
+
 /* While the agent log shows (or its "hidden" notice does), the docked chat
  * sits above the log's spot: launcher, gap, log (collapsed, empty or open),
  * gap, chat. */
@@ -212,13 +279,13 @@ body.agent-log-reserved .canvas-navigation.react-flow__panel {
 
 body.agent-log-reserved .proposal-bar {
   --proposal-bar-room: calc(100vw - 2 * (var(--page-gutter) + var(--col-right-w) + var(--stack-gap-sm)));
-  --proposal-bar-w: min(620px, calc(100vw - 32px), max(420px, var(--proposal-bar-room)));
+  --proposal-bar-w: min(var(--notice-max-w, 560px), calc(100vw - 32px), max(420px, var(--proposal-bar-room)));
   width: var(--proposal-bar-w);
   translate: min(0px, calc((var(--proposal-bar-room) - var(--proposal-bar-w)) / 2));
 }
 
 body.agent-log-reserved .project-switch-toast {
-  max-width: min(640px, calc(100vw - 32px), max(420px, calc(100vw - 2 * (var(--page-gutter) + var(--col-right-w) + var(--stack-gap-sm)))));
+  max-width: min(var(--notice-max-w, 560px), calc(100vw - 32px), max(420px, calc(100vw - 2 * (var(--page-gutter) + var(--col-right-w) + var(--stack-gap-sm)))));
 }
 
 /* Once the user drags/resizes chat into an explicit position, it must escape
@@ -592,3 +659,25 @@ body:not(.app-slava-restraint) .agent-log__msg {
 
 /* Preserve shared Settings/Chat state while Commons temporarily owns the screen. */
 .workspace-overlays--hidden { display: none; }
+
+/* A failure on a two-line surface (components/failure/FailureLines.tsx, GM
+ * error-copy round 2): the heading on line 1, the reason on line 2, and no
+ * short last word left alone on a line. Colour comes from the notice. */
+.failure-lines {
+  display: block;
+  min-width: 0;
+  text-wrap: pretty;
+}
+
+.failure-lines__heading,
+.failure-lines__reason {
+  display: block;
+}
+
+.failure-lines__heading {
+  font-weight: 600;
+}
+
+.failure-lines + .failure-lines {
+  margin-top: 6px;
+}

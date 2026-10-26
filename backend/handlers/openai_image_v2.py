@@ -11,6 +11,7 @@ from services.edit_masks import image_size, openai_edit_mask
 from services.media_input import read_local_media
 from services.output import get_run_dir
 from execution.missing_credential import MissingCredentialError
+from execution.person_line import model_name, with_api_status, with_details_line, with_person_line
 
 OPENAI_GENERATIONS_URL = "https://api.openai.com/v1/images/generations"
 OPENAI_EDITS_URL = "https://api.openai.com/v1/images/edits"
@@ -34,10 +35,11 @@ def _is_org_verification_error(body: str) -> bool:
 
 
 def _raise_org_verification_error(model: str = "gpt-image-2") -> None:
-    raise RuntimeError(
+    raise with_details_line(RuntimeError(
         f"Your OpenAI org isn't verified for {model}. "
         "Visit https://platform.openai.com/settings/organization/general to verify."
-    )
+    ), f"OpenAI needs your organization verified to use {model_name(model)}. Verify it in OpenAI's organization "
+        "settings, then run the node again.")
 
 
 def build_generate_body(node: GraphNode, prompt_text: str, model: str = "gpt-image-2") -> dict[str, Any]:
@@ -69,7 +71,7 @@ def build_generate_body(node: GraphNode, prompt_text: str, model: str = "gpt-ima
 def gpt_image_25_model(node: GraphNode) -> str:
     model = (node.params or {}).get("model") or GPT_IMAGE_25_MODELS[0]
     if model not in GPT_IMAGE_25_MODELS:
-        raise ValueError(f"GPT Image 2.5 model must be Flare or Sunburst, not {model}")
+        raise with_person_line(ValueError(f"GPT Image 2.5 model must be Flare or Sunburst, not {model}"), "Pick Flare or Sunburst in “Model”, then run the node again.")
     return model
 
 
@@ -79,13 +81,13 @@ def build_25_body(node: GraphNode, prompt_text: str) -> dict[str, Any]:
     model = gpt_image_25_model(node)
     quality = params.get("quality") or "auto"
     if quality not in GPT_IMAGE_25_QUALITIES:
-        raise ValueError(f"GPT Image 2.5 quality must be one of {', '.join(sorted(GPT_IMAGE_25_QUALITIES))}")
+        raise with_person_line(ValueError(f"GPT Image 2.5 quality must be one of {', '.join(sorted(GPT_IMAGE_25_QUALITIES))}"), "Pick one of the “Quality” options for GPT Image 2.5, then run the node again.")
     body = build_generate_body(node, prompt_text, model=model)
     background = params.get("background") or "auto"
     if background not in {"auto", "opaque", "transparent"}:
-        raise ValueError("Background must be auto, opaque or transparent")
+        raise with_person_line(ValueError("Background must be auto, opaque or transparent"), "Pick one of the “Background” options, then run the node again.")
     if background == "transparent" and body.get("output_format", "png") not in {"png", "webp"}:
-        raise ValueError("A transparent background needs PNG or WebP output, not JPEG")
+        raise with_person_line(ValueError("A transparent background needs PNG or WebP output, not JPEG"), "A transparent background needs PNG or WebP output, not JPEG. Change “Format”, then run the node again.")
     if background != "auto":
         body["background"] = background
     return body
@@ -102,7 +104,7 @@ async def handle_gpt_image_2_generate(
 ) -> dict[str, Any]:
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
-        raise ValueError("Prompt input is required but was not provided")
+        raise with_person_line(ValueError("Prompt input is required but was not provided"), "Connect a prompt to this node, then run it again.")
     api_key = api_keys.get("OPENAI_API_KEY")
     if not api_key:
         raise MissingCredentialError("OPENAI_API_KEY is required")
@@ -167,21 +169,21 @@ async def handle_gpt_image_2_edit(
 ) -> dict[str, Any]:
     image_input = inputs.get("images")
     if not image_input or not image_input.value:
-        raise ValueError("Image input is required but was not provided")
+        raise with_person_line(ValueError("Image input is required but was not provided"), "Connect an image to this node, then run it again.")
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
-        raise ValueError("Prompt input is required but was not provided")
+        raise with_person_line(ValueError("Prompt input is required but was not provided"), "Connect a prompt to this node, then run it again.")
     api_key = api_keys.get("OPENAI_API_KEY")
     if not api_key:
         raise MissingCredentialError("OPENAI_API_KEY is required")
 
     image_paths = _normalize_image_input(image_input.value)
     if len(image_paths) > MAX_EDIT_IMAGES:
-        raise ValueError(
+        raise with_person_line(ValueError(
             f"GPT Image edit accepts up to {MAX_EDIT_IMAGES} input images; got {len(image_paths)}"
-        )
+        ), f"GPT Image edit takes up to {MAX_EDIT_IMAGES} images, and {len(image_paths)} are connected.")
     if len(image_paths) == 0:
-        raise ValueError("Image input is required but was not provided")
+        raise with_person_line(ValueError("Image input is required but was not provided"), "Connect an image to this node, then run it again.")
 
     body = build_body(node, str(prompt_input.value))
     # Edits POST is multipart, not JSON — build separately.
@@ -244,7 +246,8 @@ async def handle_gpt_image_2_edit(
                     error_body += chunk
                 if _is_org_verification_error(error_body):
                     _raise_org_verification_error(body["model"])
-                raise RuntimeError(f"Image edit failed ({response.status_code}): {error_body}")
+                raise with_api_status(
+                    RuntimeError(f"Image edit failed ({response.status_code}): {error_body}"), response.status_code)
             async for line in response.aiter_lines():
                 line = line.strip()
                 if not line:

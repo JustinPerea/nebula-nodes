@@ -45,6 +45,7 @@ from services.typesafe_client import (
     prepare_images,
     system_one,
 )
+from execution.person_line import option_label, with_person_line
 
 PRESENCE_ID = "present"
 BOX_ID = "where"
@@ -53,15 +54,23 @@ MAX_PAD = 0.5
 BOX_COLOR = "#65e6c4"  # the QC nodes' annotation colour
 
 
+# The node's own field labels (node_definitions.json), for the person's line.
+_FIELD_LABELS = {"presence_threshold": "Presence Threshold", "min_confidence": "Minimum Confidence", "pad": "Crop Padding"}
+
+
+def _fraction_line(name: str, high: str) -> str:
+    return f"Set “{_FIELD_LABELS.get(name, 'setting')}” to a number from 0 to {high}."
+
+
 def _fraction(raw: Any, default: float, name: str, high: float = 1.0) -> float:
     if raw is None or raw == "":
         return default
     try:
         value = float(raw)
     except (TypeError, ValueError):
-        raise ValueError(f"{name} must be a number from 0 to {out.format_number(high)}, got {raw!r}") from None
+        raise with_person_line(ValueError(f"{name} must be a number from 0 to {out.format_number(high)}, got {raw!r}"), _fraction_line(name, out.format_number(high))) from None
     if not 0.0 <= value <= high:
-        raise ValueError(f"{name} must be from 0 to {out.format_number(high)}, got {value}")
+        raise with_person_line(ValueError(f"{name} must be from 0 to {out.format_number(high)}, got {value}"), _fraction_line(name, out.format_number(high)))
     return value
 
 
@@ -81,7 +90,7 @@ def _image_value(inputs: dict[str, PortValueDict]) -> str:
     if isinstance(value, list):
         value = next((item for item in value if item not in (None, "")), None)
     if value in (None, ""):
-        raise ValueError("Jev Box needs an image: connect one to Image")
+        raise with_person_line(ValueError("Jev Box needs an image: connect one to Image"), "Connect an image to this node, then run it again.")
     return str(value)
 
 
@@ -199,10 +208,10 @@ async def handle_jev_box(
     params = node.params
     target = _target_text(node, inputs)
     if not target:
-        raise ValueError("Jev Box needs a target: what to find, e.g. 'the red car'")
+        raise with_person_line(ValueError("Jev Box needs a target: what to find, e.g. 'the red car'"), "Jev Box needs a target, what to find, like “the red car”. Fill in “Target”, then run the node again.")
     model = check_model(params.get("model") or BOX_MODELS[0])
     if model not in BOX_MODELS:
-        raise ValueError(f"Jev Box needs Jev 1.14: pick {' or '.join(BOX_MODELS)}, not {model}")
+        raise with_person_line(ValueError(f"Jev Box needs Jev 1.14: pick {' or '.join(BOX_MODELS)}, not {model}"), f"Jev Box runs on Jev 1.14 only. Pick {option_label(node.definition_id, 'model', BOX_MODELS[0])} in “Model”, then run the node again.")
     presence_threshold = _fraction(params.get("presence_threshold"), 0.5, "presence_threshold")
     min_confidence = _fraction(params.get("min_confidence"), 0.5, "min_confidence")
     pad = _fraction(params.get("pad"), 0.05, "pad", MAX_PAD)

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
+from tests.conftest import stored_image_urls
 
 
 @pytest.fixture
@@ -17,13 +18,14 @@ def client(canvas_project):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from main import app
     _VALID_BODY["projectId"] = canvas_project
+    stored_image_urls()
     return TestClient(app)
 
 
 _VALID_BODY = {
     "name": "Rina",
     "subjectType": "human",
-    "referenceViews": ["url_a", "url_b", "url_c"],
+    "referenceViews": stored_image_urls(),
     "frozenTraitString": "late 20s, warm skin tone, high cheekbones",
     "seed": 7,
     "consistencyStrength": 0.9,
@@ -41,7 +43,7 @@ class TestCharacterCreateAndGet:
         assert data["name"] == "Rina"
         assert data["version"] == 1
         assert data["subjectType"] == "human"
-        assert data["thumbnail"] == "url_a"
+        assert data["thumbnail"] == stored_image_urls()[0]
         assert data["projectId"] == _VALID_BODY["projectId"]
         assert "createdAt" in data
         assert "updatedAt" in data
@@ -56,7 +58,7 @@ class TestCharacterCreateAndGet:
         fetched = get_resp.json()
         assert fetched["id"] == char_id
         assert fetched["name"] == "Rina"
-        assert fetched["referenceViews"] == ["url_a", "url_b", "url_c"]
+        assert fetched["referenceViews"] == stored_image_urls()
         assert fetched["frozenTraitString"] == "late 20s, warm skin tone, high cheekbones"
 
     def test_get_missing_id_returns_404(self, client):
@@ -64,10 +66,11 @@ class TestCharacterCreateAndGet:
         assert resp.status_code == 404
 
     def test_post_fewer_than_3_views_returns_422(self, client):
-        body = {**_VALID_BODY, "referenceViews": ["only_one", "only_two"]}
+        body = {**_VALID_BODY, "referenceViews": stored_image_urls(2)}
         resp = client.post("/api/characters", json=body)
         # store raises ValueError → mapped to 422 by the route
         assert resp.status_code == 422
+        assert "at least 3" in resp.json()["detail"]
 
 
 class TestCharacterList:

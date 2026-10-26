@@ -173,7 +173,9 @@ def test_empty_existing_sqlite_file_is_initialized(tmp_path):
 def _historical_ddl(version: int) -> str:
     # Verified against 27972325 (v1), fda31973 (v2), 99b873d0 (v3),
     # f26ee86f (v4): only these tables and nullable columns were added.
-    ddl = DDL
+    # assets.last_error_kind (error-copy round 3) came after v4 and stays v4:
+    # an additive nullable column, so no released schema has it.
+    ddl = DDL.replace("  last_error_kind TEXT,\n", "")
     if version < 4:
         ddl = ddl.replace("  seal_hash TEXT,\n  closed TEXT,\n  close_hash TEXT", "  seal_hash TEXT")
     if version < 3:
@@ -208,6 +210,7 @@ def test_supported_historical_schemas_upgrade_without_losing_rows(tmp_path, vers
                 assert tuple(conn.execute("SELECT * FROM settings").fetchone()) == ("sentinel", "keep")
                 assert tuple(conn.execute("SELECT * FROM quarantine").fetchone()) == ("preserved_hash", "synthetic.png", "then")
                 assert {row[1] for row in conn.execute("PRAGMA table_info(evaluation_batch)")} >= {"closed", "close_hash"}
+                assert "last_error_kind" in {row[1] for row in conn.execute("PRAGMA table_info(assets)")}
                 if version >= 2:
                     closure = ("keep close record", "keep close hash") if version == 4 else (None, None)
                     assert tuple(conn.execute("SELECT manifest, manifest_hash, revision, closed, close_hash FROM evaluation_batch").fetchone()) == ("{}", "keep_hash", 7, *closure)

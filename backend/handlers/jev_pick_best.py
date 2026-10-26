@@ -33,6 +33,7 @@ from services.typesafe_client import (
     prepare_images,
     system_one,
 )
+from execution.person_line import as_person_line, with_person_line
 
 QUESTION_ID = "pick"
 DEFAULT_QUESTION = "Which image best matches the brief?"
@@ -44,15 +45,25 @@ RETRY_SIDE = 768
 NO_BRIEF = "No brief was given. Judge the candidate images by the question alone."
 
 
+# The node's own field labels (node_definitions.json), for the person's line.
+_FIELD_LABELS = {"min_confidence": "Minimum Confidence"}
+
+
+def _fraction_line(name: str, high: str) -> str:
+    label = _FIELD_LABELS.get(name)
+    field = f"“{label}”" if label else "the node's setting"  # GM's rule 5: the label in quotes
+    return f"Set {field} to a number from 0 to {high}."
+
+
 def _fraction(raw: Any, default: float, name: str) -> float:
     if raw is None or raw == "":
         return default
     try:
         value = float(raw)
     except (TypeError, ValueError):
-        raise ValueError(f"{name} must be a number from 0 to 1, got {raw!r}") from None
+        raise with_person_line(ValueError(f"{name} must be a number from 0 to 1, got {raw!r}"), _fraction_line(name, "1")) from None
     if not 0.0 <= value <= 1.0:
-        raise ValueError(f"{name} must be from 0 to 1, got {value}")
+        raise with_person_line(ValueError(f"{name} must be from 0 to 1, got {value}"), _fraction_line(name, "1"))
     return value
 
 
@@ -101,12 +112,12 @@ async def handle_jev_pick_best(
 
     values = candidate_values(inputs)
     if len(values) < 2:
-        raise ValueError(f"Jev Pick Best needs at least two candidate images, got {len(values)}")
+        raise with_person_line(ValueError(f"Jev Pick Best needs at least two candidate images, got {len(values)}"), "Jev Pick Best needs at least two candidate images. Connect another, then run the node again.")
     if len(values) > MAX_CANDIDATES:
-        raise ValueError(
+        raise as_person_line(ValueError(
             f"Jev Pick Best takes at most {MAX_CANDIDATES} candidates, got {len(values)}. Each 1024 px "
             "candidate is about 2,800 tokens, so larger sets may not fit one request. Split them "
-            "across two Pick Best nodes and pick again between the winners.")
+            "across two Pick Best nodes and pick again between the winners."))
     brief = _brief_text(inputs)
     state = brief or NO_BRIEF
     options = ChoiceOptions.from_labels([str(index) for index in range(len(values))])
@@ -130,11 +141,12 @@ async def handle_jev_pick_best(
         except TypeSafeError as retry_exc:
             if not _over_context(retry_exc):
                 raise
-            raise TypeSafeError(
+            raise with_person_line(TypeSafeError(
                 f"TypeSafe: {len(values)} candidates are over the model's context even at {RETRY_SIDE} px "
                 "(400 max_tokens_exceeded). Split them across two Pick Best nodes and pick again between "
                 "the winners, or shorten the brief.",
-                status=retry_exc.status, code=retry_exc.code, request_id=retry_exc.request_id) from None
+                status=retry_exc.status, code=retry_exc.code, request_id=retry_exc.request_id),
+                f"These {len(values)} candidates are too many for one Pick Best request. Split them across two Pick Best nodes and pick again between the winners, or shorten the brief.") from None
         notes.append(f"The first request was over the context limit, so the candidates were sent again "
                      f"at {RETRY_SIDE} px on the long side.")
 

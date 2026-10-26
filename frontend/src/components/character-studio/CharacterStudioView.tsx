@@ -27,6 +27,8 @@ import { CharacterStudioToolbar } from './CharacterStudioToolbar';
 import { CharacterLibraryRail } from './CharacterLibraryRail';
 import { CharacterDefinitionPanel } from './CharacterDefinitionPanel';
 import { CharacterTestPanel } from './CharacterTestPanel';
+import { failureCopy, oneLine } from '../../lib/errorCopy';
+import { FailureLines } from '../failure/FailureLines';
 import '../../styles/character-studio.css';
 
 /** Local editable shape — a Character minus the server-owned fields. The draft
@@ -109,7 +111,7 @@ export function CharacterStudioView() {
   const enterCharacterEditor = useUIStore((s) => s.enterCharacterEditor);
 
   const studio = useAssetStudioDraft('character', characterEditorScope, characterEditorId, emptyDraft);
-  const { draft, savedId, thumbnail, saveState, loadError, saveError, loaded,
+  const { draft, savedId, thumbnail, saveState, loadError, saveError, retry, loaded,
     dirty, pendingSaveId, key, revision, epoch, projectId, projectReady, verifyProject, setDraft, initialize, patch } = studio;
   const loading = !loaded;
   const [railScope, setRailScope] = useState<AssetScope>(characterEditorScope);
@@ -231,7 +233,7 @@ export function CharacterStudioView() {
         readOnOpen.current = `${key}:${epoch}:${found.id}`;
         initialize(characterToDraft(found), found.id, found.thumbnail);
       }).catch((err) => {
-        if (current()) patch({ loadError: err instanceof Error ? err.message : 'Failed to load Character.' });
+        if (current()) patch({ loadError: failureCopy(err, { heading: "Couldn't load the character." }) });
       });
     }
     return () => { cancelled = true; };
@@ -292,7 +294,7 @@ export function CharacterStudioView() {
         }
       }
     } catch (err) {
-      store.failSave(key, attempt.id, err instanceof Error ? err.message : 'Save failed. Retry?');
+      store.failSave(key, attempt.id, failureCopy(err, { heading: "Couldn't save the character." }));
     }
   }, [key, isCurrent, verifyProject, enterCharacterEditor, moveDraft, draftNow, follow]);
 
@@ -380,6 +382,15 @@ export function CharacterStudioView() {
   // whatever scope it was opened with (a node's Open button guesses, and a
   // draft kept from an earlier visit loads without a fetch). The rail opens
   // on that scope, and says so when it's another project's Character.
+  /** Retry is a save, so it shows only beside a save's own failure (GM,
+   * error-copy round 3: "A Retry that does something else is a defect."). */
+  const canRetry = Boolean(saveError) && retry === 'save';
+  /** A failed save that another line (no project open) replaced is still
+   * owed: Error, dirty, and autosave waits while it says Error. The toolbar
+   * keeps its Retry (a save) for it; the notice's line, which no save
+   * redoes, keeps its own words and no Retry (round 3 review). */
+  const toolbarCanRetry = saveState === 'error' && (retry === 'save' || (retry == null && dirty));
+
   const characterProjectName = useProjectName(draft.projectId);
   const characterHome: AssetHome | null = loaded && savedId
     ? assetHome(draft.projectId, projectId, characterProjectName) : null;
@@ -389,7 +400,8 @@ export function CharacterStudioView() {
     <div className="character-studio-view">
       <CharacterStudioToolbar
           saveState={saveState}
-          saveError={saveError}
+          canRetry={toolbarCanRetry}
+          saveError={saveError === null ? null : typeof saveError === 'string' ? saveError : oneLine(saveError)}
           onRetry={() => void persist()}
           onDelete={savedId && !isDraftId ? () => { void deleteCharacterNow(); } : undefined}
           deleteDisabled={deleting.busy || Boolean(pendingSaveId)}
@@ -416,25 +428,26 @@ export function CharacterStudioView() {
       <main className="character-studio-view__main">
         {loading ? (
           <div className="character-studio-view__loading">
-            {loadError ? <div role="alert">{loadError}</div> : 'Loading Character…'}
-            {loadError && <button type="button" className="character-studio-view__retry"
-              onClick={() => { if (!projectReady) void verifyProject(); else patch({ loadError: null, revision: revision + 1 }); }}>Retry loading</button>}
+            {/* As in the board's Studio (round 3b): no Retry loading with no project open. */}
+            {loadError ? <div role="alert"><FailureLines failure={loadError} retry={projectReady} /></div> : 'Loading Character…'}
+            {loadError && projectReady && <button type="button" className="character-studio-view__retry"
+              onClick={() => patch({ loadError: null, revision: revision + 1 })}>Retry loading</button>}
           </div>
         ) : (
           <>
             {loadError && (
               <div className="character-studio-view__notice character-studio-view__notice--warn">
-                {loadError}
+                <FailureLines failure={loadError} />
               </div>
             )}
-            {deleting.error && !deleting.lastDeleted && (
+            {deleting.deleteError && (
               <div className="character-studio-view__notice character-studio-view__notice--error" role="alert">
-                {deleting.error}
+                <FailureLines failure={deleting.deleteError} />
               </div>
             )}
             {moving.error && (
               <div className="character-studio-view__notice character-studio-view__notice--error" role="alert">
-                {moving.error}
+                <FailureLines failure={moving.error} />
               </div>
             )}
 
@@ -468,14 +481,15 @@ export function CharacterStudioView() {
 
             {saveError && (
               <div className="character-studio-view__notice character-studio-view__notice--error">
-                {saveError}{' '}
+                {/* Its own Retry (a save) is the retry: GM's short line (WRAP rule). */}
+                <FailureLines failure={saveError} retry={canRetry} />{canRetry && <>{' '}
                 <button
                   type="button"
                   className="character-studio-view__retry"
                   onClick={() => void persist()}
                 >
                   Retry
-                </button>
+                </button></>}
               </div>
             )}
 
@@ -491,7 +505,7 @@ export function CharacterStudioView() {
       </main>
       {deleting.lastDeleted && (
         <UndoDeleteToast key={deleting.lastDeleted.id} name={deleting.lastDeleted.name} busy={deleting.busy}
-          error={deleting.error} onDismiss={deleting.dismiss} onUndo={() => { void undoDelete(); }} />
+          error={deleting.undoError} onDismiss={deleting.dismiss} onUndo={() => { void undoDelete(); }} />
       )}
     </div>
   );

@@ -19,7 +19,7 @@ def test_estimate_matches_shared_cases(case):
     entry = CASES["pricing"]["nodes"].get(case["nodeId"])
     definition = CASES["definitions"].get(case["nodeId"], {})
     result = model_pricing.estimate_node(entry, definition, case["params"], case.get("routeProvider"),
-                                         case.get("wired", []))
+                                         case.get("wired", []), case.get("size"))
     expected = case["expected"]
     if expected is None:
         assert result is None
@@ -363,7 +363,7 @@ def test_price_variables_that_arent_params_are_validated():
         "moded": {**moded, "rows": [{"match": {"(mode)": "x2v"}, "price": 0.1},
                                     {"match": {"(frames)": 1}, "price": 0.1},
                                     {"match": {"(references)": "8"}, "price": 0.1}]},
-        "tooled": {**CASES["pricing"]["nodes"]["tooled"], "per": "megapixel"},
+        "tooled": {**CASES["pricing"]["nodes"]["tooled"], "per": "pixel"},
     }}
     problems = "\n".join(model_pricing.validate_pricing(bad, definitions))
     assert "(mode) must be one of ('t2v', 'i2v', 'v2v')" in problems

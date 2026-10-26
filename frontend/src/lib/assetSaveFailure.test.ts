@@ -27,6 +27,7 @@ describe('saving an asset someone moved to Recently deleted', () => {
     await expect(updateCharacter('c1', { name: 'Edited' })).rejects.toThrow(
       'This Character was moved to Recently deleted. Restore it');
     backend.apiFetch.mockResolvedValueOnce(json(404, { detail: "Character 'c1' not found" }));
-    await expect(updateCharacter('c1', { name: 'Edited' })).rejects.toThrow('Update character failed: 404');
+    await expect(updateCharacter('c1', { name: 'Edited' })).rejects.toThrow(
+      "Couldn't save the character. Character 'c1' not found"); // error-copy round 2: heading + the backend's reason
   });
 });

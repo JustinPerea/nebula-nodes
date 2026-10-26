@@ -2,23 +2,26 @@ import { lazy, Suspense, useEffect, useRef } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { Canvas } from './components/Canvas';
 import { CanvasTabs } from './components/CanvasTabs';
+import { NoticeRegion } from './components/NoticeRegion';
 import { NodeLibrary } from './components/panels/NodeLibrary';
-import { AssetsPanel } from './components/panels/AssetsPanel';
-import { AgentLog, AgentNotes, OnboardingOverlay, RunHistoryPanel } from './components/DeferredPanels';
+// Closed or empty at the first paint, loaded after it (lib/deferredChunks.ts).
+import {
+  AgentLog, AgentNotes, AssetsPanel, ChatPanel, CommandPalette, NodeInspectorPopover, OnboardingOverlay, RunHistoryPanel,
+} from './components/DeferredPanels';
 import { Settings } from './components/panels/Settings';
 import { Toolbar } from './components/panels/Toolbar';
 import { GraphFileActions } from './components/GraphFileActions';
 import { WorkspaceRail } from './components/WorkspaceRail';
 import { ChatLauncher } from './components/ChatLauncher';
-import { NodeInspectorPopover } from './components/panels/NodeInspectorPopover';
-import { ChatPanel } from './components/panels/ChatPanel';
 // The Agent log's store collects every agent's actions from page load, even
 // before the panel mounts (store/agentLogStore.ts subscribes at import).
 import './store/agentLogStore';
 // The same for Updates (store/agentNotesStore.ts): the corner is deferred,
 // its store counts from the first socket message.
 import './store/agentNotesStore';
-import { CommandPalette } from './components/CommandPalette';
+// Questions agents asked (store/agentQuestionsStore.ts): the form is deferred
+// with the corner; the store keeps every set and its key from hello on.
+import './store/agentQuestionsStore';
 import { KeyboardShortcuts } from './components/KeyboardShortcuts';
 import { BackendConnectionStatus } from './components/BackendConnectionStatus';
 import { PersonRequiredBanner } from './components/PersonRequiredBanner';
@@ -39,8 +42,10 @@ import { NODE_DEFINITIONS } from './constants/nodeDefinitions';
 import { ProjectCoordinator } from './components/projects/ProjectCoordinator';
 import { ProjectSwitchToast } from './components/projects/ProjectSwitchToast';
 import { ProjectHome } from './components/projects/ProjectHome';
+// Asset proposals (a pinned cover, a board's Send notes) reach this tab on any screen.
+import './store/assetProposalsSocket';
 import { useHomeSettingsDock } from './components/projects/useHomeSettingsDock';
-import { useProjectStore } from './store/projectStore';
+import { projectErrorDetails, projectRetryOffer, useProjectStore } from './store/projectStore';
 import { listCoverChoices } from './lib/projects';
 import './App.css';
 import './styles/layouts.css';
@@ -102,9 +107,10 @@ export default function App() {
   // List prices for the Run estimate and the cost confirm, fetched once.
   useEffect(() => { void usePricingStore.getState().load(); }, []);
 
-  // Run History, the tour, the mask painter and the node mesh / world viewers
-  // live outside the startup entry (lib/deferredChunks.ts). Fetch them once
-  // the first paint is done so a later first open never waits on the network.
+  // Run History, the tour, the chat, the Inspector, the palette, the mask
+  // painter, the node mesh / world viewers and more live outside the startup
+  // entry (lib/deferredChunks.ts). Fetch them once the first paint is done so
+  // a later first open never waits on the network.
   useEffect(() => whenIdle(() => preloadAll(DEFERRED_PRELOADS)), []);
 
   // Fetch settings on mount to populate the API key cache used for warning badges
@@ -252,13 +258,16 @@ export default function App() {
   let mainView;
   if (isHome) {
     mainView = <ProjectHome projects={projects.projects} loading={projects.loading} busy={projects.busy}
-      error={projects.error} onCreate={(name) => void projects.createProject(name)}
+      error={projects.error} errorDetails={projectErrorDetails(projects)} onCreate={(name) => void projects.createProject(name)}
       onOpen={(id) => void projects.open(id)} onRename={(id, name) => void projects.rename(id, name)}
       onDelete={(id) => void projects.remove(id)} trash={projects.trash} lastDeleted={projects.lastDeleted}
       onRestore={(id) => void projects.restore(id)} onPurge={(id) => void projects.purge(id)}
       onEmptyTrash={() => void projects.emptyTrash()} onDismissUndo={projects.dismissUndo}
-      onRetry={() => void projects.retry()} settingsOpen={homeSettings.open} onToggleSettings={homeSettings.toggle}
-      loadCoverChoices={listCoverChoices} onPinCover={(id, url) => void projects.pinCover(id, url)} />;
+      onRetry={() => void projects.retry()} retry={projectRetryOffer(projects)} settingsOpen={homeSettings.open} onToggleSettings={homeSettings.toggle}
+      loadCoverChoices={listCoverChoices} onPinCover={(id, url) => void projects.pinCover(id, url)}
+      unsavedEdits={projects.unsavedEdits} editsSavedAs={projects.editsSavedAs}
+      onDownloadEdits={() => void projects.downloadUnsavedEdits()}
+      onContinueWithoutEdits={() => void projects.continueWithoutEdits()} />;
   } else if (isCanvas) {
     mainView = <Canvas />;
   } else if (isCommons) {
@@ -314,8 +323,16 @@ export default function App() {
       {isCanvas && <ChatLauncher />}
       {isCanvas && <Toolbar />}
       {isCanvas && <AgentLog />}
-      {isCanvas && <AgentNotes />}
+      {/* Updates on every screen, with the open project's list (Q107 a); one
+          mount, so the list, the card and the count carry across screens. */}
+      {!isBrandShowcase && <AgentNotes />}
       {!isHome && !isBrandShowcase && !isCommons && <CommandPalette />}
+      {/* The app's one notice region, above every panel and Studio (GM - Design,
+          2026-10-23): the canvas's notices with their Undo or Redo and the
+          proposal bar, the written lines on the other screens, and every
+          toast on every screen ("One region, one stack, and nothing else
+          draws toasts"). One mount, beside the screens. */}
+      <NoticeRegion screen={isCanvas ? 'canvas' : isHome || isBrandShowcase ? 'home' : 'studio'} />
       {isCanvas && <OnboardingOverlay />}
       {isCanvas && <KeyboardShortcuts />}
     </ReactFlowProvider>

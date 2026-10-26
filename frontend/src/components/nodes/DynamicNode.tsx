@@ -262,6 +262,9 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
         <NodeError
           category={nodeData.errorCategory}
           friendly={nodeData.errorFriendly}
+          person={nodeData.errorPerson}
+          providerText={nodeData.errorProviderText}
+          provider={nodeData.errorProvider}
           raw={nodeData.error}
         />
       )}
@@ -277,7 +280,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
 
       {isStructuredSurface && (
         <div className="model-node__preview model-node__preview--structured model-node__preview--overview">
-          <StructuredOutputs outputs={structuredOutputs}
+          <StructuredOutputs outputs={structuredOutputs} definitionId={nodeData.definitionId}
             labels={Object.fromEntries(outputPorts.map((port) => [port.id, port.label]))} />
         </div>
       )}

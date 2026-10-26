@@ -18,6 +18,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlsplit
 
+from services.input_file_name import PARAM as KEPT_NAME_PARAM
+
 
 class ProtectedPathError(ValueError):
     """A general file operation attempted to bypass protected storage."""
@@ -134,7 +136,11 @@ def validate_file_references(value: Any) -> None:
     while stack:
         current = stack.pop()
         if isinstance(current, dict):
-            stack.extend(current.values())
+            # An upload's kept name (`_fileName`) is text for its card to show,
+            # never read as a file: a name like a protected file's must not
+            # make the node unrunnable. Its stored file's own path is still
+            # checked where it sits (filePath).
+            stack.extend(item for key, item in current.items() if key != KEPT_NAME_PARAM)
         elif isinstance(current, (list, tuple)):
             stack.extend(current)
         elif isinstance(current, str) and current:

@@ -1,0 +1,89 @@
+/* The app's one notice region (NoticeRegion; GM - Design, 2026-10-23: "one
+   app-level region above every panel (above layer 10), bottom-centre,
+   sitting just above the bottom bar ... the region never takes pointer events
+   outside its notices"; round 2: "One region, one stack, and nothing else
+   draws toasts."). Mounted by App on every screen, outside .react-flow and
+   every screen's stacking context, on its own layer (slava-restraint.css
+   --sr-layer-notice). It sits the notice gap above the bottom bar's measured
+   top (--bottom-bar-clearance, written by the canvas bar, Creator Studio's
+   composer, the Remotion editor's timeline tray and the trim editor's
+   timeline: lib/bottomBar.ts); with
+   no bar, at the bar's own
+   distance from the bottom edge. Only its items take clicks; the canvas,
+   nodes and panels around them get the rest. In the startup entry, so a toast
+   that shows at once is already placed. */
+.notice-region {
+  --notice-gap: var(--sr-space-2, 8px);
+  /* One line in the stack, and the band's notice: the tallest one-line item
+     (a toast's 32 px buttons inside its 6 px padding and 1 px border). Every
+     item's height and the band read it, so floating panels stop exactly one
+     notice and its gap above the bar (lib/bottomBar.ts). */
+  --notice-h: 46px;
+  /* Every row's widest (GM - Design, round 3: "keep notices to one line in
+     the copy. Cap their width at 560 px, and let a rare second line overlap a
+     panel's edge while it shows. Don't grow the band."). Each item's own
+     width rule reads it too, so a narrower rule (a Studio's room) still wins
+     and none is wider. */
+  --notice-max-w: 560px;
+  position: fixed;
+  left: var(--page-gutter, 16px);
+  right: var(--page-gutter, 16px);
+  bottom: calc(var(--bottom-bar-clearance, calc(var(--sr-space-6, 24px) - var(--notice-gap))) + var(--notice-gap));
+  z-index: var(--sr-layer-notice, 58);
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  /* Follows the bar when it grows (its Canvas actions panel opens) on the
+     undo notice's spring. */
+  transition: bottom 420ms var(--agent-log-spring);
+}
+
+/* The reserved band (GM, round 2: "Floating panels stop above a reserved
+   notice band, whether or not a notice is showing. The band is the region's
+   height for one notice plus its gap"). Never drawn, never clicked: floating
+   panels measure it (lib/bottomBar.ts floatingBottomLimit). */
+.notice-region__band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(var(--notice-h) + var(--notice-gap));
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.notice-region__stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--notice-gap);
+  min-width: 0;
+  max-width: 100%;
+  pointer-events: none;
+}
+
+/* A slot per kind of item, in one order (lib/noticeSlots.ts). It draws no box
+   of its own: its items are the stack's rows. */
+.notice-region__slot {
+  display: contents;
+  pointer-events: none;
+}
+
+/* Every item: at least one line tall, and it takes clicks. */
+.notice-region__slot > * {
+  box-sizing: border-box;
+  min-height: var(--notice-h);
+  pointer-events: auto;
+}
+
+/* The cap for any row whose own CSS sets none (zero specificity, so an
+   item's own, narrower width always wins). */
+:where(.notice-region__slot) > * {
+  max-width: min(var(--notice-max-w), 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notice-region {
+    transition: none;
+  }
+}

@@ -8,6 +8,7 @@ vi.mock('../src/lib/backend', () => ({
 
 import { commonsApi, commonsEvaluationApi, filtersToRequest, resetCommonsSessionForTests } from '../src/lib/commonsApi';
 import { EMPTY_FILTERS } from '../src/lib/commonsTypes';
+import { CommonsRequestError } from '../src/lib/commonsRequestError';
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -53,7 +54,9 @@ describe('commonsApi', () => {
       .mockResolvedValueOnce({ ok: true, token: crypto.randomUUID() });
     vi.stubGlobal('nebulaDesktop', { apiBaseUrl: 'http://127.0.0.1:56789', person: { token: uiToken } });
     apiFetch.mockImplementation(async () => json({ detail: 'invalid UI session token' }, 401));
-    await expect(commonsApi.status()).rejects.toThrow('use a fresh Commons dev link from the backend terminal');
+    // Round 2 (GM): in the desktop app a reload fetches the shell's token
+    // again, so a 401 after the silent refetch says GM's 401 line.
+    await expect(commonsApi.status()).rejects.toThrow("You don't have access to this anymore. Reload to sign in again.");
     expect(uiToken).toHaveBeenCalledTimes(2);
     expect(apiFetch).toHaveBeenCalledTimes(2);
     expect(apiFetch.mock.calls[0][1].headers.Authorization).not.toBe(apiFetch.mock.calls[1][1].headers.Authorization);
@@ -61,23 +64,41 @@ describe('commonsApi', () => {
 
   it('stops sending a forgotten browser session after two rejected requests', async () => {
     apiFetch.mockImplementation(async () => json({ detail: 'invalid UI session token' }, 401));
-    await expect(commonsApi.status()).rejects.toThrow('no UI session');
+    // Round 2 (GM): a plain browser tab, where only a fresh terminal link helps.
+    await expect(commonsApi.status()).rejects.toThrow("Your session expired. Open a fresh Commons link from the backend terminal.");
     expect(sessionStorage.getItem('nebula.commons.token')).toBeNull();
     expect(sessionStorage.getItem('nebula.person')).toBeNull();
-    await expect(commonsApi.status()).rejects.toThrow('no UI session');
+    await expect(commonsApi.status()).rejects.toThrow("Your session expired. Open a fresh Commons link from the backend terminal.");
     expect(apiFetch).toHaveBeenCalledTimes(2);
+  });
+
+  // The Commons' leave popover offers a save again only when it could work:
+  // the error carries the answer's status (none for a lost connection).
+  it('throws a CommonsRequestError carrying the status of a refused request', async () => {
+    apiFetch.mockResolvedValueOnce(json({ detail: 'Labels changed in another window. Reload before saving.' }, 409));
+    const conflict = await commonsApi.status().catch((error: unknown) => error);
+    expect(conflict).toBeInstanceOf(CommonsRequestError);
+    expect(conflict).toMatchObject({ status: 409, reason: 'Labels changed in another window. Reload before saving.' });
+    apiFetch.mockResolvedValueOnce(json({ detail: 'database is locked' }, 503));
+    expect(await commonsApi.status().catch((error: unknown) => error)).toMatchObject({ status: 503 });
+    apiFetch.mockImplementation(async () => json({ detail: 'invalid UI session token' }, 401));
+    const session = await commonsApi.status().catch((error: unknown) => error);
+    expect(session).toBeInstanceOf(CommonsRequestError);
+    expect(session).toMatchObject({ status: 401 });
+    sessionStorage.clear();
+    expect(await commonsApi.status().catch((error: unknown) => error)).toMatchObject({ status: 401 });
   });
 
   it('makes no request from a desktop window that may not have the token', async () => {
     const token = vi.fn().mockResolvedValue({ ok: false, error: 'DEBUG_PORT' });
     vi.stubGlobal('nebulaDesktop', { apiBaseUrl: 'http://127.0.0.1:56789', person: { token } });
-    await expect(commonsApi.status()).rejects.toThrow('no UI session');
+    await expect(commonsApi.status()).rejects.toThrow("You don't have access to this anymore. Reload to sign in again.");
     expect(apiFetch).not.toHaveBeenCalled();
   });
 
   it('does not make a request without human authority', async () => {
     sessionStorage.clear();
-    await expect(commonsApi.status()).rejects.toThrow('use a fresh Commons dev link from the backend terminal');
+    await expect(commonsApi.status()).rejects.toThrow("Your session expired. Open a fresh Commons link from the backend terminal.");
     expect(apiFetch).not.toHaveBeenCalled();
   });
 

@@ -16,8 +16,9 @@ call in it is one of:
 - ``lookup``: looking up node types, their ports, params or prices
   (``nebula context``, ``nodes``, ``info`` and their aliases ``find`` and
   ``describe``; MCP ``start_here``, ``find_nodes``, ``describe_node``);
-- ``limits``: reading the spend limits or the keys (``nebula spend``,
-  ``nebula keys``, MCP ``get_spend_limits``);
+- ``limits``: reading the spend limits or the keys and whether they work
+  (``nebula spend``, ``nebula keys``, ``nebula providers``, MCP
+  ``get_spend_limits``, ``get_settings``, ``provider_status``);
 - ``schema``: loading tool schemas (Claude Code's ``ToolSearch``, which
   loads the deferred MCP tools' argument docs before they can be called);
 - ``usage-error``: a call that failed on usage, whatever it meant to do
@@ -61,13 +62,13 @@ ORIENTATION = ("help", "lookup", "limits", "schema", "usage-error")
 # `nebula` commands by class. `find` and `describe` are the CLI's aliases for
 # `nodes` and `info` (MCP's names for them).
 LOOKUP_COMMANDS = {"context", "nodes", "info", "find", "describe"}
-LIMIT_COMMANDS = {"spend", "keys"}
+LIMIT_COMMANDS = {"spend", "keys", "providers"}
 # Options of the top `nebula` parser that take a value.
 GLOBAL_VALUE_OPTIONS = {"--url"}
 
 # MCP tool names (after `mcp__<server>__`).
 LOOKUP_TOOLS = {"start_here", "find_nodes", "describe_node"}
-LIMIT_TOOLS = {"get_spend_limits"}
+LIMIT_TOOLS = {"get_spend_limits", "get_settings", "provider_status"}
 # Claude Code's tools that load deferred tool schemas.
 SCHEMA_TOOLS = {"ToolSearch"}
 
@@ -80,6 +81,10 @@ USAGE_PATTERNS = [
         r"\berror: argument [^:\n]+: expected\b",
         r"\berror: unknown [a-z ]+ (command|action)\b",
         r"\bNode '[^']+' not found\b",
+        # describe_node's and the write paths' words for a node type that isn't one
+        # (an unknown id, or a display name two nodes share).
+        r"\bNo node type '[^']+'",
+        r"\bunknown node definition '[^']+'",
         r"`nebula [a-z-]+` doesn't take --",
         r"\bRename existing nodes with edit_canvas\b",
         r"\bvalidation errors? for \w+Arguments\b",

@@ -66,6 +66,17 @@ function startupGraph(entry: string): Map<string, string[]> {
   return chains;
 }
 
+const STARTUP_STATE = [
+  'store/agentLogStore.ts',
+  'store/agentNotesStore.ts',
+  'store/agentQuestionsStore.ts',
+  'store/agentPresenceStore.ts',
+  'store/canvasProposalsStore.ts',
+  'store/canvasPinsStore.ts',
+  'lib/heldIntents.ts',
+  'lib/commandPaletteKeys.ts',
+];
+
 const rel = (file: string) => path.relative(SRC, file).split(path.sep).join('/');
 
 describe('startup entry split', () => {
@@ -86,6 +97,16 @@ describe('startup entry split', () => {
       chain?.map(rel).join(' -> '),
       `${module} is statically imported on the startup path; import its Deferred* wrapper instead`,
     ).toBeUndefined();
+  });
+
+  // Startup-time state a deferred piece reads: stores that subscribe to the
+  // socket at import, and the listeners that hold an intent until the piece
+  // is in. Moving one of these out with its panel would drop what arrives
+  // before the chunk does.
+  it.each(STARTUP_STATE)('%s stays in the startup entry', (module) => {
+    const file = path.join(SRC, module);
+    expect(existsSync(file), `${module} exists`).toBe(true);
+    expect(graph.has(file), `${module} must be imported eagerly (App.tsx or another startup module)`).toBe(true);
   });
 
 });

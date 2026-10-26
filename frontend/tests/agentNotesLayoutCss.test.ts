@@ -27,3 +27,335 @@ describe('the Updates chip keeps the top-right corner', () => {
     expect(body).toMatch(/--chat-dock-top:[^;]*var\(--agent-notes-chip-top\)[^;]*var\(--agent-notes-chip-h\)/);
   });
 });
+
+describe('the Updates corner off the canvas (Q107 a)', () => {
+  it('reserves a header slot only while the chip shows', () => {
+    expect(rule('.agent-notes-slot')).toMatch(/display:\s*none/);
+    const shown = rule('body.agent-notes-shown .agent-notes-slot');
+    expect(shown).toMatch(/width:\s*var\(--agent-notes-chip-w\)/);
+  });
+
+  // Review: a chat left open on the canvas stays mounted in the studios and
+  // docked from the top gutter, under the chip's slot and the card's drop.
+  it('starts a studio\'s docked chat below the line the corner drops from', () => {
+    const body = rule('body.agent-notes-shown:not(.agent-notes-reserved) .workspace-overlays--studio .chat-panel');
+    expect(body).toMatch(/--chat-dock-top:\s*var\(--agent-notes-drop-top,[^;]*var\(--agent-notes-chip-h\)/);
+  });
+
+  it('sits above the full-screen studios (their layer), below modals', () => {
+    const body = rule('body.agent-notes-shown:not(.agent-notes-reserved) .agent-notes-chip,\nbody.agent-notes-shown:not(.agent-notes-reserved) .agent-note-card,\nbody.agent-notes-shown:not(.agent-notes-reserved) .agent-notes-panel');
+    expect(body).toMatch(/z-index:\s*var\(--sr-layer-workspace-overlay, 55\)/);
+  });
+});
+
+// Live check 2026-10-21 at 1280x800: the Commons toolbar filled its row, so
+// the slot (a flex item) wrapped onto a second line and the chip landed over
+// "Worker stopped / Start"; in Cinema, Remotion and the Video editor (no
+// actions) the slot sat right after the title. The workspace header keeps the
+// corner in its own right padding instead: its contents wrap inside the rest,
+// and the slot is pinned to the top-right of the first row.
+const header = readFileSync(join(__dirname, '../src/styles/workspace-header.css'), 'utf8');
+function headerRule(selector: string): string {
+  const start = header.indexOf(`${selector} {`);
+  expect(start, `missing rule: ${selector}`).toBeGreaterThan(-1);
+  return header.slice(start, header.indexOf('}', start));
+}
+
+describe('the workspace header keeps the Updates corner (Q107 a)', () => {
+  const reserved = 'body.app-slava-restraint.agent-notes-shown .workspace-header.workspace-header--updates-slot';
+
+  it('names its gutter and column gap as tokens', () => {
+    const base = headerRule('body.app-slava-restraint .workspace-header.workspace-header');
+    expect(base).toMatch(/--workspace-header-pad-x:\s*14px/);
+    expect(base).toMatch(/--workspace-header-gap-x:\s*16px/);
+    expect(base).toMatch(/gap:\s*8px var\(--workspace-header-gap-x\)/);
+    expect(base).toMatch(/padding:\s*8px var\(--workspace-header-pad-x\)/);
+  });
+
+  it('reserves the chip width in its right padding while the chip shows', () => {
+    const body = headerRule(reserved);
+    expect(body).toMatch(/position:\s*relative/);
+    expect(body).toMatch(/padding-right:\s*calc\(var\(--workspace-header-pad-x\) \+ var\(--agent-notes-chip-w\) \+ var\(--workspace-header-gap-x\)\)/);
+  });
+
+  it('pins the slot to the first row, so it never wraps under the controls', () => {
+    const body = headerRule(`${reserved} > .agent-notes-slot`);
+    expect(body).toMatch(/position:\s*absolute/);
+    expect(body).toMatch(/top:\s*8px/);
+    expect(body).toMatch(/right:\s*var\(--workspace-header-pad-x\)/);
+  });
+});
+
+// GM review of Q107 a (2026-10-21): at 1280 wide the Commons toolbar wrapped
+// to two rows (86 px instead of main's 49) once the chip took its room: "treat
+// the two-row wrap at 1280 as a defect". Below about 1360 px the chip shrinks
+// to its author dots and the count, and the header reserves that compact
+// width; above it, the full chip and its width. One token carries the width
+// the slot and the header padding reserve. jsdom has no layout or media
+// queries, so these pin the rules and resolve the token by hand; the live
+// check measures them.
+const notesCss = readFileSync(join(__dirname, '../src/components/agent-notes/agentNotes.css'), 'utf8');
+const COMPACT = '(max-width: 1359px)';
+
+/** The whole `@media <query> { ... }` block, braces balanced. */
+function mediaBlock(css: string, query: string): string {
+  const start = css.indexOf(`@media ${query} {`);
+  expect(start, `missing @media ${query}`).toBeGreaterThan(-1);
+  let depth = 0;
+  for (let i = css.indexOf('{', start); i < css.length; i += 1) {
+    if (css[i] === '{') depth += 1;
+    else if (css[i] === '}' && --depth === 0) return css.slice(start, i + 1);
+  }
+  throw new Error(`unbalanced @media ${query}`);
+}
+
+function ruleIn(css: string, selector: string): string {
+  const start = css.indexOf(`${selector} {`);
+  expect(start, `missing rule: ${selector}`).toBeGreaterThan(-1);
+  return css.slice(start, css.indexOf('}', start));
+}
+
+function declared(body: string, name: string): string | null {
+  const match = body.match(new RegExp(`${name}:\\s*([^;]+);`));
+  return match ? match[1].trim() : null;
+}
+
+/** The px width `--agent-notes-chip-w` resolves to at a window width. */
+function reservedAt(viewport: number): number {
+  const root = ruleIn(layouts, ':root');
+  const max = Number(COMPACT.match(/max-width:\s*(\d+)px/)![1]);
+  const value = viewport <= max
+    ? declared(ruleIn(mediaBlock(layouts, COMPACT), ':root'), '--agent-notes-chip-w')
+    : declared(root, '--agent-notes-chip-w');
+  const name = value?.match(/^var\((--[\w-]+)\)$/)?.[1];
+  const px = declared(root, name ?? '--none');
+  expect(px, `--agent-notes-chip-w at ${viewport}px`).toMatch(/^\d+px$/);
+  return parseFloat(px!);
+}
+
+describe('the compact Updates chip below about 1360 px (GM review of Q107 a)', () => {
+  it('names the chip\'s full and compact widths as tokens, the full one by default', () => {
+    const root = ruleIn(layouts, ':root');
+    // Measured live (2026-10-21, p157: the count as plain figures after a 4 px
+    // gap): the dots 38 + gap 8 + "Updates" 52 + gap 8 + the count 4 + 7, plus padding and border.
+    expect(declared(root, '--agent-notes-chip-w-full')).toBe('134px');
+    // Without the word: dots 38 + gap 8 + count 4 + 7 + padding 15 + border 2.
+    expect(declared(root, '--agent-notes-chip-w-compact')).toBe('74px');
+    expect(declared(root, '--agent-notes-chip-w')).toBe('var(--agent-notes-chip-w-full)');
+  });
+
+  it('reserves the compact width below the breakpoint and the full width above it', () => {
+    expect(reservedAt(1280)).toBe(74);
+    expect(reservedAt(1359)).toBe(74);
+    expect(reservedAt(1366)).toBe(134);
+    expect(reservedAt(1440)).toBe(134);
+    expect(reservedAt(1920)).toBe(134);
+    // Both the slot and the header's right padding read that one token.
+    expect(rule('body.agent-notes-shown .agent-notes-slot')).toMatch(/width:\s*var\(--agent-notes-chip-w\)/);
+    expect(headerRule('body.app-slava-restraint.agent-notes-shown .workspace-header.workspace-header--updates-slot'))
+      .toMatch(/padding-right:\s*calc\(var\(--workspace-header-pad-x\) \+ var\(--agent-notes-chip-w\) \+ var\(--workspace-header-gap-x\)\)/);
+  });
+
+  it('drops the word "Updates" at the same breakpoint, keeping the dots, the count and the hit target', () => {
+    const compact = mediaBlock(notesCss, COMPACT);
+    expect(ruleIn(compact, '.agent-notes-chip__label')).toMatch(/display:\s*none/);
+    // Nothing else of the chip changes there: dots, count, height and padding stay.
+    expect(compact).not.toMatch(/agent-notes-chip__dots|agent-notes-chip__count|agent-notes-dot/);
+    expect(compact).not.toMatch(/\.agent-notes-chip\s*[,{][^}]*(height|padding)/);
+    expect(ruleIn(notesCss, '.agent-notes-chip')).toMatch(/height:\s*var\(--agent-notes-chip-h, 40px\)/);
+  });
+});
+
+// GM review of p157 (the 1280 shots): "the '1' is a lime circle the same size
+// and colour as the 'C' author dot. At a glance the chip reads as three
+// people, not two people and one unread. Give the count its own form ... It
+// should not share the author-dot palette. ... A 1px ring in the chip's
+// background colour around each dot would separate them."
+describe('the chip\'s count and dots read apart (GM review of p157)', () => {
+  it('gives the count its own form: no author colour, no dot-sized circle, a clear gap after the dots', () => {
+    const count = ruleIn(notesCss, '.agent-notes-chip__count');
+    // Not the author-dot palette: neither the newest author's colour nor a dot's.
+    expect(count).not.toMatch(/--an-newest|--an-dot|--an-on-dot/);
+    // Not a filled circle: no fill, no round corners.
+    expect(count).not.toMatch(/border-radius/);
+    expect(count).not.toMatch(/background(-color)?:\s*(?!transparent|none)/);
+    // Its colour is the chip's own ink, and it keeps the mono figures.
+    expect(declared(count, 'color')).toBe('var(--an-ink-bold)');
+    expect(count).toMatch(/font-variant-numeric:\s*tabular-nums/);
+    // A clear gap after the dots, beyond the chip's own 8 px item gap.
+    expect(parseFloat(declared(count, 'margin-left') ?? '0')).toBeGreaterThanOrEqual(4);
+    // Nothing for "unread" puts it back on a circle or the author's colour.
+    const muted = ruleIn(notesCss, ".agent-notes-chip__count[data-muted='true']");
+    expect(muted).not.toMatch(/--an-newest|--an-dot|border-radius|box-shadow/);
+  });
+
+  it('rings each dot in the chip with 1 px of the chip\'s background, so overlapping dots separate', () => {
+    const dots = ruleIn(notesCss, '.agent-notes-chip__dots .agent-notes-dot');
+    expect(dots).toMatch(/box-shadow:\s*0 0 0 1px var\(--an-raised\)/);
+    // The ring is on every dot, not only the second.
+    expect(notesCss).not.toContain('.agent-notes-chip__dots .agent-notes-dot + .agent-notes-dot {\n  margin-left: -6px;\n  box-shadow');
+    // A dimmed dot stays opaque, so the dot under it doesn't show through it and its ring.
+    expect(ruleIn(notesCss, ".agent-notes-dot[data-lit='false']")).not.toMatch(/opacity/);
+  });
+});
+
+// The Commons toolbar still wrapped at 1280 with the compact chip (it needs
+// 1346 px then, main's 1245): its two least-used sections fold into a More
+// menu while the chip shows, below the width where the full chip still fits
+// it (1406 px measured, so below 1440).
+const commonsCss = readFileSync(join(__dirname, '../src/styles/commons.css'), 'utf8');
+const COMMONS_FOLD = '(max-width: 1439px)';
+
+describe('the Commons toolbar keeps one row with the chip (GM review of Q107 a)', () => {
+  it('hides the More button unless the toolbar folds', () => {
+    expect(ruleIn(commonsCss, 'body.app-slava-restraint .commons-tabs__more')).toMatch(/display:\s*none/);
+  });
+
+  it('folds Blind labeling and Settings into More while the chip shows, below 1440', () => {
+    const fold = mediaBlock(commonsCss, COMMONS_FOLD);
+    expect(ruleIn(fold, 'body.app-slava-restraint.agent-notes-shown .commons-tab--overflow:not(.commons-tab--active)')).toMatch(/display:\s*none/);
+    expect(ruleIn(fold, 'body.app-slava-restraint.agent-notes-shown .commons-tabs__more')).toMatch(/display:\s*inline-flex/);
+  });
+
+  // Review of the fold: display:none on the open folded tab took it out of the
+  // accessibility tree, so the tablist had no selected tab. It stays in the
+  // tree, hidden on screen (and out of the Tab order, CommonsView).
+  it('keeps the open folded tab in the accessibility tree, hidden only on screen', () => {
+    const fold = mediaBlock(commonsCss, COMMONS_FOLD);
+    expect(fold).not.toContain('body.app-slava-restraint.agent-notes-shown .commons-tab--overflow {');
+    const open = ruleIn(fold, 'body.app-slava-restraint.agent-notes-shown .commons-tab--overflow.commons-tab--active');
+    expect(open).not.toMatch(/display:\s*none|visibility:\s*hidden/);
+    expect(open).toMatch(/position:\s*absolute/);
+    expect(open).toMatch(/width:\s*1px/);
+    expect(open).toMatch(/height:\s*1px/);
+    expect(open).toMatch(/overflow:\s*hidden/);
+    expect(open).toMatch(/clip-path:\s*inset\(50%\)/);
+  });
+});
+
+// p157c: with the long worker status ("Library analysis paused until
+// reference labels are sealed") the Commons header still wrapped to 86 px at
+// 1280, 1366 and 1440. The status gives way first: its text truncates on one
+// line down to a minimum that keeps its first words, and only that minimum
+// counts toward the row (inline-size containment), so no status length can
+// push the controls or the header onto a second row. Start/Stop never shrinks.
+describe('the Commons worker status gives way before the toolbar wraps (p157c)', () => {
+  it('grows into the toolbar\'s free room and keeps its text at the control\'s side', () => {
+    const line = ruleIn(commonsCss, 'body.app-slava-restraint .commons-status');
+    expect(declared(line, 'flex')).toBe('1 1 auto');
+    expect(declared(line, 'justify-content')).toBe('flex-end');
+    expect(declared(line, 'white-space')).toBe('nowrap');
+  });
+
+  it('truncates its text on one line with an ellipsis, shrinking to a named minimum', () => {
+    const text = ruleIn(commonsCss, 'body.app-slava-restraint .commons-status__text');
+    expect(declared(text, 'white-space')).toBe('nowrap');
+    expect(declared(text, 'overflow')).toBe('hidden');
+    expect(declared(text, 'text-overflow')).toBe('ellipsis');
+    // Only the minimum counts toward the row: the text's own length never does.
+    expect(declared(text, 'contain')).toBe('inline-size');
+    expect(declared(text, 'flex')).toBe('1 1 auto');
+    // A short status ("Worker stopped") reserves no more than its own length
+    // (1ch per character is wider than this face's average glyph, measured),
+    // so it never truncates and the row keeps the room it had before.
+    expect(declared(text, 'min-width')).toBe('min(var(--commons-status-min), calc(var(--commons-status-chars, 99) * 1ch))');
+    expect(declared(text, 'text-align')).toBe('right');
+    const token = declared(ruleIn(commonsCss, 'body.app-slava-restraint .commons-toolbar'), '--commons-status-min');
+    expect(token, 'the minimum is a token on the toolbar').toMatch(/^\d+(\.\d+)?em$/);
+  });
+
+  it('never shrinks or wraps its Start / Stop control', () => {
+    const control = ruleIn(commonsCss, 'body.app-slava-restraint .commons-status > .commons-button');
+    expect(declared(control, 'flex')).toBe('none');
+  });
+});
+
+// Review of the fold: More's menu drew its two items the same, so a sighted
+// person could not see which folded section was open. A checked radio item
+// carries a visible mark; the Move menu (no `checked`) stays plain.
+const assetMoveCss = readFileSync(join(__dirname, '../src/styles/asset-move.css'), 'utf8');
+
+describe('the toolbar menu marks its checked item', () => {
+  it('draws a check before a checked radio item and leaves room for it', () => {
+    expect(ruleIn(assetMoveCss, '.asset-move__item[role="menuitemradio"]')).toMatch(/padding-left:\s*24px/);
+    expect(ruleIn(assetMoveCss, '.asset-move__item[role="menuitemradio"]')).toMatch(/position:\s*relative/);
+    const mark = ruleIn(assetMoveCss, '.asset-move__item[aria-checked="true"]::before');
+    expect(mark).toMatch(/content:\s*"\u2713"/);
+    expect(mark).toMatch(/position:\s*absolute/);
+    expect(ruleIn(assetMoveCss, '.asset-move__item[aria-checked="true"]')).toMatch(/font-weight:\s*600/);
+  });
+});
+
+// GM review of PR #157, round 2 (count-forms.png): "the dim '0' is mono with
+// a slashed zero, but 1/9/12 look like Inter bold. Use one face for all of
+// them." The unread count asked for weight 700, which the bundled JetBrains
+// Mono doesn't ship (400, 500, 600: src/assets/fonts/README.md), and the
+// muted 0 for 500, so the two were drawn from two different instances. Every
+// count now uses one family at one shipped weight; the muted 0 dims by colour only.
+const fontsCss = readFileSync(join(__dirname, '../src/assets/fonts/fonts.css'), 'utf8');
+const slavaCss = readFileSync(join(__dirname, '../src/styles/slava-restraint.css'), 'utf8');
+
+describe('every count in the chip shares one face (GM review, round 2)', () => {
+  it('sets the count in the mono at a weight the bundled mono ships', () => {
+    const count = ruleIn(notesCss, '.agent-notes-chip__count');
+    const font = declared(count, 'font');
+    expect(font).toMatch(/^\d{3} 12px\/1 var\(--an-mono\)$/);
+    const weight = font!.split(' ')[0];
+    // The skin's mono is JetBrains Mono first, and the app ships that weight of it.
+    expect(declared(ruleIn(notesCss, 'body.app-slava-restraint .agent-notes-root'), '--an-mono')).toBe('var(--sr-mono)');
+    expect(slavaCss).toMatch(/--sr-mono:\s*'JetBrains Mono',/);
+    const faces = fontsCss.split('@font-face').filter((face) => /font-family:\s*'JetBrains Mono'/.test(face));
+    expect(faces.some((face) => new RegExp(`font-weight:\\s*${weight};`).test(face) && /U\+0000-00FF/.test(face))).toBe(true);
+    expect(count).toMatch(/font-variant-numeric:\s*tabular-nums/);
+  });
+
+  it('changes only the colour for the muted 0, and nothing of the face while it pops', () => {
+    for (const selector of [".agent-notes-chip__count[data-muted='true']", ".agent-notes-chip__count[data-pop='true']"]) {
+      expect(ruleIn(notesCss, selector)).not.toMatch(/font(-family|-weight|-style|-stretch|-variant[\w-]*)?:/);
+    }
+    expect(declared(ruleIn(notesCss, ".agent-notes-chip__count[data-muted='true']"), 'color')).toBe('var(--an-faint)');
+  });
+});
+
+// GM review of PR #157, round 2: one heading pattern for the Commons'
+// sections. The section's name is the h2 set as the eyebrow line (Blind
+// labeling, Agent review), in the eyebrow style Blind labeling already used;
+// the display line keeps its look as a p; Settings, which has no display
+// line, sets its h2 one step above its 13 px section titles, at the
+// Commons' existing step size (no new size).
+const evaluationCss = readFileSync(join(__dirname, '../src/styles/commons-evaluation.css'), 'utf8');
+
+describe('the Commons sections share one heading pattern (GM review, round 2)', () => {
+  it('sets the eyebrow line in the eyebrow style Blind labeling used, the h2 included', () => {
+    // The same rule as the old eyebrow (`small`), not a copy of it.
+    const eyebrow = ruleIn(evaluationCss, '.commons-evaluation small,\n.commons-eyebrow');
+    expect(declared(eyebrow, 'font-size')).toBe('10px');
+    expect(declared(eyebrow, 'letter-spacing')).toBe('1.5px');
+    expect(declared(eyebrow, 'color')).toBe('#a0b28f');
+    // The h2 takes the line's type: no heading size, weight or margin of its own.
+    const name = ruleIn(evaluationCss, '.commons-eyebrow h2');
+    expect(declared(name, 'font')).toBe('inherit');
+    expect(declared(name, 'margin')).toBe('0');
+    expect(declared(name, 'display')).toBe('inline');
+    // No other rule gives a heading in the evaluation panels the step size by tag.
+    expect(evaluationCss).not.toMatch(/\.commons-evaluation h[12]\b/);
+  });
+
+  it('keeps the display line\'s look as a p', () => {
+    const title = ruleIn(evaluationCss, '.commons-evaluation .evaluation-title');
+    expect(declared(title, 'font-size')).toBe('30px');
+    expect(declared(title, 'font-weight')).toBe('450');
+    // Not the panel's paragraph colour and line height.
+    expect(declared(title, 'color')).toBe('inherit');
+    expect(declared(title, 'line-height')).toBe('normal');
+  });
+
+  it('sets Settings\' h2 at the Commons\' step size, above its section titles', () => {
+    const step = declared(ruleIn(evaluationCss, '.commons-evaluation .evaluation-step'), 'font-size');
+    expect(step).toBe('22px');
+    const settings = ruleIn(commonsCss, 'body.app-slava-restraint .commons-settings > .commons-panel-title');
+    expect(declared(settings, 'font-size')).toBe(step);
+    expect(declared(settings, 'font-weight')).toBe(declared(ruleIn(evaluationCss, '.commons-evaluation .evaluation-step'), 'font-weight'));
+    expect(parseFloat(step!)).toBeGreaterThan(parseFloat(declared(ruleIn(commonsCss, 'body.app-slava-restraint .commons-heading'), 'font-size')!));
+  });
+});

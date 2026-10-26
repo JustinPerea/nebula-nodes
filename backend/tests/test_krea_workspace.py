@@ -358,7 +358,7 @@ async def test_files_save_refuses_grants_it_cannot_honor_safely(session, grant, 
 async def test_files_save_takes_only_local_media(session):
     with pytest.raises(ValueError, match="not remote URLs"):
         await workspace.handle_krea_files_save(node("krea-files-save"), {"media": port(["https://x.test/a.png"])}, {})
-    with pytest.raises(ValueError, match="Wire media or text"):
+    with pytest.raises(ValueError, match="Connect media or text"):
         await workspace.handle_krea_files_save(node("krea-files-save"), {}, {})
     assert session.calls == []
 

@@ -733,3 +733,110 @@ async def test_long_text_is_capped_per_chunk_and_per_turn(env, monkeypatch):
     assert sum(len(e["text"]) for e in shown) == 50_000
     assert [e for e in events if e["type"] == "system"] == [{"type": "system", "text": acp_events.TEXT_CUT_NOTICE}]
     assert events[-1]["type"] == "result"
+
+
+@pytest.mark.asyncio
+async def test_legacy_models_field_becomes_one_picker(env):
+    env.register({"models": {"currentModelId": "a", "availableModels": [
+        {"modelId": "a", "name": "Model A"}, {"modelId": "b", "name": "Model B"}, {"name": "no id"}]}})
+    host = await env.open()
+    try:
+        [option] = host.option_view()
+        assert option["id"] == acp_session.LEGACY_MODEL_OPTION and option["current"] == "a"
+        assert [o["value"] for o in option["options"]] == ["a", "b"]
+        assert (await host.set_option(option["id"], "b"))[0]["current"] == "b"
+        assert "session/set_model" in env.methods()
+        assert host.prompt_images is False
+    finally:
+        await env.manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_an_agent_without_options_offers_none(env):
+    env.register({})
+    host = await env.open()
+    try:
+        assert host.option_view() == []
+        with pytest.raises(PersonalSessionError):
+            await host.set_option("model", "x")
+    finally:
+        await env.manager.close_all()
+
+
+def test_config_options_are_capped_and_filtered():
+    raw = [{"id": "m", "name": "M" * 99, "category": "model", "type": "select", "currentValue": "v0",
+            "options": [{"group": "g", "name": "G", "options": [{"value": f"v{i}", "name": f"V{i}"} for i in range(80)]}]},
+           {"id": "b", "category": "model", "type": "boolean", "currentValue": True},
+           {"id": "t", "category": "thought_level", "type": "select", "currentValue": "low",
+            "options": [{"value": "low", "name": "Low"}, {"value": "", "name": "empty"}]},
+           "junk"]
+    out = acp_session.clean_config_options(raw)
+    assert [o["id"] for o in out] == ["m", "t"]
+    assert len(out[0]["options"]) == acp_session.MAX_OPTION_VALUES and len(out[0]["name"]) == 40
+    assert out[1]["options"] == [{"value": "low", "name": "Low"}]
+
+
+@pytest.mark.asyncio
+async def test_opening_a_gemini_agent_never_blocks_the_event_loop(env, tmp_path, monkeypatch):
+    """Checking the Gemini CLI first runs `gemini --version` and `--help`, which
+    take seconds on a cold node start. That must run off the event loop, or
+    every chat socket and request in the backend freezes while it does."""
+    from services import agent_binaries, gemini_cli_setup
+    bin_dir = tmp_path / "slow-bin"
+    bin_dir.mkdir()
+    gemini = bin_dir / "gemini"
+    gemini.write_text(f'#!/bin/sh\necho "$1" >> {tmp_path / "probed.txt"}\nsleep 1.5\ncase "$1" in --version) echo 0.25.2 ;; '
+                      '--help) echo "  --experimental-acp  ACP mode" ;; esac\n')
+    gemini.chmod(0o755)
+    monkeypatch.setattr(agent_binaries, "_FIXED_DIRS", ())
+    monkeypatch.setattr(agent_binaries, "login_shell_path", lambda: "")
+    monkeypatch.setenv("PATH", f"{bin_dir}:/usr/bin:/bin")
+    monkeypatch.setenv("GEMINI_CLI_SYSTEM_SETTINGS_PATH", str(tmp_path / "no-system.json"))
+    gemini_cli_setup.clear_probe_cache()
+    personal_agents.acknowledge_warning(env.state)
+    personal_agents.update_agent(env.state, "gemini", {"enabled": True}, home=tmp_path / "home")
+    gemini_cli_setup.clear_probe_cache()
+    (tmp_path / "probed.txt").unlink()
+    longest = 0.0
+
+    async def heartbeat() -> None:
+        nonlocal longest
+        last = time.monotonic()
+        while True:
+            await asyncio.sleep(0.05)
+            now = time.monotonic()
+            longest = max(longest, now - last)
+            last = now
+
+    beat = asyncio.create_task(heartbeat())
+    await asyncio.sleep(0.1)  # the heartbeat is running before open starts
+    try:
+        with pytest.raises(PersonalSessionError) as info:
+            await env.manager.open(OWNER, "gemini", state_dir=env.state, output_root=env.out,
+                                   backend_url="http://127.0.0.1:8142", workspace_sessions=env.workspaces,
+                                   home=tmp_path / "home")
+    finally:
+        await asyncio.sleep(0.12)  # let the heartbeat see any stall before it stops
+        beat.cancel()
+    assert info.value.code == "personal_agent_needs_setup"
+    assert "--help" in (tmp_path / "probed.txt").read_text()  # the slow probe really ran
+    assert longest < 0.75, f"the event loop stalled for {longest:.2f}s"
+
+
+@pytest.mark.asyncio
+async def test_a_settings_change_while_the_spec_is_read_does_not_start_the_old_agent(env, monkeypatch):
+    """The launch spec is read off the loop; a Settings write in that window
+    must not start a session under what Settings allowed before it."""
+    env.register({})
+    real = personal_agents.launch_spec
+
+    def switch_off_meanwhile(state_dir, agent_id, home=None):
+        spec = real(state_dir, agent_id, home)
+        personal_agents.update_agent(state_dir, agent_id, {"enabled": False})
+        return spec
+
+    monkeypatch.setattr(personal_agents, "launch_spec", switch_off_meanwhile)
+    with pytest.raises(PersonalSessionError) as info:
+        await env.open()
+    assert info.value.code == "personal_agent_changed"
+    assert env.manager.live() == [] and "initialize" not in env.methods()

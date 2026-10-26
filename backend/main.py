@@ -10,7 +10,7 @@ _env_check.run_startup_checks()
 
 import asyncio
 import copy
-import difflib
+import errno
 import hashlib
 import json
 import logging
@@ -28,17 +28,18 @@ import zipfile
 from collections import OrderedDict, deque
 from contextlib import ExitStack, aclosing, contextmanager, nullcontext
 from contextvars import ContextVar
+import dataclasses
 from dataclasses import dataclass
 from functools import wraps
 from pathlib import Path
 from pathlib import PurePosixPath
 from typing import Any, BinaryIO, Callable, Iterable, Mapping, NoReturn
-from urllib.parse import quote, unquote_to_bytes, urlsplit
+from urllib.parse import quote, urlsplit
 
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, JSONResponse
 
@@ -84,29 +85,35 @@ from services.settings import (
 )
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
+from services.input_file_name import PARAM as INPUT_FILE_NAME_PARAM, file_name_param
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
-from services import agent_start, node_categories
+from services import agent_start, input_sizes, node_categories, node_lookup, node_names
 from services import output_thumbnail
+from services import refusal_copy
 from services.node_errors import NodeErrors
 from services import project_cover
+from services import graph_file_links, project_size
 from services.cli_graph import SHORT_ID_RE, CLIGraph
 from services.retired_nodes import folded_entry, migrate_graph, migrate_node, migrate_param_update, migrate_params, retired_message
 from services.saved_graph_upgrades import PARAMS_VERSION, request_version, upgrade_flat_nodes, upgrade_project
 from services.project_store import (
     MAX_PROJECT_BYTES, ProjectLimitError, ProjectStore, ProjectStoreError, empty_snapshot,
     make_project, metadata as project_metadata, needs_cover, now as project_now,
-    project_name, public_project, refresh_metadata, validate_project_id,
+    project_name, public_project, recorded_cover_owner, refresh_metadata, validate_project_id,
     move_to_trash, purge_expired_trash, restore_from_trash, trash_metadata,
 )
 from services.port_contracts import (
     ContractEdge,
     ContractNode,
     cinema_output_ports,
+    node_ports,
     validate_edge_contracts,
 )
+from services import universal_ports
+from services.media_types import MEDIA_PORT_IDS
 from services.file_access import ProtectedPathError, require_allowed_path, validate_file_references
 from services.qc_common import extract_frames
-from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT, resolve_output_ref, portable_output_ref, ManifestError, find_output_record, read_manifest
+from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT, resolve_output_ref, portable_output_ref, ManifestError, find_output_record, read_manifest, write_new_file, link_new, is_being_written
 from services.image_input import is_remote_or_data_uri
 from services.cache import ExecutionCache
 from services.execution_runs import (
@@ -115,7 +122,7 @@ from services.execution_runs import (
     ExecutionRunRegistry,
 )
 from services.chat_session import run_claude
-from services import personal_agents
+from services import antigravity_agent, personal_agents
 from services.acp_session import PersonalSessionError, acp_sessions
 from services.agent_profiles import (
     GrantOverlapsProtectedDir,
@@ -146,13 +153,15 @@ from services.canvas_events import (
     param_changes,
     parse_kinds,
 )
-from services.canvas_pins import CanvasPins, PinError, pin_summary
+from services.canvas_pins import ANOTHER_PROJECT, CanvasPins, PinError, pin_left, pin_summary
+from services.node_removals import RemovalLedger
 from services.agent_notes import AgentNotes, NoteError, note_summary
 from services import person_session
 from services import asset_trash
 from services.child_env import scrubbed_env
 from services.person_gate import (
     PERSON_HEADER,
+    PERSON_REQUIRED,
     PersonGateError,
     has_agent_marker,
     is_person,
@@ -162,7 +171,8 @@ from services.person_gate import (
 from services.canvas_edits import INTERNAL_OK as BILLING_PARAMS, EditSpec, parse_edit
 from services.canvas_arrange import canvas_arrange
 from services.canvas_undo import (
-    EDIT_ID_RE, CanvasUndoBook, UndoError, build_inverse, capture_before, plan_undo,
+    EDIT_ID_RE, UNDONE_VERBS, CanvasUndoBook, UndoError, build_inverse, capture_before, nothing_went_back,
+    plan_undo, touched_nodes,
 )
 from services.agent_params import ASSET_PARAM_TYPES, asset_params, internal_keys, internal_refusal
 from services.canvas_proposals import (
@@ -170,15 +180,38 @@ from services.canvas_proposals import (
     Proposal,
     ProposalError,
     ProposalSpec,
+    agent_wording,
     canvas_proposals,
     clean_note,
     clean_positions,
     cost_for,
     parse_spec,
     place_new_nodes,
-    readiness_warning,
     summarize_cost,
 )
+# Proposals outside the graph: a project's cover, a board's Send notes (U16).
+from services.asset_proposals import AssetProposal, asset_proposals
+from services.asset_proposals import parse_change as parse_asset_change, summary as asset_proposal_summary
+from services.asset_proposals import RESTART_OUTCOME, outcome_line as asset_outcome_line, update_text as asset_update_text
+# Each canvas proposal's Update too (Justin's Q112 a).
+from services.canvas_proposals import update_outcome as canvas_outcome_line, update_text as canvas_update_text
+# Questions an agent asks the person (Q125 item 1), modelled on proposals.
+from services.agent_questions import (
+    CLOSED_OUTCOME as QUESTIONS_CLOSED_OUTCOME,
+    RESTART_OUTCOME as QUESTIONS_RESTART_OUTCOME,
+    WITHDRAW_HTTP as QUESTIONS_WITHDRAW_HTTP,
+    QuestionBook,
+    QuestionError,
+    QuestionSet,
+    parse_answers as parse_question_answers,
+    parse_questions,
+    still_open_rows,
+    update_outcome as question_outcome_line,
+    update_text as question_update_text,
+)
+from services.agent_presence import request_headers_scope
+# The Agents panel (Q125 item 2): each agent's status line and the roster.
+from services.agent_status import AgentStatusBook, StatusError, Waiting, build_roster, clean_status_text
 from services.local_guard import host_allowed
 from services import run_approvals as approvals
 from services.run_approvals import RunApprovals
@@ -250,9 +283,24 @@ cli_graph = CLIGraph(persist_path=_STATE_PATH)
 project_store = ProjectStore(_STATE_DIR / "projects")
 # Pins follow `main.project_store` through the getter (tests swap the store).
 canvas_pins = CanvasPins(lambda: project_store)
+# Which delete of which node each removal record undoes (services/node_removals.py).
+node_removals = RemovalLedger()
 # Updates (plan section 5.9): the agent's and the reader's notices, kept with
 # the project (main canvas) or beside each board. Same getter as pins.
 agent_notes = AgentNotes(lambda: project_store)
+# Questions agents ask the person (Q125 item 1), kept on the project record
+# like pins and Updates (services/agent_questions.py). Same getter.
+agent_questions = QuestionBook(store=lambda: project_store)
+# Each agent's status line (Q125 item 2): in memory only, like cursors.
+agent_status = AgentStatusBook()
+
+
+def _agent_sign(identity: AgentIdentity) -> None:
+    """Any identified request (RequestHeadersContext): the agent is still
+    there, so its status line lasts another STATUS_IDLE_SECONDS."""
+    agent_status.saw(identity)
+
+
 _request_workspace_revision: ContextVar[str | None] = ContextVar("workspace_revision", default=None)
 _execution_workspace_context: ContextVar[dict[str, Any] | None] = ContextVar("execution_workspace", default=None)
 _synchronous_workspace_runs: set[str] = set()
@@ -318,31 +366,141 @@ provider_start_guard = ProviderStartGuard(
 )
 
 
+# A node's World Labs paid state, in the person's words (GM - Design, error-copy
+# round 3: "'settle' and 'start' are internal. Write it as: 'This node is still
+# waiting on World Labs. Check the job in Marble, then {the node's actual button
+# label} before you delete it.'"). Each state names the control that clears it:
+# the status bar's "Checked Marble — unlock" (an ambiguous start), Run History's
+# "Checked Marble — forget" (a recovery record), the node's own ID fields (an ID
+# in its params, named by their labels), or, while a start is still in flight,
+# no button: the run has to finish. `subject` is "This node is" for a node's own
+# refusal, "A node is" for one about the whole canvas; `then` ends the line
+# ("delete it", "try again"). Agents keep the specific text, unchanged.
+WORLD_LABS_WAITING = "still waiting on World Labs."
+_RECOVERY_FIELDS_FALLBACK = "Resume Operation ID and Existing World ID"
+
+
+def _paid_state_person(state: str, *, subject: str, then: str, fields: str = _RECOVERY_FIELDS_FALLBACK) -> str:
+    waiting = f"{subject} {WORLD_LABS_WAITING}"
+    if state == "active":
+        return f"{waiting} Let its run finish, then {then}."
+    if state == "ambiguity":
+        return f"{waiting} Check the job in Marble, then use \u201cChecked Marble \u2014 unlock\u201d before you {then}."
+    if state == "recovery":
+        return (f"{waiting} Check the job in Marble, then use \u201cChecked Marble \u2014 forget\u201d "
+                f"in Run History before you {then}.")
+    return f"{waiting} Check the job in Marble, then clear the node's {fields} before you {then}."
+
+
+UNLOCK_BUTTON = "\u201cChecked Marble \u2014 unlock\u201d"
+FORGET_BUTTON = "\u201cChecked Marble \u2014 forget\u201d"
+# Round 3b: a canvas edit that raced a change to the shared recovery journal.
+CANVAS_JOB_CHANGED_PERSON = "A node's World Labs job changed while Nebula saved the canvas. Reload, then try again."
+
+
+def _paid_capacity_person(limit: int | None) -> str:
+    """A full World Labs journal (GM - Design, after 3b: "Nebula is already
+    waiting on {n} World Labs jobs, the most it can track. Check them in
+    Marble and clear some in Run History, then try again." Used for a run and
+    a canvas edit alike)."""
+    if limit == 1:
+        return ("Nebula is already waiting on 1 World Labs job, the most it can track. "
+                "Check it in Marble and clear it in Run History, then try again.")
+    head = (f"Nebula is already waiting on {limit} World Labs jobs, the most it can track." if limit else
+            "Nebula is already waiting on as many World Labs jobs as it can track.")
+    return f"{head} Check them in Marble and clear some in Run History, then try again."
+
+
+def _paid_job_changed_person(button: str) -> str:
+    """The hold or record the button acts on changed since the page read it
+    (a newer start replaced it): round 3b."""
+    return f"This node is waiting on a newer World Labs job. Reload to see it, check it in Marble, then use {button}."
+
+
+def _start_refusal(exc: ProviderStartConflictError, *, own_node: bool = False) -> HTTPException:
+    """409 for a paid start the guard refused, worded by the code it was
+    raised with (ProviderStartConflictError.reason, never its text): the
+    person reads _paid_state_person's line for the state that holds the
+    canvas, agents the exact text. `own_node`: the request names the node
+    whose start is in flight ("Checked Marble — unlock" on that node)."""
+    reason = getattr(exc, "reason", "active")
+    if reason == "cancelled":
+        # A Stop that beat the run's admission: it names no World Labs state
+        # (listed for GM, round 3b).
+        return HTTPException(status_code=409, detail=str(exc))
+    if reason == "capacity":
+        person = _paid_capacity_person(getattr(exc, "limit", None))
+    elif reason == "changed":
+        person = _paid_job_changed_person(UNLOCK_BUTTON)
+    else:
+        state = "active" if reason in {"active", "busy"} else reason
+        subject = "This node is" if own_node and reason == "active" else "A node is"
+        person = _paid_state_person(state, subject=subject, then="try again",
+                                    fields=getattr(exc, "fields", None) or _RECOVERY_FIELDS_FALLBACK)
+    return refusal_copy.refusal(409, str(exc), person, route="run")
+
+
+def _recovery_field_labels(nodes: list[dict[str, Any]]) -> str:
+    """The labels (node_definitions.json) of the recovery ID fields `nodes`
+    hold, in policy order: a World node's "Resume Operation ID" and "Existing
+    World ID", a World export node's "Resume Export Operation ID"."""
+    labels: list[str] = []
+    for node in nodes:
+        definition_id = str(node.get("definitionId") or "")
+        policy = operation_policy(definition_id)
+        if policy is None:
+            continue
+        operation, resource = recovery_identifiers(definition_id, node.get("params") or {})
+        definition = node_registry.get(definition_id) or {}
+        names = {param.get("key"): param.get("label") for param in definition.get("params") or []
+                 if isinstance(param, dict)}
+        for key, value in ((policy.recovery_operation_param, operation), (policy.recovery_resource_param, resource)):
+            label = names.get(key) if key and value else None
+            if isinstance(label, str) and label and label not in labels:
+                labels.append(label)
+    if not labels:
+        return _RECOVERY_FIELDS_FALLBACK
+    return labels[0] if len(labels) == 1 else ", ".join(labels[:-1]) + " and " + labels[-1]
+
+
+def _graph_paid_refusal(specific: str, state: str, fields: str = _RECOVERY_FIELDS_FALLBACK) -> HTTPException:
+    """409 for replacing the whole canvas (clear it, open or make a project,
+    replace the graph, restore a bundle) while World Labs state holds a node.
+    The person's line leaves the action out: the screen's own heading
+    ("Couldn't clear the canvas.") names it."""
+    return refusal_copy.refusal(409, specific, _paid_state_person(state, subject="A node is", then="try again",
+                                                                  fields=fields), route="canvas")
+
+
+def _graph_settling_specific(action: str) -> str:
+    return (f"Cannot {action} while a World Labs paid start is settling. "
+            "Stop the run and wait for its terminal state first.")
+
+
 def _reject_graph_replacement_during_paid_start(action: str) -> None:
     if provider_start_guard.has_active():
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"Cannot {action} while a World Labs paid start is settling. "
-                "Stop the run and wait for its terminal state first."
-            ),
-        )
-    canonical_checkpoints = _graph_worldlabs_recovery_checkpoints(
-        list(cli_graph.nodes.values())
+        raise _graph_paid_refusal(_graph_settling_specific(action), "active")
+    nodes = list(cli_graph.nodes.values())
+    canonical_checkpoints = _graph_worldlabs_recovery_checkpoints(nodes)
+    if provider_start_guard.list():
+        state = "ambiguity"
+    elif provider_recovery_store.list():
+        state = "recovery"
+    elif canonical_checkpoints:
+        state = "params"
+    elif _graph_recovery_bootstrap_error is not None:
+        # Nebula couldn't journal a recovery it read from the canvas. Rare,
+        # with no record to name, so the person reads the recovery line
+        # (listed for GM).
+        state = "recovery"
+    else:
+        return
+    raise _graph_paid_refusal(
+        f"Cannot {action} while unresolved World Labs paid state exists. "
+        "Check Marble and resolve the exact recovery/ambiguity record first.",
+        state,
+        _recovery_field_labels(nodes) if state == "params" else _RECOVERY_FIELDS_FALLBACK,
     )
-    if (
-        provider_start_guard.list()
-        or provider_recovery_store.list()
-        or canonical_checkpoints
-        or _graph_recovery_bootstrap_error is not None
-    ):
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"Cannot {action} while unresolved World Labs paid state exists. "
-                "Check Marble and resolve the exact recovery/ambiguity record first."
-            ),
-        )
 
 
 @contextmanager
@@ -362,13 +520,7 @@ def _paid_graph_mutation(action: str):
             _graph_recovery_bootstrap_error = None
             yield
     except ProviderStartConflictError as exc:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"Cannot {action} while a World Labs paid start is settling. "
-                "Stop the run and wait for its terminal state first."
-            ),
-        ) from exc
+        raise _graph_paid_refusal(_graph_settling_specific(action), "active") from exc
     except ProviderStartPersistenceError as exc:
         raise HTTPException(
             status_code=507,
@@ -423,9 +575,10 @@ def _seed_shared_graph_recoveries_for_api(
     try:
         return _ensure_shared_graph_recoveries(nodes, source=source)
     except ProviderRecoveryCapacityError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise refusal_copy.refusal(409, str(exc), _paid_capacity_person(exc.limit),
+                                   route="canvas") from exc
     except ProviderRecoveryConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise refusal_copy.refusal(409, str(exc), CANVAS_JOB_CHANGED_PERSON, route="canvas") from exc
     except ProviderRecoveryPersistenceError as exc:
         raise HTTPException(
             status_code=507,
@@ -507,9 +660,60 @@ if _bootstrap_checkpoints:
 app = FastAPI(title="Nebula Node Backend", version="0.1.0")
 
 
+_DISK_FULL_ERRNOS = {errno.ENOSPC, getattr(errno, "EDQUOT", errno.ENOSPC)}
+
+
+def _storage_full(exc: BaseException) -> bool:
+    """The store failed because the disk (or the person's quota) is full: an
+    OSError with ENOSPC or EDQUOT in the error's causes. Read from the cause,
+    never the text (error copy round 3f)."""
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, OSError) and current.errno in _DISK_FULL_ERRNOS:
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def _storage_error_body(exc: ProjectStoreError) -> dict[str, Any]:
+    """A storage refusal's JSON: ``detail`` as before (agents read it), and an
+    additive ``storage: "full"`` when the disk is full, so the Projects view
+    can say the one cause a person can fix (GM, round 3f). A store limit (413)
+    adds ``limit``: "projects" or "storage", so the Projects screen doesn't
+    call a full store "too large" when it can't keep a tab's unsaved edits
+    (Q116 a)."""
+    return {"detail": str(exc), **({"storage": "full"} if _storage_full(exc) else {}),
+            **({"limit": exc.limit} if isinstance(exc, ProjectLimitError) else {})}
+
+
 @app.exception_handler(ProjectStoreError)
 async def project_storage_error(request, exc: ProjectStoreError):
-    return JSONResponse(status_code=413 if isinstance(exc, ProjectLimitError) else 507, content={"detail": str(exc)})
+    return JSONResponse(status_code=413 if isinstance(exc, ProjectLimitError) else 507, content=_storage_error_body(exc))
+
+
+class ProjectSizeRefusal(HTTPException):
+    """A 413 because a project would be over the save limit (Q118): the
+    snapshot a tab sent, or what an agent's edit would leave the open project
+    at. Its answer carries ``limit: "size"`` (beside the store's "projects"
+    and "storage"), ``sizeBytes`` and ``limitBytes`` beside ``detail``, so the
+    canvas can pause saving from the answer, never its words. A tab's save
+    keeps its old detail word for word; an agent's refusal has its own text."""
+
+    def __init__(self, size: int, detail: str = "Project snapshot exceeds the 16 MiB limit",
+                 scope: str | None = None) -> None:
+        super().__init__(status_code=413, detail=detail)
+        self.size = size
+        self.scope = scope
+
+
+@app.exception_handler(ProjectSizeRefusal)
+async def project_size_refusal(request, exc: ProjectSizeRefusal):
+    content = {"detail": exc.detail, "limit": "size", "sizeBytes": exc.size, "limitBytes": MAX_PROJECT_BYTES}
+    if exc.scope:
+        content["scope"] = exc.scope
+    return JSONResponse(status_code=413, content=content)
 
 
 def _workspace_context() -> dict[str, Any]:
@@ -629,7 +833,7 @@ async def project_workspace_fence(request: Request, call_next):
         except HTTPException as exc:
             return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
         except ProjectStoreError as exc:
-            return JSONResponse(status_code=507, content={"detail": str(exc)})
+            return JSONResponse(status_code=507, content=_storage_error_body(exc))
         return await call_next(request)
     finally:
         _execution_workspace_context.reset(execution_token)
@@ -665,7 +869,9 @@ app.add_middleware(
 # earlier ones): foreign Hosts and Origins never reach CORS or the routes.
 app.add_middleware(AgentWorkspaceContext)
 # Lets graph routes see who is calling, so agent edits move that agent's cursor.
-app.add_middleware(RequestHeadersContext)
+# Every identified request is also a sign that the agent is still there,
+# which keeps its status line alive (Q125 item 2, services/agent_status.py).
+app.add_middleware(RequestHeadersContext, on_agent=lambda identity: _agent_sign(identity))
 app.add_middleware(LocalRequestGuard)
 
 
@@ -731,17 +937,17 @@ RESTORE_MAX_TOTAL_UNCOMPRESSED_BYTES = 8 * 1024 * 1024 * 1024  # 8 GiB bundle
 RESTORE_MAX_COMPRESSION_RATIO = 250.0
 RESTORE_MAX_PATH_BYTES = 1024
 RESTORE_COPY_CHUNK_BYTES = 1024 * 1024
-RESTORE_MAX_GRAPH_BYTES = 16 * 1024 * 1024
+# A bundle's graph.json may be as large as the bundle Load graph accepts (the
+# frontend's GRAPH_BUNDLE_MAX_IMPORT_BYTES, 512 MiB of files + 16 MiB), the
+# size a plain .nebula opens up to (Q121 a, Justin 2026-10-24: "Bundles work
+# like plain files"). The save limit is the import's to check, not this one:
+# a graph over 16 MiB opens as a new project with saving paused (Q118/Q120).
+RESTORE_MAX_GRAPH_BYTES = 528 * 1024 * 1024
 RESTORE_MAX_GRAPH_NODES = 10_000
 RESTORE_MAX_GRAPH_EDGES = 50_000
 RESTORE_MAX_GRAPH_DEPTH = 64
 RESTORE_MAX_GRAPH_VALUES = 1_000_000
 RESTORE_CONTENT_TYPE = "application/zip"
-_PORTABLE_COMPONENT_FORBIDDEN = re.compile(r'[<>:"|?#*\\\x00-\x1f\x7f]')
-_WINDOWS_DEVICE_NAME = re.compile(
-    r"^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$", re.IGNORECASE
-)
-_PROTOTYPE_COMPONENTS = {"__proto__", "prototype", "constructor"}
 
 
 def _zip_member_kind(member: zipfile.ZipInfo) -> str:
@@ -799,66 +1005,13 @@ def _safe_zip_parts(member_name: str) -> tuple[str, ...]:
 
 
 def _decoded_portable_component(raw_part: str) -> tuple[str, str]:
-    """Return once-decoded NFC text and its browser-compatible identity."""
-    if re.search(r"%(?![0-9A-Fa-f]{2})", raw_part):
-        raise HTTPException(status_code=400, detail="Zip bundle path has invalid percent encoding")
+    """Return once-decoded NFC text and its browser-compatible identity: the
+    one component rule (services/graph_file_links.py), which agents' link
+    rewrite shares, refused here as the restore's 400."""
     try:
-        decoded = unquote_to_bytes(raw_part).decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise HTTPException(
-            status_code=400, detail="Zip bundle path is not valid UTF-8"
-        ) from exc
-    decoded = unicodedata.normalize("NFC", decoded)
-
-    def reject_unsafe(value: str) -> None:
-        if (
-            not value
-            or value in {".", ".."}
-            or "/" in value
-            or "\\" in value
-            or _PORTABLE_COMPONENT_FORBIDDEN.search(value)
-            or value.endswith((" ", "."))
-            or _WINDOWS_DEVICE_NAME.fullmatch(value)
-            or value.casefold() in _PROTOTYPE_COMPONENTS
-        ):
-            raise HTTPException(
-                status_code=400, detail="Zip bundle contains a non-portable path"
-            )
-
-    reject_unsafe(decoded)
-    probe = decoded
-    for _decode_pass in range(4):
-        if "%" not in probe:
-            break
-        if re.search(r"%(?![0-9A-Fa-f]{2})", probe):
-            raise HTTPException(
-                status_code=400, detail="Zip bundle path has invalid percent encoding"
-            )
-        try:
-            nested = unquote_to_bytes(probe).decode("utf-8")
-        except UnicodeDecodeError as exc:
-            raise HTTPException(
-                status_code=400, detail="Zip bundle path is not valid UTF-8"
-            ) from exc
-        nested = unicodedata.normalize("NFC", nested)
-        if nested == probe:
-            break
-        reject_unsafe(nested)
-        probe = nested
-    if "%" in probe:
-        # The frontend applies the same bounded nested-decode policy. Reject
-        # residual encoding instead of extracting a path the browser will
-        # subsequently refuse (which would orphan a restore directory).
-        raise HTTPException(
-            status_code=400, detail="Zip bundle path has excessive percent encoding"
-        )
-
-    # JavaScript encodeURIComponent's unescaped set, minus '*' which the
-    # portability policy rejects above.
-    canonical = quote(decoded, safe="-_.!~'()")
-    if len(canonical.encode("utf-8")) > 255:
-        raise HTTPException(status_code=400, detail="Zip bundle path component is too long")
-    return decoded, canonical
+        return graph_file_links.decoded_portable_component(raw_part)
+    except graph_file_links.PortablePathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _canonical_zip_parts(parts: tuple[str, ...]) -> tuple[str, ...]:
@@ -1592,8 +1745,7 @@ def _validate_imported_outputs(
     """Reject fabricated output handles/types before staging graph state."""
 
     definition = node_registry.get(definition_id) or {}
-    output_ports = (cinema_output_ports(params) if definition_id == "cinema-scene"
-                    else definition.get("outputPorts", []) or [])
+    output_ports = node_ports(definition_id, params, definition, "outputPorts")
     # displayOutputs are values a node keeps only to show on its card (Image
     # Compare's two inputs). They are saved with the node but never wired.
     declared_ports = {
@@ -1603,7 +1755,22 @@ def _validate_imported_outputs(
     }
     handles_are_dynamic = (
         definition_id in _DYNAMIC_OUTPUT_DEFINITION_IDS and not declared_ports
+        and universal_ports.stored_ports(definition_id, params) is None
+    ) or (
+        # A Replicate node configured before its file output was typed (every
+        # file `image`): its run named the output by the returned file, as it
+        # still does, so a saved `video`/`audio` output is its own.
+        definition_id in _DYNAMIC_OUTPUT_DEFINITION_IDS
+        and universal_ports.untyped_output_stamp(definition_id, params)
     )
+    guessed = (universal_ports.declared_output(definition_id, params)
+               if definition_id in _DYNAMIC_OUTPUT_DEFINITION_IDS else None)
+    if guessed and guessed.get("typeUnconfirmed"):
+        # The port was a guess (the model's data said nothing): its run keeps
+        # a file of another type under that type's own port
+        # (handlers/replicate_universal._fill_declared_port).
+        for media, port_id in MEDIA_PORT_IDS.items():
+            declared_ports.setdefault(port_id, media)
     for handle, port in outputs.items():
         if not isinstance(handle, str) or not handle:
             raise ValueError(f"nodes[{node_index}] has an invalid output handle")
@@ -1625,6 +1792,25 @@ def _validate_imported_outputs(
                 f"nodes[{node_index}] output '{handle}' declares type {actual_type}, "
                 f"but definition '{definition_id}' outputs {declared_type or 'a known dynamic type'}"
             )
+
+
+def _drop_outputs_off_ports(graph: CLIGraph, node_id: str, params: dict[str, Any]) -> None:
+    """Before a universal node takes ``params`` (another model, or its model
+    read again), drop each saved output its new ports don't take: one left on
+    a port the node no longer declares fails every save of the project
+    (_validate_imported_outputs). The run history keeps the old result."""
+    node = graph.nodes.get(node_id)
+    if not node or not isinstance(node.get("outputs"), dict) or not node["outputs"]:
+        return
+    definition_id = str(node.get("definitionId") or "")
+    kept: dict[str, Any] = {}
+    for handle, value in node["outputs"].items():
+        try:
+            _validate_imported_outputs(definition_id, {handle: value}, node_index=0, params=params)
+        except ValueError:
+            continue
+        kept[handle] = value
+    node["outputs"] = kept
 
 
 def _import_external_image_to_output_root(file_path_value: str) -> tuple[Path, str] | None:
@@ -1667,7 +1853,8 @@ def _import_external_image_to_output_root(file_path_value: str) -> tuple[Path, s
     digest = hashlib.sha256(data).hexdigest()
     saved_path = require_allowed_path(CHAT_UPLOADS_DIR / f"{digest}{ext}")
     if not saved_path.exists():
-        saved_path.write_bytes(data)
+        # Whole or not at all: a price may be measured from it (write_new_file).
+        write_new_file(saved_path, data)
     return saved_path.resolve(), f"/api/outputs/chat-uploads/{saved_path.name}"
 
 
@@ -1844,6 +2031,22 @@ def _is_person_request() -> bool:
     return is_person(current_request_headers())
 
 
+def _person_only_refusal(detail: str) -> HTTPException | PersonGateError:
+    """The 403 for a request refused only because it isn't the person's (who
+    bills a node, a run the person approved, the agents' spending limits the
+    person isn't held to). One with an agent marker gets the plain refusal it
+    always got, ``{detail}``. One without (a canvas tab with no person token,
+    or a token from before Nebula restarted; also curl, or the CLI without
+    NEBULA_AGENT_NAME) gets the person gate's ``code: person_required`` beside
+    the same detail, as require_person answers: reconnecting fixes it, and
+    the canvas reads the code, never the words (GM - Design, Q116 a: "Use it
+    for every person-only refusal, not just Krea billing."). Nothing more is
+    allowed either way: only the answer says why."""
+    if has_agent_marker(current_request_headers()):
+        return HTTPException(status_code=403, detail=detail)
+    return PersonGateError(403, detail, PERSON_REQUIRED)
+
+
 agent_spend_ledger = agent_spend.SpendLedger(_STATE_DIR / "agent-spend.json")
 # Tokens the person made for outside apps (Settings > Agent spending), each
 # also in its own private file (services/app_token_file.py).
@@ -1967,15 +2170,18 @@ def _settle_hold(run_id: str) -> None:
         pass
 
 
-def _require_run_spend_approval(
+async def _require_run_spend_approval(
     run_id: str, nodes: list[GraphNode], edges: list[GraphEdge], *, approval_id: str | None = None, **kwargs: Any,
 ) -> None:
     """The approval and spend checks for a run already noted for its actor: a
-    refusal forgets the note."""
+    refusal forgets the note. The inputs a price reads are measured first,
+    off the event loop (_measure_run_inputs); the approval is taken and the
+    limits checked after that, with no await between them."""
     try:
+        measured = await _measure_run_inputs(nodes, edges)
         _check_run_approval(approval_id, nodes, edges)
-        _require_spend_approval(nodes, edges, run_id=run_id, **kwargs)
-    except HTTPException:
+        _require_spend_approval(nodes, edges, run_id=run_id, measured=measured, **kwargs)
+    except (HTTPException, PersonGateError):
         canvas_events.forget_run(run_id)
         raise
 
@@ -1996,9 +2202,9 @@ def _check_run_approval(approval_id: str | None, nodes: list[GraphNode], edges: 
     if approval_id is None:
         return
     if not _is_person_request():
-        raise HTTPException(status_code=403, detail=(
+        raise _person_only_refusal(
             "Only the person's canvas starts a run they approved. Agents run through "
-            "/api/graph/run, inside the spending limits."))
+            "/api/graph/run, inside the spending limits.")
     approval = run_approvals.take(approval_id)
     if approval is None:
         raise HTTPException(status_code=409, detail=(
@@ -2054,12 +2260,57 @@ def _guard_approved_runs(change: Callable[[CLIGraph], Any]) -> None:
     _refuse_agent_change_to_approved_runs(probe)
 
 
+def _guard_agent_growth_past_save_limit(change: Callable[[CLIGraph], Any]) -> None:
+    """_refuse_agent_growth_past_save_limit for a direct edit (the CLI's
+    connect and rename), tried on a copy of the graph first. A copy that
+    refuses the edit means the real edit reports its own error."""
+    if _is_person_request():
+        return
+    probe = cli_graph.clone()
+    try:
+        change(probe)
+    except Exception:  # noqa: BLE001 - the real edit reports its own error
+        return
+    _refuse_agent_growth_past_save_limit(probe)
+
+
+async def _measure_run_inputs(nodes: list[GraphNode], edges: list[GraphEdge]) -> input_sizes.Measured | None:
+    """The input sizes the spending check prices size-priced nodes at
+    (services/input_sizes.py), measured in a worker thread: reading every
+    packet of a clip takes seconds, and on the event loop it would hold up
+    every other request. Each run route awaits this just before its
+    synchronous check and passes the result to _require_spend_approval.
+
+    None for the person's own runs, which the limits don't bind. A project
+    switch while it measured makes the run refuse (409) rather than start
+    against a different project than the one it was checked in."""
+    if _is_person_request():
+        return None
+    try:
+        pricing = model_pricing.load_pricing()
+    except (OSError, ValueError):
+        return input_sizes.Measured()  # the check itself refuses: the table is unavailable
+    items = [{"id": n.id, "definitionId": n.definition_id, "params": n.params} for n in nodes]
+    if not input_sizes.needs_measuring(items, pricing):
+        return input_sizes.Measured()
+    before = _workspace_context()["workspaceRevision"]
+    measured = await input_sizes.measure_run(
+        items, [(e.source, e.source_handle, e.target, e.target_handle) for e in edges], pricing,
+        node_registry.get_all(), {n.id: n for n in nodes})
+    _check_workspace_revision(before)
+    return measured
+
+
 def _require_spend_approval(
-    nodes: list[GraphNode], edges: list[GraphEdge], *, settings: Mapping[str, Any], how_to_ask: str | None = None,
+    nodes: list[GraphNode], edges: list[GraphEdge], *, settings: Mapping[str, Any],
+    measured: input_sizes.Measured | None, how_to_ask: str | None = None,
     run_ids: list[str] | None = None, run_id: str | None = None, passes: int = 1, on_canvas: bool = True,
 ) -> None:
     """Refuse a run that isn't the person's when it breaks a spending limit, and
     count it against the caller's session when it doesn't.
+
+    ``measured`` is what _measure_run_inputs found for these nodes, awaited
+    by the caller (off the event loop), for prices read from an input's size.
 
     ``settings`` is the snapshot the caller read for this run: its ``apiKeys``
     are the ones the run receives, so the provider route priced here (a
@@ -2084,14 +2335,28 @@ def _require_spend_approval(
             status_code=503, detail=f"Can't check this run's cost (pricing table unavailable: {exc}). {ask}",
         ) from exc
     key, label = _spend_session(headers)
+    items = [{"id": n.id, "definitionId": n.definition_id, "params": n.params} for n in nodes]
+    run_nodes = {n.id: n for n in nodes}
+    definitions = node_registry.get_all()
+    # A price that depends on the input's size is checked at the size of the
+    # file this run will send (services/input_sizes.py), measured before this
+    # synchronous check by the caller (_measure_run_inputs).
+    if measured is None:
+        raise RuntimeError("_require_spend_approval needs the run's measured inputs (_measure_run_inputs)")
     decision = agent_spend.decide(
-        [{"id": n.id, "definitionId": n.definition_id, "params": n.params} for n in nodes],
-        [(e.source, e.target, e.target_handle) for e in edges],
-        settings=settings, pricing=pricing, definitions=node_registry.get_all(),
-        budgets=_spend_budgets(key, settings), how_to_ask=ask, passes=passes,
+        items, [(e.source, e.target, e.target_handle) for e in edges],
+        settings=settings, pricing=pricing, definitions=definitions,
+        budgets=_spend_budgets(key, settings), how_to_ask=ask, passes=passes, sizes=measured.sizes,
+        size_reasons=measured.reasons,
+        # What is connected to a port with more than one input, by name, for the refusal to list.
+        # Named from this run's own nodes (/api/execute and a shot price the
+        # request's nodes, which needn't match the open canvas): _run_node_name.
+        size_inputs={node_id: (port, [(_run_node_name(source, run_nodes), source, handle)
+                                      for source, handle in sources])
+                     for node_id, (port, sources) in measured.connected.items()},
     )
     if decision.refusal:
-        raise HTTPException(status_code=403, detail=decision.refusal)
+        raise _person_only_refusal(decision.refusal)
     at = agent_spend_ledger.record(key, label, decision.charge, decision.plan_charge)
     if run_id is not None and (decision.per_node or decision.plan_per_node):
         _place_hold(run_id, key, dict(decision.per_node), dict(decision.plan_per_node), at=at)
@@ -2164,6 +2429,11 @@ async def archive_outputs(older_than_days: int = 30) -> dict:
                 continue
         except OSError:
             continue
+        if is_being_written(entry):
+            # A run still writing here would go on writing into the moved
+            # folder, where the spending check could measure a half-written
+            # file (services/input_sizes.py); it is archived another time.
+            continue
         dest = archive_root / entry.name
         if dest.exists():
             # Don't clobber an existing archive slot — append a uuid suffix.
@@ -2175,19 +2445,40 @@ async def archive_outputs(older_than_days: int = 30) -> dict:
     return {"archived": archived, "archive_dir": str(archive_root)}
 
 
+def _restore_with_rewritten_links(zip_file: BinaryIO) -> dict[str, Any]:
+    """The restore, then the link rewrite the canvas's Load graph does next
+    (services/graph_file_links.py): the graph's local output links point at
+    the restored files (or are null, with the canvas's warnings), and World
+    and spatial outputs are checked."""
+    restored = _restore_zip_bundle(zip_file)
+    graph = restored["graph"]
+    try:
+        mapping = graph_file_links.validated_restore_mapping(restored["urlMapping"])
+    except graph_file_links.GraphFileLinkError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    warnings = graph_file_links.rewrite_asset_urls(graph["nodes"], mapping)
+    warnings += graph_file_links.sanitize_imported_spatial_outputs(graph["nodes"])
+    return {**restored, "warnings": warnings}
+
+
 @app.post("/api/outputs/restore")
-async def restore_outputs(request: Request) -> dict:
+async def restore_outputs(request: Request, rewriteLinks: bool = False) -> dict:
     """Bound, validate, and restore a complete .nebula.zip atomically.
 
     The browser does not inflate graph.json. This endpoint returns the parsed
     graph with the old-path → served-URL mapping only after both graph
     validation and asset extraction succeed.
+
+    ``?rewriteLinks=true`` (agents: graph_file_client.py, Q123 a) also
+    rewrites the graph's links to the restored files as the canvas does
+    after this answer, and adds the canvas's ``warnings``: a graph ready for
+    POST /api/graph/import. The person's tab doesn't ask for it.
     """
     _reject_graph_replacement_during_paid_start("restore a graph bundle")
     _validate_restore_request_headers(request)
     spool = await _spool_restore_request(request)
     try:
-        return await asyncio.to_thread(_restore_zip_bundle, spool)
+        return await asyncio.to_thread(_restore_with_rewritten_links if rewriteLinks else _restore_zip_bundle, spool)
     finally:
         spool.close()
 
@@ -2214,6 +2505,60 @@ def _sniff_image_type(data: bytes) -> tuple[str, str] | None:
     # WebP has a variable prefix: "RIFF" then 4 size bytes then "WEBP".
     if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
         return ("image/webp", ".webp")
+    return None
+
+
+# ISO base media brands that mean sound only (an .m4a/.m4b), not a clip.
+_AUDIO_FTYP_BRANDS = {b"M4A ", b"M4B "}
+
+
+def _iso_sound_only(data: bytes) -> bool:
+    """Whether an ISO base media file (ftyp) holds sound tracks and no video
+    track, read from its tracks' handler boxes: size(4) 'hdlr' version and
+    flags(4) pre_defined(4) handler_type(4), 'soun' or 'vide'. The brand
+    alone doesn't say: ffmpeg's `-f mp4`, Android recorders and many
+    exporters write an audio-only file as isom/mp42. Needs the whole file,
+    since the moov box sits at the end of one that isn't faststart."""
+    handlers: set[bytes] = set()
+    index = data.find(b"hdlr")
+    while index != -1 and index + 16 <= len(data):
+        handlers.add(bytes(data[index + 12:index + 16]))
+        index = data.find(b"hdlr", index + 4)
+    return b"soun" in handlers and b"vide" not in handlers
+
+
+def _sniff_audio_type(data: bytes) -> tuple[str, str] | None:
+    """Return (mime, ext) if *data* starts like a supported audio file, else None.
+
+    Checked by signature, like images, clips and PDFs: WAV (RIFF....WAVE),
+    MP3 (an ID3 tag, or an MPEG audio frame sync), AAC (ADTS frame sync),
+    M4A (ftyp with an M4A/M4B brand, or any ftyp file whose tracks are all
+    sound: pass the whole file for that), FLAC (fLaC) and Ogg (OggS: Vorbis or
+    Opus). These are what the Audio Input's consumers read (speech to text,
+    lip sync, audio-driven video). Run after the image sniff, so a JPEG
+    (FF D8) never reads as a frame sync.
+    """
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WAVE":
+        return ("audio/wav", ".wav")
+    if data[:3] == b"ID3":
+        return ("audio/mpeg", ".mp3")
+    if len(data) >= 12 and data[4:8] == b"ftyp" and (
+        data[8:12] in _AUDIO_FTYP_BRANDS or _iso_sound_only(data)
+    ):
+        return ("audio/mp4", ".m4a")
+    if data[:4] == b"fLaC":
+        return ("audio/flac", ".flac")
+    if data[:4] == b"OggS":
+        return ("audio/ogg", ".ogg")
+    if len(data) >= 2 and data[0] == 0xFF and (data[1] & 0xE0) == 0xE0:
+        # The frame sync. ADTS (AAC) has a 12-bit sync and layer bits 00;
+        # MPEG audio's layer 00 and version 01 are reserved, so no real MP3
+        # starts that way.
+        layer, version = data[1] & 0x06, data[1] & 0x18
+        if (data[1] & 0xF6) == 0xF0:
+            return ("audio/aac", ".aac")
+        if layer != 0 and version != 0x08:
+            return ("audio/mpeg", ".mp3")
     return None
 
 
@@ -2403,22 +2748,47 @@ async def _commons_startup() -> None:
                                                              downloader=commons_runtime.get_downloader()))
 
 
+def _upload_position(x: str | None, y: str | None) -> dict[str, float] | None:
+    """The spot /api/uploads puts a created node at: both of `x` and `y` as
+    finite numbers, or neither (None: today's placement). Anything else is
+    a 422 before a byte is stored."""
+    if x is None and y is None:
+        return None
+    if x is None or y is None:
+        raise HTTPException(status_code=422, detail="Send both x and y for where the node goes, or neither")
+    try:
+        spot = {"x": float(x), "y": float(y)}
+    except ValueError:
+        raise HTTPException(status_code=422, detail="x and y must be numbers") from None
+    if not all(math.isfinite(value) for value in spot.values()):
+        raise HTTPException(status_code=422, detail="x and y must be finite numbers")
+    return spot
+
+
 @app.post("/api/uploads")
 async def upload_file_consolidated(
     file: UploadFile,
     create_node: str = Form("false"),
+    x: str | None = Form(None),
+    y: str | None = Form(None),
 ) -> dict:
-    """Accept an image or video upload with strict validation and content-hash dedup.
+    """Accept an image, video, audio or document upload with strict validation
+    and content-hash dedup.
 
-    Routes by magic bytes: PNG/JPEG/GIF/WebP → image-input node; MP4/MOV/WebM
-    → video-input node (with ffprobe-derived private source metadata stored on
-    the node's params so the editor surface can read source metadata
-    without waiting for the edit handler to run).
+    Routes by magic bytes: PNG/JPEG/GIF/WebP → image-input node; WAV/MP3/AAC/
+    M4A/FLAC/Ogg → audio-input node; MP4/MOV/WebM → video-input node (with
+    ffprobe-derived private source metadata stored on the node's params so
+    the editor surface can read source metadata without waiting for the edit
+    handler to run); PDF or a text file → document-input node.
 
     When `create_node` is truthy, atomically creates the routed node in
     cli_graph and broadcasts graphSync. When absent or falsy, returns only
     the upload metadata so callers can handle node creation themselves (or
-    use the URL for an existing node).
+    use the URL for an existing node). `x` and `y` (both or neither, finite
+    flow coordinates) put the created node there: the canvas sends the drop
+    point, an agent its own spot. Without them the node goes right of the
+    rightmost node, as before. The export keeps a stored position
+    (_display_positions), so the spot is where the canvas draws it.
 
     Probe failure on a video that passed the magic-byte sniff deletes the
     just-written file (unless it pre-existed via content-hash dedup) and
@@ -2429,6 +2799,7 @@ async def upload_file_consolidated(
     Supersedes the deprecated /api/upload and /api/chat/uploads endpoints;
     both shapes of caller can migrate to this one.
     """
+    requested_position = _upload_position(x, y)
     content = await file.read()
     # Reject anything that cannot possibly be an accepted file before sniffing.
     # Images are capped at MAX_CHAT_UPLOAD_BYTES; videos at MAX_VIDEO_UPLOAD_BYTES.
@@ -2442,13 +2813,24 @@ async def upload_file_consolidated(
         raise HTTPException(status_code=415, detail="File is too small to be a valid media file")
 
     image_sniffed = _sniff_image_type(content[:16])
-    video_sniffed = _sniff_video_type(content[:16]) if image_sniffed is None else None
+    # A text name wins over a bare audio guess: a .txt saved as UTF-16 starts
+    # FF FE (an MPEG frame sync) and one can start "ID3"; both stay documents.
+    is_text_name = Path(file.filename or "").suffix.lower() in _DOC_TEXT_EXTS
+    audio_sniffed = (_sniff_audio_type(content)
+                     if image_sniffed is None and not is_text_name else None)
+    video_sniffed = (_sniff_video_type(content[:16])
+                     if image_sniffed is None and audio_sniffed is None else None)
 
     if image_sniffed is not None:
         if len(content) > MAX_CHAT_UPLOAD_BYTES:
             raise HTTPException(status_code=413, detail="Image exceeds 20 MB limit")
         _, ext = image_sniffed
         node_type = "image-input"
+    elif audio_sniffed is not None:
+        # Sound shares the clip cap (MAX_VIDEO_UPLOAD_BYTES, checked above):
+        # an hour of WAV is far past the 20 MB image cap.
+        _, ext = audio_sniffed
+        node_type = "audio-input"
     elif video_sniffed is not None:
         # Size already validated against MAX_VIDEO_UPLOAD_BYTES above.
         _, ext = video_sniffed
@@ -2463,18 +2845,20 @@ async def upload_file_consolidated(
         # the image cap for a better error, else reject.
         if len(content) > MAX_CHAT_UPLOAD_BYTES:
             raise HTTPException(status_code=413, detail="Image exceeds 20 MB limit")
-        raise HTTPException(status_code=415, detail="Only image, video, or document (PDF/text) files are accepted")
+        raise HTTPException(status_code=415, detail="Nebula takes images, video, audio, PDFs and text files.")
 
     digest = hashlib.sha256(content).hexdigest()
     saved_path = require_allowed_path(CHAT_UPLOADS_DIR / f"{digest}{ext}")
     # Track whether THIS request created the file: content-hash dedup means the
     # file may already exist from an earlier upload, in which case a later
     # failure must NOT delete it (other nodes/requests may reference it).
-    file_created = not saved_path.exists()
-    if file_created:
+    file_created = False
+    if not saved_path.exists():
         # Dedup by content hash: identical bytes collapse to one file on disk.
-        # Concurrent write-after-write writes the same bytes and is benign.
-        saved_path.write_bytes(content)
+        # It appears whole under its served name, never half-written, so a
+        # price measured from it (services/input_sizes.py) is of the whole
+        # file; a concurrent upload of the same bytes finds it there.
+        file_created = write_new_file(saved_path, content)
 
     url = f"/api/outputs/chat-uploads/{saved_path.name}"
     filename = file.filename or f"{digest}{ext}"
@@ -2484,19 +2868,25 @@ async def upload_file_consolidated(
         "url": url,
         "filePath": str(saved_path.resolve()),
         "filename": filename,
+        # The input node it routes to (upload_client: `nebula upload`, MCP upload_file).
+        "nodeType": node_type,
     }
 
     # Opt-in node creation: parse create_node laxly so any reasonable truthy
     # string works (supports callers composing forms in different tools).
     if create_node.strip().lower() in ("true", "1", "yes"):
-        positions = [n.get("position", {}) for n in cli_graph.nodes.values()]
-        max_x = max((p.get("x", 0) for p in positions), default=-300)
-        new_position = {"x": float(max_x) + 300.0, "y": 100.0}
+        if requested_position is not None:
+            new_position = requested_position
+        else:
+            positions = [n.get("position", {}) for n in cli_graph.nodes.values()]
+            max_x = max((p.get("x", 0) for p in positions), default=-300)
+            new_position = {"x": float(max_x) + 300.0, "y": 100.0}
 
-        if node_type in ("image-input", "document-input"):
-            # filePath is the absolute local path (handlers open() this), _previewUrl
-            # is the served URL. Document Input ignores the preview (no <img>) but
-            # the shape is harmless and matches the Inspector upload.
+        if node_type in ("image-input", "audio-input", "document-input"):
+            # filePath is the absolute local path (handlers open() this; the
+            # engine's audio-input branch reads it), _previewUrl is the served
+            # URL. Only Image Input draws the preview; the shape matches the
+            # Inspector's own upload for each of them.
             node_params = {"filePath": str(saved_path.resolve()), "_previewUrl": url}
         else:
             # video-input: probe at upload so the source owns its own
@@ -2531,6 +2921,10 @@ async def upload_file_consolidated(
             response["sourceFps"] = probe.fps
             response["sourceIsVfr"] = probe.is_vfr
 
+        # The name it was sent with, for the card (the stored name is a hash).
+        kept_name = file_name_param(node_params["filePath"], file.filename)
+        if kept_name is not None:
+            node_params[INPUT_FILE_NAME_PARAM] = kept_name
         node_id = cli_graph.add_node(node_type, node_params, position=new_position)
         try:
             await _broadcast_graph_sync(edit=True)
@@ -2549,6 +2943,12 @@ async def upload_file_consolidated(
                 status_code=500,
                 detail=f"Upload succeeded but graph sync failed: {exc}",
             ) from exc
+        # The same record /api/graph/node keeps: the history, `nebula watch`
+        # and the chat's action line credit the node to whoever uploaded it
+        # (an agent's `nebula upload` / upload_file, or the person's drop).
+        publish_action(f"Added {node_type} ({node_id})")
+        _journal_node_added(node_id)
+        await _show_agent({"nodeId": node_id}, say=f"Added {_quoted(_node_label(node_id))}", did=_did("Added", node_id))
         response["nodeId"] = node_id
         if node_type == "image-input":
             response["thumbUrl"] = url
@@ -2768,6 +3168,8 @@ def _event_to_camel(event: ExecutionEvent) -> dict[str, Any]:
                     "nodeId": e.get("node_id", e.get("nodeId", "")),
                     "portId": e.get("port_id", e.get("portId", "")),
                     "message": e.get("message", ""),
+                    # The card's line (error copy round 3e); None: GM's general line.
+                    "person": e.get("person"),
                 }
                 for e in value
             ]
@@ -2775,7 +3177,12 @@ def _event_to_camel(event: ExecutionEvent) -> dict[str, Any]:
 
 
 def _validation_response(errors: list[ValidationErrorDetail]) -> dict[str, Any]:
-    """Keep REST validation details aligned with the WebSocket event shape."""
+    """Keep REST validation details aligned with the WebSocket event shape.
+
+    The canvas's own run calls (/api/execute, a node's run, a shot): each
+    error's `message` is the specific text and `person` the card's line
+    (error copy round 3e). Agents' runs answer with _refused_cli_run, which
+    keeps `message` alone."""
     return {
         "status": "validation_error",
         "errorCount": len(errors),
@@ -2784,10 +3191,22 @@ def _validation_response(errors: list[ValidationErrorDetail]) -> dict[str, Any]:
                 "nodeId": error.node_id,
                 "portId": error.port_id,
                 "message": error.message,
+                "person": error.person,
             }
             for error in errors
         ],
     }
+
+
+def _validation_person_lines(errors: list[ValidationErrorDetail]) -> dict[str, str | None]:
+    """Node id -> the card's line for its pre-call errors (joined_lines:
+    None when one of them has none)."""
+    from execution.person_line import joined_lines
+
+    by_node: dict[str, list[str | None]] = {}
+    for error in errors:
+        by_node.setdefault(error.node_id, []).append(error.person)
+    return {node_id: joined_lines(lines) for node_id, lines in by_node.items()}
 
 
 def _validation_messages(errors: list[ValidationErrorDetail]) -> dict[str, str]:
@@ -2843,6 +3262,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         export = await export_graph_for_frontend()
         await websocket.send_text(json.dumps({"type": "graphSync", **export}))
         await websocket.send_text(json.dumps(_pins_message()))
+        await _settle_proposal_updates()
         await websocket.send_text(json.dumps(_canvas_notes_message()))
         while True:
             raw = await websocket.receive_text()
@@ -2859,6 +3279,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             if manager.promote(websocket, frame.get("personToken")):
                 # Accept keys travel only to the person's canvas sockets.
                 await websocket.send_text(json.dumps(_proposal_sync_message()))
+                await websocket.send_text(json.dumps(await _asset_proposal_sync_message()))
+                # Open question sets with their answer keys (Q125 item 1), same rule.
+                await _send_questions_sync(websocket)
             else:
                 await websocket.send_text(json.dumps({
                     "type": "personRequired",
@@ -2937,7 +3360,10 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 return {"type": "done"}
             enqueue({"type": "session", "sessionId": host.id, "agentName": host.display_name, "color": host.color,
                      "agentInfo": {"name": str(host.agent_info.get("name") or "")[:64],
-                                   "version": str(host.agent_info.get("version") or "")[:32]}})
+                                   "version": str(host.agent_info.get("version") or "")[:32]},
+                     # The models (and thinking levels) the person may pick
+                     # for this session, and whether its prompts take images.
+                     "options": host.option_view(), "promptImages": host.prompt_images})
         # Reused or just started, Settings must still allow it before it gets
         # a prompt: switched off, removed or changed since it started.
         if host.closed or not acp_sessions.still_allowed(host, _STATE_DIR):
@@ -3176,7 +3602,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
                         "source": source,
                     })
                 continue
-            if msg_type in {"permission", "close_session"}:
+            if msg_type in {"permission", "close_session", "personal_option"}:
                 # The person's answers to a personal agent: they carry the
                 # person token, and only this socket's own sessions count.
                 if chat_marked_as_agent or not person_session.verify(payload.get("personToken")):
@@ -3188,6 +3614,24 @@ async def chat_websocket(websocket: WebSocket) -> None:
                     for host in acp_sessions.live():
                         if host.owner == connection_id:
                             host.resolve_permission(payload.get("requestId"), payload.get("decision"), connection_id)
+                    continue
+                if msg_type == "personal_option":
+                    # The person picked a model (or thinking level) for this session.
+                    target = acp_sessions.get(payload.get("sessionId"), connection_id)
+                    if target is None:
+                        await send_event({"type": "error", "code": "personal_session_ended", "message": (
+                            "This chat's agent has stopped. Send again to start a new conversation."),
+                            "source": "personal"})
+                        continue
+                    try:
+                        options = await target.set_option(payload.get("configId"), payload.get("value"))
+                    except PersonalSessionError as exc:
+                        await send_event({"type": "personal_options", "sessionId": target.id,
+                                          "options": target.option_view(), "error": exc.message,
+                                          "source": "personal"})
+                        continue
+                    await send_event({"type": "personal_options", "sessionId": target.id, "options": options,
+                                      "source": "personal"})
                     continue
                 target = acp_sessions.get(payload.get("sessionId"), connection_id)
                 if target is not None and current_task is not None and not current_task.done() \
@@ -3324,6 +3768,8 @@ async def chat_websocket(websocket: WebSocket) -> None:
 
 def _personal_agent_http_error(exc: personal_agents.PersonalAgentError) -> HTTPException:
     status = {"not_found": 404, "conflict": 409}.get(exc.code, 400)
+    if status == 404:  # GM's 404 pattern (error-copy round 3); these routes are the person's only
+        return refusal_copy.not_found(exc.message, "agent", "agents")
     return HTTPException(status_code=status, detail=exc.message)
 
 
@@ -3352,7 +3798,7 @@ async def update_personal_agent(agent_id: str, body: dict[str, Any]) -> dict[str
     """Switch an agent on or off, rename or recolor it (custom: also its command)."""
     require_person(current_request_headers())
     if not personal_agents.ID_RE.fullmatch(agent_id):
-        raise HTTPException(status_code=404, detail="No agent with that id")
+        raise refusal_copy.not_found("No agent with that id", "agent", "agents")
     try:
         view = await asyncio.to_thread(personal_agents.update_agent, _STATE_DIR, agent_id, body)
     except personal_agents.PersonalAgentError as exc:
@@ -3372,9 +3818,79 @@ async def delete_personal_agent(agent_id: str) -> dict[str, Any]:
     except personal_agents.PersonalAgentError as exc:
         raise _personal_agent_http_error(exc) from exc
     if not removed:
-        raise HTTPException(status_code=404, detail="No custom agent with that id")
+        raise refusal_copy.not_found("No custom agent with that id", "agent", "agents")
     await acp_sessions.close_stale(_STATE_DIR)
     return {"ok": True}
+
+
+def _antigravity_signed_in(value: bool) -> None:
+    personal_agents.set_signed_in(_STATE_DIR, antigravity_agent.AGENT_ID, value)
+
+
+def _antigravity_view() -> dict[str, Any]:
+    view = personal_agents.get_agent(_STATE_DIR, antigravity_agent.AGENT_ID)
+    assert view is not None
+    return {"agent": view.as_dict()}
+
+
+def _antigravity_http_error(exc: antigravity_agent.AntigravityError) -> HTTPException:
+    return HTTPException(status_code=409 if exc.code in {"not_installed", "unsupported"} else 400, detail=exc.message)
+
+
+@app.post("/api/personal-agents/antigravity/install")
+async def install_antigravity() -> dict[str, Any]:
+    """Download Google's Antigravity ACP server, pinned and SHA-256 checked
+    (services/antigravity_agent.py). Runs in the background; GET shows progress."""
+    require_person(current_request_headers())
+    try:
+        antigravity_agent.start_install(_STATE_DIR)
+    except antigravity_agent.AntigravityError as exc:
+        raise _antigravity_http_error(exc) from exc
+    return await asyncio.to_thread(_antigravity_view)
+
+
+@app.delete("/api/personal-agents/antigravity/install")
+async def remove_antigravity() -> dict[str, Any]:
+    """Stop a download in progress, or delete the downloaded server."""
+    require_person(current_request_headers())
+    if not await antigravity_agent.cancel(_STATE_DIR, "install"):
+        await antigravity_agent.cancel(_STATE_DIR, "sign_in")
+        await asyncio.to_thread(antigravity_agent.remove, _STATE_DIR)
+    await acp_sessions.close_stale(_STATE_DIR)
+    return await asyncio.to_thread(_antigravity_view)
+
+
+@app.post("/api/personal-agents/antigravity/sign-in")
+async def sign_in_antigravity() -> dict[str, Any]:
+    """The person asked to sign in with Google. Google's server opens the
+    browser and keeps the login in the Keychain; Nebula never sees it."""
+    require_person(current_request_headers())
+    try:
+        antigravity_agent.start_sign_in(_STATE_DIR, _antigravity_signed_in)
+    except antigravity_agent.AntigravityError as exc:
+        raise _antigravity_http_error(exc) from exc
+    return await asyncio.to_thread(_antigravity_view)
+
+
+@app.delete("/api/personal-agents/antigravity/sign-in")
+async def cancel_antigravity_sign_in() -> dict[str, Any]:
+    require_person(current_request_headers())
+    await antigravity_agent.cancel(_STATE_DIR, "sign_in")
+    return await asyncio.to_thread(_antigravity_view)
+
+
+@app.post("/api/personal-agents/antigravity/sign-out")
+async def sign_out_antigravity() -> dict[str, Any]:
+    """Stop using the Google login at once (running sessions stop), then ask
+    Google's server to delete it."""
+    require_person(current_request_headers())
+    try:
+        message = await antigravity_agent.sign_out(_STATE_DIR, _antigravity_signed_in)
+    except antigravity_agent.AntigravityError as exc:
+        message = exc.message
+    finally:
+        await acp_sessions.close_stale(_STATE_DIR)
+    return {**(await asyncio.to_thread(_antigravity_view)), "message": message}
 
 
 @app.post("/api/personal-agents/acknowledge-warning")
@@ -3548,7 +4064,7 @@ async def update_agent_app(app_id: str, body: dict[str, Any]) -> dict[str, Any]:
     except app_tokens.AppTokenError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if app_view is None:
-        raise HTTPException(status_code=404, detail="No connected app with that id")
+        raise refusal_copy.not_found("No connected app with that id", "app", "apps")
     return {"app": app_view}
 
 
@@ -3559,7 +4075,7 @@ async def revoke_agent_app(app_id: str) -> dict[str, Any]:
     The person's only."""
     require_person(current_request_headers())
     if not (app_tokens.valid_id(app_id) and app_token_store.revoke(app_id)):
-        raise HTTPException(status_code=404, detail="No connected app with that id")
+        raise refusal_copy.not_found("No connected app with that id", "app", "apps")
     return {"status": "revoked"}
 
 
@@ -3620,6 +4136,10 @@ def _agent_node_context() -> dict[str, Any]:
             "pricing": pricing, "definitions": node_registry.get_all()}
 
 
+# find_nodes' and `nebula context`'s price for a node priced from its input's size.
+SIZED_PRICE = "by input size"
+
+
 def _agent_node_row(definition: Mapping[str, Any], context: Mapping[str, Any]) -> dict[str, Any]:
     """One node type as find_nodes lists it: whether it runs here (and if not,
     what's missing) and its list price at default settings."""
@@ -3648,15 +4168,25 @@ def _agent_node_row(definition: Mapping[str, Any], context: Mapping[str, Any]) -
     elif definition.get("apiProvider") == "utility":
         row["price"] = None
     else:
-        estimate = model_pricing.estimate_node(
-            context["pricing"].get(definition["id"]), definition, {},
-            model_pricing.route_price_key(
-                definition, node_route.select_route(definition, {}, settings.get("apiKeys") or {}))
-            if node_route.has_routes(definition)
-            else model_pricing.route_provider(definition, settings.get("apiKeys") or {}))
+        provider = (model_pricing.route_price_key(
+                        definition, node_route.select_route(definition, {}, settings.get("apiKeys") or {}))
+                    if node_route.has_routes(definition)
+                    else model_pricing.route_provider(definition, settings.get("apiKeys") or {}))
+        entry = context["pricing"].get(definition["id"])
+        estimate = model_pricing.estimate_node(entry, definition, {}, provider)
         row["price"] = ([round(estimate["low"], 4), round(estimate["high"], 4)]
                         if estimate and estimate.get("currency") == "usd" else None)
+        note = model_pricing.size_note(model_pricing.entry_for_route(entry, provider), definition)
+        if row["price"] is None and note:
+            # Priced at run time from the input file (model_pricing sizing).
+            row["price"] = SIZED_PRICE
+            row["priceNote"] = note
     return row
+
+
+# GET /api/agent/nodes' largest `limit`: above the catalog (308 node types,
+# 2026-10-21), so `nebula nodes --all` gets every one in one call.
+AGENT_NODES_MAX = 2000
 
 
 @app.get("/api/agent/nodes")
@@ -3666,10 +4196,11 @@ async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool
 
     Every word of `query` must appear in the id, name or description.
     `category` is a category id (image-gen) or its short name (image),
-    services/node_categories.py."""
+    services/node_categories.py. `limit` goes up to AGENT_NODES_MAX: MCP's
+    find_nodes asks for at most 100 rows, `nebula nodes` for every match."""
     context = _agent_node_context()
     words = [word for word in query.lower().split() if word]
-    limit = max(1, min(int(limit), 100))
+    limit = max(1, min(int(limit), AGENT_NODES_MAX))
     definitions = context["definitions"]
     wanted = (node_categories.resolve(category, {str(d.get("category")) for d in definitions.values()}) or category
               if category else "")
@@ -3752,6 +4283,11 @@ def _describe_routes(
             "price": ({"usd": [round(estimate["low"], 4), round(estimate["high"], 4)]}
                       if estimate and estimate.get("currency") == "usd" else None),
         }
+        sized = model_pricing.size_note(model_pricing.entry_for_route(
+            (pricing.get("nodes") or {}).get(str(definition.get("id") or "")), str(spec.get("pricing") or spec["id"])),
+            definition)
+        if row["price"] is None and sized:
+            row["priceBy"] = sized
         if row["price"] and model_pricing.route_price_unconfirmed(
                 (pricing.get("nodes") or {}).get(str(definition.get("id") or "")), definition, str(spec["id"])):
             row["priceUnconfirmed"] = True
@@ -3804,15 +4340,46 @@ def _brief_param(param: dict[str, Any]) -> dict[str, Any]:
     return brief
 
 
-@app.get("/api/agent/nodes/{definition_id}")
+_CHAT_MODEL_PORTS = (
+    "These ports follow the node's `model`: `messages` always; `images` (Image, several connections) when the model "
+    "takes images; `text` when it writes text and `image` (Image) when it makes images. Set `model` with "
+    "edit_canvas and the node gets that model's ports (the edit's `modelPorts` lists them; look_at_canvas shows "
+    "a node's `ports`). Nebula reads the model list with the person's key, which costs nothing; without it the "
+    "edit says so and the node keeps the ports above.")
+_MODEL_PORTS_NOTES = {
+    "openrouter-universal": _CHAT_MODEL_PORTS,
+    "nous-portal-universal": _CHAT_MODEL_PORTS,
+    "replicate-universal": (
+        "No ports until `model_id` (owner/name) is set. Set it with edit_canvas and the node gets the model's "
+        "version and defaults, a port for each file input (named as the model names it) and one output: for a "
+        "file or a list of them, typed from the model's data (its schema's content hints, else its "
+        "`default_example` run's file) as `video`, `audio`, `image`, `svg` or `mesh` (`image` with "
+        "`typeUnconfirmed` when nothing says; a run then keeps a file of another type under that type's own port), "
+        "else `text`; a run fills that port. A node whose ports were saved before outputs were typed shows its file "
+        "output as `typeUnconfirmed` with a note: set its model_id again. The model's other inputs are params of "
+        "the same name. The edit's `modelPorts` lists the ports; look_at_canvas shows a node's `ports`. Nebula "
+        "reads the schema with the person's Replicate token, which costs nothing; without it the edit says so."),
+}
+
+
+# `{...:path}`: a display name may hold a slash ("Jev Decide (judge / classify / yes-no)").
+@app.get("/api/agent/nodes/{definition_id:path}")
 async def agent_describe_node(definition_id: str) -> dict[str, Any]:
     """One node type, in what an agent needs to wire and set it: ports, params
-    (options, defaults, ranges), whether it can run here, and its list prices."""
-    definition = node_registry.get(definition_id)
-    if definition is None:
-        hint = ", ".join(_suggest_node_ids(definition_id, list(node_registry.get_all())))
+    (options, defaults, ranges), whether it can run here, and its list prices.
+    Takes an id, or the exact display name of one node type (ignoring case
+    and outer spaces); a name answer starts with `lookup`, saying the id."""
+    found = node_lookup.resolve(definition_id, node_registry.get_all())
+    if found.definition_id is None:
+        if len(found.named) > 1:
+            line = node_lookup.shared_name_line(definition_id, found.named, node_registry.get_all())
+            raise HTTPException(status_code=404, detail=f"No node type '{definition_id}': {line}: "
+                                f"{', '.join(found.named)}. Use one of those ids.")
+        hint = ", ".join(_suggest_node_ids(definition_id, node_registry.get_all()))
         raise HTTPException(status_code=404, detail=f"No node type '{definition_id}'." + (
             f" Close matches: {hint}." if hint else " find_nodes lists them."))
+    definition_id = found.definition_id
+    definition = node_registry.get(definition_id)
     settings = load_settings()
     try:
         krea_signed_in = _krea_connector().status().get("status") == "connected"
@@ -3829,6 +4396,8 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
         for port in definition.get(key) or []
     ]
     result: dict[str, Any] = {
+        # A name, not the id, picked it: say which id (first, so it's read first).
+        **({"lookup": found.note} if found.note else {}),
         "id": definition["id"],
         "name": definition.get("displayName") or definition["id"],
         "category": definition.get("category"),
@@ -3838,6 +4407,9 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
     }
     if definition.get("description"):
         result["description"] = definition["description"]
+    if definition_id in _MODEL_PORTS_NOTES:
+        # Its ports come from its model (services/universal_ports.py).
+        result["modelPorts"] = _MODEL_PORTS_NOTES[definition_id]
     shown = lambda key: [_brief_param(param) for param in definition.get(key) or []  # noqa: E731
                          if not str(param.get("key", "")).startswith("_") and not param.get("hidden")]
     # A dual-route node lists its shared params here and each route's own
@@ -3927,7 +4499,13 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
 
             def price_table(priced: Mapping[str, Any]) -> dict[str, Any]:
                 rows = [{**row.get("match", {}), "usd": row.get("price")} for row in priced.get("rows") or []]
-                return {"per": priced.get("per"), "dependsOn": priced.get("priceParams") or [], "rows": rows[:40]}
+                table = {"per": priced.get("per"), "dependsOn": priced.get("priceParams") or [], "rows": rows[:40]}
+                sized = model_pricing.size_note(priced, definition)
+                if sized:
+                    # The rows' multiplyBy quantities come from the input file at run time.
+                    table["byInputSize"] = sized
+                    table["multiplyBy"] = list(priced.get("multiplyBy") or [])
+                return table
 
             routed = model_pricing.entry_for_route(entry, provider)
             result["price"] = {
@@ -3935,6 +4513,9 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
                 "atDefaultsUsd": ([round(estimate["low"], 4), round(estimate["high"], 4)]
                                   if estimate and estimate.get("currency") == "usd" else None),
             }
+            if (routed or entry).get("unconfirmed") is True:
+                # The vendor's page doesn't state it exactly (the entry's notes say what's assumed).
+                result["price"]["unconfirmed"] = True
             if isinstance(entry.get("routes"), Mapping):
                 # Each route's own price; the run bills the route it takes.
                 result["price"]["billedBy"] = provider if routed else None
@@ -3988,23 +4569,44 @@ async def set_canvas_selection(body: dict[str, Any]) -> dict[str, Any]:
     return snapshot
 
 
+def _did(verb: str, node_id: str | None = None, label: str | None = None) -> dict[str, Any]:
+    """What an agent's action was, for the Agents panel's line when it has no
+    status (Q125 item 2, GM: Moved “Hero shots” · 2 min ago): a past-tense
+    verb and the node it names, by the node's label (else its model's name)."""
+    if node_id is not None and label is None and node_id in cli_graph.nodes:
+        label = _node_label(node_id)
+    return {"verb": verb, "nodeId": node_id if node_id in cli_graph.nodes else None, "label": label}
+
+
+def _point(identity: AgentIdentity, **kwargs: Any) -> dict[str, Any]:
+    """agent_presence.point for the open project: every cursor event says
+    which project it happened in (the roster lists a cursor only there)."""
+    try:
+        project_id = _workspace_context()["activeProjectId"]
+    except Exception:  # noqa: BLE001 - the catalog unreadable: the cursor still moves
+        project_id = None
+    return agent_presence.point(identity, project_id=project_id, **kwargs)
+
+
 async def _show_agent(
     target: dict[str, Any],
     *,
     action: str = "click",
     say: str = "",
     origin: dict[str, Any] | None = None,
+    did: dict[str, Any] | None = None,
 ) -> None:
     """Move the calling agent's cursor; a no-op for the browser's own requests.
 
-    Never fails the route that called it: presence is decoration on top of
-    an edit that already succeeded.
+    ``did`` (_did) is what the action was, for the Agents panel. Never fails
+    the route that called it: presence is decoration on top of an edit that
+    already succeeded.
     """
     identity = identify_agent(current_request_headers())
     if identity is None:
         return
     try:
-        event = agent_presence.point(identity, target=target, origin=origin, action=action, say=say)
+        event = _point(identity, target=target, origin=origin, action=action, say=say, did=did)
         await manager.broadcast_raw(event)
     except Exception:  # noqa: BLE001 - decoration must not break graph edits
         pass
@@ -4022,7 +4624,7 @@ async def _say_agent_action(say: str) -> None:
     if identity is None:
         return
     try:
-        await manager.broadcast_raw(agent_presence.point(identity, target=None, action="click", say=say))
+        await manager.broadcast_raw(_point(identity, target=None, action="click", say=say))
     except Exception:  # noqa: BLE001 - decoration must not break a saved write
         pass
 
@@ -4075,6 +4677,41 @@ _RUN_EVENT_VERBS = {"run.started": "started", "run.finished": "finished", "run.f
                     "run.skipped": "skipped"}
 
 
+def _note_run(run_id: str) -> None:
+    """Who asked for a run, and when: the journal credits its node events to
+    them, and an agent's undo (POST /api/graph/apply/undo) leaves a node
+    someone else ran after the agent's edit (services/canvas_undo.py)."""
+    actor = actor_for_headers(current_request_headers())
+    canvas_events.note_run(run_id, actor)
+    try:
+        canvas_undo_book.run_started(run_id, actor=actor, project_id=_workspace_context()["activeProjectId"])
+    except Exception:  # noqa: BLE001 - never refuse a run over undo bookkeeping
+        pass
+
+
+def _note_run_nodes(run_id: str, nodes: list[GraphNode]) -> None:
+    """The canvas nodes a run set out to run: while it is going they count as
+    run for an agent's undo, before the engine reaches them."""
+    canvas_undo_book.run_nodes(run_id, [node.id for node in nodes])
+
+
+def _run_is_active(run_id: str) -> bool:
+    record = execution_runs.get(run_id)
+    return record is not None and record.status in {"running", "cancelling"}
+
+
+def _note_node_ran(event: Any, run_id: str | None) -> None:
+    """A run started a canvas node (its ExecutingEvent), for an agent's undo."""
+    node_id = getattr(event, "node_id", None)
+    if not isinstance(event, ExecutingEvent) or not isinstance(node_id, str) or node_id not in cli_graph.nodes:
+        return
+    try:
+        project_id = (_execution_workspace_context.get() or _workspace_context())["activeProjectId"]
+        canvas_undo_book.node_ran(run_id, node_id, actor=canvas_events.run_actor(run_id), project_id=project_id)
+    except Exception:  # noqa: BLE001 - never break execution over undo bookkeeping
+        pass
+
+
 def _journal_execution_event(event: Any, run_id: str | None) -> None:
     """Journal one node's run start/finish/failure, attributed to whoever started the run."""
     try:
@@ -4088,11 +4725,15 @@ def _journal_execution_event(event: Any, run_id: str | None) -> None:
         if not canvas_events.first_run_event(run_id, node_id, kind):
             return
         data: dict[str, Any] = {"runId": run_id}
+        # Agents read these (wait_for_canvas_change, `nebula watch`): hide a key
+        # a provider quoted (services/key_echoes.py) before cutting to 200, so
+        # a key cut short can't slip under the 8-character run check.
         if isinstance(event, ErrorEvent):
-            error = event.friendly or event.error or ""
+            error = _hide_key_echoes(event.friendly or event.error or "", _agent_key_secrets())
             data["error"] = str(_journal_safe_value(error, key="error"))[:200]
         if isinstance(event, SkippedEvent):
-            data["reason"] = str(_journal_safe_value(event.reason, key="reason"))[:200]
+            reason = _hide_key_echoes(event.reason, _agent_key_secrets())
+            data["reason"] = str(_journal_safe_value(reason, key="reason"))[:200]
             if event.gate_node_id:
                 data["gateNodeId"] = event.gate_node_id
         _journal(
@@ -4132,6 +4773,58 @@ def _node_label(node_id: str) -> str:
     return str(definition.get("displayName") or node.get("definitionId") or node_id)
 
 
+def _run_node_name(node_id: str, run_nodes: Mapping[str, GraphNode]) -> str:
+    """A node's name in a run, from the run's own nodes, for a refusal: the
+    label it carries (a run's node has none today: GraphNode keeps no label),
+    else the open canvas's label when the canvas node with that id is the
+    same definition (a run of the canvas: /api/graph/run), else the run
+    node's type name, else its id. Never raises: it only names things in a
+    refusal that is already decided."""
+    try:
+        node = run_nodes.get(node_id)
+        if node is None:
+            return node_id
+        own = getattr(node, "label", None)
+        if isinstance(own, str) and own.strip():
+            return own
+        live = cli_graph.nodes.get(node_id)
+        if isinstance(live, dict) and live.get("definitionId") == node.definition_id:
+            canvas_label = live.get("label")
+            if isinstance(canvas_label, str) and canvas_label.strip():
+                return canvas_label
+        definition = node_registry.get_all().get(node.definition_id) or {}
+        return str(definition.get("displayName") or node_id)
+    except Exception:  # noqa: BLE001 - a name in a refusal must never turn it into a 500
+        return node_id
+
+
+def _quoted(label: str) -> str:
+    """A node's name in a cursor bubble, in curly quotes as the Agents panel
+    shows it (GM - Design, 2026-10-25: Connecting “A” to “B”), without
+    doubling quotes already around the name (services/node_names.py)."""
+    return node_names.quoted(label)
+
+
+# The Agents panel's verb for a point_at with nothing else behind it (Q125
+# item 2). GM - Design's review of PR #193: keep only "Pointed at “X”" and
+# "Looked at “X”" on a node and "Looked around" at a spot; "Clicked",
+# "Dragged to" and a bare "Moved", "Clicked" or "Dragged" at a spot are cut
+# ("'Moved · just now' reads like the agent moved a node, and the rest is
+# noise"). A cut gesture names nothing: the cursor keeps the agent's previous
+# action, with that action's own time (agent_presence.point).
+_POINTED_AT_NODE = {"move": "Pointed at", "look": "Looked at"}
+_POINTED_AT_SPOT = {"look": "Looked around"}
+
+
+def _pointed(action: str, target: Mapping[str, Any]) -> dict[str, Any] | None:
+    node_id = target.get("nodeId") if isinstance(target, Mapping) else None
+    if isinstance(node_id, str):
+        verb = _POINTED_AT_NODE.get(action)
+        return _did(verb, node_id) if verb else None
+    verb = _POINTED_AT_SPOT.get(action)
+    return {"verb": verb, "nodeId": None, "label": None} if verb else None
+
+
 @app.post("/api/canvas/cursor")
 async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
     """Point the calling agent's cursor at a node, a port, or a canvas spot.
@@ -4163,18 +4856,154 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
         else:
             target = parse_target(body.get("target"), cli_graph.nodes)
         origin = parse_target(body["from"], cli_graph.nodes, "from") if body.get("from") is not None else None
-        event = agent_presence.point(
+        action = body.get("action") or "move"
+        event = _point(
             identity,
             target=target,
             origin=origin,
-            action=body.get("action") or "move",
+            action=action,
             say=body.get("say"),
+            # A line said in place, or a cut gesture (_pointed gives None),
+            # keeps the agent's last action and its time.
+            did=None if placed == "cursor" else _pointed(action, target),
         )
     except PresenceError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     await manager.broadcast_raw(event)
     return {"agent": identity.as_dict(), "target": target, "action": event["action"], "say": event["say"],
             "placed": placed}
+
+
+# ---------- The Agents panel: status lines and the roster (Q125 item 2) ----------
+#
+# Justin, 2026-10-24 ("Yes, all four, in that order"), item 2: "An Agents
+# panel: Needs you / Working ... MCP: set_status(text, node_id). Proposals
+# and questions feed 'Needs you' on their own." Every surface sets a status
+# through set_agent_status (MCP set_status, `nebula status`) and reads the
+# roster through list_canvas_agents (the panel, MCP list_agents, `nebula
+# agents`). services/agent_status.py has the rules.
+
+_STATUS_KEYS = frozenset({"text", "nodeId"})
+_status_expiry: asyncio.TimerHandle | None = None
+_status_sweeps: set[asyncio.Task[Any]] = set()
+
+
+async def _broadcast_status_events(events: list[dict[str, Any]]) -> None:
+    for event in events:
+        try:
+            await manager.broadcast_raw(event)
+        except Exception:  # noqa: BLE001 - a canvas that missed it reads the roster on reconnect
+            pass
+
+
+def _schedule_status_expiry() -> None:
+    """Check again just after the next status would run out. A sign that
+    came meanwhile moves that out, and the check schedules itself again."""
+    global _status_expiry
+    if _status_expiry is not None:
+        _status_expiry.cancel()
+        _status_expiry = None
+    deadline = agent_status.next_deadline()
+    if deadline is None:
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:  # no running loop (a script): the next roster read sweeps
+        return
+    _status_expiry = loop.call_later(max(0.0, deadline - agent_status.now()) + 0.5, _start_status_sweep)
+
+
+def _start_status_sweep() -> None:
+    task = asyncio.get_running_loop().create_task(_sweep_agent_statuses())
+    _status_sweeps.add(task)
+    task.add_done_callback(_status_sweeps.discard)
+
+
+async def _sweep_agent_statuses() -> None:
+    """Drop the statuses whose agent went quiet, and tell every canvas."""
+    await _broadcast_status_events(agent_status.sweep())
+    _schedule_status_expiry()
+
+
+async def _forget_status_anchors(*, node_id: str | None = None) -> None:
+    """A node deleted (``node_id``) or the graph cleared or replaced: the
+    lines on those nodes stay, without them (as cursors re-anchor)."""
+    events = agent_status.forget_node(node_id) if node_id is not None else agent_status.forget_graph()
+    await _broadcast_status_events(events)
+
+
+@app.post("/api/canvas/status")
+async def set_agent_status(body: Any = Body(None)) -> dict[str, Any]:
+    """Set the calling agent's status: one line about what it is working on,
+    optionally on a node. Body: {text, nodeId?}; empty text clears it. It
+    lasts until replaced or cleared, or until the agent has made no request
+    for 10 minutes. The caller must identify itself (agent token or
+    X-Nebula-Agent); it sets only its own."""
+    headers = current_request_headers()
+    identity = identify_agent(headers)
+    if identity is None:
+        if is_person(headers):
+            raise HTTPException(status_code=403, detail=(
+                "A status says what an agent is working on: the person doesn't set one"))
+        raise HTTPException(status_code=400, detail=(
+            "Name yourself with NEBULA_AGENT_NAME or --as (an X-Nebula-Agent header) to set your status"))
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="The body must be an object: {text, nodeId?}")
+    unknown = sorted(set(body) - _STATUS_KEYS)
+    if unknown:
+        raise HTTPException(status_code=422, detail=(
+            f"unknown field '{unknown[0]}': a status takes text and nodeId, and it is always your own"))
+    if "text" not in body:
+        raise HTTPException(status_code=422, detail="text is required: one line about what you're working on "
+                                                    "(\"\" clears it)")
+    node_id = body.get("nodeId")
+    try:
+        text = clean_status_text(body.get("text"))
+        if text and node_id is not None:
+            # Checked as a cursor target is: a node on the open canvas.
+            node_id = parse_target({"nodeId": node_id}, cli_graph.nodes, "nodeId")["nodeId"]
+        events = agent_status.set(identity, text, node_id=node_id if text else None,
+                                  project_id=_workspace_context()["activeProjectId"])
+    except (StatusError, PresenceError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc).replace("nodeId.nodeId", "nodeId")) from exc
+    await _broadcast_status_events(events)
+    _schedule_status_expiry()
+    status = agent_status.get(identity.id)
+    return {"agent": identity.as_dict(), "status": agent_status.view(status) if status is not None else None}
+
+
+def _waiting_in(project_id: str | None) -> list[Waiting]:
+    """The open project's open question sets and proposals (canvas and
+    asset), by agent and age: what "Needs you" counts. Nothing else of them."""
+    waiting = [Waiting(agent=s.agent, kind="question", created_at=s.created_at, count=len(s.spec.questions))
+               for s in agent_questions.open_list() if s.project_id == project_id]
+    waiting += [Waiting(agent=p.agent, kind="proposal", created_at=p.created_at)
+                for p in canvas_proposals.open_list() if p.project_id == project_id]
+    for proposal in asset_proposals.open_list():
+        # Kept with the project whose Updates hold it; one with no Update (made
+        # with no project open) waits wherever the person is, as the panel
+        # counts it (agentRosterModel), so the two reads agree.
+        ref = getattr(proposal, "update", None) or {}
+        where = ref.get("projectId") or project_id
+        if where == project_id:
+            waiting.append(Waiting(agent=proposal.agent, kind="proposal", created_at=proposal.created_at))
+    return waiting
+
+
+@app.get("/api/canvas/agents")
+async def list_canvas_agents() -> dict[str, Any]:
+    """The agents around in the open project: each one's status, its
+    cursor's last action, and how many questions and proposals wait for the
+    person (counts only, never their content). Needs you first (longest
+    wait first), then Working (most recent first)."""
+    await _sweep_agent_statuses()
+    await _sweep_proposals()
+    await _sweep_asset_proposals()
+    project_id = _workspace_context()["activeProjectId"]
+    agents = build_roster(project_id=project_id, now=agent_status.now(), cursors=agent_presence.active(),
+                          statuses=agent_status.for_project(project_id), waiting=_waiting_in(project_id),
+                          status_view=agent_status.view)
+    return {"projectId": project_id, "agents": agents, "rev": agent_status.revision}
 
 
 @app.post("/api/canvas/view")
@@ -4192,10 +5021,11 @@ async def get_canvas_snapshot() -> dict[str, Any]:
     selected = selection_context.snapshot(cli_graph, node_registry).get("selectedNodeIds", [])
     snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=selected)
     # Why a node's last run failed, as its card says it (services/node_errors.py).
+    key_words = _agent_key_secrets()
     for node in snapshot.get("nodes") or []:
         failed = node_errors.get(node["id"])
         if failed:
-            node["error"] = failed["error"]
+            node["error"] = _hide_key_echoes(failed["error"], key_words)
             if failed.get("hint"):
                 node["errorHint"] = failed["hint"]
     # `nebula look` then `nebula watch --since <cursor>` leaves no gap.
@@ -4208,7 +5038,46 @@ async def get_canvas_snapshot() -> dict[str, Any]:
     # Proposals waiting for the person (one line each; never their accept keys).
     await _sweep_proposals()
     snapshot["proposals"] = [canvas_proposals.brief(p) for p in canvas_proposals.open_list()]
+    snapshot["providerHolds"] = _provider_holds_for_agents()
     return snapshot
+
+
+def _provider_holds_for_agents() -> dict[str, Any]:
+    """Paid starts Nebula holds, read-only (graph export has the same two
+    lists): `recoveries` are accepted World Labs operations a rerun resumes
+    instead of paying again; `startAmbiguities` are starts Nebula couldn't
+    confirm, which keep the node from starting again until someone checks
+    Marble and clears it. Agents have no tool to clear either."""
+    try:
+        recoveries = provider_recovery_store.list()
+    except Exception:  # noqa: BLE001 - a read surface never fails the snapshot
+        recoveries = []
+    try:
+        ambiguities = provider_start_guard.list()
+    except Exception:  # noqa: BLE001
+        ambiguities = []
+    return {
+        "recoveries": [{key: record.get(key) for key in ("runId", "nodeId", "resumeOperationId", "existingWorldId")}
+                       for record in recoveries],
+        "startAmbiguities": [{key: record.get(key) for key in ("runId", "nodeId", "kind", "message", "durable")}
+                             for record in ambiguities],
+    }
+
+
+def _journal_provider_hold(hold: str, change: str, *, run_id: str | None, node_id: str,
+                           kind: str | None = None, durable: bool | None = None,
+                           actor: dict[str, Any] | None = None) -> None:
+    """One ``provider.hold`` event: a paid start held (`change` "held") or
+    cleared ("cleared"). `hold` is "recovery" or "startAmbiguity"."""
+    data: dict[str, Any] = {"hold": hold, "change": change, "runId": run_id}
+    if kind:
+        data["kind"] = kind
+    if durable is not None:
+        data["durable"] = durable
+    what = "a paid start Nebula couldn't confirm" if hold == "startAmbiguity" else "a recovery checkpoint"
+    summary = (f"{_node_label(node_id)} ({node_id}) is held: {what}" if change == "held"
+               else f"{what} on {_node_label(node_id)} ({node_id}) was cleared")
+    _journal("provider.hold", node_id=node_id, data=data, summary=summary, actor=actor)
 
 
 def _start_node_notes(rows: list[dict[str, Any]], context: Mapping[str, Any], via: str) -> list[str]:
@@ -4277,6 +5146,11 @@ async def agent_start_here(request: Request, via: str = "mcp") -> dict[str, Any]
         pins = []
     await _sweep_proposals()
     briefs = [canvas_proposals.brief(p) for p in canvas_proposals.open_list()]
+    # Asset proposals too (a cover, Send notes, Commons curation), with the
+    # Update each posted; a commons one only where the caller sees it.
+    await _sweep_asset_proposals()
+    briefs += [asset_proposals.brief(p) for p in asset_proposals.open_list()
+               if isinstance(p, AssetProposal) and await _commons_proposal_visible(p, headers)]
     # Reads every board file; off the event loop.
     summaries = await asyncio.to_thread(lambda: _moodboard_store().summaries())
     context = await asyncio.to_thread(_agent_node_context)
@@ -4387,6 +5261,403 @@ async def _journal_detached_pins(pins: list[dict[str, Any]], reason: str) -> Non
         )
 
 
+# ---------- What a node delete removed, and its undo (GM, 2026-10-23) ----------
+#
+# GM - Design, item 1: "Make undo complete. ... Reopen a proposal only if it's
+# still valid against the restored graph. If one can't be reopened, the Undo
+# notice says so." Every node delete (DELETE /api/graph/node, an agent's
+# apply, a restore that removes nodes: Cmd+Z of an add, redo of a delete)
+# detaches the pins on the node and closes the proposals that read it. Each
+# one gets a removal record, {id: "rm_...", nodeId, projectId, definitionId,
+# replaces?, pins, proposals}: the delete's answer carries it, so does the
+# edit's graphSync (edit.removals, for a canvas that didn't send it) and an
+# agent's undo record. The restore that brings the node back names it
+# (``removals``), and _undo_removals re-checks each pin and proposal rather
+# than trusting the list: a pin goes back only if this very removal detached
+# it from a node of this model (it keeps the id, persisted with the project,
+# canvas_pins.reattach), a proposal reopens only if this (removal, node) pair
+# closed it and the accept checks still pass (_proposal_reopen_misfit).
+#
+# Node ids are not unique over time (an import or a clear restarts the
+# counter at n1, a restore may put any id back, each project has its own n1),
+# so a record undoes exactly one delete of exactly one node and nothing
+# matches it by the node id alone (second review): the record carries its
+# project and model, node_removals knows what each id was minted for, and a
+# later delete of a node a restore brought back names the removal that
+# restore consumed (``replaces``), the only record renewed to it.
+
+REMOVAL_ID_RE = re.compile(r"^rm_[0-9a-f]{16}$")
+MAX_REMOVAL_PINS = 200
+MAX_REMOVAL_PROPOSALS = 50
+# The removal records of the request deleting nodes now: its graphSync's edit
+# carries them, and cover proposals that sync closes keep their ids.
+_removals_ctx: ContextVar[list[dict[str, Any]] | None] = ContextVar("node_removals", default=None)
+
+
+def _remove_side_effects(gone: list[dict[str, Any]], reason: Callable[[dict[str, Any]], str]) -> list[dict[str, Any]]:
+    """For each deleted node ({id, name, definitionId, position}): detach its
+    pins and close the proposals that read it, under a new removal id. Right
+    after the mutation, before any await, so the project the record names is
+    the one the node was deleted from; before the delete's graphSync, so the
+    sync can name them; journaled after it (_announce_removed_nodes). Returns
+    one entry per node: the public ``record`` plus what the journal needs
+    (``detached``, ``closed``)."""
+    project_id = _workspace_context()["activeProjectId"]
+    entries: list[dict[str, Any]] = []
+    for item in gone:
+        definition_id = str(item.get("definitionId") or "")
+        lineage = node_removals.lineage(project_id, item["id"])
+        record = node_removals.mint(node_id=item["id"], project_id=project_id, definition_id=definition_id)
+        try:
+            detached = canvas_pins.detach_node(item["id"], item.get("position"), removal=record["id"],
+                                               definition_id=definition_id)
+        except (PinError, ProjectStoreError):
+            detached = []
+        closed = canvas_proposals.invalidate_referencing(item["id"], reason(item), removal=record["id"],
+                                                         project_id=project_id, lineage=lineage)
+        entries.append({
+            "gone": item,
+            "detached": detached,
+            "closed": closed,
+            "record": {**record,
+                       "pins": [str(pin.get("id")) for pin in detached if pin.get("id")],
+                       # Only those it tagged: one in another project isn't this undo's.
+                       "proposals": [proposal.id for proposal in closed if record["id"] in proposal.closed_by]},
+        })
+    return entries
+
+
+def _removal_records(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [copy.deepcopy(entry["record"]) for entry in entries]
+
+
+def _renew_kept_removals(removals: list[dict[str, Any]]) -> None:
+    """These deletes took nodes a restore had brought back by undoing an
+    earlier delete (the person's redo of an agent's edit, their Cmd+Z of the
+    agent's undo): each record says which removal it supersedes
+    (``replaces``), and an agent's kept edit that names that one names the
+    new one now. By the records' own project, not the one open after the
+    graphSync's await. After the sync, so the records carry its cover proposals."""
+    if not any(record.get("replaces") for record in removals):
+        return
+    try:
+        canvas_undo_book.renew_removals(removals)
+    except Exception:  # noqa: BLE001 - never fail a delete over undo bookkeeping
+        pass
+
+
+async def _announce_removed_nodes(entries: list[dict[str, Any]], *, note: str, pin_reason: Callable[[dict[str, Any]], str],
+                                  journal_removed: bool = True) -> None:
+    """After the delete's graphSync: node.removed, then its pins (pin.detached)
+    and the proposals it closed (proposal.invalidated), node by node, as before."""
+    for entry in entries:
+        gone = entry["gone"]
+        if journal_removed:
+            _journal(
+                "node.removed",
+                node_id=gone["id"],
+                data={"name": gone["name"], "definitionId": gone["definitionId"]},
+                summary=f"removed {gone['name']} ({gone['id']}){note}",
+            )
+        await _journal_detached_pins(entry["detached"], pin_reason(gone))
+        await _announce_closed_proposals(entry["closed"])
+        agent_presence.forget_node(gone["id"])
+        await _forget_status_anchors(node_id=gone["id"])
+
+
+def _restore_removals(raw: Any) -> list[dict[str, Any]]:
+    """The ``removals`` a restore names: the removal records of the deletes it undoes."""
+    if raw is None:
+        return []
+    shape = ("removals must be a list of the removal records the delete answered with "
+             "({id, nodeId, projectId, definitionId, replaces?, pins, proposals})")
+    if not isinstance(raw, list) or len(raw) > RESTORE_MAX_GRAPH_NODES:
+        raise HTTPException(status_code=400, detail=shape)
+    records: list[dict[str, Any]] = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise HTTPException(status_code=400, detail=shape)
+        removal, node_id = item.get("id"), item.get("nodeId")
+        if not isinstance(removal, str) or REMOVAL_ID_RE.fullmatch(removal) is None:
+            raise HTTPException(status_code=400, detail=f"removals[{index}].id must be a removal id like rm_0123456789abcdef")
+        if not isinstance(node_id, str) or SHORT_ID_RE.fullmatch(node_id) is None:
+            raise HTTPException(status_code=400, detail=f"removals[{index}].nodeId must be a node id like n3")
+        bound: dict[str, Any] = {}
+        project_id = item.get("projectId")
+        if project_id is not None:
+            if not isinstance(project_id, str) or not 0 < len(project_id) <= 64:
+                raise HTTPException(status_code=400, detail=f"removals[{index}].projectId must be a project id")
+            bound["projectId"] = project_id
+        definition_id = item.get("definitionId")
+        if definition_id is not None:
+            if not isinstance(definition_id, str) or not 0 < len(definition_id) <= 128:
+                raise HTTPException(status_code=400, detail=f"removals[{index}].definitionId must be a model id")
+            bound["definitionId"] = definition_id
+        replaces = item.get("replaces")
+        if replaces is not None:
+            if not isinstance(replaces, str) or REMOVAL_ID_RE.fullmatch(replaces) is None:
+                raise HTTPException(status_code=400,
+                                    detail=f"removals[{index}].replaces must be a removal id like rm_0123456789abcdef")
+            bound["replaces"] = replaces
+        lists: dict[str, list[str]] = {}
+        for key, cap in (("pins", MAX_REMOVAL_PINS), ("proposals", MAX_REMOVAL_PROPOSALS)):
+            values = item.get(key, [])
+            if (not isinstance(values, list) or len(values) > cap
+                    or not all(isinstance(value, str) and 0 < len(value) <= 64 for value in values)):
+                raise HTTPException(status_code=400, detail=f"removals[{index}].{key} must be a list of ids")
+            lists[key] = list(dict.fromkeys(values))
+        records.append({"id": removal, "nodeId": node_id, **bound, **lists})
+    return records
+
+
+_PROPOSAL_GONE = "Nebula no longer has it (it restarted, or the proposal closed too long ago)"
+
+
+async def _proposal_reopen_misfit(proposal: Proposal) -> str | None:
+    """Why a proposal a delete closed can't reopen on the restored graph, or
+    None when it can: the checks Accept runs (the params it sets unchanged
+    since, the whole proposal staged on the live graph, what its runs would
+    start unchanged), and it hasn't expired and is for the open project."""
+    if proposal.project_id != _workspace_context()["activeProjectId"]:
+        return "it belongs to another project"
+    if proposal.expires_at <= canvas_proposals.now():
+        return "it expired"
+    models = await _look_up_models(_spec_models_wanted(proposal.spec))
+    try:
+        _refuse_overwriting_later_edits(proposal)
+        candidate, id_map, _edge_ids, run_ids = _stage_proposal(proposal.spec, positions=proposal.positions,
+                                                                models=models)
+        _refuse_changed_runs(proposal, candidate, id_map, run_ids)
+    except HTTPException as exc:
+        return str(exc.detail)
+    return None
+
+
+async def _asset_reopen_misfit(proposal: AssetProposal, exported: dict[str, Any] | None = None) -> str | None:
+    """Accept's check, against the restored live graph as Accept reads it
+    (``exported``, _projects_live_export): the stored snapshot may be an
+    autosave from after the delete, without the node's image."""
+    if proposal.expires_at <= asset_proposals.now():
+        return "it expired"
+    try:
+        if exported is None and proposal.kind == "project":
+            exported = await _projects_live_export()
+        return await _asset_proposal_misfit(proposal, exported)
+    except Exception:  # noqa: BLE001 - a target that can't be read doesn't reopen
+        return "its target can't be read"
+
+
+async def _reopen_update(ref: Mapping[str, Any] | None, proposal_id: str) -> None:
+    """Its Update reviews the proposal again (op "changed", the note as it is now)."""
+    if not ref:
+        return
+    try:
+        result = await asyncio.to_thread(agent_notes.reopen_proposal, ref["projectId"], ref["id"], proposal_id)
+    except (NoteError, ProjectStoreError):
+        return
+    if result is not None and result["projectId"] == project_store.read().get("activeProjectId"):
+        await _broadcast_raw_quietly(_notes_message("canvas", "changed", project_id=result["projectId"],
+                                                    ids=[ref["id"]], note=result["note"], unread=result["unread"]))
+
+
+def _bound_removals(records: list[dict[str, Any]], back: Mapping[str, str],
+                    project_id: str | None) -> list[tuple[dict[str, Any], bool | None]]:
+    """The records that may undo the delete of a node this restore brought
+    back (``back``: node id -> its model, in ``project_id``), each with
+    node_removals' verdict: True when this backend minted it for exactly
+    this node, False when for anything else (another node, project or
+    model), None when it doesn't know the id (after a restart). A record
+    that says it is for another project or model is dropped here."""
+    bound: list[tuple[dict[str, Any], bool | None]] = []
+    for record in records:
+        node_id = record["nodeId"]
+        if node_id not in back:
+            continue
+        if record.get("projectId", project_id) != project_id:
+            continue
+        if record.get("definitionId", back[node_id]) != back[node_id]:
+            continue
+        bound.append((record, node_removals.verdict(record, project_id=project_id, definition_id=back[node_id])))
+    return bound
+
+
+def _note_restored(project_id: str | None, back: Mapping[str, str], consumed: Mapping[str, str]) -> None:
+    """Each node this restore brought back, with the removal it undid (or
+    none): the next delete of that node names it (``replaces``)."""
+    for node_id in back:
+        node_removals.restored(project_id, node_id, consumed.get(node_id))
+
+
+async def _undo_removals(records: list[dict[str, Any]], back: Mapping[str, str],
+                         project_id: str | None) -> dict[str, list[Any]]:
+    """The restore brought ``back`` these nodes (node id -> model) in
+    ``project_id``: undo what their deletes removed. Only records bound to
+    those very nodes count (_bound_removals), and only pins and proposals
+    those removals detached or closed: a pin by its ``detachedBy`` and
+    model, a proposal by a (removal, node) pair in its ``closed_by``. Returns
+    the restore's ``reattached`` (pin ids), ``pinsLeft`` ({id, reason, code}),
+    ``reopened`` (proposal ids) and ``notReopened`` ({id, reason}): a
+    proposal the delete closed that doesn't fit the restored graph, expired,
+    lost its tag to a clear, an import or a project switch, or that Nebula
+    no longer has (a restart; proposals live in memory)."""
+    out: dict[str, list[Any]] = {"reattached": [], "pinsLeft": [], "reopened": [], "notReopened": []}
+    bound = _bound_removals(records, back, project_id)
+    # Pins check their own persisted binding (detachedBy, detachedFrom,
+    # detachedDefinition), so a record minted for something else still gets
+    # each pin it names reported as left; proposals and ``replaces`` take only
+    # the records not known to be another delete's.
+    for_pins = [record for record, _verdict in bound]
+    relevant = [record for record, verdict in bound if verdict is not False]
+    if _workspace_context()["activeProjectId"] != project_id:
+        # Another project opened while the restore was on its way: its pins
+        # and proposals aren't these; say so rather than touch them.
+        out["pinsLeft"] = [pin_left(pin_id, ANOTHER_PROJECT)
+                           for pin_id in dict.fromkeys(p for r in for_pins for p in r.get("pins") or [])]
+        out["notReopened"] = [{"id": proposal_id, "reason": ANOTHER_PROJECT}
+                              for proposal_id in dict.fromkeys(p for r in relevant for p in r.get("proposals") or [])]
+        return out
+    consumed = {record["nodeId"]: record["id"] for record, verdict in bound if verdict}
+    if not for_pins:
+        _note_restored(project_id, back, consumed)
+        return out
+    pairs = {(record["id"], record["nodeId"]) for record in relevant}
+
+    try:
+        pins = canvas_pins.reattach(for_pins, back, project_id)
+    except (PinError, ProjectStoreError):
+        pins = {"reattached": [], "left": []}
+    out["reattached"] = [str(pin.get("id")) for pin in pins["reattached"]]
+    out["pinsLeft"] = pins["left"]
+    # After a restart only a pin proves which delete a record undid.
+    by_pin = {str(pin.get("id")): str((pin.get("anchor") or {}).get("nodeId")) for pin in pins["reattached"]}
+    for record, verdict in bound:
+        if verdict is None and any(by_pin.get(str(pin_id)) == record["nodeId"] for pin_id in record.get("pins") or []):
+            consumed.setdefault(record["nodeId"], record["id"])
+    _note_restored(project_id, back, consumed)
+    if pins["reattached"]:
+        await _broadcast_pins()
+        for pin in pins["reattached"][:50]:
+            node_id = (pin.get("anchor") or {}).get("nodeId")
+            _journal(
+                "pin.reattached",
+                node_id=node_id if isinstance(node_id, str) else None,
+                data={"pinId": pin.get("id"), "text": pin.get("text"), "anchor": pin.get("anchor")},
+                summary=f"note {pin.get('id')} is back on {node_id}: the undo put its node back",
+            )
+
+    named = {proposal_id for record in relevant for proposal_id in record.get("proposals") or []}
+    found = sorted(canvas_proposals.closed_by_pairs(pairs, project_id), key=lambda p: p.created_at)
+    reopened: list[Proposal] = []
+    for proposal in found:
+        # Its tags stay as they are until it reopens: only a matching pair
+        # counts, and nothing is taken off before the checks pass.
+        waiting_on = {node_id for removal, node_id in proposal.closed_by.items() if (removal, node_id) not in pairs}
+        missing = {node_id for node_id in proposal.references if node_id not in cli_graph.nodes}
+        if missing and missing <= waiting_on:
+            # It still needs nodes other deletes took, and undoing those may
+            # bring them back: it waits for that, closed, and isn't counted.
+            continue
+        reason = await _proposal_reopen_misfit(proposal)
+        if reason is None:
+            try:
+                canvas_proposals.reopen(proposal.id)
+            except ProposalError as exc:
+                reason = exc.detail
+        if reason is None:
+            reopened.append(proposal)
+        else:
+            out["notReopened"].append({"id": proposal.id, "reason": reason})
+    assets = [p for p in asset_proposals.closed_by_pairs(pairs, project_id) if isinstance(p, AssetProposal)]
+    found_ids = {proposal.id for proposal in found} | {proposal.id for proposal in assets}
+    for proposal_id in sorted(named - found_ids):
+        proposal_now = canvas_proposals.get(proposal_id) or asset_proposals.get(proposal_id)
+        if proposal_now is None:
+            out["notReopened"].append({"id": proposal_id, "reason": _PROPOSAL_GONE})
+        elif (proposal_now.status == "invalidated" and proposal_now.project_id == project_id
+              and any(pair in pairs for pair in proposal_now.dropped_by.items())):
+            # A clear, an import or a project switch spent this delete's tag.
+            out["notReopened"].append({"id": proposal_id,
+                                       "reason": f"{proposal_now.dropped_reason or 'the canvas was replaced'} since"})
+        # One that is there but this delete didn't close (decided, or another
+        # delete's) isn't this undo's: it stays as it is and isn't counted.
+    for proposal in reopened:
+        out["reopened"].append(proposal.id)
+        _journal(
+            "proposal.reopened",
+            node_id=next(iter(sorted(proposal.references, key=_node_order)), None),
+            data={"proposalId": proposal.id, "agentId": proposal.agent.id, "note": proposal.spec.note},
+            summary=f"reopened {proposal.agent.name}'s proposal {proposal.id}: the undo put back the node it needs",
+        )
+        try:
+            await manager.broadcast_browser({
+                "type": "proposalOpened",
+                "proposal": _proposal_view(proposal),
+                "acceptKey": proposal.accept_key,
+                "personValues": canvas_proposals.person_values(proposal),
+            })
+        except Exception:  # noqa: BLE001 - a browser that missed it gets proposalSync on reconnect
+            pass
+        await _reopen_update(proposal.update, proposal.id)
+        _schedule_canvas_expiry(proposal)
+
+    reopened_assets: list[AssetProposal] = []
+    live: dict[str, Any] | None = None
+    if any(p.kind == "project" for p in assets):
+        try:
+            live = await _projects_live_export()
+        except Exception:  # noqa: BLE001 - each proposal tries again, and fails closed
+            live = None
+    for proposal in sorted(assets, key=lambda p: p.created_at):
+        reason = await _asset_reopen_misfit(proposal, live if proposal.kind == "project" else None)
+        if reason is None:
+            try:
+                asset_proposals.reopen(proposal.id)
+            except ProposalError as exc:
+                reason = exc.detail
+        if reason is None:
+            reopened_assets.append(proposal)
+            out["reopened"].append(proposal.id)
+        else:
+            out["notReopened"].append({"id": proposal.id, "reason": reason})
+    for proposal in reopened_assets:
+        _journal(
+            "proposal.reopened",
+            data=_asset_journal_data(proposal),
+            summary=f"reopened {proposal.agent.name}'s proposal {proposal.id}: the undo put back the image it needs",
+        )
+        await _reopen_update(proposal.update, proposal.id)
+        _schedule_asset_expiry(proposal)
+    if reopened_assets:
+        try:
+            await manager.broadcast_browser(_asset_proposal_open_message())
+        except Exception:  # noqa: BLE001 - the screens relist on reconnect
+            pass
+    return out
+
+
+def _undo_extras_text(result: Mapping[str, Any]) -> str:
+    """What else an undo put back, and what it couldn't, for its message: "1
+    pin back on its node; 1 pin left as it is (pin_3: deleted since);
+    reopened 1 proposal; 1 proposal couldn't be reopened (it expired)."."""
+    parts: list[str] = []
+    pins = len(result.get("reattached") or [])
+    if pins:
+        parts.append(f"{pins} pin{'s' if pins != 1 else ''} back on {'its node' if pins == 1 else 'their nodes'}")
+    left = result.get("pinsLeft") or []
+    if left:
+        reasons = "; ".join(f"{row['id']}: {row['reason']}" for row in left[:3])
+        parts.append(f"{len(left)} pin{'s' if len(left) != 1 else ''} left as "
+                     f"{'it is' if len(left) == 1 else 'they are'} ({reasons})")
+    reopened = len(result.get("reopened") or [])
+    if reopened:
+        parts.append(f"reopened {reopened} proposal{'s' if reopened != 1 else ''}")
+    missed = result.get("notReopened") or []
+    if missed:
+        reasons = "; ".join(f"{row['id']}: {row['reason']}" for row in missed[:3])
+        parts.append(f"{len(missed)} proposal{'s' if len(missed) != 1 else ''} couldn't be reopened ({reasons})")
+    return ("; ".join(parts) + ".") if parts else ""
+
+
 def _pin_http_error(exc: PinError) -> HTTPException:
     return HTTPException(status_code=exc.status, detail=exc.detail)
 
@@ -4469,7 +5740,9 @@ async def resolve_canvas_pin(pin_id: str, body: dict[str, Any]) -> dict[str, Any
             pin.get("position") or {"x": anchor.get("x", 0.0), "y": anchor.get("y", 0.0)}
         )
         target = {"nodeId": target["nodeId"]} if "nodeId" in target else {"x": target["x"], "y": target["y"]}
-        await manager.broadcast_raw(agent_presence.point(identity, target=target, action="click", say=reply))
+        node = target.get("nodeId")
+        await manager.broadcast_raw(_point(identity, target=target, action="click", say=reply,
+                                           did=_did("Replied on", node) if node else {"verb": "Replied"}))
     except Exception:  # noqa: BLE001 - the cursor is decoration on a saved reply
         pass
     return {"pin": pin}
@@ -4501,6 +5774,10 @@ class AgentNotesReadBody(BaseModel):
 
 
 def _note_http_error(exc: NoteError) -> HTTPException | JSONResponse:
+    if exc.code == "note_not_found":
+        # GM's 404 pattern for the person (error-copy round 3); agents keep the detail.
+        detail = refusal_copy.refusal_detail(exc.detail, refusal_copy.gone("update", "updates"))
+        return JSONResponse(status_code=exc.status, content={"detail": detail, "code": exc.code})
     if exc.code:
         return JSONResponse(status_code=exc.status, content={"detail": exc.detail, "code": exc.code})
     return HTTPException(status_code=exc.status, detail=exc.detail)
@@ -4565,6 +5842,7 @@ def _note_author() -> AgentIdentity:
 async def list_canvas_agent_notes(unread: int = 0) -> Any:
     """The open project's Updates, newest first (``?unread=1`` for unread only)."""
     try:
+        await _settle_proposal_updates()  # never list an expired proposal as waiting
         return agent_notes.canvas_list(unread_only=bool(unread))
     except NoteError as exc:
         return _raise_note_error(exc)
@@ -4621,7 +5899,7 @@ def _live_board_for_notes(moodboard_id: str) -> dict[str, Any] | JSONResponse:
     try:
         board = store.get(moodboard_id, laid_out=False)
     except ValueError:
-        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
     if board is None:
         return _asset_not_found("moodboard", moodboard_id)
     return board
@@ -4747,6 +6025,7 @@ async def _announce_closed_proposals(
             await manager.broadcast_raw(_proposal_closed_message(proposal))
         except Exception:  # noqa: BLE001 - the canvas also hides expired proposals locally
             pass
+    await _follow_canvas_updates(proposals, actor=actor)
 
 
 async def _sweep_proposals() -> None:
@@ -4762,12 +6041,88 @@ def _proposal_view(proposal: Proposal) -> dict[str, Any]:
     return canvas_proposals.view(proposal, registry=node_registry)
 
 
+def _spec_models_wanted(spec: ProposalSpec) -> list[tuple[str, str]]:
+    """(definition id, model) for each universal node a proposal or edit
+    creates with a model or sets the model of: what _look_up_models reads."""
+    wanted: list[tuple[str, str]] = []
+    for node in spec.nodes:
+        if universal_ports.is_universal(node.definition_id):
+            wanted.append((node.definition_id, universal_ports.model_of(node.definition_id, node.params)))
+    for change in spec.params:
+        node = cli_graph.nodes.get(change.node_id) or {}
+        definition_id = str(node.get("definitionId") or "")
+        key = universal_ports.MODEL_PARAM.get(definition_id)
+        if key and key in change.params:
+            wanted.append((definition_id, universal_ports.model_of(
+                definition_id, {**(node.get("params") or {}), **change.params})))
+    return wanted
+
+
+async def _look_up_models(wanted: Iterable[tuple[str, str]]) -> dict[tuple[str, str], Any]:
+    """The provider's data (or why there is none) for each wanted model,
+    read before staging: staging can't wait on the network. Cached by the
+    model-list routes, so a second edit with the same model reads nothing."""
+    found: dict[tuple[str, str], Any] = {}
+    for definition_id, model in wanted:
+        if model and (definition_id, model) not in found:
+            found[(definition_id, model)] = await universal_ports.look_up(definition_id, model)
+    return found
+
+
+def _basic_ports_line(definition_id: str, params: Mapping[str, Any]) -> str:
+    definition = node_registry.get(definition_id) or {}
+    inputs = universal_ports.port_ids(node_ports(definition_id, params, definition, "inputPorts"))
+    outputs = universal_ports.port_ids(node_ports(definition_id, params, definition, "outputPorts"))
+    if not inputs and not outputs:
+        return "no ports"
+    return f"inputs {', '.join(inputs) or '(none)'}; outputs {', '.join(outputs) or '(none)'}"
+
+
+def _refuse_orphaned_wires(graph: CLIGraph, node_id: str, name: str | None = None, reason: str = "") -> None:
+    """400 when a node's model change leaves wires on ports it no longer has:
+    the new model's, or, when the model was cleared or can't be read
+    (``reason``), its definition's. An agent's edit is all or nothing, so the
+    wires aren't dropped for it: it unwires them in the same edit (the picker
+    drops them for the person). Left in place they would fail every save."""
+    node = graph.nodes.get(node_id) or {}
+    definition_id = str(node.get("definitionId") or "")
+    params = node.get("params") or {}
+    definition = node_registry.get(definition_id) or {}
+    inputs = node_ports(definition_id, params, definition, "inputPorts")
+    outputs = node_ports(definition_id, params, definition, "outputPorts")
+    configured = universal_ports.stored_ports(definition_id, params) is not None
+    # A node never configured with no declared ports in a direction takes any
+    # handle there (port_contracts.DYNAMIC_PORT_DEFINITION_IDS): Replicate.
+    def fits(edge: dict[str, Any]) -> bool:
+        if edge.get("source") == node_id and (outputs or configured):
+            return edge.get("sourceHandle") in universal_ports.port_ids(outputs)
+        if edge.get("target") == node_id and (inputs or configured):
+            return edge.get("targetHandle") in universal_ports.port_ids(inputs)
+        return True
+    orphans = [edge for edge in graph.edges if not fits(edge)]
+    if orphans:
+        wires = ", ".join(f"{e['source']}.{e['sourceHandle']} → {e['target']}.{e['targetHandle']}" for e in orphans[:6])
+        model = universal_ports.model_of(definition_id, params)
+        who = name or node_id
+        if configured:
+            why = f"{who}'s new model {model} doesn't have the ports these connections use"
+        elif model:
+            why = (f"{reason}, so Nebula can't tell which ports {model} has and {who} keeps only "
+                   f"{_basic_ports_line(definition_id, params)}; these connections use others")
+        else:
+            why = f"Without a model {who} has {_basic_ports_line(definition_id, params)}; these connections use others"
+        raise HTTPException(status_code=400, detail=(
+            f"{why}: {wires}. Disconnect them in the same edit (`unwire`), or pick a model that takes them."))
+
+
 def _stage_proposal(
     spec: ProposalSpec,
     *,
     positions: dict[str, dict[str, float]] | None = None,
     base: CLIGraph | None = None,
     what: str = "a proposal",
+    models: Mapping[tuple[str, str], Any] | None = None,
+    report: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[CLIGraph, dict[str, str], list[str], list[str]]:
     """Stage a proposal on a clone of the live graph with the cluster validators.
 
@@ -4777,11 +6132,20 @@ def _stage_proposal(
     committed. Missing referenced nodes raise 409 (the canvas moved on).
     `base` stages onto an already-staged candidate instead (direct edits
     remove nodes first); `what` names the change in refusals.
+
+    `models` (from _look_up_models) configures each universal node whose
+    model the spec sets, as the canvas's picker does: its ports follow the
+    model (services/universal_ports.py). A wire to a port that can't be
+    known (no key, unknown model) is refused with the reason. `report`, when
+    given, gets `ports` {node id: {model, inputs, outputs}} and `notes`
+    {node id: reason} for those nodes.
     """
     candidate = base if base is not None else cli_graph.clone()
     for node_id in sorted(spec.references):
         if node_id not in candidate.nodes:
             raise HTTPException(status_code=409, detail=f"{node_id} is no longer on the canvas")
+    # node id -> why its model's ports are unknown ("" when they are known).
+    configured: dict[str, str] = {}
     # Existing nodes first: their ports can depend on their params.
     for change in spec.params:
         node = candidate.nodes[change.node_id]
@@ -4791,8 +6155,15 @@ def _stage_proposal(
         if uses_durable_recovery(definition_id, provider="worldlabs"):
             raise HTTPException(status_code=400, detail=f"World Labs nodes can't be changed by {what}; add a new node instead")
         _validate_params(definition_id, change.params)
-        candidate.update_params(change.node_id, migrate_param_update(
-            definition_id, node.get("params"), _coerce_params(definition_id, change.params)))
+        update = migrate_param_update(definition_id, node.get("params"), _coerce_params(definition_id, change.params))
+        model_key = universal_ports.MODEL_PARAM.get(definition_id)
+        if models is not None and model_key and model_key in change.params:
+            full, reason = universal_ports.agent_update(definition_id, node.get("params") or {}, update, models)
+            _drop_outputs_off_ports(candidate, change.node_id, full)
+            candidate.set_params(change.node_id, full)
+            configured[change.node_id] = reason or ""
+        else:
+            candidate.update_params(change.node_id, update)
     names = spec.names
     raw_nodes = [
         {
@@ -4807,20 +6178,82 @@ def _stage_proposal(
     ]
     raw_nodes, raw_edges, _warnings, _folded = _migrate_ingress(
         raw_nodes, [edge.as_dict() for edge in spec.edges], reference_key="tempId")
+    configured_refs: dict[str, str] = {}
+    for raw in raw_nodes:
+        definition_id = str(raw.get("definitionId") or "")
+        params = raw.get("params")
+        if (models is not None and universal_ports.is_universal(definition_id) and isinstance(params, dict)
+                and universal_ports.model_of(definition_id, params)):
+            raw["params"], reason = universal_ports.agent_update(definition_id, {}, params, models)
+            configured_refs[str(raw.get("tempId"))] = reason or ""
     id_map = _stage_graph_nodes(candidate, raw_nodes, reference_key="tempId", include_outputs=False)
+    configured.update({id_map[ref]: reason for ref, reason in configured_refs.items() if ref in id_map})
     new_ids = set(id_map.values())
     refs: dict[str, str] = {node_id: node_id for node_id in candidate.nodes if node_id not in new_ids}
     refs.update(id_map)
+    ref_for = {new_id: ref for ref, new_id in id_map.items()}
+    # A wire to a port the model's data would have to say exists: refused in
+    # plain words when that data can't be read (a missing key, say).
+    for raw in raw_edges:
+        for end, handle_key, port_key in (("source", "sourceHandle", "outputPorts"),
+                                          ("target", "targetHandle", "inputPorts")):
+            node_id = refs.get(raw.get(end)) if isinstance(raw.get(end), str) else None
+            reason = configured.get(node_id or "")
+            if not reason:
+                continue
+            node = candidate.nodes[node_id]
+            definition_id = str(node.get("definitionId") or "")
+            ports = node_ports(definition_id, node.get("params"), node_registry.get(definition_id) or {}, port_key)
+            handle = raw.get(handle_key)
+            if handle not in universal_ports.port_ids(ports):
+                name = ref_for.get(node_id, node_id)
+                model = universal_ports.model_of(definition_id, node.get("params"))
+                raise HTTPException(status_code=400, detail=(
+                    f"Can't connect {name}.{handle}: {reason}, so Nebula can't tell which ports {model} has. "
+                    f"Until it can, {name} has {_basic_ports_line(definition_id, node.get('params') or {})}."))
     try:
         edge_ids = _stage_graph_edges(candidate, raw_edges, refs)
+        for node_id, reason in configured.items():
+            _refuse_orphaned_wires(candidate, node_id, reason=reason)
     except HTTPException as exc:
         # The validators name nodes by id; a new node's staged id (n12) means
         # nothing to the agent, which wrote +img.
-        ref_for = {new_id: ref for ref, new_id in id_map.items()}
         detail = exc.detail
         if isinstance(detail, str) and ref_for:
             detail = re.sub(r"\bn\d+\b", lambda match: ref_for.get(match.group(0), match.group(0)), detail)
         raise HTTPException(status_code=exc.status_code, detail=detail) from exc
+    if report is not None:
+        for node_id, reason in configured.items():
+            node = candidate.nodes[node_id]
+            definition_id = str(node.get("definitionId") or "")
+            stored = universal_ports.stored_ports(definition_id, node.get("params"))
+            if stored is not None:
+                model = universal_ports.model_of(definition_id, node.get("params"))
+                report.setdefault("ports", {})[node_id] = {
+                    "model": model,
+                    "inputs": universal_ports.port_ids(stored[0]), "outputs": universal_ports.port_ids(stored[1])}
+                # A port typed without the model's data saying so (Replicate),
+                # or kept before file outputs were typed.
+                guessed = universal_ports.stored_port_note(definition_id, node.get("params"))
+                if guessed:
+                    report.setdefault("notes", {})[node_id] = guessed
+            elif reason:
+                report.setdefault("notes", {})[node_id] = (
+                    f"{reason}, so Nebula can't tell which ports "
+                    f"{universal_ports.model_of(definition_id, node.get('params'))} has; until it can, the node has "
+                    f"{_basic_ports_line(definition_id, node.get('params') or {})}")
+        # A wire this edit makes on a node already there whose port is a guess
+        # (a Replicate stamp kept before file outputs were typed, say): the
+        # agent learns it now, not from a run that fills another port.
+        for raw in raw_edges:
+            for end in ("source", "target"):
+                node_id = refs.get(raw.get(end)) if isinstance(raw.get(end), str) else None
+                node = candidate.nodes.get(node_id or "")
+                if node is None or node_id in new_ids or node_id in report.get("notes", {}):
+                    continue
+                guessed = universal_ports.stored_port_note(str(node.get("definitionId") or ""), node.get("params"))
+                if guessed:
+                    report.setdefault("notes", {})[node_id] = guessed
     run_ids: list[str] = []
     for item in spec.run:
         if item not in refs:
@@ -4842,12 +6275,72 @@ def _outputs_available(outputs: Any) -> bool:
     return any(bool(value.get("value") if isinstance(value, dict) else value) for value in outputs.values())
 
 
-def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[str]) -> dict[str, Any]:
+def _proposal_run_scope(
+    candidate: CLIGraph, run_ids: list[str],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str], list[str], bool, list[dict[str, Any]]]:
+    """A proposal's run as the cost sees it: the staged graph (nodes, edges),
+    the nodes it may start (``chosen``: the targets plus ancestors without
+    outputs), every node its pre-call check reads (``scope``), whether
+    ancestors are counted (``up_to``), and the chosen nodes as price items."""
+    graph_nodes, graph_edges = candidate.to_execute_format()
+    nodes = [GraphNode.model_validate(node) for node in graph_nodes]
+    edges = [GraphEdge.model_validate(edge) for edge in graph_edges]
+    chosen: list[str] = []
+    # Every node the run's pre-call check reads, cached ancestors too.
+    scope: list[str] = []
+    up_to = False
+    for target in run_ids:
+        sub_nodes, _ = get_subgraph(nodes, edges, target)
+        for node in sorted(sub_nodes, key=lambda n: _node_order(n.id)):
+            if node.id not in scope:
+                scope.append(node.id)
+            if node.id in chosen:
+                continue
+            if node.id not in run_ids:
+                if _outputs_available((candidate.nodes.get(node.id) or {}).get("outputs")):
+                    continue
+                up_to = True
+            chosen.append(node.id)
+    items = [
+        {
+            "id": node_id,
+            "definitionId": str(candidate.nodes[node_id].get("definitionId") or ""),
+            "params": candidate.nodes[node_id].get("params") or {},
+        }
+        for node_id in chosen
+    ]
+    return graph_nodes, graph_edges, chosen, scope, up_to, items
+
+
+async def _measure_proposal_inputs(candidate: CLIGraph, run_ids: list[str]) -> input_sizes.Measured:
+    """The proposal estimate's input sizes (_estimate_proposal_run),
+    measured in a worker thread from copies of the staged nodes, so the
+    event loop serves other requests meanwhile (_measure_run_inputs)."""
+    if not run_ids:
+        return input_sizes.Measured()
+    try:
+        pricing = model_pricing.load_pricing()
+    except (OSError, ValueError):
+        return input_sizes.Measured()
+    _graph_nodes, graph_edges, chosen, _scope, _up_to, items = _proposal_run_scope(candidate, run_ids)
+    if not input_sizes.needs_measuring(items, pricing):
+        return input_sizes.Measured()
+    wired = [(str(e.get("source")), e.get("sourceHandle"), str(e.get("target")), e.get("targetHandle"))
+             for e in graph_edges if str(e.get("target")) in chosen]
+    # The thread reads copies: the staged graph stays this request's own.
+    sources = {source for source, _handle, _target, _port in wired}
+    known = {node_id: copy.deepcopy(candidate.nodes[node_id]) for node_id in sources if node_id in candidate.nodes}
+    return await input_sizes.measure_run(copy.deepcopy(items), wired, pricing, node_registry.get_all(), known)
+
+
+def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[str], *,
+                   measured: input_sizes.Measured) -> dict[str, Any]:
     """Which nodes a run after acceptance may start: the targets plus ancestors without outputs.
 
     Each node is free (utility) or paid (a provider call), with its list
     price when model_pricing.json has one. "Up to" when ancestors are counted,
-    because the execution cache may skip them.
+    because the execution cache may skip them. ``measured`` holds the input
+    sizes for prices read from them (_measure_proposal_inputs, awaited first).
     """
     ref_for = {new_id: ref for ref, new_id in id_map.items()}
     definitions = node_registry.get_all()
@@ -4856,33 +6349,8 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
     entries: list[dict[str, Any]] = []
     up_to = False
     if run_ids:
-        graph_nodes, graph_edges = candidate.to_execute_format()
-        nodes = [GraphNode.model_validate(node) for node in graph_nodes]
-        edges = [GraphEdge.model_validate(edge) for edge in graph_edges]
-        chosen: list[str] = []
-        # Every node the run's pre-call check reads, cached ancestors too.
-        scope: list[str] = []
-        for target in run_ids:
-            sub_nodes, _ = get_subgraph(nodes, edges, target)
-            for node in sorted(sub_nodes, key=lambda n: _node_order(n.id)):
-                if node.id not in scope:
-                    scope.append(node.id)
-                if node.id in chosen:
-                    continue
-                if node.id not in run_ids:
-                    if _outputs_available((candidate.nodes.get(node.id) or {}).get("outputs")):
-                        continue
-                    up_to = True
-                chosen.append(node.id)
-        items = [
-            {
-                "id": node_id,
-                "definitionId": str(candidate.nodes[node_id].get("definitionId") or ""),
-                "params": candidate.nodes[node_id].get("params") or {},
-            }
-            for node_id in chosen
-        ]
-        estimate = _estimate_proposal_run(items, graph_nodes, graph_edges, definitions)
+        graph_nodes, graph_edges, chosen, scope, up_to, items = _proposal_run_scope(candidate, run_ids)
+        estimate = _estimate_proposal_run(items, graph_nodes, graph_edges, definitions, measured)
         for node_id in chosen:
             definition = definitions.get(str(candidate.nodes[node_id].get("definitionId") or ""), {})
             line = (estimate or {}).get("priced", {}).get(node_id)
@@ -4898,6 +6366,7 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
                 "unpriced": [ref_for.get(i, i) for i in estimate["unpriced"]],
                 "plan": [ref_for.get(i, i) for i in estimate["plan"]],
                 "unavailable": {ref_for.get(i, i): why for i, why in (estimate.get("unavailable") or {}).items()},
+                "awaitingInput": [ref_for.get(i, i) for i in estimate.get("awaitingInput") or []],
             }
         not_ready = _not_ready_nodes(candidate, graph_edges, scope, ref_for, definitions)
         needs = {row["ref"]: row["missing"] for row in not_ready}
@@ -4938,11 +6407,18 @@ def _not_ready_nodes(
         need = node_readiness.instance_missing(definition, node.get("params") or {}, keys, krea_signed_in,
                                                definitions, wired.get(node_id, {}))
         if need:
+            name = str(node.get("label") or definition.get("displayName") or definition.get("id"))
             rows.append({
                 "ref": ref_for.get(node_id, node_id),
                 "nodeId": None if node_id in ref_for else node_id,
-                "name": str(node.get("label") or definition.get("displayName") or definition.get("id")),
+                "name": name,
                 "missing": need,
+                # The line the proposal bar and layer show (error copy round
+                # 3f): the key by its provider, the node by its name. Agents
+                # keep `missing`, find_nodes' words, as before.
+                "person": node_readiness.instance_missing_line(
+                    definition, node.get("params") or {}, keys, krea_signed_in, definitions,
+                    wired.get(node_id, {}), name=name) or need,
             })
     return rows
 
@@ -4952,8 +6428,11 @@ def _estimate_proposal_run(
     graph_nodes: list[dict[str, Any]],
     graph_edges: list[dict[str, Any]],
     definitions: dict[str, Any],
+    measured: input_sizes.Measured,
 ) -> dict[str, Any] | None:
-    """List-price estimate for a proposal's run; None when the table can't load."""
+    """List-price estimate for a proposal's run; None when the table can't load.
+    ``measured`` are the input sizes for a price read from an upload or an
+    ancestor's existing output (_measure_proposal_inputs)."""
     try:
         pricing = model_pricing.load_pricing()
     except (OSError, ValueError):
@@ -4966,7 +6445,9 @@ def _estimate_proposal_run(
     )
     wired = model_pricing.wired_counts(
         items, [(str(e.get("source")), str(e.get("target")), e.get("targetHandle")) for e in graph_edges])
-    return model_pricing.estimate_run(items, pricing, definitions, api_keys, multipliers, wired)
+    # Measured from the file the run would get: an upload, or an ancestor's
+    # output that already exists (it isn't in the run: see _proposal_cost).
+    return model_pricing.estimate_run(items, pricing, definitions, api_keys, multipliers, wired, measured.sizes)
 
 
 def _node_order(node_id: str) -> tuple[int, str]:
@@ -5027,15 +6508,17 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         _check_provider(str(current.get("definitionId") or ""), change.params, change.node_id)
         _check_asset_refs(str(current.get("definitionId") or ""), change.params, change.node_id,
                           before=current.get("params") or {}, must_exist=True)
+    models = await _look_up_models(_spec_models_wanted(spec))
     try:
-        candidate, id_map, _edge_ids, run_ids = _stage_proposal(spec)
+        candidate, id_map, _edge_ids, run_ids = _stage_proposal(spec, models=models)
     except HTTPException as exc:
         # A missing node is a bad proposal here (the agent's view is stale), not a conflict.
         raise HTTPException(status_code=400 if exc.status_code == 409 else exc.status_code,
                             detail=exc.detail) from exc
     known, visible_area = _proposal_layout_hints()
     positions = place_new_nodes(spec, known, visible_area)
-    cost = _proposal_cost(candidate, id_map, run_ids)
+    measured = await _measure_proposal_inputs(candidate, run_ids)
+    cost = _proposal_cost(candidate, id_map, run_ids, measured=measured)
     run_fingerprint = _proposal_run_fingerprint(candidate, id_map, run_ids)
     existing = {
         node_id: {
@@ -5056,8 +6539,13 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         )
     except ProposalError as exc:
         raise _proposal_http_error(exc) from exc
+    # Which node it reads under each id, so only a delete of that very node tags it (second review).
+    proposal.lineage = {node_id: node_removals.lineage(proposal.project_id, node_id) for node_id in spec.references}
+    await _post_canvas_update(proposal)  # Q112 a: the person hears of it on every screen
     view = _proposal_view(proposal)
-    warning = readiness_warning(cost)
+    # The agent's other open proposals here that can't run: Justin (Q109)
+    # keeps them, and the agent is told to withdraw one this replaces.
+    still_open = [{"id": p.id, "note": p.spec.note} for p in canvas_proposals.open_unrunnable(proposal)]
     first_reference = next(iter(sorted(proposal.references, key=_node_order)), None)
     _journal(
         "proposal.created",
@@ -5073,6 +6561,13 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         },
         summary=f'proposed {proposal.id}: "{spec.note}"',
     )
+    if not proposal.is_open:
+        # It closed while its Update was being written (see
+        # _post_canvas_update): the canvas already heard proposalClosed, so
+        # it never gets it as open (Accept would only fail). The agent reads
+        # the real status, and its reason, in the view; agent_wording gives a
+        # closed one no readiness warning, but still names the agent's others.
+        return agent_wording({"proposal": view, **({"stillOpen": still_open} if still_open else {})})
     # The accept key goes only to the person's canvas sockets.
     try:
         await manager.broadcast_browser({
@@ -5092,10 +6587,12 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
     else:
         target = None
     if target is not None:
-        await _show_agent(target, action="click", say=spec.note)
+        await _show_agent(target, action="click", say=spec.note,
+                          did=_did("Proposed", target.get("nodeId")))
     # Nodes of the run that can't run here, so the agent can say so or pick
-    # another model before the person accepts (the canvas shows it too).
-    return {"proposal": view, **({"warning": warning} if warning else {})}
+    # another model before the person accepts (the canvas shows it too), and
+    # the call that withdraws this one or an earlier one this replaces.
+    return agent_wording({"proposal": view, **({"stillOpen": still_open} if still_open else {})})
 
 
 @app.get("/api/canvas/proposals")
@@ -5105,6 +6602,13 @@ async def list_canvas_proposals() -> dict[str, Any]:
     return {"proposals": [_proposal_view(p) for p in canvas_proposals.open_list()]}
 
 
+def _gone_proposal_detail(proposal_id: str) -> str:
+    """A proposal Nebula no longer has: decided ones go after 30 minutes, and
+    open ones live in memory, so a restart closes them (Q108 a)."""
+    return (f"No proposal {proposal_id[:20]} (decided proposals are kept for 30 minutes, and a restart of "
+            "Nebula closes open ones: propose again if you still want it)")
+
+
 @app.get("/api/canvas/proposals/{proposal_id}")
 async def get_canvas_proposal(proposal_id: str, request: Request) -> dict[str, Any]:
     """One proposal; with ?wait=<seconds> (≤25) wait for the person to decide."""
@@ -5112,8 +6616,10 @@ async def get_canvas_proposal(proposal_id: str, request: Request) -> dict[str, A
     wait = min(wait, 25.0)
     await _sweep_proposals()
     proposal = canvas_proposals.get(proposal_id)
+    if proposal is None and asset_proposals.get(proposal_id) is not None:
+        return await _get_asset_proposal(proposal_id, wait)  # a project's or a board's (U16)
     if proposal is None:
-        raise HTTPException(status_code=404, detail=f"No proposal {proposal_id[:20]} (decided proposals are kept for 30 minutes)")
+        raise refusal_copy.not_found(_gone_proposal_detail(proposal_id), "proposal", "proposals")
     loop = asyncio.get_running_loop()
     deadline = loop.time() + wait
     cursor = canvas_events.latest
@@ -5142,8 +6648,10 @@ async def withdraw_canvas_proposal(proposal_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
     await _sweep_proposals()
     proposal = canvas_proposals.get(proposal_id)
+    if proposal is None and asset_proposals.get(proposal_id) is not None:
+        return await _withdraw_asset_proposal(proposal_id, identity)  # a project's or a board's (U16)
     if proposal is None:
-        raise HTTPException(status_code=404, detail=f"No proposal {proposal_id[:20]}")
+        raise refusal_copy.not_found(f"No proposal {proposal_id[:20]}", "proposal", "proposals")
     if proposal.agent.id != identity.id:
         raise HTTPException(status_code=403, detail="Only the agent that proposed this can withdraw it")
     try:
@@ -5168,7 +6676,7 @@ async def _decidable_proposal(proposal_id: str) -> Proposal:
     supplied = lower.get(_PROPOSAL_KEY_HEADER) or ""
     proposal = canvas_proposals.get(proposal_id)
     if proposal is None:
-        raise HTTPException(status_code=404, detail="This proposal is no longer available")
+        raise refusal_copy.not_found("This proposal is no longer available", "proposal", "proposals")
     if not supplied or not secrets.compare_digest(supplied.encode(), proposal.accept_key.encode()):
         raise HTTPException(status_code=403, detail="This proposal can only be accepted from the Nebula canvas.")
     await _sweep_proposals()
@@ -5242,6 +6750,8 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
     proposal = await _decidable_proposal(proposal_id)
     _check_workspace_revision()
     body = await _proposal_body(request)
+    # The models it sets, read now: nothing below may await.
+    models = await _look_up_models(_spec_models_wanted(proposal.spec))
     # Reading the body can yield to the event loop, and in that gap the agent
     # may withdraw, the sweep may expire it, or a second tab may accept it.
     # Check again here. From this line to close() below nothing awaits, so no
@@ -5256,7 +6766,7 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
     with _paid_graph_mutation("accept a proposal"):
         try:
             _refuse_overwriting_later_edits(proposal)
-            candidate, id_map, edge_ids, run_ids = _stage_proposal(proposal.spec, positions=positions)
+            candidate, id_map, edge_ids, run_ids = _stage_proposal(proposal.spec, positions=positions, models=models)
             _refuse_changed_runs(proposal, candidate, id_map, run_ids)
         except HTTPException as exc:
             # cli_graph is only replaced at commit, so nothing changed.
@@ -5321,10 +6831,12 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
         await manager.broadcast_raw(_proposal_closed_message(proposal))
     except Exception:  # noqa: BLE001
         pass
+    await _follow_canvas_updates([proposal], actor=person)
     focus = next(iter(id_map.values()), None) or next(iter(sorted(proposal.references, key=_node_order)), None)
     if focus is not None:
         try:
-            event = agent_presence.point(proposal.agent, target={"nodeId": focus}, action="click", say="Accepted")
+            event = _point(proposal.agent, target={"nodeId": focus}, action="click", say="Accepted",
+                           did=_did("Proposed", focus))
             await manager.broadcast_raw(event)
         except Exception:  # noqa: BLE001 - the cursor is decoration on a committed change
             pass
@@ -5369,6 +6881,1166 @@ async def release_run_approval(approval_id: str) -> dict[str, Any]:
     run, or the canvas didn't start it). The nodes it locked are free again."""
     require_person(current_request_headers())
     return {"status": "released" if run_approvals.drop(approval_id) else "not_found"}
+
+
+# ---------- Questions: agents ask, the person answers (Q125 item 1) ----------
+#
+# Justin, 2026-10-24: "Yes, all four, in that order"; then "go with your
+# suggestions". Modelled on the canvas proposals above: open caps, the same
+# two-layer person gate (require_person, then a per-set key only the
+# person's browser sockets get, in the proposal key's header), and an Update
+# that settles when the set closes. Unlike proposals, sets are kept on the
+# project record (services/agent_questions.py), so a restart keeps them open
+# with their answers to come; the key is new each launch. Every surface (MCP
+# ask_person, `nebula ask`, HTTP) asks through create_agent_questions.
+
+def _question_view(question_set: QuestionSet) -> dict[str, Any]:
+    return agent_questions.view(question_set)
+
+
+def _question_http_error(exc: QuestionError) -> HTTPException:
+    return HTTPException(status_code=exc.status, detail=exc.detail)
+
+
+def _questions_sync_message() -> dict[str, Any]:
+    """For the person's sockets only, after hello: every open set with its
+    key, and the recently closed ones (their answers included, for the
+    closed view; the person wrote them)."""
+    return {
+        "type": "questionsSync",
+        "sets": [{**_question_view(s), "answerKey": s.answer_key} for s in agent_questions.open_list()]
+        + [_question_view(s) for s in agent_questions.closed_list()],
+    }
+
+
+async def _send_questions_sync(websocket: WebSocket) -> None:
+    """The person's socket after hello. Not sent when the sets can't be read
+    (the catalog is unavailable): an empty sync would drop the tab's drafts."""
+    try:
+        message = _questions_sync_message()
+    except ProjectStoreError:
+        return
+    await websocket.send_text(json.dumps(message))
+
+
+def _journal_question(question_set: QuestionSet, *, actor: dict[str, Any] | None = None) -> None:
+    """One journal event per step. Never the questions' text nor the
+    answers: every agent on the canvas reads the journal."""
+    kind = "asked" if question_set.is_open else question_set.status
+    count = len(question_set.spec.questions)
+    noun = "question" if count == 1 else "questions"
+    summaries = {
+        "asked": f"asked the person {count} {noun} ({question_set.id})",
+        "answered": f"answered {question_set.agent.name}'s {noun} ({question_set.id})",
+        "dismissed": f"dismissed {question_set.agent.name}'s {noun} ({question_set.id})",
+        "withdrawn": f"withdrew its {noun} ({question_set.id})",
+    }
+    _journal(f"question.{kind}", node_id=next(iter(question_set.spec.node_ids), None),
+             data={"questionId": question_set.id, "agentId": question_set.agent.id, "count": count},
+             summary=summaries[kind], actor=actor)
+
+
+def _gone_question_detail(set_id: str) -> str:
+    """A set Nebula doesn't have for this agent: another agent's, closed too
+    long ago, or gone with its project (deleted for good). Open sets survive
+    a restart: they are kept with the project."""
+    return (f"No question set {set_id[:20]} of yours (closed ones are kept for 30 minutes, and a project deleted "
+            "for good takes its sets with it): ask again if you still need to know")
+
+
+def _questions_owner(set_id: str) -> tuple[AgentIdentity, QuestionSet]:
+    """The asking agent's own set, or 404 (another agent's set is not there for it)."""
+    identity = identify_agent(current_request_headers())
+    if identity is None:
+        raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
+    question_set = agent_questions.get(set_id)
+    if question_set is None or question_set.agent.id != identity.id:
+        raise refusal_copy.not_found(_gone_question_detail(set_id), "question", "questions")
+    return identity, question_set
+
+
+async def _post_question_update(question_set: QuestionSet) -> bool:
+    """Its Update on the project's list, with Answer: where the person answers
+    it. The set is saved on the project's record in the same commit."""
+    book = agent_questions
+
+    def save_set(catalog: dict[str, Any], project_id: str, note_id: str) -> bool:
+        question_set.project_id = project_id
+        question_set.update = {"id": note_id, "projectId": project_id}
+        return book.write_into(catalog, [project_id])
+
+    try:
+        result = await asyncio.to_thread(
+            agent_notes.post_questions, author={"kind": "agent", **question_set.agent.as_dict()},
+            text=question_update_text(question_set), questions={"id": question_set.id},
+            refs=list(question_set.spec.node_ids), project_id=question_set.project_id, save_set=save_set)
+    except (NoteError, ProjectStoreError):
+        question_set.update = None  # never committed: no later save may keep it
+        return False
+    note = result["note"]
+    await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"], note=note,
+                                                unread=result["unread"], removed=result["removed"]))
+    _journal_note(note, "canvas")
+    return True
+
+
+def _question_resolved_by(question_set: QuestionSet) -> dict[str, Any]:
+    if question_set.status == "withdrawn":
+        return {"kind": "agent", "name": question_set.agent.name}
+    return {"kind": "person"}
+
+
+async def _follow_question_updates(sets: list[QuestionSet]) -> None:
+    """Closed sets: each one's Update says how it ended and is read, so its Answer goes."""
+    for question_set in sets:
+        ref = question_set.update
+        if not ref or question_set.is_open:
+            continue
+        try:
+            result = await asyncio.to_thread(agent_notes.resolve_questions, ref["projectId"], ref["id"],
+                                             outcome=question_outcome_line(question_set),
+                                             by=_question_resolved_by(question_set))
+        except (NoteError, ProjectStoreError):
+            continue
+        if result is None:
+            continue
+        if result["projectId"] == project_store.read().get("activeProjectId"):
+            await _broadcast_raw_quietly(_notes_message("canvas", "resolved", project_id=result["projectId"],
+                                                        ids=[ref["id"]], note=result["note"], unread=result["unread"]))
+
+
+async def _announce_closed_questions(sets: list[QuestionSet], *, actor: dict[str, Any] | None = None) -> None:
+    """Journal each, tell the person's sockets (only theirs: the message
+    carries their answers back to them), then settle each one's Update."""
+    for question_set in sets:
+        _journal_question(question_set, actor=actor)
+        try:
+            await manager.broadcast_browser({"type": "questionsClosed", "questionId": question_set.id,
+                                             "status": question_set.status, "agentId": question_set.agent.id,
+                                             "set": _question_view(question_set)})
+        except Exception:  # noqa: BLE001 - a browser that missed it gets questionsSync on reconnect
+            pass
+    await _follow_question_updates(sets)
+
+
+@app.post("/api/canvas/questions", status_code=201)
+async def create_agent_questions(body: dict[str, Any]) -> Any:
+    """An agent asks the person 1-5 questions; they answer in Nebula's Updates.
+
+    Body: {questions: [{text, options?, multiple?, allowText?}], note?,
+    nodeIds?}. Posts an Update with Answer on the open project's list.
+    Answers come back only to this agent (GET /api/canvas/questions/{id})."""
+    headers = current_request_headers()
+    identity = identify_agent(headers)
+    if identity is None:
+        if is_person(headers):
+            raise HTTPException(status_code=403, detail="The person doesn't need to ask: these questions are for them")
+        raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
+    try:
+        spec = parse_questions(body)
+    except QuestionError as exc:
+        raise _question_http_error(exc) from exc
+    # Like an Update's refs: unknown ones are dropped and listed, never guessed.
+    kept = [node_id for node_id in spec.node_ids if node_id in cli_graph.nodes]
+    dropped = [node_id for node_id in spec.node_ids if node_id not in kept]
+    spec = dataclasses.replace(spec, node_ids=tuple(kept))
+    project_id = _workspace_context()["activeProjectId"]
+    if not project_id:
+        raise HTTPException(status_code=409, detail=(
+            "Open or create a project first: the person answers questions from its Updates, which are kept "
+            "with a project"))
+    try:
+        question_set = agent_questions.create(agent=identity, project_id=project_id, spec=spec)
+    except QuestionError as exc:
+        if exc.status == 429:
+            return JSONResponse(status_code=429, content={
+                "detail": exc.detail, "code": "questions_open_limit",
+                "stillOpen": still_open_rows(exc.still_open, withdraw=QUESTIONS_WITHDRAW_HTTP)})
+        raise _question_http_error(exc) from exc
+    if not await _post_question_update(question_set):
+        # No Update, no Answer: the person couldn't reach it, so it isn't kept.
+        agent_questions.drop(question_set.id)
+        raise HTTPException(status_code=409, detail=(
+            "Couldn't post the questions' Update on the open project, so nothing was asked; try again"))
+    _journal_question(question_set)
+    if not question_set.is_open:
+        # Withdrawn while its Update was being written: settle that now.
+        await _follow_question_updates([question_set])
+    else:
+        try:
+            await manager.broadcast_browser({"type": "questionsOpened", "set": _question_view(question_set),
+                                             "answerKey": question_set.answer_key})
+        except Exception:  # noqa: BLE001 - a browser that missed it gets questionsSync on reconnect
+            pass
+    return {"questions": _question_view(question_set), **({"dropped": dropped} if dropped else {})}
+
+
+@app.get("/api/canvas/questions/{set_id}")
+async def get_agent_questions(set_id: str, request: Request) -> dict[str, Any]:
+    """Your own question set; with ?wait=<seconds> (≤25) wait for the person."""
+    wait = _query_number(request.query_params.get("wait"), "wait", integer=False, low=0, high=None) or 0.0
+    wait = min(wait, 25.0)
+    _identity, question_set = _questions_owner(set_id)
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + wait
+    cursor = canvas_events.latest
+    while question_set.is_open:
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            break
+        try:
+            result = await canvas_events.wait(after=cursor, journal=canvas_events.journal_id,
+                                              wait=remaining, kinds={"question"})
+        except TooManyWaiters as exc:
+            raise HTTPException(status_code=429, detail=str(exc)) from exc
+        cursor = result.get("cursor", cursor)
+        if result.get("timedOut") and deadline - loop.time() <= 0:
+            break
+    return {"questions": _question_view(question_set)}
+
+
+@app.delete("/api/canvas/questions/{set_id}")
+async def withdraw_agent_questions(set_id: str) -> dict[str, Any]:
+    """The asking agent takes its questions back."""
+    _identity, question_set = _questions_owner(set_id)
+    try:
+        await asyncio.to_thread(agent_questions.close, question_set.id, "withdrawn")
+    except QuestionError as exc:
+        raise _question_http_error(exc) from exc
+    await _announce_closed_questions([question_set])
+    return {"questions": _question_view(question_set)}
+
+
+def _answerable_questions(set_id: str) -> QuestionSet:
+    """The person-only checks shared by answer and dismiss, in order, as
+    accepting a proposal (_decidable_proposal):
+
+    1. No agent markers and this launch's person token.
+    2. The set's answer key, which only sockets that said hello with the
+       person token ever received (sent in the proposal key's header).
+    3. Still open."""
+    headers = current_request_headers()
+    require_person(headers)
+    lower = {k.lower(): v for k, v in (headers or {}).items()}
+    supplied = lower.get(_PROPOSAL_KEY_HEADER) or ""
+    question_set = agent_questions.get(set_id)
+    if question_set is None:
+        raise refusal_copy.not_found("These questions are no longer available", "question", "questions")
+    if not supplied or not secrets.compare_digest(supplied.encode(), question_set.answer_key.encode()):
+        raise HTTPException(status_code=403, detail="These questions can only be answered from the Nebula canvas.")
+    _ensure_questions_open(question_set)
+    return question_set
+
+
+def _ensure_questions_open(question_set: QuestionSet) -> None:
+    if not question_set.is_open:
+        raise HTTPException(status_code=409, detail=f"These questions are already {question_set.status}")
+
+
+@app.post("/api/canvas/questions/{set_id}/answer")
+async def answer_agent_questions(set_id: str, request: Request) -> dict[str, Any]:
+    """The person answers. Body: {answers: [{questionId, choices?, text?}]};
+    a question left out is blank, and at least one must be answered."""
+    question_set = _answerable_questions(set_id)
+    body = await _proposal_body(request)
+    # Reading the body can yield: the agent may have withdrawn meanwhile.
+    _ensure_questions_open(question_set)
+    try:
+        answers = parse_question_answers(question_set.spec, body)
+    except QuestionError as exc:
+        raise _question_http_error(exc) from exc
+    # Saved before the answer is acknowledged; a failed save leaves it open.
+    try:
+        await asyncio.to_thread(agent_questions.close, question_set.id, "answered", answers=answers)
+    except QuestionError as exc:
+        raise _question_http_error(exc) from exc
+    await _announce_closed_questions([question_set], actor=dict(_PERSON_ACTOR))
+    return {"status": "answered", "questionId": question_set.id}
+
+
+@app.post("/api/canvas/questions/{set_id}/dismiss")
+async def dismiss_agent_questions(set_id: str) -> dict[str, Any]:
+    """The person closes the questions without answering."""
+    question_set = _answerable_questions(set_id)
+    try:
+        await asyncio.to_thread(agent_questions.close, question_set.id, "dismissed")
+    except QuestionError as exc:
+        raise _question_http_error(exc) from exc
+    await _announce_closed_questions([question_set], actor=dict(_PERSON_ACTOR))
+    return {"status": "dismissed", "questionId": question_set.id}
+
+
+# ---------- Asset proposals: changes outside the graph (U16) ----------
+#
+# The canvas proposals' life cycle and accept gate for a project's cover and
+# a board's Send notes (services/asset_proposals.py). Accept applies the
+# change through the route the person's own click uses (the cover route, the
+# board PUT), as the person.
+
+# Proposals being applied right now: an agent can't withdraw one and the
+# sweep leaves it alone until Accept has closed it.
+_asset_deciding: set[str] = set()
+_ASSET_WAIT_KINDS = {"proposal", "project", "board", "commons"}
+
+
+def _asset_proposal_view(proposal: AssetProposal) -> dict[str, Any]:
+    return asset_proposals.view(proposal)
+
+
+def _asset_proposal_closed_message(proposal: AssetProposal) -> dict[str, Any]:
+    # Every socket gets it, agents' too: a commons proposal's reason (the
+    # person's words) reaches only those who may read it (get_proposal).
+    return {"type": "assetProposalClosed", "proposalId": proposal.id, "status": proposal.status,
+            "reason": None if proposal.kind == "commons" else proposal.reason, "kind": proposal.kind,
+            "targetId": proposal.target_id}
+
+
+def _asset_journal_data(proposal: AssetProposal) -> dict[str, Any]:
+    data = {"proposalId": proposal.id, "agentId": proposal.agent.id, "kind": proposal.kind,
+            "targetId": proposal.target_id, "targetName": proposal.target_name, "note": proposal.note}
+    if proposal.kind == "commons":
+        # Every agent on the canvas reads the journal, whatever its brand; the
+        # note and the person's reason reach only those who see the reference.
+        data.pop("note")
+    return data
+
+
+async def _announce_closed_asset_proposals(proposals: list[AssetProposal], *,
+                                           actor: dict[str, Any] | None = None) -> None:
+    """Journal and broadcast asset proposals that just closed."""
+    for proposal in proposals:
+        reason = f": {proposal.reason}" if proposal.reason and proposal.kind != "commons" else ""
+        _journal(
+            f"proposal.{proposal.status}",
+            data={**_asset_journal_data(proposal), "reason": proposal.reason if proposal.kind != "commons" else None},
+            summary=f"{proposal.status} {proposal.agent.name}'s proposal {proposal.id}{reason}",
+            actor=actor,
+        )
+        try:
+            await manager.broadcast_raw(_asset_proposal_closed_message(proposal))
+        except Exception:  # noqa: BLE001 - the screens also hide expired proposals locally
+            pass
+    await _follow_asset_updates(proposals)
+
+
+# ---- the Update each asset proposal posts (Justin's Q92 a, 2026-10-21) ----
+#
+# "Keep the wording, and each proposal also posts an Update ("Claude Code asks
+# to change the cover of X", with Review)." Posted on the open project's
+# Updates (the corner on the canvas), the way Nebula posts its own updates,
+# attributed to the agent; one per agent and target. When the proposal closes
+# the Update says how and is read.
+
+_RESOLVED_BY = {"accepted": {"kind": "person"}, "rejected": {"kind": "person"}}
+
+
+async def _post_asset_update(proposal: AssetProposal) -> None:
+    try:
+        result = await asyncio.to_thread(
+            agent_notes.post_proposal, author={"kind": "agent", **proposal.agent.as_dict()},
+            text=asset_update_text(proposal),
+            proposal={"id": proposal.id, "kind": proposal.kind, "targetId": proposal.target_id})
+    except (NoteError, ProjectStoreError):
+        return  # no project open: the Agent log line is the only notice, as before
+    note = result["note"]
+    ref = {"id": note["id"], "projectId": result["projectId"]}
+    # The agent's earlier open proposals on this target share the one Update.
+    for other in asset_proposals.open_list():
+        if isinstance(other, AssetProposal) and _same_asker(other, proposal):
+            other.update = dict(ref)
+    proposal.update = dict(ref)
+    await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"], note=note,
+                                                unread=result["unread"], removed=result["removed"]))
+    _journal_note(note, "canvas")
+
+
+def _same_asker(one: AssetProposal, other: AssetProposal) -> bool:
+    return one.agent.id == other.agent.id and one.kind == other.kind and one.target_id == other.target_id
+
+
+async def _follow_asset_updates(proposals: list[AssetProposal]) -> None:
+    """Closed proposals: each one's Update says how it ended, unless the same
+    agent still has another proposal open on that target (the Update then
+    reviews that one)."""
+    for proposal in proposals:
+        ref = proposal.update
+        if not ref or proposal.is_open:
+            continue
+        waiting = [p for p in asset_proposals.open_list()
+                   if isinstance(p, AssetProposal) and _same_asker(p, proposal) and p.update == ref]
+        try:
+            if waiting:
+                newest = max(waiting, key=lambda p: p.created_at)
+                result = await asyncio.to_thread(agent_notes.retarget_proposal, ref["projectId"], ref["id"], newest.id)
+                op, extra = "changed", {}
+            else:
+                by = _RESOLVED_BY.get(proposal.status) or (
+                    {"kind": "agent", "name": proposal.agent.name} if proposal.status == "withdrawn" else {"kind": "system"})
+                result = await asyncio.to_thread(agent_notes.resolve_proposal, ref["projectId"], ref["id"],
+                                                 outcome=asset_outcome_line(proposal), by=by)
+                op, extra = "resolved", ({"unread": result["unread"]} if result else {})
+        except (NoteError, ProjectStoreError):
+            continue
+        if result is None:
+            continue
+        # Only the open project's list is on the person's screen; another
+        # project's reloads with it when they open it.
+        if result["projectId"] == project_store.read().get("activeProjectId"):
+            await _broadcast_raw_quietly(_notes_message("canvas", op, project_id=result["projectId"],
+                                                        ids=[ref["id"]], note=result["note"], **extra))
+
+
+async def _asset_proposal_misfit(proposal: AssetProposal, exported: dict[str, Any] | None = None) -> str | None:
+    """Why the proposal no longer fits its target, or None while it does."""
+    if proposal.kind == "commons":
+        return await _commons_proposal_misfit(proposal)
+    if proposal.kind == "project":
+        catalog = project_store.read()
+        project = catalog["projects"].get(proposal.target_id)
+        if project is None:
+            return "the project was deleted"
+        return _cover_proposal_misfit(proposal, project, _cover_images_now(project, catalog, exported))
+    try:
+        board = await asyncio.to_thread(_moodboard_store().get, proposal.target_id)
+    except ValueError:
+        board = None
+    if board is None:
+        return "the board was deleted"
+    if board.get("sendNotes") is True:
+        return "Send notes to generators is already on"
+    return None
+
+
+def _cover_proposal_misfit(proposal: AssetProposal, project: Mapping[str, Any],
+                           images: Mapping[str, Any]) -> str | None:
+    """A cover proposal against its project (``images``: its snapshot as it is
+    now), refreshing what its view shows: a lost pin and the automatic cover."""
+    if _cover_state(project) != proposal.before:
+        return "the project's cover changed since it was proposed"
+    # The pin it was proposed against may have lost its image, or got it back (Q90 a).
+    proposal.lost_pin = _lost_pin(project, images)
+    proposal.auto_cover = _automatic_cover(images)
+    url = proposal.change.get("cover")
+    if url is None and proposal.lost_pin:
+        # "Back to automatic" against a pin whose image is gone changes
+        # nothing (a new one is refused with 409); Accepting it would only
+        # drop the stored pin an undo brings back.
+        return "the project's cover is already the automatic one"
+    if url is not None and not project_cover.is_choice(dict(images), url):
+        return "that image is no longer one of the project's images"
+    return None
+
+
+async def _sweep_asset_proposals() -> None:
+    """Expire overdue asset proposals and invalidate those whose target moved
+    on (another cover pinned, the project or board deleted, notes already
+    sent). Called before every asset proposal read and decision, after a
+    cover change, and on each proposal's expiry timer (_schedule_asset_expiry)."""
+    try:
+        expired = [p for p in asset_proposals.sweep() if isinstance(p, AssetProposal)]
+    except Exception:  # noqa: BLE001 - never fail a read over housekeeping
+        return
+    misfits: list[AssetProposal] = []
+    waiting = [p for p in asset_proposals.open_list() if p.id not in _asset_deciding]
+    exported = None
+    if any(p.kind == "project" for p in waiting):
+        try:
+            exported = await _projects_live_export()
+        except Exception:  # noqa: BLE001 - checked against the saved snapshot then
+            exported = None
+    for proposal in waiting:
+        try:
+            reason = await _asset_proposal_misfit(proposal, exported)
+            if reason and proposal.is_open and proposal.id not in _asset_deciding:
+                asset_proposals.close(proposal.id, "invalidated", reason=reason)
+                misfits.append(proposal)
+        except Exception:  # noqa: BLE001 - one odd target never blocks the rest
+            continue
+    await _announce_closed_asset_proposals(expired + misfits, actor=dict(_SYSTEM_ACTOR))
+
+
+# ---- on time, not on the next read (review of Q92 a) ----
+#
+# The sweep above runs when something reads proposals. An agent that proposes
+# and stops, with the person on the canvas, reads nothing: without a timer the
+# Update would keep "waiting for your OK" and a live Review past expiry.
+
+_asset_expiry_tasks: set[asyncio.Task[Any]] = set()
+
+
+def _call_later(delay: float, callback: Callable[..., Any], *args: Any) -> None:
+    asyncio.get_running_loop().call_later(delay, callback, *args)
+
+
+def _schedule_asset_expiry(proposal: AssetProposal) -> None:
+    """Check the proposal just after it is due (asset_proposals' clock)."""
+    delay = max(0.0, proposal.expires_at - asset_proposals.now()) + 0.5
+    try:
+        _call_later(delay, _start_asset_expiry_check, proposal.id)
+    except RuntimeError:  # no running loop (a script): the next read sweeps
+        pass
+
+
+def _start_asset_expiry_check(proposal_id: str) -> None:
+    task = asyncio.get_running_loop().create_task(_asset_expiry_check(proposal_id))
+    _asset_expiry_tasks.add(task)
+    task.add_done_callback(_asset_expiry_tasks.discard)
+
+
+async def _asset_expiry_check(proposal_id: str) -> None:
+    await _sweep_asset_proposals()
+    proposal = asset_proposals.get(proposal_id)
+    if isinstance(proposal, AssetProposal) and proposal.is_open:
+        _schedule_asset_expiry(proposal)  # its expiry moved out (an accept under way)
+
+
+_ASSET_UPDATE_KINDS = ("project", "moodboard", "commons")
+
+
+async def _settle_proposal_updates() -> None:
+    """Before the open project's Updates are listed: sweep, then resolve any
+    proposal Update (an asset proposal's, or a canvas proposal's since
+    Justin's Q112 a) whose proposal can no longer be decided. Proposals live
+    in memory and Updates on the project, so after a restart an Update can
+    outlive its proposal; its Review would lead nowhere. Runs on list_notes,
+    on a tab's socket connect and on a project switch."""
+    await _sweep_asset_proposals()
+    await _sweep_proposals()
+    try:
+        listing = await asyncio.to_thread(agent_notes.canvas_list)
+    except (NoteError, ProjectStoreError):
+        return
+    project_id = listing.get("projectId")
+    for note in listing.get("notes") or []:
+        if note.get("about") == "question":
+            # A question set's Update (Q125 item 1): the same rule, with GM's line for a restart.
+            await _settle_question_update(project_id, note)
+            continue
+        ref = note.get("proposal")
+        if (note.get("about") != "proposal" or note.get("source") != "nebula" or note.get("resolvedAt")
+                or not isinstance(ref, Mapping)):
+            continue
+        kind = ref.get("kind")
+        if kind in _ASSET_UPDATE_KINDS:
+            proposal: Any = asset_proposals.get(str(ref.get("id") or ""))
+            known = isinstance(proposal, AssetProposal)
+        elif kind == "canvas":
+            proposal = canvas_proposals.get(str(ref.get("id") or ""))
+            known = isinstance(proposal, Proposal)
+        else:
+            continue
+        if known and proposal.is_open:
+            continue
+        # Not in memory: Nebula restarted while it was open (Q108 a).
+        if not known:
+            outcome = RESTART_OUTCOME
+        else:
+            outcome = asset_outcome_line(proposal) if kind in _ASSET_UPDATE_KINDS else canvas_outcome_line(proposal)
+        try:
+            result = await asyncio.to_thread(agent_notes.resolve_proposal, project_id, note["id"],
+                                             outcome=outcome, by={"kind": "system"})
+        except (NoteError, ProjectStoreError):
+            continue
+        if result is not None:
+            await _broadcast_raw_quietly(_notes_message("canvas", "resolved", project_id=project_id,
+                                                        ids=[note["id"]], note=result["note"],
+                                                        unread=result["unread"]))
+
+
+async def _settle_question_update(project_id: str | None, note: Mapping[str, Any]) -> None:
+    """A question set's Update whose set can't be answered any more: closed
+    (its outcome); closed and since pruned before this Update heard ("Closed.",
+    GM's PR #193 review); or not there at all ("Closed when Nebula
+    restarted.", GM's line for questions). Sets are kept with the project, so
+    a restart alone never gets there; a set whose record couldn't be read
+    back does (damaged, or from a build that didn't keep sets)."""
+    ref = note.get("questions")
+    if note.get("source") != "nebula" or note.get("resolvedAt") or not isinstance(ref, Mapping):
+        return
+    question_set = agent_questions.get(str(ref.get("id") or ""))
+    if isinstance(question_set, QuestionSet) and question_set.is_open:
+        return
+    if isinstance(question_set, QuestionSet):
+        outcome = question_outcome_line(question_set)
+    elif agent_questions.closed_before(project_id, str(note.get("id") or "")):
+        # Closed, then pruned before its Update heard (GM's review, item 6).
+        outcome = QUESTIONS_CLOSED_OUTCOME
+    else:
+        outcome = QUESTIONS_RESTART_OUTCOME
+    try:
+        result = await asyncio.to_thread(agent_notes.resolve_questions, project_id, note["id"],
+                                         outcome=outcome, by={"kind": "system"})
+    except (NoteError, ProjectStoreError):
+        return
+    if outcome == QUESTIONS_CLOSED_OUTCOME:
+        agent_questions.forget_closed_update(project_id, str(note.get("id") or ""))
+    if result is not None:
+        await _broadcast_raw_quietly(_notes_message("canvas", "resolved", project_id=project_id, ids=[note["id"]],
+                                                    note=result["note"], unread=result["unread"]))
+
+
+# ---- the Update each canvas proposal posts (Justin's Q112 a, 2026-10-21) ----
+#
+# "a) Yes, every one: "Claude Code proposes 3 changes on the canvas", with
+# Review taking you to the canvas and its bar. It settles like the others
+# (Accepted, Rejected, Expired, Closed: Nebula restarted)." Every surface
+# (MCP propose_change, `nebula propose`, HTTP) proposes through
+# create_canvas_proposal, which posts it here. Nebula writes it for the agent:
+# it skips the agent's post_note rate limit, and the project's cap prunes it.
+
+async def _post_canvas_update(proposal: Proposal) -> None:
+    if not proposal.project_id:
+        return  # no project open: the bar and the Agent log are the only notice, as before
+    try:
+        result = await asyncio.to_thread(
+            agent_notes.post_proposal, author={"kind": "agent", **proposal.agent.as_dict()},
+            text=canvas_update_text(proposal), project_id=proposal.project_id,
+            proposal={"id": proposal.id, "kind": "canvas", "targetId": proposal.project_id})
+    except (NoteError, ProjectStoreError):
+        return
+    note = result["note"]
+    proposal.update = {"id": note["id"], "projectId": result["projectId"]}
+    await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"], note=note,
+                                                unread=result["unread"], removed=result["removed"]))
+    _journal_note(note, "canvas")
+    if not proposal.is_open:
+        # It closed while the Update was being written (a node it needs
+        # deleted, the canvas cleared, another project opened, withdrawn):
+        # that close found no Update to settle, so settle it now.
+        await _follow_canvas_updates([proposal])
+        return
+    _schedule_canvas_expiry(proposal)
+
+
+def _canvas_resolved_by(proposal: Proposal, actor: Mapping[str, Any] | None) -> dict[str, Any]:
+    if proposal.status == "withdrawn":
+        return {"kind": "agent", "name": proposal.agent.name}
+    if proposal.status in ("accepted", "rejected") or (actor or {}).get("kind") == "person":
+        return {"kind": "person"}
+    return {"kind": "system"}
+
+
+async def _follow_canvas_updates(proposals: list[Proposal], *, actor: Mapping[str, Any] | None = None) -> None:
+    """Closed canvas proposals: each one's Update says how it ended and is
+    read, so its Review goes. Every way one ends comes through here:
+    accepted, rejected, withdrawn, expired (the sweep and the timer below),
+    and invalidated (a node it needs deleted, the canvas cleared or replaced
+    by an import or another project, or no longer fitting at Accept)."""
+    for proposal in proposals:
+        ref = proposal.update
+        if not ref or proposal.is_open:
+            continue
+        try:
+            result = await asyncio.to_thread(agent_notes.resolve_proposal, ref["projectId"], ref["id"],
+                                             outcome=canvas_outcome_line(proposal),
+                                             by=_canvas_resolved_by(proposal, actor))
+        except (NoteError, ProjectStoreError):
+            continue
+        if result is None:
+            continue
+        # Only the open project's list is on the person's screen; another
+        # project's reloads with it when they open it.
+        if result["projectId"] == project_store.read().get("activeProjectId"):
+            await _broadcast_raw_quietly(_notes_message("canvas", "resolved", project_id=result["projectId"],
+                                                        ids=[ref["id"]], note=result["note"], unread=result["unread"]))
+
+
+# On time, not on the next read: an agent that proposes and stops, with the
+# person on Projects, reads nothing, so without a timer the Update would keep
+# its Review past the proposal's 15 minutes.
+_proposal_expiry_tasks: set[asyncio.Task[Any]] = set()
+
+
+def _schedule_canvas_expiry(proposal: Proposal) -> None:
+    """Check the proposal just after it is due (canvas_proposals' clock)."""
+    delay = max(0.0, proposal.expires_at - canvas_proposals.now()) + 0.5
+    try:
+        _call_later(delay, _start_canvas_expiry_check, proposal.id)
+    except RuntimeError:  # no running loop (a script): the next read sweeps
+        pass
+
+
+def _start_canvas_expiry_check(proposal_id: str) -> None:
+    task = asyncio.get_running_loop().create_task(_canvas_expiry_check(proposal_id))
+    _proposal_expiry_tasks.add(task)
+    task.add_done_callback(_proposal_expiry_tasks.discard)
+
+
+async def _canvas_expiry_check(proposal_id: str) -> None:
+    await _sweep_proposals()
+    proposal = canvas_proposals.get(proposal_id)
+    if isinstance(proposal, Proposal) and proposal.is_open and proposal.expires_at > canvas_proposals.now():
+        _schedule_canvas_expiry(proposal)  # not due yet: look again then
+
+
+async def _follow_cover_proposals(exported: dict[str, Any]) -> None:
+    """After any change to the live canvas (every one goes through
+    _broadcast_graph_sync): re-check the open project's cover proposals, so
+    the person's tab hears at once when the pin lost its image or got it back,
+    or the automatic cover moved, instead of on the autosave's relist. Those
+    that no longer fit close (assetProposalClosed); if a view still open
+    changed, the person's tabs get assetProposalSync. Bounded: nothing to do
+    unless a cover proposal waits on the open project, then only its
+    proposals, against the export the sync already made. Never fails or
+    holds up the canvas edit."""
+    try:
+        waiting = [p for p in asset_proposals.open_list()
+                   if isinstance(p, AssetProposal) and p.kind == "project" and p.id not in _asset_deciding]
+        if not waiting:
+            return
+        active = project_store.workspace().get("activeProjectId")  # no catalog copy
+        mine = [p for p in waiting if p.target_id == active]
+        if not mine:
+            return
+        project = _open_project_record(active)
+        if project is None:
+            return  # the sweep on the next read says "deleted"
+        images = _cover_images_now(project, {"activeProjectId": active}, exported)
+        shown = {p.id: _asset_proposal_view(p) for p in mine}
+        closed: list[AssetProposal] = []
+        for proposal in mine:
+            reason = _cover_proposal_misfit(proposal, project, images)
+            if reason and proposal.is_open and proposal.id not in _asset_deciding:
+                asset_proposals.close(proposal.id, "invalidated", reason=reason)
+                # A node delete took its image: that delete's undo may reopen
+                # it. Its records name it too, so an undo after a restart
+                # (asset proposals live in memory) still counts it as lost.
+                # Only deletes in its own project tag it (second review).
+                records = [record for record in _removals_ctx.get() or []
+                           if record.get("projectId") == proposal.project_id]
+                proposal.closed_by = {str(record["id"]): str(record["nodeId"]) for record in records}
+                for record in records:
+                    named = record.setdefault("proposals", [])
+                    if proposal.id not in named:
+                        named.append(proposal.id)
+                closed.append(proposal)
+        if closed:
+            await _announce_closed_asset_proposals(closed, actor=dict(_SYSTEM_ACTOR))
+        if any(p.is_open and _asset_proposal_view(p) != shown[p.id] for p in mine):
+            await manager.broadcast_browser(_asset_proposal_open_message())
+    except Exception:  # noqa: BLE001 - housekeeping; the autosave's projectsChanged relists anyway
+        return
+
+
+# (catalog.json's signature, the open project's record): a run's many output
+# syncs reuse it; the catalog is read again only once it is written.
+_open_project_cache: tuple[Any, str, dict[str, Any]] | None = None
+
+
+def _open_project_record(project_id: str) -> dict[str, Any] | None:
+    global _open_project_cache
+    signature = project_store.signature()
+    cached = _open_project_cache
+    if signature is not None and cached is not None and cached[0] == signature and cached[1] == project_id:
+        return cached[2]
+    project = project_store.read()["projects"].get(project_id)
+    _open_project_cache = (signature, project_id, project) if project is not None and signature is not None else None
+    return project
+
+
+def _asset_proposal_open_message() -> dict[str, Any]:
+    return {"type": "assetProposalSync",
+            "proposals": [{**_asset_proposal_person_view(p), "acceptKey": p.accept_key}
+                          for p in asset_proposals.open_list()]}
+
+
+async def _asset_proposal_sync_message() -> dict[str, Any]:
+    """Every open asset proposal with its accept key, for a socket that just
+    said hello as the person (the Projects screen and Moodboard Studio)."""
+    await _sweep_asset_proposals()
+    return _asset_proposal_open_message()
+
+
+async def _asset_proposal_target(kind: str, target_id: str, change: dict[str, Any]
+                                 ) -> tuple[str, dict[str, Any], dict[str, Any] | None, str | None]:
+    """(the target's name, its state now, a lost pin, the automatic cover's
+    image) for a new proposal; 404
+    for a missing target, 400 for an image not in the project, 409 for a
+    change that is already so."""
+    if kind == "project":
+        exported = await _projects_live_export()
+        catalog = project_store.read()
+        project = _project_id_or_404(target_id, catalog)
+        images = _cover_images_now(project, catalog, exported)
+        url = change.get("cover")
+        if url is not None and not project_cover.is_choice(images, url):
+            raise HTTPException(status_code=400, detail=(
+                "Pick one of this project's own images for its cover (list_project_covers, "
+                f"GET /api/projects/{target_id}/covers, lists them)."))
+        state = _cover_state(project)
+        lost = _lost_pin(project, images)
+        # Against what the card shows: a pin whose image is gone shows the automatic cover.
+        if (None if lost else state["cover"]) == url:
+            raise HTTPException(status_code=409, detail=(
+                "That is already the project's cover; nothing to propose." if url is not None
+                else "The project's cover is already the automatic one; nothing to propose."))
+        return str(project.get("name") or ""), state, lost, _automatic_cover(images)
+    try:
+        board = await asyncio.to_thread(_moodboard_store().get, target_id)
+    except ValueError:
+        board = None
+    if board is None:
+        raise HTTPException(status_code=404, detail=f"No moodboard '{target_id[:40]}' (moodboard_list lists them)")
+    if board.get("sendNotes") is True:
+        raise HTTPException(status_code=409, detail=(
+            f'Send notes to generators is already on for board "{board.get("name")}"; nothing to propose.'))
+    return str(board.get("name") or ""), {"sendNotes": False}, None, None
+
+
+@app.post("/api/asset-proposals", status_code=201)
+async def create_asset_proposal(body: dict[str, Any]) -> dict[str, Any]:
+    """An agent proposes a change outside the graph; the person decides where
+    they work on that thing (a project's cover on the Projects screen, a
+    board's Send notes in Moodboard Studio). Nothing changes until they accept.
+
+    Body: {kind: "project" | "moodboard", id, change, note}. ``change`` is
+    {"cover": url | null} for a project, {"sendNotes": true} for a board."""
+    headers = current_request_headers()
+    identity = identify_agent(headers)
+    if identity is None:
+        if is_person(headers):
+            raise HTTPException(status_code=403, detail="The person doesn't need to propose; change it directly")
+        raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
+    await _sweep_asset_proposals()
+    try:
+        spec = parse_asset_change(body)
+    except ProposalError as exc:
+        raise _proposal_http_error(exc) from exc
+    lost = auto = None
+    if spec.kind == "commons":
+        spec, name, before = await _commons_proposal_target(spec, headers)
+    else:
+        name, before, lost, auto = await _asset_proposal_target(spec.kind, spec.target_id, spec.change)
+    try:
+        proposal = asset_proposals.create_asset(agent=identity, spec=spec, target_name=name, before=before)
+    except ProposalError as exc:
+        raise _proposal_http_error(exc) from exc
+    proposal.lost_pin = lost
+    proposal.auto_cover = auto
+    # The Update in the corner (Q92 a), before the view so the answer names it.
+    await _post_asset_update(proposal)
+    _schedule_asset_expiry(proposal)
+    view = _asset_proposal_view(proposal)
+    said = asset_proposal_summary(proposal)
+    _journal("proposal.created", data={**_asset_journal_data(proposal), "change": sorted(spec.change)},
+             summary=(f"proposed {proposal.id} ({said})" if spec.kind == "commons"
+                      else f'proposed {proposal.id}: "{spec.note}" ({said})'))
+    try:
+        # The accept key goes only to the person's canvas sockets.
+        await manager.broadcast_browser({"type": "assetProposalOpened",
+                                         "proposal": _asset_proposal_person_view(proposal),
+                                         "acceptKey": proposal.accept_key})
+    except Exception:  # noqa: BLE001 - a screen that missed it gets assetProposalSync on reconnect
+        pass
+    where = {"project": "on the Projects screen", "commons": "in the Commons"}.get(spec.kind, "in Moodboard Studio")
+    # No cursor can go there, so the Agent log names it.
+    await _say_agent_action(f"Asks to {said} (decide {where})")
+    return {"proposal": view}
+
+
+@app.get("/api/asset-proposals")
+async def list_asset_proposals(kind: str | None = None, id: str | None = None) -> dict[str, Any]:  # noqa: A002
+    """Open asset proposals, optionally for one kind or one target (never their accept keys)."""
+    await _sweep_asset_proposals()
+    headers = current_request_headers()
+    return {"proposals": [_asset_proposal_view(p) for p in asset_proposals.for_target(kind, id)
+                          if await _commons_proposal_visible(p, headers)]}
+
+
+async def _get_asset_proposal(proposal_id: str, wait: float) -> dict[str, Any]:
+    """``GET /api/canvas/proposals/{id}`` for an asset proposal: with ``wait``
+    (≤25 s), wait for the decision, or for its target to move on."""
+    await _sweep_asset_proposals()
+    proposal = asset_proposals.get(proposal_id)
+    if not isinstance(proposal, AssetProposal) or not await _commons_proposal_visible(proposal, current_request_headers()):
+        raise refusal_copy.not_found(_gone_proposal_detail(proposal_id), "proposal", "proposals")
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + wait
+    cursor = canvas_events.latest
+    while proposal.is_open:
+        remaining = min(deadline - loop.time(), proposal.expires_at - asset_proposals.now() + 0.05)
+        if remaining <= 0:
+            break
+        try:
+            result = await canvas_events.wait(after=cursor, journal=canvas_events.journal_id,
+                                              wait=remaining, kinds=set(_ASSET_WAIT_KINDS))
+        except TooManyWaiters as exc:
+            raise HTTPException(status_code=429, detail=str(exc)) from exc
+        cursor = result.get("cursor", cursor)
+        await _sweep_asset_proposals()
+        if result.get("timedOut") and deadline - loop.time() <= 0:
+            break
+    return {"proposal": _asset_proposal_view(proposal)}
+
+
+async def _withdraw_asset_proposal(proposal_id: str, identity: Any) -> dict[str, Any]:
+    await _sweep_asset_proposals()
+    proposal = asset_proposals.get(proposal_id)
+    if not isinstance(proposal, AssetProposal) or not await _commons_proposal_visible(proposal, current_request_headers()):
+        raise refusal_copy.not_found(f"No proposal {proposal_id[:20]}", "proposal", "proposals")
+    if proposal.agent.id != identity.id:
+        raise HTTPException(status_code=403, detail="Only the agent that proposed this can withdraw it")
+    if proposal.id in _asset_deciding:
+        raise HTTPException(status_code=409, detail="The person is accepting this proposal right now")
+    try:
+        asset_proposals.close(proposal_id, "withdrawn", reason="withdrawn by the agent")
+    except ProposalError as exc:
+        raise _proposal_http_error(exc) from exc
+    await _announce_closed_asset_proposals([proposal])
+    return {"proposal": _asset_proposal_view(proposal)}
+
+
+async def _decidable_asset_proposal(proposal_id: str) -> AssetProposal:
+    """The person-only checks of accept and reject, as for canvas proposals:
+    no agent markers and the person token, then the proposal's accept key,
+    then still open."""
+    headers = current_request_headers()
+    require_person(headers)
+    lower = {k.lower(): v for k, v in (headers or {}).items()}
+    supplied = lower.get(_PROPOSAL_KEY_HEADER) or ""
+    proposal = asset_proposals.get(proposal_id)
+    if not isinstance(proposal, AssetProposal):
+        raise refusal_copy.not_found("This proposal is no longer available", "proposal", "proposals")
+    if not supplied or not secrets.compare_digest(supplied.encode(), proposal.accept_key.encode()):
+        raise HTTPException(status_code=403, detail="This proposal can only be decided from Nebula, where you saw it.")
+    await _sweep_asset_proposals()
+    if not proposal.is_open or proposal.id in _asset_deciding:
+        raise HTTPException(status_code=409, detail=f"This proposal is already {proposal.status}")
+    return proposal
+
+
+async def _apply_asset_proposal(proposal: AssetProposal) -> dict[str, Any]:
+    """Make the change as the person, through the route their own click uses."""
+    note = f" (accepted from {proposal.agent.name})"
+    if proposal.kind == "commons":
+        return await _apply_commons_proposal(proposal)
+    if proposal.kind == "project":
+        url = proposal.change.get("cover")
+        result = await _set_project_cover(proposal.target_id, url, expect=proposal.before, note=note)
+        return {"applied": {"cover": url}, "project": result["project"]}
+    # Without the tab id, the write isn't this tab's echo: the Studio that
+    # clicked Accept reads the board again like every other open one.
+    headers = {k: v for k, v in (current_request_headers() or {}).items() if k.lower() != "x-nebula-tab"}
+    with request_headers_scope(headers):
+        answer = await update_moodboard(proposal.target_id, MoodboardUpdate(sendNotes=True))
+    if isinstance(answer, Response):
+        detail = ""
+        try:
+            detail = str(json.loads(bytes(answer.body)).get("detail") or "")
+        except Exception:  # noqa: BLE001
+            pass
+        raise HTTPException(status_code=409, detail=detail or "the board can't take it now")
+    return {"applied": {"sendNotes": True}, "board": answer}
+
+
+@app.post("/api/asset-proposals/{proposal_id}/accept")
+async def accept_asset_proposal(proposal_id: str) -> dict[str, Any]:
+    """The person accepts: the change is made as theirs, or nothing is (409,
+    and the proposal closes as invalidated when it no longer fits)."""
+    proposal = await _decidable_asset_proposal(proposal_id)
+    _asset_deciding.add(proposal.id)
+    # Expiry must not land while the change is being made.
+    proposal.expires_at = max(proposal.expires_at, asset_proposals.now() + 120)
+    try:
+        exported = await _projects_live_export() if proposal.kind == "project" else None
+        misfit = await _asset_proposal_misfit(proposal, exported)
+        if misfit is not None:
+            raise HTTPException(status_code=409, detail=misfit)
+        outcome = await _apply_asset_proposal(proposal)
+    except (HTTPException, PersonGateError) as exc:
+        detail = str(getattr(exc, "detail", "") or exc)
+        _asset_deciding.discard(proposal.id)
+        if proposal.is_open:
+            asset_proposals.close(proposal.id, "invalidated", reason=detail[:200])
+            await _announce_closed_asset_proposals([proposal], actor=dict(_PERSON_ACTOR))
+        raise HTTPException(status_code=409, detail=f"This proposal no longer fits: {detail}") from exc
+    except BaseException:
+        _asset_deciding.discard(proposal.id)
+        raise
+    proposal.applied = dict(outcome["applied"])
+    try:
+        asset_proposals.close(proposal.id, "accepted")
+    except ProposalError:
+        pass  # unreachable while it is in _asset_deciding; the change is made either way
+    _asset_deciding.discard(proposal.id)
+    _journal("proposal.accepted", data={**_asset_journal_data(proposal), "applied": proposal.applied},
+             summary=f"accepted {proposal.agent.name}'s proposal {proposal.id} ({asset_proposal_summary(proposal)})",
+             actor=dict(_PERSON_ACTOR))
+    try:
+        await manager.broadcast_raw(_asset_proposal_closed_message(proposal))
+    except Exception:  # noqa: BLE001
+        pass
+    await _follow_asset_updates([proposal])
+    publish_action(f"Accepted {proposal.agent.name}'s proposal to {asset_proposal_summary(proposal)}")
+    return {"status": "accepted", "proposalId": proposal.id, "kind": proposal.kind,
+            "targetId": proposal.target_id, **outcome}
+
+
+@app.post("/api/asset-proposals/{proposal_id}/reject")
+async def reject_asset_proposal(proposal_id: str, request: Request) -> dict[str, Any]:
+    """The person says no. Body: {reason?} (one short line the agent will read)."""
+    proposal = await _decidable_asset_proposal(proposal_id)
+    body = await _proposal_body(request)
+    if not proposal.is_open or proposal.id in _asset_deciding:
+        raise HTTPException(status_code=409, detail=f"This proposal is already {proposal.status}")
+    reason: str | None = None
+    if body.get("reason") not in (None, ""):
+        try:
+            reason = clean_note(body.get("reason"), limit=MAX_REASON, label="reason")
+        except ProposalError as exc:
+            raise _proposal_http_error(exc) from exc
+    asset_proposals.close(proposal.id, "rejected", reason=reason)
+    await _announce_closed_asset_proposals([proposal], actor=dict(_PERSON_ACTOR))
+    return {"status": "rejected", "proposalId": proposal.id}
+
+
+# ---------- Commons curation as asset proposals (Justin's Q63 b, U13) ----------
+#
+# Curating the Commons (corrections, regions, a reference's role, why or
+# inbox place) stays the person's: agents propose it with kind "commons"
+# and the person decides on the reference's detail in the Commons. Accept
+# makes each edit through the Commons route the person's own click uses
+# (services/commons_proposals.py). Every curation write, the person's own
+# and an accepted proposal's, journals a commons.* event.
+
+def _asset_proposal_person_view(proposal: AssetProposal) -> dict[str, Any]:
+    """The view plus what only the person's screen may see (a commons
+    proposal's ``before``: Commons text), for the browser-only messages."""
+    return {**_asset_proposal_view(proposal), **asset_proposals.person_values(proposal)}
+
+
+def _commons_proposal_store() -> Any:
+    from commons import activation as commons_activation, runtime as commons_runtime
+
+    if not commons_activation.is_enabled():
+        raise HTTPException(status_code=404, detail="The Commons is off on this backend, so there is nothing to propose.")
+    return commons_runtime.get_store()
+
+
+async def _commons_proposal_target(spec: Any, headers: Mapping[str, str] | None) -> tuple[Any, str, dict[str, Any]]:
+    """(the spec with edits already so dropped, the target's name, ``before``).
+    The agent must see the reference in its own scope, as commons_get does."""
+    import dataclasses
+
+    from routes import commons as commons_routes
+    from services import commons_proposals
+
+    store = _commons_proposal_store()
+    try:
+        actor = commons_actors.resolve_actor(headers or {})
+    except commons_actors.AuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    change, before = await asyncio.to_thread(commons_proposals.target, store, actor, spec.target_id,
+                                             spec.change, spec.brand)
+    # The scope it was proposed in: who else may read it (_commons_proposal_visible).
+    scope = {"brand": commons_routes._effective_brand(actor, spec.brand),
+             "workspace": str(actor.workspace) if actor.workspace is not None else None}
+    return dataclasses.replace(spec, change=change), "", {"edits": before, "scope": scope}
+
+
+async def _commons_proposal_visible(proposal: AssetProposal, headers: Mapping[str, str] | None) -> bool:
+    """Whether this caller may read a proposal: any proposal but a commons
+    one; that one only for the person, the session that proposed it (which
+    reads the outcome even once the reference is gone), and callers who see
+    its reference in the brand it was proposed for, as commons_get does. A
+    brand-bound agent session never sees another brand's (the Commons fence)."""
+    if proposal.kind != "commons" or is_person(headers):
+        return True
+    from commons import activation as commons_activation, runtime as commons_runtime
+    from routes import commons as commons_routes
+
+    scope = proposal.before.get("scope") or {}
+    try:
+        actor = commons_actors.resolve_actor(headers or {})
+    except commons_actors.AuthError:
+        return False
+    identity = identify_agent(headers)
+    workspace = str(actor.workspace) if actor.workspace is not None else None
+    if identity is not None and identity.id == proposal.agent.id and workspace == scope.get("workspace"):
+        return True
+    if not commons_activation.is_enabled():
+        return False
+
+    def sees_reference() -> bool:
+        try:
+            commons_routes._asset_access(commons_runtime.get_store(), actor, proposal.target_id, scope.get("brand"))
+        except HTTPException:
+            return False
+        return True
+
+    return await asyncio.to_thread(sees_reference)
+
+
+async def _commons_proposal_misfit(proposal: AssetProposal) -> str | None:
+    from commons import activation as commons_activation, runtime as commons_runtime
+    from services import commons_proposals
+
+    if not commons_activation.is_enabled():
+        return "the Commons was turned off"
+    return await asyncio.to_thread(commons_proposals.misfit, commons_runtime.get_store(), proposal.target_id,
+                                   proposal.change, list(proposal.before.get("edits") or []))
+
+
+async def _apply_commons_proposal(proposal: AssetProposal) -> dict[str, Any]:
+    from services import commons_proposals
+
+    store = _commons_proposal_store()
+    said = commons_proposals.accepted_from.set(proposal.agent.name)
+    try:
+        made = await asyncio.to_thread(commons_proposals.apply, store, proposal.target_id, proposal.change)
+    finally:
+        commons_proposals.accepted_from.reset(said)
+    # Other proposals on this reference may no longer fit (this one is still deciding).
+    await _sweep_asset_proposals()
+    return {"applied": {"edits": made}}
+
+
+_COMMONS_EVENT_KINDS = {"corrected": "commons.corrected", "region": "commons.region",
+                        "membership": "commons.membership"}
+
+
+def _commons_curation_summary(kind: str, data: Mapping[str, Any]) -> str:
+    asset_id = data.get("assetId") or "?"
+    if kind == "corrected":
+        return f"corrected {data.get('fieldPath')} ({data.get('op')}) on Commons reference {asset_id}"
+    changed = ", ".join(data.get("change") or []) or "nothing"
+    if kind == "region":
+        return f"{'added a region' if changed == 'added' else f'changed a region ({changed})'} on Commons reference {asset_id}"
+    return f"changed {changed} of Commons reference {asset_id} in a collection"
+
+
+def _journal_commons_curation(kind: str, data: dict[str, Any], actor: Any) -> None:
+    """routes/commons.py's curation hook: one commons.* event per write, with
+    who made it, and never Commons text (no values, labels or whys). Then the
+    proposals waiting on that reference are checked, from the route's worker
+    thread (an accepted proposal sweeps for itself)."""
+    from services import commons_proposals
+
+    event = _COMMONS_EVENT_KINDS.get(kind)
+    if event is None:
+        return
+    who = dict(_PERSON_ACTOR) if getattr(actor, "is_human", False) else actor_for_headers(current_request_headers())
+    origin = commons_proposals.accepted_from.get()
+    note = f" (accepted from {origin})" if origin else ""
+    _journal(event, data=dict(data), summary=_commons_curation_summary(kind, data) + note, actor=who)
+    if origin or not asset_proposals.for_target("commons", str(data.get("assetId") or "")):
+        return
+    try:
+        import anyio.from_thread
+
+        anyio.from_thread.run(_sweep_asset_proposals)
+    except Exception:  # noqa: BLE001 - not on a route's worker thread; the next read sweeps
+        pass
+
+
+def _register_commons_curation_journal() -> None:
+    from routes import commons as commons_routes
+
+    if _journal_commons_curation not in commons_routes.curation_listeners:
+        commons_routes.curation_listeners.append(_journal_commons_curation)
+
+
+_register_commons_curation_journal()
 
 
 @app.get("/api/project")
@@ -5473,8 +8145,12 @@ async def get_settings() -> dict:
     settings = load_settings()
     masked = dict(settings)
     if "apiKeys" in masked:
+        # Justin, Q55 a: "Only the app (your person token) gets the endings.
+        # Everything else learns which providers are set, and nothing more."
+        # An agent's curl or `nebula keys` sees a bare "***" for a set key.
+        person = _is_person_request()
         masked["apiKeys"] = {
-            k: ("***" + v[-4:] if len(v) > 4 else "***") if v else ""
+            k: (("***" + v[-4:] if len(v) > 4 else "***") if person else "***") if v else ""
             for k, v in masked["apiKeys"].items()
         }
     if agent_spend.CAPS_KEY in masked:
@@ -5610,11 +8286,12 @@ async def _finalize_cancelled_execution(
     if not preserve_graph_params and _sync_params_to_cli_graph(nodes, submitted=submitted):
         await _broadcast_graph_sync()
     await manager.broadcast(GraphCancelledEvent(run_id=run_id))
+    stopped_by, started_by = _run_cancelled_actor(run_id)
     _journal(
         "run.cancelled",
-        data={"runId": run_id},
+        data={"runId": run_id, "startedBy": started_by},
         summary="run stopped",
-        actor=canvas_events.run_actor(run_id),
+        actor=stopped_by,
     )
 
 
@@ -5757,12 +8434,18 @@ def _claim_fresh_paid_worldlabs_starts(
             claimed_node_ids & (recovered_node_ids | canonical_recovery_node_ids)
         )
         if stale_nodes:
+            # The person's line names what clears it (round 3b): Run History's
+            # forget for a record, else the node's own ID fields.
+            journaled = any(node_id in recovered_node_ids for node_id in stale_nodes)
             raise ProviderStartConflictError(
                 "Fresh World Labs start blocked because Nebula already has a "
                 "recovery checkpoint for node(s): "
                 + ", ".join(stale_nodes)
                 + ". Restore or explicitly delete the checkpoint before starting "
-                "new paid work."
+                "new paid work.",
+                reason="recovery" if journaled else "params",
+                fields=None if journaled else _recovery_field_labels(
+                    [cli_graph.nodes[node_id] for node_id in stale_nodes if node_id in cli_graph.nodes]),
             )
         provider_recovery_store.reserve(
             run_id=run_id,
@@ -5797,7 +8480,8 @@ def _claim_fresh_paid_worldlabs_starts(
         )
     except ProviderRecoveryCapacityError as exc:
         provider_recovery_store.release_reservations(run_id)
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise refusal_copy.refusal(409, str(exc), _paid_capacity_person(exc.limit),
+                                   route="run") from exc
     except ProviderRecoveryPersistenceError as exc:
         provider_recovery_store.release_reservations(run_id)
         raise HTTPException(
@@ -5812,7 +8496,7 @@ def _claim_fresh_paid_worldlabs_starts(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ProviderStartConflictError as exc:
         provider_recovery_store.release_reservations(run_id)
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise _start_refusal(exc) from exc
     except ProviderStartPersistenceError as exc:
         provider_recovery_store.release_reservations(run_id)
         raise HTTPException(
@@ -5888,10 +8572,11 @@ async def execute(request: ExecuteRequest) -> dict:
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
-    canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
+    _note_run(run_id)
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
     nodes = _normalize_execute_nodes(request.nodes)
+    _note_run_nodes(run_id, nodes)
     submitted = _submitted_params(nodes)
     _validate_cinema_base_models(nodes)
 
@@ -5918,7 +8603,7 @@ async def execute(request: ExecuteRequest) -> dict:
         raise HTTPException(status_code=400, detail=f"Graph contains a cycle: {exc}")
 
     # After validation, so a graph that can't run reports why, not its cost.
-    _require_run_spend_approval(run_id, nodes, request.edges, approval_id=request.approval_id,
+    await _require_run_spend_approval(run_id, nodes, request.edges, approval_id=request.approval_id,
                                 run_ids=_end_node_ids(nodes, request.edges), settings=settings)
 
     handler_registry = get_handler_registry(emit=_emit_and_sync)
@@ -6026,7 +8711,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
-    canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
+    _note_run(run_id)
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
     nodes = _normalize_execute_nodes(request.nodes)
@@ -6038,10 +8723,8 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     )
 
     if not sub_nodes:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Node '{request.target_node_id}' not found in graph",
-        )
+        raise _node_gone(request.target_node_id, f"Node '{request.target_node_id}' not found in graph")
+    _note_run_nodes(run_id, sub_nodes)
 
     _validate_cinema_base_models(sub_nodes)
 
@@ -6068,7 +8751,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
         raise HTTPException(status_code=400, detail=f"Subgraph contains a cycle: {exc}")
 
     # After validation, so a graph that can't run reports why, not its cost.
-    _require_run_spend_approval(run_id, sub_nodes, sub_edges, approval_id=request.approval_id,
+    await _require_run_spend_approval(run_id, sub_nodes, sub_edges, approval_id=request.approval_id,
                                 run_ids=[request.target_node_id], settings=settings)
 
     handler_registry = get_handler_registry(emit=_emit_and_sync)
@@ -6136,18 +8819,70 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     return {"status": "started", "nodeCount": len(sub_nodes), "runId": run_id}
 
 
+# -- who may stop a run (Justin, 2026-10-20, MCP parity Q61 a) --------------------
+# Agents stop only runs an agent started; the person stops anything. The rule
+# is services/execution_runs.py stop_refusal; here is who the caller is.
+
+def _run_party(headers: Mapping[str, str] | None = None) -> dict[str, Any]:
+    """The caller as a run's starter or stopper, as the journal names actors:
+    the person, a named agent, or anonymous (no marker, no person token: the
+    `nebula` CLI without NEBULA_AGENT_NAME, curl, a tab not connected as the
+    person). A request with an agent marker but no name is still an agent."""
+    headers = current_request_headers() if headers is None else headers
+    actor = actor_for_headers(headers)
+    if actor.get("kind") != "agent" and has_agent_marker(headers):
+        actor = {"kind": "agent", "name": "An agent"}
+    return actor
+
+
+execution_runs.set_starter_source(_run_party)
+
+
+def _refuse_stopping_the_persons_run(run_id: str, record: Any) -> None:
+    """Refuse a Stop the caller may not make, before anything is recorded.
+
+    A run still being admitted (its POST noted the starter in the journal but
+    hasn't registered it) is judged by the journal. A run ID nobody started
+    here keeps today's pre-admission tombstone for any caller, and a run that
+    already ended answers its status (there is nothing left to stop)."""
+    from services.execution_runs import stop_refusal
+    from services.person_gate import AGENT_REFUSED, PERSON_REQUIRED
+
+    if record is not None and record.status not in {"running", "cancelling"}:
+        return
+    headers = current_request_headers()
+    started_by = record.started_by if record is not None else canvas_events.run_actor(run_id)
+    refusal = stop_refusal(started_by, caller_is_person=is_person(headers))
+    if refusal is not None:
+        raise PersonGateError(403, refusal, AGENT_REFUSED if has_agent_marker(headers) else PERSON_REQUIRED)
+    if record is not None and record.stopped_by is None:
+        record.stopped_by = _run_party(headers)
+
+
+def _run_cancelled_actor(run_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """(who stopped it, who started it) for the run.cancelled journal event.
+    A Stop another backend recorded has no stopper here: the starter stands in."""
+    record = execution_runs.get(run_id)
+    started_by = record.started_by if record is not None else canvas_events.run_actor(run_id)
+    stopped_by = record.stopped_by if record is not None and record.stopped_by else started_by
+    return stopped_by, {key: started_by[key] for key in ("kind", "name") if started_by.get(key)}
+
+
 @app.get("/api/executions/{run_id}")
 async def get_execution_status(run_id: str) -> dict:
     record = execution_runs.get(run_id)
     if record is None:
-        raise HTTPException(status_code=404, detail=f"run '{run_id}' not found")
+        raise refusal_copy.not_found(f"run '{run_id}' not found", "run", "runs")
     return {"runId": run_id, "status": record.status}
 
 
 @app.delete("/api/executions/{run_id}")
 async def cancel_execution(run_id: str) -> dict:
-    """Idempotently request cancellation of a tracked graph execution."""
+    """Idempotently request cancellation of a tracked graph execution.
+
+    Only the person stops a run the person started (_refuse_stopping_the_persons_run)."""
     existing = execution_runs.get(run_id)
+    _refuse_stopping_the_persons_run(run_id, existing)
     try:
         # Persist every Stop, including one received by the task-owning worker.
         # Otherwise a different backend could reuse the same runId after the
@@ -6248,6 +8983,7 @@ async def _merge_shot_result(
     captured_outputs: dict[str, Any],
     *,
     terminal_error: str | None = None,
+    terminal_fields: dict[str, str] | None = None,
 ) -> dict[str, Any] | None:
     """Merge a single-shot regeneration into the canonical cli_graph node WITHOUT
     clobbering sibling shots.
@@ -6264,6 +9000,11 @@ async def _merge_shot_result(
     only the live target shot as failed while retaining its last good image and
     output port. This prevents the request snapshot from restoring stale success
     after an upstream failure. Returns the merged shot output dict, or None.
+
+    ``terminal_fields`` are what the Cinema panel reads the failure with, as
+    a node card does (error copy round 3c-2): ``errorCategory``,
+    ``errorFriendly``, ``errorPerson`` and ``errorRaw`` (_shot_failure_fields).
+    ``error`` stays the text agents read, word for word.
     """
     new_output: dict[str, Any] | None = None
     if terminal_error is None and executed_node is not None:
@@ -6272,11 +9013,8 @@ async def _merge_shot_result(
         if sub_shots and isinstance(sub_shots[0], dict):
             new_output = sub_shots[0].get("output")
 
-    result_output = (
-        {"status": "error", "error": terminal_error}
-        if terminal_error is not None
-        else new_output
-    )
+    failure = {"status": "error", "error": terminal_error, **(terminal_fields or {})}
+    result_output = failure if terminal_error is not None else new_output
 
     async with _shot_merge_lock(node_id):
         node = cli_graph.nodes.get(node_id)
@@ -6294,8 +9032,9 @@ async def _merge_shot_result(
                         # Keep the last successful image/hash available for
                         # preview and downstream reuse, but make the terminal
                         # status truthful and durable.
-                        failed_output = dict(shot.get("output") or {})
-                        failed_output.update({"status": "error", "error": terminal_error})
+                        failed_output = {key: value for key, value in (shot.get("output") or {}).items()
+                                         if key not in _SHOT_FAILURE_FIELDS}
+                        failed_output.update(failure)
                         shot["output"] = failed_output
                         result_output = failed_output
                     elif new_output is not None:
@@ -6320,7 +9059,19 @@ async def _merge_shot_result(
 
 
 class _ShotPassError(RuntimeError):
-    """Expected per-shot pass failure already expressed as user-facing text."""
+    """Expected per-shot pass failure already expressed as user-facing text.
+
+    ``failure`` is the node run error behind it, as the card reads one:
+    category, friendly, person and the raw text (round 3c-2)."""
+
+    def __init__(self, message: str, failure: dict[str, Any] | None = None) -> None:
+        super().__init__(message)
+        self.failure = failure
+
+
+# What a failed shot's output carries beside ``error`` for the Cinema panel.
+_SHOT_FAILURE_FIELDS = ("errorCategory", "errorFriendly", "errorPerson", "errorProviderText", "errorProvider",
+                        "errorRaw")
 
 
 def _shot_task_error_message(exc: Exception) -> str:
@@ -6328,6 +9079,21 @@ def _shot_task_error_message(exc: Exception) -> str:
         return str(exc)
     detail = str(exc).strip() or type(exc).__name__
     return f"Shot generation failed: {detail}"
+
+
+def _shot_failure_fields(exc: Exception) -> dict[str, Any]:
+    """How the Cinema panel reads a failed shot, the way a node card reads its
+    run error (lib/nodeErrorCopy.ts): the handler's person line, the
+    classifier's category and line, and the full raw text for Details. A
+    shot that ended for a reason Nebula wrote itself carries none and shows
+    as it is; an unexpected exception reads GM's general line."""
+    if isinstance(exc, _ShotPassError):
+        failure = exc.failure or {}
+        fields = {"errorCategory": failure.get("category"), "errorFriendly": failure.get("friendly"),
+                  "errorPerson": failure.get("person"), "errorProviderText": failure.get("provider_text"),
+                  "errorProvider": failure.get("provider"), "errorRaw": failure.get("raw")}
+        return {key: value for key, value in fields.items() if value}
+    return {"errorCategory": "unknown"}
 
 
 async def _execute_single_shot_pass(
@@ -6366,6 +9132,11 @@ async def _execute_single_shot_pass(
             return
         if isinstance(event, ErrorEvent) and "error" not in captured:
             captured["error"] = event.friendly or event.error
+            if event.category:
+                captured["failure"] = {"category": event.category, "friendly": event.friendly,
+                                       "person": event.person, "provider_text": event.provider_text,
+                                       "provider": event.provider,
+                                       "raw": event.error}
         await _emit_and_sync(event)
 
     await execute_graph(
@@ -6380,7 +9151,8 @@ async def _execute_single_shot_pass(
 
     if not captured["target_executed"]:
         raise _ShotPassError(
-            str(captured.get("error") or "Shot generation ended before the Cinema node completed.")
+            str(captured.get("error") or "Shot generation ended before the Cinema node completed."),
+            captured.get("failure"),
         )
 
     return executed_node, captured.get("outputs") or {}
@@ -6412,6 +9184,7 @@ async def _run_single_shot_task(
             None,
             {},
             terminal_error=_shot_task_error_message(exc),
+            terminal_fields=_shot_failure_fields(exc),
         )
     except Exception as exc:
         traceback.print_exc()
@@ -6421,6 +9194,7 @@ async def _run_single_shot_task(
             None,
             {},
             terminal_error=_shot_task_error_message(exc),
+            terminal_fields=_shot_failure_fields(exc),
         )
     else:
         await _merge_shot_result(node_id, shot_id, executed_node, outputs)
@@ -6471,7 +9245,7 @@ async def _promote_shot_variation(
     async with _shot_merge_lock(node_id):
         node = cli_graph.nodes.get(node_id)
         if node is None:
-            raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+            raise _node_gone(node_id)
         if node.get("definitionId") != "cinema-scene":
             raise HTTPException(status_code=400, detail=f"Node '{node_id}' is not a cinema-scene node")
 
@@ -6489,7 +9263,7 @@ async def _promote_shot_variation(
             None,
         )
         if target_shot is None:
-            raise HTTPException(status_code=404, detail=f"Shot '{shot_id}' not found in scene")
+            raise refusal_copy.not_found(f"Shot '{shot_id}' not found in scene", "shot", "shots")
 
         variations = target_shot.get("variations")
         if not isinstance(variations, list) or index >= len(variations):
@@ -6556,14 +9330,14 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
-    canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
+    _note_run(run_id)
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
     nodes = _normalize_execute_nodes(request.nodes)
 
     target = next((n for n in nodes if n.id == request.node_id), None)
     if target is None:
-        raise HTTPException(status_code=404, detail=f"Node '{request.node_id}' not found in graph")
+        raise _node_gone(request.node_id, f"Node '{request.node_id}' not found in graph")
     if target.definition_id != "cinema-scene":
         raise HTTPException(status_code=400, detail=f"Node '{request.node_id}' is not a cinema-scene node")
 
@@ -6577,7 +9351,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
         None,
     )
     if shot is None:
-        raise HTTPException(status_code=404, detail=f"Shot '{request.shot_id}' not found in scene")
+        raise refusal_copy.not_found(f"Shot '{request.shot_id}' not found in scene", "shot", "shots")
 
     # Build a single-shot copy of the scene so the handler regenerates ONLY this
     # shot. The seed is applied per-pass via the shot's `_seedOverride` (which the
@@ -6589,7 +9363,8 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
 
     sub_nodes, sub_edges = get_subgraph(patched_nodes, request.edges, request.node_id)
     if not sub_nodes:
-        raise HTTPException(status_code=404, detail=f"Node '{request.node_id}' not found in graph")
+        raise _node_gone(request.node_id, f"Node '{request.node_id}' not found in graph")
+    _note_run_nodes(run_id, sub_nodes)
     fresh_paid_ancestors = _fresh_paid_worldlabs_claims(sub_nodes)
     if fresh_paid_ancestors:
         blocked_ids = ", ".join(node_id for _kind, node_id in fresh_paid_ancestors)
@@ -6605,11 +9380,9 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     errors = validate_graph(sub_nodes, sub_edges, api_keys)
     if errors:
         await _announce_validation_errors(errors, run_id)
-        return {
-            "status": "validation_error",
-            "errorCount": len(errors),
-            "runId": run_id,
-        }
+        # With each error (error copy round 3e), so the shot panel can say
+        # the scene's own line rather than a general one.
+        return {**_validation_response(errors), "runId": run_id}
 
     try:
         topological_sort(sub_nodes, sub_edges)
@@ -6630,7 +9403,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     # each one counts in full. Checked after validation, so a request that
     # can't run doesn't count.
     spend_nodes, spend_edges = get_subgraph(request.nodes, request.edges, request.node_id)
-    _require_run_spend_approval(run_id, spend_nodes, spend_edges, run_ids=[request.node_id], passes=count,
+    await _require_run_spend_approval(run_id, spend_nodes, spend_edges, run_ids=[request.node_id], passes=count,
                                 settings=settings)
 
     # A per-shot run does not acquire the frontend's Canvas-wide ``isExecuting``
@@ -6650,12 +9423,14 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
         import traceback
 
         terminal_error: str | None = None
+        terminal_fields: dict[str, str] | None = None
         try:
             if count > 1:
                 # Variation batch: N passes at distinct seeds (cache OFF so each
                 # truly regenerates), collected into the shot's variations strip.
                 variations: list[dict[str, Any]] = []
                 failures: list[str] = []
+                last_fields: dict[str, str] = {}
                 for i in range(count):
                     seed_i = (request.seed + i) if request.seed is not None else random.randint(1, 2_147_483_647)
                     try:
@@ -6670,21 +9445,25 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
                         )
                     except _ShotPassError as exc:
                         failures.append(_shot_task_error_message(exc))
+                        last_fields = _shot_failure_fields(exc)
                         continue
                     except Exception as exc:
                         traceback.print_exc()
                         failures.append(_shot_task_error_message(exc))
+                        last_fields = _shot_failure_fields(exc)
                         continue
                     url = (outputs.get(shot_port) or {}).get("value")
                     if url:
                         variations.append({"url": url, "seed": seed_i})
                     else:
                         failures.append(f"Variation seed {seed_i} returned no image.")
+                        last_fields = {}
                 if variations:
                     await _merge_shot_variations(request.node_id, request.shot_id, variations)
                 else:
                     last_failure = failures[-1] if failures else "No variation returned an image."
                     terminal_error = f"All {count} variation passes failed. {last_failure}"
+                    terminal_fields = last_fields
             else:
                 executed_node, outputs = await _execute_single_shot_pass(
                     node_id=request.node_id,
@@ -6700,9 +9479,11 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
                 )
         except _ShotPassError as exc:
             terminal_error = _shot_task_error_message(exc)
+            terminal_fields = _shot_failure_fields(exc)
         except Exception as exc:
             traceback.print_exc()
             terminal_error = _shot_task_error_message(exc)
+            terminal_fields = _shot_failure_fields(exc)
         finally:
             try:
                 if terminal_error is not None:
@@ -6712,6 +9493,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
                         None,
                         {},
                         terminal_error=terminal_error,
+                        terminal_fields=terminal_fields,
                     )
                 await _broadcast_graph_sync()
             finally:
@@ -6784,6 +9566,37 @@ async def get_pricing() -> dict:
     return {"currencies": data.get("currencies") or {}, "nodes": data.get("nodes") or {}}
 
 
+MAX_SIZE_REFS = 64
+
+
+@app.post("/api/pricing/input-sizes")
+async def get_input_sizes(body: dict[str, Any]) -> dict:
+    """The size of input files, for the canvas's estimate of a price that
+    depends on it (model_pricing ``sizing``: SeedVR2, FLUX Video Upscale and
+    Edit). ``refs`` is a list of {ref, kind: Image | Video}; each comes back
+    as {width, height[, seconds, frames]} or null. Only files in the output
+    store are read, by the same rule the spending check uses (the path as
+    given and its resolved path both inside the store, no ``..``, nothing
+    Nebula is still writing: services/input_sizes.py), so the canvas and the
+    check agree; an outside URL or any other path is null, never fetched or
+    opened. An inline data: image is null here (the canvas sends files)."""
+    refs = body.get("refs") if isinstance(body, dict) else None
+    if not isinstance(refs, list) or len(refs) > MAX_SIZE_REFS:
+        raise HTTPException(status_code=400, detail=f"refs must be a list of at most {MAX_SIZE_REFS} {{ref, kind}}")
+    wanted: list[tuple[str, str]] = []
+    for item in refs:
+        ref = item.get("ref") if isinstance(item, dict) else None
+        kind = item.get("kind") if isinstance(item, dict) else None
+        if not isinstance(ref, str) or kind not in ("Image", "Video"):
+            raise HTTPException(status_code=400, detail="each ref must be {ref: text, kind: Image or Video}")
+        wanted.append((ref, kind))
+
+    def measure_all() -> dict[str, Any]:
+        return {ref: input_sizes.measure(ref, kind, inline=False) for ref, kind in wanted}
+
+    return {"sizes": await asyncio.to_thread(measure_all)}
+
+
 @app.get("/api/moodboard/adapters")
 async def get_moodboard_adapters() -> dict:
     """How each node takes a wired Nebula moodboard (services/moodboard_adapters.py,
@@ -6805,28 +9618,30 @@ async def list_nodes() -> dict:
     return {"nodes": nodes_list, "categories": categories}
 
 
-def _suggest_node_ids(query: str, all_ids: list[str]) -> list[str]:
-    """Find candidate definition ids for a failed `nebula info` lookup.
-
-    Prefix match first (catches family names: `gpt-image-2` → four variants);
-    falls back to difflib close matches for typos. Returns [] if nothing is
-    close enough — callers should skip the 'Did you mean:' block in that case
-    rather than pad the 404 with noise.
-    """
-    prefix = sorted(nid for nid in all_ids if nid.startswith(query) and nid != query)
-    if prefix:
-        return prefix
-    return difflib.get_close_matches(query, all_ids, n=5, cutoff=0.6)
+def _suggest_node_ids(query: str, definitions: Mapping[str, Mapping[str, Any]]) -> list[str]:
+    """Candidate definition ids for a failed lookup (services/node_lookup.py):
+    the node types the text is the exact name of first, then ids it starts
+    (a family name: `gpt-image-2` lists its four variants), else difflib close
+    matches for a typo. [] when nothing is close: callers then skip the
+    'Did you mean:' block rather than pad the 404 with noise."""
+    return node_lookup.suggestions(query, definitions)
 
 
-@app.get("/api/nodes/{node_id}")
+# `{...:path}`: a display name may hold a slash ("Jev Decide (judge / classify / yes-no)").
+@app.get("/api/nodes/{node_id:path}")
 async def get_node(node_id: str) -> dict:
-    node = node_registry.get(node_id)
-    if node is None:
-        all_nodes = node_registry.get_all()
-        suggestions = _suggest_node_ids(node_id, list(all_nodes.keys()))
+    """One node definition, for `nebula info`. Takes an id, or the exact
+    display name of one node type (ignoring case and outer spaces); a name
+    answer starts with `lookup`, the line saying which id it used."""
+    all_nodes = node_registry.get_all()
+    found = node_lookup.resolve(node_id, all_nodes)
+    if found.definition_id is None:
+        suggestions = _suggest_node_ids(node_id, all_nodes)
+        head = f"Node '{node_id}' not found"
+        if len(found.named) > 1:
+            head += f": {node_lookup.shared_name_line(node_id, found.named, all_nodes)}"
         if suggestions:
-            lines = [f"Node '{node_id}' not found. Did you mean:"]
+            lines = [f"{head}. Did you mean:"]
             for nid in suggestions:
                 meta = all_nodes.get(nid, {})
                 display = meta.get("displayName", "")
@@ -6834,11 +9649,13 @@ async def get_node(node_id: str) -> dict:
                 lines.append(f"  - {nid:32s} {display:24s} {category}")
             detail = "\n".join(lines)
         else:
-            detail = f"Node '{node_id}' not found"
+            detail = head
         raise HTTPException(status_code=404, detail=detail)
+    node = all_nodes[found.definition_id]
     board = _moodboard_adapter(node)
-    # `nebula info` prints it; the definition itself stays as registered.
-    return {**node, "moodboardAdapter": board} if board is not None else node
+    # `nebula info` prints them; the definition itself stays as registered.
+    lookup = {"lookup": found.note} if found.note else {}
+    return {**lookup, **node, **({"moodboardAdapter": board} if board is not None else {})}
 
 
 def _moodboard_adapter(definition: Mapping[str, Any], settings: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
@@ -6893,6 +9710,12 @@ def _graph_edit_origin() -> dict[str, Any]:
     link = _canvas_edit_link.get()
     if link:
         origin.update({key: link[key] for key in ("id", "undoes", "redoes") if key in link})
+    # The nodes this edit deleted, with the pins and proposals each delete
+    # removed: a canvas that didn't send the edit keeps them in its undo step,
+    # so its Cmd+Z puts them back too (_undo_removals).
+    removals = _removals_ctx.get()
+    if removals:
+        origin["removals"] = copy.deepcopy(removals)
     return origin
 
 
@@ -6931,8 +9754,13 @@ async def _broadcast_graph_sync(
             node_errors.forget_canvas()
             _forget_canvas_undo("a graph was loaded into the project since, so its node ids started again")
     export = await export_graph_for_frontend()
+    # A cover proposal's view follows the live canvas (a pin's image deleted
+    # or back). Before the sync goes out: one a delete closes is named in the
+    # delete's removal records, which the sync's ``edit`` carries.
+    await _follow_cover_proposals(export)
     if graph_replaced:
         agent_presence.forget_graph()
+        await _forget_status_anchors()
     moved_ids = sorted({str(node_id) for node_id in moved if node_id in cli_graph.nodes})
     await manager.broadcast_raw({"type": "graphSync", **export,
                                  **({"graphReplaced": True} if graph_replaced else {}),
@@ -6973,12 +9801,16 @@ async def _broadcast_graph_sync(
         # Updates belong to the project record too: an open or create brings
         # that project's list; an import keeps the project, and its list.
         if safe_reason != "import":
+            await _settle_proposal_updates()
             await _broadcast_raw_quietly(_canvas_notes_message())
         await _journal_detached_pins(detached, "the canvas was replaced")
         # Proposals point at node ids that just restarted: none of them still fit.
         # Nor do runs approved on Accept that haven't started.
         run_approvals.clear()
         await _announce_closed_proposals(canvas_proposals.invalidate_all("the canvas was replaced"))
+        # Node ids started again, or another project's are live: no earlier
+        # delete's undo may reopen a cover proposal by its node id either.
+        asset_proposals.drop_removal_tags("the canvas was replaced")
     return export
 
 
@@ -7085,6 +9917,8 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
                 }
             )
         await manager.broadcast(event)
+        _journal_provider_hold("startAmbiguity", "held", run_id=run_id, node_id=event.node_id, kind=event.kind,
+                               durable=event.durable, actor=canvas_events.run_actor(run_id))
         if run_id is not None:
             await _broadcast_graph_sync()
         return
@@ -7101,6 +9935,9 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
                 update={"durable": False, "warning": durability_warning}
             )
         await manager.broadcast(event)
+        _journal_provider_hold("recovery", "held", run_id=event.run_id or execution_run_id.get(),
+                               node_id=event.node_id, durable=event.durable,
+                               actor=canvas_events.run_actor(event.run_id or execution_run_id.get()))
         if changed or safety_hold_changed:
             await _broadcast_graph_sync()
         return
@@ -7111,6 +9948,7 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
     if record is not None and record.status in {"cancelling", "cancelled"}:
         return
     _journal_execution_event(event, run_id)
+    _note_node_ran(event, run_id)
     node_errors.observe(event)
     if isinstance(event, ErrorEvent) and run_id is not None:
         # The engine reports per-node failures as events and then returns
@@ -7130,6 +9968,8 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
                 for snapshot in event.batch_outputs
             ]
         event = event.model_copy(update=updates)
+    # What get_run reports for the run (services/run_reports.py).
+    _run_reports().observe(event, run_id)
     await manager.broadcast(event)
 
 
@@ -7154,7 +9994,7 @@ def _sync_provider_recovery_to_cli_graph(
             # terminal in-memory param sync remain available as fallbacks.
             print(f"[provider-recovery] journal rejected checkpoint: {exc}", flush=True)
             durability_warning = (
-                "Nebula captured this paid-provider recovery ID but could not "
+                "Nebula captured this World Labs recovery ID but couldn't "
                 "save it durably. Keep this tab open and copy the ID before "
                 "reloading."
             )
@@ -7173,8 +10013,8 @@ def _sync_provider_recovery_to_cli_graph(
                 safety_hold_changed = False
     else:
         durability_warning = (
-            "Nebula captured this paid-provider recovery ID without a run ID, "
-            "so it could not save it durably. Keep this tab open and copy the "
+            "Nebula captured this World Labs recovery ID without a run ID, "
+            "so it couldn't save it durably. Keep this tab open and copy the "
             "ID before reloading."
         )
 
@@ -7527,7 +10367,7 @@ def _journal_node_added(node_id: str, *, actor: dict[str, Any] | None = None, no
 
 def _journal_edge(kind: str, edge: dict[str, Any], *, actor: dict[str, Any] | None = None, note: str = "") -> None:
     data = _edge_data(edge)
-    verb = "wired" if kind == "edge.added" else "unwired"
+    verb = "connected" if kind == "edge.added" else "disconnected"
     _journal(
         kind,
         node_id=str(data.get("target") or "") or None,
@@ -7581,6 +10421,7 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
     definition_id = body.get("definitionId", "")
     if message := retired_message(str(definition_id)):
         raise HTTPException(status_code=400, detail=message)
+    _refuse_unknown_definition(definition_id)
     raw_params = body.get("params", {})
     params = {} if raw_params is None else raw_params
     if not isinstance(params, dict):
@@ -7590,6 +10431,12 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
     _refuse_agent_internal_params(params, str(definition_id))
     _check_provider(str(definition_id), params, str(definition_id))
     params = migrate_params(definition_id, _coerce_params(definition_id, params))
+    if (not _is_person_request() and universal_ports.is_universal(str(definition_id))
+            and universal_ports.model_of(str(definition_id), params)):
+        # Anyone but the person (an agent, the unnamed CLI) gets the node
+        # configured for its model, as the picker would.
+        models = await _look_up_models([(str(definition_id), universal_ports.model_of(str(definition_id), params))])
+        params, _reason = universal_ports.agent_update(str(definition_id), {}, params, models)
     _check_asset_refs(str(definition_id), params, str(definition_id))
     _refuse_agent_billing_change([(str(definition_id), str(definition_id), None, params)])
     carries_recovery = bool(
@@ -7605,6 +10452,7 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
     with mutation:
         candidate = cli_graph.clone()
         short_id = candidate.add_node(definition_id, params, position=position)
+        _refuse_agent_growth_past_save_limit(candidate)
         _commit_graph_candidate_with_recoveries(
             candidate,
             [candidate.nodes[short_id]],
@@ -7613,7 +10461,7 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
     await _broadcast_graph_sync(edit=True)
     publish_action(f"Added {definition_id} ({short_id})")
     _journal_node_added(short_id)
-    await _show_agent({"nodeId": short_id}, say=f"Added {_node_label(short_id)}")
+    await _show_agent({"nodeId": short_id}, say=f"Added {_quoted(_node_label(short_id))}", did=_did("Added", short_id))
     return cli_graph.nodes[short_id]
 
 
@@ -7629,6 +10477,9 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
     _guard_approved_runs(lambda probe: probe.connect(
         body["source"], body["sourceHandle"], body["target"], body["targetHandle"],
     ))
+    _guard_agent_growth_past_save_limit(lambda probe: probe.connect(
+        body["source"], body["sourceHandle"], body["target"], body["targetHandle"],
+    ))
     try:
         edge = cli_graph.connect(
             body["source"], body["sourceHandle"],
@@ -7638,7 +10489,7 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
         raise HTTPException(status_code=400, detail=str(e))
     await _broadcast_graph_sync(edit=True)
     publish_action(
-        f"Wired {edge['source']}:{edge['sourceHandle']} → "
+        f"Connected {edge['source']}:{edge['sourceHandle']} → "
         f"{edge['target']}:{edge['targetHandle']}"
     )
     _journal_edge("edge.added", edge)
@@ -7646,7 +10497,8 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
         {"nodeId": edge["target"], "handle": edge["targetHandle"]},
         origin={"nodeId": edge["source"], "handle": edge["sourceHandle"]},
         action="drag",
-        say=f"Wiring {edge['source']} → {edge['target']}",
+        say=f"Connecting {_quoted(_node_label(edge['source']))} to {_quoted(_node_label(edge['target']))}",
+        did=_did("Connected", edge["target"]),
     )
     return {"connection": f"{edge['source']}:{edge['sourceHandle']} -> {edge['target']}:{edge['targetHandle']}"}
 
@@ -7667,6 +10519,7 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     definition_id = body.get("definitionId", "")
     if message := retired_message(str(definition_id)):
         raise HTTPException(status_code=400, detail=message)
+    _refuse_unknown_definition(definition_id)
     raw_params = body.get("params", {})
     params = {} if raw_params is None else raw_params
     if not isinstance(params, dict):
@@ -7736,6 +10589,7 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
                 raise HTTPException(status_code=400, detail=f"Cannot connect this node: {exc}") from exc
 
         _refuse_agent_change_to_approved_runs(candidate)
+        _refuse_agent_growth_past_save_limit(candidate)
         _commit_graph_candidate_with_recoveries(
             candidate,
             [candidate.nodes[short_id]],
@@ -7746,9 +10600,7 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     if edge is not None:
         source_node = candidate.nodes[src]
         source_def = node_registry.get(source_node["definitionId"]) or {}
-        source_ports = (cinema_output_ports(source_node.get("params"))
-                        if source_node["definitionId"] == "cinema-scene"
-                        else source_def.get("outputPorts", []))
+        source_ports = node_ports(source_node["definitionId"], source_node.get("params"), source_def, "outputPorts")
         data_type = next((port["dataType"] for port in source_ports
                           if port["id"] == edge["sourceHandle"]), "Any")
         rf_edge = {**copy.deepcopy(edge), "type": "typed-edge", "data": {"dataType": data_type}}
@@ -7761,17 +10613,18 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     if edge is not None:
         _journal_edge("edge.added", edge)
         publish_action(
-            f"Wired {src}:{connect_spec.get('sourceHandle', '')} → "
+            f"Connected {src}:{connect_spec.get('sourceHandle', '')} → "
             f"{dst}:{connect_spec.get('targetHandle', '')}"
         )
         await _show_agent(
             {"nodeId": dst, "handle": connect_spec.get("targetHandle", "")},
             origin={"nodeId": src, "handle": connect_spec.get("sourceHandle", "")},
             action="drag",
-            say=f"Added {_node_label(short_id)} and wired it",
+            say=f"Added {_quoted(_node_label(short_id))} and connected it",
+            did=_did("Added", short_id),
         )
     else:
-        await _show_agent({"nodeId": short_id}, say=f"Added {_node_label(short_id)}")
+        await _show_agent({"nodeId": short_id}, say=f"Added {_quoted(_node_label(short_id))}", did=_did("Added", short_id))
     return response
 
 
@@ -7995,10 +10848,27 @@ def _keep_recovery_checkpoint(node: dict[str, Any], params: dict[str, Any]) -> b
 async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]) -> dict:
     _check_workspace_revision()
     _validate_graph_ingress_complexity(body)
+    # Anyone but the person (an agent, the unnamed CLI) who sets a universal
+    # node's model reconfigures it (its ports follow the model): when the model
+    # changes, or its ports are stale (a node saved before ports were kept, or
+    # a Replicate node whose file output was kept untyped: universal_ports.needs_configuring).
+    # The same model again reads nothing. The canvas's own pushes are stored
+    # as sent; its picker uses /model.
+    models: dict[tuple[str, str], Any] | None = None
+    current = cli_graph.nodes.get(node_id) or {}
+    current_definition = str(current.get("definitionId") or "")
+    current_params = current.get("params") or {}
+    model_key = universal_ports.MODEL_PARAM.get(current_definition)
+    if (model_key and not _is_person_request() and isinstance(body.get("params"), dict)
+            and model_key in body["params"]):
+        model = universal_ports.model_of(current_definition, {**current_params, **body["params"]})
+        if (model != universal_ports.model_of(current_definition, current_params)
+                or universal_ports.needs_configuring(current_definition, current_params)):
+            models = await _look_up_models([(current_definition, model)])
     with _paid_graph_mutation("update graph node parameters"):
         node = cli_graph.nodes.get(node_id)
         if not node:
-            raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+            raise _node_gone(node_id)
         params_before = copy.deepcopy(node.get("params") or {})
 
         raw_params = body.get("params", {})
@@ -8013,25 +10883,40 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
         _check_asset_refs(str(node.get("definitionId") or ""), params, node_id, before=params_before)
         _refuse_agent_billing_change([(node_id, str(node.get("definitionId") or ""), params_before,
                                             {**params_before, **params})])
-        _guard_approved_runs(lambda probe: probe.update_params(node_id, copy.deepcopy(params)))
-        _author_cinema_scene(cli_graph, node_id, node, params)
-        recovery_update = _keep_recovery_checkpoint(node, params)
-        if recovery_update:
-            candidate = cli_graph.clone()
-            try:
-                candidate.update_params(node_id, params)
-            except ValueError:
-                raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
-            _commit_graph_candidate_with_recoveries(
-                candidate,
-                [candidate.nodes[node_id]],
-                source="update",
-            )
+        if models is not None and node.get("definitionId") == current_definition:
+            # Universal nodes carry no recovery checkpoint or Cinema scene.
+            full, reason = universal_ports.agent_update(current_definition, params_before, params, models)
+            probe = cli_graph.clone()
+            probe.set_params(node_id, full)
+            _refuse_orphaned_wires(probe, node_id, reason=reason or "")
+            _refuse_agent_growth_past_save_limit(probe)
+            _guard_approved_runs(lambda probe: probe.set_params(node_id, copy.deepcopy(full)))
+            _drop_outputs_off_ports(cli_graph, node_id, full)
+            cli_graph.set_params(node_id, full)
         else:
-            try:
-                cli_graph.update_params(node_id, params)
-            except ValueError:
-                raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+            _guard_approved_runs(lambda probe: probe.update_params(node_id, copy.deepcopy(params)))
+            if not _is_person_request():
+                grown = cli_graph.clone()
+                grown.update_params(node_id, copy.deepcopy(params))
+                _refuse_agent_growth_past_save_limit(grown)
+            _author_cinema_scene(cli_graph, node_id, node, params)
+            recovery_update = _keep_recovery_checkpoint(node, params)
+            if recovery_update:
+                candidate = cli_graph.clone()
+                try:
+                    candidate.update_params(node_id, params)
+                except ValueError:
+                    raise _node_gone(node_id)
+                _commit_graph_candidate_with_recoveries(
+                    candidate,
+                    [candidate.nodes[node_id]],
+                    source="update",
+                )
+            else:
+                try:
+                    cli_graph.update_params(node_id, params)
+                except ValueError:
+                    raise _node_gone(node_id)
     await _broadcast_graph_sync(edit=True)
     publish_action(f"Updated {node_id} params")
     changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
@@ -8043,8 +10928,108 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
             summary=f"set {_listed(changes['keys'], 4)} on {_node_label(node_id)} ({node_id})",
         )
     changed = ", ".join(sorted(str(key) for key in params)[:4])
-    await _show_agent({"nodeId": node_id}, say=f"Set {changed}" if changed else f"Updated {node_id}")
+    await _show_agent({"nodeId": node_id}, say=f"Set {changed}" if changed else f"Updated {_quoted(_node_label(node_id))}",
+                      did=_did("Changed", node_id))
     return cli_graph.nodes[node_id]
+
+
+def _universal_request(body: Any, definition_id: str | None = None) -> tuple[str, str]:
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="body must be an object")
+    definition_id = definition_id if definition_id is not None else str(body.get("definitionId") or "")
+    if not universal_ports.is_universal(definition_id):
+        raise HTTPException(status_code=400, detail=(
+            "Only the OpenRouter, Nous Portal and Replicate nodes take their ports from a model"))
+    model = body.get("model")
+    if not isinstance(model, str) or not model.strip() or len(model) > 300:
+        raise HTTPException(status_code=400, detail="model must be a model id")
+    return definition_id, model.strip()
+
+
+async def _universal_data(definition_id: str, model: str) -> dict[str, Any]:
+    found = await universal_ports.look_up(definition_id, model)
+    if isinstance(found, str):
+        raise HTTPException(status_code=400, detail=found[0].upper() + found[1:] + ".")
+    return found
+
+
+@app.post("/api/universal/ports")
+async def universal_model_ports(body: dict[str, Any]) -> dict[str, Any]:
+    """The ports and settings a universal node has for one model, without a node.
+
+    Body: {definitionId: "openrouter-universal" | "nous-portal-universal" |
+    "replicate-universal", model, params?}. Reads the provider's model list or
+    schema with the person's key (cached; nothing billed). Returns `inputs`,
+    `outputs` (the canvas's port shape), `nodeParams` (`params`, or {},
+    configured for the model as the picker sets them), `providerMeta` and,
+    for Replicate, `params` (the model's other inputs, set as params) and
+    `versionId`."""
+    _validate_graph_ingress_complexity(body)
+    definition_id, model = _universal_request(body)
+    base = body.get("params") if isinstance(body.get("params"), dict) else {}
+    configured = universal_ports.configure(definition_id, base, model, await _universal_data(definition_id, model))
+    result: dict[str, Any] = {"definitionId": definition_id, "model": model,
+                              "inputs": configured.inputs, "outputs": configured.outputs,
+                              "nodeParams": configured.params, "providerMeta": configured.provider_meta}
+    if definition_id == "replicate-universal":
+        result["params"] = configured.dynamic_params
+        result["versionId"] = configured.provider_meta.get("version_id")
+    return result
+
+
+@app.post("/api/graph/node/{node_id}/model")
+async def configure_universal_node(node_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    """The canvas's model picker: set a universal node's model and the ports,
+    params and Inspector controls that come with it (services/universal_ports.py).
+
+    Body: {model}. Writes the node's params as the picker always did, drops
+    wires on ports the new model doesn't have, and syncs the canvas. Returns
+    the node's `params`, `dynamicInputPorts`, `dynamicOutputPorts`,
+    `dynamicParams`, `providerMeta` (additions) and `removedEdges`. Only the
+    person: it drops wires, past the approved-run and billing checks an edit
+    gets. Anyone else (agents, the unnamed CLI, a tab without the person
+    link) sets the model with an edit (edit_canvas, `nebula apply`) or PUT
+    /api/graph/node/{id}, which configure the node the same way and refuse
+    rather than drop wires."""
+    require_person(current_request_headers(), hint=(
+        "Set a universal node's model with an edit (edit_canvas or `nebula apply`, params {model: ...}) "
+        "or PUT /api/graph/node/{id}: its ports follow the model."))
+    _check_workspace_revision()
+    node = cli_graph.nodes.get(node_id)
+    if node is None:
+        raise _node_gone(node_id)
+    definition_id, model = _universal_request(body, str(node.get("definitionId") or ""))
+    data = await _universal_data(definition_id, model)
+    with _paid_graph_mutation("set a node's model"):
+        node = cli_graph.nodes.get(node_id)
+        if node is None or node.get("definitionId") != definition_id:
+            raise _node_gone(node_id)
+        params_before = copy.deepcopy(node.get("params") or {})
+        configured = universal_ports.configure(definition_id, params_before, model, data)
+        removed = [copy.deepcopy(edge) for edge in cli_graph.edges
+                   if not universal_ports.edge_fits(node_id, edge, configured.inputs, configured.outputs)]
+        candidate = cli_graph.clone()
+        for edge in removed:
+            candidate.remove_edge(edge["source"], edge["sourceHandle"], edge["target"], edge["targetHandle"])
+        _drop_outputs_off_ports(candidate, node_id, configured.params)
+        candidate.set_params(node_id, configured.params)
+        _commit_graph_candidate_with_recoveries(candidate, [candidate.nodes[node_id]], source="update")
+    await _broadcast_graph_sync(edit=True)
+    publish_action(f"Set {node_id}'s model to {model}")
+    changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
+    if changes:
+        _journal("node.params", node_id=node_id, data=changes,
+                 summary=f"set {_listed(changes['keys'], 4)} on {_node_label(node_id)} ({node_id})")
+    for edge in removed:
+        _journal_edge("edge.removed", edge)
+    return {
+        "params": configured.params,
+        "dynamicInputPorts": configured.inputs,
+        "dynamicOutputPorts": configured.outputs,
+        "dynamicParams": configured.dynamic_params,
+        "providerMeta": configured.provider_meta,
+        "removedEdges": [{"id": edge.get("id"), **_edge_data(edge)} for edge in removed],
+    }
 
 
 @app.put("/api/graph/node/{node_id}/label")
@@ -8055,12 +11040,14 @@ async def rename_graph_node(node_id: str, body: dict[str, Any]) -> dict:
     _check_workspace_revision()
     node = cli_graph.nodes.get(node_id)
     if not node:
-        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+        raise _node_gone(node_id)
     raw = body.get("label")
     if not isinstance(raw, str):
         raise HTTPException(status_code=400, detail="label must be a string")
     previous = _node_label(node_id)
-    cli_graph.set_label(node_id, _custom_node_label(raw, str(node.get("definitionId", ""))))
+    label = _custom_node_label(raw, str(node.get("definitionId", "")))
+    _guard_agent_growth_past_save_limit(lambda probe: probe.set_label(node_id, label))
+    cli_graph.set_label(node_id, label)
     current = _node_label(node_id)
     await _broadcast_graph_sync(edit=True)
     if current != previous:
@@ -8071,6 +11058,9 @@ async def rename_graph_node(node_id: str, body: dict[str, Any]) -> dict:
             data={"from": previous, "to": current},
             summary=f"renamed {previous} ({node_id}) to {current}",
         )
+        # An agent's rename is an action like any edit (the Agents panel's
+        # line, Q125 item 2); a no-op for the person's own.
+        await _show_agent({"nodeId": node_id}, say=f"Renamed {_quoted(current)}", did=_did("Renamed", node_id))
     return {"id": node_id, "label": current}
 
 
@@ -8108,7 +11098,7 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
     normalized: dict[str, dict[str, float]] = {}
     for node_id, raw_position in raw_positions.items():
         if node_id not in cli_graph.nodes:
-            raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+            raise _node_gone(node_id)
         if not isinstance(raw_position, dict):
             raise HTTPException(status_code=400, detail=f"Position for '{node_id}' must be an object")
         try:
@@ -8171,6 +11161,11 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
             # itself, so it can't put its positions under another agent's name.
             actor=arrange.actor if arrange is not None and not has_agent_marker(current_request_headers()) else None,
         )
+        if arrange is None:
+            # An agent's move (`nebula move`) is an action too (the Agents
+            # panel's line, Q125 item 2); a no-op for the person's drags.
+            await _show_agent({"nodeId": moved[0]}, action="move", say=f"Moved {_quoted(_node_label(moved[0]))}",
+                              did=_did("Moved", moved[0]))
     if arrange is not None:
         return {"status": "arranged", "count": len(normalized), "positions": normalized}
     return {"status": "updated", "count": len(normalized)}
@@ -8208,7 +11203,10 @@ async def clear_graph(force: bool = False) -> dict:
         _reject_graph_replacement_during_paid_start("clear the canvas")
         cli_graph.clear()
         run_approvals.clear()
+        # Ids start again at n1: no node now is one a restore brought back.
+        node_removals.forget_project(_workspace_context()["activeProjectId"])
     agent_presence.forget_graph()
+    await _forget_status_anchors()
     _forget_canvas_undo("the canvas was cleared since")
     await _broadcast_graph_sync(edit=True)
     publish_action("Cleared the canvas")
@@ -8219,6 +11217,7 @@ async def clear_graph(force: bool = False) -> dict:
         detached = []
     await _journal_detached_pins(detached, "the canvas was cleared")
     await _announce_closed_proposals(canvas_proposals.invalidate_all("the canvas was cleared"))
+    asset_proposals.drop_removal_tags("the canvas was cleared")
     return {"status": "cleared"}
 
 
@@ -8236,12 +11235,14 @@ async def delete_provider_recovery(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if active:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "Cannot delete a World Labs recovery checkpoint while that "
-                    "node's paid start is still settling"
-                ),
+            # Run History's "Checked Marble — forget": the same "still
+            # waiting" line as the node's own refusal (round 3 review).
+            raise refusal_copy.refusal(
+                409,
+                "Cannot delete a World Labs recovery checkpoint while that "
+                "node's paid start is still settling",
+                _paid_state_person("active", subject="This node is", then="try again"),
+                route="canvas",
             )
         try:
             removed = provider_recovery_store.delete(
@@ -8251,7 +11252,8 @@ async def delete_provider_recovery(
                 existing_world_id=existing_world_id,
             )
         except ProviderRecoveryConflictError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise refusal_copy.refusal(409, str(exc), _paid_job_changed_person(f"{FORGET_BUTTON} in Run History"),
+                                       route="canvas") from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except ProviderRecoveryPersistenceError as exc:
@@ -8292,6 +11294,8 @@ async def delete_provider_recovery(
                 current["params"] = params
                 cli_graph._maybe_persist()
     await _broadcast_graph_sync()
+    if removed:
+        _journal_provider_hold("recovery", "cleared", run_id=run_id, node_id=node_id)
     return {
         "status": "deleted",
         "runId": run_id,
@@ -8314,7 +11318,9 @@ async def acknowledge_provider_start_ambiguity(
             run_id=run_id,
         )
     except ProviderStartConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        # "Checked Marble — unlock" (round 3b): the person reads the line for
+        # why it can't unlock yet; agents keep the exact text.
+        raise _start_refusal(exc, own_node=True) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ProviderStartPersistenceError as exc:
@@ -8323,6 +11329,8 @@ async def acknowledge_provider_start_ambiguity(
             detail="Could not durably acknowledge World Labs paid-start hold",
         ) from exc
     await _broadcast_graph_sync()
+    if removed:
+        _journal_provider_hold("startAmbiguity", "cleared", run_id=run_id, node_id=node_id, kind=kind)
     return {
         "status": "acknowledged",
         "kind": kind,
@@ -8332,10 +11340,31 @@ async def acknowledge_provider_start_ambiguity(
     }
 
 
+# What the person's canvas reads when a node can't go (error-copy review, GM:
+# never ids in what the person reads; "People get the written line and agents
+# keep the specific detail"). Round 3: _paid_state_person, by the record that
+# holds the node; an ID in its params names that node's own fields by their
+# labels (round 3 review: a World export node has only "Resume Export
+# Operation ID"). Agents keep the detail with the id, unchanged.
+NODE_GONE_PERSON = "That node isn't on the canvas anymore."
+
+
+def _node_refusal(status: int, specific: str, person: str) -> HTTPException:
+    return refusal_copy.refusal(status, specific, person, route="canvas")
+
+
+def _node_gone(node_id: str, specific: str | None = None) -> HTTPException:
+    """404 for a node that isn't on the canvas: GM's line for the person
+    (approved round 3), the id for agents."""
+    return _node_refusal(404, specific or f"Node '{node_id}' not found", NODE_GONE_PERSON)
+
+
 def _ensure_node_deletable(node_id: str, node: dict[str, Any]) -> None:
     """Refuse (409) to delete a node that still carries World Labs paid state.
 
     Call inside _paid_graph_mutation so no paid start can land in between.
+    The person reads _paid_state_person for the record that holds it; an
+    agent reads the node's id.
     """
     try:
         active = provider_start_guard.has_active_node(node_id)
@@ -8352,14 +11381,17 @@ def _ensure_node_deletable(node_id: str, node: dict[str, Any]) -> None:
     live_checkpoint = has_recovery_identity(
         str(node.get("definitionId") or ""), params
     )
-    if active or held or recovered or live_checkpoint:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"Cannot delete {node_id}: it has unresolved World Labs paid state. "
-                "Check Marble, then resolve its exact recovery/ambiguity record "
-                "first."
-            ),
+    state = ("active" if active else "ambiguity" if held else "recovery" if recovered
+             else "params" if live_checkpoint else None)
+    if state is not None:
+        raise _node_refusal(
+            409,
+            f"Cannot delete {node_id}: it has unresolved World Labs paid state. "
+            "Check Marble, then resolve its exact recovery/ambiguity record "
+            "first.",
+            _paid_state_person(state, subject="This node is", then="delete it",
+                               fields=_recovery_field_labels([node]) if state == "params"
+                               else _RECOVERY_FIELDS_FALLBACK),
         )
 
 
@@ -8370,7 +11402,7 @@ async def delete_graph_node(node_id: str) -> dict:
     with _paid_graph_mutation("delete a graph node"):
         node = cli_graph.nodes.get(node_id)
         if node is None:
-            raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+            raise _node_gone(node_id)
         _ensure_node_deletable(node_id, node)
         _guard_approved_runs(lambda probe: probe.remove_node(node_id))
         label = _node_label(node_id)
@@ -8379,28 +11411,25 @@ async def delete_graph_node(node_id: str) -> dict:
         try:
             cli_graph.remove_node(node_id)
         except ValueError:
-            raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
-    await _broadcast_graph_sync(edit=True)
-    publish_action(f"Removed {node_id}")
-    _journal(
-        "node.removed",
-        node_id=node_id,
-        data={"name": label, "definitionId": removed_definition},
-        summary=f"removed {label} ({node_id})",
-    )
+            raise _node_gone(node_id)
+    entries = _remove_side_effects(
+        [{"id": node_id, "name": label, "definitionId": removed_definition, "position": removed_position}],
+        lambda gone: f"{gone['name']} ({gone['id']}) was deleted")
+    removals = _removal_records(entries)
+    token = _removals_ctx.set(removals)
     try:
-        detached = canvas_pins.detach_node(node_id, removed_position)
-    except (PinError, ProjectStoreError):
-        detached = []
-    await _journal_detached_pins(detached, f"{label} was deleted")
-    await _announce_closed_proposals(
-        canvas_proposals.invalidate_referencing(node_id, f"{label} ({node_id}) was deleted")
-    )
+        await _broadcast_graph_sync(edit=True)
+    finally:
+        _removals_ctx.reset(token)
+    _renew_kept_removals(removals)
+    publish_action(f"Removed {node_id}")
     last_point = agent_presence.last_point(node_id)
-    agent_presence.forget_node(node_id)
+    await _announce_removed_nodes(entries, note="", pin_reason=lambda gone: f"{gone['name']} was deleted")
     if last_point is not None:
-        await _show_agent(last_point, say=f"Removed {label}")
-    return {"status": "deleted", "id": node_id}
+        await _show_agent(last_point, say=f"Removed {_quoted(label)}", did={"verb": "Removed", "nodeId": None, "label": label})
+    # What the delete removed, for its undo (POST /api/graph/restore `removals`).
+    # `label` is its name as the canvas showed it (the type's name when it has none): `nebula delete` says it.
+    return {"status": "deleted", "id": node_id, "label": label, "removal": removals[0]}
 
 
 def _billing_choice(definition_id: str, params: Mapping[str, Any]) -> tuple[str, str] | None:
@@ -8466,7 +11495,9 @@ def _refuse_agent_billing_change(changes: Iterable[tuple[str, str, Mapping[str, 
     mode (_billing_choice). ``changes`` are (label, definitionId, params
     before or None for a new node, params after). A new node counts as
     changed unless it starts on Auto and the default mode (the API token).
-    The person's own edits and accepted proposals always pass.
+    The person's own edits and accepted proposals always pass. The refusal
+    is _person_only_refusal's: plain for an agent, ``person_required`` for a
+    request with no agent marker (a canvas tab not connected as the person).
 
     The same gate keeps a Moodboard node's ``send_notes`` (gap 18, P4): an
     agent may close it (toward "no"), never open it (a new node may start on
@@ -8490,11 +11521,11 @@ def _refuse_agent_billing_change(changes: Iterable[tuple[str, str, Mapping[str, 
         elif choice[1] != was[1]:
             mode_switched.append(label)
     if provider_switched:
-        raise HTTPException(status_code=403, detail=f"{_listed(provider_switched, 4)}: {PROVIDER_CHOICE_REFUSAL}")
+        raise _person_only_refusal(f"{_listed(provider_switched, 4)}: {PROVIDER_CHOICE_REFUSAL}")
     if mode_switched:
-        raise HTTPException(status_code=403, detail=f"{_listed(mode_switched, 4)}: {KREA_BILLING_REFUSAL}")
+        raise _person_only_refusal(f"{_listed(mode_switched, 4)}: {KREA_BILLING_REFUSAL}")
     if notes_opened:
-        raise HTTPException(status_code=403, detail=f"{_listed(notes_opened, 4)}: {NOTES_TO_GENERATORS_REFUSAL}")
+        raise _person_only_refusal(f"{_listed(notes_opened, 4)}: {NOTES_TO_GENERATORS_REFUSAL}")
 
 
 def _check_krea_auth(definition_id: str, params: dict[str, Any], label: str) -> None:
@@ -8632,6 +11663,8 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             {**((cli_graph.nodes.get(change.node_id) or {}).get("params") or {}), **change.params})
            for change in additions.params])
 
+    models = await _look_up_models(_spec_models_wanted(additions))
+    model_report: dict[str, dict[str, Any]] = {}
     positions: dict[str, dict[str, float]] = {}
     if additions.nodes:
         known, visible_area = _proposal_layout_hints()
@@ -8651,8 +11684,8 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         for edge in spec.unwire:
             if not candidate.remove_edge(edge.source, edge.source_handle, edge.target, edge.target_handle):
                 raise HTTPException(status_code=404, detail=(
-                    f"There's no wire {edge.source}.{edge.source_handle} → {edge.target}.{edge.target_handle}; "
-                    "look_at_canvas lists the current wires."))
+                    f"There's no connection {edge.source}.{edge.source_handle} → {edge.target}.{edge.target_handle}; "
+                    "look_at_canvas lists the current connections."))
         for node_id in spec.remove:
             node = candidate.nodes.get(node_id)
             if node is None:
@@ -8670,7 +11703,8 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         if additions.nodes or additions.edges or additions.params:
             try:
                 candidate, id_map, edge_ids, _ = _stage_proposal(
-                    additions, positions=positions, base=candidate, what="an edit"
+                    additions, positions=positions, base=candidate, what="an edit",
+                    models=models, report=model_report,
                 )
             except HTTPException as exc:
                 # A missing node means the agent's view is stale.
@@ -8689,6 +11723,7 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         if moves:
             candidate.update_positions(moves)
         _refuse_oversized_graph(candidate)
+        _refuse_agent_growth_past_save_limit(candidate)
         touched = sorted(set(id_map.values()) | set(params_before))
         _refuse_agent_change_to_approved_runs(candidate)
         _commit_graph_candidate_with_recoveries(
@@ -8706,26 +11741,21 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     if spec.arrange is not None and id_map:
         arrange = canvas_arrange.add(id_map.values(), direction=spec.arrange.direction, gap=spec.arrange.gap,
                                      actor=actor_for_headers(headers))
-    await _broadcast_graph_sync(edit=True, moved=moves)
+    entries = _remove_side_effects(removed, lambda gone: f"{gone['name']} ({gone['id']}) was deleted")
+    removals = _removal_records(entries)
+    removals_token = _removals_ctx.set(removals)
+    try:
+        await _broadcast_graph_sync(edit=True, moved=moves)
+    finally:
+        _removals_ctx.reset(removals_token)
+    # Its undo puts back the pins and proposals these deletes removed (after
+    # the sync, which adds the cover proposals it closed).
+    undo_after["removals"] = copy.deepcopy(removals)
+    _renew_kept_removals(removals)
     note = f" ({additions.note})" if additions.note != "edit" else ""
     for edge in spec.unwire:
         _journal_edge("edge.removed", edge.as_dict())
-    for gone in removed:
-        _journal(
-            "node.removed",
-            node_id=gone["id"],
-            data={"name": gone["name"], "definitionId": gone["definitionId"]},
-            summary=f"removed {gone['name']} ({gone['id']}){note}",
-        )
-        try:
-            detached = canvas_pins.detach_node(gone["id"], gone["position"])
-        except (PinError, ProjectStoreError):
-            detached = []
-        await _journal_detached_pins(detached, f"{gone['name']} was deleted")
-        await _announce_closed_proposals(
-            canvas_proposals.invalidate_referencing(gone["id"], f"{gone['name']} ({gone['id']}) was deleted")
-        )
-        agent_presence.forget_node(gone["id"])
+    await _announce_removed_nodes(entries, note=note, pin_reason=lambda gone: f"{gone['name']} was deleted")
     _journal_cluster(list(id_map.values()), edge_ids, note=note)
     changed: list[str] = []
     for node_id, before in params_before.items():
@@ -8761,18 +11791,20 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     added = list(id_map.values())
     parts = [
         f"added {len(added)}" if added else "",
-        f"wired {len(edge_ids)}" if edge_ids else "",
+        f"connected {len(edge_ids)}" if edge_ids else "",
         f"changed {len(changed)}" if changed else "",
         f"renamed {len(renamed)}" if renamed else "",
         f"moved {len(moves)}" if moves else "",
         f"removed {len(removed)}" if removed else "",
-        f"unwired {len(spec.unwire)}" if spec.unwire else "",
+        f"disconnected {len(spec.unwire)}" if spec.unwire else "",
     ]
     summary = ", ".join(part for part in parts if part) or "no change"
     publish_action(f"{identity.name} edited the canvas: {summary}")
     focus = next(iter(added), None) or next(iter(changed or list(renamed) or list(moves)), None)
     if focus is not None and focus in cli_graph.nodes:
-        await _show_agent({"nodeId": focus}, say=additions.note if note else summary)
+        verb = ("Added" if focus in added else "Changed" if focus in (changed or ())
+                else "Renamed" if focus in renamed else "Moved")
+        await _show_agent({"nodeId": focus}, say=additions.note if note else summary, did=_did(verb, focus))
     wanted = set(edge_ids)
     undo = _canvas_undo_keep(identity, undo_after)
     _canvas_edit_link.reset(edit_link)
@@ -8787,8 +11819,14 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         "renamed": renamed,
         "moved": list(moves),
         "removed": [gone["id"] for gone in removed],
+        # Per node it deleted: the pins detached and proposals closed (undo puts them back).
+        **({"removals": removals} if removals else {}),
         "unwired": [edge.as_dict() for edge in spec.unwire],
         **({"arrange": _arrange_reply(arrange)} if arrange is not None else {}),
+        # Universal nodes whose model this edit set: the ports they have now,
+        # or why they can't be known yet (services/universal_ports.py).
+        **({"modelPorts": model_report["ports"]} if model_report.get("ports") else {}),
+        **({"modelPortNotes": model_report["notes"]} if model_report.get("notes") else {}),
         "undo": undo,
     }
 
@@ -8798,8 +11836,8 @@ def _refuse_oversized_graph(candidate: CLIGraph) -> None:
     nodes, edges = len(candidate.nodes), len(candidate.edges)
     if nodes > RESTORE_MAX_GRAPH_NODES or edges > RESTORE_MAX_GRAPH_EDGES:
         raise HTTPException(status_code=413, detail=(
-            f"A canvas holds at most {RESTORE_MAX_GRAPH_NODES:,} nodes and {RESTORE_MAX_GRAPH_EDGES:,} wires "
-            f"(the most a project can save). This edit would leave {nodes:,} nodes and {edges:,} wires, "
+            f"A canvas holds at most {RESTORE_MAX_GRAPH_NODES:,} nodes and {RESTORE_MAX_GRAPH_EDGES:,} connections "
+            f"(the most a project can save). This edit would leave {nodes:,} nodes and {edges:,} connections, "
             "so nothing changed."))
 
 
@@ -8868,7 +11906,16 @@ async def restore_graph_state(body: dict[str, Any]) -> dict[str, Any]:
     ``edit.redone`` event follows, and the agent's undo token for it knows
     the person undid it (services/canvas_undo.py). From anyone else it is
     ignored: agents undo their own edits with POST /api/graph/apply/undo.
+
+    ``removals`` (the removal records of the deletes this step undoes) are
+    the person's too. From the person's canvas they re-attach the pins and
+    reopen the proposals those deletes removed; from anyone else they are
+    ignored, since graphSync shows every socket an edit's removals and pins
+    are the person's. An agent's own undo puts back what its deletes removed
+    from the records the backend keeps.
     """
+    if body.get("removals") is not None and not _is_person_request():
+        body = {key: value for key, value in body.items() if key != "removals"}
     link = _restore_edit_link(body)
     if link is None:
         return await _restore_graph(body)
@@ -8904,6 +11951,7 @@ async def _restore_graph(
         raise HTTPException(status_code=400, detail="remove must be a list of node ids")
     wires = [_restore_wire(raw, f"wire[{index}]") for index, raw in enumerate(_graph_ingress_items(body, "wire"))]
     unwires = [_restore_wire(raw, f"unwire[{index}]") for index, raw in enumerate(_graph_ingress_items(body, "unwire"))]
+    named_removals = _restore_removals(body.get("removals"))
     seen_ids: set[str] = set()
     for index, raw in enumerate(raw_nodes):
         node_id = raw.get("id")
@@ -8923,7 +11971,10 @@ async def _restore_graph(
     renamed: dict[str, tuple[str, str]] = {}
     moved: list[str] = []
     removed: list[dict[str, Any]] = []
+    added_models: dict[str, str] = {}
     with _paid_graph_mutation(f"{action} an edit"):
+        # The project these nodes come back into: their deletes' records must name it.
+        project_id = _workspace_context()["activeProjectId"]
         candidate = cli_graph.clone()
         unwired: list[dict[str, Any]] = []
         for source, source_handle, target, target_handle in unwires:
@@ -8965,6 +12016,7 @@ async def _restore_graph(
                 if label:
                     candidate.set_label(node_id, label)
                 added.append(node_id)
+                added_models[node_id] = definition_id
                 continue
             if str(current.get("definitionId") or "") != definition_id:
                 raise HTTPException(status_code=409, detail=(
@@ -9006,7 +12058,7 @@ async def _restore_graph(
             missing = next((node_id for node_id in (source, target) if node_id not in candidate.nodes), None)
             if missing is not None:
                 raise HTTPException(status_code=409, detail=(
-                    f"{missing} is no longer on the canvas, so its wire can't be put back. "
+                    f"{missing} is no longer on the canvas, so its connection can't be put back. "
                     "Reload the canvas to see the current graph."))
             try:
                 _validate_connect_handles(source, source_handle, target, target_handle, graph=candidate)
@@ -9026,6 +12078,10 @@ async def _restore_graph(
         except CycleError as exc:
             raise HTTPException(status_code=400, detail=f"graph contains a cycle: {exc}") from exc
         _refuse_agent_change_to_approved_runs(candidate)
+        # An agent's undo or restore is an edit like any other (Q118 review):
+        # it can't put the open project back over the save limit. The
+        # person's Cmd+Z never is refused (the check skips the person).
+        _refuse_agent_growth_past_save_limit(candidate)
         touched = sorted(set(added) | set(changed))
         _commit_graph_candidate_with_recoveries(
             candidate,
@@ -9037,25 +12093,19 @@ async def _restore_graph(
     for node_id in {gone["id"] for gone in removed} & set(added):
         node_errors.forget(node_id)
 
-    await _broadcast_graph_sync(edit=True, moved=moved)
+    # A redo of a delete (or an undo of an add) deletes like any delete: its
+    # own removal records, which the canvas keeps for the next undo.
+    entries = _remove_side_effects(removed, lambda gone: f"{gone['name']} ({gone['id']}) was removed{note}")
+    removals = _removal_records(entries)
+    removals_token = _removals_ctx.set(removals)
+    try:
+        await _broadcast_graph_sync(edit=True, moved=moved)
+    finally:
+        _removals_ctx.reset(removals_token)
+    _renew_kept_removals(removals)
     for edge in unwired:
         _journal_edge("edge.removed", edge, note=note)
-    for gone in removed:
-        _journal(
-            "node.removed",
-            node_id=gone["id"],
-            data={"name": gone["name"], "definitionId": gone["definitionId"]},
-            summary=f"removed {gone['name']} ({gone['id']}){note}",
-        )
-        try:
-            detached = canvas_pins.detach_node(gone["id"], gone["position"])
-        except (PinError, ProjectStoreError):
-            detached = []
-        await _journal_detached_pins(detached, f"{gone['name']} was removed{note}")
-        await _announce_closed_proposals(
-            canvas_proposals.invalidate_referencing(gone["id"], f"{gone['name']} ({gone['id']}) was removed{note}")
-        )
-        agent_presence.forget_node(gone["id"])
+    await _announce_removed_nodes(entries, note=note, pin_reason=lambda gone: f"{gone['name']} was removed{note}")
     for node_id in added:
         _journal_node_added(node_id, note=note)
     for node_id, before in changed.items():
@@ -9088,7 +12138,15 @@ async def _restore_graph(
     for edge in wired:
         _journal_edge("edge.added", edge, note=note)
     publish_action(f"{action.capitalize()} on the canvas: {len(added)} back, {len(removed)} removed, "
-                   f"{len(changed)} changed, {len(wired)} wired, {len(unwired)} unwired")
+                   f"{len(changed)} changed, {len(wired)} connected, {len(unwired)} disconnected")
+    # The nodes it brought back: their pins on them again, and the proposals
+    # their deletes closed open again where they still fit (GM, 2026-10-23).
+    # A swapped id (in ``remove`` too) holds another node now, not the one deleted.
+    swapped = {gone["id"] for gone in removed}
+    undone = await _undo_removals(named_removals, {node_id: added_models[node_id] for node_id in added
+                                                   if node_id not in swapped}, project_id)
+    for node_id in swapped & set(added):
+        node_removals.restored(project_id, node_id, None)
     return {
         "status": "restored",
         "action": action,
@@ -9099,6 +12157,8 @@ async def _restore_graph(
         "moved": moved,
         "wired": [_edge_data(edge) for edge in wired],
         "unwired": unwired,
+        **undone,
+        "removals": removals,
     }
 
 
@@ -9140,7 +12200,8 @@ def _canvas_undo_after(before: dict[str, Any], added: list[str]) -> dict[str, An
     another request changed while this one was still broadcasting."""
     project_id, project_name = _open_project_brief()
     return {"inverse": build_inverse(before, cli_graph.nodes, cli_graph.edges, added=added),
-            "projectId": project_id, "projectName": project_name, "epoch": canvas_undo_book.epoch(project_id)}
+            "projectId": project_id, "projectName": project_name, "epoch": canvas_undo_book.epoch(project_id),
+            "mark": canvas_undo_book.mark()}
 
 
 def _canvas_undo_keep(identity: Any, after: dict[str, Any]) -> dict[str, Any] | None:
@@ -9152,7 +12213,8 @@ def _canvas_undo_keep(identity: Any, after: dict[str, Any]) -> dict[str, Any] | 
     canvas_undo_book.link(edit_id, kind="edit", actor=actor)
     canvas_undo_book.note_events(edit_id, canvas_events.seqs_of_edit(edit_id))
     return canvas_undo_book.keep(edit_id=edit_id, actor=actor, agent_id=identity.id, project_id=after["projectId"],
-                                 project_name=after["projectName"], inverse=after["inverse"], epoch=after["epoch"])
+                                 project_name=after["projectName"], inverse=after["inverse"], epoch=after["epoch"],
+                                 mark=after.get("mark"), removals=after.get("removals"))
 
 
 def _forget_canvas_undo(why: str) -> None:
@@ -9166,7 +12228,7 @@ def _forget_canvas_undo(why: str) -> None:
 def _undo_refused_change(node_id: str, definition_id: str, before: dict[str, Any], after: dict[str, Any]) -> str | None:
     try:
         _refuse_agent_billing_change([(node_id, definition_id, before, after)])
-    except HTTPException as exc:
+    except (HTTPException, PersonGateError) as exc:
         return str(exc.detail)
     return None
 
@@ -9244,6 +12306,26 @@ def _journal_restored_edit(link: dict[str, Any], action: str) -> None:
                                               else ("undone", actor_record(target.actor)))
 
 
+def _undo_ran_since(record: Any) -> dict[str, list[dict[str, Any]]]:
+    """The nodes an edit touched that someone other than its agent ran since
+    the edit (the person, another agent, an unnamed client), with who."""
+    ran: dict[str, list[dict[str, Any]]] = {}
+    for node_id in touched_nodes(record.inverse):
+        if node_id not in cli_graph.nodes:
+            continue
+        who = canvas_undo_book.ran_since(record.project_id, node_id, since=record.mark,
+                                         agent_id=record.agent_id, active=_run_is_active)
+        if who:
+            ran[node_id] = who
+    return ran
+
+
+def _undo_left_text(skipped: list[dict[str, Any]]) -> str:
+    """The parts an undo left, in its reply's message."""
+    messages = [str(item.get("message") or item.get("reason") or "") for item in skipped]
+    return "Left as is: " + "; ".join(message for message in messages if message) + "."
+
+
 @app.post("/api/graph/apply/undo")
 async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     """An agent undoes one of its own edits: ``{token}``, the ``undo.token``
@@ -9253,11 +12335,18 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     open, within UNDO_TTL_SECONDS. Each part (a node it added, a param,
     name or position it changed, a node or wire it removed) goes back only
     if the canvas still has it as the edit left it; a part someone changed
-    since stays and is listed in ``skipped``. The rest goes through one
-    restore, as the canvas's Cmd+Z does, so it lands whole or not at all.
+    since stays and is listed in ``skipped``. A node someone ran since the
+    edit counts as changed (Q82): the person, another agent or an unnamed
+    client; only this agent's own runs don't. That node stays whole (not
+    removed, params, name and position not put back, no wire into it taken
+    away or put back) as one skipped item, reason "ran since", with
+    ``ranBy``. The rest goes through one restore, as the canvas's Cmd+Z
+    does, so it lands whole or not at all. ``message`` says what went back
+    and what was left and why.
 
     ``status`` is ``undone``; ``skipped`` when nothing could go back (the
-    token still works, say after the person puts a part back); or
+    token still works, say after the person puts a changed part back, but a
+    node someone ran since stays for good, and the message says which); or
     ``already-undone`` (by this agent, or by the person on the canvas) with
     ``undoneBy``. The journal tags each event ``edit: {id, undoes, of}`` and
     ends with ``edit.undone``.
@@ -9288,15 +12377,15 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
                 "undoneBy": by, "skipped": record.last_skipped,
                 "message": f"This edit was already undone by {who}; nothing changed."}
     plan = plan_undo(record.inverse, cli_graph.nodes, cli_graph.edges,
-                     cannot_remove=_undo_cannot_remove, refused_change=_undo_refused_change)
+                     cannot_remove=_undo_cannot_remove, refused_change=_undo_refused_change,
+                     ran=_undo_ran_since(record))
     owner = record.actor
     actor = actor_for_headers(headers)
     if plan.empty:
         if plan.skipped:
             return {"status": "skipped", "editId": record.edit_id, "added": [], "removed": [], "changed": [],
                     "renamed": [], "moved": [], "wired": [], "unwired": [], "skipped": plan.skipped,
-                    "message": ("Nothing went back: every part of this edit was changed since. The token still "
-                                "works if those parts are put back the way the edit left them.")}
+                    "message": nothing_went_back(plan.skipped, _undo_left_text(plan.skipped))}
         record.state, record.undone_by, record.last_skipped = "undone", actor_record(actor), []
         return {"status": "undone", "editId": record.edit_id, "undoId": None, "added": [], "removed": [],
                 "changed": [], "renamed": [], "moved": [], "wired": [], "unwired": [], "skipped": [],
@@ -9307,20 +12396,21 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     wire_skips: list[dict[str, Any]] = []
     context = _canvas_edit_link.set(link)
     try:
-        result = await _restore_graph(plan.restore, trusted=plan.trusted, skipped_wires=wire_skips)
+        # The pins and proposals the edit's deletes removed go back with the nodes.
+        restore = {**plan.restore, **({"removals": record.removals} if record.removals else {})}
+        result = await _restore_graph(restore, trusted=plan.trusted, skipped_wires=wire_skips)
         skipped = plan.skipped + [{
             "part": "wire", "nodeId": wire["target"], "reason": "can't be wired now",
             "wire": {key: wire[key] for key in ("source", "sourceHandle", "target", "targetHandle")},
-            "message": (f"the wire {wire['source']}.{wire['sourceHandle']} → {wire['target']}.{wire['targetHandle']} "
+            "message": (f"the connection {wire['source']}.{wire['sourceHandle']} → {wire['target']}.{wire['targetHandle']} "
                         f"can't come back: {wire['reason']}")} for wire in wire_skips]
         record.state, record.undone_by, record.undo_id = "undone", actor_record(actor), undo_id
         record.last_skipped = skipped
         canvas_undo_book.note_events(undo_id, canvas_events.seqs_of_edit(undo_id))
         link_entry = canvas_undo_book.link_of(record.edit_id)
-        counts = {key: len(result.get(key) or []) for key in ("added", "removed", "changed", "renamed", "moved")}
-        done = ", ".join(f"{verb} {counts[key]}" for key, verb in (
-            ("removed", "removed"), ("added", "put back"), ("changed", "reset"), ("renamed", "renamed"),
-            ("moved", "moved")) if counts[key])
+        counts = {key: len(result.get(key) or []) for key in (
+            "added", "removed", "changed", "renamed", "moved", "wired", "unwired")}
+        done = ", ".join(f"{verb} {counts[key]}" for key, verb in UNDONE_VERBS if counts[key])
         left = f"; left {len(skipped)} part{'s' if len(skipped) != 1 else ''} as is" if skipped else ""
         _journal("edit.undone", data={
             "editId": record.edit_id, "undoId": undo_id, "of": owner, "editKind": "edit",
@@ -9328,11 +12418,17 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             summary=f"undid {_undo_owner_text(owner, by=actor)} ({done or 'no change'}){left}")
     finally:
         _canvas_edit_link.reset(context)
-    publish_action(f"{identity.name} undid its edit: {done or 'no change'}{left}")
+    stays = [item["nodeId"] for item in skipped if item.get("reason") == "ran since"]
+    publish_action(f"{identity.name} undid its edit: {done or 'no change'}{left}"
+                   + (f" ({_listed(stays)} ran since, so {'it stays' if len(stays) == 1 else 'they stay'})"
+                      if stays else ""))
+    extras = _undo_extras_text(result)
     return {"status": "undone", "editId": record.edit_id, "undoId": undo_id,
             **{key: result.get(key) for key in ("added", "removed", "changed", "renamed", "moved", "wired",
-                                                 "unwired")},
-            "skipped": skipped}
+                                                 "unwired", "reattached", "pinsLeft", "reopened", "notReopened")},
+            "skipped": skipped,
+            "message": f"Undone: {done or 'no change'}." + (f" Also {extras}" if extras else "")
+            + (f" {_undo_left_text(skipped)}" if skipped else "")}
 
 
 @app.get("/api/graph/node/{node_id}/path")
@@ -9392,7 +12488,9 @@ def _raise_last_run_failed(node_id: str) -> None:
     failed = node_errors.get(node_id)
     if failed:
         hint = f" ({failed['hint']})" if failed.get("hint") else ""
-        raise HTTPException(status_code=409, detail=f"{node_id} has no output: its last run failed: {failed['error']}{hint}")
+        # An agent read: hide a key the provider quoted (services/key_echoes.py).
+        error = _hide_key_echoes(failed["error"], _agent_key_secrets())
+        raise HTTPException(status_code=409, detail=f"{node_id} has no output: its last run failed: {error}{hint}")
 
 
 def _preview_path(value: Any, node_id: str, port: str) -> Path:
@@ -9445,7 +12543,11 @@ def _last_run_error_header(node_id: str) -> dict[str, str] | None:
     """The node's output is from before a run that failed: view_output says
     so beside it, a picture (200) or a value (415) alike."""
     failed = node_errors.get(node_id)
-    return {"X-Nebula-Last-Run-Error": quote(failed["error"], safe=" :,.()'")} if failed else None
+    if not failed:
+        return None
+    # Hide a quoted key (services/key_echoes.py) before quote() encodes it.
+    error = _hide_key_echoes(failed["error"], _agent_key_secrets())
+    return {"X-Nebula-Last-Run-Error": quote(error, safe=" :,.()'")}
 
 
 def _resolve_primary_image_url(node: dict[str, Any]) -> str | None:
@@ -9507,13 +12609,15 @@ async def delete_graph_edge(body: dict[str, Any]) -> dict:
         await _broadcast_graph_sync(edit=True)
         _journal_edge("edge.removed", body)
         publish_action(
-            f"Unwired {body.get('source', '')}:{body.get('sourceHandle', '')} → "
+            f"Disconnected {body.get('source', '')}:{body.get('sourceHandle', '')} → "
             f"{body.get('target', '')}:{body.get('targetHandle', '')}"
         )
         if body.get("target") in cli_graph.nodes:
             await _show_agent(
                 {"nodeId": body["target"]},
-                say=f"Unwired {body.get('source', '')} → {body.get('target', '')}",
+                say=(f"Disconnected {_quoted(_node_label(str(body.get('source', ''))))} "
+                     f"from {_quoted(_node_label(body['target']))}"),
+                did=_did("Disconnected", body["target"]),
             )
     return {"status": "deleted" if removed else "not_found"}
 
@@ -9643,6 +12747,18 @@ def _folded_billing_baseline(reference: str, folded: set[str]) -> dict[str, Any]
     return {node_route.PROVIDER_PARAM: "krea"} if reference in folded else None
 
 
+def _refuse_unknown_definition(definition_id: Any) -> None:
+    """400 for a node type the registry doesn't have, on every path that
+    stores or runs one (create, node-and-connect, quick, and every staged
+    import, cluster, restore, edit and proposal). Writes take ids only, never
+    a display name (services/node_lookup.py), so what a saved command adds
+    can't change when names do; the refusal names the node the text is the
+    name of ("did you mean nebula-moodboard (Moodboard)?")."""
+    if not isinstance(definition_id, str) or node_registry.get(definition_id) is None:
+        raise HTTPException(status_code=400,
+                            detail=node_lookup.unknown_definition(str(definition_id), node_registry.get_all()))
+
+
 def _validated_ingress_node(
     raw: dict[str, Any],
     index: int,
@@ -9669,11 +12785,7 @@ def _validated_ingress_node(
     # A retired definition (its provider shut the model down) becomes its
     # replacement, so saved graphs and exports still load.
     definition_id, params, retired_label = migrate_node(definition_id, params)
-    if node_registry.get(definition_id) is None:
-        raise HTTPException(
-            status_code=400,
-            detail=f"unknown node definition '{definition_id}'",
-        )
+    _refuse_unknown_definition(definition_id)
     _validate_params(definition_id, params)
     params = _coerce_params(definition_id, params)
     if definition_id == "image-input" and normalize_image_inputs:
@@ -9870,6 +12982,17 @@ async def import_graph(body: dict[str, Any]) -> dict:
         (node_id, str(candidate.nodes[node_id].get("definitionId") or ""), _folded_billing_baseline(ref, folded),
          candidate.nodes[node_id].get("params") or {}) for ref, node_id in id_map.items())
     _stage_graph_edges(candidate, raw_edges, id_map, saved=True)
+    if body.get("refuseOverSaveLimit") is True:
+        _refuse_graph_over_save_limit_on_its_own(candidate)
+    # The person's Load graph opens a file of any size (Q118); anyone else's
+    # import can't leave the project over the save limit, except a graph file
+    # an agent opens in the empty project it just made for it (Q123 a, Justin:
+    # "A big one opens as a new project."; graph_file_client.py). Saving that
+    # project pauses on the canvas, as after the person's own Load graph.
+    if body.get("newProjectForFile") is True:
+        _require_empty_canvas_for_a_new_project_file()
+    else:
+        _refuse_agent_growth_past_save_limit(candidate)
     with _paid_graph_mutation("replace the graph"):
         _reject_graph_replacement_during_paid_start("replace the graph")
         if execution_runs.has_active() or _synchronous_workspace_runs:
@@ -9887,6 +13010,10 @@ async def import_graph(body: dict[str, Any]) -> dict:
             list(candidate.nodes.values()),
             source="import",
         )
+        # Ids start again under this project: no node now is one a restore
+        # brought back. Here, with the commit, not after the sync's awaits: a
+        # delete landing during the sync would name the old node's removal.
+        node_removals.forget_project(_workspace_context()["activeProjectId"])
     exported = await _broadcast_graph_sync(graph_replaced=True, edit=True)
     publish_action(
         f"Loaded graph ({len(cli_graph.nodes)} nodes, {len(cli_graph.edges)} edges)"
@@ -9933,7 +13060,7 @@ def _rf_created(node_ids: list[str], edge_ids: list[str]) -> dict[str, list[dict
         src_node = cli_graph.nodes.get(e["source"], {})
         src_def = all_defs.get(src_node.get("definitionId", ""), {})
         data_type = "Any"
-        for port in src_def.get("outputPorts", []):
+        for port in node_ports(str(src_node.get("definitionId") or ""), src_node.get("params"), src_def, "outputPorts"):
             if port["id"] == e["sourceHandle"]:
                 data_type = port["dataType"]
                 break
@@ -9978,6 +13105,7 @@ async def add_graph_cluster(body: dict[str, Any]) -> dict:
              candidate.nodes[node_id].get("params") or {}) for ref, node_id in id_map.items())
         created_edge_ids = _stage_graph_edges(candidate, raw_edges, id_map)
         _refuse_agent_change_to_approved_runs(candidate)
+        _refuse_agent_growth_past_save_limit(candidate)
         _commit_graph_candidate_with_recoveries(
             candidate,
             [candidate.nodes[node_id] for node_id in id_map.values()],
@@ -10089,8 +13217,10 @@ def _cli_node_to_rf(n: dict[str, Any], position: dict[str, float], all_defs: dic
             "isDynamic": True,
             "providerType": DYNAMIC_NODE_PROVIDER_BY_DEFINITION[definition_id],
             "modelId": params.get("model") or params.get("model_id") or params.get("endpoint_id"),
-            "dynamicInputPorts": defn.get("inputPorts", []),
-            "dynamicOutputPorts": defn.get("outputPorts", []),
+            # A configured universal node's ports are its model's
+            # (services/universal_ports.py); otherwise the definition's.
+            "dynamicInputPorts": node_ports(definition_id, params, defn, "inputPorts"),
+            "dynamicOutputPorts": node_ports(definition_id, params, defn, "outputPorts"),
             "dynamicParams": [],
             "providerMeta": {},
         })
@@ -10121,7 +13251,7 @@ def _project_id_or_404(project_id: str, catalog: dict[str, Any]) -> dict[str, An
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     project = catalog["projects"].get(project_id)
     if project is None:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise refusal_copy.not_found("Project not found", "project", "projects")
     return project
 
 
@@ -10191,7 +13321,8 @@ def _migrate_rf_graph(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) 
 
 def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None = None,
                             warnings: list[str] | None = None,
-                            ingress: _IngressVerdict | None = None) -> tuple[dict[str, Any], CLIGraph]:
+                            ingress: _IngressVerdict | None = None,
+                            size_checked: bool = True) -> tuple[dict[str, Any], CLIGraph]:
     """Validate a saved RF graph with canonical definitions, retaining its IDs.
 
     A removed definition can still be viewed when it was already in this
@@ -10200,6 +13331,11 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
     its new node (_migrate_rf_graph); what that dropped goes in ``warnings``.
     ``ingress``: the check already ran on this snapshot in a worker thread
     (the project routes do); without it, it runs here.
+    ``size_checked``: refuse a snapshot over the save limit (every save).
+    Opening a stored project doesn't: one can be stored over it (a switch
+    keeps the live canvas in the project it leaves), and it opens, so the
+    canvas can pause saving it until the person trims it (Q118), instead of
+    the project never opening again.
     """
     if not isinstance(snapshot, dict):
         raise HTTPException(status_code=400, detail="Project snapshot must be an object")
@@ -10207,8 +13343,8 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
         _validate_graph_ingress_complexity(snapshot)
     else:
         ingress.require(snapshot)
-    if len(json.dumps(snapshot, allow_nan=False, ensure_ascii=False).encode("utf-8")) > MAX_PROJECT_BYTES:
-        raise HTTPException(status_code=413, detail="Project snapshot exceeds the 16 MiB limit")
+    if size_checked and (size := project_size.snapshot_bytes(snapshot)) > MAX_PROJECT_BYTES:
+        raise ProjectSizeRefusal(size)
     nodes = _graph_ingress_items(snapshot, "nodes")
     edges = _graph_ingress_items(snapshot, "edges")
     if len(nodes) > RESTORE_MAX_GRAPH_NODES or len(edges) > RESTORE_MAX_GRAPH_EDGES:
@@ -10352,11 +13488,35 @@ def _refuse_agent_billing_in_project(candidate: CLIGraph, *before: Mapping[str, 
         prior = next((known.get("params") or {} for graph in before
                       if (known := graph.get(node_id)) and known.get("definitionId") == definition_id), None)
         changes.append((node_id, definition_id, prior, node.get("params") or {}))
+    # A canvas tab sends these snapshots (autosave, the handoff save, a stale
+    # tab's recovered copy). One that carries no agent marker is refused only
+    # because it isn't connected as the person (no person token, or one from
+    # an earlier launch): the refusal says person_required
+    # (_person_only_refusal), so the canvas shows its reconnect banner and
+    # keeps Try again instead of treating the copy as refused for good (Q116 a
+    # review). The detail stays word for word; an agent's refusal is unchanged.
     _refuse_agent_billing_change(changes)
 
 
 def _overlay_live_project(project: dict[str, Any], exported: dict[str, Any]) -> bool:
     """Overlay CLI changes while retaining frontend-only data and run recipes."""
+    previous = project["snapshot"]
+    updated = _overlaid_snapshot(project, exported)
+    changed = updated != previous
+    project["snapshot"] = updated
+    project["_backendNodeIds"] = sorted({node["id"] for node in exported["nodes"]})
+    project["_backendEdgeIds"] = sorted({edge["id"] for edge in exported["edges"]})
+    project["_nodeCounter"] = cli_graph._counter
+    if changed:
+        refresh_metadata(project)
+    return changed
+
+
+def _overlaid_snapshot(project: dict[str, Any], exported: dict[str, Any]) -> dict[str, Any]:
+    """The project's snapshot with the live canvas (``exported``, as the
+    canvas gets it) overlaid, as a switch or a listing stores it
+    (_overlay_live_project); nothing is changed. The project's size for
+    agents (project_size) and their edits' size check read this."""
     previous = project["snapshot"]
     old_nodes = {node["id"]: node for node in previous["nodes"]}
     live_ids = {node["id"] for node in exported["nodes"]}
@@ -10372,15 +13532,132 @@ def _overlay_live_project(project: dict[str, Any], exported: dict[str, Any]) -> 
     backend_edge_ids = set(project.get("_backendEdgeIds", old_edges))
     merged_edges = [{**old_edges.get(edge["id"], {}), **edge, "data": {**old_edges.get(edge["id"], {}).get("data", {}), **edge.get("data", {})}} for edge in exported["edges"]]
     merged_edges.extend(edge for edge in previous["edges"] if edge["id"] not in live_edge_ids and edge["id"] not in backend_edge_ids and edge["source"] in retained_ids and edge["target"] in retained_ids)
-    updated = {**previous, "nodes": merged_nodes, "edges": merged_edges}
-    changed = updated != previous
-    project["snapshot"] = updated
-    project["_backendNodeIds"] = sorted(live_ids)
-    project["_backendEdgeIds"] = sorted(live_edge_ids)
-    project["_nodeCounter"] = cli_graph._counter
-    if changed:
-        refresh_metadata(project)
-    return changed
+    return {**previous, "nodes": merged_nodes, "edges": merged_edges}
+
+
+def _graph_canvas_export(graph: CLIGraph) -> dict[str, list[dict[str, Any]]]:
+    """``graph``'s nodes and wires as the canvas gets them
+    (export_graph_for_frontend's shape), without its side effects: for
+    measuring what a project would hold with this graph on its canvas."""
+    all_defs = node_registry.get_all()
+    state = graph.get_state()
+    positions = _display_positions(state["nodes"], y_offset=100.0)
+    nodes = [_cli_node_to_rf(node, positions[node["id"]], all_defs) for node in state["nodes"]]
+    edges = []
+    for edge in state["edges"]:
+        source = graph.nodes.get(edge["source"], {})
+        ports = node_ports(str(source.get("definitionId") or ""), source.get("params"),
+                           all_defs.get(source.get("definitionId", ""), {}), "outputPorts")
+        data_type = next((port["dataType"] for port in ports if port["id"] == edge["sourceHandle"]), "Any")
+        edges.append({"id": edge["id"], "source": edge["source"], "sourceHandle": edge["sourceHandle"],
+                      "target": edge["target"], "targetHandle": edge["targetHandle"], "type": "typed-edge",
+                      "data": {"dataType": data_type}})
+    return {"nodes": nodes, "edges": edges}
+
+
+def _open_project_with(graph: CLIGraph) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    """(the open project, its snapshot with ``graph`` on its canvas), or None
+    with no project open."""
+    active = project_store.workspace().get("activeProjectId")
+    project = _open_project_record(active) if active else None
+    if project is None:
+        return None
+    return project, _overlaid_snapshot(project, _graph_canvas_export(graph))
+
+
+def _require_empty_canvas_for_a_new_project_file() -> None:
+    """``newProjectForFile`` loads a graph file only into an empty canvas: the
+    project an agent just made for a file over the save limit (Q123 a). It
+    never replaces nodes."""
+    if cli_graph.nodes or cli_graph.edges:
+        raise HTTPException(status_code=409, detail=(
+            "newProjectForFile loads a graph file only into an empty project (make one with new_project, "
+            "`nebula project new`), and the open project has nodes. Nothing changed."))
+
+
+def _refuse_graph_over_save_limit_on_its_own(candidate: CLIGraph) -> None:
+    """Refuse, before anything changes, a graph that would be over the save
+    limit as a project of its own, measured as the save check measures a
+    project (Q120). The person's Load graph asks for this (the body's
+    ``refuseOverSaveLimit``): on the 413 it opens the file as a new project
+    instead of replacing the open one, since Justin chose "Files over the
+    limit open as a new project named after the file. The open project is
+    left as it was." The tab's own measure can't decide alone: the export
+    adds fields to dynamic nodes and remaps ids."""
+    exported = _graph_canvas_export(candidate)
+    size = project_size.snapshot_bytes({**empty_snapshot(), "nodes": exported["nodes"], "edges": exported["edges"]})
+    if size <= MAX_PROJECT_BYTES:
+        return
+    limit = f"{MAX_PROJECT_BYTES / (1024 * 1024):g} MiB ({MAX_PROJECT_BYTES:,} bytes)"
+    detail = (f"This graph would be {size:,} bytes as a project of its own, over Nebula's save limit of {limit}. "
+              "Nothing changed (refuseOverSaveLimit).")
+    # A canvas tab with a person token from before Nebula restarted gets the
+    # person gate's refusal (GM's reconnect line), as its unflagged import
+    # would, so it doesn't make a new project it can't then load into.
+    if not _is_person_request():
+        refusal = _person_only_refusal(detail)
+        if isinstance(refusal, PersonGateError):
+            raise refusal
+    # scope "graph": the file alone is over, not the open project with it
+    # (agents word their answer from it: graph_file_client.py).
+    raise ProjectSizeRefusal(size, detail, scope="graph")
+
+
+def _refuse_agent_growth_past_save_limit(candidate: CLIGraph) -> None:
+    """Refuse an edit from anyone but the person (an agent, the CLI) that
+    would leave the open project over the save limit and larger than it is
+    (Q118). The person's canvas can't save such a project, so its saving
+    would stop, unseen by the agent. An edit that makes a project already
+    over the limit smaller (a removal, a shorter param) goes through: that is
+    how agents help trim it, with their existing tools. The person's own
+    edits and Load graph are never refused: their canvas pauses saving and
+    shows what's large. Measured as project_size measures it: the stored
+    project with the canvas overlaid (run history from its last save)."""
+    if _is_person_request():
+        return
+    after_export = _graph_canvas_export(candidate)
+    try:
+        catalog_bytes = project_store.path.stat().st_size if project_store.path.exists() else 0
+    except OSError:
+        catalog_bytes = 0
+    # The stored project is within the catalog file, so a catalog and canvas
+    # this small can't make a project over the limit: no catalog read. The
+    # catalog is written compact (",", ":") and the save check measures with
+    # ", " and ": ", one byte more per separator, and compact JSON has at most
+    # one separator per two bytes ("0,0,0"): 1.5x the catalog bounds it.
+    if (catalog_bytes * 3 + 1) // 2 + project_size.json_bytes(after_export) <= MAX_PROJECT_BYTES:
+        return
+    try:
+        found = _open_project_with(candidate)
+    except ProjectStoreError:
+        return
+    if found is None:
+        return
+    project, after_snapshot = found
+    after = project_size.snapshot_bytes(after_snapshot)
+    if after <= MAX_PROJECT_BYTES:
+        return
+    before = project_size.snapshot_bytes(_overlaid_snapshot(project, _graph_canvas_export(cli_graph)))
+    if after <= before:
+        return
+    limit = f"{MAX_PROJECT_BYTES / (1024 * 1024):g} MiB ({MAX_PROJECT_BYTES:,} bytes)"
+    if before > MAX_PROJECT_BYTES:
+        detail = (f"The open project is already over Nebula's save limit of {limit} at {before:,} bytes, so the "
+                  "person's canvas has paused saving it, and this edit would make it larger. Nothing changed. "
+                  "Call project_size (`nebula project size`) to see what's large. Edits that make it smaller "
+                  "go through (remove_from_canvas, shorter params); ask the person before deleting their work.")
+    else:
+        detail = (f"This edit would leave the open project at {after:,} bytes, over Nebula's save limit of {limit}, "
+                  "and the person's canvas can't save a project that large. Nothing changed. Call project_size "
+                  "(`nebula project size`) to see what takes the space, and make the edit smaller.")
+    # No agent marker: most likely the person's canvas tab with a token from
+    # before Nebula restarted, whose Load graph is never refused for size once
+    # it reconnects. The person gate's refusal tells it so (GM's reconnect line,
+    # this text behind Details), not a pause or the agents' text as its reason.
+    refusal = _person_only_refusal(detail)
+    if isinstance(refusal, PersonGateError):
+        raise refusal
+    raise ProjectSizeRefusal(after, detail)
 
 
 async def _projects_live_export() -> dict[str, Any]:
@@ -10444,10 +13721,11 @@ async def list_projects() -> dict[str, Any]:
             if needs_cover(project):  # saved before covers existed
                 refresh_metadata(project, touch=False)
                 changed = True
-        changed = purge_expired_trash(catalog) or changed
+        expired = purge_expired_trash(catalog)
+        changed = expired or changed
         if changed:
             project_store.commit(catalog)
-        return {
+        listing = {
             "projects": sorted((project_metadata(project) for project in catalog["projects"].values()), key=lambda project: project["updatedAt"], reverse=True),
             "trash": _trash_listing(catalog),
             "activeProjectId": catalog["activeProjectId"], "workspaceRevision": catalog["workspaceRevision"],
@@ -10456,16 +13734,89 @@ async def list_projects() -> dict[str, Any]:
             "paramsVersion": PARAMS_VERSION,
             **({"migratedProjectId": catalog["migratedProjectId"]} if catalog.get("migratedProjectId") else {}),
         }
+        kept = set(catalog["projects"]) | set(catalog.get("trash") or {})
+    if expired:
+        # Trash past its 30 days took its question sets with it.
+        agent_questions.keep_projects(kept)
+    return listing
 
 
 @app.get("/api/projects/{project_id}")
-async def get_saved_project(project_id: str) -> dict[str, Any]:
+async def get_saved_project(project_id: str, view: str | None = None) -> dict[str, Any]:
+    """The project the canvas loads. ``view=agent``: the same project as
+    agents read it (MCP get_project), redacted like look_at_canvas
+    (services/project_view.py)."""
+    if view not in (None, "agent"):
+        raise HTTPException(status_code=400, detail="view must be agent, or left out for the saved project")
     exported = await _projects_live_export()
     with project_store.transaction() as catalog:
         project = _project_id_or_404(project_id, catalog)
         if catalog["activeProjectId"] == project_id and _overlay_live_project(project, exported):
             project_store.commit(catalog)
+        if view == "agent":
+            from services.project_view import agent_project
+
+            return agent_project(project, node_registry.get_all(), open_id=catalog["activeProjectId"],
+                                 secrets=_agent_key_secrets())
         return public_project(project)
+
+
+@app.get("/api/projects/{project_id}/size")
+async def get_project_size(project_id: str) -> dict[str, Any]:
+    """A project's size and what is large, for agents (MCP project_size,
+    `nebula project size`; Q118). Read-only. The size is what a save measures
+    (services/project_size.py); for the open project, its stored snapshot
+    with the live canvas overlaid, as a switch would store it (the person's
+    tab may hold newer run history it hasn't saved). `savingPaused`: the
+    open project is over the limit, so the person's canvas can't save it.
+    `largest` holds the largest rows of 0.1 MiB and up, at most ten, with
+    node ids (the person's panel shows the same rows without them), `smaller`
+    the rest."""
+    exported = _graph_canvas_export(cli_graph)
+    catalog = project_store.read()
+    project = _project_id_or_404(project_id, catalog)
+    is_open = catalog["activeProjectId"] == project_id
+    snapshot = _overlaid_snapshot(project, exported) if is_open else project["snapshot"]
+    found = project_size.breakdown(snapshot)
+    size, limit = found["bytes"], MAX_PROJECT_BYTES
+    all_defs = node_registry.get_all()
+
+    def shown(row: dict[str, Any]) -> dict[str, Any]:
+        if row["kind"] != "node":
+            return {"kind": row["kind"], "name": project_size.ROW_NAMES[row["kind"]],
+                    **({"count": row["count"]} if "count" in row else {}),
+                    "bytes": row["bytes"], "size": project_size.row_size(row["bytes"])}
+        definition_id = str(row.get("definitionId") or "")
+        model = (all_defs.get(definition_id) or {}).get("displayName") or definition_id
+        label = row.get("label") if isinstance(row.get("label"), str) and row["label"].strip() else model
+        return {"kind": "node", "nodeId": row["nodeId"], "name": label, "definitionId": definition_id,
+                "part": project_size.PART_LABELS[row["part"]], "bytes": row["bytes"],
+                "size": project_size.row_size(row["bytes"])}
+
+    rows = found["rows"]
+    listed = project_size.listed_count(rows)
+    rest = rows[listed:]
+    over = size > limit
+    if over and is_open:
+        note = (f"Saving is paused: the person's canvas can't save this project until it is "
+                f"{project_size.limit_text(limit)} or less. Make it {project_size.over_by(size, limit)} smaller "
+                "with edit_canvas or remove_from_canvas (`nebula apply`), asking the person before deleting their "
+                "work; it saves again by itself. Run history clears only from the Run History panel, the person's.")
+    elif over:
+        note = (f"This project is over the {project_size.limit_text(limit)} save limit. It opens, but the canvas "
+                "can't save it until it is made smaller.")
+    else:
+        note = f"Under the {project_size.limit_text(limit)} save limit: it saves as usual."
+    return {
+        "project": {"id": project["id"], "name": project["name"], "open": is_open},
+        "sizeBytes": size, "limitBytes": limit,
+        "size": project_size.megabytes(size, limit), "limit": project_size.limit_text(limit),
+        "overLimit": over, "savingPaused": over and is_open, "overByBytes": max(0, size - limit),
+        "largest": [shown(row) for row in rows[:listed]],
+        "smaller": {"count": len(rest), "bytes": sum(row["bytes"] for row in rest),
+                    "size": project_size.row_size(sum(row["bytes"] for row in rest))},
+        "note": note,
+    }
 
 
 @app.post("/api/projects/recover")
@@ -10533,6 +13884,7 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         project_store.commit(catalog)
         result = {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
     await _broadcast_projects_changed("created", recovery_id)
+    _journal_project_change("project.created", result["project"])
     return result
 
 
@@ -10591,6 +13943,33 @@ async def _broadcast_projects_changed(change: str, project_id: str | None = None
         pass
 
 
+_PROJECT_SUMMARIES = {
+    "project.created": 'made project "{name}"',
+    "project.renamed": 'renamed project "{previous}" to "{name}"',
+    "project.deleted": 'moved project "{name}" to Recently deleted',
+    "project.restored": 'restored project "{name}" from Recently deleted',
+}
+
+
+def _journal_project_change(kind: str, project: Mapping[str, Any], *, previous_name: str | None = None,
+                            was_open: bool | None = None) -> None:
+    """Journal a project made, renamed, deleted or restored (``project.*``),
+    in the name of whoever asked, so wait_for_canvas_change and `nebula
+    watch` see the person's changes and other agents'. Next to
+    _broadcast_projects_changed, which tells open tabs; opening, saving, the
+    cover and deleting for good aren't journaled here (an open is
+    ``canvas.replaced``). Never fails the route."""
+    name = str(project.get("name") or "")
+    data: dict[str, Any] = {"projectId": project.get("id"), "name": name}
+    if previous_name is not None:
+        data.update({"from": previous_name, "to": name})
+    if was_open is not None:
+        data["wasOpen"] = was_open
+    if kind == "project.created" and isinstance(project.get("createdBy"), dict):
+        data["createdBy"] = project["createdBy"].get("name")
+    _journal(kind, data=data, summary=_PROJECT_SUMMARIES[kind].format(name=name, previous=previous_name or ""))
+
+
 @app.post("/api/projects")
 async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, Any]:
     body = body or {}
@@ -10624,6 +14003,7 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
     await _broadcast_graph_sync(graph_replaced=True, reason="project-create",
                                 project_switch=_switch_notice(start, project, created=True))
     await _broadcast_projects_changed("created", project["id"])
+    _journal_project_change("project.created", project)
     # A bundle built for another version doesn't load it (projectStore.ts activate).
     return {"project": public_project(project), "workspaceRevision": revision, "paramsVersion": PARAMS_VERSION}
 
@@ -10696,7 +14076,7 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
         historical = {node["id"]: node.get("data", {}).get("definitionId") for node in project["snapshot"]["nodes"]}
         warnings: list[str] = []
         project["snapshot"], candidate = _stage_project_snapshot(project["snapshot"], historical=historical, warnings=warnings,
-                                                                 ingress=verdict)
+                                                                 ingress=verdict, size_checked=False)
         candidate._counter = max(candidate._counter, project.get("_nodeCounter", 0))
         project["lastOpenedAt"] = project_now()
         start = _begin_switch(catalog, actor)
@@ -10728,6 +14108,8 @@ async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
     result = _save_project(project_id, body, ingress=verdict)
     # A save moves the card up and can change its picture and node count.
     await _broadcast_projects_changed("renamed" if "name" in body else "saved", project_id)
+    if "previousName" in result and result["previousName"] != result["project"]["name"]:
+        _journal_project_change("project.renamed", result["project"], previous_name=result["previousName"])
     return result
 
 
@@ -10764,6 +14146,7 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
             project["_nodeCounter"] = cli_graph._counter
             if catalog.get("migratedProjectId") == project_id:
                 catalog.pop("migratedProjectId", None)
+        previous_name = project["name"]
         if "name" in body:
             try:
                 project["name"] = project_name(body["name"])
@@ -10771,7 +14154,11 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
         refresh_metadata(project)
         project_store.commit(catalog)
-        return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
+        result = {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
+        if "name" in body:
+            # The name it had, so a rename can be undone (MCP rename_project).
+            result["previousName"] = previous_name
+        return result
 
 
 def _keep_person_viewport(staged: dict[str, Any], stored: dict[str, Any]) -> None:
@@ -10821,28 +14208,122 @@ async def list_project_covers(project_id: str) -> dict[str, Any]:
         project = _project_id_or_404(project_id, catalog)
         if catalog["activeProjectId"] == project_id and _overlay_live_project(project, exported):
             project_store.commit(catalog)
-        return {"images": project_cover.choices(project["snapshot"]), "pinned": project.get("coverPin"),
-                "cover": project.get("cover")}
+        images = project["snapshot"]
+        counts = project_cover.pin_counts(images, project.get("coverPin"))
+        return {"images": project_cover.choices(images), "pinned": project.get("coverPin") if counts else None,
+                "cover": project.get("cover"), "pinnedBy": _cover_owner(project, images),
+                "lostPin": _lost_pin(project, images)}
 
 
 @app.put("/api/projects/{project_id}/cover")
 async def pin_project_cover(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
     """Pin one of the project's images as its card picture ({"url": ...}), or
-    go back to the automatic one ({"url": null}). The person's choice only."""
-    require_person(current_request_headers())
-    url = body.get("url")
+    go back to the automatic one ({"url": null}).
+
+    The person may always. Anyone else (an agent, a script) may while the
+    person hasn't pinned one; a cover the person pinned changes only through
+    a proposal they accept on the Projects screen (``POST
+    /api/asset-proposals``, Justin's Q60 a, 2026-10-20). A pin whose image
+    left the project (its node deleted) no longer counts (Q90 a): the card is
+    automatic, so anyone may set it, and the person's next pin counts again.
+    Who set the pin is saved as ``coverBy``. The answer's ``previous``
+    ({"cover": url or null}, the cover the card showed) put back through this
+    route undoes the change."""
+    return await _set_project_cover(project_id, body.get("url"))
+
+
+def _cover_owner(project: Mapping[str, Any], images: Mapping[str, Any]) -> dict[str, str] | None:
+    """Who pinned the project's cover, or None for the automatic one: no pin,
+    or a pin whose image is no longer one of the project's (``images``: its
+    snapshot as it is now; Justin's Q90 a). A pin saved before ``coverBy``
+    existed is the person's: only they could pin."""
+    if not project_cover.pin_counts(dict(images), project.get("coverPin")):
+        return None
+    return recorded_cover_owner(dict(project))
+
+
+def _lost_pin(project: Mapping[str, Any], images: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The stored pin while its image is gone ({url, by}), else None. It
+    counts again if the image comes back (an undo), so it isn't deleted."""
+    pin = project.get("coverPin")
+    if not pin or project_cover.pin_counts(dict(images), pin):
+        return None
+    return {"url": pin, "by": recorded_cover_owner(dict(project))}
+
+
+def _automatic_cover(images: Mapping[str, Any]) -> str | None:
+    """The image the card shows with no pin (its first, for a mosaic), or None."""
+    return project_cover.first_image(project_cover.cover(dict(images)))
+
+
+def _cover_state(project: Mapping[str, Any]) -> dict[str, Any]:
+    """The stored pin as a proposal records it (``before``), counting or not:
+    the image leaving and coming back doesn't change it, so a proposal stays
+    open through an undo."""
+    return {"cover": project.get("coverPin") or None, "coverBy": recorded_cover_owner(dict(project))}
+
+
+def _cover_images_now(project: dict[str, Any], catalog: Mapping[str, Any], exported: dict[str, Any] | None) -> dict[str, Any]:
+    """The project's snapshot as its images are now: the open project's
+    saved snapshot lags the live canvas, so it is overlaid on a copy."""
+    if exported is None or catalog.get("activeProjectId") != project.get("id"):
+        return project["snapshot"]
+    copied = copy.deepcopy(project)
+    _overlay_live_project(copied, exported)
+    return copied["snapshot"]
+
+
+async def _set_project_cover(project_id: str, url: Any, *, expect: dict[str, Any] | None = None,
+                             note: str = "") -> dict[str, Any]:
+    """The cover change itself, for the route and for an accepted proposal
+    (``expect``: the cover as the proposal saw it, else 409)."""
+    headers = current_request_headers()
+    person = is_person(headers)
+    exported = await _projects_live_export()
     with project_store.transaction() as catalog:
         project = _project_id_or_404(project_id, catalog)
-        if url is None:
-            project.pop("coverPin", None)
+        if catalog["activeProjectId"] == project_id:
+            _overlay_live_project(project, exported)
+        if expect is not None and _cover_state(project) != expect:
+            raise HTTPException(status_code=409, detail="The project's cover changed since it was proposed.")
+        images = project["snapshot"]
+        owner = _cover_owner(project, images)
+        if not person and owner is not None and owner.get("kind") == "person":
+            require_person(headers, hint=(
+                f'The person pinned the cover of project "{project["name"]}", so only they can change it. '
+                f'To ask them, propose it: propose_asset_change(kind="project", id="{project_id}", '
+                'change={"cover": <url or null>}, note=...) (POST /api/asset-proposals); they decide on the '
+                "Projects screen."))
+        recorded = _cover_state(project)
+        # What the card showed: a pin whose image is gone showed the automatic cover.
+        previous = project.get("coverPin") if owner is not None else None
+        if url is None or url == "":
+            url = None
+            # A lost pin is already the automatic cover; only the person's own
+            # reset drops it, so an undo can still bring it back otherwise.
+            if person or owner is not None:
+                project.pop("coverPin", None)
+                project.pop("coverBy", None)
         else:
-            if not isinstance(url, str) or not project_cover.is_choice(project["snapshot"], url):
+            if not isinstance(url, str) or not project_cover.is_choice(images, url):
                 raise HTTPException(status_code=400, detail="Pick one of this project's own images for its cover.")
             project["coverPin"] = url
+            project["coverBy"] = actor_record(actor_for_headers(headers))
+        changed = recorded != _cover_state(project)
         refresh_metadata(project, touch=False)
         project_store.commit(catalog)
-        result = {"project": project_metadata(project)}
+        name = str(project.get("name") or "")
+        result = {"project": project_metadata(project), "previous": {"cover": previous}}
+    if changed:
+        _journal(
+            "project.cover",
+            data={"projectId": project_id, "projectName": name, "cover": url},
+            summary=(f'pinned a cover on project "{name}"' if url is not None
+                     else f'set the cover of project "{name}" back to automatic') + note,
+        )
     await _broadcast_projects_changed("cover", project_id)
+    # A cover proposal for this project may no longer fit (the person picked another).
+    await _sweep_asset_proposals()
     return result
 
 
@@ -10868,6 +14349,8 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
             catalog["activeProjectId"] = None
             catalog["workspaceRevision"] = uuid4().hex
             _commit_project_workspace(catalog, CLIGraph())
+            # The canvas is now the unfiled one, empty, its ids starting again at n1.
+            node_removals.forget_project(None)
         else:
             project_store.commit(catalog)
         result = {
@@ -10879,6 +14362,7 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
     if deleting_active:
         await _broadcast_graph_sync(graph_replaced=True, reason="project-delete")
     await _broadcast_projects_changed("deleted", project_id)
+    _journal_project_change("project.deleted", result["trashedProject"], was_open=deleting_active)
     return result
 
 
@@ -10894,7 +14378,7 @@ def _trashed_or_404(project_id: str, catalog: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     entry = (catalog.get("trash") or {}).get(project_id)
     if entry is None:
-        raise HTTPException(status_code=404, detail="That project is no longer in Recently deleted")
+        raise refusal_copy.refusal(404, "That project is no longer in Recently deleted", refusal_copy.gone_from_trash("project"))
     return entry
 
 
@@ -10903,12 +14387,16 @@ def _trashed_or_404(project_id: str, catalog: dict[str, Any]) -> dict[str, Any]:
 @app.post("/api/projects/{project_id}/restore")
 async def restore_saved_project(project_id: str) -> dict[str, Any]:
     with project_store.transaction() as catalog:
-        purge_expired_trash(catalog)
+        expired = purge_expired_trash(catalog)
         _trashed_or_404(project_id, catalog)
         project = restore_from_trash(catalog, project_id)
         project_store.commit(catalog)
         result = {"project": project_metadata(project), "workspaceRevision": catalog["workspaceRevision"]}
+        kept = set(catalog["projects"]) | set(catalog.get("trash") or {})
+    if expired:
+        agent_questions.keep_projects(kept)
     await _broadcast_projects_changed("restored", project_id)
+    _journal_project_change("project.restored", result["project"])
     return result
 
 
@@ -10921,7 +14409,10 @@ async def purge_trashed_project(project_id: str) -> dict[str, Any]:
         del catalog["trash"][project_id]
         project_store.commit(catalog)
         node_errors.keep_projects(set(catalog["projects"]) | set(catalog.get("trash") or {}))
+        kept = set(catalog["projects"]) | set(catalog.get("trash") or {})
         result = {"trash": _trash_listing(catalog)}
+    # Its question sets went with its record; the book forgets them too.
+    agent_questions.keep_projects(kept)
     await _broadcast_projects_changed("purged", project_id)
     return result
 
@@ -10941,8 +14432,10 @@ async def empty_project_trash(body: dict[str, Any] | None = None) -> dict[str, A
         if doomed:
             project_store.commit(catalog)
             node_errors.keep_projects(set(catalog["projects"]) | set(trash))
+        kept = set(catalog["projects"]) | set(trash)
         result = {"trash": _trash_listing(catalog)}
     if doomed:
+        agent_questions.keep_projects(kept)
         await _broadcast_projects_changed("purged")
     return result
 
@@ -11041,9 +14534,7 @@ async def export_graph_for_frontend() -> dict:
         src_node = cli_graph.nodes.get(e["source"], {})
         src_def = all_defs.get(src_node.get("definitionId", ""), {})
         data_type = "Any"
-        src_ports = (cinema_output_ports(src_node.get("params"))
-                     if src_node.get("definitionId") == "cinema-scene"
-                     else src_def.get("outputPorts", []))
+        src_ports = node_ports(str(src_node.get("definitionId") or ""), src_node.get("params"), src_def, "outputPorts")
         for port in src_ports:
             if port["id"] == e["sourceHandle"]:
                 data_type = port["dataType"]
@@ -11139,14 +14630,16 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         return await _refused_cli_run(run_id, target, errors)
 
     # Checked last: a request refused for anything else must not count.
-    _require_spend_approval(sub_nodes, sub_edges, run_id=run_id, settings=settings,
+    measured = await _measure_run_inputs(sub_nodes, sub_edges)
+    _require_spend_approval(sub_nodes, sub_edges, run_id=run_id, settings=settings, measured=measured,
                             run_ids=[target] if target else _end_node_ids(sub_nodes, sub_edges))
-    canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
+    _note_run(run_id)
+    _note_run_nodes(run_id, sub_nodes)
     publish_action(
         f"Running {target}..." if target else f"Running {len(sub_nodes)} node(s)..."
     )
     if target:
-        await _show_agent({"nodeId": target}, say=f"Running {_node_label(target)}")
+        await _show_agent({"nodeId": target}, say=f"Running {_quoted(_node_label(target))}", did=_did("Ran", target))
     else:
         # The whole canvas has no one node to point at: the Agent log only.
         await _say_agent_action(f"Running {len(sub_nodes)} node{'' if len(sub_nodes) == 1 else 's'}")
@@ -11165,7 +14658,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     _watch_for_cross_process_stop(run_id, task)
     _cli_runs.start(run_id, task, target, outcome)
-    return await _cli_run_response(run_id, None if wait is None else float(wait))
+    return _hide_run_key_echoes(await _cli_run_response(run_id, None if wait is None else float(wait)))
 
 
 async def _refused_cli_run(run_id: str, target: str | None, errors: list[ValidationErrorDetail]) -> dict[str, Any]:
@@ -11174,16 +14667,25 @@ async def _refused_cli_run(run_id: str, target: str | None, errors: list[Validat
     The canvas shows it as it shows a refused click on Run
     (_announce_validation_errors); the caller gets the run result's own
     shape with status "failed", each node's message in `errors`."""
-    canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
+    _note_run(run_id)
     await _announce_validation_errors(errors, run_id)
     messages = _validation_messages(errors)
     per_node = {node_id: message for node_id, message in messages.items() if node_id}
     summary = "; ".join(f"{node_id} ({_node_label(node_id)}): {message}" if node_id else message
                         for node_id, message in messages.items())
-    publish_action(f"Run stopped before it started. {summary}")
+    # The Agent Log and the cursor speak on the person's canvas: the card's
+    # lines, not the keys and ids agents read in `error` and `errors` (error
+    # copy round 3e). A graph-wide refusal alone (a cycle) has no node to name.
+    person = _validation_person_lines(errors)
+    said = {node_id: f"{_node_label(node_id)} can't run." + (f" {person[node_id]}" if person.get(node_id) else "")
+            for node_id in per_node}
+    publish_action("Run stopped before it started. "
+                   + (" ".join(said.values()) or person.get("") or "Couldn't run the canvas."))
     first = next(iter(per_node), None)
     if first is not None:
-        await _show_agent({"nodeId": first}, say=f"{_node_label(first)} can't run: {per_node[first]}")
+        # The cursor quotes the node like every other bubble; the log keeps its line.
+        bubble = f"{_quoted(_node_label(first))} can't run." + (f" {person[first]}" if person.get(first) else "")
+        await _show_agent({"nodeId": first}, say=bubble, did=_did("Tried to run", first))
     response = {
         "runId": run_id,
         "targetNodeId": target,
@@ -11296,6 +14798,8 @@ class _CliRuns:
 
     def start(self, run_id: str, task: asyncio.Task, target: str | None, outcome: dict[str, Any]) -> None:
         self._runs[run_id] = {"task": task, "target": target, "outcome": outcome, "started": _time_module.time()}
+        # Once forgotten here, get_run still answers from the run's events, as an agent's run.
+        _run_reports().mark_source(run_id, "agent")
         finished = [key for key, entry in self._runs.items() if entry["task"].done()]
         for key in finished[:max(0, len(finished) - self.KEEP_FINISHED)]:
             self._runs.pop(key, None)
@@ -11348,8 +14852,90 @@ async def _cli_run_response(run_id: str, wait: float | None, *, report_failure: 
 
 @app.get("/api/graph/runs/{run_id}")
 async def get_graph_run(run_id: str, wait: float = 0) -> dict[str, Any]:
-    """A CLI run's outcome; with ``wait`` (seconds, max 300), wait for it to finish first."""
-    return await _cli_run_response(run_id, max(0.0, min(float(wait), 300.0)), report_failure=True)
+    """A run's outcome; with ``wait`` (seconds, max 300), wait for it to finish first.
+
+    A run an agent or the CLI started answers as it always has. Any other run
+    (the person's Run on the canvas, an accepted proposal's run) answers from
+    the execution registry and the run's own events (services/run_reports.py),
+    in the same shape with `source: "canvas"` (`"agent"` for an agent's run
+    this route no longer keeps), `startedBy` (``{kind, name}``)
+    and `nodes`: each node's state, latest `progress`, streamed `partialText`
+    and `error`. A CLI run still going carries `nodes` too; once it ends it
+    answers exactly as its start did."""
+    wait = max(0.0, min(float(wait), 300.0))
+    reports = _run_reports()
+    if _cli_runs.get(run_id) is None and (execution_runs.get(run_id) is not None or reports.known(run_id)):
+        response = await _canvas_run_response(run_id, wait)
+        return _hide_run_key_echoes({**response, "startedBy": actor_record(canvas_events.run_actor(run_id)),
+                                     "nodes": reports.progress(run_id)})
+    response = await _cli_run_response(run_id, wait, report_failure=True)
+    if response.get("status") == "running" and reports.known(run_id):
+        response = {**response, "nodes": reports.progress(run_id),
+                    "startedBy": actor_record(canvas_events.run_actor(run_id))}
+    return _hide_run_key_echoes(response)
+
+
+def _agent_key_secrets() -> list[str]:
+    """The configured keys, for hiding wherever a provider quoted one in an
+    error agents read (services/key_echoes.py). Never fails the read."""
+    from services.key_echoes import configured_secrets
+
+    try:
+        return configured_secrets(load_settings().get("apiKeys"))
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _hide_key_echoes(text: Any, key_words: list[str]) -> Any:
+    from services.key_echoes import hide_key_echoes
+
+    return hide_key_echoes(text, key_words)
+
+
+def _hide_run_key_echoes(response: dict[str, Any]) -> dict[str, Any]:
+    from services.key_echoes import hide_in_run
+
+    return hide_in_run(response, _agent_key_secrets())
+
+
+def _run_reports():
+    from services.run_reports import run_reports
+
+    return run_reports
+
+
+_CANVAS_RUN_STATUS = {"completed": "finished", "failed": "failed", "cancelled": "cancelled",
+                      "running": "running", "cancelling": "running"}
+
+
+async def _canvas_run_response(run_id: str, wait: float) -> dict[str, Any]:
+    """A run the canvas started, as _cli_run_response words a CLI run."""
+    record = execution_runs.get(run_id)
+    if record is not None and not record.task.done():
+        # asyncio.wait never cancels the run, even when this request is cancelled.
+        await asyncio.wait({record.task}, timeout=wait)
+        await asyncio.sleep(0)  # the registry marks it terminal in a done callback
+    record = execution_runs.get(run_id)
+    made = _run_reports().outcome(run_id)
+    head = {"runId": run_id, "targetNodeId": None, "source": _run_reports().source(run_id) or "canvas"}
+    nodes_executed = made.pop("nodesExecuted", len(made["results"]) + len(made["errors"]))
+    if record is None:
+        # Pruned from the registry (it keeps the last 256): what its events said.
+        status = "failed" if made["errors"] else "finished"
+    else:
+        status = _CANVAS_RUN_STATUS.get(record.status, record.status)
+        if status == "finished" and made["errors"]:
+            status = "failed"
+    response = {**head, "status": status, **made, "nodesExecuted": nodes_executed}
+    if status == "failed" and made["errors"]:
+        failed = list(made["errors"])
+        response["error"] = (f"{failed[0]} failed: {made['errors'][failed[0]]}" if len(failed) == 1
+                             else f"{len(failed)} nodes failed: {', '.join(failed)} (errors has each message)")
+    elif status == "failed":
+        # The run raised before any node reported. Its exception stays in
+        # Nebula's log: its text can be anything, a provider's reply included.
+        response["error"] = "The run stopped with an error before any node reported one; Nebula's log has the details."
+    return response
 
 
 # Image reference suffixes recognized by /api/quick (matches the scalar
@@ -11464,6 +15050,7 @@ async def quick_execute(body: dict[str, Any]) -> dict:
     definition_id = body.get("definitionId", "")
     if message := retired_message(str(definition_id)):
         raise HTTPException(status_code=400, detail=message)
+    _refuse_unknown_definition(definition_id)
     if not quick_execution_allowed(definition_id):
         raise HTTPException(
             status_code=409,
@@ -11531,7 +15118,7 @@ async def quick_execute(body: dict[str, Any]) -> dict:
         elif isinstance(value, str) and value.endswith(('.mp4', '.mov', '.webm')):
             input_type = "video-input"
             port_type = "Video"
-        elif isinstance(value, str) and value.endswith(('.mp3', '.wav', '.m4a')):
+        elif isinstance(value, str) and value.endswith(('.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg')):
             input_type = "audio-input"
             port_type = "Audio"
         else:
@@ -11575,7 +15162,9 @@ async def quick_execute(body: dict[str, Any]) -> dict:
     ))
     # A quick run has no canvas node to propose, so point at one.
     quick_run = f"quick-{uuid4().hex}"
-    _require_spend_approval(temp_nodes, temp_edges, run_id=quick_run, on_canvas=False, settings=settings, how_to_ask=(
+    measured = await _measure_run_inputs(temp_nodes, temp_edges)
+    _require_spend_approval(temp_nodes, temp_edges, run_id=quick_run, on_canvas=False, settings=settings,
+                            measured=measured, how_to_ask=(
         f"Add it to the canvas instead (`nebula create {definition_id}`), then propose the run: "
         "`nebula propose --note \"<why>\" --run <node id>` (MCP: propose_change). "
         "The person accepts on the canvas, and the canvas runs it."
@@ -11940,6 +15529,37 @@ def _preset_params_version(body: BaseModel, missing: int) -> int:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+def _check_stored_images(kind: str, fields: Mapping[str, Any], before: Mapping[str, Any] | None = None) -> None:
+    """422 unless every image a Style (``kind="style"``: refImages, thumbnail
+    and its image params) or a Character (``"character"``: referenceViews)
+    write names is one of Nebula's own files (services/stored_image_refs.py).
+    Every caller is checked, the person too; a value ``before`` (the asset as
+    stored) already holds isn't checked again."""
+    from services.stored_image_refs import StoredImageError, check
+
+    if kind == "style":
+        # The params the Style will have under the model it will have: a
+        # write that changes only the model can make a held value an image
+        # param, so a held param counts as held only under its own model.
+        stored = before or {}
+        model = fields["modelId"] if "modelId" in fields else stored.get("modelId")
+        definition = node_registry.get(str(model or "")) or {}
+        param_keys = ["_previewUrl", *(str(p.get("key")) for p in definition.get("params") or []
+                                       if isinstance(p, dict) and p.get("type") == "file")]
+        image_fields: tuple[str, ...] = ("refImages", "thumbnail")
+        if "params" not in fields or fields["params"] is None:
+            fields = {**fields, "params": stored.get("params")}
+        if before is not None and (model or None) != (stored.get("modelId") or None):
+            before = {key: value for key, value in before.items() if key != "params"}
+    else:
+        param_keys, image_fields = [], ("referenceViews", "thumbnail")
+    try:
+        check(fields, image_fields=image_fields, before=before, param_keys=param_keys,
+              shipped_thumbnail=lambda value: _preset_thumbnail_path_from_ref(value) is not None)
+    except StoredImageError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 def _char_store():
     from services.character_store import CharacterStore
     return CharacterStore()
@@ -11987,9 +15607,20 @@ def _refuse_moodboard_layout(body: BaseModel) -> None:
 def _moodboard_out(board: dict) -> dict:
     """A board as the API returns it: the saved board plus ``brief``, what
     generators get from it (services/moodboard_brief.compose). ``brief`` is
-    computed on every read and never saved."""
+    computed on every read and never saved.
+
+    ``outsideImages`` (only when there are any): the ids of images that are
+    links to another site, which a board saved before writes were checked
+    can hold (services/stored_image_refs.py). They stay on the board, but
+    nothing in Nebula loads them: the app shows a placeholder, and runs and
+    the analysis leave them out. Computed on read, never saved."""
     from services.moodboard_brief import with_brief
-    return with_brief(board)
+    from services.stored_image_refs import outside_image_ids
+
+    out = with_brief(board)
+    if isinstance(out, dict) and (outside := outside_image_ids(out)):
+        out = {**out, "outsideImages": outside}
+    return out
 
 
 def _validate_project_id_param(project_id: str | None) -> None:
@@ -12084,6 +15715,7 @@ async def list_characters(scope: str = "global", projectId: str | None = None) -
 async def create_character(body: CharacterCreate) -> dict:
     """Create a new Character."""
     _require_canvas_project(body.projectId)
+    _check_stored_images("character", body.model_dump())
     store = _char_store()
     try:
         character = store.create(
@@ -12108,7 +15740,7 @@ async def get_character(char_id: str) -> dict:
     try:
         char = store.get(char_id)
     except ValueError:
-        raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
+        raise refusal_copy.not_found(f"Character '{char_id}' not found", "character", "characters")
     if char is None:
         return _asset_not_found("character", char_id)
     return char
@@ -12127,6 +15759,22 @@ async def update_character(char_id: str, body: CharacterUpdate) -> dict:
         raise HTTPException(status_code=422, detail="baseVersion must be a whole number: the Character's version you read")
     store = _char_store()
     updates = {k: v for k, v in body.model_dump().items() if v is not None and k != "baseVersion"}
+    if "referenceViews" in updates:
+        try:
+            stored = store.get(char_id)
+        except ValueError:
+            raise refusal_copy.not_found(f"Character '{char_id}' not found", "character", "characters")
+        # Not live: the in_trash 404 the Studio offers Restore from, before
+        # any check (a Studio sends the views it read, held links too).
+        if stored is None:
+            return _asset_not_found("character", char_id)
+        # A version behind (versions only grow): the update below is the 409
+        # the Studio merges from and writes nothing, so the views aren't
+        # checked against a Character they can't land on.
+        version = stored.get("version")
+        behind = (body.baseVersion is not None and isinstance(version, int) and version > body.baseVersion)
+        if not behind:
+            _check_stored_images("character", updates, before=stored)
     try:
         character = store.update(char_id, base_version=body.baseVersion, **updates)
     except KeyError:
@@ -12142,7 +15790,7 @@ async def update_character(char_id: str, body: CharacterUpdate) -> dict:
             "character": exc.character,
         })
     except ValueError:
-        raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
+        raise refusal_copy.not_found(f"Character '{char_id}' not found", "character", "characters")
     await _broadcast_stored_asset("character", character, edit={})
     return character
 
@@ -12155,7 +15803,7 @@ async def delete_character(char_id: str) -> dict:
     try:
         record = store.delete(char_id, deleted_by=actor_record(actor_for_headers(current_request_headers())))
     except (KeyError, ValueError):
-        raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
+        raise refusal_copy.not_found(f"Character '{char_id}' not found", "character", "characters")
     await _broadcast_stored_asset("character", None, char_id, deleted=True)
     return {"status": "trashed", "id": char_id, "trashed": record}
 
@@ -12217,7 +15865,7 @@ async def get_moodboard(moodboard_id: str) -> dict:
         # image (services/moodboard_layout.file_aspect). Reading writes nothing.
         moodboard = await asyncio.to_thread(store.get, moodboard_id)
     except ValueError:
-        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
     if moodboard is None:
         return _asset_not_found("moodboard", moodboard_id)
     return _moodboard_out(moodboard)
@@ -12241,20 +15889,26 @@ def _moodboard_conflict(exc: Any) -> JSONResponse:
 
 
 def _journal_board_change(before: dict, after: dict, changes: dict, *, say: str = "") -> None:
-    """One ``board.*`` journal event for a board write (plan section 5.2):
-    an edit batch or a PUT. Tagged with the open canvas project; the board's
-    own scope is in ``data`` (a Global board is in every project). Never any
-    note text."""
-    from services.moodboard_edits import journal_entry
+    """The journal events for a board write (plan section 5.2): an edit
+    batch or a PUT. One ``board.*`` event for its images, cards and frames,
+    and one ``board.fields`` event naming the board fields it changed
+    (Justin's Q91). Every board write goes through here (the Studio, MCP,
+    the CLI, an undo's ``restore``, an accepted proposal's PUT), so none is
+    missed. Tagged with the open canvas project; the board's own scope is in
+    ``data`` (a Global board is in every project). Never any note text, and
+    never a field's value."""
+    from services.moodboard_edits import journal_entries
 
-    entry = journal_entry(changes, before, after)
-    if entry is None:
-        return
-    data = {"boardId": after.get("id"), "boardName": after.get("name"),
-            "scope": after.get("projectId") or "global", "refs": entry["refs"], "kinds": entry["kinds"]}
-    if say:
-        data["say"] = say
-    _journal(entry["kind"], data=data, summary=entry["summary"])
+    for entry in journal_entries(changes, before, after):
+        data: dict[str, Any] = {"boardId": after.get("id"), "boardName": after.get("name"),
+                                "scope": after.get("projectId") or "global"}
+        if entry["kind"] == "board.fields":
+            data["fields"] = entry["fields"]
+        else:
+            data.update({"refs": entry["refs"], "kinds": entry["kinds"]})
+        if say:
+            data["say"] = say
+        _journal(entry["kind"], data=data, summary=entry["summary"])
 
 
 async def _say_agent_board_change(before: dict, after: dict, changes: dict, *, say: str = "",
@@ -12318,7 +15972,12 @@ async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
     _journal_board_change(before, moodboard, changes)
     await _broadcast_stored_asset("moodboard", moodboard, edit={"touched": changes["touched"], "undo": None})
     await _say_agent_board_change(before, moodboard, changes)
-    return _moodboard_out(moodboard)
+    # The answer is the board plus `undo`, the `restore` that takes this
+    # write back (the shape `/edits` answers with), made from the same diff:
+    # Moodboard Studio's field steps undo with it, and so can any caller.
+    # Only the caller gets it; the broadcast's stays null.
+    undo = {"ops": [{"op": "restore", "slices": changes["slices"]}]} if changes["slices"] else {"ops": []}
+    return {**_moodboard_out(moodboard), "undo": undo}
 
 
 @app.post("/api/moodboards/{moodboard_id}/edits")
@@ -12389,9 +16048,10 @@ async def analyze_moodboard_route(moodboard_id: str) -> dict:
         # saves an old board's layout) finds its image headers already read.
         moodboard = await asyncio.to_thread(store.get, moodboard_id)
     except ValueError:
-        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
     if moodboard is None:
-        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+        # In Recently deleted: say so (and how to restore it), as GET does.
+        return _asset_not_found("moodboard", moodboard_id)
 
     from services.moodboard_analysis import analysis_is_current, analyze_moodboard
     from services.moodboard_store import VersionConflict
@@ -12413,7 +16073,7 @@ async def analyze_moodboard_route(moodboard_id: str) -> dict:
             if not analysis_is_current(moodboard, analysis):
                 analysis = await asyncio.to_thread(analyze_moodboard, moodboard)
         except (KeyError, ValueError):
-            raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+            raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
     await _broadcast_stored_asset("moodboard", moodboard, edit=_UNTOUCHED_LAYOUT)
     await _say_agent_action(moodboard_actions.describe_write("analyzed", moodboard))
     return _moodboard_out(moodboard)
@@ -12441,9 +16101,9 @@ async def dry_run_moodboard_analysis(moodboard_id: str, body: MoodboardDryRunReq
     try:
         moodboard = _moodboard_store().get(moodboard_id, laid_out=False)  # nor does the dry run
     except ValueError:
-        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
     if moodboard is None:
-        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
     # It reads every image file, so it runs off the event loop.
     return await asyncio.to_thread(dry_run, moodboard, thresholds)
 
@@ -12460,9 +16120,9 @@ def _reader_board(moodboard_id: str) -> dict:
     try:
         board = _moodboard_store().get(moodboard_id, laid_out=False)  # a read never writes the board
     except ValueError:
-        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
     if board is None:
-        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
     return board
 
 
@@ -12509,7 +16169,7 @@ def _reader_spend_hold(source: Any, estimate: dict, settings: Mapping[str, Any],
     decision = agent_spend.decide(items, [], settings=settings, pricing=pricing, definitions=node_registry.get_all(),
                                   budgets=_spend_budgets(key, settings), how_to_ask=ask)
     if decision.refusal:
-        raise HTTPException(status_code=403, detail=decision.refusal)
+        raise _person_only_refusal(decision.refusal)
     at = agent_spend_ledger.record(key, label, decision.charge, decision.plan_charge)
     node = str(items[0]["definitionId"])
     shares = {part: (node, amount) for part, amount in (estimate.get("shares") or {}).items()}
@@ -12637,7 +16297,7 @@ async def delete_moodboard(moodboard_id: str) -> dict:
     try:
         record = store.delete(moodboard_id, deleted_by=actor_record(actor_for_headers(current_request_headers())))
     except (KeyError, ValueError):
-        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
     await _broadcast_stored_asset("moodboard", None, moodboard_id, deleted=True)
     await _say_agent_action(moodboard_actions.describe_write("deleted", record))
     return {"status": "trashed", "id": moodboard_id, "trashed": record}
@@ -12682,15 +16342,17 @@ async def _move_stored_asset(kind: str, asset_id: str, body: AssetMoveBody) -> d
     try:
         live = store.get(asset_id)
     except ValueError:
-        raise HTTPException(status_code=404, detail=f"{noun} '{asset_id}' not found")
+        raise _stored_asset_gone(kind, f"{noun} '{asset_id}' not found")
     if live is None:
         record = _trashed_asset(kind, asset_id)
         if record is None:
-            raise HTTPException(status_code=404, detail=f"{noun} '{asset_id}' not found")
+            raise _stored_asset_gone(kind, f"{noun} '{asset_id}' not found")
         return JSONResponse(status_code=409, content={
-            "detail": (f"{noun} '{asset_id}' is in Recently deleted. Restore it first "
-                       f"(nebula trash restore {kind} {asset_id}, or POST /api/trash/{kind}/{asset_id}/restore), "
-                       "then move it."),
+            "detail": refusal_copy.refusal_detail(
+                f"{noun} '{asset_id}' is in Recently deleted. Restore it first "
+                f"(nebula trash restore {kind} {asset_id}, or POST /api/trash/{kind}/{asset_id}/restore), "
+                "then move it.",
+                f"That {_person_noun(kind)} is in Recently deleted. Restore it first, then move it."),
             "code": "in_trash",
             "trashed": record,
         })
@@ -12698,7 +16360,7 @@ async def _move_stored_asset(kind: str, asset_id: str, body: AssetMoveBody) -> d
     try:
         before, after, moved = store.move(asset_id, target)
     except KeyError:  # deleted between the read and the move
-        raise HTTPException(status_code=404, detail=f"{noun} '{asset_id}' not found")
+        raise _stored_asset_gone(kind, f"{noun} '{asset_id}' not found")
     except FileExistsError as exc:
         raise HTTPException(status_code=409, detail=(
             f"{noun} '{asset_id}' can't move: {exc}. Nothing was changed.")) from exc
@@ -12771,16 +16433,31 @@ def _asset_noun(kind: str) -> str:
     return "Moodboard" if kind == "moodboard" else "Character"
 
 
+def _person_noun(kind: str) -> str:
+    """The thing as the person's UI names it (GM's 404 pattern, error-copy round 3)."""
+    return {"style": "style", "moodboard": "board"}.get(kind, "character")
+
+
+def _stored_asset_gone(kind: str, specific: str) -> HTTPException:
+    noun = _person_noun(kind)
+    return refusal_copy.not_found(specific, noun, f"{noun}s")
+
+
 def _asset_not_found(kind: str, asset_id: str) -> JSONResponse:
     """404 for a board or character that isn't live. When it is in Recently
     deleted the body says so (code "in_trash", with the trash record), so a
-    card can offer Restore instead of "not found"."""
+    card can offer Restore instead of "not found". The person reads GM's
+    lines (error-copy round 3); agents keep the id and the restore command."""
     record = _trashed_asset(kind, asset_id)
+    noun = _person_noun(kind)
     if record is None:
-        return JSONResponse(status_code=404, content={"detail": f"{_asset_noun(kind)} '{asset_id}' not found"})
+        return JSONResponse(status_code=404, content={"detail": refusal_copy.refusal_detail(
+            f"{_asset_noun(kind)} '{asset_id}' not found", refusal_copy.gone(noun, f"{noun}s"))})
     return JSONResponse(status_code=404, content={
-        "detail": (f"{_asset_noun(kind)} '{asset_id}' is in Recently deleted. Restore it with "
-                   f"nebula trash restore {kind} {asset_id} (POST /api/trash/{kind}/{asset_id}/restore)."),
+        "detail": refusal_copy.refusal_detail(
+            f"{_asset_noun(kind)} '{asset_id}' is in Recently deleted. Restore it with "
+            f"nebula trash restore {kind} {asset_id} (POST /api/trash/{kind}/{asset_id}/restore).",
+            f"That {noun} is in Recently deleted. Restore it, then try again."),
         "code": "in_trash",
         "trashed": record,
     })
@@ -12796,9 +16473,15 @@ def _trash_scope(scope: str | None, project_id: str | None) -> None:
 
 def _project_trash_items() -> list[dict[str, Any]]:
     with project_store.transaction() as catalog:
-        if purge_expired_trash(catalog):
+        expired = purge_expired_trash(catalog)
+        if expired:
             project_store.commit(catalog)
-        return [{"kind": "project", **entry} for entry in _trash_listing(catalog)]
+        items = [{"kind": "project", **entry} for entry in _trash_listing(catalog)]
+        kept = set(catalog["projects"]) | set(catalog.get("trash") or {})
+    if expired:
+        # Trash past its 30 days took its question sets with it.
+        agent_questions.keep_projects(kept)
+    return items
 
 
 @app.get("/api/trash")
@@ -12844,7 +16527,7 @@ async def restore_trashed(kind: str, item_id: str) -> dict[str, Any]:
         live = _stored_asset(kind, item_id)
         if live is not None:
             return {"restored": kind, "id": item_id, "asset": _asset_out(kind, live), "alreadyRestored": True}
-        raise HTTPException(status_code=404, detail=f"{_asset_noun(kind)} '{item_id}' isn't in Recently deleted")
+        raise refusal_copy.refusal(404, f"{_asset_noun(kind)} '{item_id}' isn't in Recently deleted", refusal_copy.gone_from_trash(_person_noun(kind)))
     await _broadcast_stored_asset(kind, asset)
     if kind == "moodboard":
         await _say_agent_action(moodboard_actions.describe_write("restored", asset))
@@ -12868,7 +16551,7 @@ async def purge_trashed(kind: str, item_id: str) -> dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except KeyError:
-        raise HTTPException(status_code=404, detail=f"{_asset_noun(kind)} '{item_id}' isn't in Recently deleted")
+        raise refusal_copy.refusal(404, f"{_asset_noun(kind)} '{item_id}' isn't in Recently deleted", refusal_copy.gone_from_trash(_person_noun(kind)))
     # A card that showed it "in Recently deleted" now says it's gone.
     await _broadcast_stored_asset(kind, None, item_id, deleted=True)
     if kind == "style":
@@ -12914,7 +16597,11 @@ async def empty_trash(kind: str | None = None, scope: str | None = None,
             if doomed:
                 purged += len(doomed)
                 project_store.commit(catalog)
+                node_errors.keep_projects(set(catalog["projects"]) | set(trash))
+            kept = set(catalog["projects"]) | set(trash)
         if doomed:
+            # Their question sets went with their records; the book forgets them too.
+            agent_questions.keep_projects(kept)
             await _broadcast_projects_changed("purged")
     return {"purged": purged}
 
@@ -12967,6 +16654,7 @@ async def create_preset(body: PresetCreate) -> dict:
     # params from before every upgrade: version 0 (services/saved_graph_upgrades.py).
     params_version = _preset_params_version(body, 0)
     _check_style_write(body.name, body.modelId, body.params, None)
+    _check_stored_images("style", body.model_dump())
     try:
         preset = preset_store.create(
             name=body.name, category=body.category, prompt=body.prompt, params=body.params,
@@ -13025,6 +16713,11 @@ async def update_preset(preset_id: str, body: PresetUpdate) -> dict:
                        fields.get("params", before.get("params") or {}),
                        before if after_model == (before.get("modelId") or None) else None,
                        before_params=before.get("params") or {})
+    # A version behind (versions only grow): the update below is the 409 the
+    # caller re-reads from, so an outside link it still holds isn't the answer.
+    version = before.get("version")
+    if not (base_version is not None and isinstance(version, int) and version > base_version):
+        _check_stored_images("style", fields, before=before)
     try:
         preset = preset_store.update(preset_id, params_version=params_version, base_version=base_version, **fields)
     except KeyError:
@@ -13055,7 +16748,7 @@ async def delete_preset(preset_id: str) -> dict:
     try:
         record = preset_store.delete(preset_id, deleted_by=actor_record(actor_for_headers(current_request_headers())))
     except (KeyError, ValueError):
-        raise HTTPException(status_code=404, detail=f"Style '{preset_id}' not found")
+        raise refusal_copy.not_found(f"Style '{preset_id}' not found", "style", "styles")
     await _style_written("deleted", record, deleted=True)
     return {"status": "trashed", "id": preset_id, "trashed": record}
 
@@ -13081,7 +16774,8 @@ def _check_style_write(name: Any, model_id: str | None, params: Mapping[str, Any
     - Nobody but the person may make a Style that changes who bills its
       model's run (``_provider``, ``_kreaAuth``; ``_refuse_agent_billing_change``).
       ``before`` is the Style as it was when the model stays the same.
-    - An agent's ``modelId`` must be a node in the catalog."""
+    - An agent's ``modelId`` must be a node id in the catalog; a display
+      name is refused naming its id (``node_lookup.unknown_definition``)."""
     params = params if isinstance(params, Mapping) else {}
     label = f"Style “{str(name or '')[:60]}”"
     if has_agent_marker(current_request_headers()):
@@ -13089,15 +16783,19 @@ def _check_style_write(name: Any, model_id: str | None, params: Mapping[str, Any
         _refuse_agent_internal_params({key: value for key, value in params.items()
                                        if key not in was or was.get(key) != value}, "style")
         if model_id and node_registry.get(model_id) is None:
+            # Strict like the node writes (a Style stores its modelId and Create
+            # applies it), and the refusal names the exact-name match the same way.
             raise HTTPException(status_code=400, detail=(
-                f"style.modelId: there's no node {str(model_id)[:64]!r}; find_nodes (`nebula nodes`) lists them"))
+                f"style.modelId: {node_lookup.unknown_definition(str(model_id)[:64], node_registry.get_all())}; "
+                "find_nodes (`nebula nodes`) lists them"))
     if model_id:
         try:
             _refuse_agent_billing_change([(label, model_id, (before or {}).get("params") if before else None, params)])
-        except HTTPException as exc:
+        except (HTTPException, PersonGateError) as exc:
             # The node sentences end "propose the change instead with
             # propose_change"; a Style change can't be proposed.
-            if exc.status_code == 403 and isinstance(exc.detail, str):
+            status = exc.status_code if isinstance(exc, HTTPException) else exc.status
+            if status == 403 and isinstance(exc.detail, str):
                 exc.detail = _STYLE_PROPOSE_RE.sub(_STYLE_BILLING_INSTEAD, exc.detail)
             raise
 
@@ -13276,17 +16974,29 @@ async def export_file(body: dict[str, Any]) -> dict:
     except OSError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
-    # Determine filename with collision avoidance
+    # Determine filename with collision avoidance. The copy goes to a
+    # dot-named temporary file and is linked into place under a name nothing
+    # holds yet, so an export never replaces a file and never shows half
+    # written (the export folder may be inside the output store, whose files
+    # the spending check measures: services/input_sizes.py). On a drive with
+    # no hard links (exFAT, FAT) link_new copies it in exclusively instead.
     stem = Path(filename).stem
     suffix = Path(filename).suffix
     dest = dest_dir / filename
     counter = 1
-    while dest.exists():
-        dest = dest_dir / f"{stem} -{counter}{suffix}"
-        counter += 1
-
     try:
-        _shutil.copy2(require_allowed_path(src), require_allowed_path(dest))
+        partial = require_allowed_path(dest_dir / f".{filename}.{uuid4().hex}.part")
+        _shutil.copy2(require_allowed_path(src), partial)
+        try:
+            while True:
+                try:
+                    link_new(partial, require_allowed_path(dest))
+                    break
+                except FileExistsError:
+                    dest = dest_dir / f"{stem} -{counter}{suffix}"
+                    counter += 1
+        finally:
+            partial.unlink(missing_ok=True)
     except OSError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 

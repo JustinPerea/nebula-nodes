@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable, Mapping, NamedTuple
 
 from models.graph import GraphNode, PortValueDict
+from execution.person_line import missing_file_line, with_person_line
 
 RouteRun = Callable[..., Awaitable[dict[str, Any]]]
 
@@ -45,6 +46,40 @@ class RouteClient(NamedTuple):
 
 
 # -- Shared structure ----------------------------------------------------------
+
+class Where(str):
+    """Who refuses a run, twice over: the text (``Replicate's
+    black-forest-labs/flux-3``) names the provider's model or endpoint id
+    for agents, MCP and the run record, and ``person`` (``FLUX 3 Video on
+    Replicate``) is how the card's line names it, by the node's name on its
+    provider (execution/person_line.py: no ids on the card)."""
+
+    person: str
+
+    def __new__(cls, text: str, person: str) -> "Where":
+        where = super().__new__(cls, text)
+        where.person = person
+        return where
+
+
+def _person(where: str) -> str:
+    """``where`` as the card names it; a plain string may carry an id, so the
+    card says "This node" for it."""
+    return where.person if isinstance(where, Where) else "This node"
+
+
+def refuse(where: str, text: str, person: str | None = None) -> ValueError:
+    """A run refused before any request: ``{where} {text}`` for agents, and
+    ``{where.person} {person or text}`` on the card. ``person`` is the tail
+    in words when ``text`` names a field key or a value."""
+    return with_person_line(ValueError(f"{where} {text}"), f"{_person(where)} {person or text}")
+
+
+def where_for(node: GraphNode, route: Mapping[str, Any], text: str) -> Where:
+    """``text`` for agents, and the node's name on the route's provider."""
+    from services import node_route
+
+    return Where(text, f"{_node_name(_definition(node))} on {node_route.provider_label(route.get('provider'))}")
 
 def port_values(inputs: Mapping[str, Any], port: str) -> list[Any]:
     """A port's values as a list (a list port's items, else its one value),
@@ -59,7 +94,8 @@ def port_values(inputs: Mapping[str, Any], port: str) -> list[Any]:
 def one_value(inputs: Mapping[str, Any], port: str, where: str) -> Any:
     values = port_values(inputs, port)
     if len(values) > 1:
-        raise ValueError(f"{where} takes one {port}, but {len(values)} are wired")
+        raise refuse(where, f"takes one {port}, but {len(values)} are connected",
+                     f"takes one {port.replace('_', ' ')}, but {len(values)} are connected. Disconnect the extra ones.")
     return values[0] if values else None
 
 
@@ -77,7 +113,9 @@ def refuse_unwired(inputs: Mapping[str, Any], takes: set[str], where: str) -> No
     takes, so a wired input is never silently left out."""
     extra = sorted(wired(inputs) - takes)
     if extra:
-        raise ValueError(f"{where} can't take the wired {', '.join(extra)}. Disconnect it or choose another provider.")
+        raise refuse(where, f"can't take the connected {', '.join(extra)}. Disconnect it or choose another provider.",
+                     f"can't take the connected {', '.join(port.replace('_', ' ') for port in extra)}. "
+                     "Disconnect it or choose another provider.")
 
 
 def refuse_end_alone(inputs: Mapping[str, Any], where: str) -> None:
@@ -86,7 +124,8 @@ def refuse_end_alone(inputs: Mapping[str, Any], where: str) -> None:
     video client checks this before its first request, so the recipe stops
     the same way on every route (and none bills it)."""
     if port_values(inputs, "end_image") and not (port_values(inputs, "start_image") or port_values(inputs, "keyframes")):
-        raise ValueError(f"{where} needs a start image (or keyframes) to end on an end image")
+        raise refuse(where, "needs a start image (or keyframes) to end on an end image",
+                     "needs a start image or keyframes to end on an end image.")
 
 
 # The most images BFL, fal and Replicate take for one FLUX 3 video, start
@@ -107,8 +146,10 @@ def video_frames(inputs: Mapping[str, Any], where: str) -> list[Any]:
     end = port_values(inputs, "end_image")[:1]
     frames = [*frames, *end]
     if len(frames) > VIDEO_MAX_FRAMES:
-        raise ValueError(f"{where} takes at most {VIDEO_MAX_FRAMES} images in all (start image, keyframes and end "
-                         f"image), but {len(frames)} are wired. Disconnect {len(frames) - VIDEO_MAX_FRAMES}.")
+        raise refuse(where, f"takes at most {VIDEO_MAX_FRAMES} images in all (start image, keyframes and end "
+                     f"image), but {len(frames)} are connected. Disconnect {len(frames) - VIDEO_MAX_FRAMES}.",
+                     f"takes at most {VIDEO_MAX_FRAMES} images in all, counting the start image, keyframes and "
+                     f"end image, but {len(frames)} are connected. Disconnect {len(frames) - VIDEO_MAX_FRAMES}.")
     return frames
 
 
@@ -125,7 +166,9 @@ def local_media_path(value: Any) -> Path | None:
         return None
     path = require_allowed_path(Path(ref))
     if not path.is_file():
-        raise ValueError(f"A wired input isn't a readable file: {Path(ref).name}")
+        raise with_person_line(
+            ValueError(f"A connected input isn't a readable file: {Path(ref).name}"),
+            missing_file_line("file", ref))
     return path
 
 
@@ -177,6 +220,10 @@ def _definition(node: GraphNode) -> dict[str, Any]:
     return maker_routes.definition_for(node.definition_id)
 
 
+def _node_name(definition: Mapping[str, Any]) -> str:
+    return str(definition.get("displayName") or "This node")
+
+
 def _set(params: Mapping[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in params.items() if value is not None and value != ""}
 
@@ -222,8 +269,9 @@ def bfl_path(endpoint: Any) -> str:
     return path[len("v1/"):] if path.startswith("v1/") else path
 
 
-def bfl_body(path: str, params: Mapping[str, Any], inputs: Mapping[str, Any]) -> dict[str, Any]:
-    where = f"Black Forest Labs' {path}"
+def bfl_body(path: str, params: Mapping[str, Any], inputs: Mapping[str, Any],
+             node_name: str = "This node") -> dict[str, Any]:
+    where = Where(f"Black Forest Labs' {path}", f"{node_name} on Black Forest Labs")
     body = _set(params)
     prompt = prompt_of(inputs)
     if path in BFL_IMAGE_PATHS:
@@ -238,14 +286,15 @@ def bfl_body(path: str, params: Mapping[str, Any], inputs: Mapping[str, Any]) ->
         size = body.pop("image_size", None)
         if size is not None:
             if not isinstance(size, Mapping) or set(size) != {"width", "height"}:
-                raise ValueError(f"{where} takes a size as width and height, not {size!r}")
+                raise refuse(where, f"takes a size as width and height, not {size!r}",
+                             "can't use the saved size. Pick one in “Size”, then run it again.")
             body.update(width=size["width"], height=size["height"])
     elif path == BFL_VIDEO_PATH:
         refuse_unwired(inputs, {"prompt", "start_image", "keyframes", "end_image", "start_video"}, where)
         start_video = one_value(inputs, "start_video", where)
         frames = video_frames(inputs, where)
         if start_video is not None and frames:
-            raise ValueError(f"{where} continues a video or animates images, not both. Disconnect one.")
+            raise refuse(where, "continues a video or animates images, not both. Disconnect one.")
         if start_video is not None:
             body.update(mode="v2v", start_video=media_url(start_video))
         elif frames:
@@ -256,20 +305,20 @@ def bfl_body(path: str, params: Mapping[str, Any], inputs: Mapping[str, Any]) ->
         refuse_unwired(inputs, {"prompt", "start_video", "video"}, where)
         source = one_value(inputs, "start_video", where) or one_value(inputs, "video", where)
         if source is None:
-            raise ValueError(f"{where} needs a video to edit")
+            raise refuse(where, "needs a video to edit", "needs a video to edit. Connect one, then run the node again.")
         body["video"] = media_url(source)
     elif path == BFL_VIDEO_UPSCALE_PATH:
         refuse_unwired(inputs, {"prompt", "video", "start_video"}, where)
         source = one_value(inputs, "video", where) or one_value(inputs, "start_video", where)
         if source is None:
-            raise ValueError(f"{where} needs a video to upscale")
+            raise refuse(where, "needs a video to upscale", "needs a video to upscale. Connect one, then run the node again.")
         body["input_video"] = media_url(source)
     else:
         raise ValueError(f"Nebula has no request shape for Black Forest Labs' {path or '(no path)'} yet")
     if prompt is not None:
         body["prompt"] = prompt
     elif path != BFL_VIDEO_UPSCALE_PATH:
-        raise ValueError(f"{where} needs a prompt")
+        raise refuse(where, "needs a prompt", "needs a prompt. Connect one, then run the node again.")
     return body
 
 
@@ -296,7 +345,7 @@ async def run_bfl(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: d
     params = node.params
     if path in BFL_FLUX2_PATHS and "image_size" not in _set(params):
         params = {**params, "image_size": flux2_default_size(definition, route)}
-    body = bfl_body(path, params, inputs)
+    body = bfl_body(path, params, inputs, _node_name(definition))
     result = await bfl.run_task(bfl.api_key(api_keys), path, body, media_type=data_type, node_id=node.id, emit=emit)
     return as_output(definition, result.path)
 
@@ -385,18 +434,21 @@ def keyframe_indexes(count: int, duration: int) -> list[int]:
     return [round(i * last / (count - 1)) for i in range(count)]
 
 
-def fal_fields(endpoint: str, params: Mapping[str, Any], inputs: Mapping[str, Any]) -> dict[str, Any]:
+def fal_fields(endpoint: str, params: Mapping[str, Any], inputs: Mapping[str, Any],
+               node_name: str = "This node") -> dict[str, Any]:
     """The media fields for ``endpoint`` from the wired ports."""
     shape = fal_shape(endpoint)
-    where = f"fal.ai's {endpoint}"
+    where = Where(f"fal.ai's {endpoint}", f"{node_name} on fal.ai")
     if shape == FAL_KEYFRAMES:
         refuse_unwired(inputs, {"prompt", "start_image", "keyframes", "end_image"}, where)
         frames = video_frames(inputs, where)
         if not frames:
-            raise ValueError(f"{where} needs at least one keyframe image")
+            raise refuse(where, "needs at least one keyframe image", "needs at least one keyframe image. Connect one, then run the node again.")
         duration = params.get("duration", FAL_DEFAULT_KEYFRAME_DURATION)
         if isinstance(duration, bool) or not isinstance(duration, int):
-            raise ValueError(f"{where} needs a set duration in seconds to place its keyframes (got {duration!r})")
+            raise refuse(where, f"needs a set duration in seconds to place its keyframes (got {duration!r})",
+                         "needs a number of seconds to place its keyframes. Set “Duration”, "
+                         "then run it again.")
         return {"keyframes": [{"image_url": media_url(value), "frame_index": index}
                               for value, index in zip(frames, keyframe_indexes(len(frames), duration))]}
     if shape not in _FAL_FIELDS:
@@ -410,7 +462,11 @@ def fal_fields(endpoint: str, params: Mapping[str, Any], inputs: Mapping[str, An
         if not values:
             continue
         if field in fields:
-            raise ValueError(f"{where} takes one source for {field}; disconnect one of the wired inputs")
+            both = [p.replace("_", " ") for p, (f, _many) in table.items() if f == field and port_values(inputs, p)]
+            kind = "video" if "video" in field else "image" if "image" in field else "file"
+            raise refuse(where, f"takes one source for {field}; disconnect one of the connected inputs",
+                         f"takes one source {kind}, but the {' and the '.join(both)} are both connected. "
+                         "Disconnect one.")
         fields[field] = [media_url(v) for v in values] if many else media_url(one_value(inputs, port, where))
     return fields
 
@@ -437,7 +493,7 @@ async def run_fal(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: d
     endpoint_id = str(endpoint if endpoint is not None else route.get("endpoint") or "").strip("/")
     dropped = FAL_ENDPOINT_SWITCHES | FAL_ENDPOINT_DROPS.get(endpoint_id, frozenset())
     sent = {key: value for key, value in _set(node.params).items() if key not in dropped}
-    params = {**sent, **fal_fields(endpoint_id, node.params, inputs)}
+    params = {**sent, **fal_fields(endpoint_id, node.params, inputs, _node_name(definition))}
     fal_node = _fal_wrapper_node(node.model_copy(update={"params": params}), endpoint_id)
     prompt = prompt_of(inputs)
     fal_inputs = {"prompt": PortValueDict(type="Text", value=prompt)} if prompt is not None else {}
@@ -470,7 +526,7 @@ def replicate_input(params: Mapping[str, Any], inputs: Mapping[str, Any], where:
         refuse_unwired(inputs, {"prompt", "video"}, where)
         source = one_value(inputs, "video", where)
         if source is None:
-            raise ValueError(f"{where} needs a video")
+            raise refuse(where, "needs a video", "needs a video. Connect one, then run the node again.")
         body = _set(params)
         prompt = prompt_of(inputs)
         if prompt is not None:
@@ -481,12 +537,12 @@ def replicate_input(params: Mapping[str, Any], inputs: Mapping[str, Any], where:
     body = _set(params)
     prompt = prompt_of(inputs)
     if prompt is None:
-        raise ValueError(f"{where} needs a prompt")
+        raise refuse(where, "needs a prompt", "needs a prompt. Connect one, then run the node again.")
     body["prompt"] = prompt
     images = [*port_values(inputs, "images"), *video_frames(inputs, where)]
     start_video = one_value(inputs, "start_video", where)
     if start_video is not None and images:
-        raise ValueError(f"{where} continues a video or uses images, not both. Disconnect one.")
+        raise refuse(where, "continues a video or uses images, not both. Disconnect one.")
     if images:
         body["images"] = images
     if start_video is not None:
@@ -501,7 +557,7 @@ async def run_replicate_model(node: GraphNode, inputs: dict[str, PortValueDict],
     definition = _definition(node)
     _, data_type = output_port(definition)
     model = str(endpoint if endpoint is not None else route.get("endpoint") or "")
-    body, media = replicate_input(node.params, inputs, f"Replicate's {model}", model)
+    body, media = replicate_input(node.params, inputs, where_for(node, route, f"Replicate's {model}"), model)
     path = await replicate_model.run_model(model, body, replicate_model.api_key(api_keys), media_type=data_type,
                                            media_fields=media, node_id=node.id, emit=emit)
     return as_output(definition, path)
@@ -522,8 +578,10 @@ def public_frame_url(value: Any, where: str) -> str:
 
     ref = local_media_ref(str(value))
     if not ref.startswith(("http://", "https://")):
-        raise ValueError(f"{where} takes frame images only as public http(s) URLs, not a Nebula output or an "
-                         "inline image. Choose another provider for it, or wire an image from a public URL.")
+        raise refuse(where, "takes frame images only as public http(s) URLs, not a Nebula output or an "
+                     "inline image. Choose another provider for it, or connect an image from a public URL.",
+                     "takes frame images only from a public web address, not a Nebula output or an inline image. "
+                     "Choose another provider, or connect an image from a public web address.")
     return ref
 
 
@@ -533,11 +591,11 @@ async def run_openrouter_images(node: GraphNode, inputs: dict[str, PortValueDict
 
     definition = _definition(node)
     model = str(endpoint if endpoint is not None else route.get("endpoint") or "")
-    where = f"OpenRouter's {model}"
+    where = where_for(node, route, f"OpenRouter's {model}")
     refuse_unwired(inputs, {"prompt", "images"}, where)
     prompt = prompt_of(inputs)
     if prompt is None:
-        raise ValueError(f"{where} needs a prompt")
+        raise refuse(where, "needs a prompt", "needs a prompt. Connect one, then run the node again.")
     body = media.request_body(model, prompt, dict(node.params), media.IMAGE_FIELDS)
     references = [media.image_url(media_url(v)) for v in port_values(inputs, "images")]
     if references:
@@ -552,14 +610,14 @@ async def run_openrouter_videos(node: GraphNode, inputs: dict[str, PortValueDict
 
     definition = _definition(node)
     model = str(endpoint if endpoint is not None else route.get("endpoint") or "")
-    where = f"OpenRouter's {model}"
+    where = where_for(node, route, f"OpenRouter's {model}")
     # frame_images takes only a first and a last frame; a source video has no
     # documented request shape (handlers/openrouter_media.py).
     refuse_unwired(inputs, {"prompt", "start_image", "end_image"}, where)
     refuse_end_alone(inputs, where)
     prompt = prompt_of(inputs)
     if prompt is None:
-        raise ValueError(f"{where} needs a prompt")
+        raise refuse(where, "needs a prompt", "needs a prompt. Connect one, then run the node again.")
     body = media.request_body(model, prompt, dict(node.params), media.VIDEO_FIELDS)
     frames = []
     for port, frame_type in (("start_image", "first_frame"), ("end_image", "last_frame")):
@@ -599,7 +657,7 @@ async def run_krea(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: 
     key = catalog_key_for(endpoint if endpoint is not None else route.get("endpoint"))
     if output_port(definition)[1] == "Video":
         # Krea's catalog schema leaves end_image optional on its own.
-        refuse_end_alone(inputs, f"Krea's {key}")
+        refuse_end_alone(inputs, where_for(node, route, f"Krea's {key}"))
     result = await handle_krea_catalog(key, node, krea_inputs(catalog_models()[key], inputs), api_keys, emit=emit)
     return rekey(definition, result, "Krea")
 

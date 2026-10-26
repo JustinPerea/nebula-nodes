@@ -32,9 +32,11 @@ from __future__ import annotations
 
 from typing import Any, Awaitable, Callable
 
-from models.events import ExecutionEvent
+from models.events import ExecutionEvent, add_run_note
 from models.graph import GraphNode, PortValueDict
 from services.character_store import CharacterStore
+from services.stored_image_refs import is_outside_link
+from execution.person_line import with_person_line
 
 
 def _in_trash(character_id: str) -> bool:
@@ -58,7 +60,9 @@ async def handle_character_node(
     params = node.params or {}
     raw = params.get("character")
     if not isinstance(raw, str) or not raw.strip():
-        raise ValueError("No character chosen: set character to a character id (GET /api/characters lists them)")
+        raise with_person_line(
+            ValueError("No character chosen: set character to a character id (GET /api/characters lists them)"),
+            "Choose a character in “Character”, then run it again.")
     character_id = raw.strip()
     try:
         character = CharacterStore().get(character_id)
@@ -66,17 +70,37 @@ async def handle_character_node(
         character = None
     if character is None:
         if _in_trash(character_id):
-            raise ValueError(f"Character {character_id!r} is in Recently deleted. Restore it (Character Studio, "
-                             f"or nebula trash restore character {character_id}) and run again.")
-        raise ValueError(f"Character {character_id!r} not found; it may have been deleted for good. "
-                         "Pick another character for this node.")
+            raise with_person_line(ValueError(f"Character {character_id!r} is in Recently deleted. Restore it (Character Studio, "
+                             f"or nebula trash restore character {character_id}) and run again."),
+                "This node's character is in Recently deleted. Restore it in Character Studio, then run the node again.")
+        raise with_person_line(ValueError(f"Character {character_id!r} not found; it may have been deleted for good. "
+                         "Pick another character for this node."),
+            "This node's character can't be found. It may have been deleted for good. Pick another character for this node.")
 
     # Build the lightweight bundle. referenceViews + frozenTraitString are
-    # passed through verbatim — no copy-with-sort, no string normalization.
+    # passed through verbatim — no copy-with-sort, no string normalization —
+    # except a view that is an image link from outside Nebula: a Character
+    # saved before writes were checked (services/stored_image_refs.py) can
+    # hold one. It stays on the Character, but the bundle is what a run sends
+    # and what the Inspector's Last output draws, so it is left out (as
+    # Create leaves it out of a Style's references) and the run says so.
+    views = list(character["referenceViews"])
+    kept = [view for view in views if not (isinstance(view, str) and is_outside_link(view))]
+    if len(kept) < len(views):
+        name = character.get("name") or character_id
+        if not kept:
+            raise with_person_line(ValueError(f"Every reference view of Character {name!r} is an image link from outside Nebula, "
+                             "so none can be used. Replace them with uploads in Character Studio and run again."), "Every reference view of this node's character is an image link from outside Nebula, so none can be used. "
+                             "Replace them with uploads in Character Studio, then run the node again.")
+        left_out = len(views) - len(kept)
+        add_run_note(f"{left_out} reference view{'s' if left_out != 1 else ''} of Character {name!r} "
+                     f"{'are image links' if left_out != 1 else 'is an image link'} from outside Nebula, so "
+                     f"{'they were' if left_out != 1 else 'it was'} left out. Replace "
+                     f"{'them' if left_out != 1 else 'it'} with an upload in Character Studio.")
     bundle: dict[str, Any] = {
         "characterId": character["id"],
         "name": character["name"],
-        "referenceViews": character["referenceViews"],
+        "referenceViews": kept,
         "frozenTraitString": character["frozenTraitString"],
         "seed": character["seed"],
         "consistencyStrength": character["consistencyStrength"],

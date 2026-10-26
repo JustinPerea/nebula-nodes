@@ -1,6 +1,8 @@
 import type { Edge, InternalNode, Node } from '@xyflow/react';
 import type { ModelNodeDefinition, NodeData } from '../types';
 import { apiFetch } from './backend';
+import { apiRequest } from './apiRequest';
+import { RequestFailedError } from './errorCopy';
 import { formatUsd, formatUsdRange } from './pricing';
 import { resolveAnchor, type Point } from './agentCursorMotion';
 import type { ProposalNotReady, ProposalPersonValues, ProposalView } from './wsClient';
@@ -29,24 +31,17 @@ export interface AcceptedProposal {
 }
 
 /** A failed accept/reject, keeping the HTTP status so the bar can explain a 403. */
-export class ProposalRequestError extends Error {
-  readonly status: number;
-
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
+/** A refused accept or reject: heading + reason like every request's error
+ * (GM, error-copy round 2); `status` tells a gone proposal from a refusal. */
+export class ProposalRequestError extends RequestFailedError {
+  constructor(status: number, reason: string, options: { heading?: string; detail?: unknown; code?: string | null } = {}) {
+    super(options.heading ?? '', status, { reason, detail: options.detail, code: options.code });
+    this.name = 'ProposalRequestError';
   }
 }
 
-async function detailOf(response: Response, fallback: string): Promise<string> {
-  try {
-    const body = (await response.json()) as { detail?: unknown };
-    if (typeof body?.detail === 'string' && body.detail) return body.detail;
-  } catch {
-    /* not JSON */
-  }
-  return fallback;
-}
+const asProposalError = (error: RequestFailedError) =>
+  new ProposalRequestError(error.status, error.reason, { heading: error.heading, detail: error.detail, code: error.code });
 
 /**
  * Accept a proposal. The key came only over this canvas's WebSocket; the
@@ -58,14 +53,11 @@ export async function acceptProposal(
   acceptKey: string,
   positions: Record<string, Point>,
 ): Promise<AcceptedProposal> {
-  const response = await apiFetch(`/api/canvas/proposals/${encodeURIComponent(id)}/accept`, {
+  const response = await apiRequest("Couldn't accept the proposal.", `/api/canvas/proposals/${encodeURIComponent(id)}/accept`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Nebula-Proposal-Key': acceptKey },
     body: JSON.stringify(Object.keys(positions).length > 0 ? { positions } : {}),
-  });
-  if (!response.ok) {
-    throw new ProposalRequestError(response.status, await detailOf(response, `Couldn't accept (${response.status})`));
-  }
+  }, { as: asProposalError });
   const body = (await response.json()) as Partial<AcceptedProposal>;
   return {
     status: 'accepted',
@@ -80,14 +72,11 @@ export async function acceptProposal(
 }
 
 export async function rejectProposal(id: string, acceptKey: string, reason?: string): Promise<void> {
-  const response = await apiFetch(`/api/canvas/proposals/${encodeURIComponent(id)}/reject`, {
+  await apiRequest("Couldn't reject the proposal.", `/api/canvas/proposals/${encodeURIComponent(id)}/reject`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Nebula-Proposal-Key': acceptKey },
     body: JSON.stringify(reason ? { reason } : {}),
-  });
-  if (!response.ok) {
-    throw new ProposalRequestError(response.status, await detailOf(response, `Couldn't reject (${response.status})`));
-  }
+  }, { as: asProposalError });
 }
 
 /**
@@ -220,18 +209,27 @@ export function stillNotReady(
   });
 }
 
-/** "GPT Image 2 (n3) needs OPENAI_API_KEY in Settings > Providers", in find_nodes' words. */
+/** The person's line ("GPT Image 2 needs your OpenAI API key. Add it in
+ * Settings.", round 3f); from a backend older than 3f, find_nodes' words:
+ * "GPT Image 2 (n3) needs OPENAI_API_KEY in Settings > Providers". */
 export function notReadyLine(row: ProposalNotReady): string {
+  if (row.person?.trim()) return row.person.trim();
   // Route messages already start with the node's name.
   return row.missing.startsWith(row.name) ? `${row.ref}: ${row.missing}` : `${row.name} (${row.ref}) ${row.missing}`;
 }
 
-/** "Adds 1 node · 1 wire · changes n4 · runs up to 1 paid model (fal)". */
+/** A ghost card's warning for its not-ready row: the person's line (round 3f), else find_nodes' words. */
+export function notReadyWarning(row: ProposalNotReady | undefined): string | null {
+  if (!row) return null;
+  return row.person?.trim() || row.missing;
+}
+
+/** "Adds 1 node · 1 connection · changes n4 · runs up to 1 paid model (fal)". */
 export function proposalSummary(view: ProposalView): string {
   const parts: string[] = [];
   const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
   if (view.nodes.length) parts.push(`Adds ${plural(view.nodes.length, 'node')}`);
-  if (view.edges.length) parts.push(`${parts.length ? '' : 'Adds '}${plural(view.edges.length, 'wire')}`);
+  if (view.edges.length) parts.push(`${parts.length ? '' : 'Adds '}${plural(view.edges.length, 'connection')}`);
   if (view.params.length) parts.push(`changes ${view.params.map((change) => change.nodeId).join(', ')}`);
   if (view.run.length) {
     const { paidRuns, freeRuns, upTo, providers } = view.cost;

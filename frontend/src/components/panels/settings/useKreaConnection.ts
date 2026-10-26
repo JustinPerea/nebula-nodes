@@ -3,6 +3,7 @@ import {
   getKreaConnection, connectKrea, checkKreaConnection, disconnectKrea, isKreaAuthorizationUrl, type KreaConnectionState,
 } from '../../../lib/kreaConnection';
 import { useUIStore } from '../../../store/uiStore';
+import { failureMessage, failureUnder } from '../../../lib/errorCopy';
 
 /**
  * Krea sign-in state and actions. Lives above the row because the row moves
@@ -22,8 +23,10 @@ export function useKreaConnection() {
     const version = requestVersion.current;
     getKreaConnection().then((state) => {
       if (!cancelled && requestVersion.current === version) setConnection(state);
-    }).catch(() => {
-      if (!cancelled && requestVersion.current === version) setError("Couldn't check Krea. Check that the Nebula backend is running.");
+    }).catch((value: unknown) => {
+      // Round 3f (GM): no answer reads "Nebula's server isn't answering. …";
+      // an answer reads its own reason (errorCopy), under this row's heading.
+      if (!cancelled && requestVersion.current === version) setError(failureUnder(value, "Couldn't check Krea."));
     });
     return () => { cancelled = true; };
   }, [setConnection]);
@@ -51,7 +54,7 @@ export function useKreaConnection() {
     setError(null);
     setLaunchError(null);
     try { setConnection(await action()); }
-    catch (value) { setError(value instanceof Error ? value.message : "Couldn't update the Krea connection."); }
+    catch (value) { setError(failureMessage(value, "Couldn't update the Krea connection.")); }
     finally { setBusy(false); }
   }
 

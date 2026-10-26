@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { ProjectHome, type ProjectHomeProps, type ProjectSummary } from './ProjectHome';
+import { useAssetProposalsStore } from '../../store/assetProposalsStore';
+import { coverProposal } from '../../test/assetProposalFixtures';
 
 vi.mock('../../lib/backend', () => ({ backendAssetUrlSync: (url: string) => `http://127.0.0.1:8060${url}` }));
 
@@ -202,6 +204,28 @@ describe('ProjectHome', () => {
     expect(actions.onRetry).toHaveBeenCalledTimes(1);
   });
 
+  it('error-copy round 2 (GM\'s WRAP rule): beside "Try again" the reason drops its own "try again"', () => {
+    render(<ProjectHome {...props({ projects: [], error: "Couldn't load your projects. Nebula didn't respond. Try again." })} />);
+    expect(screen.getByRole('alert').querySelector('span')?.textContent)
+      .toBe("Couldn't load your projects. Nebula didn't respond.");
+  });
+
+  it('error-copy round 3b: Try again shows only where it redoes the failure, and keeps the full line where it only reloads', () => {
+    const line = "Couldn't open the project. Nebula didn't respond. Try again.";
+    const { rerender } = render(<ProjectHome {...props({ error: line, retry: 'redo' })} />);
+    expect(screen.getByRole('alert').querySelector('span')?.textContent).toBe("Couldn't open the project. Nebula didn't respond.");
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+    // A refusal the same request would get again: no Try again, the whole line.
+    const refusal = "Couldn't open the project. A node is still waiting on World Labs. Check the job in Marble, then use “Checked Marble — forget” in Run History before you try again.";
+    rerender(<ProjectHome {...props({ error: refusal, retry: 'none' })} />);
+    expect(screen.getByRole('alert').textContent).toBe(refusal);
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    // Try again only reloads the saved projects: the button stays, the line stays whole.
+    rerender(<ProjectHome {...props({ error: "Couldn't load the project. Nebula didn't respond. Try again.", retry: 'reload' })} />);
+    expect(screen.getByRole('alert').querySelector('span')?.textContent).toBe("Couldn't load the project. Nebula didn't respond. Try again.");
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+  });
+
   it('disables mutating actions while busy and exposes loading before a project list arrives', () => {
     const { rerender } = render(<ProjectHome {...props({ busy: true, error: 'Please retry.' })} />);
     for (const name of ['New project', 'Open Glass campaign', 'Rename Glass campaign', 'Delete Glass campaign', 'Try again']) {
@@ -233,5 +257,41 @@ describe('ProjectHome', () => {
   it('hides the Settings button when nothing handles it', () => {
     render(<ProjectHome {...props()} />);
     expect(screen.queryByRole('button', { name: 'Settings' })).toBeNull();
+  });
+
+  it('shows an agent’s cover proposal on its project’s card only', async () => {
+    useAssetProposalsStore.getState().clear();
+    useAssetProposalsStore.getState().open(coverProposal({ target: { kind: 'project', id: 'glass', name: 'Glass campaign' } }), 'k1');
+    render(<ProjectHome {...props({ projects: [project(), project({ id: 'logo', name: 'Logo explorations' })] })} />);
+    const glass = screen.getByRole('article', { name: 'Glass campaign' });
+    expect(await within(glass).findByRole('group', { name: 'Claude Code proposes a new cover' })).toBeTruthy();
+    const logo = screen.getByRole('article', { name: 'Logo explorations' });
+    expect(within(logo).queryByRole('group')).toBeNull();
+    useAssetProposalsStore.getState().clear();
+  });
+
+  it('says when an agent set the cover', async () => {
+    const choices = { images: [{ url: '/api/outputs/a.png', kind: 'output' as const }], pinned: '/api/outputs/a.png',
+      cover: { source: 'pinned' as const, images: ['/api/outputs/a.png'] }, pinnedBy: { kind: 'agent', name: 'Codex' } };
+    render(<ProjectHome {...props({
+      projects: [project({ cover: choices.cover, coverBy: { kind: 'agent', name: 'Codex' } })],
+      loadCoverChoices: vi.fn().mockResolvedValue(choices), onPinCover: vi.fn() })} />);
+    const button = screen.getByRole('button', { name: 'Choose a cover for Glass campaign' });
+    expect(button.getAttribute('title')).toBe('Cover: set by Codex (agent)');
+    fireEvent.click(button);
+    expect(await screen.findByText('Cover · set by Codex (agent)')).toBeTruthy();
+  });
+  it('says the cover went automatic when the pinned image left the project (Q90 a)', async () => {
+    const choices = { images: [{ url: '/api/outputs/b.png', kind: 'output' as const }], pinned: null,
+      cover: { source: 'output' as const, images: ['/api/outputs/b.png'] }, pinnedBy: null,
+      lostPin: { url: '/api/outputs/a.png', by: { kind: 'person', name: 'You' } } };
+    render(<ProjectHome {...props({
+      projects: [project({ cover: choices.cover, coverLostPin: choices.lostPin })],
+      loadCoverChoices: vi.fn().mockResolvedValue(choices), onPinCover: vi.fn() })} />);
+    const button = screen.getByRole('button', { name: 'Choose a cover for Glass campaign' });
+    expect(button.getAttribute('title')).toBe('Choose cover');
+    fireEvent.click(button);
+    expect(await screen.findByText('The image you pinned is no longer in this project, so the cover is automatic.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Automatic' }).getAttribute('aria-pressed')).toBe('true');
   });
 });

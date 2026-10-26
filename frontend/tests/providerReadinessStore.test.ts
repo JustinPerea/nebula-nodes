@@ -6,6 +6,7 @@ vi.mock('../src/lib/backend', async (original) => ({
 import { useProviderReadinessStore } from '../src/store/providerReadinessStore';
 import { useUIStore } from '../src/store/uiStore';
 import { PROVIDER_HEALTH_TTL_MS } from '../src/lib/providerReadiness';
+import { ConnectionLostError } from '../src/lib/errorCopy';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -70,14 +71,30 @@ describe('explicit provider connection checks', () => {
     expect(fetch).toHaveBeenCalledOnce();
   });
 
+  // Error copy round 3e (GM): "Couldn't {verb} {object}." then the reason.
+  // Round 3f: a plain Error or a malformed answer reads GM's general line;
+  // no answer at all reads GM's "server isn't answering" line
+  // (tests/errorCopy.round3f.projects.test.ts).
+  const CHECK_FAILED = "Couldn't check the connections. Try again, or reload if it keeps happening.";
   it('sanitizes transport failures and rejects malformed status data', async () => {
     fetch.mockRejectedValueOnce(new Error('https://private.test/?token=secret'));
     await useProviderReadinessStore.getState().checkConnections();
-    expect(useProviderReadinessStore.getState().error).toContain('Connections could not be checked');
+    expect(useProviderReadinessStore.getState().error).toBe(CHECK_FAILED);
     expect(useProviderReadinessStore.getState().error).not.toContain('secret');
     fetch.mockResolvedValue(response('OpenAI', 'surprise-status'));
     await useProviderReadinessStore.getState().checkConnections();
     expect(useProviderReadinessStore.getState()).toMatchObject({ providers: {}, checkedAt: null, loading: false });
-    expect(useProviderReadinessStore.getState().error).toContain('Connections could not be checked');
+    expect(useProviderReadinessStore.getState().error).toBe(CHECK_FAILED);
+  });
+
+  // typeerror (2026-10-24): only apiFetch's ConnectionLostError means no answer.
+  it('no answer reads the connection line; a TypeError after the answer reads the general line', async () => {
+    fetch.mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch')));
+    await useProviderReadinessStore.getState().checkConnections();
+    expect(useProviderReadinessStore.getState().error)
+      .toBe("Couldn't check the connections. Nebula's server isn't answering. Make sure it's running, then try again.");
+    fetch.mockResolvedValueOnce({ ok: true, json: async () => JSON.parse(JSON.stringify({ a: 1n })) });
+    await useProviderReadinessStore.getState().checkConnections();
+    expect(useProviderReadinessStore.getState().error).toBe(CHECK_FAILED);
   });
 });

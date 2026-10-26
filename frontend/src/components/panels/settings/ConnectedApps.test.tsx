@@ -12,6 +12,7 @@ vi.mock('../../../lib/api', () => ({
 
 import { ConnectedApps } from './ConnectedApps';
 import type { OutsideSpend } from '../../../lib/api';
+import { RequestFailedError } from '../../../lib/errorCopy';
 
 const VIEW: OutsideSpend = {
   outside: { spentUsd: 0, kreaPlanRuns: 0 },
@@ -128,7 +129,9 @@ describe('Connect your agent', () => {
   });
 
   it('shows a failed color change and keeps the picker open', async () => {
-    setConnectedAppColor.mockRejectedValue(new Error('color must be #RRGGBB or null'));
+    // Round 3e: a refusal arrives as the API's typed error (apiRequest), not a plain Error,
+    // whose own text no surface shows any more.
+    setConnectedAppColor.mockRejectedValue(new RequestFailedError("Couldn't save the app color.", 422, { reason: 'color must be #RRGGBB or null' }));
     render(<ConnectedApps view={VIEW} loadError={null} onChanged={() => {}} />);
     const row = screen.getByTestId('settings-app-row');
     fireEvent.click(within(row).getByRole('button', { name: 'Change the cursor color for My Codex' }));

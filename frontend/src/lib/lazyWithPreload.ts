@@ -123,36 +123,23 @@ function defaultLoadStyle(url: string): Promise<void> {
   });
 }
 
-export function lazyWithPreload<M, P extends object>(
-  load: () => Promise<M>,
-  pick: (module: M) => ComponentType<P>,
-  io: ChunkRetryIO = {},
-): PreloadableComponent<P> {
+/**
+ * One load attempt of a chunk; after a failure (`afterFailure`), see the note
+ * at the top: add failed stylesheets again, then the loader, then the chunk
+ * from a fresh URL.
+ */
+function chunkAttempts<M>(load: () => Promise<M>, io: ChunkRetryIO): (afterFailure: boolean) => Promise<M> {
   const importModule = io.importModule ?? defaultImportModule;
   const loadStyle = io.loadStyle ?? defaultLoadStyle;
-  let loaded: ComponentType<P> | undefined;
-  let pending: Promise<ComponentType<P>> | undefined;
-  let lastFocusRetry = -Infinity;
-  let failures = 0;
-  // The lazy instance rendered now, and whether it holds a rejection.
-  let current: ReturnType<typeof makeLazy>;
-  let currentFailed = false;
-  // The current instance's factory ran and waits on `pending`: if that
-  // attempt fails, the instance holds the rejection.
-  let currentWaiting = false;
   // Stylesheets an earlier attempt could not load (Vite will not add them again).
   const failedStyles = new Set<string>();
-  const listeners = new Set<() => void>();
-
-  // One attempt. After a failure, see the note at the top: add failed
-  // stylesheets again, then the loader, then the chunk from a fresh URL.
   const viaLoader = (): Promise<M> => load().catch((error: unknown) => {
     const style = failedStyleUrl(error);
     if (style) failedStyles.add(style);
     throw error;
   });
-  const attemptLoad = async (): Promise<M> => {
-    if (failures === 0) return viaLoader();
+  return async (afterFailure) => {
+    if (!afterFailure) return viaLoader();
     for (const style of [...failedStyles]) {
       await loadStyle(freshUrl(style));
       failedStyles.delete(style);
@@ -165,6 +152,65 @@ export function lazyWithPreload<M, P extends object>(
       return (await importModule(freshUrl(url))) as M;
     }
   };
+}
+
+/** A module (not a component) loaded at the moment of use. */
+export interface DeferredModule<M> {
+  /** The module; fetched on the first call, the same promise while in flight. */
+  readonly load: () => Promise<M>;
+  /** The same as `load`, for DEFERRED_PRELOADS (a rejection is ignored there). */
+  readonly preload: () => Promise<M>;
+  readonly isLoaded: () => boolean;
+}
+
+/**
+ * For code used only inside an async action (graph save / open): the action
+ * awaits `load()` where it used to call the module. It is preloaded on idle
+ * with the deferred components, so by the time anyone acts the module is in
+ * and the await resolves at once (a file picker keeps the click's user
+ * activation). A failed fetch retries on the next use the same way a
+ * deferred component does (fresh URL in Chromium).
+ */
+export function deferredModule<M>(load: () => Promise<M>, io: ChunkRetryIO = {}): DeferredModule<M> {
+  const attempt = chunkAttempts(load, io);
+  let loaded: M | undefined;
+  let pending: Promise<M> | undefined;
+  let failures = 0;
+  const get = (): Promise<M> => {
+    if (loaded !== undefined) return Promise.resolve(loaded);
+    pending ??= attempt(failures > 0).then((module) => {
+      loaded = module;
+      pending = undefined;
+      return module;
+    }, (error: unknown) => {
+      pending = undefined;
+      failures += 1;
+      throw error;
+    });
+    return pending;
+  };
+  return { load: get, preload: get, isLoaded: () => loaded !== undefined };
+}
+
+export function lazyWithPreload<M, P extends object>(
+  load: () => Promise<M>,
+  pick: (module: M) => ComponentType<P>,
+  io: ChunkRetryIO = {},
+): PreloadableComponent<P> {
+  let loaded: ComponentType<P> | undefined;
+  let pending: Promise<ComponentType<P>> | undefined;
+  let lastFocusRetry = -Infinity;
+  let failures = 0;
+  // The lazy instance rendered now, and whether it holds a rejection.
+  let current: ReturnType<typeof makeLazy>;
+  let currentFailed = false;
+  // The current instance's factory ran and waits on `pending`: if that
+  // attempt fails, the instance holds the rejection.
+  let currentWaiting = false;
+  const listeners = new Set<() => void>();
+
+  const attempts = chunkAttempts(load, io);
+  const attemptLoad = (): Promise<M> => attempts(failures > 0);
 
   const preload = (): Promise<ComponentType<P>> => {
     if (loaded) return Promise.resolve(loaded);

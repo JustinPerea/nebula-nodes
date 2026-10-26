@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { create, type StateCreator } from 'zustand';
 import {
   applyNodeChanges,
   applyEdgeChanges,
@@ -59,9 +59,9 @@ import {
   cancelExecution as apiCancelExecution,
   acknowledgeProviderStartAmbiguity as apiAcknowledgeProviderStartAmbiguity,
   deleteProviderRecovery as apiDeleteProviderRecovery,
+  FORGET_RECOVERY_HEADING,
   generateCinemaShot as apiGenerateShot,
   promoteCinemaShotVariation as apiPromoteShotVariation,
-  fetchReplicateSchema,
   getExecutionStatus as apiGetExecutionStatus,
   ExecutionStartRejectedError,
   type ExecutionValidationError,
@@ -75,14 +75,23 @@ import {
   rewriteExecutionAssetUrls,
 } from '../lib/backend';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
+import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, deleteRefusalText, heldDeleteText } from '../lib/worldLabsWaiting';
 import {
-  RUNTIME_FIELDS, applySlice, diffCanvas, editArrivedText, foldArrange, foreignSource, isForeignEdit, isOwnEcho,
-  restoreRequest, undoNoticeText, type EditOrigin, type ForeignEdit,
+  FailureNotice, REFUSED_FALLBACK_COPY, copyForAnswer, failureCopy, failureDetails, failureMessage, readRefusal, requestError,
+  warnFailure,
+} from '../lib/errorCopy';
+import { CANVAS_NOTICE_EVENT, type CanvasNoticeDetail } from '../lib/canvasNotice';
+import { cleanRemovals, deletedNoticeText, lateRestoreText, mergeRemovals, notRestoredText, pinsOnAnotherModel, restoredNoticeText, supersededBy, type RemovalRecord } from '../lib/deleteNotice';
+import { NOTHING_RAN_LINE, OTHER_NODE_LINE, SHOT_NOT_STARTED_LINE, validationReadings, writtenReading, type ValidationReading } from '../lib/validationCopy';
+import {
+  RUNTIME_FIELDS, applySlice, diffCanvas, edgeKey, editArrivedText, foldArrange, foreignSource, isForeignEdit, isOwnEcho,
+  restoreRequest, undoNoticeText, type EditOrigin, type ForeignEdit, type RestoreBody,
 } from '../lib/canvasUndo';
 import { TAB_ID } from '../lib/tabId';
 import { notifyJobComplete } from '../lib/jobNotifications';
 import { useUIStore } from './uiStore';
 import { usePricingStore } from './pricingStore';
+import { useInputSizeStore } from './inputSizeStore';
 import { useStoredAssetsStore } from './storedAssetsStore';
 import { runCostConfirmMessage, shouldConfirmRunCost, summarizeRunScope, type RunScope } from '../lib/runScope';
 import { useCreateDraftStore } from './createDraftStore';
@@ -284,8 +293,10 @@ function pendingCinemaUploadIssue(nodes: Node<NodeData>[], selected?: { nodeId: 
   return null;
 }
 
+// A canvas notice, not a window.alert (round 3f, GM: "A native alert stops
+// the whole canvas over something that needs no answer.").
 function warnPendingCinemaUpload(issue: string): void {
-  if (typeof window !== 'undefined') window.alert(issue);
+  useGraphStore.getState().notify(issue);
 }
 
 function clearReplacedCanvasFocus(): void {
@@ -321,11 +332,17 @@ function markExecutionScopeQueued(
   });
 }
 
+/** `failure`, when given, is the refused start's error: a person-only
+ * refusal (GM, Q116 a) shows GM's line as the card's person line, with the
+ * backend's own words, written for agents, behind the card's Details toggle
+ * (NodeError: `person` over `raw`, `providerText`). */
 function markNodesErrored(
   nodes: Node<NodeData>[],
   nodeIds: Set<string>,
   message: string,
+  failure?: unknown,
 ): Node<NodeData>[] {
+  const hidden = failure === undefined ? null : failureDetails(failure);
   return nodes.map((node) => {
     if (!nodeIds.has(node.id)) return node;
     return {
@@ -333,7 +350,13 @@ function markNodesErrored(
       data: {
         ...node.data,
         state: 'error' as const,
-        error: message,
+        error: hidden ?? message,
+        // A line Nebula wrote (a refused start): no older run's reading beside it.
+        errorCategory: undefined,
+        errorFriendly: undefined,
+        errorPerson: hidden ? failureCopy(failure).reason : undefined,
+        errorProviderText: hidden ? true : undefined,
+        errorProvider: undefined,
         progress: undefined,
         streamingText: undefined,
         streamingPartials: undefined,
@@ -343,31 +366,32 @@ function markNodesErrored(
   });
 }
 
+/** The pre-run check's refusal on every node in the run (error copy round
+ * 3e, lib/validationCopy.ts): a named node reads its checks' lines (the
+ * agents' text stays in `error`); a node with nothing wrong of its own reads
+ * that another node needs a fix; an answer that names no node, a written
+ * line. Never "Validation failed before execution". */
 function markNodesWithValidationErrors(
   nodes: Node<NodeData>[],
   nodeIds: Set<string>,
   errors: ExecutionValidationError[] | undefined,
-  fallback: string,
 ): Node<NodeData>[] {
-  const messageByNode = new Map<string, string>();
-  let globalMessage: string | undefined;
-  for (const error of errors ?? []) {
-    if (error.nodeId) {
-      if (!messageByNode.has(error.nodeId)) messageByNode.set(error.nodeId, error.message);
-    } else if (!globalMessage) {
-      globalMessage = error.message;
-    }
-  }
+  const { byNode, global } = validationReadings(errors);
+  const fallback = writtenReading(byNode.size ? OTHER_NODE_LINE : NOTHING_RAN_LINE);
   return nodes.map((node) => {
     if (!nodeIds.has(node.id)) return node;
+    const reading = byNode.get(node.id) ?? global ?? fallback;
     return {
       ...node,
       data: {
         ...node.data,
         state: 'error' as const,
-        error: messageByNode.get(node.id) ?? globalMessage ?? fallback,
-        errorCategory: undefined,
+        error: reading.error,
+        errorCategory: reading.errorCategory,
         errorFriendly: undefined,
+        errorPerson: reading.errorPerson,
+        errorProviderText: undefined,
+        errorProvider: undefined,
         progress: undefined,
         streamingText: undefined,
         streamingPartials: undefined,
@@ -400,9 +424,35 @@ function markNodesWithValidationErrors(
 interface UndoSnapshot {
   nodes: Node<NodeData>[];
   edges: Edge[];
+  /** What the deletes this step undoes removed (lib/deleteNotice.ts): the
+   * delete's answers, or the redo's restore that deleted again. Undoing the
+   * step names them, so the pins and proposals come back with the nodes. */
+  removals?: RemovalRecord[];
 }
 
 type UndoEntry = UndoSnapshot | ForeignEdit;
+
+/**
+ * A node has one live removal, its latest delete's: only that one's undo can
+ * put its pins back and reopen its proposals. When a delete answers with new
+ * records (a redo, an undo of an agent's undo, this tab's delete, another
+ * tab's or an agent's edit), every stacked step that names the removal a new
+ * record supersedes takes it, not just the step that deleted again, or an
+ * older step that brings the node back would name a spent removal (review,
+ * 2026-10-23). Only by that removal's id (`replaces`, which the backend sets
+ * when a restore brought this very node back by undoing it): node ids are
+ * not unique over time, so a record for another node under the same id
+ * renews nothing (second review). The backend still re-checks every id.
+ * Steps are kept by identity, so this renews them in place.
+ */
+function renewStackedRemovals(stacks: { undoStack: UndoEntry[]; redoStack: UndoEntry[] }, fresh: RemovalRecord[]): void {
+  const byReplaced = supersededBy(fresh);
+  if (byReplaced.size === 0) return;
+  for (const step of [...stacks.undoStack, ...stacks.redoStack]) {
+    if (!step.removals?.some((record) => byReplaced.has(record.id))) continue;
+    step.removals = step.removals.map((record) => byReplaced.get(record.id) ?? record);
+  }
+}
 
 const UNDO_CAP = 50;
 
@@ -413,11 +463,76 @@ export interface UndoNotice {
   agentColor?: string;
   /** The button the notice offers: Undo when an agent's edit just landed, Redo after it was undone. */
   offer: 'undo' | 'redo' | null;
-  /** The step the button acts on; it acts only while that step is next in line. */
-  entry?: ForeignEdit;
+  /** The step the button acts on; it acts only while that step is next in
+   * line. A person's own step for "Deleted the node." and "Restored the node." */
+  entry?: UndoEntry;
+  /** 'error': a failure that used to be a window.alert (round 3f, GM: "Every
+   * error alert becomes a canvas notice"), announced as role="alert". */
+  tone?: 'error' | 'info';
 }
 
 let undoNoticeSeq = 0;
+
+/**
+ * A restore's count that arrived after the person moved on (GM - Design,
+ * 2026-10-23, round 3: "show it as a plain notice with no button, using the
+ * standard timeout"). Its own line in its own slot right above the canvas
+ * notice (lib/noticeSlots.ts 'late'; round 4: "put the late line above the
+ * newer one, so the notice with a button stays nearest the bar"), never the canvas
+ * notice itself, so it never replaces the newer notice, and it has no Undo or
+ * Redo: the store's rule for offers (withLiveNotice) never reads it. Two late
+ * counts while one shows add up on the one line.
+ */
+export interface LateNotice {
+  id: number;
+  text: string;
+  notReopened: number;
+  notReattached: number;
+}
+
+let lateNoticeSeq = 0;
+
+/** Whether a notice's Undo or Redo still applies: its step is next in line on its stack. */
+function offerApplies(notice: UndoNotice, stacks: { undoStack: UndoEntry[]; redoStack: UndoEntry[] }): boolean {
+  if (!notice.offer || !notice.entry) return true;
+  const stack = notice.offer === 'undo' ? stacks.undoStack : stacks.redoStack;
+  return stack[stack.length - 1] === notice.entry;
+}
+
+/**
+ * GM - Design, 2026-10-23: "a notice whose button no longer applies clears
+ * when a new undo step lands." A notice with an offer shows only while its
+ * step is the top of its stack (undoStack for Undo, redoStack for Redo). Every
+ * write to the store goes through here (the store's own `set` and
+ * `useGraphStore.setState` alike), so every writer of either stack keeps it:
+ * pushUndo and its callers, an agent's edit, a step taken or put back, a
+ * graph cleared, replaced or opened. When an update leaves the notice's step
+ * off the top, the notice clears in that same update. A notice without an
+ * offer (an error, a refusal, an import's notes) is never touched.
+ */
+function withLiveNotice(state: GraphState, patch: GraphState | Partial<GraphState>): GraphState | Partial<GraphState> {
+  if (!('undoStack' in patch) && !('redoStack' in patch) && !('undoNotice' in patch)) return patch;
+  const notice = 'undoNotice' in patch ? patch.undoNotice : state.undoNotice;
+  if (!notice) return patch;
+  const stacks = {
+    undoStack: patch.undoStack ?? state.undoStack,
+    redoStack: patch.redoStack ?? state.redoStack,
+  };
+  return offerApplies(notice, stacks) ? patch : { ...patch, undoNotice: null };
+}
+
+/** The store's middleware for that rule (withLiveNotice). */
+function noticeFollowsStacks(config: StateCreator<GraphState>): StateCreator<GraphState> {
+  return (set, get, api) => {
+    const guarded = ((partial: GraphState | Partial<GraphState> | ((state: GraphState) => GraphState | Partial<GraphState>),
+      replace?: boolean) => {
+      set((state) => withLiveNotice(state, typeof partial === 'function' ? partial(state) : partial) as GraphState,
+        replace as false);
+    }) as typeof set;
+    api.setState = guarded;
+    return config(guarded, get, api);
+  };
+}
 
 function settledState(state: NodeData['state']): NodeData['state'] {
   return state === 'executing' || state === 'queued' ? 'idle' : state;
@@ -693,6 +808,13 @@ interface GraphState {
   /** The notice for someone else's edit: it landed, or was undone or redone. */
   undoNotice: UndoNotice | null;
   dismissUndoNotice: () => void;
+  /** A restore's late count, shown above the canvas notice (LateNotice). */
+  lateNotice: LateNotice | null;
+  dismissLateNotice: () => void;
+  /** Show a written line as the canvas notice, non-blocking and dismissable,
+   * where a native alert used to stop the canvas (round 3f). 'error' by
+   * default; 'info' for a note such as an import's warnings. */
+  notify: (text: string, tone?: 'error' | 'info') => void;
 
   // Clipboard
   clipboard: CanvasClipboard | null;
@@ -800,6 +922,10 @@ interface GraphState {
   handleExecutionEvent: (event: ExecutionEvent) => void;
   hydrateProviderRecoveries: (checkpoints: ProviderRecoveryCheckpoint[]) => void;
   deleteProviderRecovery: (runId: string, nodeId: string) => Promise<void>;
+  /** The Delete key's guard (Canvas onBeforeDelete): false, with the canvas
+   * notice saying why, when one of `nodeIds` holds World Labs state, so React
+   * Flow removes neither the nodes nor their wires (round 3b). */
+  allowCanvasDelete: (nodeIds: string[]) => boolean;
   hydrateProviderStartAmbiguities: (ambiguities: ProviderStartAmbiguity[]) => void;
   hydrateExecutionStatuses: (statuses: ExecutionStatusResult[]) => void;
   acknowledgeProviderStartAmbiguity: (
@@ -825,7 +951,7 @@ interface GraphState {
     nodes: Node<NodeData>[];
     edges: Edge[];
     updatedNodes: Node<NodeData>[];
-  }, options?: { undoStep?: object }) => void;
+  }, options?: { undoStep?: object; synced?: ReadonlySet<string> }) => void;
   deleteGeneration: (modelNodeIds: string[]) => void;
   duplicateNode: (nodeId: string) => void;
   deleteNode: (nodeId: string) => void;
@@ -848,7 +974,9 @@ interface GraphState {
   /** `undoStep`: the step beginUndoStep made before the backend clear, so the
    * clear stays one step even when the clear's graphSync landed first. */
   clearGraph: (options?: { undoStep?: object }) => void;
-  configureOpenRouterModel: (nodeId: string, modelId: string, model: OpenRouterModel) => void;
+  /** The OpenRouter / Nous Portal picker: the backend configures the node for
+   * the model (its ports, params) and drops wires the model has no port for. */
+  configureOpenRouterModel: (nodeId: string, modelId: string, model?: OpenRouterModel) => Promise<void>;
   fetchReplicateSchemaAndConfigure: (nodeId: string, owner: string, name: string) => Promise<void>;
 
   // Video-edit node helpers
@@ -905,6 +1033,140 @@ const DYNAMIC_PROVIDER_BY_DEFINITION: Record<string, DynamicProviderType> = {
   'replicate-universal': 'replicate',
   'fal-universal': 'fal',
 };
+
+const UNIVERSAL_MODEL_PARAM: Record<string, string> = {
+  'openrouter-universal': 'model', 'nous-portal-universal': 'model', 'replicate-universal': 'model_id',
+};
+/** The canvas-owned params the backend sets with a model (universal_ports.DERIVED_PARAMS). */
+const UNIVERSAL_DERIVED_PARAMS = ['_model_ports', '_output_image', '_version_id', '_schema_fetched'];
+/** Nodes whose model request is in flight: their param pushes wait for it. */
+const universalModelRequests = new Set<string>();
+
+/** The backend keeps a universal node's ports (`_model_ports`) but not its
+ * Inspector controls (a Replicate schema's params) or provider notes: a sync
+ * keeps this canvas's while the node's model is the same. */
+function keptUniversalFields(existing: Node<NodeData>, incoming: Node<NodeData>): Partial<DynamicNodeData> {
+  const key = UNIVERSAL_MODEL_PARAM[existing.data.definitionId];
+  const before = existing.data as Partial<DynamicNodeData>;
+  if (!key || incoming.data.definitionId !== existing.data.definitionId
+    || existing.data.params[key] !== incoming.data.params[key]) return {};
+  return { dynamicParams: before.dynamicParams ?? [], providerMeta: before.providerMeta ?? {} };
+}
+
+/** A re-typed universal node's saved outputs on the ports it now has: one on
+ * a port it no longer declares fails every project save (the backend's
+ * _validate_imported_outputs; it drops them too, _drop_outputs_off_ports). */
+function outputsOnPorts(outputs: NodeData['outputs'] | undefined, ports: ReadonlyArray<{ id: string }>): NodeData['outputs'] {
+  return Object.fromEntries(Object.entries(outputs ?? {}).filter(([id]) => ports.some((p) => p.id === id)));
+}
+
+/** The canvas's outputs a sync without outputs keeps: all of them, unless
+ * the backend re-typed the node (its `_model_ports` changed). */
+function keptOutputs(existing: Node<NodeData>, incoming: Node<NodeData>): NodeData['outputs'] {
+  const after = incoming.data.params._model_ports as { outputs?: { id: string }[] } | undefined;
+  if (!UNIVERSAL_MODEL_PARAM[incoming.data.definitionId] || !after
+    || JSON.stringify(existing.data.params._model_ports) === JSON.stringify(after)) return existing.data.outputs;
+  return outputsOnPorts(existing.data.outputs, after.outputs ?? []);
+}
+
+/** Whether a wire's ends on universal nodes are ports those nodes have. */
+function universalPortsHold(edge: Edge, nodesById: Map<string, Node<NodeData>>): boolean {
+  const source = nodesById.get(edge.source)?.data as Partial<DynamicNodeData> | undefined;
+  const target = nodesById.get(edge.target)?.data as Partial<DynamicNodeData> | undefined;
+  if (source?.definitionId && UNIVERSAL_MODEL_PARAM[source.definitionId] && source.dynamicOutputPorts
+    && source.dynamicOutputPorts.length > 0 && !source.dynamicOutputPorts.some((p) => p.id === edge.sourceHandle)) return false;
+  if (target?.definitionId && UNIVERSAL_MODEL_PARAM[target.definitionId] && target.dynamicInputPorts
+    && target.dynamicInputPorts.length > 0 && !target.dynamicInputPorts.some((p) => p.id === edge.targetHandle)) return false;
+  return true;
+}
+
+/** What the backend answers for a universal node's model (POST
+ * /api/graph/node/{id}/model, or /api/universal/ports for a node the backend
+ * doesn't have yet). */
+interface UniversalModelResult {
+  params: Record<string, unknown>;
+  dynamicInputPorts: DynamicPortDefinition[];
+  dynamicOutputPorts: DynamicPortDefinition[];
+  dynamicParams: DynamicParamDefinition[];
+  providerMeta: Record<string, unknown>;
+}
+
+async function backendDetail(response: Response): Promise<string> {
+  try {
+    const body = await response.json() as { detail?: unknown };
+    if (typeof body.detail === 'string') return body.detail;
+  } catch { /* not JSON */ }
+  return `HTTP ${response.status}`;
+}
+
+/** The node's params and ports for `model`, from the backend; null when the
+ * node is gone. Throws with the backend's reason (a missing key, say). */
+async function requestUniversalModel(nodeId: string, model: string): Promise<UniversalModelResult | null> {
+  const node = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
+  if (!node) return null;
+  if (CLI_ID_RE.test(nodeId)) {
+    // The backend configures the params it holds: send an edit still waiting
+    // on the debounce first, and hold the node's param pushes until the answer
+    // (one sent meanwhile would carry the old model and its ports back).
+    await flushNodeParams(nodeId);
+    universalModelRequests.add(nodeId);
+    try {
+      const response = await graphMutationFetch(`/api/graph/node/${nodeId}/model`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model }),
+      });
+      if (!response.ok) throw new Error(await backendDetail(response));
+      return await response.json() as UniversalModelResult;
+    } finally {
+      universalModelRequests.delete(nodeId);
+    }
+  }
+  // A node only this tab has (its backend create failed): the same rules,
+  // applied to its params here.
+  const response = await apiFetch('/api/universal/ports', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ definitionId: node.data.definitionId, model, params: node.data.params }),
+  });
+  if (!response.ok) throw new Error(await backendDetail(response));
+  const body = await response.json() as {
+    nodeParams: Record<string, unknown>; inputs: DynamicPortDefinition[]; outputs: DynamicPortDefinition[];
+    params?: DynamicParamDefinition[]; providerMeta?: Record<string, unknown>;
+  };
+  return {
+    params: body.nodeParams,
+    dynamicInputPorts: body.inputs,
+    dynamicOutputPorts: body.outputs,
+    dynamicParams: body.params ?? [],
+    providerMeta: body.providerMeta ?? {},
+  };
+}
+
+/** The params the backend configured for the model, with the edits the
+ * person made while it was read kept as typed (the model and the params it
+ * sets are the answer's); the held push then sends them with the new model. */
+function withEditsSinceRequest(nodeId: string, definitionId: string, configured: Record<string, unknown>,
+  local: Record<string, unknown>): Record<string, unknown> {
+  const entry = unsavedParamEdits.get(nodeId);
+  if (!entry) return configured;
+  const owned = new Set([UNIVERSAL_MODEL_PARAM[definitionId], ...UNIVERSAL_DERIVED_PARAMS]);
+  const params = { ...configured };
+  for (const key of entry.keys) {
+    if (owned.has(key)) continue;
+    if (key in local) params[key] = local[key];
+    else delete params[key];
+  }
+  return params;
+}
+
+/** Whether a wire keeps its ends on the node's new ports (a wire leaving the
+ * node is checked at its source end), as universal_ports.edge_fits says. */
+function edgeFitsPorts(nodeId: string, edge: Edge, ports: Pick<UniversalModelResult, 'dynamicInputPorts' | 'dynamicOutputPorts'>): boolean {
+  if (edge.source === nodeId) return ports.dynamicOutputPorts.some((p) => p.id === edge.sourceHandle);
+  if (edge.target === nodeId) return ports.dynamicInputPorts.some((p) => p.id === edge.targetHandle);
+  return true;
+}
 
 function isDynamicDefinition(definitionId: string): boolean {
   return (DYNAMIC_NODE_IDS as readonly string[]).includes(definitionId);
@@ -973,6 +1235,15 @@ function shotOutputPorts(scene: CinemaSceneSpec): DynamicPortDefinition[] {
     dataType: 'Image' as PortDataType,
     required: false,
   }));
+}
+
+/** A shot's output without its status or the last failure's fields (error
+ *  copy round 3c-2): a new run, or a failure Nebula wrote itself, must not
+ *  show an earlier failure's person line or Details. */
+function withoutShotError(output: CinemaShot['output']): Omit<NonNullable<CinemaShot['output']>, 'status'> {
+  const rest: Partial<NonNullable<CinemaShot['output']>> = { ...(output ?? {}) };
+  for (const key of ['status', 'error', 'errorCategory', 'errorFriendly', 'errorPerson', 'errorProviderText', 'errorProvider', 'errorRaw'] as const) delete rest[key];
+  return rest;
 }
 
 /** Optimistically write the scene + rebuilt dynamic output ports onto the node,
@@ -1110,6 +1381,44 @@ function withGraphMutationLifetime<Args extends unknown[], Result>(operation: (.
  * their backend request settles. Admission happens before invoking fetch. */
 function graphMutationFetch(path: string, init?: RequestInit): Promise<Response> {
   return trackGraphMutation(() => apiFetch(path, init));
+}
+
+/** Send a node's params to the backend after the debounce; a node whose
+ * model request is in flight waits for its answer (requestUniversalModel). */
+function scheduleParamPush(nodeId: string): void {
+  paramPushTimers[nodeId] = window.setTimeout(() => {
+    delete paramPushTimers[nodeId];
+    if (universalModelRequests.has(nodeId)) {
+      scheduleParamPush(nodeId);
+      return;
+    }
+    void pushNodeParams(nodeId);
+  }, PARAM_PUSH_DEBOUNCE_MS);
+}
+
+function pushNodeParams(nodeId: string): Promise<void> {
+  const node = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
+  if (!node) {
+    unsavedParamEdits.delete(nodeId);
+    return Promise.resolve();
+  }
+  const edits = unsavedParamEdits.get(nodeId);
+  if (edits) edits.inFlight += 1;
+  return graphMutationFetch(`/api/graph/node/${nodeId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ params: node.data.params }),
+  }).then(() => undefined).catch((err) => {
+    console.warn(`[nebula] Param sync for ${nodeId} failed:`, err);
+  }).finally(() => { if (edits) settleParamEdit(nodeId, edits); });
+}
+
+/** Send a node's debounced params now, if any are waiting. */
+async function flushNodeParams(nodeId: string): Promise<void> {
+  if (paramPushTimers[nodeId] === undefined) return;
+  window.clearTimeout(paramPushTimers[nodeId]);
+  delete paramPushTimers[nodeId];
+  await pushNodeParams(nodeId);
 }
 
 function clearAllParamPushTimers(): void {
@@ -1335,6 +1644,79 @@ function layoutNode(node: Node<NodeData>): LayoutNode {
 // one in flight), so the canvas keeps the position it has.
 const layoutWritesInFlight = new Map<string, number>();
 
+// Wire writes this tab has sent (a connect, a delete, an undo's restore), by
+// connection; `want`: whether the wire should be there. A wire between two
+// backend nodes is the backend's: a graphSync without it takes it off the
+// canvas, one with it draws it. Only while this tab's own write is out (and,
+// after its answer, until a sync agrees or one more sync has come) does a
+// sync that disagrees leave the wire as this tab has it.
+type WireWrite = { want: boolean; sending: number; agreed?: boolean; grace?: boolean };
+const wireWrites = new Map<string, WireWrite>();
+
+/** Send one wire write (after `after`); a refusal puts the canvas back and says why. */
+function sendWire(edge: Edge, want: boolean, set: GraphSet, after?: Promise<unknown>): Promise<unknown> {
+  const done = holdWire(edge, want);
+  const send = () => graphMutationFetch(want ? '/api/graph/connect' : '/api/graph/edge', {
+    method: want ? 'POST' : 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source: edge.source, sourceHandle: edge.sourceHandle ?? '',
+      target: edge.target, targetHandle: edge.targetHandle ?? '' }),
+  });
+  // Sent at once unless it waits for `after`, as these requests always were.
+  return (after ? after.then(send) : send()).then(async (response) => {
+    done(response.ok);
+    if (response.ok) return;
+    const heading = `Couldn't ${want ? 'make' : 'remove'} that connection.`;
+    const text = `${heading} ${await backendRejectionReason(response, heading)}`;
+    set((state) => ({
+      edges: want ? state.edges.filter((e) => e.id !== edge.id)
+        : state.edges.some((e) => edgeKey(e) === edgeKey(edge)) ? state.edges : [...state.edges, edge],
+      undoNotice: { id: ++undoNoticeSeq, text, offer: null },
+    }));
+  }, (err) => {
+    done(false);
+    console.warn('[nebula] Wire sync failed:', err);
+  });
+}
+
+/** Hold a wire write; call the result with whether the backend took it. */
+function holdWire(edge: Edge | { source: string; sourceHandle: string; target: string; targetHandle: string },
+  want: boolean): (took: boolean) => void {
+  const key = edgeKey(edge);
+  const write = wireWrites.get(key) ?? { want, sending: 0 };
+  Object.assign(write, { want, sending: write.sending + 1, agreed: false, grace: false });
+  wireWrites.set(key, write);
+  return (took) => {
+    write.sending -= 1;
+    if (wireWrites.get(key) === write && !write.sending && (!took || write.agreed)) wireWrites.delete(key);
+  };
+}
+
+/** What this sync must leave as this tab has it: connection -> want. */
+function heldWires(cliEdges: Edge[]): Map<string, boolean> {
+  const keys = new Set(cliEdges.map(edgeKey));
+  const held = new Map<string, boolean>();
+  for (const [key, write] of wireWrites) {
+    // Once a sync agreed the backend has taken it: a later one that differs is newer.
+    write.agreed ||= keys.has(key) === write.want;
+    if (!write.sending && (write.agreed || write.grace)) wireWrites.delete(key);
+    else if (!write.agreed) held.set(key, write.want);
+    if (!write.sending) write.grace = true;
+  }
+  return held;
+}
+
+// Requests whose answer adds what they made (node-and-connect, Create's
+// cluster, a proposal accept): the node ids and wires syncs carried while
+// each was out. What a sync already carried is the syncs' to keep or remove,
+// so the answer adds only what none has shown yet.
+const syncWatchers = new Set<Set<string>>();
+export function watchGraphSyncs(): { seen: ReadonlySet<string>; stop: () => void } {
+  const seen = new Set<string>();
+  syncWatchers.add(seen);
+  return { seen, stop: () => syncWatchers.delete(seen) };
+}
+
 function persistNodePositions(positions: Record<string, { x: number; y: number }>): void {
   const persisted = Object.fromEntries(
     Object.entries(positions).filter(([nodeId]) => CLI_ID_RE.test(nodeId)),
@@ -1449,28 +1831,43 @@ function applyCanvasNodeChanges(
   persistNodePositions(settledPositions);
 }
 
-async function deleteCLIOriginNode(nodeId: string): Promise<void> {
+/** Resolves when the backend confirmed the delete, or answered that the node
+ * is already gone (404: another window or an agent removed it; the person
+ * wanted it gone, as restore treats an already-gone node); else rejects
+ * with the reason the person reads (GM's line for the status, or the
+ * backend's written reason). */
+async function deleteCLIOriginNode(nodeId: string): Promise<RemovalRecord | null> {
   const response = await graphMutationFetch(`/api/graph/node/${nodeId}`, { method: 'DELETE' });
-  if (response.ok) return;
-  let detail = '';
-  try {
-    detail = String(((await response.json()) as { detail?: unknown }).detail ?? '');
-  } catch {
-    // Fall through to the status-based message.
-  }
-  throw new Error(detail || `Backend rejected deletion of ${nodeId} (HTTP ${response.status}).`);
+  if (response.status === 404) return null;
+  if (!response.ok) throw await requestError("Couldn't delete the node.", response);
+  // What the delete removed (the pins it detached, the proposals it closed),
+  // kept in the undo step so undo puts them back.
+  const body = await response.json().catch(() => ({})) as { removal?: unknown };
+  return cleanRemovals([body.removal])[0] ?? null;
 }
 
-function reportNodeDeletionFailure(messages: string[]): void {
-  const message = `Nebula kept the node because its backend deletion was not confirmed. ${messages.join(' ')}`;
+/** GM's notice after a delete: "Deleted the node." / "Deleted {n} nodes.",
+ * with Undo for the step that holds it (round 3f's confirm is gone). */
+function deletedNotice(count: number, step: UndoEntry): Partial<GraphState> {
+  return { undoNotice: { id: ++undoNoticeSeq, text: deletedNoticeText(count), offer: 'undo', entry: step } };
+}
+
+/** The nodes stay on the canvas (their delete wasn't confirmed). GM's
+ * pattern: "Couldn't delete the node." then the reason, each reason once. */
+function deletionHeading(count: number): string {
+  return count === 1 ? "Couldn't delete the node." : `Couldn't delete ${count} nodes.`;
+}
+
+/** The backend's World Labs lines read as GM's trimmed ones (rounds 4 and
+ * 4b, lib/worldLabsWaiting.ts deleteRefusalText: with a held node the line
+ * starts with GM's own, "Couldn't delete them. …" for several); every other
+ * reason as given, after `deletionHeading` when no node is held. */
+function reportNodeDeletionFailure(reasons: string[], count: number): void {
+  const message = deleteRefusalText(deletionHeading(count), count, reasons);
   console.warn(`[nebula] ${message}`);
-  if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-    window.alert(message);
-  }
+  useGraphStore.getState().notify(message);
 }
 
-const WORLD_LABS_STATUS_UNCERTAIN_WARNING =
-  'Nebula could not confirm whether this World Labs start was accepted. Run remains locked to prevent duplicate paid work. Check Marble before clearing or retrying.';
 
 function trackedRunHasFreshPaidWorldLabs(runId: string, get: GraphGet): boolean {
   const record = get().runHistory.find((candidate) => candidate.id === runId);
@@ -1761,6 +2158,25 @@ function nodeHasProviderSafety(state: GraphState, nodeId: string): boolean {
 }
 
 /**
+ * The person asked to delete `ids` and the canvas keeps them, because one
+ * holds World Labs state (error copy round 3b: a refusal that says nothing
+ * is the worst kind). True when it refused: it says why once, in the
+ * canvas's short notice (GM's one line, round 4: "Couldn't delete the node.
+ * It's waiting on World Labs. Check Marble, then unlock it.", and its forms,
+ * round 4b's for several nodes among them: lib/worldLabsWaiting
+ * heldDeleteText), and sends nothing. An agent's delete
+ * goes through the backend, which refuses it with its own text.
+ */
+function refuseHeldNodeDelete(state: GraphState, ids: string[], set: GraphSet): boolean {
+  const held = ids.filter((nodeId) => nodeHasProviderSafety(state, nodeId));
+  if (held.length === 0) return false;
+  // The backend's order: an unconfirmed start before a recovery record.
+  const unlock = held.some((nodeId) => state.providerStartAmbiguities.some((ambiguity) => ambiguity.nodeId === nodeId));
+  set({ undoNotice: { id: ++undoNoticeSeq, text: heldDeleteText(ids.length, unlock, held.length), offer: null } });
+  return true;
+}
+
+/**
  * What Cmd+C copied. It survives opening another project, so nodes copy from
  * one project to another (a Moodboard node keeps pointing at its board).
  *
@@ -1878,14 +2294,14 @@ function providerSafeCloneParams(
   );
 }
 
+/** GM - Design, round 4 (one line at 560 px). Only the person reads it: the
+ * canvas refuses the copy itself, and agents add nodes, never duplicate. */
 const WORLD_LABS_UNSAFE_CLONE_MESSAGE =
-  'Nebula did not duplicate this fresh paid World Labs node. Add a new node from the Nodes rail when you intentionally want a separate paid operation.';
+  "Couldn't duplicate a paid World Labs node. Add a new one from the Nodes rail instead.";
 
 function warnUnsafeProviderClone(): void {
   console.warn(`[nebula] ${WORLD_LABS_UNSAFE_CLONE_MESSAGE}`);
-  if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-    window.alert(WORLD_LABS_UNSAFE_CLONE_MESSAGE);
-  }
+  useGraphStore.getState().notify(WORLD_LABS_UNSAFE_CLONE_MESSAGE);
 }
 
 function sameProviderRecoveryIdentity(
@@ -2055,7 +2471,7 @@ async function executeHistoricalRun(
     }
     if (result.status !== 'started' && result.status !== 'validation_error') {
       throw new ExecutionStartRejectedError(
-        `Execution did not start (${result.status || 'unknown status'}).`,
+        notStartedMessage("Couldn't start the run.", result.status),
         400,
       );
     }
@@ -2066,7 +2482,6 @@ async function executeHistoricalRun(
           state.nodes,
           scopeIds,
           'errors' in result ? result.errors as ExecutionValidationError[] : undefined,
-          'Validation failed before execution. Check the saved inputs and API keys.',
         ),
         ...ownershipState(),
       }));
@@ -2084,7 +2499,8 @@ async function executeHistoricalRun(
       nodes: markNodesErrored(
         state.nodes,
         scopeIds,
-        err instanceof Error ? err.message : 'Failed to replay historical run.',
+        failureMessage(err, "Couldn't start the run."),
+        err,
       ),
       ...ownershipState(),
     }));
@@ -2105,20 +2521,20 @@ async function ensureBackendFreshForLocalCanvas(
   } catch {
     set({ backendFreshStartPending: true });
     if (!backendWasDiscovered && getCachedBackendBaseUrl() === null) return false;
-    throw new Error(
-      'Nebula lost contact with the known backend before node creation. No local copy was added; reconnect and try again.',
-    );
+    // Written lines under reportNodeCreationFailure's "Couldn't add {node}."
+    // (error copy round 3e).
+    throw new FailureNotice('', "Nebula lost contact with its backend, so the node wasn't added. Reconnect, then add it again.");
   }
 
   if (!exportRes.ok) {
-    throw new Error(`Backend rejected graph export (HTTP ${exportRes.status}).`);
+    throw new FailureNotice('', await backendRejectionReason(exportRes, "Couldn't check the canvas."));
   }
 
   let exported: { empty?: boolean };
   try {
     exported = (await exportRes.json()) as { empty?: boolean };
   } catch {
-    throw new Error('Backend returned an invalid graph export response.');
+    throw new FailureNotice('', "Nebula couldn't read the backend's answer, so the node wasn't added. Reload, then add it again.");
   }
 
   if (exported.empty === false) {
@@ -2128,12 +2544,11 @@ async function ensureBackendFreshForLocalCanvas(
       clearRes = await graphMutationFetch('/api/graph?force=true', { method: 'DELETE' });
     } catch {
       set({ backendFreshStartPending: true });
-      throw new Error(
-        'Nebula lost the response after sending the graph-clear request. No local node was added because the clear may have completed; reload before trying again.',
-      );
+      throw new FailureNotice('', "Nebula lost the answer to clearing the canvas, so the node wasn't added. "
+        + 'The canvas may be clear already. Reload before you add it again.');
     }
     if (!clearRes.ok) {
-      throw new Error(`Backend rejected graph clear (HTTP ${clearRes.status}).`);
+      throw new FailureNotice('', await backendRejectionReason(clearRes, "Couldn't clear the canvas."));
     }
   }
 
@@ -2141,14 +2556,23 @@ async function ensureBackendFreshForLocalCanvas(
   return true;
 }
 
-async function backendRejectionReason(response: Response, fallback: string): Promise<string> {
-  try {
-    const detail = ((await response.json()) as { detail?: unknown }).detail;
-    if (typeof detail === 'string' && detail.trim()) return detail.trim();
-  } catch {
-    // Fall through to the status-based message.
-  }
-  return `${fallback} (HTTP ${response.status}).`;
+/** A start the backend answered with a status other than started (not an
+ * HTTP status: the run's own, e.g. "busy"). GM: the status stays in the
+ * console; the person reads the heading and GM's line. */
+function notStartedMessage(heading: string, status: string | undefined): string {
+  console.warn(`[nebula] ${heading} start status: ${status || 'unknown'}`);
+  return `${heading} ${REFUSED_FALLBACK_COPY}`;
+}
+
+/** The reason line for a refused canvas request (error-copy round 2, GM):
+ * the backend's written reason, or GM's line for the status; the status
+ * itself goes to the console under `heading`, once per call site. A
+ * person-only refusal says GM's line for it, by its code (Q116 a); its own
+ * words, written for agents, go to the console only. */
+async function backendRejectionReason(response: Response, heading: string): Promise<string> {
+  const { detail, code } = await readRefusal(response);
+  warnFailure(heading, response.status, detail);
+  return copyForAnswer(response.status, detail, code);
 }
 
 type NodeCreationAttempt = {
@@ -2211,11 +2635,9 @@ function observePendingConnectedNodeCreation(nodes: Node<NodeData>[], edges: Edg
 }
 
 function reportNodeCreationFailure(displayName: string, reason: string): null {
-  const message = `Nebula did not add ${displayName}. ${reason}`;
+  const message = `Couldn't add ${displayName}. ${reason}`;
   console.warn(`[nebula] ${message}`);
-  if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-    window.alert(message);
-  }
+  useGraphStore.getState().notify(message);
   return null;
 }
 
@@ -2306,6 +2728,8 @@ function foreignEditStep(
 ): Partial<GraphState> {
   if (origin && isOwnEcho(origin, TAB_ID)) return {};
   if (!origin) return graphReplaced ? { undoStack: [], redoStack: [] } : {};
+  // Its deletes are now the live removals of those nodes, for every step here.
+  if (!graphReplaced) renewStackedRemovals(state, cleanRemovals(origin.removals));
   // A replacement puts every node where the new graph has it.
   const movedIds = graphReplaced
     ? new Set([...state.nodes, ...nextNodes].map((node) => node.id))
@@ -2320,6 +2744,8 @@ function foreignEditStep(
     source,
     ...(origin.id ? { editId: origin.id } : {}),
     ...(origin.undoes ? { undoes: origin.undoes } : {}),
+    // What its deletes removed, so undoing it here puts those back too.
+    ...(cleanRemovals(origin.removals).length > 0 ? { removals: cleanRemovals(origin.removals) } : {}),
     at: Date.now(),
     ...change,
   };
@@ -2393,6 +2819,19 @@ function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): voi
   }
   const nextNodes = withFreshKeyStatus(next.nodes, nodes);
   breakUndoDebounce();
+  // The person's own step that brings nodes back says "Restored the node.",
+  // one that deletes them again "Deleted the node." (GM, 2026-10-23). The
+  // restored line waits for the backend's answer when it has backend nodes,
+  // since it counts the proposals that couldn't be reopened.
+  const before = new Set(nodes.map((node) => node.id));
+  const after = new Set(nextNodes.map((node) => node.id));
+  const back = nextNodes.filter((node) => !before.has(node.id));
+  const gone = nodes.filter((node) => !after.has(node.id)).length;
+  const ownLine: OwnStepLine | null = isForeignEdit(entry) ? null
+    : back.length > 0 ? { kind: 'restored', count: back.length }
+      : gone > 0 ? { kind: 'deleted', count: gone } : null;
+  const waitsForBackend = back.some((node) => CLI_ID_RE.test(node.id));
+  const noticeId = ++undoNoticeSeq;
   set({
     nodes: nextNodes,
     edges: next.edges,
@@ -2400,11 +2839,52 @@ function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): voi
       ? { undoStack: from.slice(0, -1), redoStack: [...state.redoStack, inverse] }
       : { redoStack: from.slice(0, -1), undoStack: [...state.undoStack, inverse] }),
     ...(isForeignEdit(entry) ? { undoNotice: {
-      id: ++undoNoticeSeq, text: undoNoticeText(action, entry), agentColor: entry.agentColor,
+      id: noticeId, text: undoNoticeText(action, entry), agentColor: entry.agentColor,
       offer: action === 'undo' ? 'redo' as const : 'undo' as const, entry,
-    } } : {}),
+    } } : ownLine && !(ownLine.kind === 'restored' && waitsForBackend)
+      ? { undoNotice: ownStepNotice(noticeId, ownLine, NOTHING_MISSED, action, inverse) } : {}),
   });
-  void sendRestore(action, nodes, edges, nextNodes, next.edges, entry, inverse, set);
+  void sendRestore(action, nodes, edges, nextNodes, next.edges, entry, inverse, set,
+    { noticeId, ownLine: ownLine?.kind === 'restored' && waitsForBackend ? ownLine : null });
+}
+
+/** A restore's count that arrived too late for its own line: the plain line
+ * above the canvas notice, added to one already showing (LateNotice). */
+function lateCount(state: GraphState, missed: Missed): Partial<GraphState> {
+  const shown = state.lateNotice;
+  const notReopened = missed.notReopened + (shown?.notReopened ?? 0);
+  const notReattached = missed.notReattached + (shown?.notReattached ?? 0);
+  if (missed.notReopened + missed.notReattached === 0) return {};
+  return { lateNotice: { id: ++lateNoticeSeq, text: lateRestoreText(notReopened, notReattached), notReopened, notReattached } };
+}
+
+/** What a person's own undo or redo says: the nodes it brought back or deleted again. */
+interface OwnStepLine { kind: 'restored' | 'deleted'; count: number }
+
+/** What a restore's answer says couldn't go back: proposals that didn't
+ * reopen, and pins whose node came back as another model. */
+interface Missed { notReopened: number; notReattached: number }
+const NOTHING_MISSED: Missed = { notReopened: 0, notReattached: 0 };
+
+function ownStepNotice(id: number, line: OwnStepLine, missed: Missed, action: 'undo' | 'redo',
+  inverse: UndoEntry): UndoNotice {
+  return {
+    id,
+    text: line.kind === 'restored' ? restoredNoticeText(line.count, missed.notReopened, missed.notReattached)
+      : deletedNoticeText(line.count),
+    // The button acts on the step this one just put on the other stack.
+    offer: action === 'undo' ? 'redo' : 'undo',
+    entry: inverse,
+  };
+}
+
+/** The removal records a step's restore names: those of the nodes it brings
+ * back, as the model each record was made for (second review). */
+function removalsFor(entry: UndoEntry, body: RestoreBody): RemovalRecord[] {
+  const back = new Map(body.nodes.filter((node) => node.outputs !== undefined)
+    .map((node) => [node.id, node.definitionId]));
+  return (entry.removals ?? []).filter((record) => back.has(record.nodeId)
+    && (!record.definitionId || record.definitionId === back.get(record.nodeId)));
 }
 
 // Undo and redo reach the backend one at a time, in the order the person
@@ -2428,12 +2908,37 @@ function sendRestore(
   entry: UndoEntry,
   inverse: UndoEntry,
   set: GraphSet,
+  notice: { noticeId: number; ownLine: OwnStepLine | null },
 ): Promise<void> {
   const body = restoreRequest(action, prevNodes, prevEdges, nextNodes, nextEdges);
   if (!body) return restoreQueue;
   if (isForeignEdit(entry) && entry.editId) body.edit = entry.editId;
+  // The wires it puts back or takes off stay so until it lands (heldWires).
+  const holds = [...body.wire.map((w) => holdWire(w, true)), ...body.unwire.map((w) => holdWire(w, false))];
+  // Shown once the backend answers, unless another notice came since, or a
+  // new step has landed since: its Redo (or Undo) would no longer apply, so
+  // the line stays away (withLiveNotice; GM - Design, 2026-10-23). What it
+  // couldn't put back is never lost with it: that count shows on its own
+  // plain line above the newer notice (lateCount; GM, rounds 3 and 4).
+  const answerNotice = (missed: Missed) => set((state) => {
+    if (notice.ownLine) {
+      const shown = ownStepNotice(notice.noticeId, notice.ownLine, missed, action, inverse);
+      if (undoNoticeSeq === notice.noticeId && offerApplies(shown, state)) return { undoNotice: shown };
+      return lateCount(state, missed);
+    }
+    const shown = state.undoNotice;
+    const text = notRestoredText(missed.notReattached, missed.notReopened);
+    if (!text) return {};
+    if (shown && shown.id === notice.noticeId) return { undoNotice: { ...shown, text: `${shown.text}. ${text}` } };
+    return lateCount(state, missed);
+  });
   const task = restoreQueue.then(async () => {
-    let response: Response;
+    const replacementRevision = canvasReplacementRevision;
+    // Read now, not when the step was taken: the answer to the delete (or to
+    // the redo before this undo) may have landed since.
+    const removals = removalsFor(entry, body);
+    if (removals.length > 0) body.removals = removals;
+    let response: Response | null = null;
     try {
       response = await graphMutationFetch('/api/graph/restore', {
         method: 'POST',
@@ -2443,10 +2948,37 @@ function sendRestore(
     } catch (err) {
       // No answer: it may have landed. The next graphSync shows which.
       console.warn(`[nebula] ${action} didn't reach the backend:`, err);
+    }
+    for (const done of holds) done(Boolean(response?.ok));
+    if (!response) {
+      answerNotice(NOTHING_MISSED);
       return;
     }
-    if (response.ok) return;
-    const reason = await backendRejectionReason(response, `Couldn't ${action} that step`);
+    if (response.ok) {
+      const answer = await response.json().catch(() => ({})) as {
+        removals?: unknown; notReopened?: unknown; pinsLeft?: unknown;
+      };
+      // This restore deleted nodes (a redo of a delete): the step that
+      // brings them back names these records.
+      const fresh = cleanRemovals(answer.removals);
+      if (fresh.length > 0) {
+        inverse.removals = mergeRemovals(inverse.removals, fresh);
+        // And every other step naming the removals these supersede (an older
+        // one that brings the nodes back), unless another graph is open now.
+        if (replacementRevision === canvasReplacementRevision) {
+          set((state) => {
+            renewStackedRemovals(state, fresh);
+            return {};
+          });
+        }
+      }
+      answerNotice({
+        notReopened: Array.isArray(answer.notReopened) ? answer.notReopened.length : 0,
+        notReattached: pinsOnAnotherModel(answer.pinsLeft),
+      });
+      return;
+    }
+    const reason = await backendRejectionReason(response, `Couldn't ${action} that.`);
     console.warn(`[nebula] ${action} refused: ${reason}`);
     set((state) => {
       const stack = action === 'undo' ? state.redoStack : state.undoStack;
@@ -2518,6 +3050,7 @@ wsClient.subscribe((event) => {
     if (graphReplaced) {
       canvasReplacementRevision += 1;
       pendingConnectedNodeCreationAttempt = null;
+      wireWrites.clear();
       unsavedParamEdits.clear();
       // The committed import can arrive before, or instead of, its HTTP ack.
       // Revoke old same-ID uploads/writes and suspended drafts before merging.
@@ -2553,6 +3086,11 @@ wsClient.subscribe((event) => {
     observePendingConnectedNodeCreation(cliNodes as Node<NodeData>[], cliEdges as Edge[]);
 
     const state = useGraphStore.getState();
+    const held = heldWires(cliEdges ?? []);
+    for (const seen of syncWatchers) {
+      for (const node of cliNodes) seen.add(node.id);
+      for (const edge of cliEdges ?? []) seen.add(edgeKey(edge));
+    }
 
     if (empty) {
       // cli_graph was cleared — drop only cli-origin nodes/edges; keep frontend work.
@@ -2642,7 +3180,8 @@ wsClient.subscribe((event) => {
           data: {
             ...existing.data,
             ...cliNode.data,
-            outputs: hasCliOutputs ? cliOutputs : existing.data.outputs,
+            ...keptUniversalFields(existing, cliNode),
+            outputs: hasCliOutputs ? cliOutputs : keptOutputs(existing, cliNode),
             // The sync says "complete" for any node with outputs. Over the
             // same outputs it must not hide what a run's events said since:
             // a failure (an agent's run ends with a sync), a skip, or a run
@@ -2659,6 +3198,8 @@ wsClient.subscribe((event) => {
             // category must not sit beside a newer message.
             ...(cliNode.data.state === 'error' ? {
               errorFriendly: cliNode.data.errorFriendly, errorCategory: cliNode.data.errorCategory,
+              errorPerson: cliNode.data.errorPerson, errorProviderText: cliNode.data.errorProviderText,
+              errorProvider: cliNode.data.errorProvider,
             } : {}),
             keyStatus,
             ...(changedOutput ? clearBatchPreview() : {}),
@@ -2667,7 +3208,11 @@ wsClient.subscribe((event) => {
               outputs: paperSource.snapshot
                 ? { image: { type: 'Image' as const, value: paperSource.snapshot.filePath } }
                 : existing.data.outputs,
-              state: paperSource.snapshot ? 'complete' as const : 'idle' as const,
+              // The backend's 'error' (a run that couldn't read the pinned
+              // snapshot) stands, as worked out above; the snapshot decides
+              // the state only when there is none (error copy round 3e).
+              ...(cliNode.data.state === 'error' ? {}
+                : { state: paperSource.snapshot ? 'complete' as const : 'idle' as const }),
             } : {}),
             ...(cinemaScene ? {
               params: { ...cliNode.data.params, scene: cinemaScene },
@@ -2704,22 +3249,19 @@ wsClient.subscribe((event) => {
     ));
     const mergedIds = new Set(merged.map((n) => n.id));
 
-    // Preserve frontend-only edges whose endpoints are still present. We dedupe
-    // by connection identity (source:handle -> target:handle) rather than edge
-    // id because onConnect issues a UUID edge optimistically and the cli
-    // version that comes back via graphSync has a different id. Using
-    // connection identity means the cli edge wins silently.
-    const edgeKey = (e: Edge): string =>
-      `${e.source}:${e.sourceHandle ?? ''}->${e.target}:${e.targetHandle ?? ''}`;
+    // A wire between two backend nodes is the backend's: one this sync lacks
+    // is gone (an agent's unwire or undo, a re-typed node's pruning), unless
+    // it is this tab's own connect on its way (heldWires). Wires on nodes only
+    // this tab has stay while both ends do. Matched by connection, not id:
+    // onConnect's optimistic wire has a UUID, the backend's copy an e-id.
     const cliEdgeKeys = new Set((cliEdges as Edge[]).map(edgeKey));
-    const confirmedMotion = useCinemaMotionStore.getState().handoffs.filter((item) => item.status === 'ready' && item.targetId);
+    const mergedById = new Map(merged.map((n) => [n.id, n]));
     const frontendOnlyEdges = graphReplaced ? [] : state.edges.filter(
       (e) => !cliEdgeKeys.has(edgeKey(e)) && mergedIds.has(e.source) && mergedIds.has(e.target)
-        // A confirmed server-owned motion wire omitted by newer canonical
-        // state was removed. Keep other optimistic frontend edges unchanged.
-        && !confirmedMotion.some((item) => CLI_ID_RE.test(item.nodeId) && CLI_ID_RE.test(item.targetId!)
-          && e.source === item.nodeId && e.sourceHandle === shotPortId(item.shotId)
-          && e.target === item.targetId && e.targetHandle === 'image'),
+        && (!CLI_ID_RE.test(e.source) || !CLI_ID_RE.test(e.target) || held.get(edgeKey(e)) === true)
+        // A universal node whose model changed (the picker's route, which drops
+        // these wires itself) no longer has the port: the wire can't stay.
+        && universalPortsHold(e, mergedById),
     );
     // Edges are matched by id and connection: the backend can hand two
     // edges the same id (cli_graph.connect numbers by count after a removal).
@@ -2729,7 +3271,7 @@ wsClient.subscribe((event) => {
       ...frontendOnlyEdges,
       // A selected wire stays selected (React Flow keeps `selected` on the
       // edge, `false` once deselected, which is kept too so the wire is unchanged).
-      ...(cliEdges as Edge[]).map((edge) => {
+      ...(cliEdges as Edge[]).filter((edge) => held.get(edgeKey(edge)) !== false).map((edge) => {
         const selected = existingEdges.get(edgeIdentity(edge))?.selected;
         return typeof selected === 'boolean' ? { ...edge, selected } : edge;
       }),
@@ -2810,12 +3352,13 @@ function confirmRunCost(nodes: Node<NodeData>[], edges: Edge[], scope: RunScope)
   const pricing = usePricingStore.getState().table;
   if (!pricing || typeof window === 'undefined') return true;
   const { runCostConfirmUsd, settingsCache } = useUIStore.getState();
-  const summary = summarizeRunScope(nodes, edges, scope, { pricing, apiKeys: settingsCache.apiKeys });
+  const summary = summarizeRunScope(nodes, edges, scope,
+    { pricing, apiKeys: settingsCache.apiKeys, sizes: useInputSizeStore.getState().sizes });
   if (!shouldConfirmRunCost(summary, runCostConfirmUsd)) return true;
   return window.confirm(runCostConfirmMessage(summary));
 }
 
-export const useGraphStore = create<GraphState>((set, get) => ({
+export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get) => ({
   nodes: [],
   edges: [],
   isExecuting: activeRunOwners.size > 0,
@@ -2859,6 +3402,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   undoNotice: null,
   dismissUndoNotice: () => set({ undoNotice: null }),
+  lateNotice: null,
+  dismissLateNotice: () => set({ lateNotice: null }),
+  notify: (text, tone = 'error') => set({ undoNotice: { id: ++undoNoticeSeq, text, offer: null, tone } }),
 
   // ---------------------------------------------------------------------------
   // Clipboard: copy/paste with UUID regeneration
@@ -3024,7 +3570,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     if (state.isExecuting) return;
     const selectedIds = state.nodes.filter((node) => node.selected).map((node) => node.id);
     if (selectedIds.length === 0) return;
-    if (selectedIds.some((nodeId) => nodeHasProviderSafety(state, nodeId))) return;
+    if (refuseHeldNodeDelete(state, selectedIds, set)) return;
     // Route through the normal React Flow removal path so one undo snapshot,
     // backend mirroring, edge cleanup, and Remotion source pruning stay atomic.
     get().onNodesChange(selectedIds.map((id) => ({ id, type: 'remove' as const })));
@@ -3140,10 +3686,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     try {
       backendFresh = await ensureBackendFreshForLocalCanvas(localCanvasWasEmpty, set, get);
     } catch (err) {
-      return reportNodeCreationFailure(
-        definition.displayName,
-        err instanceof Error ? err.message : 'Backend rejected the request.',
-      );
+      return reportNodeCreationFailure(definition.displayName, failureCopy(err).reason);
     }
     if (!backendFresh) return addLocally(new Error('Backend is unavailable.'));
 
@@ -3184,7 +3727,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       if (pendingNodeCreationAttempt === attempt) pendingNodeCreationAttempt = null;
       return reportNodeCreationFailure(
         definition.displayName,
-        await backendRejectionReason(res, 'Backend rejected node creation'),
+        await backendRejectionReason(res, `Couldn't add ${definition.displayName}.`),
       );
     }
 
@@ -3274,6 +3817,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       originDefinitionId: origin.data.definitionId, connect: { ...connect }, phase: 'sending',
     };
     pendingConnectedNodeCreationAttempt = attempt;
+    const synced = watchGraphSyncs();
     let definiteOutcome = false;
     try {
       const res = await graphMutationFetch('/api/graph/node-and-connect', {
@@ -3283,7 +3827,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       });
       if (!res.ok) {
         definiteOutcome = res.status >= 400 && res.status < 500;
-        return fail(await backendRejectionReason(res, 'Backend rejected the connection'));
+        return fail(await backendRejectionReason(res, `Couldn't add ${definition.displayName}.`));
       }
       const node = (await res.json()) as { id?: unknown; definitionId?: unknown; params?: Record<string, unknown>;
         connected?: boolean; edge?: Edge };
@@ -3322,11 +3866,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         type: nodeTypes[definitionId] ?? (dynamic ? 'dynamic-node' : definitionId.startsWith('qc-') ? 'videoQcNode' : 'model-node'),
         position: { ...position }, data };
       // A fast graphSync may already contain either item. Keep its canonical
-      // data, outputs and edge ID; otherwise expose the acknowledged pair now.
+      // data, outputs and edge ID (or its removal since: an agent's unwire);
+      // otherwise expose the acknowledged pair now.
       set((state) => ({
-        nodes: state.nodes.some((item) => item.id === nodeId) ? state.nodes : [...state.nodes, newNode],
-        edges: state.edges.some((item) => item.source === edge.source && item.sourceHandle === edge.sourceHandle
-          && item.target === edge.target && item.targetHandle === edge.targetHandle) ? state.edges : [...state.edges, edge],
+        nodes: synced.seen.has(nodeId) || state.nodes.some((item) => item.id === nodeId) ? state.nodes : [...state.nodes, newNode],
+        edges: synced.seen.has(edgeKey(edge)) || state.edges.some((item) => edgeKey(item) === edgeKey(edge))
+          ? state.edges : [...state.edges, edge],
         undoStack: [...state.undoStack, undoSnapshot].slice(-UNDO_CAP),
         redoStack: [],
       }));
@@ -3340,6 +3885,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         if (definiteOutcome || attempt.observedNodeId) pendingConnectedNodeCreationAttempt = null;
         else attempt.phase = 'uncertain';
       }
+      synced.stop();
       unsubscribe();
     }
   },
@@ -3404,6 +3950,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         if (!shortId) return;
         // Remap edges too so any connections drawn during the race window
         // keep pointing at the renamed node.
+        const drawn = new Set(get().edges.filter((e) => e.source === tempId || e.target === tempId).map((e) => e.id));
         set((state) => ({
           nodes: state.nodes.map((n) => (n.id === tempId ? { ...n, id: shortId } : n)),
           edges: state.edges.map((e) => ({
@@ -3412,6 +3959,11 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             target: e.target === tempId ? shortId : e.target,
           })),
         }));
+        // onConnect sent none of them (an end had no backend id yet): those
+        // between two backend nodes now go, held like any connect (sendWire).
+        for (const edge of get().edges) {
+          if (drawn.has(edge.id) && CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) void sendWire(edge, true, set);
+        }
       })
       .catch((err) => {
         console.warn('[nebula] addDynamicNode backend push failed — staying frontend-only:', err);
@@ -3420,13 +3972,26 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     return tempId;
   },
 
+  // No confirm (GM, 2026-10-23): undo puts back everything a delete removed,
+  // so the delete says "Deleted the node." with Undo instead (lib/deleteNotice.ts).
+  allowCanvasDelete: (nodeIds) => !refuseHeldNodeDelete(get(), nodeIds, set),
+
   onNodesChange: (changes) => {
     if (get().isExecuting && changes.some((change) => change.type === 'remove')) return;
     const removedIds = changes.filter((c): c is NodeChange & { type: 'remove' } => c.type === 'remove').map((c) => c.id);
-    if (removedIds.some((nodeId) => nodeHasProviderSafety(get(), nodeId))) return;
+    if (refuseHeldNodeDelete(get(), removedIds, set)) return;
     const cliRemovedIds = removedIds.filter((nodeId) => CLI_ID_RE.test(nodeId));
     if (cliRemovedIds.length === 0) {
-      applyCanvasNodeChanges(changes, set, get);
+      if (removedIds.length === 0) {
+        applyCanvasNodeChanges(changes, set, get);
+        return;
+      }
+      breakUndoDebounce();
+      const step = pushUndo(set, get);
+      const present = new Set(get().nodes.map((node) => node.id));
+      applyCanvasNodeChanges(changes, set, get, step);
+      const gone = removedIds.filter((nodeId) => present.has(nodeId) && !get().nodes.some((node) => node.id === nodeId));
+      if (gone.length > 0) set(deletedNotice(gone.length, step));
       return;
     }
 
@@ -3436,25 +4001,53 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     // node here before its reply arrives.
     breakUndoDebounce();
     const undoStep = pushUndo(set, get);
-    void Promise.allSettled(cliRemovedIds.map(deleteCLIOriginNode)).then((results) => {
+    const shownBefore = new Set(get().nodes.map((node) => node.id));
+    // A project opened (or a graph loaded) before the answers came: the
+    // canvas and its steps are another graph's now (second review).
+    const replacementRevision = canvasReplacementRevision;
+    const deleting = Promise.allSettled(cliRemovedIds.map(deleteCLIOriginNode)).then((results) => {
       const confirmed = new Set<string>();
       const failures: string[] = [];
+      const removals: RemovalRecord[] = [];
       results.forEach((result, index) => {
-        if (result.status === 'fulfilled') confirmed.add(cliRemovedIds[index]);
-        else failures.push(result.reason instanceof Error
-          ? result.reason.message
-          : `Deletion of ${cliRemovedIds[index]} failed.`);
+        if (result.status === 'fulfilled') {
+          confirmed.add(cliRemovedIds[index]);
+          if (result.value) removals.push(result.value);
+        } else failures.push(failureCopy(result.reason).reason);
       });
+      // Undoing this step names what each delete removed (GM, 2026-10-23).
+      if (removals.length > 0) undoStep.removals = mergeRemovals(undoStep.removals, removals);
+      if (replacementRevision !== canvasReplacementRevision) {
+        // Nothing here is that graph's any more: no node to take off, no
+        // step to renew, no notice. The step keeps its records, for an undo
+        // that comes back to that graph (an import undone).
+        if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length);
+        return;
+      }
+      if (removals.length > 0) {
+        set((state) => {
+          renewStackedRemovals(state, removals);
+          return {};
+        });
+      }
       const safeChanges = changes.filter((change) => (
         change.type !== 'remove'
         || !CLI_ID_RE.test(change.id)
         || confirmed.has(change.id)
       ));
+      const removing = safeChanges.filter((change) => change.type === 'remove').map((change) => change.id);
       // Nothing was deleted after all: the step taken above would undo nothing.
-      if (!safeChanges.some((change) => change.type === 'remove')) get().cancelUndoStep(undoStep);
+      if (removing.length === 0) get().cancelUndoStep(undoStep);
       if (safeChanges.length > 0) applyCanvasNodeChanges(safeChanges, set, get, undoStep);
-      if (failures.length > 0) reportNodeDeletionFailure(failures);
+      const deleted = removing.filter((nodeId) => shownBefore.has(nodeId)).length;
+      // Its Undo applies only while this step is next in line: after a newer
+      // step, the line would offer a button that does nothing (withLiveNotice).
+      if (deleted > 0 && get().undoStack.at(-1) === undoStep) set(deletedNotice(deleted, undoStep));
+      if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length);
     });
+    // An undo pressed while the deletes are on their way waits for their
+    // answers, so its restore can name what they removed.
+    restoreQueue = restoreQueue.then(() => deleting);
   },
 
   onEdgesChange: (changes) => {
@@ -3472,18 +4065,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       for (const id of removedIds) {
         const edge = currentEdges.find((e) => e.id === id);
         if (!edge) continue;
-        if (CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) {
-          graphMutationFetch('/api/graph/edge', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              source: edge.source,
-              sourceHandle: edge.sourceHandle ?? '',
-              target: edge.target,
-              targetHandle: edge.targetHandle ?? '',
-            }),
-          }).catch((err) => console.warn('[nebula] DELETE edge failed:', err));
-        }
+        if (CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) void sendWire(edge, false, set);
       }
     }
     set((state) => {
@@ -3584,31 +4166,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     set((state) => ({ edges: [...state.edges.filter((edge) => !replacedIds.has(edge.id)), newEdge] }));
 
     if (CLI_ID_RE.test(connection.source) && CLI_ID_RE.test(connection.target)) {
-      (async () => {
-        for (const edge of edgesToReplace) {
-          if (!CLI_ID_RE.test(edge.source) || !CLI_ID_RE.test(edge.target)) continue;
-          await graphMutationFetch('/api/graph/edge', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              source: edge.source,
-              sourceHandle: edge.sourceHandle ?? '',
-              target: edge.target,
-              targetHandle: edge.targetHandle ?? '',
-            }),
-          });
-        }
-        await graphMutationFetch('/api/graph/connect', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            source: connection.source,
-            sourceHandle: connection.sourceHandle,
-            target: connection.target,
-            targetHandle: connection.targetHandle,
-          }),
-        });
-      })().catch((err) => console.warn('[nebula] onConnect backend push failed:', err));
+      // The wires it replaces go first; all are held from now (sendWire).
+      let sent: Promise<unknown> | undefined;
+      for (const edge of edgesToReplace) {
+        if (CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) sent = sendWire(edge, false, set, sent);
+      }
+      void sendWire(newEdge, true, set, sent);
     }
 
     // mask-painter only outputs a mask bitmap — inpaint nodes also need the base
@@ -3722,23 +4285,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       if (paramPushTimers[nodeId] !== undefined) {
         window.clearTimeout(paramPushTimers[nodeId]);
       }
-      paramPushTimers[nodeId] = window.setTimeout(() => {
-        delete paramPushTimers[nodeId];
-        const node = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
-        if (!node) {
-          unsavedParamEdits.delete(nodeId);
-          return;
-        }
-        const edits = unsavedParamEdits.get(nodeId);
-        if (edits) edits.inFlight += 1;
-        graphMutationFetch(`/api/graph/node/${nodeId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ params: node.data.params }),
-        }).catch((err) => {
-          console.warn(`[nebula] Param sync for ${nodeId} failed:`, err);
-        }).finally(() => { if (edits) settleParamEdit(nodeId, edits); });
-      }, PARAM_PUSH_DEBOUNCE_MS);
+      scheduleParamPush(nodeId);
     }
   },
 
@@ -4364,7 +4911,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
       if (result.status !== 'started' && result.status !== 'validation_error') {
         throw new ExecutionStartRejectedError(
-          `Execution did not start (${result.status || 'unknown status'}).`,
+          notStartedMessage("Couldn't start the run.", result.status),
           400,
         );
       }
@@ -4375,7 +4922,6 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             state.nodes,
             new Set(nodesInExecutionScope(state.nodes, state.edges).map((node) => node.id)),
             result.errors,
-            'Validation failed before execution. Check required inputs and API keys.',
           ),
           ...ownershipState(),
         }));
@@ -4393,7 +4939,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         nodes: markNodesErrored(
           state.nodes,
           new Set(nodesInExecutionScope(state.nodes, state.edges).map((node) => node.id)),
-          err instanceof Error ? err.message : 'Failed to start execution.',
+          failureMessage(err, "Couldn't start the run."),
+          err,
         ),
         ...ownershipState(),
       }));
@@ -4441,7 +4988,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
       if (result.status !== 'started' && result.status !== 'validation_error') {
         throw new ExecutionStartRejectedError(
-          `Execution did not start (${result.status || 'unknown status'}).`,
+          notStartedMessage("Couldn't run the node.", result.status),
           400,
         );
       }
@@ -4452,7 +4999,6 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             state.nodes,
             new Set(nodesInExecutionScope(state.nodes, state.edges, nodeId).map((node) => node.id)),
             result.errors,
-            'Validation failed before execution. Check required inputs and API keys.',
           ),
           ...ownershipState(),
         }));
@@ -4470,7 +5016,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         nodes: markNodesErrored(
           state.nodes,
           new Set(nodesInExecutionScope(state.nodes, state.edges, nodeId).map((node) => node.id)),
-          err instanceof Error ? err.message : 'Failed to start node execution.',
+          failureMessage(err, "Couldn't run the node."),
+          err,
         ),
         ...ownershipState(),
       }));
@@ -4513,7 +5060,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const shotSnapshot = captureRunSnapshot(nodes, edges);
     if (runIncludesFreshPaidWorldLabsStart(shotSnapshot, nodeId)) {
       applySceneToNode(set, nodeId, patchShot(scene, {
-        ...(shot.output ?? {}),
+        ...withoutShotError(shot.output),
         status: 'error',
         error: 'Run the World Labs Environment on Canvas first, then generate this shot from its recovered output.',
       }));
@@ -4522,7 +5069,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
     // Optimistically mark this shot running (local only — the backend streams the
     // terminal scene back via graphSync).
-    applySceneToNode(set, nodeId, patchShot(scene, { ...(shot.output ?? {}), status: 'running' }));
+    applySceneToNode(set, nodeId, patchShot(scene, { ...withoutShotError(shot.output), status: 'running' }));
 
     const graphNodes = shotSnapshot.nodes;
     const graphEdges = shotSnapshot.edges.map((edge) => ({
@@ -4533,12 +5080,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
     // Clear the optimistic spinner to an error state when no graphSync will
     // follow (up-front validation failure or a thrown request).
-    const failShot = (message: string) => {
+    const failShot = (message: string, reading?: ValidationReading) => {
       const cur = get().nodes.find((n) => n.id === nodeId);
       const curScene = (cur?.data.params as { scene?: CinemaSceneSpec } | undefined)?.scene;
       if (!curScene) return;
       const curShot = curScene.shots.find((s) => s.id === shotId);
-      applySceneToNode(set, nodeId, patchShot(curScene, { ...(curShot?.output ?? {}), status: 'error', error: message }));
+      applySceneToNode(set, nodeId, patchShot(curScene, { ...withoutShotError(curShot?.output), status: 'error',
+        error: reading?.error ?? message,
+        ...(reading?.errorPerson ? { errorPerson: reading.errorPerson } : {}),
+        ...(reading?.errorCategory ? { errorCategory: reading.errorCategory } : {}) }));
     };
 
     const runId = uuidv4();
@@ -4555,7 +5105,13 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       if (!ownsRun(runId)) return;
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
       if (result.status !== 'started') {
-        failShot(result.status === 'validation_error' ? 'Validation failed. Check inputs and API keys.' : `Shot did not start (${result.status}).`);
+        if (result.status === 'validation_error') {
+          // The scene's own checks' line, or that another node needs a fix
+          // (error copy round 3e); the answer names no node from an older backend.
+          const { byNode, global } = validationReadings(result.errors);
+          failShot(SHOT_NOT_STARTED_LINE, byNode.get(nodeId) ?? global
+            ?? (byNode.size ? writtenReading(OTHER_NODE_LINE) : writtenReading(SHOT_NOT_STARTED_LINE)));
+        } else failShot(notStartedMessage("Couldn't start the shot.", result.status));
         settleTrackedExecutionStatus('failed', runId, set, get);
         return;
       }
@@ -4567,7 +5123,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       if (!ownsRun(runId)) return;
       console.error('Failed to generate shot:', err);
       if (err instanceof ExecutionStartRejectedError) {
-        failShot(err.message);
+        failShot(failureMessage(err, "Couldn't start the shot."));
         settleTrackedExecutionStatus('failed', runId, set, get);
       } else await reconcileWorldLabsExecutionStatus(runId, set, get);
     }
@@ -4667,7 +5223,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
       if (result.status !== 'started' && result.status !== 'validation_error') {
         throw new ExecutionStartRejectedError(
-          `Execution did not start (${result.status || 'unknown status'}).`,
+          notStartedMessage("Couldn't start the run.", result.status),
           400,
         );
       }
@@ -4678,7 +5234,6 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             state.nodes,
             idSet,
             result.errors,
-            'Validation failed before generation. Check required inputs and API keys.',
           ),
           ...ownershipState(),
         }));
@@ -4693,7 +5248,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
       closeCurrentRun(set, { status: 'failed' });
       set((state) => ({
-        nodes: markNodesErrored(state.nodes, idSet, err instanceof Error ? err.message : 'Failed to start generation.'),
+        nodes: markNodesErrored(state.nodes, idSet, failureMessage(err, "Couldn't start the run."), err),
         ...ownershipState(),
       }));
     }
@@ -4744,9 +5299,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
       closeTrackedRun(set, runId, { status: 'failed' });
       set((state) => ({ nodes: result.status === 'validation_error'
-        ? markNodesWithValidationErrors(state.nodes, idSet, result.errors,
-          'Validation failed before generation. Check required inputs and API keys.')
-        : markNodesErrored(state.nodes, idSet, `Execution did not start (${result.status || 'unknown status'}).`) }));
+        ? markNodesWithValidationErrors(state.nodes, idSet, result.errors)
+        : markNodesErrored(state.nodes, idSet, notStartedMessage("Couldn't start the run.", result.status)) }));
     } catch (error) {
       settleFailedStart(runId, error);
       if (!ownsRun(runId)) return;
@@ -4759,12 +5313,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
       closeTrackedRun(set, runId, { status: cancellationRequestedRunIds.has(runId) ? 'cancelled' : 'failed' });
       set((state) => ({ nodes: markNodesErrored(state.nodes, idSet,
-        error instanceof Error ? error.message : 'Failed to start generation.') }));
+        failureMessage(error, "Couldn't start the run."), error) }));
     }
   },
 
   authorGenerationCluster: async (request) => {
-    if (get().isImportingGraph) throw new Error('Wait for the graph import to finish.');
+    if (get().isImportingGraph) throw new FailureNotice("Couldn't start the generation.", 'Wait for the graph import to finish.');
     const def = NODE_DEFINITIONS[request.definitionId];
     if (!def) return { modelNodeIds: [], allNodeIds: [] };
 
@@ -4825,6 +5379,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     let idMap: Record<string, string> = {};
     let rfNodes: Node<NodeData>[] = [];
     let rfEdges: Edge[] = [];
+    const synced = watchGraphSyncs();
     try {
       const res = await graphMutationFetch('/api/graph/cluster', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -4836,6 +5391,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     } catch (err) {
       console.error('[nebula] authorGenerationCluster persist failed:', err);
       return { modelNodeIds: [], allNodeIds: [] };
+    } finally {
+      synced.stop();
     }
 
     const origin: CreateOriginTag = { sessionId: request.sessionId, genId: request.genId, ts: Date.now(), prompt: request.prompt };
@@ -4856,11 +5413,11 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           ? { ...n, data: { ...n.data, _createOrigin: incoming.data._createOrigin } }
           : n;
       });
-      const newNodes = taggedNodes.filter((n) => !existingIds.has(n.id));
+      const newNodes = taggedNodes.filter((n) => !existingIds.has(n.id) && !synced.seen.has(n.id));
       const existingEdgeIds = new Set(state.edges.map((e) => e.id));
       return {
         nodes: [...mergedNodes, ...newNodes],
-        edges: [...state.edges, ...rfEdges.filter((e) => !existingEdgeIds.has(e.id))],
+        edges: [...state.edges, ...rfEdges.filter((e) => !existingEdgeIds.has(e.id) && !synced.seen.has(edgeKey(e)))],
       };
     });
 
@@ -4887,9 +5444,11 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       });
       const existingIds = new Set(state.nodes.map((node) => node.id));
       const existingEdgeIds = new Set(state.edges.map((edge) => edge.id));
+      // What a sync already carried is the syncs' (an agent may have removed it since).
+      const synced = options?.synced ?? new Set<string>();
       return {
-        nodes: [...merged, ...incoming.filter((node) => !existingIds.has(node.id))],
-        edges: [...state.edges, ...incomingEdges.filter((edge) => !existingEdgeIds.has(edge.id))],
+        nodes: [...merged, ...incoming.filter((node) => !existingIds.has(node.id) && !synced.has(node.id))],
+        edges: [...state.edges, ...incomingEdges.filter((edge) => !existingEdgeIds.has(edge.id) && !synced.has(edgeKey(edge)))],
       };
     });
   },
@@ -4908,7 +5467,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const isCreateInput = inputNode?.data.definitionId === 'text-input' || inputNode?.data.definitionId === 'image-input';
       if (!stillUsed && isCreateInput) toRemove.add(inputId);
     }
-    if ([...toRemove].some((nodeId) => nodeHasProviderSafety(get(), nodeId))) return;
+    if (refuseHeldNodeDelete(get(), [...toRemove], set)) return;
     get().onNodesChange([...toRemove].map((id) => ({ id, type: 'remove' as const })));
   },
 
@@ -4948,7 +5507,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   deleteNode: (nodeId) => {
-    if (get().isExecuting || nodeHasProviderSafety(get(), nodeId)) return;
+    if (get().isExecuting || refuseHeldNodeDelete(get(), [nodeId], set)) return;
     get().onNodesChange([{ id: nodeId, type: 'remove' }]);
   },
 
@@ -5146,18 +5705,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const deadPortId = shotPortId(shotId);
     for (const edge of get().edges) {
       if (edge.source !== nodeId || edge.sourceHandle !== deadPortId) continue;
-      if (CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) {
-        graphMutationFetch('/api/graph/edge', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            source: edge.source,
-            sourceHandle: edge.sourceHandle ?? '',
-            target: edge.target,
-            targetHandle: edge.targetHandle ?? '',
-          }),
-        }).catch((err) => console.warn('[nebula] DELETE cinema shot edge failed:', err));
-      }
+      if (CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) void sendWire(edge, false, set);
     }
 
     applySceneToNode(set, nodeId, nextScene);
@@ -5178,18 +5726,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     for (const edge of get().edges) {
       if (edge.source !== nodeId || !edge.sourceHandle?.startsWith('shot_')) continue;
       if (validPortIds.has(edge.sourceHandle)) continue;
-      if (CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) {
-        graphMutationFetch('/api/graph/edge', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            source: edge.source,
-            sourceHandle: edge.sourceHandle ?? '',
-            target: edge.target,
-            targetHandle: edge.targetHandle ?? '',
-          }),
-        }).catch((err) => console.warn('[nebula] DELETE cinema shot edge failed:', err));
-      }
+      if (CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) void sendWire(edge, false, set);
     }
 
     applySceneToNode(set, nodeId, spec);
@@ -5402,6 +5939,10 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       // The clipboard stays, so nodes copy across projects; the bumped load
       // makes it paste with its copy-time params (see CanvasClipboard).
       undoStack: [], redoStack: [], backendFreshStartPending: false,
+      // The old project's notice (its edit's Undo, its error) is about that
+      // canvas; a notice for the new one is set after this load. Its late
+      // restore count too.
+      undoNotice: null, lateNotice: null,
       providerRecoveryWarning: null, providerRecoveries: [], providerStartAmbiguities: [],
       uncertainWorldLabsRunId: null,
     });
@@ -5450,7 +5991,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     if (!source) return;
     const snapshot = snapshotWithLatestPaperSources(source, captureRunSnapshot(state.nodes, state.edges));
     if (!snapshot) {
-      window.alert('Refresh or reconnect the Paper sources in this saved recipe before rerunning with the latest snapshot. Their last successful snapshots remain in source history.');
+      // GM - Design, round 4 (one line at 560 px).
+      get().notify("Refresh this recipe's Paper sources, then run it again. Their last snapshots are kept.");
       return;
     }
     await executeHistoricalRun({ ...source, snapshot }, 'latest-paper-source', set, get);
@@ -5489,127 +6031,56 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     set({ nodes: [], edges: [], undoStack: newStack, redoStack: [], backendFreshStartPending: false });
   },
 
-  configureOpenRouterModel: (nodeId, modelId, model) => {
-    pushUndo(set, get);
-
-    const inputModalities = model.input_modalities || ['text'];
-    const outputModalities = model.output_modalities || ['text'];
-
-    const inputPorts: DynamicPortDefinition[] = [
-      { id: 'messages', label: 'Messages', dataType: 'Text', required: true },
-    ];
-    if (inputModalities.includes('image')) {
-      inputPorts.push({ id: 'images', label: 'Images', dataType: 'Image', required: false, multiple: true });
+  // The model pickers ask the backend for a model's ports and params
+  // (services/universal_ports.py, POST /api/graph/node/{id}/model): one set of
+  // rules for the canvas, the wire checks and agents' edits. The backend also
+  // drops wires on ports the new model doesn't have and syncs the canvas.
+  configureOpenRouterModel: async (nodeId, modelId) => {
+    const step = get().beginUndoStep();
+    try {
+      const result = await requestUniversalModel(nodeId, modelId);
+      if (!result) {
+        get().cancelUndoStep(step);
+        return;
+      }
+      set((state) => ({
+        nodes: state.nodes.map((n) => {
+          if (n.id !== nodeId) return n;
+          const data = n.data as unknown as DynamicNodeData;
+          return {
+            ...n,
+            type: isDynamicDefinition(data.definitionId) ? 'dynamic-node' : n.type,
+            data: {
+              ...data,
+              isDynamic: true,
+              providerType: dynamicProviderFor(data.definitionId),
+              modelId,
+              params: withEditsSinceRequest(nodeId, data.definitionId, result.params, data.params),
+              outputs: outputsOnPorts(data.outputs, result.dynamicOutputPorts),
+              dynamicInputPorts: result.dynamicInputPorts,
+              dynamicOutputPorts: result.dynamicOutputPorts,
+              dynamicParams: data.dynamicParams ?? [],
+              providerMeta: data.providerMeta ?? {},
+            } as unknown as NodeData,
+          };
+        }),
+        // Remove edges connected to ports that no longer exist
+        edges: state.edges.filter((e) => edgeFitsPorts(nodeId, e, result)),
+      }));
+    } catch (err) {
+      get().cancelUndoStep(step);
+      console.error('Failed to set the model:', err);
     }
-
-    const outputPorts: DynamicPortDefinition[] = [];
-    if (outputModalities.includes('text')) {
-      outputPorts.push({ id: 'text', label: 'Text', dataType: 'Text', required: false });
-    }
-    if (outputModalities.includes('image')) {
-      outputPorts.push({ id: 'image', label: 'Image', dataType: 'Image', required: false });
-    }
-
-    const wantsImage = outputModalities.includes('image');
-
-    set((state) => ({
-      nodes: state.nodes.map((n) => {
-        if (n.id !== nodeId) return n;
-        const data = n.data as unknown as DynamicNodeData;
-        return {
-          ...n,
-          type: isDynamicDefinition(data.definitionId) ? 'dynamic-node' : n.type,
-          data: {
-            ...data,
-            isDynamic: true,
-            providerType: dynamicProviderFor(data.definitionId),
-            modelId,
-            params: { ...data.params, model: modelId, _output_image: wantsImage },
-            dynamicInputPorts: inputPorts,
-            dynamicOutputPorts: outputPorts,
-            dynamicParams: data.dynamicParams ?? [],
-            providerMeta: data.providerMeta ?? {},
-          } as unknown as NodeData,
-        };
-      }),
-      // Remove edges connected to ports that no longer exist
-      edges: state.edges.filter((e) => {
-        if (e.source === nodeId) {
-          return outputPorts.some((p) => p.id === e.sourceHandle);
-        }
-        if (e.target === nodeId) {
-          return inputPorts.some((p) => p.id === e.targetHandle);
-        }
-        return true;
-      }),
-    }));
   },
 
   fetchReplicateSchemaAndConfigure: async (nodeId, owner, name) => {
+    const step = get().beginUndoStep();
     try {
-      const schema = await fetchReplicateSchema(owner, name);
-
-      const inputProps = ((schema.input_schema as Record<string, unknown>)?.properties as Record<string, Record<string, unknown>>) ?? {};
-      const requiredInputs: string[] = ((schema.input_schema as Record<string, unknown>)?.required as string[]) ?? [];
-      const dynamicParams: DynamicParamDefinition[] = [];
-      const inputPorts: DynamicPortDefinition[] = [];
-
-      for (const [key, prop] of Object.entries(inputProps)) {
-        const p = prop as Record<string, unknown>;
-        const description = (p.description as string) ?? '';
-        const isUploadable = p['x-uploadable'] === true;
-        const format = (p.format as string) ?? '';
-
-        if (isUploadable || format === 'uri') {
-          inputPorts.push({
-            id: key,
-            label: key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
-            dataType: 'Image',
-            required: requiredInputs.includes(key),
-          });
-          continue;
-        }
-
-        let paramType: DynamicParamDefinition['type'] = 'string';
-        if (p.type === 'integer') paramType = 'integer';
-        else if (p.type === 'number') paramType = 'float';
-        else if (p.type === 'boolean') paramType = 'boolean';
-        else if (p.enum) paramType = 'enum';
-
-        const param: DynamicParamDefinition = {
-          key,
-          label: key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
-          type: paramType,
-          required: requiredInputs.includes(key),
-          default: p.default,
-          placeholder: description.slice(0, 80),
-        };
-
-        if (p.enum) {
-          param.options = (p.enum as Array<string | number>).map((v) => ({ label: String(v), value: v }));
-        }
-        if (p.minimum !== undefined) param.min = p.minimum as number;
-        if (p.maximum !== undefined) param.max = p.maximum as number;
-
-        dynamicParams.push(param);
+      const result = await requestUniversalModel(nodeId, `${owner}/${name}`);
+      if (!result) {
+        get().cancelUndoStep(step);
+        return;
       }
-
-      const outputPorts: DynamicPortDefinition[] = [];
-      const outputSchema = schema.output_schema as Record<string, unknown>;
-
-      if (outputSchema?.type === 'string' && outputSchema?.format === 'uri') {
-        outputPorts.push({ id: 'image', label: 'Output', dataType: 'Image', required: false });
-      } else if (outputSchema?.type === 'array') {
-        outputPorts.push({ id: 'image', label: 'Output', dataType: 'Image', required: false });
-      } else {
-        outputPorts.push({ id: 'text', label: 'Output', dataType: 'Text', required: false });
-      }
-
-      const paramDefaults: Record<string, unknown> = {};
-      for (const dp of dynamicParams) {
-        if (dp.default !== undefined) paramDefaults[dp.key] = dp.default;
-      }
-
       set((state) => ({
         nodes: state.nodes.map((n) => {
           if (n.id !== nodeId) return n;
@@ -5618,16 +6089,19 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             ...n,
             data: {
               ...data,
-              params: { ...data.params, ...paramDefaults, _version_id: schema.version_id, _schema_fetched: true },
-              dynamicInputPorts: inputPorts,
-              dynamicOutputPorts: outputPorts,
-              dynamicParams,
-              providerMeta: { ...data.providerMeta, version_id: schema.version_id, description: schema.description },
+              params: withEditsSinceRequest(nodeId, data.definitionId, result.params, data.params),
+              outputs: outputsOnPorts(data.outputs, result.dynamicOutputPorts),
+              dynamicInputPorts: result.dynamicInputPorts,
+              dynamicOutputPorts: result.dynamicOutputPorts,
+              dynamicParams: result.dynamicParams,
+              providerMeta: { ...data.providerMeta, ...result.providerMeta },
             } as unknown as NodeData,
           };
         }),
+        edges: state.edges.filter((e) => edgeFitsPorts(nodeId, e, result)),
       }));
     } catch (err) {
+      get().cancelUndoStep(step);
       console.error('Failed to fetch Replicate schema:', err);
     }
   },
@@ -5847,6 +6321,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           error: event.error,
           errorCategory: event.category,
           errorFriendly: event.friendly,
+          errorPerson: event.person ?? undefined,
+          errorProviderText: event.providerText || undefined,
+          errorProvider: event.provider || undefined,
           progress: undefined,
           streamingText: undefined,
           streamingPartials: undefined,
@@ -5855,11 +6332,14 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       case 'validationError': {
         const runId = event.runId ?? currentRunId;
         // CLI runs also annotate their validation errors, but an unrelated
-        // external validation cannot overwrite a locally owned node.
-        for (const error of event.errors) {
-          if (error.nodeId && ((runId && ownsRun(runId)) || !scopeOverlaps([error.nodeId]))) {
-            get().updateNodeData(error.nodeId, {
-              state: 'error', error: error.message, errorCategory: undefined, errorFriendly: undefined,
+        // external validation cannot overwrite a locally owned node. Each
+        // node reads all its checks together (lib/validationCopy.ts), as its
+        // run call's answer and a reload do.
+        for (const [nodeId, reading] of validationReadings(event.errors).byNode) {
+          if ((runId && ownsRun(runId)) || !scopeOverlaps([nodeId])) {
+            get().updateNodeData(nodeId, {
+              state: 'error', error: reading.error, errorCategory: reading.errorCategory, errorFriendly: undefined,
+              errorPerson: reading.errorPerson, errorProviderText: undefined, errorProvider: undefined,
             });
           }
         }
@@ -5918,14 +6398,17 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   deleteProviderRecovery: async (runId, nodeId) => {
+    // Round 3b: the person reads these (Run History alerts them), so they are
+    // written lines under the button's heading, not developer text.
     if (get().isExecuting) {
-      throw new Error('Wait for the active run to finish before clearing recovery safety.');
+      throw new FailureNotice(FORGET_RECOVERY_HEADING, 'Let the run finish, then try again.');
     }
     const expected = get().providerRecoveries.find(
       (checkpoint) => checkpoint.runId === runId && checkpoint.nodeId === nodeId,
     );
     if (!expected || expected.durable === false) {
-      throw new Error('That durable provider recovery checkpoint is no longer current.');
+      throw new FailureNotice(FORGET_RECOVERY_HEADING,
+        "That recovery safeguard isn't there anymore. Reload to get the latest run history.");
     }
     await apiDeleteProviderRecovery(runId, nodeId, expected);
     set((state) => {
@@ -6052,7 +6535,16 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   dismissProviderRecoveryWarning: () => set({ providerRecoveryWarning: null }),
-}));
+})));
+
+// A line from a module that doesn't import this store (lib/canvasNotice.ts,
+// round 3f) becomes the canvas notice.
+if (typeof window !== 'undefined') {
+  window.addEventListener(CANVAS_NOTICE_EVENT, (event) => {
+    const detail = (event as CustomEvent<CanvasNoticeDetail>).detail;
+    if (detail?.text) useGraphStore.getState().notify(detail.text, detail.tone);
+  });
+}
 
 // Hold navigation through response parsing and local authoring callbacks too.
 const projectMutationMethods = useGraphStore.getState();
@@ -6063,6 +6555,7 @@ useGraphStore.setState({
   addMoodboardNode: withGraphMutationLifetime(projectMutationMethods.addMoodboardNode),
   authorGenerationCluster: withGraphMutationLifetime(projectMutationMethods.authorGenerationCluster),
   fetchReplicateSchemaAndConfigure: withGraphMutationLifetime(projectMutationMethods.fetchReplicateSchemaAndConfigure),
+  configureOpenRouterModel: withGraphMutationLifetime(projectMutationMethods.configureOpenRouterModel),
   promoteShotVariation: withGraphMutationLifetime(projectMutationMethods.promoteShotVariation),
 });
 

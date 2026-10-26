@@ -142,7 +142,8 @@ describe('App project startup and explicit workspace entry', () => {
   });
 
   it('keeps a load failure visible on home and delegates the explicit retry action', async () => {
-    useProjectStore.setState({ loading: false, projects: [], error: 'Could not load saved projects.' });
+    // The store records what Try again redoes beside every error (round 3b): here, the list.
+    useProjectStore.setState({ loading: false, projects: [], error: 'Could not load saved projects.', errorRetry: { action: 'load' } });
     await act(async () => { render(<App />); });
     expect(screen.getByRole('alert').textContent).toContain('Could not load saved projects.');
     expect(screen.queryByTestId('project-canvas')).toBeNull();

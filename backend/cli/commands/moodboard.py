@@ -132,7 +132,7 @@ def _print_brief(board: dict[str, Any]) -> None:
     source = _OVERRIDE_AUTHOR[override["by"]] if override else "generated"
     if board_is_off(board):
         # Q36 a: at 0 no node it's wired into gets any of it.
-        print(f"  Brief ({source}), not sent: board strength is 0, so no node it's wired into gets the board:")
+        print(f"  Brief ({source}), not sent: board strength is 0, so no node it's connected to gets the board:")
     else:
         print(f"  Brief sent to generators ({source}):")
     if composed.get("styleBrief"):
@@ -218,16 +218,23 @@ def _print_board(board: dict[str, Any], names: dict[str, tuple[str, bool]] | Non
         print(f"  Cover: #{cover['number']} ({cover['id']})" if cover["chosen"]
               else f"  Cover: #{cover['number']}, the first image (none chosen)")
     print(f"  Images ({len(images)}):")
+    outside = {str(image_id) for image_id in board.get("outsideImages") or []}
     for index, image in enumerate(images, start=1):
         flags = ("  set aside" if image.get("excluded")
                  else "  set aside (weight 0)" if boards.is_set_aside(image) else "")
         if cover is not None and cover["chosen"] and cover["number"] == index:
             flags += "  cover"
         note = f'  "{image["notes"]}"' if image.get("notes") else ""
+        # A board saved before images were checked can hold a link to another
+        # site: never loaded, so the placeholder says so beside the link.
+        shown = (f"[{boards.OUTSIDE_PLACEHOLDER}] {image.get('url')}" if str(image.get("id")) in outside
+                 else image.get("url"))
         print(f"    {index:>2}  {image.get('id')}  weight {float(image.get('weight', 1)):.2f}{flags}  "
-              f"{image.get('url')}{note}")
+              f"{shown}{note}")
         if image.get("privateNote"):
             print(f'        Private note (not sent anywhere): "{image["privateNote"]}"')
+    if outside:
+        print(f"  {boards.OUTSIDE_NOTE_CLI}")
     _print_brief(board)
     analysis = board.get("analysis")
     if not analysis:

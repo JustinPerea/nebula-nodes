@@ -105,7 +105,8 @@ describe('saved project coordinator', () => {
     expect(projects.openProject).not.toHaveBeenCalled();
     expect(useProjectStore.getState().activeProject?.id).toBe('alpha');
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('alpha');
-    expect(useProjectStore.getState().error).toBe('Disk full');
+    // Error copy round 3e: a plain Error's own words never show; the action's heading and GM's general line do.
+    expect(useProjectStore.getState().error).toBe("Couldn't open the project. Try again, or reload if it keeps happening.");
   });
   it('creates a blank canvas without replaying a recipe or clearing the outgoing saved project', async () => {
     await useProjectStore.getState().initialize();
@@ -175,7 +176,8 @@ describe('saved project coordinator', () => {
     await useProjectStore.getState().restore('beta');
     expect(useProjectStore.getState().trash).toEqual([]);
     expect(useProjectStore.getState().lastDeleted).toBeNull();
-    expect(useProjectStore.getState().error).toBe('That project is no longer in Recently deleted');
+    // Round 3e: the action's heading leads a reason the request carried without one.
+    expect(useProjectStore.getState().error).toBe("Couldn't restore the project. That project is no longer in Recently deleted");
   });
   it('purges one trashed project or empties the trash', async () => {
     vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project()], trash: [trashed('beta'), trashed('gamma')], activeProjectId: 'alpha', workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION });
@@ -200,12 +202,13 @@ describe('saved project coordinator', () => {
     expect(useProjectStore.getState().activeProject?.id).toBe('alpha');
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('alpha');
     expect(useGraphStore.getState().isImportingGraph).toBe(false);
-    expect(useProjectStore.getState().error).toBe('This project view is out of date.');
+    expect(useProjectStore.getState().error).toBe("Couldn't delete the project. This project view is out of date.");
     vi.mocked(projects.deleteProject).mockClear();
     useGraphStore.setState({ isExecuting: true });
     await useProjectStore.getState().remove('alpha');
     expect(projects.deleteProject).not.toHaveBeenCalled();
-    expect(useProjectStore.getState().error).toContain('before deleting the open project');
+    // Error copy round 3c (GM): every "Finish or stop …" variant reads this way.
+    expect(useProjectStore.getState().error).toBe("Couldn't delete the project. A run is still going. Let it finish or stop it.");
   });
   it('can return Home and resume the active canvas during a run, but rejects changing projects', async () => {
     await useProjectStore.getState().initialize();
@@ -296,7 +299,9 @@ describe('saved project coordinator', () => {
     vi.mocked(projects.recoverProject).mockRejectedValueOnce(new Error('Recovery disk full'));
     await useProjectStore.getState().retry();
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('Unsaved alpha edits');
-    expect(useProjectStore.getState().error).toBe('Recovery disk full');
+    // Error copy round 3c-2: never the error's own message, and not GM's
+    // general line either while these edits wait (it says "reload").
+    expect(useProjectStore.getState().error).toBe("Couldn't load your projects.");
     const firstRecovery = vi.mocked(projects.recoverProject).mock.calls[0];
     vi.mocked(projects.recoverProject).mockResolvedValueOnce(project('recovered-alpha'));
     vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project('beta'), project('recovered-alpha')],

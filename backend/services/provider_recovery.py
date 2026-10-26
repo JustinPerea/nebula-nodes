@@ -26,7 +26,14 @@ class ProviderRecoveryPersistenceError(RuntimeError):
 
 
 class ProviderRecoveryCapacityError(ProviderRecoveryPersistenceError):
-    """Unresolved checkpoints have exhausted the bounded safety journal."""
+    """Unresolved checkpoints have exhausted the bounded safety journal.
+
+    `limit` is the journal's size, for the person's line (main.py, error copy
+    round 3b); the message is the specific text agents keep."""
+
+    def __init__(self, message: str = "", *, limit: int | None = None) -> None:
+        super().__init__(message)
+        self.limit = limit
 
 
 class ProviderRecoveryConflictError(RuntimeError):
@@ -92,7 +99,8 @@ class ProviderRecoveryStore:
                 ):
                     raise ProviderRecoveryCapacityError(
                         "provider recovery journal is at capacity; resolve an "
-                        "existing checkpoint before starting more paid work"
+                        "existing checkpoint before starting more paid work",
+                        limit=self._max_records,
                     )
                 for key in new_keys:
                     self._reservations[key] = run_id
@@ -153,7 +161,8 @@ class ProviderRecoveryStore:
                 ):
                     raise ProviderRecoveryCapacityError(
                         "provider recovery journal is at capacity; resolve an "
-                        "existing checkpoint before starting more paid work"
+                        "existing checkpoint before starting more paid work",
+                        limit=self._max_records,
                     )
                 for key in new_keys:
                     self._reservations[key] = run_id
@@ -213,7 +222,8 @@ class ProviderRecoveryStore:
                 ):
                     raise ProviderRecoveryCapacityError(
                         "provider recovery journal is at capacity; resolve an "
-                        "existing checkpoint before starting more paid work"
+                        "existing checkpoint before starting more paid work",
+                        limit=self._max_records,
                     )
                 previous = dict(self._records)
                 previous_reservations = dict(self._reservations)
@@ -311,7 +321,8 @@ class ProviderRecoveryStore:
                 if occupied > self._max_records:
                     raise ProviderRecoveryCapacityError(
                         "provider recovery journal is at capacity; resolve an "
-                        "existing checkpoint before importing more paid state"
+                        "existing checkpoint before importing more paid state",
+                        limit=self._max_records,
                     )
                 if not additions:
                     return []

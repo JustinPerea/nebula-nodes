@@ -17,7 +17,11 @@ from pydantic import BaseModel
 from handlers.video_edit import _build_filter_complex, _resolve_local_path
 from services.file_access import ProtectedPathError
 from services.ffmpeg import ffprobe_video, run_ffmpeg
-from services.output import OUTPUT_ROOT, get_run_dir
+from services.output import OUTPUT_ROOT, get_run_dir, seal_run_dir
+from services import refusal_copy
+
+# GM's 404 pattern (error-copy round 3): the video the edit cuts from is gone.
+SOURCE_GONE = "That video isn't there anymore. Reload to get the latest outputs."
 
 router = APIRouter(prefix="/api/video-edit", tags=["video-edit"])
 
@@ -38,7 +42,7 @@ async def preview_render(req: PreviewRenderRequest) -> PreviewRenderResponse:
     except ProtectedPathError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if src_path is None:
-        raise HTTPException(status_code=404, detail=f"Source not found: {req.sourceUrl}")
+        raise refusal_copy.refusal(404, f"Source not found: {req.sourceUrl}", SOURCE_GONE)
     if not req.clips:
         raise HTTPException(status_code=400, detail="clips required")
 
@@ -74,6 +78,8 @@ async def preview_render(req: PreviewRenderRequest) -> PreviewRenderResponse:
         args += ["-c:a", "aac", "-b:a", "96k"]
     args += [str(output_path)]
     await run_ffmpeg(args)
+    # Whole now: a price may be measured from it (services/output.py _LIVE_RUN_DIRS).
+    seal_run_dir(preview_dir.parent)
 
     rel = output_path.relative_to(OUTPUT_ROOT)
     return PreviewRenderResponse(previewUrl=f"/api/outputs/{rel}")

@@ -313,6 +313,9 @@ class TestMergeShotResult:
             "imageUrl": "URL_B_old",
             "status": "error",
             "error": "Shot generation failed: executor exploded",
+            # Round 3c-2: the panel reads an unexpected failure with GM's
+            # general line, the text behind Details (agents keep `error`).
+            "errorCategory": "unknown",
         }
         assert cli_graph.nodes["n1"]["outputs"]["shot_b"]["value"] == "URL_B_old"
         assert broadcasts == [True]

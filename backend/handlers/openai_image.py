@@ -8,6 +8,7 @@ from models.graph import GraphNode, PortValueDict
 from services.output import get_run_dir, save_base64_image
 from execution.missing_credential import MissingCredentialError
 from services.retired_nodes import GPT_IMAGE_1_SHUTDOWN, default_until
+from execution.person_line import with_api_status, with_person_line
 
 OPENAI_API_URL = "https://api.openai.com/v1/images/generations"
 # gpt-image-1 shuts down 2026-10-23; OpenAI names gpt-image-2.5-sunburst or
@@ -22,7 +23,7 @@ def check_background(params: dict[str, Any]) -> None:
     """A transparent background needs PNG or WebP output
     (https://developers.openai.com/api/docs/guides/image-generation)."""
     if params.get("background") == "transparent" and (params.get("output_format") or "png") not in ("png", "webp"):
-        raise ValueError("A transparent background needs PNG or WebP output, not JPEG")
+        raise with_person_line(ValueError("A transparent background needs PNG or WebP output, not JPEG"), "A transparent background needs PNG or WebP output, not JPEG. Change “Format”, then run the node again.")
 
 
 async def handle_openai_image_generate(
@@ -32,7 +33,7 @@ async def handle_openai_image_generate(
 ) -> dict[str, Any]:
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
-        raise ValueError("Prompt input is required but was not provided")
+        raise with_person_line(ValueError("Prompt input is required but was not provided"), "Connect a prompt to this node, then run it again.")
 
     prompt_text = str(prompt_input.value)
 
@@ -80,7 +81,8 @@ async def handle_openai_image_generate(
         )
         if response.status_code != 200:
             error_detail = response.text
-            raise RuntimeError(f"OpenAI API error {response.status_code}: {error_detail}")
+            raise with_api_status(
+                RuntimeError(f"OpenAI API error {response.status_code}: {error_detail}"), response.status_code)
         response.raise_for_status()
 
     data = response.json()

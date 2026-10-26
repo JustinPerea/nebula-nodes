@@ -16,6 +16,7 @@ from PIL import Image, ImageOps
 
 from execution.missing_credential import MissingCredentialError
 from services.http_errors import HTTP_ERRORS, describe
+from execution.person_line import with_api_status, with_person_line
 
 VISION_TIMEOUT_SECONDS = 45.0
 MAX_VISION_IMAGES = 13  # 12 sampled frames plus one optional reference image.
@@ -54,16 +55,16 @@ def available_vision_providers(api_keys: dict[str, str]) -> list[VisionProvider]
 
 def _encoded_images(paths: Sequence[Path]) -> list[tuple[str, str]]:
     if not paths:
-        raise ValueError("At least one vision image is required")
+        raise with_person_line(ValueError("At least one vision image is required"), "Connect at least one image to this node, then run it again.")
     if len(paths) > MAX_VISION_IMAGES:
-        raise ValueError(f"Vision requests support at most {MAX_VISION_IMAGES} images")
+        raise with_person_line(ValueError(f"Vision requests support at most {MAX_VISION_IMAGES} images"), f"This node takes up to {MAX_VISION_IMAGES} images, and {len(paths)} are connected.")
 
     encoded: list[tuple[str, str]] = []
     encoded_chars = 0
     for path in paths:
         mime = mimetypes.guess_type(path.name)[0] or "image/png"
         if mime not in {"image/png", "image/jpeg", "image/webp", "image/gif"}:
-            raise ValueError(f"Unsupported vision image type: {path.suffix}")
+            raise with_person_line(ValueError(f"Unsupported vision image type: {path.suffix}"), "A connected image isn't a PNG, JPEG, WebP or GIF. Connect one of those, then run the node again.")
         # Provider limits apply to the JSON request after base64 expansion, not
         # to the source file. Normalize every advisory frame to a bounded JPEG
         # in memory; the source artifact remains untouched on disk.
@@ -215,9 +216,10 @@ async def call_vision_llm(
 ) -> dict[str, Any]:
     providers = available_vision_providers(api_keys)
     if not providers:
-        raise NoVisionProviderError(
+        raise with_person_line(NoVisionProviderError(
             "vision-llm mode requires ANTHROPIC_API_KEY, OPENAI_API_KEY, or GOOGLE_API_KEY"
-        )
+        ),
+            "Add an Anthropic, OpenAI or Gemini API key in Settings, then run the node again.")
     provider = providers[0]
     url, headers, body = build_vision_request(
         provider,
@@ -244,10 +246,10 @@ async def call_vision_llm(
                 f"{VISION_TIMEOUT_SECONDS:g} seconds"
             ) from exc
         if response.status_code != 200:
-            raise VisionProviderError(
+            raise with_api_status(VisionProviderError(
                 f"{provider.name} vision request failed ({response.status_code}): "
                 f"{response.text[-1024:]}"
-            )
+            ), response.status_code)
         try:
             payload = response.json()
         except (json.JSONDecodeError, ValueError) as exc:

@@ -2,6 +2,8 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { clipSpeed } from '../../lib/editor/virtualPlayback';
+import type { NodeData } from '../../types';
+import { NodeRunError } from './NodeError';
 
 interface EditClipShape {
   duration?: number;
@@ -72,6 +74,7 @@ export function EditNode({ id, data, selected }: NodeProps) {
           Open Editor
         </button>
       )}
+      <NodeRunError data={data as unknown as NodeData} className="edit-node__run-error" />
       <Handle type="source" position={Position.Right} id="video" />
     </div>
   );

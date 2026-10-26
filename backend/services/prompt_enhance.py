@@ -13,6 +13,7 @@ from typing import Any
 import httpx
 
 from services.http_errors import HTTP_ERRORS
+from execution.person_line import with_api_status
 
 SYSTEM_PROMPT = (
     "You are a prompt enhancer for an AI image and video generation studio. "
@@ -145,7 +146,7 @@ async def _call_provider(
     except HTTP_ERRORS as exc:
         raise EnhanceProviderError(f"Could not reach {provider}") from exc
     if resp.status_code >= 400:
-        raise EnhanceProviderError(f"{provider} call failed ({resp.status_code})")
+        raise with_api_status(EnhanceProviderError(f"{provider} call failed ({resp.status_code})"), resp.status_code)
     return extract_enhanced(provider, resp.json())
 
 

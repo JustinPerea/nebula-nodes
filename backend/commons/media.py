@@ -32,7 +32,13 @@ _MOV_ATOMS = {b"moov", b"mdat", b"wide", b"free", b"skip"}
 
 
 class MediaError(Exception):
-    pass
+    """A file the Commons can't take. `code` is a machine reason the person's
+    UI maps to written copy (commons/person_copy.INTAKE): too_large,
+    unsupported_type or unreadable. The message stays the specific text."""
+
+    def __init__(self, message: str, code: str = "unreadable"):
+        super().__init__(message)
+        self.code = code
 
 
 @dataclass(frozen=True)
@@ -61,14 +67,14 @@ def sniff(data: bytes) -> Sniffed:
         return Sniffed("video", "video/mp4", "mp4")
     if head[4:8] in _MOV_ATOMS:
         return Sniffed("video", "video/quicktime", "mov")
-    raise MediaError("unsupported file type (accepted: jpg, png, webp, gif, heic, mp4, mov)")
+    raise MediaError("unsupported file type (accepted: jpg, png, webp, gif, heic, mp4, mov)", "unsupported_type")
 
 
 def check_size(kind: str, size: int) -> None:
     if kind == "video" and size > VIDEO_CAP:
-        raise MediaError("video is larger than the 500 MB cap")
+        raise MediaError("video is larger than the 500 MB cap", "too_large")
     if kind == "image" and size > IMAGE_CAP:
-        raise MediaError("image is larger than the 25 MB cap")
+        raise MediaError("image is larger than the 25 MB cap", "too_large")
 
 
 def _heic_to_png(data: bytes) -> bytes:
@@ -102,19 +108,19 @@ def load_image(data: bytes, mime: str) -> Image.Image:
     """
     fmt = _PIL_FORMATS.get(mime)
     if fmt is None:
-        raise MediaError(f"unsupported image type {mime}")
+        raise MediaError(f"unsupported image type {mime}", "unsupported_type")
     if mime == "image/heic":
         data = _heic_to_png(data)
     try:
         img = Image.open(io.BytesIO(data), formats=[fmt])
         limit = Image.MAX_IMAGE_PIXELS
         if limit and img.width * img.height > limit:
-            raise MediaError(f"image has too many pixels: {img.width}x{img.height} exceeds {limit}")
+            raise MediaError(f"image has too many pixels: {img.width}x{img.height} exceeds {limit}", "too_large")
         img.seek(0)
         img.load()
         return img.convert("RGB")
     except Image.DecompressionBombError as exc:
-        raise MediaError(f"image has too many pixels: {exc}") from exc
+        raise MediaError(f"image has too many pixels: {exc}", "too_large") from exc
     except (OSError, ValueError, SyntaxError, EOFError) as exc:
         raise MediaError(f"unreadable image: {exc}") from exc
 

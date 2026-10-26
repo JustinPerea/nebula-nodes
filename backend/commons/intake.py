@@ -18,7 +18,15 @@ from commons.store import CommonsStore
 
 
 class IntakeError(Exception):
-    pass
+    """A refused add. The message is the specific text (agents read it to fix
+    their call; it is logged); `code` is a machine reason the person's UI
+    maps to written copy (commons/person_copy.INTAKE, the frontend's
+    UPLOAD_REASONS). Never show the message to the person (GM, error-copy
+    round 2)."""
+
+    def __init__(self, message: str, code: str = "refused"):
+        super().__init__(message)
+        self.code = code
 
 
 @dataclass
@@ -67,9 +75,9 @@ def add_bytes(store: CommonsStore, data: bytes, *, filename: str, collection_id:
         sniffed = media.sniff(data)
         media.check_size(sniffed.media, len(data))
     except media.MediaError as exc:
-        raise IntakeError(str(exc)) from exc
+        raise IntakeError(str(exc), exc.code) from exc
     if store.get_collection(collection_id) is None:
-        raise IntakeError(f"unknown collection {collection_id}")
+        raise IntakeError(f"unknown collection {collection_id}", "unknown_collection")
 
     existing = store.asset_by_sha(hashlib.sha256(data).hexdigest())
     columns: dict[str, Any] | None = None
@@ -81,7 +89,7 @@ def add_bytes(store: CommonsStore, data: bytes, *, filename: str, collection_id:
             else:
                 columns = {"media": "video", "mime": sniffed.mime}
         except media.MediaError as exc:
-            raise IntakeError(str(exc)) from exc
+            raise IntakeError(str(exc), exc.code) from exc
 
     # A blob write failure raises here, before any row exists (§10).
     sha, key = store.put_blob(data, sniffed.ext)
@@ -119,8 +127,8 @@ def add_bytes(store: CommonsStore, data: bytes, *, filename: str, collection_id:
                               info["duration"], CODE_VERSION, asset["id"]))
         except media.MediaError as exc:
             with store.db.tx() as conn:
-                conn.execute("UPDATE assets SET analysis_state = 'analysis_failed', last_error = ? "
-                             "WHERE id = ?", (f"video probe failed: {exc}", asset["id"]))
+                conn.execute("UPDATE assets SET analysis_state = 'analysis_failed', last_error = ?, "
+                             "last_error_kind = 'unreadable' WHERE id = ?", (f"video probe failed: {exc}", asset["id"]))
 
     from commons import search  # local import: search -> records -> measure; keeps intake import-light
 
@@ -144,7 +152,9 @@ async def add_url(store, url: str, *, collection_id: str, actor: str, role: str 
     try:
         fetched = await fetch(url, max_bytes=media.VIDEO_CAP, accept="image/*,video/*,text/html;q=0.8")
     except (net.FetchBlocked, net.FetchError) as exc:
-        raise IntakeError(f"cannot fetch {url}: {exc}") from exc
+        code = ("blocked" if isinstance(exc, net.FetchBlocked)
+                else "too_large" if isinstance(exc, net.FetchTooLarge) else "fetch_failed")
+        raise IntakeError(f"cannot fetch {url}: {exc}", code) from exc
     ctype = fetched.content_type.split(";")[0].strip().lower()
     if ctype in ("text/html", "application/xhtml+xml"):
         info = page_mod.parse_page(fetched.data[:2_000_000].decode("utf-8", errors="replace"), fetched.final_url)
@@ -215,13 +225,16 @@ def _imported_membership(store, collection_id: str, url: str) -> dict | None:
     return dict(row) if row else None
 
 
-def import_moodboards(store, *, fetch=None) -> dict:
+def import_moodboards(store) -> dict:
     """Idempotent: an image a previous run imported into the board's collection
-    is neither re-read, re-fetched nor re-sighted. Calls asyncio.run for remote
-    URLs, so it must run in a worker thread, never on the event loop."""
+    is neither re-read nor re-sighted. Board images are Nebula's own files
+    (an upload or an output, read from the output folder); one that links to
+    another site, which a board saved before board writes were checked can
+    hold, is skipped and never fetched (services/stored_image_refs.py). It
+    reads files, so it runs in a worker thread, never on the event loop."""
     from commons import records
+    from services.stored_image_refs import is_outside_link
 
-    fetch = fetch or net.safe_fetch
     summary: dict[str, Any] = {"collections": 0, "added": 0, "skipped": [], "comments": 0}
     for board in _moodboards():
         collection = store.ensure_collection(board.get("name") or board["id"], "moodboard",
@@ -235,24 +248,28 @@ def import_moodboards(store, *, fetch=None) -> dict:
                 memberships.append(previous)
                 continue
             source = {"kind": "moodboard", "url": url, "source_date": board.get("createdAt")}
+            if is_outside_link(url):
+                # A board saved before board writes were checked can hold a
+                # link to another site: nothing in Nebula fetches one
+                # (services/stored_image_refs.py), this import included.
+                summary["skipped"].append({"url": url, "reason": (
+                    "an image link from outside Nebula, not fetched: upload the image to the board instead")})
+                continue
             try:
-                if url.startswith("/api/outputs/"):
-                    path = _output_path(url)
+                # Not outside, so an http(s) url here is a loopback one to /api/outputs.
+                output = urlsplit(url).path if url.lower().startswith(("http://", "https://")) else url
+                if output.startswith("/api/outputs/"):
+                    path = _output_path(output)
                     if path is None:
                         summary["skipped"].append({"url": url, "reason": "output file missing"})
                         continue
-                    made_by = "unknown" if url.startswith("/api/outputs/chat-uploads/") else "ai"
+                    made_by = "unknown" if output.startswith("/api/outputs/chat-uploads/") else "ai"
                     res = add_bytes(store, path.read_bytes(), filename=path.name, collection_id=collection["id"],
                                     actor=MOODBOARD_ACTOR, source=source, made_by=made_by)
-                elif url.startswith(("http://", "https://")):
-                    fetched = asyncio.run(fetch(url, max_bytes=media.IMAGE_CAP, accept="image/*"))
-                    res = add_bytes(store, fetched.data, filename=url.rsplit("/", 1)[-1][:200] or "image",
-                                    collection_id=collection["id"], actor=MOODBOARD_ACTOR,
-                                    source={**source, "fetched_at": now_iso()})
                 else:
                     summary["skipped"].append({"url": url, "reason": "unsupported url"})
                     continue
-            except (IntakeError, net.FetchBlocked, net.FetchError, OSError) as exc:
+            except (IntakeError, OSError) as exc:
                 summary["skipped"].append({"url": url, "reason": str(exc)})
                 continue
             memberships.append(res.membership)
@@ -291,7 +308,7 @@ def _check_agent_target(store, actor, collection_id: str, why: str) -> None:
         raise IntakeError("why is required for agent adds")
     collection = store.get_collection(collection_id)
     if collection is None or collection["kind"] == "system":
-        raise IntakeError("unknown collection")
+        raise IntakeError("unknown collection", "unknown_collection")
     if actor.workspace is not None:
         from commons.search import scope_collection_ids
         if collection_id not in scope_collection_ids(store, actor.brand):
@@ -333,7 +350,7 @@ async def agent_add(store, *, actor, source: str, collection_id: str, why: str, 
     if not real.is_file():
         raise IntakeError("no such file")
     if real.stat().st_size > media.VIDEO_CAP:
-        raise IntakeError("file exceeds the size cap")
+        raise IntakeError("file exceeds the size cap", "too_large")
     data = await asyncio.to_thread(real.read_bytes)
     return await asyncio.to_thread(agent_add_bytes, store, actor=actor, data=data,
                                    filename=real.name, collection_id=collection_id, why=why, made_by=made_by)

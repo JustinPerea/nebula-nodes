@@ -6,7 +6,6 @@
 
 body.app-slava-restraint .panel--settings {
   --settings-spring: var(--workspace-rail-spring, 320ms cubic-bezier(0.32, 0.72, 0, 1));
-  --settings-focus: 0 0 0 2px var(--sr-accent-border-strong);
   font-family: var(--sr-ui);
   font-size: var(--sr-type-body);
   line-height: var(--sr-line-body);
@@ -86,7 +85,7 @@ body.app-slava-restraint .settings-tabs__tab {
 
 body.app-slava-restraint .settings-tabs__tab:hover { color: var(--sr-ink); }
 body.app-slava-restraint .settings-tabs__tab[aria-selected="true"] { color: var(--sr-ink-bold); }
-body.app-slava-restraint .settings-tabs__tab:focus-visible { outline: none; box-shadow: var(--settings-focus); }
+body.app-slava-restraint .settings-tabs__tab:focus-visible { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); }
 
 body.app-slava-restraint .settings-tabs__count {
   color: var(--sr-ink-meta);
@@ -124,7 +123,7 @@ body.app-slava-restraint .settings-label__action {
 
 body.app-slava-restraint .settings-label__action:hover:not(:disabled) { color: var(--sr-ink-bold); }
 body.app-slava-restraint .settings-label__action:disabled { color: var(--sr-ink-meta); cursor: default; }
-body.app-slava-restraint .settings-label__action:focus-visible { outline: none; border-radius: 4px; box-shadow: var(--settings-focus); }
+body.app-slava-restraint .settings-label__action:focus-visible { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); border-radius: 4px; }
 
 body.app-slava-restraint .settings-list {
   overflow: hidden;
@@ -223,7 +222,7 @@ body.app-slava-restraint .settings__button:hover:not(:disabled) {
 
 body.app-slava-restraint .settings__button:active:not(:disabled) { transform: scale(0.97); }
 body.app-slava-restraint .settings__button:disabled { opacity: var(--sr-disabled-opacity); cursor: default; }
-body.app-slava-restraint .settings__button:focus-visible { outline: none; box-shadow: var(--settings-focus); }
+body.app-slava-restraint .settings__button:focus-visible { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); }
 
 body.app-slava-restraint .settings__button--ghost { border-color: transparent; color: var(--sr-ink-light); }
 
@@ -257,7 +256,7 @@ body.app-slava-restraint .settings__select {
   cursor: pointer;
 }
 
-body.app-slava-restraint .settings__select:focus-visible { outline: none; box-shadow: var(--settings-focus); }
+body.app-slava-restraint .settings__select:focus-visible { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); }
 body.app-slava-restraint .settings__select--compact { min-height: 26px; max-width: 132px; }
 
 /* ── Search ─────────────────────────────────────────────────────────── */
@@ -278,6 +277,12 @@ body.app-slava-restraint .settings-search {
 body.app-slava-restraint .settings-search:focus-within {
   border-color: var(--sr-edge-strong);
   background: var(--sr-surface-control-focus);
+}
+
+/* The search field is bare inside its box, so the box takes the ring. */
+body.app-slava-restraint .settings-search:has(input:focus-visible) {
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
 }
 
 body.app-slava-restraint .settings-search input {
@@ -310,7 +315,7 @@ body.app-slava-restraint .settings-row {
 }
 
 body.app-slava-restraint .settings-row--open { background: rgba(255, 255, 255, 0.025); }
-body.app-slava-restraint .settings-row:focus-visible { outline: none; box-shadow: inset var(--settings-focus); }
+body.app-slava-restraint .settings-row:focus-visible { outline: var(--sr-focus-outline); outline-offset: -2px; }
 
 body.app-slava-restraint .settings-row__dot {
   justify-self: center;
@@ -382,7 +387,7 @@ body.app-slava-restraint .settings-row__more[aria-expanded="true"] {
   color: var(--sr-ink-bold);
 }
 
-body.app-slava-restraint .settings-row__more:focus-visible { outline: none; box-shadow: var(--settings-focus); }
+body.app-slava-restraint .settings-row__more:focus-visible { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); }
 
 body.app-slava-restraint .settings-row__body {
   grid-column: 2 / 4;
@@ -432,7 +437,9 @@ body.app-slava-restraint .settings-key {
   transition: border-color var(--sr-motion-fast);
 }
 
-body.app-slava-restraint .settings-key:focus-within { border-color: var(--sr-accent); }
+body.app-slava-restraint .settings-key:focus-within { border-color: var(--sr-ink-meta); }
+/* The key field is bare inside its box, so the box takes the ring. */
+body.app-slava-restraint .settings-key:has(.settings-key__input:focus-visible) { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); }
 
 body.app-slava-restraint .settings-key__input {
   flex: 1;
@@ -461,7 +468,7 @@ body.app-slava-restraint .settings-key__reveal {
 }
 
 body.app-slava-restraint .settings-key__reveal:hover { color: var(--sr-ink); background: var(--sr-surface-control-hover); }
-body.app-slava-restraint .settings-key__reveal:focus-visible { outline: none; box-shadow: var(--settings-focus); }
+body.app-slava-restraint .settings-key__reveal:focus-visible { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); }
 
 /* Vertex service-account key */
 body.app-slava-restraint .settings-sa { display: grid; gap: 6px; }
@@ -504,7 +511,7 @@ body.app-slava-restraint .settings-sa__paste {
   resize: vertical;
 }
 
-body.app-slava-restraint .settings-sa__paste:focus { border-color: var(--sr-accent); }
+body.app-slava-restraint .settings-sa__paste:focus { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); }
 body.app-slava-restraint .settings-sa__choices { display: flex; flex-wrap: wrap; gap: 4px; margin-left: -10px; }
 
 /* Krea default select and plans inside the Krea row */
@@ -591,7 +598,8 @@ body.app-slava-restraint .settings-apps__dot-button:hover:not(:disabled) .settin
 body.app-slava-restraint .settings-apps__dot-button[aria-expanded="true"] .settings-apps__dot {
   box-shadow: 0 0 0 2px var(--sr-canvas), 0 0 0 3px var(--sr-ink);
 }
-body.app-slava-restraint .settings-apps__dot-button:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--sr-accent); }
+/* Outside the open / checked ring (2px gap + 1px ink), so focus and choice read apart. */
+body.app-slava-restraint .settings-apps__dot-button:focus-visible { outline: var(--sr-focus-outline); outline-offset: 4px; }
 body.app-slava-restraint .settings-apps__swatch--auto {
   background: conic-gradient(#3FC1A5, #7AD3FF, #B392F0, #FF6B9A, #FF9F43, #F2C14E, #C3E86B, #3FC1A5);
   opacity: 0.55;
@@ -601,7 +609,7 @@ body.app-slava-restraint .settings-apps__swatch[aria-checked="true"] {
   opacity: 1;
   box-shadow: 0 0 0 2px var(--sr-canvas), 0 0 0 3px var(--sr-ink);
 }
-body.app-slava-restraint .settings-apps__swatch:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--sr-canvas), 0 0 0 3px var(--sr-accent); }
+body.app-slava-restraint .settings-apps__swatch:focus-visible { outline: var(--sr-focus-outline); outline-offset: 4px; }
 body.app-slava-restraint .settings-apps__setup {
   display: grid;
   gap: var(--sr-space-2);
@@ -671,7 +679,7 @@ body.app-slava-restraint .settings-pref {
 
 body.app-slava-restraint .settings-pref:hover { background: rgba(255, 255, 255, 0.025); }
 body.app-slava-restraint .settings-pref--nested { padding-left: 28px; }
-body.app-slava-restraint .settings-pref--link:focus-visible { outline: none; box-shadow: inset var(--settings-focus); }
+body.app-slava-restraint .settings-pref--link:focus-visible { outline: var(--sr-focus-outline); outline-offset: -2px; }
 body.app-slava-restraint .settings-pref--link svg { color: var(--sr-ink-meta); transition: transform var(--settings-spring); }
 body.app-slava-restraint .settings-pref--link:hover svg { color: var(--sr-ink); transform: translateX(2px); }
 
@@ -706,7 +714,7 @@ body.app-slava-restraint .settings-switch::before {
 
 body.app-slava-restraint .settings-switch:checked { background: var(--sr-accent); }
 body.app-slava-restraint .settings-switch:checked::before { background: #fff; transform: translateX(12px); }
-body.app-slava-restraint .settings-switch:focus-visible { outline: none; box-shadow: var(--settings-focus); }
+body.app-slava-restraint .settings-switch:focus-visible { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); }
 body.app-slava-restraint .settings-switch:disabled { opacity: var(--sr-disabled-opacity); cursor: default; }
 
 /* ── Storage ────────────────────────────────────────────────────────── */
@@ -734,7 +742,7 @@ body.app-slava-restraint .settings-folder__input {
 }
 
 body.app-slava-restraint .settings-folder__input::placeholder { color: var(--sr-ink-faint); }
-body.app-slava-restraint .settings-folder__input:focus { border-color: var(--sr-accent); }
+body.app-slava-restraint .settings-folder__input:focus { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); }
 body.app-slava-restraint .settings-folder__input[aria-invalid="true"] { border-color: var(--sr-danger-border); }
 body.app-slava-restraint .settings-folder__hint { margin-top: 6px; }
 body.app-slava-restraint .settings-folder .settings-row__error { margin-top: 6px; }
@@ -777,7 +785,7 @@ body.app-slava-restraint .settings-notice__undo {
 }
 
 body.app-slava-restraint .settings-notice__undo:hover { color: var(--sr-ink-bold); }
-body.app-slava-restraint .settings-notice__undo:focus-visible { outline: none; box-shadow: var(--settings-focus); }
+body.app-slava-restraint .settings-notice__undo:focus-visible { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); }
 
 @keyframes settings-fade {
   from { opacity: 0; }

@@ -15,6 +15,7 @@ import type { ProviderSetupTarget } from '../lib/providerReadiness';
 import { useProviderReadinessStore } from './providerReadinessStore';
 import { useGraphStore } from './graphStore';
 import { ONBOARDING_TOUR } from '../lib/onboarding';
+import { holdCommonsExits, type CommonsHold } from '../lib/commonsUnsaved';
 
 const AGENT_LOG_ENABLED_KEY = 'nebula:agentLog:enabled';
 const CANVAS_PERF_MODE_KEY = 'nebula:canvas:perfMode';
@@ -396,7 +397,30 @@ interface UIState {
   resetPanelsForFreshCanvas: (options?: { canvasEmpty?: boolean }) => void;
 }
 
-export const useUIStore = create<UIState>((set, get) => ({
+let commonsOffHeld = false;
+/**
+ * While the Commons holds unsaved labels nothing leaves it (commons-exits):
+ * a write's viewMode is dropped (Back, the hash routes, a project load, a
+ * graph import, an agent's Show node, the tour), and the capability going
+ * off waits until the Commons is clean, then leaves as it would have. One
+ * that sends the person to the canvas also makes the canvas where Back goes:
+ * those writers (a project load, an import, a node focus) are the ones that
+ * make the studio the Commons was opened from stale.
+ */
+const holdCommons: CommonsHold<UIState> = (state, next, later) => {
+  if (state.viewMode !== 'commons' || !state.commonsEnabled) return next;
+  if (next.commonsEnabled !== undefined) commonsOffHeld = !next.commonsEnabled;
+  if ((next.viewMode === undefined || next.viewMode === 'commons') && next.commonsEnabled !== false) return next;
+  const { viewMode, commonsEnabled, ...rest } = next;
+  if (commonsEnabled === false) {
+    later(() => {
+      if (commonsOffHeld) { commonsOffHeld = false; useUIStore.getState().setCommonsEnabled(false); }
+    });
+  }
+  return viewMode === 'canvas' ? { ...rest, commonsReturnView: 'canvas' } : rest;
+};
+
+export const useUIStore = create<UIState>(holdCommonsExits(holdCommons, (set, get) => ({
   selectedNodeId: null,
   canvasViewport: null,
   canvasViewportRevision: 0,
@@ -960,7 +984,7 @@ export const useUIStore = create<UIState>((set, get) => ({
       },
     });
   },
-}));
+})));
 
 // Apply the supported appearance on module load so the first paint is correct.
 if (typeof document !== 'undefined') {

@@ -330,7 +330,7 @@ def test_truncated_parts_say_where_the_rest_is(start, monkeypatch):
     assert cli["boards"]["more"] == \
         "`nebula moodboard list --project <project-id>` lists a project's boards and Global's"
     assert cli["boards"]["read"] == "`nebula moodboard show <id>` gives one in full"
-    assert cli["nodes"]["more"] == "`nebula nodes --category <category>` gives the rest"
+    assert cli["nodes"]["more"] == "`nebula nodes --category <category>` lists the rest with prices"
     assert "nebula info" in cli["next"]["describe"]
 
 

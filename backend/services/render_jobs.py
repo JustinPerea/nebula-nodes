@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Awaitable, Callable, Literal
 from uuid import uuid4
 
-from services.output import OUTPUT_ROOT
+from services.output import OUTPUT_ROOT, create_run_dir, execution_run_dir, seal_run_dir
 
 
 RenderJobStatus = Literal["running", "complete", "failed", "cancelled"]
@@ -54,8 +54,16 @@ class RenderJobManager:
                 job.progress = max(job.progress, min(max(value, 0.0), 1.0))
 
         async def _run() -> None:
+            # The job's own run folder (get_run_dir() inside the runner returns
+            # it). Sealed once the render is whole, so a price can be measured
+            # from it then and never while it is still being written
+            # (services/output.py _LIVE_RUN_DIRS). A failed or cancelled render
+            # stays unsealed: its writer may not have stopped.
+            run_dir = create_run_dir(f"render-{job.id[:8]}")
+            token = execution_run_dir.set(run_dir)
             try:
                 output_path = await runner(_progress)
+                seal_run_dir(run_dir)
                 resolved = output_path.resolve()
                 resolved.relative_to(OUTPUT_ROOT.resolve())
                 job.output_url = f"/api/outputs/{resolved.relative_to(OUTPUT_ROOT.resolve())}"
@@ -67,6 +75,8 @@ class RenderJobManager:
             except Exception as exc:
                 job.status = "failed"
                 job.error = str(exc)
+            finally:
+                execution_run_dir.reset(token)
 
         job.task = asyncio.create_task(_run())
         return job

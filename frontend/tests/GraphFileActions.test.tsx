@@ -33,7 +33,9 @@ import { GraphFileActions } from '../src/components/GraphFileActions';
 import { CommandPalette } from '../src/components/CommandPalette';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
+import { useProjectStore } from '../src/store/projectStore';
 import { requestGraphLoad, requestGraphSave } from '../src/lib/graphFileActions';
+import { CANVAS_NOTICE_EVENT } from '../src/lib/canvasNotice';
 import * as api from '../src/lib/api';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 
@@ -112,8 +114,20 @@ describe('workspace-independent graph file actions', () => {
     rendered.rerender(<><GraphFileActions /><CommandPalette /></>);
     paletteCommand('Save graph');
     await waitFor(() => expect(mocks.saveToFile).toHaveBeenCalledOnce());
-    expect(mocks.saveToFile).toHaveBeenCalledWith([node('existing')], [], { x: 10, y: 20, zoom: 0.75 });
+    expect(mocks.saveToFile).toHaveBeenCalledWith([node('existing')], [], { x: 10, y: 20, zoom: 0.75 }, undefined);
     expect(useUIStore.getState().viewMode).toBe(viewMode);
+  });
+
+  it("names the saved file after the open project, so Load graph names its project after it again", async () => {
+    const before = useProjectStore.getState();
+    useProjectStore.setState({ initialized: true, activeProject: { id: 'alpha', name: 'Glass campaign' } } as never);
+    try {
+      render(<GraphFileActions />);
+      await act(async () => { requestGraphSave(); });
+      expect(mocks.saveToFile).toHaveBeenCalledWith([node('existing')], [], expect.anything(), 'Glass campaign');
+    } finally {
+      useProjectStore.setState(before, true);
+    }
   });
 
   it('saves the live Canvas camera when disabled Commons falls back to Canvas', async () => {
@@ -121,7 +135,7 @@ describe('workspace-independent graph file actions', () => {
     useUIStore.getState().setCanvasViewport({ x: -50, y: 40, zoom: 0.5 });
     render(<GraphFileActions />);
     await act(async () => { requestGraphSave(); });
-    expect(mocks.saveToFile).toHaveBeenCalledWith([node('existing')], [], { x: 10, y: 20, zoom: 0.75 });
+    expect(mocks.saveToFile).toHaveBeenCalledWith([node('existing')], [], { x: 10, y: 20, zoom: 0.75 }, undefined);
   });
 
   it.each(['create', 'cinema-editor'] as const)('loads from %s only after atomic backend confirmation', async (viewMode) => {
@@ -152,7 +166,9 @@ describe('workspace-independent graph file actions', () => {
   });
 
   it('preserves graph and workspace on picker cancellation or backend rejection', async () => {
+    // Error copy round 3f (GM): a canvas notice, never a window.alert.
     const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const notice = () => useGraphStore.getState().undoNotice;
     useUIStore.setState({ viewMode: 'create' });
     mocks.loadFromFile.mockResolvedValueOnce(null);
     render(<GraphFileActions />);
@@ -160,7 +176,13 @@ describe('workspace-independent graph file actions', () => {
     expect(mocks.apiFetch).not.toHaveBeenCalled();
     mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Fixture import rejected' }), { status: 400 }));
     await act(async () => { requestGraphLoad(); });
-    expect(alert).toHaveBeenCalledWith('Fixture import rejected');
+    // error-copy round 2 (GM): "Couldn't load the graph." then the reason.
+    expect(notice()).toMatchObject({ text: "Couldn't load the graph. Fixture import rejected", tone: 'error', offer: null });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mocks.apiFetch.mockResolvedValueOnce(new Response('', { status: 503 }));
+    await act(async () => { requestGraphLoad(); });
+    expect(notice()?.text).toBe("Couldn't load the graph. Nebula didn't respond. Try again.");
+    expect(alert).not.toHaveBeenCalled();
     expect(useGraphStore.getState().nodes[0].id).toBe('existing');
     expect(useUIStore.getState().viewMode).toBe('create');
     expect(useGraphStore.getState().isImportingGraph).toBe(false);
@@ -173,7 +195,138 @@ describe('workspace-independent graph file actions', () => {
     render(<GraphFileActions />);
     await act(async () => { requestGraphLoad(); });
     expect(useGraphStore.getState().nodes[0].id).toBe('n8');
-    expect(alert).toHaveBeenCalledWith(`Imported.\n• ${warning}`);
+    expect(useGraphStore.getState().undoNotice).toMatchObject({ text: `Imported.\n• ${warning}`, tone: 'info' });
+    expect(alert).not.toHaveBeenCalled();
+  });
+
+  it('tells the project store which file it opened, so an over-limit file pauses saving with its name (Q118)', async () => {
+    const noteLoadedGraph = vi.fn();
+    const before = useProjectStore.getState();
+    useProjectStore.setState({ noteLoadedGraph } as never);
+    try {
+      mocks.loadFromFile.mockResolvedValueOnce({ ...pickedGraph(), fileName: 'Big campaign.nebula' });
+      render(<GraphFileActions />);
+      await act(async () => { requestGraphLoad(); });
+      expect(useGraphStore.getState().nodes[0].id).toBe('n8');
+      expect(noteLoadedGraph).toHaveBeenCalledWith('Big campaign.nebula', false);
+      // A refused import opens nothing, so there is nothing to note.
+      noteLoadedGraph.mockClear();
+      mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Fixture import rejected' }), { status: 400 }));
+      await act(async () => { requestGraphLoad(); });
+      expect(noteLoadedGraph).not.toHaveBeenCalled();
+    } finally {
+      useProjectStore.setState(before, true);
+    }
+  });
+
+  describe('a file over the save limit opens as a new project (Q120)', () => {
+    // Q120 (Justin, option a): "Files over the limit open as a new project
+    // named after the file. The open project is left as it was. Files under
+    // the limit still replace the canvas, as today." The backend's save
+    // check decides: the import into the open project asks to be refused.
+    const overLimit = () => new Response(JSON.stringify({ detail: 'Over the limit on its own', limit: 'size',
+      sizeBytes: 16 * 1024 * 1024 + 10, limitBytes: 16 * 1024 * 1024 }), { status: 413 });
+    const imports = () => mocks.apiFetch.mock.calls.filter(([path]) => path === '/api/graph/import');
+    const flags = () => imports().map(([, init]) => JSON.parse(String((init as RequestInit).body)).refuseOverSaveLimit ?? null);
+    const notices: string[] = [];
+    const onNotice = (event: Event) => { notices.push((event as CustomEvent<{ text: string }>).detail.text); };
+    let before: ReturnType<typeof useProjectStore.getState>;
+    beforeEach(() => {
+      before = useProjectStore.getState();
+      notices.length = 0;
+      window.addEventListener(CANVAS_NOTICE_EVENT, onNotice);
+    });
+    afterEach(() => {
+      useProjectStore.setState(before, true);
+      window.removeEventListener(CANVAS_NOTICE_EVENT, onNotice);
+    });
+    const withProject = (createProject: (name?: string, then?: () => Promise<void>) => Promise<void>) => {
+      useProjectStore.setState({ initialized: true, busy: false, error: null, unsavedEdits: null, noteLoadedGraph: vi.fn(), createProject,
+        activeProject: { id: 'alpha', name: 'Glass campaign' } } as never);
+    };
+
+    it("refused before anything changes, then a project named after the file, and the load goes there", async () => {
+      const order: string[] = [];
+      const createProject = vi.fn(async (_name?: string, then?: () => Promise<void>) => {
+        order.push(`create with ${useGraphStore.getState().nodes.map((item) => item.id).join(',')}, ${imports().length} imports`);
+        useGraphStore.setState({ nodes: [], edges: [] });
+        useProjectStore.setState({ activeProject: { id: 'gamma', name: 'Big campaign' } } as never);
+        await then?.();
+      });
+      withProject(createProject);
+      mocks.loadFromFile.mockResolvedValueOnce({ ...pickedGraph(), fileName: 'Big campaign.nebula' });
+      mocks.apiFetch.mockResolvedValueOnce(overLimit());
+      render(<GraphFileActions />);
+      await act(async () => { requestGraphLoad(); });
+      expect(flags()).toEqual([true, null]);
+      expect(createProject).toHaveBeenCalledOnce();
+      expect(createProject.mock.calls[0][0]).toBe('Big campaign');
+      expect(order).toEqual(['create with existing, 1 imports']);
+      expect(useGraphStore.getState().nodes[0].id).toBe('n8');
+      // The line says it opened as a new project (GM, Q120 batch).
+      expect(useProjectStore.getState().noteLoadedGraph).toHaveBeenCalledWith('Big campaign.nebula', true);
+      expect(notices).toEqual([]);
+    });
+
+    it("a create that returns without opening, waiting or a line of its own: the canvas says the file didn't open", async () => {
+      const createProject = vi.fn(async () => {});
+      withProject(createProject);
+      mocks.apiFetch.mockResolvedValueOnce(overLimit());
+      render(<GraphFileActions />);
+      await act(async () => { requestGraphLoad(); });
+      expect(createProject).toHaveBeenCalledOnce();
+      expect(flags()).toEqual([true]);
+      expect(useGraphStore.getState().nodes.map((item) => item.id)).toEqual(['existing']);
+      expect(notices).toEqual(["Couldn't load the graph. Try again, or reload if it keeps happening."]);
+    });
+
+    it("waiting behind #178's screen, or turned away with its own line: no second line, nothing loaded", async () => {
+      for (const outcome of [{ unsavedEdits: { reason: 'Held' } }, { error: "Couldn't create the project." }]) {
+        mocks.apiFetch.mockClear();
+        withProject(vi.fn(async () => { useProjectStore.setState(outcome as never); }));
+        mocks.apiFetch.mockResolvedValueOnce(overLimit());
+        const view = render(<GraphFileActions />);
+        await act(async () => { requestGraphLoad(); });
+        view.unmount();
+        expect(flags()).toEqual([true]);
+      }
+      expect(useGraphStore.getState().nodes.map((item) => item.id)).toEqual(['existing']);
+      expect(notices).toEqual([]);
+    });
+
+    it('waits for Projects to finish what it is doing before the create', async () => {
+      const createProject = vi.fn(async () => {});
+      withProject(createProject);
+      useProjectStore.setState({ busy: true });
+      mocks.apiFetch.mockResolvedValueOnce(overLimit());
+      render(<GraphFileActions />);
+      await act(async () => { requestGraphLoad(); });
+      expect(createProject).not.toHaveBeenCalled();
+      await act(async () => { useProjectStore.setState({ busy: false }); });
+      await waitFor(() => expect(createProject).toHaveBeenCalledOnce());
+    });
+
+    it('a file under the limit still replaces the open canvas, with no new project', async () => {
+      const createProject = vi.fn(async () => {});
+      withProject(createProject);
+      mocks.loadFromFile.mockResolvedValueOnce({ ...pickedGraph(), fileName: 'Small.nebula' });
+      render(<GraphFileActions />);
+      await act(async () => { requestGraphLoad(); });
+      expect(createProject).not.toHaveBeenCalled();
+      expect(flags()).toEqual([true]);
+      expect(useGraphStore.getState().nodes[0].id).toBe('n8');
+    });
+
+    it('with no project open (Projects not loaded), the file replaces the canvas as before, unflagged', async () => {
+      const createProject = vi.fn(async () => {});
+      withProject(createProject);
+      useProjectStore.setState({ initialized: false });
+      render(<GraphFileActions />);
+      await act(async () => { requestGraphLoad(); });
+      expect(createProject).not.toHaveBeenCalled();
+      expect(flags()).toEqual([null]);
+      expect(useGraphStore.getState().nodes[0].id).toBe('n8');
+    });
   });
 
   it.each(['navigation', 'return', 'focus', 'replacement'] as const)('a delayed import fit yields to later %s', async (action) => {
@@ -229,12 +382,14 @@ describe('workspace-independent graph file actions', () => {
     let resolveSave!: () => void;
     mocks.saveToFile.mockReturnValue(new Promise<void>((resolve) => { resolveSave = resolve; }));
     const rendered = render(<StrictMode><GraphFileActions /></StrictMode>);
-    act(() => { requestGraphSave(); requestGraphSave(); requestGraphLoad(); });
+    // Save reaches lib/graphFile.ts through its deferred import (a microtask
+    // later); the guard is taken before that await, so the repeats still drop.
+    await act(async () => { requestGraphSave(); requestGraphSave(); requestGraphLoad(); });
     expect(mocks.saveToFile).toHaveBeenCalledOnce();
     expect(mocks.loadFromFile).not.toHaveBeenCalled();
     await act(async () => resolveSave());
     rendered.unmount();
-    act(() => { requestGraphSave(); requestGraphLoad(); });
+    await act(async () => { requestGraphSave(); requestGraphLoad(); });
     expect(mocks.saveToFile).toHaveBeenCalledOnce();
     expect(mocks.loadFromFile).not.toHaveBeenCalled();
   });

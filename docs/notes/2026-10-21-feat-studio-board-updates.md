@@ -1,0 +1,112 @@
+# 2026-10-21 — A board's own Updates in Moodboard Studio (Q113 c)
+
+Branch `feat/studio-board-updates`, stacked on `feat/updates-corner-every-screen` at `e2c6242b` (Q107/Q108, not yet merged). Uncommitted (the coordinator commits). No paid provider call, no package installed.
+
+- **What changed and why.**
+  - **Q113**, Justin: "c) Two sections in one list: "This board" first, then the project. One chip with one count (both added), opening it reads both, and an empty board section is hidden."
+  - Before this, an Update posted with `board` (`post_note(board=...)`, `nebula note --board`) was saved with the board but showed on no screen. The plan's Studio mount (§5.9, PR9a) was never built.
+  - Now, in Moodboard Studio on a saved board, the corner's list has two sections:
+    - **"This board"** first, with "kept with this board" on the right, as in GM's still;
+    - then **"This project"**, with "kept with Harbor" (the canvas mount's off-canvas label).
+  - The header keeps "Updates", the count of both lists and the read state ("4 · all read"). On a single list the header's right side says where the list is kept; with two sections that moves to each section's heading.
+  - An empty board section is hidden. With no board Updates, the list is exactly the one every other screen shows (the same markup, "kept with Harbor" in the header).
+  - **One chip, one count.** The unread count is the board's plus the project's. Opening the list reads both (one `markRead` per list). A new update on either list drops a card while the person is in the Studio. A card's × dismisses it on its own list. A board update arriving over the socket lands live in the board section and bumps the count.
+  - **Show** on a board entry ("Show #2", "Show on board") opens the Board view, selects the cards of the images it names (every card of each image) and springs the camera to them (the Board view's own Fit spring). It writes nothing. From the List view it switches the Studio to Board, which the Studio remembers, like its own Board/List switch.
+  - **Agent support.** These now say a board's Updates show in Moodboard Studio's corner under "This board" while the person has that board open, and on no other screen, so an agent posts without `board` to reach the person anywhere:
+    - the `post_note` `board` bullet and the `list_notes` docstring;
+    - `nebula note`'s description and `--board` help, and its confirmation line ("Posted to this board's Updates (the person reads it in Moodboard Studio on that board, under This board)");
+    - docs/MCP-SETUP.md (the tool list, the Updates section, the `--board` example comment);
+    - skills/nebula/SKILL.md.
+  - The words "not on screen yet" are gone everywhere. MCP INSTRUCTIONS are unchanged (2,994 of 3,000). No new tool. The plan (`docs/moodboard-canvas-plan.md` §5.9) has a Q113 line.
+- **Decisions not in the spec.**
+  - **Which board.** The Studio publishes the saved board it has open (`boardCanvasStore.studioBoard`: id, draft key, image ids in board order) and clears it when it unmounts. A new, unsaved draft has no board section.
+  - **Global boards** (not in a project) behave the same: their section shows above the open project's. The workspace always has a project open, so in practice the Studio always shows the project section too.
+  - **No project open** (not reachable in the Studio today, but the rule is pinned by a test): a board with Updates shows its own list alone ("kept with this board"); with no board Updates and no project there is no corner, as before.
+  - **Outside the Studio** a board's Updates never show (only the project's list), as before. A board update posted while the person is elsewhere waits, unread, and drops no card when they open the board later. It is counted then.
+  - **Numbers are drawn from the board as it is now.** The board section draws `#n` in the text and the Show label from the Studio's own image order, not from the number the server drew when it listed the note. A removal since then can't mislabel it.
+  - **The board's list is loaded** when the Studio opens a board, read again after the socket reconnects (the backend replays no board Updates on connect), and read again after a read or dismiss the server refused.
+  - **Show keeps the list open** in the Studio, as Show on the canvas does there: it's the same screen. (Show on canvas from elsewhere still closes it.)
+  - **First-load budget.** Loading a board's list and choosing the board in view live in the corner's deferred chunk (`lib/agentNotesBoard.ts`). The startup store only gained what its socket handler needs (`boardInView`, `boardSeq`).
+- **Board actions (step 3): what exists on main.** No board edit action has a route on main:
+  - `run.undo` ("Undo the move" / "Undo the sort"), `history.restore` ("Restore"), `suggestion.accept` / `suggestion.dismiss` ("Make frame", "Add copies", "Not now") and board `proposal.accept` / `proposal.reject`;
+  - `post_nebula` and `mark_acted` (services/agent_notes.py) have no callers outside tests, so nothing posts a board Update that carries one.
+  - So none is built here. If such an entry ever reached the list, its button says `"Undo the sort" can't run here yet.` and changes nothing (tested).
+  - The plan's PR7e, PR10 and PR11 own them, and `mark_acted` settles the entry once they land.
+  - Asset proposals about a board (`proposal.review`) post on the project's list, not the board's, and their Review works as before.
+- **Not built (plan §5.9's Studio mount, listed for later).**
+  - Outlines on the board's cards (a card's lavender/orange outline, hover outlines). The canvas outline layer draws nodes only, so board entries set no outline.
+  - AgentLog in the Studio ("See all actions →" opens the log, which is mounted on the canvas only).
+- **Tradeoffs.**
+  - The list, opened over the Board view, covers the side panel at 1280 and 1440 until it is closed (Esc or a click outside). The selection shows in the side panel once it is.
+  - Show from the List view switches the Studio's remembered view to Board.
+- **Surprises.**
+  - The first build put the first-load entry 153 bytes over budget (512,153). Moving the board loading out of the startup store brought it to 511,504.
+  - "Show on board" on "#1 and #3 share the dusk palette; #2 is the outlier" selects #1, #2 and #3. That is right: `#2` in the text is a ref too.
+  - `react-hooks/refs` refuses `ref.current = x` during render. The corner keeps its sections ref in a layout effect.
+- **Tests (written first, seen failing).**
+  - **Frontend.** 20 failed first. The ones that passed first passed by design (no board section with no board Updates, another board's update not counted, no corner with neither, an unsaved draft has no section).
+    - `tests/AgentNotesStudioBoard.test.tsx` (19 tests, 15 failed first):
+      - two sections in order with their labels;
+      - the board list loads;
+      - the count is the sum;
+      - opening reads both lists;
+      - a live board note lands, drops a card and sits in its section;
+      - a note posted elsewhere drops no card later;
+      - live numbers and Show #n;
+      - an unbuilt action says so;
+      - a card's dismiss goes to the board list;
+      - reconnect reloads;
+      - a Global board;
+      - no project open;
+      - canvas, the Commons and Create never show board Updates.
+    - `MoodboardStudioBoard.test.tsx` (3 new, all failed first): the Studio publishes the open board and clears it on leaving; Show opens Board, selects and asks to frame; a Show for another board is left alone.
+    - `BoardCanvas.test.tsx` (2 new, both failed first): a frame request springs to just those cards, once, on its own board; a request made before the view mounts frames once it has.
+  - **Backend: `tests/test_board_updates_in_studio.py` (6 tests).**
+    - 4 failed first: the post_note and list_notes words, MCP-SETUP/SKILL/CLI, and the plan's Q113 line. The INSTRUCTIONS-unchanged test passed by design.
+    - The CLI confirmation test was added later and failed first.
+    - The parent's `test_agents_are_told_a_boards_updates_are_not_on_screen_yet` was removed: it pinned the words this change replaces.
+- **Live check.**
+  - **Setup.**
+    - Isolated backend on 8849 and Vite on 5849 (`VITE_NEBULA_BACKEND_PORT=8849`; `/api/health` through Vite answered from 8849).
+    - A temp HOME, every NEBULA_* root in scratch, no keys.
+    - Headless Chromium with 8000-8010 and 5173 blocked (CDP plus the dead-proxy layer).
+    - One real MCP stdio agent named "Claude Code".
+    - Project Harbor with a board "Dusk refs" (3 images), opened in Moodboard Studio.
+  - **At 1280x800.**
+    - The agent's `post_note(board="Dusk refs", refs=["2"])` dropped a card "#2 carries the warm light…" with "Show #2" (count 1).
+    - Its project `post_note` dropped a second card (count 2).
+    - Opening the list showed "Updates 2 · all read", then "This board 1 · kept with this board", then "This project 1 · kept with Harbor". `list_notes` then gave unread 0 for both.
+    - "Show #2" switched to the Board view with Reference #2 alone selected, framed in the middle, and its side panel showing.
+    - On the canvas, a further board note neither counted nor dropped a card, and the list was the project's alone ("kept with this project").
+    - Back in the Studio, that note counted 1 unread and dropped no card.
+  - **At 1440x900.**
+    - A new board note dropped a card with "Show on board".
+    - The list showed 3 board entries and then 1 project entry.
+    - "Show on board" selected the three images the text names.
+    - The canvas again showed only the project list.
+  - **CLI.** `nebula note --board "Dusk refs" --ref 3` posted, and `nebula notes --board "Dusk refs"` listed all four.
+  - **Requests.** Blocked: 2, both in the deliberate canary probe; **0 during the run**. Proxy failures during the run: 0. Canary hits: 0. Console errors: none.
+  - Screenshots: `scratchpad/q113/shots/` (06 to 14).
+- **Gates (2026-10-21, load average about 17 to 23 from other sessions).**
+  - **Backend whole suite** (iso.sh): 9456 passed, 61 skipped, 0 failed (22:39).
+  - **Frontend whole `vitest run`** (with the backend suite running at the same time): 74 failed, 3939 passed (34 of 337 files failed; 61 of the failures were "Test timed out"). Rerun of those 34 files together: 34 files passed, 476 tests passed, 0 failed.
+  - `tsc -b` rc 0, and `npm run -s lint` rc 0.
+  - `vite build` plus the budget passed: **511,504 bytes raw** / 149,620 gzip (496 under 512,000).
+  - `lib/agentNotesBoard.ts` is added to `DEFERRED_MODULES`, so `entrySplit.test.ts` keeps it out of the entry. That file passes.
+- **Review (one confirmed finding, fixed).**
+  - **The finding.** If any socket message for a board (say an agent's `post_note(board=…)`) landed while that board's list was loading, `hydrateBoard` threw the load away and never tried again. The board's list then held only the new note, still "not loaded", while the count came from the server. Nothing repaired it short of a reconnect, an error, or reopening the board, because the backend replays no board Updates on connect (the canvas list has that replay; the board list doesn't).
+  - **The fix** (`frontend/src/lib/agentNotesBoard.ts`): when a socket message lands during the GET, load again instead of returning. Each new GET starts after that message, so it already holds it. It tries at most 3 times. Merging the GET into the store was ruled out, because a read or dismiss can land mid-flight too. A GET that fails (board gone or not saved) still stops at once.
+  - **Tests first.** New `frontend/src/lib/agentNotesBoard.test.ts` (4 tests). On the old code 2 failed: "loads again … when a board note lands while it loads" (the GET was called 1 time, not 2) and "stops after a few tries under a steady stream" (1 call, not 3). The other 2 (a quiet load, a gone board) passed on both. After the fix all 4 pass, and `AgentNotesStudioBoard.test.tsx` still passes (23 across the two files).
+  - **Live check (8849/5849, fake keys, nothing paid).** The page's `fetch` held each board GET for 3 s. Two older board notes were seeded first. Then Dusk refs was opened in the Studio, and the real MCP agent ("Claude Code") posted a board note during the held GET. **Old code:** 1 GET, the chip said 3, and "This board" showed 1 entry (the new note). Both older notes were missing. **Fixed code:** 2 GETs (one retry), and "This board" listed every note newest first, the count matching. Checked at 1280x800 and 1440x900. Blocked requests: 2, both the deliberate canary probes, **0 during the run**. One dead-proxy refusal during the run was the page's discovery trying `localhost:8849` (not one of Justin's ports). Canary hits: 0. Screenshots: `scratchpad/q113/shots/r-before-list-1280.png`, `r-after4-list-1280.png`, `r-after5-list-1440.png`.
+  - **Gates after the fix.**
+    - **Backend whole suite:** 1 failed, 9455 passed, 61 skipped. The failure was `test_agent_guardian.py::test_sigkilled_backend_leaves_no_agent_or_descendant_behind`, whose two child processes outlived the check under load. That file run alone: 5 passed. No backend file changed.
+    - **Frontend whole `vitest run`:** 19 failed, 3998 passed, with 10 of 338 files failing; 12 of the failures were "Test timed out". Those 10 files run alone: 168 passed, 0 failed.
+    - `tsc -b` rc 0, and `npm run -s lint` rc 0.
+    - `vite build` plus the budget passed: entry 511,504 bytes raw, unchanged. The fix sits in the deferred `AgentNotesCorner` chunk.
+- **Coordinator, before the PR.** The review fix stopped after 3 tries under a steady stream of board messages and left the list unloaded until a reconnect. Now, once the tries run out, one more load follows 2 s later if that board is still in view and its list still isn't loaded (`HYDRATE_RETRY_MS`). Each such load can schedule one more, so it ends when the stream stops or the person leaves the board. Tests first in `src/lib/agentNotesBoard.test.ts`: the retry test failed on the old code; the not-in-view test pins that no retry runs once the board is gone.
+- **Merging #157's review fixes (coordinator).** #157 replaced the adapter's `showLeaves` with a `show` that returns a promise off the canvas: the list steps aside once it's there, and a failure shows its reason in the list. The merge keeps that model inside this branch's per-section routing (`sectionHolding`): Show and actions run on the entry's own section's adapter, `showLeaves` is gone from both adapters and the interface, and `outlines` stays. The board's Show returns nothing, so the list stays open in the Studio, as before. The count in the chip's new plain-figure form is still the two lists' sum.
+- **Open items.**
+  - Board edit actions (above) wait for PR7e, PR10 and PR11.
+  - Board outlines and the Studio's AgentLog link (above).
+  - **For the parallel header-fix lane (compact chip under about 1360 px):** this change needs nothing new from the chip; its sizing and the header slot CSS are untouched. The list, card and chip are placed exactly as before.
+  - **Budget margin.** The entry is 511,504 bytes raw, 496 under 512,000. The header-fix lane should check its own additions against this.

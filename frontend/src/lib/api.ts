@@ -1,9 +1,11 @@
 import { apiFetch, rewriteBackendAssetUrls } from './backend';
+import { apiRequest } from './apiRequest';
 import { resolveProjectId } from './currentProject';
 import type { Character, Moodboard } from '../types';
 import { actorLabel, type TrashedItem } from './trash';
 import { MoodboardVersionConflict, type MoodboardEditResult, type MoodboardOp } from './moodboardEdits';
 import { CharacterVersionConflict } from './characterEdits';
+import { RequestFailedError, requestError, requestSucceeded, withHeading } from './errorCopy';
 import type {
   ProviderRecoveryCheckpoint,
   ProviderStartAmbiguity,
@@ -13,7 +15,10 @@ import type {
 export interface ExecutionValidationError {
   nodeId: string;
   portId: string;
+  /** The specific text agents keep, word for word. */
   message: string;
+  /** The card's line (error copy round 3e); null/absent: GM's general line, `message` behind Details. */
+  person?: string | null;
 }
 
 export interface ExecutionStartResult {
@@ -37,68 +42,62 @@ export interface ExecutionStatusResult {
 
 /** A received non-2xx response proves the start request reached a backend and
  * was rejected. Network exceptions remain ambiguous and must be reconciled by
- * the caller with the client-owned run ID. */
-export class ExecutionStartRejectedError extends Error {
-  readonly status: number;
-
-  constructor(message: string, status: number) {
-    super(message);
+ * the caller with the client-owned run ID. Like every request's error it
+ * carries a heading (the call's, when it came from one) and a reason. */
+export class ExecutionStartRejectedError extends RequestFailedError {
+  constructor(reason: string, status: number, options: { heading?: string; detail?: unknown; code?: string | null } = {}) {
+    super(options.heading ?? '', status, { reason, detail: options.detail, code: options.code });
     this.name = 'ExecutionStartRejectedError';
-    this.status = status;
   }
 }
 
-function executionStartResponseError(
-  message: string,
-  status: number,
-): Error {
+/** A refused start, named by its call: GM's line for the status, or the
+ * backend's written reason. */
+async function executionStartResponseError(heading: string, response: Response): Promise<Error> {
+  const error = await requestError(heading, response);
   // A gateway/server failure can be returned after the request body was
   // forwarded and the backend scheduled work, so it is not proof of rejection.
   // 507 is Nebula's explicit pre-provider durable-safety rejection.
-  if ((status >= 500 && status !== 507) || status === 408) {
-    return new Error(message);
-  }
-  return new ExecutionStartRejectedError(message, status);
+  if ((response.status >= 500 && response.status !== 507) || response.status === 408) return error;
+  return new ExecutionStartRejectedError(error.reason, response.status, { heading, detail: error.detail, code: error.code });
 }
 
+/* Every call below names its action (GM, error-copy round 2: "Couldn't
+ * {verb} {object}." then the reason; "Never 'failed:', '(HTTP 503)' or
+ * status codes in the UI. Keep them in the console."). apiRequest makes the
+ * words: GM's line for no answer, 408, 429 and 5xx; else the backend's
+ * written reason; else GM's line for the status. */
+
 export async function getExecutionStatus(runId: string): Promise<ExecutionStatusResult> {
-  const response = await apiFetch(`/api/executions/${encodeURIComponent(runId)}`, {
+  const response = await apiRequest("Couldn't check the run.", `/api/executions/${encodeURIComponent(runId)}`, {
     cache: 'no-store',
   });
-  if (!response.ok) throw new Error(`Execution status unavailable: HTTP ${response.status}.`);
   return response.json();
 }
 
 export async function cancelExecution(runId: string): Promise<ExecutionCancellationResult> {
-  const response = await apiFetch(`/api/executions/${encodeURIComponent(runId)}`, {
+  const response = await apiRequest("Couldn't cancel the run.", `/api/executions/${encodeURIComponent(runId)}`, {
     method: 'DELETE',
   });
-  if (!response.ok) {
-    let detail = '';
-    try { detail = (await response.json()).detail ?? ''; } catch {
-      /* Non-JSON responses use the status fallback. */
-    }
-    throw new Error(detail || `Cancel failed: ${response.status} ${response.statusText}`);
-  }
   return response.json();
 }
+
+/** The headings for the two "Checked Marble" buttons (round 3, GM: named
+ * after the button the person clicked); the store and the screens use these. */
+export const UNLOCK_NODE_HEADING = "Couldn't unlock the node.";
+export const FORGET_RECOVERY_HEADING = "Couldn't forget the recovery safeguard.";
 
 export async function acknowledgeProviderStartAmbiguity(
   kind: ProviderStartKind,
   nodeId: string,
   runId: string,
 ): Promise<void> {
-  const response = await apiFetch(
+  // Round 3 (GM): the label the person clicked. The status bar's "Checked
+  // Marble — unlock" unlocks one node (its label: "unlock node n1").
+  await apiRequest(UNLOCK_NODE_HEADING,
     `/api/provider-start-ambiguities/${encodeURIComponent(kind)}/${encodeURIComponent(nodeId)}/${encodeURIComponent(runId)}`,
     { method: 'DELETE' },
   );
-  if (!response.ok) {
-    let detail = '';
-    try { detail = (await response.json()).detail ?? ''; } catch {
-      /* Non-JSON responses use the status fallback. */
-    }
-    throw new Error(detail || `Could not unlock provider start: HTTP ${response.status}.`);
-  }
 }
 
 export async function deleteProviderRecovery(
@@ -116,17 +115,29 @@ export async function deleteProviderRecovery(
   if ([...query.keys()].length !== 1) {
     throw new Error('Provider recovery deletion requires exactly one recovery ID.');
   }
-  const response = await apiFetch(
+  // Run History's "Checked Marble — forget" forgets a "World Labs recovery safeguard".
+  await apiRequest(FORGET_RECOVERY_HEADING,
     `/api/provider-recoveries/${encodeURIComponent(runId)}/${encodeURIComponent(nodeId)}?${query.toString()}`,
     { method: 'DELETE' },
   );
-  if (!response.ok) {
-    let detail = '';
-    try { detail = (await response.json()).detail ?? ''; } catch {
-      /* Non-JSON responses use the status fallback. */
-    }
-    throw new Error(detail || `Could not clear provider recovery: HTTP ${response.status}.`);
+}
+
+/** apiFetch for a run start: no answer stays ambiguous (a ConnectionLostError
+ * under the heading); an answered failure is the start's error. */
+async function startRequest(heading: string, path: string, body: unknown): Promise<Response> {
+  let response: Response;
+  try {
+    response = await apiFetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    throw withHeading(error, heading);
   }
+  if (!response.ok) throw await executionStartResponseError(heading, response);
+  requestSucceeded(heading);
+  return response;
 }
 
 export async function executeGraph(
@@ -136,23 +147,9 @@ export async function executeGraph(
   preserveGraphParams = false,
   approvalId?: string,
 ): Promise<ExecutionStartResult> {
-  const response = await apiFetch('/api/execute', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      nodes, edges, runId, ...(preserveGraphParams ? { preserveGraphParams } : {}), ...(approvalId ? { approvalId } : {}),
-    }),
+  const response = await startRequest("Couldn't start the run.", '/api/execute', {
+    nodes, edges, runId, ...(preserveGraphParams ? { preserveGraphParams } : {}), ...(approvalId ? { approvalId } : {}),
   });
-  if (!response.ok) {
-    let detail = '';
-    try { detail = (await response.json()).detail ?? ''; } catch {
-      /* Non-JSON error responses still fall back to status text. */
-    }
-    throw executionStartResponseError(
-      detail || `Execute failed: ${response.status} ${response.statusText}`,
-      response.status,
-    );
-  }
   return response.json();
 }
 
@@ -164,24 +161,10 @@ export async function executeNode(
   preserveGraphParams = false,
   approvalId?: string,
 ): Promise<ExecutionStartResult> {
-  const response = await apiFetch('/api/execute-node', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      nodes, edges, targetNodeId, runId,
-      ...(preserveGraphParams ? { preserveGraphParams } : {}), ...(approvalId ? { approvalId } : {}),
-    }),
+  const response = await startRequest("Couldn't run the node.", '/api/execute-node', {
+    nodes, edges, targetNodeId, runId,
+    ...(preserveGraphParams ? { preserveGraphParams } : {}), ...(approvalId ? { approvalId } : {}),
   });
-  if (!response.ok) {
-    let detail = '';
-    try { detail = (await response.json()).detail ?? ''; } catch {
-      /* Non-JSON error responses still fall back to status text. */
-    }
-    throw executionStartResponseError(
-      detail || `Execute node failed: ${response.status} ${response.statusText}`,
-      response.status,
-    );
-  }
   return response.json();
 }
 
@@ -193,19 +176,9 @@ export async function generateCinemaShot(
   seed?: number,
   variations?: number,
   runId?: string,
-): Promise<{ status: string; shotId?: string; variations?: number; errorCount?: number }> {
-  const response = await apiFetch('/api/cinema/generate-shot', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nodes, edges, nodeId, shotId, seed, variations, runId }),
-  });
-  if (!response.ok) {
-    let detail = '';
-    try { detail = (await response.json()).detail ?? ''; } catch {
-      /* Non-JSON error responses still fall back to status text. */
-    }
-    throw executionStartResponseError(detail || `Generate shot failed: ${response.status} ${response.statusText}`, response.status);
-  }
+): Promise<{ status: string; shotId?: string; variations?: number; errorCount?: number; errors?: ExecutionValidationError[] }> {
+  const response = await startRequest("Couldn't start the shot.", '/api/cinema/generate-shot',
+    { nodes, edges, nodeId, shotId, seed, variations, runId });
   return response.json();
 }
 
@@ -214,34 +187,25 @@ export async function promoteCinemaShotVariation(
   shotId: string,
   index: number,
 ): Promise<{ status: string; shotId: string; selectedVariation: number; imageUrl: string }> {
-  const response = await apiFetch('/api/cinema/promote-shot-variation', {
+  const response = await apiRequest("Couldn't use that variation.", '/api/cinema/promote-shot-variation', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ nodeId, shotId, index }),
   });
-  if (!response.ok) {
-    let detail = '';
-    try { detail = (await response.json()).detail ?? ''; } catch {
-      /* Non-JSON error responses still fall back to status text. */
-    }
-    throw new Error(detail || `Promote shot variation failed: ${response.status} ${response.statusText}`);
-  }
   return response.json();
 }
 
 export async function getSettings(): Promise<Record<string, unknown>> {
-  const response = await apiFetch('/api/settings');
-  if (!response.ok) throw new Error(`Get settings failed: ${response.status}`);
+  const response = await apiRequest("Couldn't load your API keys.", '/api/settings');
   return response.json();
 }
 
 export async function updateSettings(settings: Record<string, unknown>): Promise<{ status: string }> {
-  const response = await apiFetch('/api/settings', {
+  const response = await apiRequest("Couldn't save your settings.", '/api/settings', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
   });
-  if (!response.ok) throw new Error(`Update settings failed: ${response.status}`);
   return response.json();
 }
 
@@ -290,18 +254,15 @@ export interface AgentSetup {
   warnings: string[];
 }
 
-async function agentAppsCall<T>(path: string, init: RequestInit | undefined, what: string): Promise<T> {
-  const response = await apiFetch(path, init);
-  if (!response.ok) {
-    let detail = '';
-    try { detail = (await response.json()).detail ?? ''; } catch { /* not JSON */ }
-    throw new Error(detail || `${what} failed: ${response.status}`);
-  }
+/** `heading` names the call ("Couldn't revoke the app."); the backend's
+ * written reason (Settings shows it) or GM's line comes after it. */
+async function agentAppsCall<T>(path: string, init: RequestInit | undefined, heading: string): Promise<T> {
+  const response = await apiRequest(heading, path, init);
   return response.json() as Promise<T>;
 }
 
 export function getOutsideSpend(): Promise<OutsideSpend> {
-  return agentAppsCall('/api/agent/spend/apps', undefined, 'Loading connected apps');
+  return agentAppsCall('/api/agent/spend/apps', undefined, "Couldn't load the connected apps.");
 }
 
 /** The backend keeps a hash and writes the token to tokenFile (0600). The raw token is in this
@@ -314,31 +275,30 @@ export function createConnectedApp(
   return agentAppsCall('/api/agent/spend/apps', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, dailyUsd, ...options }),
-  }, 'Creating the app token');
+  }, "Couldn't create the app token.");
 }
 
 export function setConnectedAppColor(id: string, color: string | null): Promise<{ app: ConnectedApp }> {
   return agentAppsCall(`/api/agent/spend/apps/${encodeURIComponent(id)}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ color }),
-  }, 'Saving the app color');
+  }, "Couldn't save the app color.");
 }
 
 export function setConnectedAppLimit(id: string, dailyUsd: number | null): Promise<{ app: ConnectedApp }> {
   return agentAppsCall(`/api/agent/spend/apps/${encodeURIComponent(id)}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dailyUsd }),
-  }, 'Saving the app limit');
+  }, "Couldn't save the app limit.");
 }
 
 export function revokeConnectedApp(id: string): Promise<{ status: string }> {
-  return agentAppsCall(`/api/agent/spend/apps/${encodeURIComponent(id)}`, { method: 'DELETE' }, 'Revoking the app');
+  return agentAppsCall(`/api/agent/spend/apps/${encodeURIComponent(id)}`, { method: 'DELETE' }, "Couldn't revoke the app.");
 }
 
 /** Remove one browser-managed provider key without resubmitting other settings. */
 export async function deleteSettingsApiKey(provider: string): Promise<{ status: string }> {
-  const response = await apiFetch(`/api/settings/api-keys/${encodeURIComponent(provider)}`, {
+  const response = await apiRequest("Couldn't remove the API key.", `/api/settings/api-keys/${encodeURIComponent(provider)}`, {
     method: 'DELETE',
   });
-  if (!response.ok) throw new Error(`Remove API key failed: ${response.status}`);
   return response.json();
 }
 
@@ -350,12 +310,11 @@ export async function deleteSettingsApiKey(provider: string): Promise<{ status: 
  * key string removes the provider from the in-memory store.
  */
 export async function updateCredential(provider: string, key: string): Promise<{ status: string }> {
-  const response = await apiFetch('/api/credentials/update', {
+  const response = await apiRequest("Couldn't save the API key.", '/api/credentials/update', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ provider, key }),
   });
-  if (!response.ok) throw new Error(`Credential update failed: ${response.status}`);
   return response.json();
 }
 
@@ -369,8 +328,7 @@ export interface OpenRouterModel {
 }
 
 export async function fetchOpenRouterModels(): Promise<{ models: OpenRouterModel[]; count: number }> {
-  const response = await apiFetch('/api/openrouter/models');
-  if (!response.ok) throw new Error(`Fetch OpenRouter models failed: ${response.status}`);
+  const response = await apiRequest("Couldn't load the OpenRouter models.", '/api/openrouter/models');
   return response.json();
 }
 
@@ -379,16 +337,9 @@ export async function fetchOpenRouterModels(): Promise<{ models: OpenRouterModel
 export type NousModel = OpenRouterModel;
 
 export async function fetchNousModels(): Promise<{ models: NousModel[]; count: number }> {
-  const response = await apiFetch('/api/nous/models');
-  if (!response.ok) {
-    // Surface the backend's auth message verbatim — usually instructs the
-    // user to run `hermes model` and pick Nous Portal.
-    let detail = '';
-    try { detail = (await response.json()).detail ?? ''; } catch {
-      /* Non-JSON error responses still fall back to the status message. */
-    }
-    throw new Error(detail || `Fetch Nous models failed: ${response.status}`);
-  }
+  // A refusal says the backend's auth message verbatim, usually how to run
+  // `hermes model` and pick Nous Portal.
+  const response = await apiRequest("Couldn't load the Nous models.", '/api/nous/models');
   return response.json();
 }
 
@@ -416,6 +367,54 @@ export interface PersonalAgent {
   resolvedPath: string | null;
   note: string;
   startable: boolean;
+  /** The installed CLI's version, when Nebula checked it (Gemini, Antigravity). */
+  version?: string | null;
+  /** Gemini: hand this agent the Gemini API key saved in Settings. Off until the person turns it on. */
+  keyOption?: { enabled: boolean; keySaved: boolean; billing: string; blocked: string | null } | null;
+  /** Antigravity: Google's ACP server, downloaded pinned and SHA-256 checked. */
+  install?: {
+    state: 'unsupported' | 'missing' | 'downloading' | 'changed' | 'installed';
+    version: string; sizeBytes: number | null; message: string; source: string | null;
+    job?: PersonalAgentJob;
+  } | null;
+  /** Antigravity: the Google sign-in Google's server runs in the browser. */
+  signIn?: { state: 'signed_out' | 'waiting' | 'signed_in'; job?: PersonalAgentJob } | null;
+  /** What using this agent means for the person's own account (Antigravity's terms). */
+  termsNote?: string;
+}
+
+export interface PersonalAgentJob {
+  state: 'running' | 'done' | 'failed' | 'cancelled';
+  message: string;
+  receivedBytes?: number;
+  totalBytes?: number;
+  signInUrl?: string;
+}
+
+/** A model (or thinking level) the person may pick for one personal session. */
+export interface PersonalSessionOption {
+  id: string;
+  name: string;
+  category: string;
+  current: string | null;
+  options: Array<{ value: string; name: string }>;
+}
+
+export function parsePersonalSessionOptions(raw: unknown): PersonalSessionOption[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item): PersonalSessionOption[] => {
+    if (!item || typeof item !== 'object') return [];
+    const option = item as Record<string, unknown>;
+    if (typeof option.id !== 'string' || !Array.isArray(option.options)) return [];
+    const values = option.options.flatMap((value): Array<{ value: string; name: string }> => {
+      if (!value || typeof value !== 'object') return [];
+      const entry = value as Record<string, unknown>;
+      return typeof entry.value === 'string' ? [{ value: entry.value, name: String(entry.name ?? entry.value) }] : [];
+    });
+    if (!values.length) return [];
+    return [{ id: option.id, name: String(option.name ?? option.id), category: String(option.category ?? ''),
+      current: typeof option.current === 'string' ? option.current : null, options: values }];
+  });
 }
 
 export interface PersonalAgentList {
@@ -424,19 +423,20 @@ export interface PersonalAgentList {
 }
 
 export function fetchPersonalAgents(): Promise<PersonalAgentList> {
-  return agentAppsCall('/api/personal-agents', undefined, 'Loading personal agents');
+  return agentAppsCall('/api/personal-agents', undefined, "Couldn't load your agents.");
 }
 
 export function acknowledgePersonalAgentWarning(): Promise<{ warningAcknowledgedAt: string }> {
-  return agentAppsCall('/api/personal-agents/acknowledge-warning', { method: 'POST' }, 'Saving your answer');
+  return agentAppsCall('/api/personal-agents/acknowledge-warning', { method: 'POST' }, "Couldn't save your answer.");
 }
 
 export function updatePersonalAgent(
-  id: string, changes: Partial<Pick<PersonalAgent, 'enabled' | 'displayName' | 'color' | 'command' | 'args'>>,
+  id: string,
+  changes: Partial<Pick<PersonalAgent, 'enabled' | 'displayName' | 'color' | 'command' | 'args'>> & { useNebulaKey?: boolean },
 ): Promise<{ agent: PersonalAgent }> {
   return agentAppsCall(`/api/personal-agents/${encodeURIComponent(id)}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changes),
-  }, 'Saving the agent');
+  }, "Couldn't save the agent.");
 }
 
 export function createPersonalAgent(agent: {
@@ -444,11 +444,25 @@ export function createPersonalAgent(agent: {
 }): Promise<{ agent: PersonalAgent }> {
   return agentAppsCall('/api/personal-agents', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(agent),
-  }, 'Adding the agent');
+  }, "Couldn't add the agent.");
 }
 
 export function deletePersonalAgent(id: string): Promise<{ ok: boolean }> {
-  return agentAppsCall(`/api/personal-agents/${encodeURIComponent(id)}`, { method: 'DELETE' }, 'Removing the agent');
+  return agentAppsCall(`/api/personal-agents/${encodeURIComponent(id)}`, { method: 'DELETE' }, "Couldn't remove the agent.");
+}
+
+/** Antigravity's download, sign-in and sign-out (backend services/antigravity_agent.py). */
+export function antigravityAction(
+  action: 'install' | 'remove' | 'sign-in' | 'cancel-sign-in' | 'sign-out',
+): Promise<{ agent: PersonalAgent; message?: string }> {
+  const [path, method, what] = {
+    install: ['install', 'POST', "Couldn't start the download."],
+    remove: ['install', 'DELETE', "Couldn't remove the download."],
+    'sign-in': ['sign-in', 'POST', "Couldn't start the sign-in."],
+    'cancel-sign-in': ['sign-in', 'DELETE', "Couldn't stop the sign-in."],
+    'sign-out': ['sign-out', 'POST', "Couldn't sign out."],
+  }[action];
+  return agentAppsCall(`/api/personal-agents/antigravity/${path}`, { method }, what);
 }
 
 export function chatAuthUsesProviderBilling(mode: string | null): boolean {
@@ -473,10 +487,13 @@ export interface ChatModelCatalog {
 }
 
 export async function fetchChatModels(agent: ChatProvider, refresh = false): Promise<ChatModelCatalog> {
-  const response = await apiFetch(`/api/agents/${agent}/models${refresh ? '?refresh=true' : ''}`);
-  if (!response.ok) throw new Error(response.status === 404
-    ? 'Model discovery needs the updated Nebula backend. Restart it, then retry.'
-    : 'Model discovery is unavailable. Check the Nebula backend, then retry.');
+  const heading = "Couldn't load the models.";
+  const response = await apiRequest(heading, `/api/agents/${agent}/models${refresh ? '?refresh=true' : ''}`, undefined,
+    { allow: [404] });
+  // An older backend has no model discovery: say how to get it.
+  if (response.status === 404) {
+    throw await requestError(heading, response, { reason: 'Model discovery needs the updated Nebula backend. Restart it, then retry.' });
+  }
   return response.json();
 }
 
@@ -507,30 +524,26 @@ export interface ClaudeStatus {
 }
 
 export async function fetchClaudeStatus(): Promise<ClaudeStatus> {
-  const response = await apiFetch('/api/agents/claude/status');
-  if (!response.ok) throw new Error(`Fetch Claude status failed: ${response.status}`);
+  const response = await apiRequest("Couldn't check Claude status.", '/api/agents/claude/status');
   return response.json();
 }
 
 export async function fetchCodexStatus(): Promise<CodexStatus> {
-  const response = await apiFetch('/api/agents/codex/status');
-  if (!response.ok) throw new Error(`Fetch Codex status failed: ${response.status}`);
+  const response = await apiRequest("Couldn't check Codex status.", '/api/agents/codex/status');
   return response.json();
 }
 
 export async function startCodexChatGPTLogin(deviceAuth = false): Promise<CodexChatGPTLoginState> {
-  const response = await apiFetch('/api/agents/codex/login/chatgpt', {
+  const response = await apiRequest("Couldn't start the ChatGPT sign-in.", '/api/agents/codex/login/chatgpt', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ deviceAuth }),
   });
-  if (!response.ok) throw new Error(`Start Codex ChatGPT login failed: ${response.status}`);
   return response.json();
 }
 
 export async function fetchCodexChatGPTLoginState(): Promise<CodexChatGPTLoginState> {
-  const response = await apiFetch('/api/agents/codex/login/chatgpt');
-  if (!response.ok) throw new Error(`Fetch Codex ChatGPT login failed: ${response.status}`);
+  const response = await apiRequest("Couldn't check the ChatGPT sign-in.", '/api/agents/codex/login/chatgpt');
   return response.json();
 }
 
@@ -545,16 +558,9 @@ export interface QuiverModel {
 }
 
 export async function fetchQuiverModels(): Promise<{ models: QuiverModel[]; count: number }> {
-  const response = await apiFetch('/api/quiver/models');
-  if (!response.ok) {
-    // 400 is the offline-fallback signal — frontend uses hardcoded
-    // arrow-1 / arrow-1.1 / arrow-1.1-max if QUIVER_API_KEY is unset.
-    let detail = '';
-    try { detail = (await response.json()).detail ?? ''; } catch {
-      /* Non-JSON error responses still fall back to the status message. */
-    }
-    throw new Error(detail || `Fetch Quiver models failed: ${response.status}`);
-  }
+  // 400 is the offline-fallback signal — frontend uses hardcoded
+  // arrow-1 / arrow-1.1 / arrow-1.1-max if QUIVER_API_KEY is unset.
+  const response = await apiRequest("Couldn't load the Quiver models.", '/api/quiver/models');
   return response.json();
 }
 
@@ -578,14 +584,13 @@ export async function fetchCLIGraph(): Promise<{
   /** Agent edits waiting for a canvas to lay out their new nodes (services/canvas_arrange.py). */
   arrange?: unknown;
 }> {
-  const response = await apiFetch('/api/graph/export');
-  if (!response.ok) throw new Error(`Fetch CLI graph failed: ${response.status}`);
+  const response = await apiRequest("Couldn't load the canvas.", '/api/graph/export');
   return rewriteBackendAssetUrls(await response.json());
 }
 
 export async function fetchReplicateSchema(owner: string, name: string): Promise<ReplicateSchema> {
-  const response = await apiFetch(`/api/replicate/schema/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`);
-  if (!response.ok) throw new Error(`Fetch Replicate schema failed: ${response.status}`);
+  const response = await apiRequest("Couldn't load the Replicate schema.",
+    `/api/replicate/schema/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`);
   return response.json();
 }
 
@@ -599,45 +604,44 @@ type CharacterUpdateInput = Partial<CharacterCreateInput>;
 export async function fetchCharacters(scope: 'project' | 'global', projectId?: string): Promise<Character[]> {
   const params = new URLSearchParams({ scope });
   if (scope === 'project') params.append('projectId', await resolveProjectId(projectId));
-  const response = await apiFetch(`/api/characters?${params.toString()}`);
-  if (!response.ok) throw new Error(`Fetch characters failed: ${response.status}`);
+  const response = await apiRequest("Couldn't load the characters.", `/api/characters?${params.toString()}`);
   return response.json();
 }
 
 /** One Character by id, or null when there's none (deleted, or never existed). */
 export async function fetchCharacter(id: string): Promise<Character | null> {
-  const response = await apiFetch(`/api/characters/${encodeURIComponent(id)}`);
+  const response = await apiRequest("Couldn't load the character.", `/api/characters/${encodeURIComponent(id)}`,
+    undefined, { allow: [404] });
   if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`Fetch character failed: ${response.status}`);
   return response.json();
 }
 
 export async function createCharacter(body: CharacterCreateInput): Promise<Character> {
-  const response = await apiFetch('/api/characters', {
+  const response = await apiRequest("Couldn't create the character.", '/api/characters', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!response.ok) throw new Error(`Create character failed: ${response.status}`);
   return response.json();
 }
 
-/** Why a Studio save failed. Someone (often an agent) may have moved the
- * asset to Recently deleted while it was open: say so, since restoring it and
- * saving again keeps the edits (backend main.py _asset_not_found). */
-async function saveFailure(response: Response, kind: 'moodboard' | 'character', fallback: string): Promise<Error> {
-  if (response.status === 404) {
-    try {
-      const body = await response.json() as { code?: unknown; trashed?: { deletedBy?: { kind?: string; name?: string } } };
-      if (body?.code === 'in_trash') {
-        const by = body.trashed?.deletedBy;
-        const who = !by || by.kind === 'person' ? '' : ` by ${actorLabel(by)}`;
-        const noun = kind === 'moodboard' ? 'board' : 'Character';
-        return new Error(`This ${noun} was moved to Recently deleted${who}. Restore it from the list on the left, then Retry to save your changes.`);
-      }
-    } catch { /* not JSON: plain not found */ }
-  }
-  return new Error(fallback);
+/** Why a Studio save failed, when it's because someone (often an agent)
+ * moved the asset to Recently deleted while it was open: say so under the
+ * save's heading, since restoring it and saving again keeps the edits
+ * (backend main.py _asset_not_found). Null for a plain not-found. */
+async function trashedFailure(response: Response, kind: 'moodboard' | 'character', heading: string): Promise<Error | null> {
+  if (response.status !== 404) return null;
+  try {
+    const body = await response.clone().json() as { code?: unknown; trashed?: { deletedBy?: { kind?: string; name?: string } } };
+    if (body?.code === 'in_trash') {
+      const by = body.trashed?.deletedBy;
+      const who = !by || by.kind === 'person' ? '' : ` by ${actorLabel(by)}`;
+      const noun = kind === 'moodboard' ? 'board' : 'Character';
+      return requestError(heading, response, { detail: body, reason:
+        `This ${noun} was moved to Recently deleted${who}. Restore it from the list on the left, then Retry to save your changes.` });
+    }
+  } catch { /* not JSON: plain not found */ }
+  return null;
 }
 
 /** A 409 from a Character PUT sent with `baseVersion`: someone else saved it
@@ -652,24 +656,27 @@ async function characterConflict(response: Response): Promise<CharacterVersionCo
   }
 }
 
+const SAVE_CHARACTER = "Couldn't save the character.";
+
 /** With `baseVersion`, a Character saved elsewhere since is a
  *  CharacterVersionConflict, not an overwrite. */
 export async function updateCharacter(id: string, body: CharacterUpdateInput & { baseVersion?: number }): Promise<Character> {
-  const response = await apiFetch(`/api/characters/${id}`, {
+  const response = await apiRequest(SAVE_CHARACTER, `/api/characters/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-  });
+  }, { allow: [404, 409] });
   if (!response.ok) {
-    throw await characterConflict(response) ?? await saveFailure(response, 'character', `Update character failed: ${response.status}`);
+    throw await characterConflict(response) ?? await trashedFailure(response, 'character', SAVE_CHARACTER)
+      ?? await requestError(SAVE_CHARACTER, response);
   }
   return response.json();
 }
 
 /** Moves the Character to Recently deleted; the result is its trash record. */
 export async function deleteCharacter(id: string): Promise<TrashedItem> {
-  const response = await apiFetch(`/api/characters/${encodeURIComponent(id)}`, { method: 'DELETE' });
-  if (!response.ok) throw new Error(`Delete character failed: ${response.status}`);
+  const response = await apiRequest("Couldn't delete the character.", `/api/characters/${encodeURIComponent(id)}`,
+    { method: 'DELETE' });
   return ((await response.json()) as { trashed: TrashedItem }).trashed;
 }
 
@@ -683,55 +690,42 @@ type MoodboardCreateInput = Omit<Moodboard, 'id' | 'version' | 'thumbnail' | 'cr
   & { briefOverride?: { text: string } | null };
 type MoodboardUpdateInput = Partial<MoodboardCreateInput>;
 
-/** The backend's reason a moodboard call was refused (a string, or FastAPI's
- *  list of field errors), so Studio can say what to fix. */
-async function moodboardError(response: Response, what: string): Promise<Error> {
-  let detail = '';
-  try {
-    const body = (await response.json()).detail;
-    if (typeof body === 'string') detail = body;
-    else if (Array.isArray(body)) {
-      detail = body.map((item: { loc?: unknown[]; msg?: string }) =>
-        [Array.isArray(item.loc) ? item.loc.filter((part) => part !== 'body').join('.') : '', item.msg ?? '']
-          .filter(Boolean).join(': ')).join('; ');
-    }
-  } catch { /* not JSON */ }
-  return new Error(detail ? `${what} failed: ${detail}` : `${what} failed: ${response.status}`);
-}
+/* Board calls name their action (GM, error-copy round 2: "Couldn't save the
+ * board. <reason>" replaces "Save failed: <reason>"), and apiRequest says
+ * the reason: GM's lines for no answer, 408, 429 and 5xx; else the backend's
+ * written reason; else GM's line for the status. A FastAPI field list
+ * ("images.0.url: field required") is not a reason the person can read: it
+ * says GM's fallback line, and the list stays in the error's `detail` and
+ * the console. Never a status code. */
+export const SAVE_BOARD = "Couldn't save the board.";
 
 /** Why a write to a saved board failed: that it went to Recently deleted
- * meanwhile (saveFailure), else the backend's reason (moodboardError). */
-async function moodboardWriteError(response: Response, what: string): Promise<Error> {
-  if (response.status === 404) {
-    const trashed = await saveFailure(response.clone(), 'moodboard', '');
-    if (trashed.message) return trashed;
-  }
-  return moodboardError(response, what);
+ * meanwhile, else the reason for the answer. */
+async function moodboardWriteError(response: Response, heading: string): Promise<Error> {
+  return await trashedFailure(response, 'moodboard', heading) ?? requestError(heading, response);
 }
 
 export async function fetchMoodboards(scope: 'project' | 'global', projectId?: string): Promise<Moodboard[]> {
   const params = new URLSearchParams({ scope });
   if (scope === 'project') params.append('projectId', await resolveProjectId(projectId));
-  const response = await apiFetch(`/api/moodboards?${params.toString()}`);
-  if (!response.ok) throw new Error(`Fetch moodboards failed: ${response.status}`);
+  const response = await apiRequest("Couldn't load the boards.", `/api/moodboards?${params.toString()}`);
   return response.json();
 }
 
 /** One Moodboard by id, or null when there's none (deleted, or never existed). */
 export async function fetchMoodboard(id: string): Promise<Moodboard | null> {
-  const response = await apiFetch(`/api/moodboards/${encodeURIComponent(id)}`);
+  const response = await apiRequest("Couldn't load the board.", `/api/moodboards/${encodeURIComponent(id)}`,
+    undefined, { allow: [404] });
   if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`Fetch moodboard failed: ${response.status}`);
   return response.json();
 }
 
 export async function createMoodboard(body: MoodboardCreateInput): Promise<Moodboard> {
-  const response = await apiFetch('/api/moodboards', {
+  const response = await apiRequest("Couldn't create the board.", '/api/moodboards', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!response.ok) throw await moodboardError(response, 'Create moodboard');
   return response.json();
 }
 
@@ -749,47 +743,50 @@ async function moodboardConflict(response: Response): Promise<MoodboardVersionCo
 
 /** Board fields only (the Studio sends images as checked edits, below).
  *  With `baseVersion`, a board saved elsewhere since is a
- *  MoodboardVersionConflict, not an overwrite. */
-export async function updateMoodboard(id: string, body: MoodboardUpdateInput & { baseVersion?: number }): Promise<Moodboard> {
-  const response = await apiFetch(`/api/moodboards/${id}`, {
+ *  MoodboardVersionConflict, not an overwrite. The answer is the board plus
+ *  `undo`, the `restore` that takes this write back (absent on an older
+ *  backend). */
+export async function updateMoodboard(id: string, body: MoodboardUpdateInput & { baseVersion?: number }):
+  Promise<Moodboard & { undo?: MoodboardEditResult['undo'] }> {
+  const response = await apiRequest(SAVE_BOARD, `/api/moodboards/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-  });
-  if (!response.ok) throw await moodboardConflict(response) ?? await moodboardWriteError(response, 'Save');
+  }, { allow: [404, 409] });
+  if (!response.ok) throw await moodboardConflict(response) ?? await moodboardWriteError(response, SAVE_BOARD);
   return response.json();
 }
 
 /** Checked board edits (`POST /api/moodboards/{id}/edits`): the ops land
  *  together, or none do. */
 export async function editMoodboard(id: string, ops: MoodboardOp[], baseVersion?: number): Promise<MoodboardEditResult> {
-  const response = await apiFetch(`/api/moodboards/${encodeURIComponent(id)}/edits`, {
+  const response = await apiRequest(SAVE_BOARD, `/api/moodboards/${encodeURIComponent(id)}/edits`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(baseVersion === undefined ? { ops } : { ops, baseVersion }),
-  });
-  if (!response.ok) throw await moodboardConflict(response) ?? await moodboardWriteError(response, 'Save');
+  }, { allow: [404, 409] });
+  if (!response.ok) throw await moodboardConflict(response) ?? await moodboardWriteError(response, SAVE_BOARD);
   return response.json();
 }
 
 export async function analyzeMoodboard(id: string): Promise<Moodboard> {
-  const response = await apiFetch(`/api/moodboards/${id}/analyze`, { method: 'POST' });
-  if (!response.ok) throw new Error(`Analyze moodboard failed: ${response.status}`);
+  const response = await apiRequest("Couldn't analyze the board.", `/api/moodboards/${id}/analyze`, { method: 'POST' });
   return response.json();
 }
 
 /** Keep a board's hand-written brief after the board changed: clears
  *  "board changed since you edited this" until the next change. */
 export async function keepMoodboardBriefOverride(id: string): Promise<Moodboard> {
-  const response = await apiFetch(`/api/moodboards/${encodeURIComponent(id)}/brief-override/keep`, { method: 'POST' });
-  if (!response.ok) throw await moodboardWriteError(response, 'Keep brief');
+  const heading = "Couldn't save your brief."; // GM, round 3
+  const response = await apiRequest(heading, `/api/moodboards/${encodeURIComponent(id)}/brief-override/keep`,
+    { method: 'POST' }, { allow: [404] });
+  if (!response.ok) throw await moodboardWriteError(response, heading);
   return response.json();
 }
 
 /** Moves the board to Recently deleted; the result is its trash record. */
 export async function deleteMoodboard(id: string): Promise<TrashedItem> {
-  const response = await apiFetch(`/api/moodboards/${encodeURIComponent(id)}`, { method: 'DELETE' });
-  if (!response.ok) throw new Error(`Delete moodboard failed: ${response.status}`);
+  const response = await apiRequest("Couldn't delete the board.", `/api/moodboards/${encodeURIComponent(id)}`, { method: 'DELETE' });
   return ((await response.json()) as { trashed: TrashedItem }).trashed;
 }
 
@@ -811,12 +808,12 @@ export interface StoredAssetMove<T> {
 export async function moveStoredAsset<K extends 'moodboard' | 'character'>(
   kind: K, id: string, projectId: string | null,
 ): Promise<StoredAssetMove<K extends 'moodboard' ? Moodboard : Character>> {
-  const response = await apiFetch(`/api/${kind === 'moodboard' ? 'moodboards' : 'characters'}/${encodeURIComponent(id)}/move`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectId }),
-  });
-  if (!response.ok) throw await moodboardError(response, 'Move');
+  const response = await apiRequest(kind === 'moodboard' ? "Couldn't move the board." : "Couldn't move the character.",
+    `/api/${kind === 'moodboard' ? 'moodboards' : 'characters'}/${encodeURIComponent(id)}/move`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId }),
+    });
   return response.json();
 }
 
@@ -834,7 +831,8 @@ export type StoredAssetLookup<T> =
 export async function lookupStoredAsset<K extends 'moodboard' | 'character'>(
   kind: K, id: string,
 ): Promise<StoredAssetLookup<K extends 'moodboard' ? Moodboard : Character>> {
-  const response = await apiFetch(`/api/${kind === 'moodboard' ? 'moodboards' : 'characters'}/${encodeURIComponent(id)}`);
+  const response = await apiRequest(kind === 'moodboard' ? "Couldn't load the board." : "Couldn't load the character.",
+    `/api/${kind === 'moodboard' ? 'moodboards' : 'characters'}/${encodeURIComponent(id)}`, undefined, { allow: [404] });
   if (response.status === 404) {
     try {
       const body = await response.json() as { code?: unknown; trashed?: TrashedItem };
@@ -842,6 +840,5 @@ export async function lookupStoredAsset<K extends 'moodboard' | 'character'>(
     } catch { /* not JSON: plain not found */ }
     return { status: 'missing' };
   }
-  if (!response.ok) throw new Error(`Fetch ${kind} failed: ${response.status}`);
   return { status: 'ready', asset: await response.json() };
 }

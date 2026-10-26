@@ -1,0 +1,7 @@
+# 2026-10-21 — The personal-agents download poll test failed when run alone
+
+- **Symptom.** `tests/ChatPanel.personal.test.tsx > follows a download while it runs` failed CI on #157 ("expected 1 to be greater than 1") and failed in almost every whole-suite run on this machine. It passed whenever its file ran on its own, so it was put down as a load timeout.
+- **Real cause.** It isn't load. Run alone (`-t "follows a download"`), it failed 12 of 12. The poll's `setInterval` starts in `PersonalAgentsSection`'s effect after the list renders, and the test moved the fake clock 2.1 s before React had run that effect. A probe showed 0 fake timers before the advance and 1 right after the `act` that held it, so no poll could fire. When the file's earlier tests ran first, React happened to flush the effect sooner, which is why the whole file passed.
+- **Fix (test only).** An empty `act()` lets React run the effect before the clock moves, and the test checks that a timer exists before advancing. The component was right: in the app the effect runs as normal and the list polls every second.
+- **Checked.** The test alone: 6 of 6 passed (12 of 12 failed before). The whole file: 12/12. tsc and lint pass.
+- **Not checked.** Other files in the load-sensitive set (CommandPalette, ModelPicker, ResultsGallery and others) fail by timeout, not by this pattern. Running each failing test alone, as here, would show whether any of them is order-dependent too.

@@ -81,16 +81,18 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 .agent-notes-chip:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--an-ink) 55%, transparent);
+  outline: var(--sr-focus-outline, 2px solid var(--an-ink));
   outline-offset: 2px;
 }
 
-/* The ring shows for as long as a card is up, in the newest author's colour. */
+/* The ring shows whenever there is anything unread and the list is closed,
+ * at any count (GM review of PR #157, round 2), in the newest author's colour,
+ * lightened where needed to clear 3:1 on the header (--an-ring, lib/unreadRing). */
 .agent-notes-chip::after {
   content: '';
   position: absolute;
   inset: -3px;
-  border: 2px solid var(--an-newest);
+  border: 2px solid var(--an-ring, var(--an-newest));
   border-radius: 999px;
   opacity: 0;
   pointer-events: none;
@@ -102,36 +104,64 @@ body.app-slava-restraint .agent-notes-root {
   transition: opacity var(--spring-pop-ms) var(--spring-pop);
 }
 
+/* The unread ring fills 1-3px outside the chip, so while it shows the focus
+ * ring moves out to 4-6px: the whole unread ring stays visible, with a 1px gap
+ * (GM, review of #161: the neutral focus ring stays clear of the unread ring). */
+.agent-notes-chip--ringed:focus-visible {
+  outline-offset: 4px;
+}
+
 .agent-notes-chip__dots {
   display: inline-flex;
   align-items: center;
 }
 
+/* 1 px of the chip's own background around each dot, so overlapping dots
+ * read as two (GM review of p157: "Ar" was grey on grey, half under "C"). */
+.agent-notes-chip__dots .agent-notes-dot {
+  box-shadow: 0 0 0 1px var(--an-raised);
+}
+
 .agent-notes-chip__dots .agent-notes-dot + .agent-notes-dot {
   margin-left: -6px;
-  box-shadow: 0 0 0 2px var(--an-raised);
 }
 
 .agent-notes-chip__label {
   white-space: nowrap;
 }
 
+/* Below about 1360 px wide the chip shows only its author dots and the count
+ * (GM review of Q107 a: at 1280 the full chip wrapped the Commons toolbar to
+ * two rows). Its name ("Updates, 3 unread"), height and the list it opens
+ * stay; every screen's header reserves this compact width
+ * (--agent-notes-chip-w, layouts.css, same breakpoint). The canvas follows
+ * the same rule, so the one chip looks the same as the person moves between
+ * screens. */
+@media (max-width: 1359px) {
+  .agent-notes-chip__label {
+    display: none;
+  }
+}
+
+/* The unread count: plain figures in the chip's own ink, after a clear gap.
+ * It was a circle in the newest author's colour, the size of a dot, so the
+ * chip read as three people (GM review of p157). Neutral, not the orange
+ * accent: the default agent colour is orange too (#E8825A). The chip's name
+ * says the count ("Updates, 3 unread"). */
 .agent-notes-chip__count {
-  min-width: 22px;
-  box-sizing: border-box;
-  padding: 4px 7px;
-  border-radius: 999px;
-  background: var(--an-newest);
-  color: var(--an-on-dot);
-  font: 700 11px/1 var(--an-mono);
-  text-align: center;
+  margin-left: 4px;
+  color: var(--an-ink-bold);
+  font: 600 12px/1 var(--an-mono);
   font-variant-numeric: tabular-nums;
 }
 
+/* One face for every count (GM review of PR #157, round 2): the muted 0 dims
+ * by colour only. It used to drop to weight 500 while an unread count asked
+ * for 700, which the bundled JetBrains Mono doesn't ship (400, 500, 600), so
+ * the two were drawn from different instances of the face and read as two
+ * fonts. 600 is the heaviest weight shipped. */
 .agent-notes-chip__count[data-muted='true'] {
-  background: transparent;
   color: var(--an-faint);
-  box-shadow: inset 0 0 0 1px var(--an-edge-strong);
 }
 
 .agent-notes-chip__count[data-pop='true'] {
@@ -141,6 +171,26 @@ body.app-slava-restraint .agent-notes-root {
 @keyframes agent-notes-count-pop {
   from { transform: scale(1.4); }
   to { transform: scale(1); }
+}
+
+/* How many agents need the person (GM's review of PR #193): a filled light
+ * pill with a dark number, the inverse of the Agents panel's outlined
+ * Working badge. One badge counts several agents, so never an agent's
+ * colour. After the chip's unread count, and in the panel's Needs-you group. */
+.agent-notes-needs-badge {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border: 1px solid var(--an-ink-bold);
+  border-radius: 999px;
+  background: var(--an-ink-bold);
+  color: var(--an-on-dot);
+  font: 600 11px/1 var(--an-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 /* =============== Author dots =============== */
@@ -159,15 +209,23 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 /* In the chip a dot brightens while its author has unread updates. */
+/* Dimmed, it stays opaque: a see-through dot showed the dot under it through
+ * itself and its ring (GM review of p157). */
 .agent-notes-dot[data-lit='false'] {
-  opacity: 0.42;
-  filter: saturate(0.5);
+  filter: saturate(0.5) brightness(0.45);
 }
 
 .agent-notes-dot[data-lit] {
-  transition:
-    opacity var(--spring-soft-ms) var(--spring-soft),
-    filter var(--spring-soft-ms) var(--spring-soft);
+  transition: filter var(--spring-soft-ms) var(--spring-soft);
+}
+
+/* An agent that named itself (no token, Q125 item 2, GM): a hollow ring in
+ * its colour, same size and place, with its initials in the ink. The Agents
+ * panel and the question form draw it; its tooltip says why. */
+.agent-notes-dot--unverified {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--an-dot);
+  color: var(--an-ink);
 }
 
 /* =============== The card =============== */
@@ -243,7 +301,7 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 .agent-note-card__close:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--an-ink) 55%, transparent);
+  outline: var(--sr-focus-outline, 2px solid var(--an-ink));
   outline-offset: 1px;
 }
 
@@ -274,7 +332,7 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 .agent-note-card__summary:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--an-ink) 55%, transparent);
+  outline: var(--sr-focus-outline, 2px solid var(--an-ink));
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -320,7 +378,7 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 .agent-notes-panel:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--an-ink) 40%, transparent);
+  outline: var(--sr-focus-outline, 2px solid var(--an-ink));
   outline-offset: 2px;
 }
 
@@ -361,6 +419,55 @@ body.app-slava-restraint .agent-notes-root {
   overflow-y: auto;
   overscroll-behavior: contain;
   list-style: none;
+}
+
+/* Two lists in one (Moodboard Studio, Q113 c): "This board", then the
+ * project's. Each heading carries what the header's right side says on a
+ * single list: where that list is kept. */
+.agent-notes-section + .agent-notes-section {
+  border-top: 1px solid var(--an-edge);
+}
+
+.agent-notes-section__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 16px 8px 18px;
+  border-bottom: 1px solid var(--an-edge);
+  background: var(--an-hover);
+}
+
+.agent-notes-section__title {
+  color: var(--an-ink-bold);
+  font: 600 12px/1 var(--an-ui);
+}
+
+.agent-notes-section__count {
+  color: var(--an-muted);
+  font: 400 11px/1 var(--an-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-notes-section__kept {
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--an-muted);
+  font: 400 12px/1 var(--an-ui);
+  white-space: nowrap;
+}
+
+.agent-notes-section__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-notes-section__empty {
+  margin: 0;
+  padding: 12px 16px 13px 18px;
+  color: var(--an-muted);
+  font: 400 12px/1.4 var(--an-ui);
 }
 
 .agent-notes-panel__empty {
@@ -418,7 +525,7 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 .agent-notes-panel__see-all:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--an-ink) 55%, transparent);
+  outline: var(--sr-focus-outline, 2px solid var(--an-ink));
   outline-offset: 3px;
   border-radius: 2px;
 }
@@ -445,7 +552,7 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 .agent-notes-entry:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--an-ink) 45%, transparent);
+  outline: var(--sr-focus-outline, 2px solid var(--an-ink));
   outline-offset: -2px;
 }
 
@@ -543,7 +650,7 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 .agent-notes-btn:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--an-ink) 55%, transparent);
+  outline: var(--sr-focus-outline, 2px solid var(--an-ink));
   outline-offset: 1px;
 }
 
@@ -556,6 +663,235 @@ body.app-slava-restraint .agent-notes-root {
 .agent-notes-btn--primary:hover {
   background: var(--an-ink-bold);
   border-color: var(--an-ink-bold);
+}
+
+/* =============== Questions (Q125 item 1) =============== */
+
+/* The answer form: a popover over the list, at its place and width (the
+ * panel's rules above), one layer up. The agent's dot and colour lead it. */
+.agent-questions-form {
+  z-index: 47;
+}
+
+.agent-questions-form__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 0 0 auto;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--an-edge);
+  box-shadow: inset 4px 0 0 color-mix(in srgb, var(--an-author) 70%, transparent);
+}
+
+.agent-questions-form__head .agent-notes-dot {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  font-size: 9px;
+}
+
+.agent-questions-form__titles {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.agent-questions-form__heading {
+  margin: 0;
+  color: var(--an-ink-bold);
+  font: 600 15px/1.2 var(--an-ui);
+  overflow-wrap: anywhere;
+}
+
+.agent-questions-form__skip {
+  margin: 0;
+  color: var(--an-muted);
+  font: 400 12px/1.3 var(--an-ui);
+}
+
+.agent-questions-form__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 16px 4px;
+}
+
+.agent-questions-form__note {
+  margin: 0;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--an-edge);
+  color: var(--an-muted);
+  font: 400 12.5px/1.4 var(--an-ui);
+  overflow-wrap: anywhere;
+}
+
+.agent-questions-form__question {
+  min-width: 0;
+  padding: 12px 0 14px;
+  border-bottom: 1px solid var(--an-edge);
+}
+
+.agent-questions-form__question:last-child {
+  border-bottom: 0;
+}
+
+.agent-questions-form__text {
+  margin: 0;
+  color: var(--an-ink);
+  font: 500 13.5px/1.42 var(--an-ui);
+  overflow-wrap: anywhere;
+}
+
+.agent-questions-form__hint {
+  margin: 3px 0 0;
+  color: var(--an-muted);
+  font: 400 12px/1.3 var(--an-ui);
+}
+
+.agent-questions-form__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+/* An option: the list's button. Once picked, GM - Design's neutral ring for
+ * every agent (2026-10-24): "the light ink ring with a faint fill, the same
+ * weight as now, just not the agent's color. The pick is the person's
+ * choice, not the agent's." The agent's colour stays on the form's left edge
+ * and its dot; never the orange accent. */
+.agent-questions-form__option {
+  max-width: 100%;
+  padding: 7px 11px;
+  border: 1px solid var(--an-edge-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--an-ink);
+  font: 500 12.5px/1.2 var(--an-ui);
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  transition:
+    background-color 160ms var(--spring-soft),
+    border-color 160ms var(--spring-soft),
+    box-shadow var(--spring-soft-ms) var(--spring-soft),
+    transform var(--spring-pop-ms) var(--spring-pop);
+}
+
+/* Only an unpicked option dims on hover: a picked one keeps its full ring, or
+   hovering would read as un-picking it (GM). */
+.agent-questions-form__option:hover:not(:disabled):not([aria-pressed='true']) {
+  background: var(--an-hover);
+  border-color: color-mix(in srgb, var(--an-ink) 30%, transparent);
+}
+
+.agent-questions-form__option:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.agent-questions-form__option[aria-pressed='true'] {
+  border-color: var(--an-ink);
+  background: color-mix(in srgb, var(--an-ink) 8%, transparent);
+  box-shadow: 0 0 0 1px var(--an-ink);
+  color: var(--an-ink-bold);
+}
+
+.agent-questions-form__option:focus-visible,
+.agent-questions-form__input:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid var(--an-ink));
+  outline-offset: 1px;
+}
+
+.agent-questions-form__typed {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.agent-questions-form__other {
+  color: var(--an-muted);
+  font: 400 11px/1 var(--an-mono);
+}
+
+.agent-questions-form__input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 34px;
+  padding: 8px 10px;
+  border: 1px solid var(--an-edge-strong);
+  border-radius: 8px;
+  background: var(--an-raised);
+  color: var(--an-ink);
+  font: 400 13px/1.4 var(--an-ui);
+  resize: vertical;
+}
+
+.agent-questions-form__input::placeholder {
+  color: var(--an-faint);
+}
+
+.agent-questions-form__input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--an-ink) 40%, transparent);
+}
+
+.agent-questions-form__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 11px 16px 12px;
+  border-top: 1px solid var(--an-edge);
+}
+
+.agent-questions-form__foot .agent-notes-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.agent-questions-form__foot .agent-notes-btn--primary:disabled:hover {
+  background: var(--an-ink);
+  border-color: var(--an-ink);
+}
+
+/* The closed view, under an answered set's Update: each question, then its answer. */
+.agent-questions-answers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-questions-answers__row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.agent-questions-answers__question {
+  color: var(--an-muted);
+  font: 400 12px/1.35 var(--an-ui);
+  overflow-wrap: anywhere;
+}
+
+.agent-questions-answers__answer {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--an-ink);
+  font: 400 13px/1.4 var(--an-ui);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.agent-questions-answers__answer[data-blank='true'] {
+  color: var(--an-faint);
 }
 
 /* =============== Node outlines (inside React Flow's viewport) =============== */
@@ -643,6 +979,14 @@ body.app-slava-restraint .agent-notes-root {
   }
 
   .agent-notes-btn:active {
+    transform: none;
+  }
+
+  .agent-questions-form__option {
+    transition: none;
+  }
+
+  .agent-questions-form__option:active:not(:disabled) {
     transform: none;
   }
 

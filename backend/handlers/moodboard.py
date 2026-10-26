@@ -10,6 +10,8 @@ from models.graph import GraphNode, PortValueDict
 from services.moodboard_analysis import analysis_is_current, analyze_moodboard, rank_representative_images, steers
 from services.moodboard_brief import NODE_NOTES_CHOICES, compose, generator_analysis
 from services.moodboard_store import MoodboardStore, output_image
+from services.stored_image_refs import is_outside_link
+from execution.person_line import with_person_line
 
 
 def _in_trash(moodboard_id: str) -> bool:
@@ -32,7 +34,9 @@ async def handle_moodboard_node(
     engine's ``migrate_params`` has moved it to ``moodboard`` by now."""
     raw = (node.params or {}).get("moodboard")
     if not isinstance(raw, str) or not raw.strip():
-        raise ValueError("No moodboard chosen: set moodboard to a board id (GET /api/moodboards lists them)")
+        raise with_person_line(
+            ValueError("No moodboard chosen: set moodboard to a board id (GET /api/moodboards lists them)"),
+            "Choose a board for this node, then run it again.")
     moodboard_id = raw.strip()
     try:
         # The node never reads the layout, so the board isn't laid out.
@@ -41,10 +45,12 @@ async def handle_moodboard_node(
         moodboard = None
     if moodboard is None:
         if _in_trash(moodboard_id):
-            raise ValueError(f"Moodboard {moodboard_id!r} is in Recently deleted. Restore it (Moodboard Studio, "
-                             f"or nebula trash restore moodboard {moodboard_id}) and run again.")
-        raise ValueError(f"Moodboard {moodboard_id!r} not found; it may have been deleted for good. "
-                         "Pick another board for this node.")
+            raise with_person_line(ValueError(f"Moodboard {moodboard_id!r} is in Recently deleted. Restore it (Moodboard Studio, "
+                             f"or nebula trash restore moodboard {moodboard_id}) and run again."),
+                "This node's board is in Recently deleted. Restore it in Moodboard Studio, then run the node again.")
+        raise with_person_line(ValueError(f"Moodboard {moodboard_id!r} not found; it may have been deleted for good. "
+                         "Pick another board for this node."),
+            "This node's board can't be found. It may have been deleted for good. Pick another board for this node.")
 
     analysis = moodboard.get("analysis")
     if not analysis_is_current(moodboard, analysis):
@@ -71,11 +77,22 @@ async def handle_moodboard_node(
     # Image notes go only when the board's notes do (gap 18, P4). Set-aside
     # images (the switch, or weight 0: plan section 4.4) never steer, so no
     # generator gets them.
+    # An image saved before board writes were checked that links to another
+    # site stays on the board but goes to no generator (the bundle is also
+    # what the Inspector's Last output draws), as a Character's outside view
+    # doesn't (handlers/character_node.py); the run says so.
+    steering = [img for img in moodboard.get("images", []) if isinstance(img, dict) and steers(img)]
+    outside = [img for img in steering if is_outside_link(str(img.get("url") or ""))]
     images = [
         output_image(img) if notes_sent else {**output_image(img), "notes": ""}
-        for img in moodboard.get("images", [])
-        if isinstance(img, dict) and steers(img)
+        for img in steering if not any(img is gone for gone in outside)
     ]
+    if outside:
+        count = len(outside)
+        add_run_note(f"{count} image{'s' if count != 1 else ''} on Moodboard '{moodboard.get('name')}' "
+                     f"{'are image links' if count != 1 else 'is an image link'} from outside Nebula, so "
+                     f"{'they were' if count != 1 else 'it was'} left out. Replace "
+                     f"{'them' if count != 1 else 'it'} with an upload in Moodboard Studio.")
     # What a generator (or an LLM on an Any port) may read of the analysis:
     # no notes unless sent, colour sentences without left-out colours, and
     # representative images that steer. The saved analysis is left as it was.

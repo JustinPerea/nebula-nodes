@@ -4,9 +4,12 @@ import { storedAssetId, useStoredAsset } from '../../store/storedAssetsStore';
 import { NodeSettingsAction } from './NodeSettingsAction';
 import { RestoreTrashedAsset } from './RestoreTrashedAsset';
 import { PORT_COLORS } from '../../lib/portCompatibility';
-import { backendAssetUrlSync } from '../../lib/backend';
+import { storedImageView } from '../../lib/storedImage';
+import { OutsideImageNote } from '../OutsideImageNote';
 import { useOpenOnDoubleClick } from './useOpenOnDoubleClick';
 import { moodboardImagesLabel } from '../../lib/moodboardCount';
+import type { NodeData } from '../../types';
+import { NodeRunError } from './NodeError';
 import '../../styles/moodboard-node.css';
 
 // The node stores only the board's id (its `moodboard` param, which agents
@@ -39,6 +42,7 @@ export function MoodboardNode({ id, data, selected }: NodeProps) {
         : status === 'error' ? "Couldn't load this board" : 'Loading…';
   // A board in Recently deleted keeps its name and picture here, with Restore.
   const trashed = status === 'trashed';
+  const thumb = storedImageView(board?.thumbnail);
   // The line is the board's count (not a status such as "Loading…").
   const counted = Boolean(board) && !trashed;
   const canOpen = Boolean(boardId) && status !== 'missing' && !trashed;
@@ -53,9 +57,11 @@ export function MoodboardNode({ id, data, selected }: NodeProps) {
       <NodeSettingsAction id={id} />
       <div className="moodboard-node__name">{name}</div>
       <div className="moodboard-node__preview">
-        {board?.thumbnail ? (
-          <img src={backendAssetUrlSync(board.thumbnail)} alt="" draggable={false} />
-        ) : (
+        {/* Only Nebula's own files are loaded (lib/storedImage.ts): an old
+            board's link to another site gets the placeholder (Q98). */}
+        {thumb.src ? (
+          <img src={thumb.src} alt="" draggable={false} />
+        ) : thumb.outside ? <OutsideImageNote /> : (
           <span>No images</span>
         )}
       </div>
@@ -75,6 +81,7 @@ export function MoodboardNode({ id, data, selected }: NodeProps) {
           Open Moodboard
         </button>
       )}
+      <NodeRunError data={data as unknown as NodeData} className="moodboard-node__run-error" />
       {OUTPUTS.map((output, index) => (
         <div
           key={output.id}

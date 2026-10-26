@@ -8,6 +8,7 @@ import type { RouteFix } from '../../lib/directRoute';
 import type { ProviderSetupTarget } from '../../lib/providerReadiness';
 import { useUIStore } from '../../store/uiStore';
 import { useSwitchContext } from '../../hooks/useSwitchContext';
+import { floatingBottomLimit } from '../../lib/bottomBar';
 import '../../styles/provider-switcher.css';
 
 /**
@@ -17,7 +18,7 @@ import '../../styles/provider-switcher.css';
  * them. Three ways in, one menu:
  *
  * - `inspector`: the Inspector's "Provider" section, the list in place;
- * - `chip`: the card header chip ("Auto · BFL", "fal", "Krea plan"), which
+ * - `chip`: the card header chip ("Auto · BFL", "fal.ai", "Krea plan"), which
  *   turns accent with a warning glyph when the run can't start;
  * - `pill`: Create Studio's pill.
  *
@@ -231,8 +232,8 @@ function ProviderPopoverTrigger({ state, variant, displayName, onPick, onFix }: 
     <>
       <button ref={triggerRef} type="button" className={className}
         aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}
-        aria-label={`Provider for ${displayName}: ${state.chip}${state.blocked ? `. Can't run: ${state.message ?? ''}` : ''}`}
-        title={state.blocked ? state.message ?? undefined : `Runs on ${state.chip}. Change provider`}
+        aria-label={`Provider for ${displayName}: ${state.chipName}${state.blocked ? `. Can't run: ${state.message ?? ''}` : ''}`}
+        title={state.blocked ? state.message ?? undefined : `Runs on ${state.chipName}. Change provider`}
         onMouseDown={(event) => event.stopPropagation()}
         onClick={(event) => { event.stopPropagation(); setOpen((value) => !value); }}
         onKeyDown={(event) => {
@@ -240,7 +241,9 @@ function ProviderPopoverTrigger({ state, variant, displayName, onPick, onFix }: 
         }}>
         {state.blocked && <span className="provider-switcher__warning" aria-hidden="true">&#x26A0;</span>}
         {variant === 'pill' && <span className="param-pill__label">Provider</span>}
-        <span className="provider-switcher__chip-text">{state.chip}</span>
+        {/* The card chip has room for a short name only where the full one
+            can't fit (chipText); Create Studio's pill wraps, so it names it in full. */}
+        <span className="provider-switcher__chip-text">{variant === 'pill' ? state.chipName : state.chip}</span>
         {variant === 'pill' && <ChevronDown size={12} strokeWidth={1.75} aria-hidden="true" />}
       </button>
       {open && (
@@ -271,8 +274,11 @@ function ProviderPopover({ anchorRef, id, onClose, children }: {
     const width = popover?.width ?? 300;
     const height = popover?.height ?? 0;
     const gap = 6;
-    const above = anchor.bottom + gap + height > window.innerHeight - 8 && anchor.top - gap - height > 8;
     const left = Math.min(Math.max(8, anchor.left), Math.max(8, window.innerWidth - width - 8));
+    // Under the chip unless that crosses the window's bottom or the canvas's
+    // bottom bar, or the Canvas actions panel where it is over it (lib/bottomBar.ts).
+    const bottom = floatingBottomLimit(8, window.innerHeight, { left, right: left + width });
+    const above = anchor.bottom + gap + height > bottom && anchor.top - gap - height > 8;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- DOM measurement: the popover's place depends on its own rendered size
     setPosition({ left, top: above ? anchor.top - gap - height : anchor.bottom + gap, above });
   }, [anchorRef]);

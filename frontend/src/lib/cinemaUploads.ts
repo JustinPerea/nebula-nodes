@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { uploadReference } from './uploadReference';
+import { failureMessage } from './errorCopy';
 import { useCinemaUploadStore, type CinemaReferenceUpload } from '../store/cinemaUploadStore';
 import { useGraphStore } from '../store/graphStore';
 import type { CinemaSceneSpec } from '../types';
@@ -44,7 +45,8 @@ async function finish(upload: CinemaReferenceUpload) {
   } catch (error) {
     if (!owns(upload)) return;
     useCinemaUploadStore.getState().setUploads((uploads) => uploads.map((item) => item.id === upload.id
-      ? { ...item, status: 'error', error: error instanceof Error ? error.message : 'Could not upload this image. Please try again.' }
+      // uploadReference's error names the file and the reason (error-copy round 2).
+      ? { ...item, status: 'error', error: failureMessage(error, `Couldn't upload ${upload.name}.`) }
       : item));
   } finally { controllers.delete(upload.attempt); }
 }

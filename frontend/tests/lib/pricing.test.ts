@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import shared from '../../../backend/tests/fixtures/pricing_cases.json';
 import shippedTable from '../../../backend/data/model_pricing.json';
 import backendCatalog from '../../../backend/data/node_definitions.json';
-import { estimateNode, estimateRoutes, formatUsd, formatUsdRange, pricedKeys, routePriceUnconfirmed, RUN_TIME_VARIABLES, type PriceEntry, type PricingTable } from '../../src/lib/pricing';
+import { awaitsInput, estimateNode, estimateRoutes, formatUsd, formatUsdRange, pricedKeys, routePriceUnconfirmed, RUN_TIME_VARIABLES, sizeNote, type PriceEntry, type PricingTable } from '../../src/lib/pricing';
 import type { ModelNodeDefinition } from '../../src/types';
 
 type Fixture = {
@@ -14,6 +14,7 @@ type Fixture = {
     params?: Record<string, unknown>;
     routeProvider?: string;
     wired?: string[];
+    size?: { width?: number; height?: number; seconds?: number; frames?: number };
     expected: { currency: string; low: number; high: number; plus?: string } | null;
   }>;
 };
@@ -29,6 +30,7 @@ describe('estimateNode (cases shared with the backend)', () => {
         testCase.params,
         testCase.routeProvider,
         testCase.wired,
+        testCase.size,
       );
       if (testCase.expected === null) {
         expect(result).toBeNull();
@@ -53,8 +55,9 @@ describe('the shipped price table', () => {
     // A dual-route node prices each route on its own: check every route.
     // A local node priced only in a paid mode (QC Jev) is free at its
     // defaults, so it must resolve in that mode instead. A price that reads
-    // the source clip (FLUX Video Edit [fast] and Upscale) is known only once the
-    // run is, so it is the one kind left unpriced on a fresh node.
+    // the input file's size (SeedVR2, FLUX Video Edit [fast] and Upscale) is
+    // known only once that file is, so it is the one kind left unpriced on a
+    // fresh node; every such entry but fal's tiered one is measurable.
     const runTime = (entry: PriceEntry) => RUN_TIME_VARIABLES.some((key) => pricedKeys(entry).has(key));
     const routed = Object.entries(nodes)
       .flatMap(([id, entry]) => (entry.routes
@@ -63,7 +66,10 @@ describe('the shipped price table', () => {
     expect(routed.filter(([, , , , priced]) => runTime(priced)).map(([, , , label]) => label)).toEqual([
       'flux-video-edit (bfl)', 'flux-video-edit (fal)',
       'flux-video-upscale (bfl)', 'flux-video-upscale (fal)', 'flux-video-upscale (replicate)',
+      'seedvr-video-upscale', 'seedvr2-upscale',
     ]);
+    expect(routed.filter(([, , , , priced]) => runTime(priced) && !awaitsInput(priced)).map(([, , , label]) => label))
+      .toEqual(['flux-video-upscale (fal)']);
     const missing = routed
       .filter(([, , , , priced]) => !runTime(priced))
       .filter(([id, entry, provider]) => {
@@ -162,5 +168,26 @@ describe('estimateRoutes (cases shared with the backend)', () => {
   it('is empty for a node without a route table', () => {
     const definition = fixture.definitions.dual as unknown as ModelNodeDefinition;
     expect(estimateRoutes(definition, {}, [], fixture.pricing as unknown as PricingTable)).toEqual({});
+  });
+});
+
+describe('a price measured from the input', () => {
+  const nodes = (shippedTable as unknown as { nodes: Record<string, PriceEntry> }).nodes;
+  const catalog = backendCatalog as unknown as Record<string, ModelNodeDefinition>;
+
+  it('says how SeedVR2 Upscale counts, as describe_node does', () => {
+    expect(sizeNote(nodes['seedvr2-upscale'], catalog['seedvr2-upscale'])).toBe(
+      "$0.001 per megapixel of the larger of input and output, rounded up to a whole megapixel; "
+      + "priced from your image's size when you run it");
+    expect(sizeNote(nodes['seedvr-video-upscale'], catalog['seedvr-video-upscale'])).toContain("priced from your video's size");
+    expect(sizeNote(nodes['gpt-image-2-generate'], catalog['gpt-image-2-generate'])).toBeNull();
+  });
+
+  it('is unpriced without a size and priced with one', () => {
+    const entry = nodes['seedvr2-upscale'];
+    const definition = catalog['seedvr2-upscale'];
+    expect(estimateNode(entry, definition, {}, 'fal', ['image'])).toBeNull();
+    expect(estimateNode(entry, definition, {}, 'fal', ['image'], { width: 1000, height: 1000 })).toEqual(
+      { currency: 'usd', low: 0.004, high: 0.004 });
   });
 });

@@ -19,7 +19,9 @@ from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent
 from execution.stream_runner import StreamConfig, stream_execute
 from services.file_access import require_allowed_path
-from services.nous_auth import NousNotAuthenticatedError, load_nous_credential
+from services.nous_auth import (NousCredentialExpiredError, NousCredentialInvalidError,
+                                 NousNotAuthenticatedError, load_nous_credential)
+from execution.person_line import with_person_line
 
 
 def _image_to_content_block(value: Any) -> dict[str, Any] | None:
@@ -46,6 +48,20 @@ def _image_to_content_block(value: Any) -> dict[str, Any] | None:
     return None
 
 
+_SIGN_IN = "Run `hermes model` in a terminal, choose Nous Portal, then run the node again."
+
+
+def _sign_in_line(exc: NousNotAuthenticatedError) -> str | None:
+    """The card's line for a Nous Portal run with no usable sign-in."""
+    if str(exc).startswith("NOUS_INFERENCE_BASE_URL"):
+        return None
+    if isinstance(exc, NousCredentialExpiredError):
+        return f"Your Nous Portal sign-in has expired. {_SIGN_IN}"
+    if isinstance(exc, NousCredentialInvalidError):
+        return f"Nous Portal's saved sign-in can't be used. {_SIGN_IN}"
+    return f"Nous Portal isn't signed in. {_SIGN_IN}"
+
+
 async def handle_nous_portal_universal(
     node: GraphNode,
     inputs: dict[str, PortValueDict],
@@ -55,15 +71,20 @@ async def handle_nous_portal_universal(
     try:
         cred = load_nous_credential()
     except NousNotAuthenticatedError as exc:
-        raise RuntimeError(str(exc)) from exc
+        # The text names Hermes' files and the last path checked, for agents.
+        # The card says how to sign in (a developer's NOUS_INFERENCE_BASE_URL
+        # override keeps the general line).
+        line = _sign_in_line(exc)
+        error = RuntimeError(str(exc))
+        raise (with_person_line(error, line) if line else error) from exc
 
     model = node.params.get("model", "")
     if not model:
-        raise ValueError("No model selected — choose one from the Inspector panel")
+        raise with_person_line(ValueError("No model selected — choose one from the Inspector panel"), "Pick a model in “Model”, then run the node again.")
 
     messages_input = inputs.get("messages")
     if not messages_input or not messages_input.value:
-        raise ValueError("Messages input is required")
+        raise with_person_line(ValueError("Messages input is required"), "Connect messages to this node, then run it again.")
 
     text_part = str(messages_input.value)
     content: list[dict[str, Any]] = [{"type": "text", "text": text_part}]

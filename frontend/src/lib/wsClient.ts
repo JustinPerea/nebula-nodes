@@ -8,6 +8,8 @@ import type {
   ProviderStartAmbiguity,
   ProviderStartKind,
 } from './runHistory';
+import type { AssetProposalClosedEvent, AssetProposalOpenedEvent, AssetProposalSyncEvent } from './assetProposals';
+import type { QuestionsClosedEvent, QuestionsOpenedEvent, QuestionsSyncEvent } from './agentQuestions';
 
 export type ErrorCategory =
   | 'blocked'
@@ -48,6 +50,23 @@ export interface AgentPresenceEvent {
   say: string;
   /** Backend wall-clock milliseconds. */
   at: number;
+  /** The project open when it happened (the Agents panel lists it only there). */
+  projectId?: string | null;
+  /** What the action was, for the Agents panel (Q125 item 2): a past-tense
+   * verb and the node it names, and how long ago it was (a click or a drag
+   * keeps the agent's last action). Absent when the agent has none. */
+  did?: { verb: string; nodeId: string | null; label: string | null; secondsAgo?: number };
+}
+
+/** An agent's status line changed (backend services/agent_status.py, Q125 item 2). */
+export interface AgentStatusEvent {
+  type: 'agentStatus';
+  agent: { id: string; name: string; color: string; verified: boolean };
+  /** Null once cleared or expired. */
+  status: { text: string; nodeId: string | null; projectId: string | null; at: number; secondsAgo: number } | null;
+  change: 'set' | 'cleared' | 'expired' | 'unanchored';
+  /** Rises with every change; a roster read says the one it saw. */
+  rev: number;
 }
 
 /** A short note the person pinned for agents (backend services/canvas_pins.py). */
@@ -148,8 +167,11 @@ export interface ProposalNotReady {
   /** The canvas node's id; null for a node the proposal adds. */
   nodeId: string | null;
   name: string;
-  /** "needs OPENAI_API_KEY in Settings > Providers" (node_readiness.instance_missing). */
+  /** "needs OPENAI_API_KEY in Settings > Providers" (node_readiness.instance_missing): find_nodes' words, for agents. */
   missing: string;
+  /** The person's line (round 3f, node_readiness.instance_missing_line): "GPT Image 2 needs your
+   *  OpenAI API key. Add it in Settings." Absent from a backend older than 3f. */
+  person?: string;
 }
 
 /** An agent's proposed change (backend services/canvas_proposals.ProposalBook.view). */
@@ -240,8 +262,10 @@ export type ExecutionEvent = (
       withheld?: Record<string, string> | null }
   /** A gate upstream withheld this node's input, so it never ran (backend execution/gating.py). */
   | { type: 'skipped'; nodeId: string; reason: string; gateNodeId?: string | null }
-  | { type: 'error'; nodeId: string; error: string; retryable: boolean; category?: ErrorCategory; friendly?: string; variant?: VariantScope | null }
-  | { type: 'validationError'; errors: Array<{ nodeId: string; portId: string; message: string }> }
+  /** `person`: the handler's line for the person (error copy round 3c); `error` is the specific text agents keep. */
+  | { type: 'error'; nodeId: string; error: string; retryable: boolean; category?: ErrorCategory; friendly?: string; person?: string | null; providerText?: boolean; provider?: string | null; variant?: VariantScope | null }
+  /** `person`: each check's line for the card (error copy round 3e); `message` is the agents' text. */
+  | { type: 'validationError'; errors: Array<{ nodeId: string; portId: string; message: string; person?: string | null }> }
   | { type: 'graphComplete'; duration: number; nodesExecuted: number; nodesSkipped?: number }
   | { type: 'graphCancelled' }
   | {
@@ -288,6 +312,7 @@ export type ExecutionEvent = (
       executionStatuses?: ExecutionStatusResult[];
     }
   | AgentPresenceEvent
+  | AgentStatusEvent
   | CanvasPinsEvent
   | AgentNotesEvent
   | StoredAssetChangedEvent
@@ -295,6 +320,12 @@ export type ExecutionEvent = (
   | ProposalOpenedEvent
   | ProposalSyncEvent
   | ProposalClosedEvent
+  | AssetProposalOpenedEvent
+  | AssetProposalSyncEvent
+  | AssetProposalClosedEvent
+  | QuestionsOpenedEvent
+  | QuestionsSyncEvent
+  | QuestionsClosedEvent
   | SocketReconnectedEvent
 ) & { runId?: string };
 

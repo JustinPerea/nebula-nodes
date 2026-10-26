@@ -140,6 +140,7 @@ body.app-slava-restraint .moodboard-analysis__empty {
 }
 
 body.app-slava-restraint .moodboard-studio__notice {
+  text-wrap: pretty;
   border-left: 2px solid currentColor;
   padding: 8px 10px;
   background: rgba(255, 255, 255, 0.035);

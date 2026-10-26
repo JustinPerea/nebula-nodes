@@ -11,6 +11,7 @@ import pytest
 from services import asset_project_rehome as rehome
 from services.asset_project_rehome import AssetRoot, rehome_legacy_assets
 from services.project_store import ProjectStore, make_project, move_to_trash
+from tests.conftest import stored_image_urls
 
 OLD = "nebula_nodes"
 
@@ -62,7 +63,7 @@ def env(tmp_path, monkeypatch):
 
 def _board(project_id=OLD, name="Board"):
     from services.moodboard_store import MoodboardStore
-    return MoodboardStore().create(name=name, images=[{"url": "/api/outputs/a.png"}], projectId=project_id)
+    return MoodboardStore().create(name=name, images=[{"url": stored_image_urls(1, name="rehome")[0]}], projectId=project_id)
 
 
 def _character(project_id=OLD, name="Nari"):

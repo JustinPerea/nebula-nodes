@@ -212,23 +212,16 @@
   text-overflow: ellipsis;
 }
 
-/* The decision bar: same surface as the selection toolbar. */
-.proposal-bar-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  /* Clear of the canvas's own bottom toolbar (Run / Canvas actions). */
-  margin-bottom: 78px;
-  pointer-events: none;
-}
-
+/* The decision bar: same surface as the selection toolbar. It sits in the
+   app's notice region, above the notices (NoticeRegion; GM - Design,
+   2026-10-23: "The order from the bottom up is notices, then the proposal
+   bar."), so it keeps no spacing of its own over them. */
 .proposal-bar {
   --agent-color: #5b9dff;
   display: flex;
   align-items: center;
   gap: 14px;
-  width: min(620px, calc(100vw - 32px));
+  width: min(var(--notice-max-w, 560px), calc(100vw - 32px));
   box-sizing: border-box;
   padding: 10px 10px 10px 14px;
   border: 1px solid rgb(255 255 255 / 0.14);
@@ -247,6 +240,30 @@
 
 .proposal-bar--notice {
   border-left-color: rgb(255 255 255 / 0.3);
+}
+
+/* Review on the proposal's Update (Q112 a) focuses the bar: a ring in the
+ * agent's colour springs in on the agent log's spring and settles, as the
+ * asset proposals' strip does. */
+.proposal-bar:focus {
+  outline: none;
+}
+
+/* From the keyboard the bar shows the neutral ring (#161); the agent-colour
+ * ring below is the Review flash. */
+.proposal-bar:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #e8e6e1);
+  outline-offset: var(--sr-focus-offset, 2px);
+}
+
+.proposal-bar[data-review='true'] {
+  animation: proposal-bar-review 1600ms var(--agent-log-spring, cubic-bezier(0.2, 0.9, 0.3, 1.2)) both;
+}
+
+@keyframes proposal-bar-review {
+  0% { box-shadow: 0 16px 42px rgb(0 0 0 / 0.38), 0 0 0 0 var(--agent-color); }
+  25% { box-shadow: 0 16px 42px rgb(0 0 0 / 0.38), 0 0 0 3px var(--agent-color); }
+  100% { box-shadow: 0 16px 42px rgb(0 0 0 / 0.38), 0 0 0 0 transparent; }
 }
 
 .proposal-bar__main {
@@ -379,8 +396,8 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 }
 
 .proposal-bar__details-toggle:focus-visible {
-  outline: 2px solid #fff;
-  outline-offset: 2px;
+  outline: var(--sr-focus-outline, 2px solid #fff);
+  outline-offset: var(--sr-focus-offset, 2px);
 }
 
 .proposal-bar__details-toggle[aria-expanded='true'] .proposal-bar__chevron {
@@ -481,8 +498,8 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 }
 
 .proposal-bar__button:focus-visible {
-  outline: 2px solid #fff;
-  outline-offset: 2px;
+  outline: var(--sr-focus-outline, 2px solid #fff);
+  outline-offset: var(--sr-focus-offset, 2px);
 }
 
 .proposal-bar__button--primary {
@@ -505,7 +522,7 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   display: flex;
   align-items: center;
   gap: 8px;
-  max-width: min(520px, calc(100vw - 32px));
+  max-width: min(var(--notice-max-w, 560px), calc(100vw - 32px));
   box-sizing: border-box;
   padding: 6px 6px 6px 12px;
   border: 1px solid rgb(255 255 255 / 0.14);
@@ -534,6 +551,16 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* A written line with no button (a refusal) wraps, so the step it names is
+   never cut off by the ellipsis (error copy round 3b). A file drop's
+   failures each take a line of their own (lib/canvasFileDrop.ts). */
+.canvas-undo-notice--message .canvas-undo-notice__text {
+  overflow: visible;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
 }
 
 .canvas-undo-notice__action,
@@ -586,9 +613,13 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 @media (prefers-reduced-motion: reduce) {
   .proposal-ghosts,
   .proposal-bar,
+  .proposal-bar[data-review='true'],
   .canvas-undo-notice {
     animation: none;
     transition: none;
+  }
+  .proposal-bar[data-review='true'] {
+    box-shadow: 0 16px 42px rgb(0 0 0 / 0.38), 0 0 0 2px var(--agent-color);
   }
 }
 
@@ -601,4 +632,9 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   .proposal-bar__actions {
     justify-content: flex-end;
   }
+}
+
+/* A note with several lines (an import's warnings) keeps its line breaks. */
+.canvas-undo-notice--message .canvas-undo-notice__text {
+  white-space: pre-line;
 }
