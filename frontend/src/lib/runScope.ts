@@ -2,7 +2,7 @@ import type { Edge, Node } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { NodeData } from '../types';
 import { batchSizeCap, parseBatchItems } from './batch';
-import { hasRoutes, routePriceKey, routeUnavailable, selectRoute, withWiredBlockers } from './directRoute';
+import { hasRoutes, nameOnRoute, routePriceKey, routeUnavailable, selectRoute, withWiredBlockers } from './directRoute';
 import { usesKreaAccount } from './kreaConnection';
 import { runRouteProvider } from './modelDiscovery';
 import { cinemaSceneBase, isLocalRun } from './nodeKeys';
@@ -57,6 +57,21 @@ export interface RunScopeSummary {
    *  makes run, counted in `total`, `paid` and `cost`; the line under the
    *  cost says so. Present only when there are some. */
   pendingIncluded?: PendingSkipSummary;
+  /** The provider each paid node's run goes through, by node id (selectRoute,
+   *  with the keys of the cost context): the confirm rows name it (GM - Design,
+   *  round 15, item 3). Present with a cost context. */
+  routes?: Record<string, string>;
+}
+
+/** A node's name in a run's confirm and summary: the name the person gave
+ * it; a node still under its model's own name is named by the route the
+ * run takes (GM - Design, round 15, item 3: "Grok Imagine 2.0 (xAI)" on the
+ * person's xAI key, never the Krea copy's name). */
+export function runNodeName(node: Node<NodeData>, provider: string | null | undefined): string {
+  const definition = node.data?.definitionId ? NODE_DEFINITIONS[node.data.definitionId] : undefined;
+  const label = node.data?.label;
+  if (label && label !== definition?.displayName) return label;
+  return definition ? nameOnRoute(definition, provider) : (label || node.id);
 }
 
 export interface RunCostContext {
@@ -286,14 +301,20 @@ export function summarizeRunScope(
   const wired = wiredPorts(included, edges);
   const behindGates = nodesBehindGates(included, edges);
   const gated: string[] = [];
+  const routes: Record<string, string> = {};
   for (const node of included) {
     let definition = node.data?.definitionId ? NODE_DEFINITIONS[node.data.definitionId] : undefined;
     let params = (node.data?.params ?? {}) as Record<string, unknown>;
     let calls = 1;
     let noPrice = false;
     let ports: ReadonlyMap<string, number> = wired.get(node.id) ?? new Map();
-    const name = node.data?.label || definition?.displayName || node.id;
     if (!definition || isLocalRun(definition, params)) continue;
+    // The provider the run goes through (the wires a Krea-only setting
+    // arrives by keep it on Krea), for the name the confirm shows.
+    const provider = costContext && !definition.providerVia
+      ? selectRoute(definition, withWiredBlockers(definition, params, ports), costContext.apiKeys).provider : null;
+    if (provider) routes[node.id] = provider;
+    const name = definition.providerVia ? (node.data?.label || definition.displayName || node.id) : runNodeName(node, provider);
     if (definition.providerVia?.kind === 'model') {
       const nested = cinemaSceneBase(params, definition);
       if (nested && NODE_DEFINITIONS[nested.model]) {
@@ -375,6 +396,7 @@ export function summarizeRunScope(
     if (estimate.plus && !cost.plus.includes(estimate.plus)) cost.plus.push(estimate.plus);
   }
   const summary: RunScopeSummary = pricing ? { total: included.length, paid, cost } : { total: included.length, paid };
+  if (costContext) summary.routes = routes;
   if (gated.length) summary.gated = gated;
   if (pendingSkipped) summary.pendingSkipped = pendingSkipped;
   if (pendingIncluded) summary.pendingIncluded = pendingIncluded;

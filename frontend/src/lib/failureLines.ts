@@ -42,11 +42,16 @@ export function modelSetupFailedText(name: string): string {
   return `Couldn't set up “${name}”.`;
 }
 
-/** The model pickers, the provider's key isn't set (review 13, L-5): GM's
- * "Couldn't set up “X”." and the key to add, by its provider's name (no env
- * names: directRoute.keyPhrase). The node keeps its settings. */
+/** GM - Design, round 15, item 1, verbatim: the pickers' line calls
+ * Replicate's an "API key" ("Add your Replicate API key in Settings."). */
+const PICKER_KEY_PHRASES: Readonly<Record<string, string>> = { REPLICATE_API_TOKEN: 'Replicate API key' };
+
+/** The model pickers, the provider's key isn't set (review 13, L-5; GM -
+ * Design, round 15, item 1): GM's "Couldn't set up “X”." and the key to
+ * add, by its provider's name (no env names: directRoute.keyPhrase). The
+ * node keeps its settings. */
 export function modelKeyMissingText(name: string, keys: readonly string[]): string {
-  const phrase = keyPhrase(keys);
+  const phrase = keys.length === 1 && Object.hasOwn(PICKER_KEY_PHRASES, keys[0]) ? PICKER_KEY_PHRASES[keys[0]] : keyPhrase(keys);
   return phrase ? `${modelSetupFailedText(name)} Add your ${phrase} in Settings.` : modelSetupFailedText(name);
 }
 

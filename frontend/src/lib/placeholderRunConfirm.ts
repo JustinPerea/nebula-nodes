@@ -1,11 +1,11 @@
 import type { Edge, Node } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { NodeData } from '../types';
-import { allParamDefinitions, hasRoutes, routeById, selectRoute, withWiredBlockers } from './directRoute';
+import { allParamDefinitions, hasRoutes, nameOnRoute, routeById, selectRoute, withWiredBlockers } from './directRoute';
 import { isLocalRun, modelChoice } from './nodeKeys';
 import { cleanPending, type PendingAgent } from './pendingNodes';
 import { formatUsdRange } from './pricing';
-import { runCostNotes, type RunCost, type RunScopeSummary } from './runScope';
+import { runCostNotes, runNodeName, type RunCost, type RunScopeSummary } from './runScope';
 
 /**
  * Q133 (Justin, 2026-10-25, option b): the person's direct run still runs the
@@ -222,6 +222,14 @@ function modelName(node: Node<NodeData>): string {
   return definition.displayName;
 }
 
+/** The model a node runs, named on the route its run takes (GM - Design,
+ * round 15, item 3): a node type's own name names that route's provider. */
+function modelOnRoute(node: Node<NodeData>, provider: string | null): string {
+  const model = modelName(node);
+  const definition = NODE_DEFINITIONS[node.data?.definitionId];
+  return definition && model === definition.displayName ? nameOnRoute(definition, provider) : model;
+}
+
 function unset(value: unknown): boolean {
   return value === undefined || value === null || (typeof value === 'string' && !value.trim());
 }
@@ -359,8 +367,7 @@ export function unchosenOnRoute(definitionId: string, params: Record<string, unk
   const fields = requiredFields(definition);
   if (fields.length === 0) return null;
   const values = params ?? {};
-  const routed = withWiredBlockers(definition, wholeSizes(definition, values), context.wired ?? []);
-  const route = selectRoute(definition, routed, context.apiKeys);
+  const route = refusalRoute(definition, values, context);
   let needed: string[][];
   if (route.kind === 'plan') needed = context.planReady ? fields : [];
   else if (route.kind === 'unset' || !route.key || !String(context.apiKeys[route.key] ?? '').trim()) needed = [];
@@ -371,6 +378,43 @@ export function unchosenOnRoute(definitionId: string, params: Record<string, unk
   }
   const missing = needed.find(([key]) => unset(values[key]));
   return missing ? [fieldVerb(definition, missing[0]), missing[1]] : null;
+}
+
+/** The route the refusal reads: selectRoute's, with a half-set size left out
+ * and the Krea-only ports wired (withWiredBlockers). */
+function refusalRoute(definition: (typeof NODE_DEFINITIONS)[string], values: Record<string, unknown>,
+  context: Pick<RouteContext, 'apiKeys' | 'wired'>) {
+  const routed = withWiredBlockers(definition, wholeSizes(definition, values), context.wired ?? []);
+  return selectRoute(definition, routed, context.apiKeys);
+}
+
+/** The ports wired into `node` among `edges`. */
+function wiredInto(node: Node<NodeData>, edges: readonly Edge[] | undefined): string[] {
+  return (edges ?? []).filter((edge) => edge.target === node.id && edge.targetHandle)
+    .map((edge) => edge.targetHandle as string);
+}
+
+/**
+ * Review 14, M-B: whether the refusal could name a field of `node` at all (a
+ * required field with nothing in it). Only then does what the refusal reads
+ * (the keys, the Krea plan's sign-in) have to be known before deciding.
+ */
+export function mayBeRefused(node: Node<NodeData>): boolean {
+  const definition = NODE_DEFINITIONS[node.data?.definitionId];
+  if (!definition) return false;
+  const values = (node.data?.params ?? {}) as Record<string, unknown>;
+  return requiredFields(definition).some(([key]) => unset(values[key]));
+}
+
+/** Whether, with these keys and wires, a node of `nodes` that may be refused
+ * runs on the Krea plan: then the plan's sign-in decides its refusal. */
+export function planDecidesRefusal(nodes: Node<NodeData>[], edges: readonly Edge[], apiKeys: RouteContext['apiKeys']): boolean {
+  return nodes.some((node) => {
+    const definition = NODE_DEFINITIONS[node.data?.definitionId];
+    if (!definition || !mayBeRefused(node)) return false;
+    const values = (node.data?.params ?? {}) as Record<string, unknown>;
+    return refusalRoute(definition, values, { apiKeys, wired: wiredInto(node, edges) }).kind === 'plan';
+  });
 }
 
 /** Every Krea definition with a field the refusal names: {id: [[key, word]]}. */
@@ -401,8 +445,7 @@ export function modelNotChosenText(nodes: Node<NodeData>[], names?: Readonly<Rec
   context?: { apiKeys: RouteContext['apiKeys']; edges?: Edge[]; planReady?: boolean }): string | null {
   if (!context) return null;
   for (const node of nodes) {
-    const wired = (context.edges ?? []).filter((edge) => edge.target === node.id && edge.targetHandle)
-      .map((edge) => edge.targetHandle as string);
+    const wired = wiredInto(node, context.edges);
     const found = unchosenOnRoute(node.data?.definitionId, (node.data?.params ?? {}) as Record<string, unknown>,
       { apiKeys: context.apiKeys, wired, planReady: context.planReady });
     if (!found) continue;
@@ -586,13 +629,15 @@ export function placeholderRunConfirm(
   let anyMissing = false;
   const unlisted: string[] = [];
   const byInput: string[] = [];
-  const labelOf = (node: Node<NodeData>) => options.names?.[node.id] || node.data?.label
-    || NODE_DEFINITIONS[node.data?.definitionId]?.displayName || node.id;
+  // GM - Design, round 15, item 3: a row names the route the run actually
+  // takes (summarizeRunScope's `routes`): a node under its model's own name,
+  // and the model, read "Grok Imagine 2.0 (xAI)" on the person's xAI key.
+  const routeOf = (node: Node<NodeData>) => summary.routes?.[node.id] ?? null;
+  const labelOf = (node: Node<NodeData>) => options.names?.[node.id] || runNodeName(node, routeOf(node));
   const row = (node: Node<NodeData>): PlaceholderRunRow => {
-    const definition = NODE_DEFINITIONS[node.data?.definitionId];
     const label = labelOf(node);
-    const model = modelName(node);
-    const price = rowPrice(node.id, summary, node.data?.label || definition?.displayName || node.id);
+    const model = modelOnRoute(node, routeOf(node));
+    const price = rowPrice(node.id, summary, runNodeName(node, routeOf(node)));
     if (price.missing) anyMissing = true;
     if (price.text === PRICE_NOT_LISTED) unlisted.push(`“${label}”`);
     if (price.text === PRICE_DEPENDS_ON_INPUT) byInput.push(`“${label}”`);

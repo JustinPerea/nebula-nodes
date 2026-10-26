@@ -473,6 +473,8 @@ def cost_for(
     params: Mapping[str, Any] | None = None,
     definitions: Mapping[str, Mapping[str, Any]] | None = None,
     api_keys: Mapping[str, Any] | None = None,
+    *,
+    wired: Any = (),
 ) -> dict[str, Any]:
     """`free` for local utility nodes, else `paid` with the provider. No prices exist.
 
@@ -487,7 +489,14 @@ def cost_for(
     ``provider`` is None, ``unavailable`` says why and, for a setting the
     route doesn't offer, ``fixes`` lists route_unavailable's one-click
     param edits ([{param, value}], value None = clear). Without ``api_keys``
-    it names the explicit route's provider, or under Auto the maker's."""
+    it names the explicit route's provider, or under Auto the maker's.
+
+    Any other node that can run on more than one provider (a Krea copy that
+    runs on its maker's API with the person's key, a fal copy on its maker's)
+    is paid by the provider of the route select_route picks with ``api_keys``
+    and the input ports ``wired`` into it (a Krea-only input keeps the run on
+    Krea): the route that actually runs, as the estimate beside it prices it
+    (GM - Design, round 15, item 3; review 14, L-I)."""
     from services import model_pricing, node_readiness, node_route
 
     if definition and node_route.has_routes(definition):
@@ -514,6 +523,9 @@ def cost_for(
         provider = str((base or {}).get("apiProvider") or "") or None
         return {"kind": "paid", "provider": provider, "label": f"paid · {provider or 'provider'}, per shot"}
     provider = str((definition or {}).get("apiProvider") or "") or None
+    if definition and api_keys is not None and provider not in (None, "utility"):
+        routed = node_route.with_wired_blockers(definition, params or {}, wired or ())
+        provider = str(node_route.select_route(definition, routed, api_keys).provider or "") or provider
     if provider == "utility" and not model_pricing.is_local(definition or {}, params or {}):
         via = node_readiness.provider_via(definition or {}) or {}
         _keys, what = node_readiness.param_route(via, node_readiness.param_value(definition or {}, params or {}))

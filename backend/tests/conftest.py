@@ -90,6 +90,20 @@ def pytest_runtest_teardown(item, nextitem):
 
 
 @pytest.fixture(autouse=True)
+def empty_model_cache():
+    """Each test starts and ends with an empty provider model cache (review
+    14, L-G): services.model_cache lives for the process, so a model list one
+    test cached (OpenRouter's, for 5 minutes) answered a later test's picker
+    before its own fixture's keys were read, and its outcome depended on test
+    order."""
+    from services.model_cache import model_cache
+
+    model_cache.clear()
+    yield
+    model_cache.clear()
+
+
+@pytest.fixture(autouse=True)
 def isolated_commons_opt_in(request, monkeypatch):
     """Only the dedicated synthetic Commons tests opt into store access."""
     name = request.node.path.name

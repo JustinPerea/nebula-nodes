@@ -1386,3 +1386,63 @@ Branch feat/agent-presence, base main (head f4c6f719 before this round).
 - Lint: clean (the inline-style and Slava-scope guards passed).
 - Build budget: 392,757 bytes raw / 118,192 gzip (limit 512,000).
 - INSTRUCTIONS: 2,233 characters (2,957 with the Commons guide), unchanged.
+
+## Round 15: review 14 and GM - Design's round-15 items (2026-10-26)
+
+### What changed
+
+- **M-A, a multi-node delete comes back whole from one undo** (`graphStore.ts`). Before: one delete gesture had one undo step, and each echo re-placed that step on its own. An agent edit or typing between two echoes split it, so the second echo pushed a step that held only the second node, and the restore brought back one node. Now each delete step carries the nodes it removed (`removedBy`), and `keepRemovedNodes` puts them into whichever step the echo re-pushes (with their edges among held nodes). Held or not, edits between echoes, echoes in either order: one Cmd+Z restores every node that gesture deleted and says "Restored 2 nodes.". A DELETE that answers 500 with no echo keeps its node on the canvas, and the undo restores only the others.
+- **M-B, never let the person approve a run that can't go out** (`graphStore.ts`, `placeholderRunConfirm.ts`). The refusal used to be decided on whatever the page knew at that moment. Now:
+  - Before deciding, a run that could be refused (`mayBeRefused`: a model with a required field unset) waits, for at most 4 s (`RUN_INPUTS_WAIT_MS`), for the settings and, when the Krea plan decides the refusal (`planDecidesRefusal`), the plan's sign-in status. If neither can be read in time, it decides on what it has and the backend's refusal still holds, as before.
+  - On yes, `refuseUnchosenModel` runs again on the graph and keys as they are now. A route that changed while the dialog was open (Codex wired Style images, the OpenAI key was removed) refuses with no send.
+  - On Nebula's 409 re-ask, the same check runs after the yes; if the rows changed (`sameRoutes`: node, model and setting), the dialog asks again with the new rows.
+  - Paths covered: Run on a node, Run on the canvas, a cluster (both orders), the approval-id path, and a whole-canvas replay. The backend refusal, spend approval, the 409 order and run admission are unchanged.
+- **L-A:** an echo that empties the canvas goes through `placeEchoedDeletes` too (E2: deleting the last node, typing, the empty echo, Cmd+Z: it comes back as typed).
+- **L-B:** a clear drops only the held presses issued before it. A Cmd+Z pressed after the clear undoes the clear (C3). The dropped presses are counted in the one skipped line.
+- **L-C:** `stripClearedFromLaterSteps` takes the clear's ids out of every step taken while the clear was on its way (and out of redo), so undoing an upload made during a clear never brings a cleared node back (C5, held and not).
+- **L-D:** an undo restore takes off only nodes it put back. When a reconnect sync drops the deleted node and adds an agent node, the undo restores the deleted node and keeps the agent's (X1/X1b). A redo of that undo deletes only the restored node (`deleteTouches` / `redeletes` on the inverse step).
+- **L-E:** if the echo already removed the node, a failed DELETE answer (500) counts as done: no failure line, and the step stays undoable (F1, held and not). A 500 with no echo keeps the node and says so, as before.
+- **L-F / GM item 1:** the picker's key lines, verbatim. `PICKER_KEY_PHRASES` maps `REPLICATE_API_TOKEN` to "Replicate API key": "Couldn't set up “X”. Add your Replicate API key in Settings." (`failureLines.ts`).
+- **L-G:** the openrouter `model_cache` test-order flake. `backend/tests/conftest.py` has an autouse `empty_model_cache` fixture that clears `services.model_cache` before and after each test. Before: `test_pending_nodes*` then `test_*round14*` failed `test_l5_a_missing_key_is_marked_as_one[openrouter…]`. After: the same order, 67 passed.
+- **L-H:** `docs/MCP-SETUP.md` and `skills/nebula/SKILL.md` quote the lines agents get: "Missing API key: KREA_API_TOKEN", "Missing API key: XAI_API_KEY or KREA_API_TOKEN", and the plan line "Connect your Krea account in Settings before running this recipe".
+- **L-I / GM item 3, a confirm row names the route that runs, at that route's price:**
+  - `nameOnRoute` (`directRoute.ts`) swaps a gateway suffix "(Krea)" or "(FAL)" for the route's provider label, the one the running card uses ("Grok Imagine 2.0 (xAI)").
+  - `summarizeRunScope` records each node's route (`summary.routes`, through `selectRoute(withWiredBlockers)`), and the placeholder dialog, the costly-run confirm and the run summary all name it through `runNodeName`. The row's price is that route's, or "price not listed" with the usual footnote. Style images wired keeps the run on Krea, under the Krea name and never the xAI price.
+  - Backend: `cost_for` takes the wired ports and picks the provider with `node_route.select_route`, so a proposal's cost and label agree with the canvas ("paid · xai", $0.06 for Grok on an xAI key). `mcp_server.py`'s propose docstring and `docs/MCP-SETUP.md` say the label names the route.
+- **GM item 2:** "Couldn't clear the session." stays unwired. In `ChatPanel.tsx`, `/clear` resets the session id locally and a personal agent's close is fire-and-forget, so the session clear has no failure path to show.
+- MCP/CLI/docs: `docs/MCP-SETUP.md` (cost wording, the required-field lines, the re-check on yes, held undo: a multi-node delete is one step, a sync makes a delete done, undo puts back only what it removed, a Cmd+Z after a clear undoes the clear, a step during a clear never brings cleared nodes back) and `skills/nebula/SKILL.md` (the key refusal lines).
+
+### Tests written first, and how they failed on c04d1454
+
+- `frontend/tests/heldUndo.round15.test.tsx`, 20 tests (fake backend applying deletes, syncs, restores and clears in arrival order; each asserts the restore bodies, the line and canvas = backend): 18 failed, 2 passed. Examples: M2 restored only [n2]; E2 restored n1 without the typing; C3 sent no restore; C5 restored n1 and removed n2; X1 removed n3; F1 sent no restore and showed a failure line.
+- `frontend/tests/dialogRecheck.round15.test.ts`, 14 tests (D1 to D5 with controls, D1 on four other run paths, the route-change re-ask, the 409 re-ask): 10 failed, 4 passed. The failures: the dialog showed and the run was sent; the row read "(Krea)"; the 409 case asked three times.
+- `frontend/tests/routeLabels.round15.test.ts`, 12 tests: 10 failed (`nameOnRoute` not a function; rows, the costly confirm and the run summary named "(Krea)"). The two-row footnote test ("“GPT Image 2.5 Flare (OpenAI)” has no list price…") was written after the code: the single-row case has no total, so no footnote by design.
+- `frontend/tests/failureLines.round15.test.ts`, 3 tests: the Replicate case failed ("API token"). `failureLines.round14` updated to the ruled phrase.
+- `backend/tests/test_route_labels_round15.py`, 2 tests (`cost_for` and a propose e2e: Grok with xAI and Krea keys gives provider xai, "paid · xai", $0.06): both failed (krea).
+- L-G: the two files in the failing order, 1 failed before the fixture.
+- Review 14's probes rerun against the fix (`scratchpad/agent-presence/r15/probes/`, output redirected): 37 of 37 ran. M2, M3, M5 and M6 restore every node; E2/E3 keep the edits; C3 undoes the clear; C5/C5b keep the cleared node gone; X1/X1b keep n3; F1 restores with no failure line; D3, D4 and D5 send nothing. D1 and D2 still send in the probe because its mocked settings fetch rejects, so the bounded wait falls through by design; the backend refuses those.
+
+### Live check (8795/5795, isolated, `scratchpad/agent-presence/r15/live/live-r15.mjs`): 14 of 14
+
+- The backend had no keys: temp HOME and every `NEBULA_*` root under scratch, with every key, token, `NEBULA_*` and `VITE_*` variable dropped, behind a dead proxy. Keys existed only as a stubbed `GET /api/settings` answer inside the page: the backend's real answer with `apiKeys` swapped for masked stand-ins. Every run request was answered in the page; none was made. Nothing left the machine.
+- **M-A:** three text nodes. I selected First and Second and pressed Backspace; both DELETE answers were held while the backend deleted and the echoes landed. I pressed Cmd+Z while they were held, then released the answers in reverse order. Result: one restore naming both nodes, "Restored 2 nodes." with Redo, no failure line, and canvas = backend = all three.
+- **L-I:** Codex's Grok Imagine 2.0 placeholder "Alt still", with the stub showing an xAI key and a Krea token. The dialog row read "“Alt still” · Grok Imagine 2.0 (xAI) · $0.06" and the button "Run for $0.06". Cancel sent nothing.
+- **M-B:** Codex's GPT Image 2.5 Flare placeholder "Hero still", with no aspect ratio set. With the stub showing an OpenAI key, the dialog row read "“Hero still” · GPT Image 2.5 Flare (OpenAI) · price not listed". While the dialog was open I switched the stub to a Krea token only, then clicked Run. Result: "Nothing ran. Choose an aspect ratio for “Hero still” first.", the dialog closed, and nothing was sent.
+- **Blocked requests:** 2, both the canaries; none toward 8000-8010 or 5173.
+- **Screenshots** `r15-one-undo-two-nodes`, `r15-confirm-row-xai`, `r15-refused-after-yes`, each at -1440 and -1280.
+
+### Open items (round 15)
+
+- A held press made redundant by a later step (its `inverseOf` target superseded) still goes to nothing silently: no skipped line.
+- Delete answers that arrive after a clear has answered are not modelled beyond L-C; no reviewer probe covers that order.
+- The two-row footnote test in `routeLabels.round15` was written after the code (see above).
+- D1/D2 depend on the settings and plan reads succeeding within 4 s; if they can't be read, the dialog asks as before and the backend's refusal is the backstop.
+
+### Gates (round 15)
+
+- Backend full suite: 11,144 passed, 71 skipped (24 min 52 s), run beside the vitest suite.
+- Vitest full suite: 502 files and 6,362 tests. 466 files passed and 36 failed (96 tests: 79 "Test timed out in 5000ms", the rest find or focus waits under load, run beside the backend suite). The 36 rerun alone with `--no-file-parallelism`: 526 tests passed.
+- errorCopy ratchets: 14 files, 173 tests passed.
+- tsc: clean.
+- Lint: clean (the inline-style and Slava-scope guards passed).
+- Build budget: 392,757 bytes raw / 118,209 gzip (limit 512,000).

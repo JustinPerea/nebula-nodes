@@ -6466,10 +6466,14 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
         for node_id in chosen:
             definition = definitions.get(str(candidate.nodes[node_id].get("definitionId") or ""), {})
             line = (estimate or {}).get("priced", {}).get(node_id)
+            # The input ports wired into it: a Krea-only one keeps the run on Krea (cost_for).
+            wired = {str(edge.get("targetHandle")) for edge in graph_edges
+                     if str(edge.get("target")) == node_id and edge.get("targetHandle")}
             entries.append({
                 "ref": ref_for.get(node_id, node_id),
                 "nodeId": None if node_id in ref_for else node_id,
-                **cost_for(definition, candidate.nodes[node_id].get("params") or {}, definitions, api_keys),
+                **cost_for(definition, candidate.nodes[node_id].get("params") or {}, definitions, api_keys,
+                           wired=wired),
                 "price": {"low": line["low"], "high": line["high"]} if line else None,
             })
         if estimate:

@@ -221,9 +221,16 @@ The server exposes these tools for building and running (see
   that later delete removed). A delete's change lands when Nebula's own
   sync takes its nodes off, which can come before its answer: no undo
   after that, waiting or not, brings those nodes back to the canvas or to
-  Nebula's graph unless it undoes that delete. A clear the person issues
-  after a Cmd+Z that is still waiting supersedes it: the Cmd+Z is dropped
-  and the canvas ends cleared. If a newer edit has settled on top of its step by then
+  Nebula's graph unless it undoes that delete. A delete of several nodes
+  is one step however its nodes' syncs arrive (one per node, with your edit
+  or the person's typing between them): one Cmd+Z brings them all back. A
+  sync that already took a node off makes its delete done, whatever its
+  answer says, and undoing a delete puts back only what it removed (a node
+  you added meanwhile stays). A clear the person issues after a Cmd+Z that
+  is still waiting supersedes it: the Cmd+Z is dropped and the canvas ends
+  cleared; a Cmd+Z pressed after the clear undoes the clear once it lands,
+  and a step taken while a clear was on its way never brings a cleared
+  node back. If a newer edit has settled on top of its step by then
   (yours, another agent's, or the person's own later edit), it never undoes
   that edit instead: it is dropped, and the canvas says "Nothing was undone. Your last
   change was still saving." ("Nothing was redone. …" when only Cmd+Shift+Z
@@ -1106,7 +1113,14 @@ run), 3 when rejected (with the person's reason, if any), 4 when withdrawn,
 expired or invalidated, and 2 on timeout (600 s default, still open).
 
 **Cost wording.** Proposals say how many paid model runs and free nodes
-would run, and from which providers. Upstream nodes that have no outputs yet
+would run, and from which providers: each entry in `cost.nodes` names the
+provider its run would go through with the keys set (`provider`, and
+`label` "paid · xai"), the route its `price` is for. A Krea copy that runs
+on its maker's API with the person's key names the maker (Grok Imagine 2.0
+on an xAI key: `xai`, priced at xAI's price, never Krea's), and a connection
+into a Krea-only input (Grok's style images) keeps it on `krea`; the person's
+confirm rows name the same route ("Grok Imagine 2.0 (xAI) · $0.06").
+Upstream nodes that have no outputs yet
 are counted too, and then the count reads "up to", because the run cache may
 skip some of them. `cost.estimate` adds up list prices in USD from
 `backend/data/model_pricing.json`, where every price cites the vendor page it
@@ -1559,10 +1573,18 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   leaves it out); Seedream 4 and 5 with a BytePlus key still need a Width
   and a Height. A connection into a Krea-only input (Grok's style images) keeps
   the run on Krea. With no key that can run it (or the plan not signed in),
-  no field is named: the run is refused for the key ("Add your Krea API
-  token in Settings, then run the node again.") or the sign-in first.
+  no field is named: the run is refused for the key or the sign-in first.
+  Your `run_nodes` and `nebula run` get "Missing API key: KREA_API_TOKEN"
+  (or every key a copy can use: "Missing API key: XAI_API_KEY or
+  KREA_API_TOKEN"), the card "Add your Krea API token in Settings, then
+  run the node again."; a run on the plan that isn't signed in gets
+  "Connect your Krea account in Settings before running this recipe".
   A run that would send one with nothing in it is refused before anything
-  runs or is priced, on every run path, and before any dialog: the canvas
+  runs or is priced, on every run path, and before any dialog (the canvas
+  reads the keys and the plan's sign-in first when it hasn't yet, and
+  checks again when the person says yes: a key removed or a connection made
+  while the dialog was open refuses instead of sending, and a run whose
+  route changed asks again with the new row): the canvas
   says "Nothing ran. Choose an aspect ratio for “Hero” first." for a
   picker ("… a model …", "… a version …", "… a resolution …") and "Nothing
   ran. Set a width for “Hero” first." for a value typed in ("… a height

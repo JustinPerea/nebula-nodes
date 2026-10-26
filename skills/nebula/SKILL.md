@@ -281,7 +281,8 @@ way. Only the route the run takes counts: Krea's own API needs them all, but
 GPT Image 2.5 Flare/Sunburst with an OpenAI key and Grok Imagine 2.0 with an
 xAI key run without an Aspect ratio or Resolution (Seedream with a BytePlus
 key still needs its Width and Height). With no key that can run it, the
-refusal names the key instead. Set it with `nebula set` first, or leave the
+refusal names the key instead ("Missing API key: KREA_API_TOKEN", or "…
+XAI_API_KEY or KREA_API_TOKEN" for a copy that can also run on its maker). Set it with `nebula set` first, or leave the
 choice to the person). The card on
 the canvas shows the same error. `nebula look` prints a failed node's error
 under it, and `nebula path` says why there is no file. The error stays on the
