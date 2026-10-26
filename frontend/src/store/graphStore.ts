@@ -1676,7 +1676,7 @@ function sendWire(edge: Edge, want: boolean, set: GraphSet, after?: Promise<unkn
   return (after ? after.then(send) : send()).then(async (response) => {
     done(response.ok);
     if (response.ok) return;
-    const heading = `Couldn't ${want ? 'connect' : 'remove'} that wire.`;
+    const heading = `Couldn't ${want ? 'make' : 'remove'} that connection.`;
     const text = `${heading} ${await backendRejectionReason(response, heading)}`;
     set((state) => ({
       edges: want ? state.edges.filter((e) => e.id !== edge.id)

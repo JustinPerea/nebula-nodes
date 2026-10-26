@@ -194,7 +194,7 @@ async def test_bfl_video_picks_its_mode_from_the_wired_ports(monkeypatch, wired,
 @pytest.mark.parametrize("wired, message", [
     ({"start_video": "https://e.com/v.mp4", "start_image": "https://e.com/s.png"}, "not both"),
     ({"end_image": "https://e.com/e.png"}, "needs a start image"),
-    ({"video": "https://e.com/v.mp4"}, "can't take the wired video"),
+    ({"video": "https://e.com/v.mp4"}, "can't take the connected video"),
 ])
 async def test_bfl_refuses_a_recipe_it_cant_send_before_any_request(monkeypatch, wired, message):
     hosts = bfl_hosts(monkeypatch)
@@ -315,7 +315,7 @@ def test_fal_media_fields_match_each_endpoints_schema(endpoint, params, wired, e
 
 
 def test_fal_refuses_what_an_endpoint_cant_take():
-    with pytest.raises(ValueError, match="can't take the wired start_image"):
+    with pytest.raises(ValueError, match="can't take the connected start_image"):
         route_clients.fal_fields("blackforestlabs/flux-3/text-to-video", {}, ports(prompt="p", start_image="a.png"))
     with pytest.raises(ValueError, match="needs a set duration"):
         route_clients.fal_fields("blackforestlabs/flux-3/keyframes-to-video", {"duration": "auto"},
@@ -330,7 +330,7 @@ def test_fal_whole_endpoint_shapes_dont_leak_to_a_shared_last_segment():
     assert route_clients.fal_shape("blackforestlabs/flux-3/text-to-video/draft") == "text-to-video"
     with pytest.raises(ValueError, match="no request shape for fal.ai's someone/other/edit"):
         route_clients.fal_fields("someone/other/edit", {}, ports(prompt="p"))
-    with pytest.raises(ValueError, match="can't take the wired images"):
+    with pytest.raises(ValueError, match="can't take the connected images"):
         route_clients.fal_fields("krea/v3/text-to-image", {}, ports(prompt="p", images=["https://e.com/a.png"]))
 
 
@@ -371,10 +371,10 @@ def test_replicate_upscale_takes_its_source_as_input_video_and_an_optional_promp
     assert body["prompt"] == "sharper"
     with pytest.raises(ValueError, match="needs a video"):
         route_clients.replicate_input({}, ports(prompt="p"), "Replicate's upscale", model)
-    with pytest.raises(ValueError, match="can't take the wired start_video"):
+    with pytest.raises(ValueError, match="can't take the connected start_video"):
         route_clients.replicate_input({}, ports(video="https://e.com/v.mp4", start_video="https://e.com/w.mp4"), "x", model)
     # Every other model still needs a prompt and takes no 'video' port.
-    with pytest.raises(ValueError, match="can't take the wired video"):
+    with pytest.raises(ValueError, match="can't take the connected video"):
         route_clients.replicate_input({}, ports(prompt="p", video="https://e.com/v.mp4"), "x",
                                       "black-forest-labs/flux-3")
 
@@ -391,7 +391,7 @@ def test_more_than_ten_video_frames_stop_before_any_request():
     edge (which the preflight counts as one) still stops in the client."""
     frames = [f"https://e.com/{i}.png" for i in range(10)]
     inputs = ports(prompt="p", start_image="https://e.com/s.png", keyframes=frames, end_image="https://e.com/e.png")
-    with pytest.raises(ValueError, match="at most 10 images in all .* but 12 are wired. Disconnect 2"):
+    with pytest.raises(ValueError, match="at most 10 images in all .* but 12 are connected. Disconnect 2"):
         route_clients.bfl_body("flux-3-video", {}, inputs)
     with pytest.raises(ValueError, match="at most 10 images in all"):
         route_clients.fal_fields("blackforestlabs/flux-3/keyframes-to-video", {"duration": 5}, inputs)
@@ -618,7 +618,7 @@ async def test_openrouter_videos_failures_and_unsupported_inputs(monkeypatch):
     with pytest.raises(RuntimeError, match="Content policy violation"):
         await run("openrouter-videos", "clients-video", "openrouter", {}, ports(prompt="p"))
     before = len(hosts.requests)
-    with pytest.raises(ValueError, match="can't take the wired start_video"):
+    with pytest.raises(ValueError, match="can't take the connected start_video"):
         await run("openrouter-videos", "clients-video", "openrouter", {},
                   ports(prompt="p", start_video="https://e.com/v.mp4"))
     assert len(hosts.requests) == before

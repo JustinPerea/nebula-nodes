@@ -136,9 +136,10 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Sequence
 
 from services import model_pricing
+from services.node_names import quoted
 from services.retired_nodes import merged_into
 
 SETTING_KEY = "runCostConfirmUsd"
@@ -600,11 +601,51 @@ def _names(ids: list[str], labels: Mapping[str, str]) -> str:
 
 _NO_LIMIT_CHECK = "so it can't check this run against the spending limits set in Nebula Settings."
 
+# {node id: (port, [(source name, source id, source port), ...])}: what is
+# connected to the port a node is priced from, when more than one input is.
+SizeInputs = Mapping[str, tuple[str, Sequence[tuple[str, str, str | None]]]]
+
+
+def _and(items: list[str]) -> str:
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + f" and {items[-1]}"
+
+
+# How many sources, and how many nodes' groups of them, a size refusal lists
+# before "and N more" (as _names caps node names): 100 inputs on one port
+# would otherwise make a 10 KB refusal.
+_LISTED = 5
+
+
+def _connected_now(ids: list[str], size_inputs: SizeInputs | None) -> str:
+    """The inputs connected to each node's measured port, so the agent knows
+    which to choose from (GM - Design: "If the refusal doesn't already name
+    the connected inputs, list them right before it"). Each is the source
+    node's name in quotes and its id:port, as `--unwire` takes it. Text only:
+    the refusal itself is decided before this runs, whatever it lists."""
+    def inputs(node_id: str) -> str:
+        _port, sources = (size_inputs or {})[node_id]
+        shown = [f"{quoted(name)} ({source}:{handle})" if handle else f"{quoted(name)} ({source})"
+                 for name, source, handle in sources[:_LISTED]]
+        if len(sources) > _LISTED:
+            return ", ".join(shown) + f" and {len(sources) - _LISTED} more"
+        return _and(shown)
+
+    known = [node_id for node_id in ids if node_id in (size_inputs or {}) and (size_inputs or {})[node_id][1]]
+    if not known:
+        return ""
+    if len(ids) == 1:
+        return f"Connected to it now: {inputs(known[0])}. "
+    first, *rest = known[:_LISTED]
+    more = f"; and {len(known) - _LISTED} more nodes" if len(known) > _LISTED else ""
+    return (f"Connected to {first} now: {inputs(first)}"
+            + "".join(f"; to {node_id}: {inputs(node_id)}" for node_id in rest) + more + ". ")
+
 
 def _awaiting_reasons(
     awaiting: list[str], why: Mapping[str, str], labels: Mapping[str, str],
     definition_of: Mapping[str, str], pricing: Mapping[str, Any],
     definitions: Mapping[str, Mapping[str, Any]] | None = None,
+    size_inputs: SizeInputs | None = None,
 ) -> list[str]:
     """One sentence per reason the nodes priced from their input's size have
     no size here (input_sizes.run_input_sizes ``reasons``): each says what to
@@ -624,7 +665,7 @@ def _awaiting_reasons(
     for node_id in awaiting:
         groups.setdefault(why.get(node_id) or input_sizes.PENDING, []).append(node_id)
     upload = ("`nebula upload <file>` (MCP: upload_file) copies it into Nebula's output folder and puts an "
-              "Image Input or Video Input holding the copy on the canvas; wire that into the node and run it")
+              "Image Input or Video Input holding the copy on the canvas; connect that to the node and run it")
     sentences = []
     for reason, ids in groups.items():
         first = definition_of.get(ids[0], "")
@@ -660,19 +701,20 @@ def _awaiting_reasons(
                 "and run it again, or propose it.")
         elif reason == input_sizes.WIRES:
             sentences.append(
-                f"{names}, and more than one input is wired into its {port} port, so Nebula can't tell which "
-                f"file it sends; {_NO_LIMIT_CHECK} Wire one input into it, or propose it.")
+                f"{names}, and more than one input is connected to its {port} port, so Nebula can't tell which "
+                f"file it sends; {_NO_LIMIT_CHECK} {_connected_now(ids, size_inputs)}"
+                "Disconnect all but one, or propose it.")
         elif reason == input_sizes.UNWIRED:
             sentences.append(
-                f"{names}, and nothing wired into its {port} port gives it a file, {_NO_LIMIT_CHECK} Wire an "
-                "Image Input (or Video Input) holding the file into it, or propose it.")
+                f"{names}, and nothing connected to its {port} port gives it a file, {_NO_LIMIT_CHECK} Connect an "
+                "Image Input (or Video Input) holding the file to it, or propose it.")
         else:
             quick = (f", or run it on the file with `nebula quick {first} --input {port}=<file>`"
                      if image_port else "")
             sentences.append(
                 f"{names}, and that image or video doesn't exist yet (the node that makes it runs in this same "
                 f"run or hasn't run, or Nebula is still writing it), {_NO_LIMIT_CHECK} To run it within the "
-                f"limits, wire an Image Input (or Video Input) holding the file into it: {upload}{quick}; "
+                f"limits, connect an Image Input (or Video Input) holding the file to it: {upload}{quick}; "
                 "otherwise propose it (once the node that makes the input has run, a proposal is priced from "
                 "that output).")
     return sentences
@@ -691,6 +733,7 @@ def decide(
     passes: int = 1,
     sizes: Mapping[str, Mapping[str, Any]] | None = None,
     size_reasons: Mapping[str, str] | None = None,
+    size_inputs: SizeInputs | None = None,
 ) -> Decision:
     """Whether an agent may start this run itself, and what it would cost.
 
@@ -707,7 +750,9 @@ def decide(
     input's size (input_sizes.run_input_sizes), and ``size_reasons`` why
     each of the others wasn't measured (its ``reasons``), so the refusal says
     what is true: still to be made, a file on another host, a local file
-    outside Nebula's output folder, unreadable, or not one wire."""
+    outside Nebula's output folder, unreadable, or not one wire.
+    ``size_inputs`` names what is connected to a port with more than one
+    input (SizeInputs), which that refusal lists."""
     if isinstance(passes, bool) or not isinstance(passes, int) or passes < 1:
         raise ValueError("passes must be a positive whole number")
     threshold = threshold_from_settings(settings)
@@ -762,7 +807,7 @@ def decide(
                            "so it can't check this run against the spending limits set in Nebula Settings.")
         if awaiting:
             reasons.extend(_awaiting_reasons(awaiting, size_reasons or {}, labels, definition_of, pricing,
-                                              definitions))
+                                              definitions, size_inputs))
         return refuse(" ".join(reasons))
 
     # Per run: each model with its own limit, then everything else against the general one.

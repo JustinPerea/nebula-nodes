@@ -102,7 +102,7 @@ def test_builds_a_cluster_in_one_call(api):
     body = response.json()
     prompt, image = body["idMap"]["+prompt"], body["idMap"]["+img"]
     assert body["status"] == "applied"
-    assert body["summary"] == "added 2, wired 1, renamed 1"
+    assert body["summary"] == "added 2, connected 1, renamed 1"
     assert [n["id"] for n in body["added"]] == [prompt, image]
     assert body["wired"][0]["source"] == prompt and body["wired"][0]["target"] == image
     assert api.graph.nodes[image]["label"] == "Fox"
@@ -190,7 +190,7 @@ def test_remove_and_unwire(api):
 
     missing = _apply(api, {"unwire": [{"source": prompt, "sourceHandle": "text", "target": image, "targetHandle": "prompt"}]})
     assert missing.status_code == 404
-    assert "no wire" in missing.json()["detail"]
+    assert "There's no connection" in missing.json()["detail"]
 
 
 def test_removing_a_node_invalidates_proposals_that_use_it(api):
@@ -316,7 +316,7 @@ def test_a_large_edit_lands_in_one_call(api):
               "targetHandle": "text1" if side == 0 else "text2"} for i in range(15) for side in (0, 1)]
     response = _apply(api, {"nodes": nodes, "edges": edges})
     assert response.status_code == 200, response.text
-    assert response.json()["summary"] == "added 45, wired 30"
+    assert response.json()["summary"] == "added 45, connected 30"
     assert len(api.graph.nodes) == 45 and len(api.graph.edges) == 30
 
 

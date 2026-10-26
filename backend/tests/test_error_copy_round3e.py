@@ -255,8 +255,8 @@ def test_a_wire_of_the_wrong_kind_names_the_input_by_its_label():
     [issue] = _contracts([("a", "image-input"), ("b", "gpt-image-1-generate")], [("a", "image", "b", "prompt")])
     assert issue.message.startswith("Incompatible port types: source 'image' on node 'a'")
     # Round 3g (GM): the port's label in quotes.
-    assert _clean(issue.person) == ("The wire into “Prompt” brings something it can't take. "
-                                    "Remove that wire, then connect a matching output.")
+    assert _clean(issue.person) == ("The connection into “Prompt” brings something it can't take. "
+                                    "Remove that connection, then connect a matching output.")
 
 
 def test_too_many_wires_into_one_input_has_a_line():
@@ -265,13 +265,13 @@ def test_too_many_wires_into_one_input_has_a_line():
     [issue] = [i for i in issues if "multiple connections" in i.message]
     assert issue.message == "Input port 'prompt' on node 'b' does not allow multiple connections"
     # Round 3g (GM): the port's label in quotes.
-    assert _clean(issue.person) == "“Prompt” takes one wire. Remove the extra one, then run the node again."
+    assert _clean(issue.person) == "“Prompt” takes one connection. Remove the extra one, then run the node again."
 
 
 def test_a_wire_into_an_input_the_node_no_longer_has_has_a_line():
     [issue] = _contracts([("a", "text-input"), ("b", "gpt-image-1-generate")], [("a", "text", "b", "gone")])
     assert issue.message.startswith("Invalid target handle 'gone' on node 'b'")
-    assert _clean(issue.person) == ("A wire into this node no longer matches its inputs. Remove it, then "
+    assert _clean(issue.person) == ("A connection into this node no longer matches its inputs. Remove it, then "
                                     "connect it again.")
 
 

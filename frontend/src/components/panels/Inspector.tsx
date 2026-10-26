@@ -1111,7 +1111,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
               {editNeedsBaseImage && !editHasBaseImageWire && (
                 <p className="mask-painter__hint">
                   Connect the source image to the edit node&apos;s Image port too — mask-painter only passes the mask.
-                  Re-connect the mask wire to auto-wire the base image.
+                  Reconnect the mask, and Nebula connects the base image for you.
                 </p>
               )}
               {maskPainterOpen && (

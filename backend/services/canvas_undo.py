@@ -208,7 +208,7 @@ def describe(inverse: Mapping[str, Any]) -> str:
         parts.append("makes " + _ids([item["id"] for item in inverse["ready"]]) + " placeholders again")
     wires = len(inverse["addedWires"]) + len(inverse["removedWires"])
     if wires and not parts:
-        parts.append(f"puts {wires} wire{'s' if wires != 1 else ''} back")
+        parts.append(f"puts {wires} connection{'s' if wires != 1 else ''} back")
     return "Undo " + "; ".join(parts) + ". Anything changed or run since is left as it is."
 
 
@@ -321,7 +321,7 @@ def plan_undo(
             foreign = sorted(wire for wire in current_wires if node_id in (wire[0], wire[2]) and wire not in edit_wires)
             if foreign:
                 other = foreign[0][2] if foreign[0][0] == node_id else foreign[0][0]
-                reason, message = "wired since", f"{node_id} was wired to {other} since, so it stays"
+                reason, message = "wired since", f"{node_id} was connected to {other} since, so it stays"
             else:
                 refusal = cannot_remove(node_id, now)
                 if refusal:
@@ -469,7 +469,7 @@ def plan_undo(
         if missing is not None:
             skipped.append({"part": "wire", "wire": wire_body(edge), "reason": "gone since",
                             "nodeId": missing,
-                            "message": f"the wire {_wire_text(edge)} can't come back: {missing} is gone"})
+                            "message": f"the connection {_wire_text(edge)} can't come back: {missing} is gone"})
             continue
         wire.append(wire_body(edge))
 
@@ -485,10 +485,10 @@ def plan_undo(
 
 
 # What an undo did, in its reply and in `nebula undo`'s first line, in this
-# order: "Undone: removed 1, unwired 1." A wire counts too, so an undo that
+# order: "Undone: removed 1, disconnected 1." A wire counts too, so an undo that
 # only took a wire away doesn't read "no change".
 UNDONE_VERBS = (("removed", "removed"), ("added", "put back"), ("changed", "reset"), ("renamed", "renamed"),
-                ("moved", "moved"), ("wired", "wired back"), ("unwired", "unwired"),
+                ("moved", "moved"), ("wired", "connected back"), ("unwired", "disconnected"),
                 ("placeholders", "made pending"))
 
 

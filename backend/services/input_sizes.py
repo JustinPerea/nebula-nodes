@@ -464,6 +464,7 @@ def run_input_sizes(
     nodes: Mapping[str, Any] | None = None,
     *,
     reasons: dict[str, str] | None = None,
+    connected: dict[str, tuple[str, list[tuple[str, str | None]]]] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """{node id: measured input} for each run node whose price reads its
     input's size and whose input is known (see the module docstring).
@@ -474,7 +475,10 @@ def run_input_sizes(
     sources outside the run. One wire into the measured port, or none known.
     ``reasons``, when given, gets {node id: why} for each sized node left
     unmeasured (PENDING, REMOTE, OUTSIDE, UNREADABLE, WIRES, UNWIRED): its
-    first measured port's reason. Off the event loop only (measure_run)."""
+    first measured port's reason. ``connected``, when given, gets {node id:
+    (port, [(source, source handle), ...])} for each node left unmeasured
+    because more than one input is connected to that port (WIRES), so the
+    refusal can name them. Off the event loop only (measure_run)."""
     _off_loop()
     run = {str(item["id"]): item for item in items}
     known = {**(nodes or {}), **run}
@@ -492,6 +496,8 @@ def run_input_sizes(
         for port in sorted(ports):
             wires = incoming.get((node_id, port)) or []
             if len(wires) != 1:
+                if why is None and wires and connected is not None:
+                    connected[node_id] = (port, list(wires))
                 why = why or (WIRES if wires else UNWIRED)
                 continue
             source_id, handle = wires[0]
@@ -510,6 +516,8 @@ def run_input_sizes(
             why = why or _why_not(ref)
         if node_id not in sizes and ports and why and reasons is not None:
             reasons[node_id] = why
+        if connected is not None and (node_id in sizes or why != WIRES):
+            connected.pop(node_id, None)
     return sizes
 
 
@@ -520,6 +528,8 @@ class Measured:
     (main._require_spend_approval) and the proposal estimate."""
     sizes: dict[str, dict[str, Any]] = field(default_factory=dict)
     reasons: dict[str, str] = field(default_factory=dict)
+    # {node id: (port, [(source, source handle), ...])} for each WIRES node.
+    connected: dict[str, tuple[str, list[tuple[str, str | None]]]] = field(default_factory=dict)
 
 
 async def measure_run(
@@ -535,5 +545,7 @@ async def measure_run(
     if not needs_measuring(items, pricing):
         return Measured()
     reasons: dict[str, str] = {}
-    sizes = await asyncio.to_thread(run_input_sizes, items, edges, pricing, definitions, nodes, reasons=reasons)
-    return Measured(sizes, reasons)
+    connected: dict[str, tuple[str, list[tuple[str, str | None]]]] = {}
+    sizes = await asyncio.to_thread(run_input_sizes, items, edges, pricing, definitions, nodes, reasons=reasons,
+                                    connected=connected)
+    return Measured(sizes, reasons, connected)

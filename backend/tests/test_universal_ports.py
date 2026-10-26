@@ -216,7 +216,7 @@ def test_an_agent_builds_a_vision_node_and_an_image_node_wired_onward(api):
     assert response.status_code == 200, response.text
     body = response.json()
     eye, paint = body["idMap"]["+eye"], body["idMap"]["+paint"]
-    assert body["summary"] == "added 5, wired 4"
+    assert body["summary"] == "added 5, connected 4"
     assert body["modelPorts"][eye] == {"model": "openai/gpt-4o", "inputs": ["messages", "images"], "outputs": ["text"]}
     assert body["modelPorts"][paint]["outputs"] == ["text", "image"]
     params = api.graph.nodes[paint]["params"]

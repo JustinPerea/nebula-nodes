@@ -31,7 +31,7 @@ Code's 10,000-token warning and its 50,000-character file cut:
 | `canvas` | The open project, `view.stale`, the selection, other agents' cursors, and each node's id, name, `definitionId`, state, `onScreen`, `inputsFrom` and up to 8 params (each cut to 60 characters, redacted as `look_at_canvas` redacts them) | The first nodes in full (selected, then on screen), the rest as `others: {id: name}`, `truncated: true`, and "look_at_canvas gives every node" |
 | `pins` | Open pins: id, text, anchor | The 10 newest, and `openCount` |
 | `proposals` | Open proposals, briefly | 5, and `count` |
-| `boards` | Every moodboard: id, name, `where` (`current`, `global` or the project's name), image count, analyzed or not, Direction cut to 80 characters. Boards in Recently deleted, or in a project there, are left out. `read` is how to read one (`moodboard_get(board="<id or exact name>")`; over the CLI `nebula moodboard show <id>`). `use` is how to put one on the canvas: the exact `edit_canvas` call for a Moodboard node (`nebula-moodboard`, the board in its `moodboard` param, sending from its `moodboard` port) wired to a Preview's `input` (or, over the CLI, the `nebula apply` flags) | 30 rows (this project, then Global, then the rest by last edit), `count`, and, when rows were cut, `more`: `moodboard_list(project_id=...)` lists a project's boards and Global's |
+| `boards` | Every moodboard: id, name, `where` (`current`, `global` or the project's name), image count, analyzed or not, Direction cut to 80 characters. Boards in Recently deleted, or in a project there, are left out. `read` is how to read one (`moodboard_get(board="<id or exact name>")`; over the CLI `nebula moodboard show <id>`). `use` is how to put one on the canvas: the exact `edit_canvas` call for a Moodboard node (`nebula-moodboard`, the board in its `moodboard` param, sending from its `moodboard` port) connected to a Preview's `input` (or, over the CLI, the `nebula apply` flags) | 30 rows (this project, then Global, then the rest by last edit), `count`, and, when rows were cut, `more`: `moodboard_list(project_id=...)` lists a project's boards and Global's |
 | `nodes` | The node types that run here, by category: `{id: price}` (`"free"`, `[low, high]` USD or `null`), `runsWith` for those that don't run on a key, and notes on modes, providers and Krea | Categories in a fixed order, cut at the budget, `rest: {category: count}`, and "find_nodes(category=…) gives the rest" (over the CLI "`nebula nodes --category <category>` lists the rest with prices"; `nebula context` also prints how many more can't run here and that `nebula nodes --all` lists them) |
 | `spend` | The per-run limit, the budget kind, its limit and what is used, Krea plan runs. Outside agents share one 24-hour budget, so `usedUsd` is what all of them used; an app with a token also gets its own line (`limitUsd`, `usedUsd`) beside the shared one (`sharedLimitUsd`, `sharedUsedUsd`) | |
 | `next` | `events.cursor` and the journal id for `wait_for_canvas_change`, then one line each: `describe`, `build`, `propose`, `point` and `pins`. Each is the exact call, its arguments named as the tool takes them (`describe_node(definition_id=...)`, `point_at(node_id=..., say=...)`); `build` is a whole `edit_canvas` plan (nodes `{ref, definitionId, params}`, edges `{source, sourceHandle, target, targetHandle}`, `arrange`), and `propose` says `propose_change` takes the same nodes and edges plus `params` and `run`. Over the CLI they are `nebula` commands with their real flags, so a first build needs neither `nebula apply --help` nor `nebula info nebula-moodboard` | |
@@ -48,13 +48,13 @@ moodboard_get(board=...).", a name it doesn't take is refused even beside
 the right ones ("run_nodes takes node_id, wait_seconds, ..., not node_ids
 (did you mean node_id?)."), and a wrong type names the type ("point_at: x
 must be a number, not "left". It takes ..."). Before, FastMCP sent
-pydantic's report and ignored names a tool doesn't take. A node or wire in
+pydantic's report and ignored names a tool doesn't take. A node or connection in
 another shape gets the same kind of line from `edit_canvas`,
 `propose_change` and `nebula apply`/`propose --file`: a node with `type`
 (or `kind`, `definition`, ...) is told the type goes in `definitionId`, and
-a wire with `from`/`to` (or `sourcePort`/`targetPort`) is told it is
+a connection with `from`/`to` (or `sourcePort`/`targetPort`) is told it is
 `{source, sourceHandle, target, targetHandle}`, with its own ends rewritten
-when they read as node and port (`"+mb.moodboard"`). A wire with no port
+when they read as node and port (`"+mb.moodboard"`). A connection with no port
 (`{source, target}`, or `--wire +mb +pv:input`) is told the ports that end
 has ("edges[0].sourceHandle must be a port id. Valid outputPorts on +mb
 (nebula-moodboard): ['moodboard', ...]"), as a wrong port name is. These
@@ -126,7 +126,7 @@ The server exposes these tools for building and running (see
   it as a sentence in its message. `_provider` changes go through
   `propose_change`. See
   [Provider routes](PROVIDER-ROUTES.md#hidden-settings-paramvisiblewhen).
-  A node with a Moodboard input has `moodboardAdapter`: what a wired Nebula
+  A node with a Moodboard input has `moodboardAdapter`: what a connected Nebula
   moodboard does there, from the adapter table (contract 07 section 1.16) at
   the node's defaults on the route a run takes here (`route`, when it has
   more than one). `line` is the card's Moodboard line ("Board images: on ·
@@ -141,7 +141,7 @@ The server exposes these tools for building and running (see
   with the fields they change (and `route`, when the value moves the run to
   another route). `nebula info` prints the same as a `MOODBOARD:` line and
   one line of detail.
-- `edit_canvas`: adds nodes, wires, param changes, renames, moves, removals
+- `edit_canvas`: adds nodes, connections, param changes, renames, moves, removals
   (`remove`) and unwires (`unwire`) in one call, all or nothing: everything
   `nebula apply` does, with no limit on how much one call adds. `arrange:
   true` has the canvas lay out the new nodes by their real size. `steps`
@@ -149,7 +149,7 @@ The server exposes these tools for building and running (see
   stop-and-report of `nebula apply`'s steps. Its result has `undo`, the token
   that takes the edit back (see
   [Undoing your own edit](#undoing-your-own-edit)). A proposal
-  (`propose_change`) takes the same nodes, wires and params, but not moves,
+  (`propose_change`) takes the same nodes, connections and params, but not moves,
   removals, unwires, `arrange`, `steps` or renames of nodes already on the
   canvas; it can name its own new nodes (`rename`).
 - `upload_file`: adds a local image, video, audio file or document to
@@ -194,9 +194,9 @@ The server exposes these tools for building and running (see
   path follows `upload_file`'s rules (an in-app chat's turn reads only its
   own workspace, protected files are refused, the read follows no links),
   files up to 528 MB.
-- `remove_from_canvas`: deletes nodes or single wires, all or nothing. Its
+- `remove_from_canvas`: deletes nodes or single connections, all or nothing. Its
   result has `undo` too, which puts the nodes back with their params,
-  outputs, names and wires, the person's pins on them, and the proposals
+  outputs, names and connections, the person's pins on them, and the proposals
   the delete closed when they still fit. `removals` lists, per node it
   deleted, the pins it detached and the proposals it closed (each record
   also names its `projectId` and the node's `definitionId`, and `replaces`
@@ -277,9 +277,9 @@ The server exposes these tools for building and running (see
   `GET /api/projects/{id}?view=agent` (`services/project_view.py`). Nodes come
   exactly as `look_at_canvas` shows a live one
   (`services/agent_presence.redacted_node`: redacted params, which outputs
-  exist and never their values, wires in, and a universal node's `ports`
+  exist and never their values, connections in, and a universal node's `ports`
   from its model with `_model_ports` left out of params), plus `state`,
-  `position` and the last `error`; then the wires, `cover`, `open`, and `runHistory`, the
+  `position` and the last `error`; then the connections, `cover`, `open`, and `runHistory`, the
   newest 20 records of the canvas's Run History (`runHistoryCount` counts
   them all), each with its status, timing, `nodeIds` and which outputs it
   made, never its recipe's params or output values. Without `view` the route
@@ -298,7 +298,7 @@ The server exposes these tools for building and running (see
   0.1 MiB and up, at most ten, largest first: a node's `nodeId`, `name`, `definitionId` and the `part`
   that takes most of it, "Text" for its params, "Stored outputs", "Embedded
   files" for data: URLs in params, "Node data"; or the project's own "Run
-  history", "Wires", "Create draft", "Project settings"), `smaller` (`count`
+  history", "Connections", "Create draft", "Project settings"), `smaller` (`count`
   and `bytes` of the rest) and a `note`. Each row's `size` (and `smaller`'s)
   is to the nearest tenth of a MB, halves up, as the person's panel shows it;
   the project's own `size` rounds up while over the limit. Agents get no trim tool: they trim
@@ -392,7 +392,7 @@ And these canvas tools:
 - `look_at_canvas`: the canvas as data, so an agent doesn't need a
   screenshot. It returns the browser's viewport and visible area, every node
   with its run state, position, size and whether it is on screen, redacted
-  parameters, output availability, wires, the selection, and agent cursors.
+  parameters, output availability, connections, the selection, and agent cursors.
   An input holding an uploaded file has `fileName`, the name it was uploaded
   with (`nebula look` prints it as `file:`).
   A node whose last run failed has `state: "error"` with the message in
@@ -443,7 +443,7 @@ And these canvas tools:
 - `resolve_pin`: answers one of the person's pinned notes (from
   `look_at_canvas` `pins`) with a one-line reply, which marks it resolved and
   moves the agent's cursor to it. See [Pins](#pins).
-- `propose_change`: proposes new nodes, wires, param changes and runs as
+- `propose_change`: proposes new nodes, connections, param changes and runs as
   ghosts on the canvas. Nothing changes until the person clicks Accept. Use
   it before paid runs or reworking their graph. When a node the run needs
   can't run here (no key, no Krea sign-in, a route that can't take it), the
@@ -510,21 +510,22 @@ request:
 | `X-Nebula-Agent: <name>` | that name | Self-reported; set `NEBULA_AGENT_NAME` for the CLI |
 | none of these (the browser itself) | no cursor | Your own clicks never spawn one |
 
-Creating, wiring, setting, running, removing and unwiring nodes move the
-cursor automatically (a wire shows as a drag from port to port). To point
+Creating, connecting, setting, running, removing and disconnecting nodes move the
+cursor automatically (a connection shows as a drag from port to port). To point
 explicitly, with a short line about your own action:
 
 ```bash
 NEBULA_AGENT_NAME="Claude Code" nebula point n2 --say "Checking this prompt"
-nebula point n2.prompt --from n1.text --say "Wiring the prompt in"
+nebula point n2.prompt --from n1.text --say "Connecting the prompt"
 nebula look          # the canvas as text; --json for the full snapshot
 ```
 
 Every one of these actions is also listed in the canvas's **Agent log**
 (bottom right, shown by default with or without the chat; hide it from its
 own eye-off button or Settings > Preferences > "Agent log"): the agent's
-name in its cursor colour, the cursor's words ("Added Moodboard", "Running
-Krea 2", "Accepted"), and the time. Moodboard writes are listed there too
+name in its cursor colour, the cursor's words ("Added “Moodboard”", "Running
+“Krea 2”", "Connecting “Prompt” to “Krea 2”", "Accepted"; a node by its name in
+curly quotes, else its type's name), and the time. Moodboard writes are listed there too
 (your edit batch's `say`, else the journal's words: "Set aside #1 on board
 Dusk"; "Analyzed board Dusk"), and so is a run of the
 whole canvas ("Running 4 nodes"); neither has one place on the canvas, so
@@ -570,7 +571,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `node.params` | a param changed (only keys whose value changed) | `keys`, redacted `values` |
 | `node.moved` | a drag ended, auto-layout or paste moved nodes 8 px or more | `nodeIds`, `count` |
 | `node.renamed` | a node got a new name on the canvas (or went back to its model name) | `from`, `to` |
-| `edge.added` / `edge.removed` | wired / unwired | source, target and handles |
+| `edge.added` / `edge.removed` | connected / disconnected | source, target and handles |
 | `selection.changed` | the selected set changed | `nodeIds`, `count` |
 | `run.started` / `run.finished` / `run.failed` | per node, attributed to whoever started the run | `runId`, `error` |
 | `run.cancelled` | a run stopped, attributed to whoever pressed Stop or called `cancel_run` (the starter when another backend took the Stop) | `runId`, `startedBy` (`kind`, `name`) |
@@ -584,7 +585,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `pin.detached` | a pinned node was deleted, or an import/clear removed it | `pinId`, `anchor` (where the node was) |
 | `pin.reattached` | the undo of that delete (the person's Cmd+Z or Undo, or an agent's `undo_canvas_edit`) put the node back, and the note is on it again as before | `pinId`, `text`, `anchor` (`{nodeId}`) |
 | `proposal.created` | an agent proposed a change | `proposalId`, `note`, `adds`, `wires`, `sets`, `runs`, `paidRuns`; for a [proposal outside the canvas](#proposals-outside-the-canvas) `kind`, `targetId`, `targetName`, `change` instead of the graph counts (the decisions after it carry `kind` and `targetId` too) |
-| `proposal.accepted` | the person accepted; the added nodes and wires follow as `node.added` / `edge.added` by the person (for a project cover, `project.cover` by the person) | `proposalId`, `idMap`, `runNodeIds`; outside the canvas `kind`, `targetId`, `targetName`, `applied` (what was set) |
+| `proposal.accepted` | the person accepted; the added nodes and connections follow as `node.added` / `edge.added` by the person (for a project cover, `project.cover` by the person) | `proposalId`, `idMap`, `runNodeIds`; outside the canvas `kind`, `targetId`, `targetName`, `applied` (what was set) |
 | `proposal.rejected` | the person rejected | `proposalId`, `reason` |
 | `proposal.withdrawn` / `proposal.expired` / `proposal.invalidated` | the agent took it back, 15 minutes passed, or the canvas changed under it | `proposalId`, `reason` |
 | `proposal.reopened` | a proposal a node delete invalidated is open again: the undo of that delete put the node back and the proposal still passes Accept's checks (same id, same expiry; it's in the open list and the person's bar again) | `proposalId`, `agentId`, `note`; outside the canvas (a cover whose image went with the node) `kind`, `targetId`, `targetName` |
@@ -593,7 +594,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `project.created` / `project.deleted` / `project.restored` | anyone made a project (new, or a stale tab's recovered copy), moved one to Recently deleted, or brought one back | `projectId`, `name`; `wasOpen` on a delete; `createdBy` when an agent made it |
 | `project.renamed` | a project's name changed (saving the same name again isn't journaled) | `projectId`, `from`, `to` |
 | `provider.hold` | a paid start was held (a World Labs recovery checkpoint, or a start Nebula couldn't confirm) or cleared, attributed to whoever started the run or cleared it | `hold` (`recovery` or `startAmbiguity`), `change` (`held` or `cleared`), `runId`, `kind`, `durable` |
-| `edit.undone` / `edit.redone` | a whole edit was undone (an agent's `undo_canvas_edit`, or the person's Cmd+Z of a step the canvas knew the edit of) or redone; after the node and wire events it made | `editId` (the edit reverted), `of` (whose), `editKind`, `events` (that edit's event cursors), `undid` (for an undo of an undo), `counts`, `skipped` |
+| `edit.undone` / `edit.redone` | a whole edit was undone (an agent's `undo_canvas_edit`, or the person's Cmd+Z of a step the canvas knew the edit of) or redone; after the node and connection events it made | `editId` (the edit reverted), `of` (whose), `editKind`, `events` (that edit's event cursors), `undid` (for an undo of an undo), `counts`, `skipped` |
 | `note.posted` | an agent posted an update to the person (Updates, `post_note`) | `surface` (canvas or board), `noteId`, `about`, `refs` (up to 12), `text`; `boardId`, `boardName` on a board |
 | `style.created` / `style.updated` / `style.deleted` / `style.restored` / `style.purged` | a Style was saved, changed, moved to Recently deleted, restored from it, or deleted for good, by the person (Create, the Assets panel) or an agent (`style_*`, `nebula style`) | `styleId`, `styleName`, `scope` (`global` or the project id); `fields` (what an update changed: `name`, `category`, `prompt`, `params`, `modelId`, `refImages`, `thumbnail`); never a prompt or a setting's value |
 
@@ -825,7 +826,7 @@ that was wrong, and is the one change you can see. Its other categories
 (`rate_limit`, `timeout`, `quota`, ...) stay.
 
 Round 3e gave the pre-run check the same split. A run the check refuses
-(a missing key, an unconnected required input, a Batch over its cap, a wire
+(a missing key, an unconnected required input, a Batch over its cap, a connection
 that no longer fits) still answers agents exactly as before: `run_nodes`,
 `/api/graph/run` and `nebula run` list each node's `message` in `errors`,
 word for word ("Missing API key: OPENAI_API_KEY", "Required input port
@@ -984,9 +985,9 @@ Rules:
 
 ### Proposals
 
-An agent can propose a change instead of making it: new nodes, wires, param
+An agent can propose a change instead of making it: new nodes, connections, param
 changes on existing nodes, and which nodes to run. The person sees ghost
-nodes and dashed wires in the agent's colour and a bar at the bottom of the
+nodes and dashed connections in the agent's colour and a bar at the bottom of the
 canvas with **Show**, **Reject** and **Accept** (or **Accept & run (N
 paid)**). They can drag ghosts before accepting; the nodes land where they
 dropped them. Accept adds everything in one step (one undo) and starts the
@@ -997,7 +998,7 @@ anything that costs money or reworks the person's graph.
 corner (Justin's Q112 a, 2026-10-21), so the person hears of it on every
 screen, not only on the canvas: "Claude Code proposes 3 changes on the
 canvas" ("proposes 1 change", or "proposes a run on the canvas" when it
-only runs nodes). Each new node, each wire and each existing node whose
+only runs nodes). Each new node, each connection and each existing node whose
 params change counts as one change; runs and names don't. Nebula writes it
 from that template, never from the agent's note (the note is the bar's), and
 attributes it to the agent (`source: "nebula"`, `about: "proposal"`,
@@ -1122,11 +1123,11 @@ is the one read when each proposal was made.
 Rules:
 
 - Proposals are checked like direct edits: unknown node types, ports, params
-  or wires, cycles and missing node ids are refused when proposed (400 or
+  or connections, cycles and missing node ids are refused when proposed (400 or
   422), so the person never sees
   something that can't be added. Cinema scene params and World Labs
   durable-recovery nodes can't be proposed.
-- Limits: 12 new nodes, 24 wires, 12 param changes and 6 run targets per
+- Limits: 12 new nodes, 24 connections, 12 param changes and 6 run targets per
   proposal (the person reviews each item; direct edits have no such limit);
   3 open per agent and 12 in total (429 beyond); a 160-character
   note. Proposals expire after 15 minutes.
@@ -1139,10 +1140,10 @@ Rules:
   runs through the same path as its own Run button.
 - Accept approves values, not just node ids (`backend/services/run_approvals.py`).
   Accept refuses (409, invalidated) if anything the listed runs would start
-  changed since the proposal was made: a node's settings, its wires in, or a
+  changed since the proposal was made: a node's settings, its connections in, or a
   node gone. After Accept, every node those runs can start is locked against
   edits by anyone but the person until the canvas starts the run: set params,
-  `apply`, wire, unwire and delete on them return 409 ("in a run the person
+  `apply`, connect, disconnect and delete on them return 409 ("in a run the person
   approved ... hasn't started yet"). The canvas sends the approval id from the
   accept response with its run (also when the run waits for another to
   finish), and the backend starts it only if the live graph and the request
@@ -1622,7 +1623,7 @@ The person decides what agents may spend, in **Settings > Preferences**:
 
 Any limit also makes an agent ask before running a node with no list price,
 since Nebula can't check it. That includes a Video QC node in vision-llm mode (it calls a vision model,
-which has no list price; Jev mode is priced per request) and a node whose priced setting arrives by wire (Krea Kling 3.0's
+which has no list price; Jev mode is priced per request) and a node whose priced setting arrives by connection (Krea Kling 3.0's
 `multi_prompt` port), or is set to something the price list doesn't cover
 (multi-shot Kling). Free nodes always pass. The person's own runs from the
 canvas are never limited.
@@ -1649,7 +1650,7 @@ writes there writes a new name. `nebula save` won't write over a file that
 isn't a saved graph. A local file anywhere else, a chat's workspace
 included, is refused as outside: add it first with `upload_file` (`nebula
 upload <file>`), which copies it into the folder and puts an Image Input or
-Video Input holding the copy on the canvas, then wire that in. (`nebula
+Video Input holding the copy on the canvas, then connect that to the node. (`nebula
 quick` copies a local image into Nebula first, so `--input image=<file>`
 works; a clip passed to it stays outside.) Every run route makes that same
 copy of an outside image, so an image still outside is one it refused: over
@@ -1676,8 +1677,8 @@ refused, and the refusal says which case it is and what to do (the same
 words on MCP, the CLI and HTTP):
 
 - The input is made by another node in the same run, that node hasn't run,
-  or Nebula is still writing it: wire an Image Input (or Video Input)
-  holding the file into the node and run that (`upload_file` / `nebula
+  or Nebula is still writing it: connect an Image Input (or Video Input)
+  holding the file to the node and run that (`upload_file` / `nebula
   upload` makes one), run an image through
   `nebula quick <node type> --input image=<file>`, or propose it (a
   proposal made after the upstream node has run is priced from its output).
@@ -1690,7 +1691,7 @@ words on MCP, the CLI and HTTP):
   add the local copy with `upload_file` / `nebula upload`, or propose it.
 - The file can't be measured (missing, not an image or clip Nebula opens,
   more than one frame, size or video stream, or outside the folders Nebula
-  may read), or the port has no wire or more than one: fix the input, or
+  may read), or the port has nothing connected or more than one input: fix the input, or
   propose it.
 
 How it works (`backend/services/agent_spend.py`):
@@ -2145,10 +2146,10 @@ there is no timer. Projects keep their 30-day expiry. Files live in
 proposal shape (`nodes` with `+refs`, `edges`, `params`) plus `rename`,
 `move`, `remove` and `unwire`, stages all of it on a copy of the graph in that
 order (unwire, remove, add and change, rename, move) with the validators the
-single-edit routes use, and commits it at once. A bad wire or a missing node
+single-edit routes use, and commits it at once. A bad connection or a missing node
 leaves the canvas exactly as it was. There is no limit on how much one edit
 does: the only bound is the most a project can save
-(10,000 nodes and 50,000 wires, the same limits as import). An edit that
+(10,000 nodes and 50,000 connections, the same limits as import). An edit that
 would pass them is refused with 413 and changes nothing. Proposals keep their
 limits because the person reviews them item by item. Nodes with unresolved World Labs paid
 state can't be removed. Krea nodes may name `_kreaAuth` only to keep the mode
@@ -2186,10 +2187,10 @@ model's file inputs are its ports. One backend module has the rules
   set, the model doesn't exist, the provider is down) the node keeps its
   definition's ports (OpenRouter: `messages` in, `text` out; Nous Portal adds
   `images`; Replicate none), the reply says why in `modelPortNotes`, and a
-  wire to any other port of it is refused with that reason, for example
+  connection to any other port of it is refused with that reason, for example
   "Nebula can't read OpenRouter's model list because OPENROUTER_API_KEY isn't
   set, and only the person can add it (Settings in Nebula)".
-- A model change that leaves wires on ports the node no longer has is
+- A model change that leaves connections on ports the node no longer has is
   refused and names them; `unwire` them in the same edit. That covers a new
   model without those ports, and clearing the model or naming one Nebula
   can't read, which leaves the definition's ports. (The person's picker drops
@@ -2209,19 +2210,19 @@ model's file inputs are its ports. One backend module has the rules
   file). A run fills that declared port; a returned file whose type
   contradicts a confirmed port fails the run naming both. On an unconfirmed
   port the file's own type wins: it goes out under `video`/`audio`/...,
-  shown and saved, but a wire on the guessed port gets nothing. A node
+  shown and saved, but a connection on the guessed port gets nothing. A node
   configured on 2026-10-20 (no `rev` in its `_model_ports`) shows its file
-  output as unconfirmed with a note: set its `model_id` again to re-read. Other inputs are params of the same name; a wire to one is
+  output as unconfirmed with a note: set its `model_id` again to re-read. Other inputs are params of the same name; a connection to one is
   refused ("... are params of the same name: set them with params instead
-  of a wire").
+  of a connection").
 - `describe_node` on these nodes has `modelPorts`, a sentence with the rules;
   `look_at_canvas` lists a configured node's `ports` ({inputs, outputs}).
   Before an edit, `model_schema` (and `model_catalog`'s rows, as ids) give a
   model's ports from the same function.
 - `POST /api/universal/ports {definitionId, model, params?}` returns a
   model's ports without a node (and, for Replicate, its params and version).
-- The canvas export, the wire checks (`port_contracts.node_ports`) and the
-  run check read `_model_ports`, so the canvas draws the ports and wires an
+- The canvas export, the connection checks (`port_contracts.node_ports`) and the
+  run check read `_model_ports`, so the canvas draws the ports and connections an
   agent made without a reload. A node saved before 2026-10-20 has no
   `_model_ports` and keeps exactly the ports it had (its definition's) until
   its model is set again. A Replicate node configured on 2026-10-20, before
@@ -2230,7 +2231,7 @@ model's file inputs are its ports. One backend module has the rules
   (an edit or `PUT /api/graph/node/{id}`) reads the model again and types it.
 
 The canvas's pickers call `POST /api/graph/node/{id}/model {model}`, which
-configures the node with the same function, drops wires the model has no
+configures the node with the same function, drops connections the model has no
 port for, and returns the params, ports, Inspector controls
 (`dynamicParams`, Replicate) and `providerMeta`. It is the canvas's (403 for
 an agent).
@@ -2241,30 +2242,30 @@ Every apply that changes something replies with `undo: {token, editId,
 expiresInSeconds, summary}`. `undo_canvas_edit(token)` (`nebula undo
 TOKEN`, `POST /api/graph/apply/undo {token}`) takes the edit back:
 
-- A node it added is removed with its wires, unless it changed since (its
-  params or name), or the person wired it to something else since.
+- A node it added is removed with its connections, unless it changed since (its
+  params or name), or the person connected it to something else since.
 - A param, name or position it changed goes back to the earlier value,
   each param on its own: if the person changed the prompt since, the prompt
   stays and the seed the agent changed goes back.
 - A node it removed comes back under its own id with its params (an
   uploaded image's preview, a painted mask and a Paper source included),
-  outputs, name, position and wires. A wire whose other end is gone, or
-  whose input has taken another wire since, stays out. The person's pins
+  outputs, name, position and connections. A connection whose other end is gone, or
+  whose input has taken another connection since, stays out. The person's pins
   that were on it go back on it (`reattached`; one the person deleted
   since stays gone, in `pinsLeft`), and the proposals the delete closed
   reopen when they still pass Accept's checks (`reopened`); one that
   expired, no longer fits, or that Nebula no longer has after a restart is
   in `notReopened` with the reason.
-- A wire it added is unwired; one it took away is wired back.
+- A connection it added is disconnected; one it took away is connected back.
 
 A run counts as a change. A node the edit touched that someone ran after
 the edit (the person, another agent, or a client that didn't name itself)
 stays whole: it isn't removed, its params, name and position aren't put
-back, and no wire into it is taken away or put back, because those inputs
+back, and no connection into it is taken away or put back, because those inputs
 made its result. It is one `skipped` item with reason `ran since`,
 `ranBy` (`[{kind, name}]`), `left` (the parts it kept: `node`, `params`,
 `name`, `position`, `wires in`) and a message such as "n3 ran since (run
-by the person), so it stays". Wires out of it follow the rules above. Only
+by the person), so it stays". Connections out of it follow the rules above. Only
 runs the undoing agent started itself don't count, so an agent can still
 undo its own experiments. A run counts if it was asked for after the edit
 landed, including one still going when the undo comes (all the nodes it
@@ -2301,8 +2302,8 @@ to its image), so an edit can leave the layout to the canvas. Add `arrange`
 to the edit:
 
 - `"arrange": true` lays the new nodes out left to right, following their
-  wires: each step of the wiring is a column, 120 px apart, and nodes in the
-  same column stack 40 px apart.
+  connections: each step of connecting the nodes is a column, 120 px apart, and
+  nodes in the same column stack 40 px apart.
 - `"arrange": {"direction": "down", "gap": 80}` flows top to bottom instead:
   each step is a row, and nodes in the same row sit side by side.
   `direction` is `right` (default) or `down`; `gap` is 0 to 2000 px.
@@ -2348,19 +2349,19 @@ drops open requests; the nodes keep the positions they were placed at.
 #### The person can undo any agent edit
 
 Every graph edit an agent makes (`edit_canvas`, `remove_from_canvas`,
-`nebula apply`, `set`, `create`, `delete`, `wire`, `disconnect`, `move`,
+`nebula apply`, `set`, `create`, `delete`, `connect`, `disconnect`, `move`,
 `nebula graph load`, the layout route) is one undo step on each open canvas (a canvas
 finishing an agent's `arrange` joins that agent's step instead; see above). The canvas shows "Claude changed the
 canvas" with an Undo button, and Cmd-Z works too. Undo puts back exactly
 what that edit changed: deleted nodes come back with their params, outputs,
-name and wires, and new nodes go away with their wires. Redo (Cmd-Shift-Z)
+name and connections, and new nodes go away with their connections. Redo (Cmd-Shift-Z)
 applies the edit again. A run's results are never undo steps, so undoing a
 param change keeps the outputs a run made since.
 
-An open canvas draws exactly the backend's wires between backend nodes: a
-wire an agent took away (an unwire, `disconnect`, an undo, a node re-typed
+An open canvas draws exactly the backend's connections between backend nodes: a
+connection an agent took away (an unwire, `disconnect`, an undo, a node re-typed
 to other ports) leaves it at once, with no reload, and its next save doesn't
-put it back. Only the person's own wire still on its way (drawn, not yet
+put it back. Only the person's own connection still on its way (drawn, not yet
 answered) or one they just deleted stays as they have it until the backend
 answers.
 
@@ -2444,7 +2445,7 @@ replaced since"). Pins never show the removal ids or anchors undo keeps
 (`detachedBy` and the rest stay in Nebula's own copy); agents undo their own
 edits by token and never need them. Only the person's restore carries
 records: an edit's graphSync shows every socket its `edit.removals`, so a
-restore from anyone else that names `removals` restores its nodes and wires
+restore from anyone else that names `removals` restores its nodes and connections
 but ignores the records (its answer's `reattached`, `pinsLeft`, `reopened`
 and `notReopened` stay empty). Your `undo_canvas_edit` puts back what your
 deletes removed from the records the backend kept for that edit.
@@ -2452,7 +2453,7 @@ deletes removed from the records the backend kept for that edit.
 A run from `run_nodes` is a CLI run (`POST /api/graph/run` with `wait`), so
 it gets the same spending check and the same long-run handling. It also gets
 the canvas Run button's pre-call check (`validate_graph`: missing keys,
-unwired required inputs, a cycle), before the spending check. A node that
+required inputs with nothing connected, a cycle), before the spending check. A node that
 fails it refuses the whole run: nothing is called or spent, the reply is
 `{status: "failed", error: "Nothing ran, so nothing was spent. …", errors:
 {nodeId: message}, results: {}}`, and the canvas marks the node exactly as a
@@ -2530,13 +2531,13 @@ so the three always agree:
    `ports: {inputs: [messages, images], outputs: [text, image]}` (each port
    with its `dataType`).
 2. One `edit_canvas` call creates the node with `params: {model: ...}` (or
-   `model_id` on Replicate) and wires those ports: `images` in, `image` out,
+   `model_id` on Replicate) and connects those ports: `images` in, `image` out,
    or a Replicate model's file inputs by name. The reply's `modelPorts` lists
    the same ids, `look_at_canvas` shows them as the node's `ports`, and the
    canvas draws them without a reload.
 
 - **OpenRouter / Nous Portal:** `messages` always; `images` (Image, several
-  wires) for a model that takes images; `text` and/or `image` out for what
+  connections) for a model that takes images; `text` and/or `image` out for what
   it makes, as the model list says.
 - **Replicate:** a port per file input (`x-uploadable`, or a `uri` string),
   named as the schema names it; one output, for a file URL or a list of them
@@ -2545,9 +2546,9 @@ so the three always agree:
   `mesh`, else `text`. With nothing to tell, it is `image` with
   `typeUnconfirmed: true` and a `note`. The run fills that port, so
   `model_schema("replicate", "<a video model>")` gives `outputs: [video]`
-  and one `edit_canvas` can set the model and wire `video` into a Video
+  and one `edit_canvas` can set the model and connect `video` to a Video
   input. `model_schema`'s `params` are the other inputs: set them as params
-  of the same name; a wire to one is refused.
+  of the same name; a connection to one is refused.
 - **Quiver** nodes have fixed ports (`describe_node`); their catalog rows
   carry no `ports`.
 
@@ -2619,7 +2620,7 @@ nebula apply --note "Two takes" \
   --add +wide=nano-banana --add +tight=nano-banana \
   --wire +p:text +wide:prompt --wire +p:text +tight:prompt \
   --rename +wide=Wide --move n3=400,120 --remove n7 --unwire n1:text n2:prompt
-# Applied: added 3, wired 2, renamed 1, moved 1, removed 1, unwired 1.
+# Applied: added 3, connected 2, renamed 1, moved 1, removed 1, disconnected 1.
 #   +p → n8  Text Input
 #   +wide → n9  Wide
 #   +tight → n10  Nano Banana
@@ -2639,7 +2640,7 @@ including `idMap`. There's no limit on how much one plan adds. `--arrange`
 (or `"arrange"` in the file) has the canvas lay out the new nodes by their
 real size; see Arrange above.
 
-A plan file can also hold steps, for a build where later parts wire into
+A plan file can also hold steps, for a build where later parts connect to
 nodes earlier parts made:
 
 ```json
@@ -2673,7 +2674,7 @@ doesn't take steps. The checks and the stop-and-report rule are
 Other graph commands:
 
 ```bash
-nebula delete n3 n4                 # nodes and their wires
+nebula delete n3 n4                 # nodes and their connections
 nebula disconnect n1:text n2:prompt
 nebula rename n2 "Hero shot"        # an empty name restores the model's
 nebula move n2=400,120 n3=400,320   # canvas coordinates
@@ -2681,7 +2682,7 @@ nebula projects                     # saved projects; * is open (--json: list_pr
 nebula project open <id>            # switch the canvas (not while a run is going)
 nebula project new "Logo ideas"     # start a new, empty project and open it
 nebula project rename current "Logo ideas, round 2"   # prints the command that renames it back
-nebula project show <id>            # a saved project unopened: nodes, wires, cover, runs (get_project)
+nebula project show <id>            # a saved project unopened: nodes, connections, cover, runs (get_project)
 nebula project size                 # its size against the 16 MB save limit, largest parts first (project_size)
 nebula load "Big campaign.nebula.zip"  # a .nebula, .json or bundle, as Load graph opens it (load_graph_file)
 nebula clear                        # refused when the canvas has nodes
@@ -2722,7 +2723,7 @@ for every caller: `DELETE /api/graph` on a project with nodes returns 409
 unless it has `?force=true` (the canvas's Clear button and chat `/clear`
 send it after the person confirms). It's a check of intent, not of who is
 asking. With the canvas open, a clear is one undo step: Undo (or Cmd-Z)
-brings back every node, wire, name and output. With no canvas open there is
+brings back every node, connection, name and output. With no canvas open there is
 nothing to undo it from, so prefer `nebula project new`.
 
 ### Styles from the CLI and MCP
@@ -3074,11 +3075,11 @@ nebula moodboard delete <board>
     A reference that isn't a file on this computer is skipped and listed.
   - It needs `GOOGLE_API_KEY` (400 without it, and nothing is charged).
 
-- Strength 0 turns the board off for every node it's wired into: no brief,
+- Strength 0 turns the board off for every node it's connected to: no brief,
   Avoid, negatives or images, and each such node's run notes "Board
-  strength is 0: board not sent". Any other board wired into the same node
+  strength is 0: board not sent". Any other board connected to the same node
   still goes. The Moodboard node's own outputs (Brief, Negative, Palette,
-  Images) are unchanged, since wiring one is the person's choice. `show`
+  Images) are unchanged, since connecting one is the person's choice. `show`
   says the brief is not sent while strength is 0. Images off with text on
   is the node's "Send board images" switch, not strength 0; that switch
   isn't in this version yet, and until it is, GPT Image, Nano Banana, FLUX

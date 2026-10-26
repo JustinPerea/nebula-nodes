@@ -42,7 +42,7 @@ MIB = 1024 * 1024
 TOP_ROWS = 10
 PARTS = ("text", "outputs", "embedded", "node")
 PART_LABELS = {"text": "Text", "outputs": "Stored outputs", "embedded": "Embedded files", "node": "Node data"}
-ROW_NAMES = {"runHistory": "Run history", "wires": "Wires", "createDraft": "Create draft", "project": "Project settings"}
+ROW_NAMES = {"runHistory": "Run history", "wires": "Connections", "createDraft": "Create draft", "project": "Project settings"}
 _STORED_OUTPUTS = ("outputs", "batchOutputs", "batchVariants")
 
 

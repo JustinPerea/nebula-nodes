@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from services.file_access import ProtectedPathError, require_allowed_path
+from services.node_names import quoted
 
 from ..client import NebulaClient
 from ..formatter import format_graph
@@ -141,8 +142,11 @@ def _port_ref(value: str, role: str) -> tuple[str, str]:
 
 def run_delete(client: NebulaClient, node_refs: list[str]) -> None:
     for node_ref in node_refs:
-        client.delete_node(node_ref)
-        print(f"Deleted {node_ref} and its wires")
+        result = client.delete_node(node_ref)
+        # The id stays beside the name, so several deletes, or two nodes with
+        # one name, still map back to ids.
+        node_id = str(result.get("id") or node_ref)
+        print(f"Deleted {quoted(str(result.get('label') or node_id))} ({node_id}) and its connections")
 
 
 def run_disconnect(client: NebulaClient, src: str, dst: str) -> None:
@@ -150,7 +154,7 @@ def run_disconnect(client: NebulaClient, src: str, dst: str) -> None:
     dst_node, dst_port = _port_ref(dst, "destination")
     result = client.disconnect(src_node, src_port, dst_node, dst_port)
     if result.get("status") != "deleted":
-        print(f"error: no wire {src} → {dst} (`nebula graph` lists them)", file=sys.stderr)
+        print(f"error: no connection {src} → {dst} (`nebula graph` lists them)", file=sys.stderr)
         sys.exit(1)
     print(f"Disconnected {src} → {dst}")
 

@@ -48,4 +48,4 @@ def run(client: NebulaClient, source: str, at: str | None = None) -> None:
     if node:
         # Each input node's one output port (node_definitions.json).
         port = _OUTPUT_PORTS.get(result["kind"], "image")
-        print(f"Wire it in: nebula connect {node}:{port} <node>:<port>")
+        print(f"Connect it: nebula connect {node}:{port} <node>:<port>")

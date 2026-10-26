@@ -224,12 +224,12 @@ export function notReadyWarning(row: ProposalNotReady | undefined): string | nul
   return row.person?.trim() || row.missing;
 }
 
-/** "Adds 1 node · 1 wire · changes n4 · runs up to 1 paid model (fal)". */
+/** "Adds 1 node · 1 connection · changes n4 · runs up to 1 paid model (fal)". */
 export function proposalSummary(view: ProposalView): string {
   const parts: string[] = [];
   const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
   if (view.nodes.length) parts.push(`Adds ${plural(view.nodes.length, 'node')}`);
-  if (view.edges.length) parts.push(`${parts.length ? '' : 'Adds '}${plural(view.edges.length, 'wire')}`);
+  if (view.edges.length) parts.push(`${parts.length ? '' : 'Adds '}${plural(view.edges.length, 'connection')}`);
   if (view.params.length) parts.push(`changes ${view.params.map((change) => change.nodeId).join(', ')}`);
   if (view.run.length) {
     const { paidRuns, freeRuns, upTo, providers } = view.cost;

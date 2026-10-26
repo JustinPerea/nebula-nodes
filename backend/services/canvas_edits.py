@@ -56,9 +56,10 @@ INTERNAL_OK = frozenset(BILLING_PARAMS)
 class ArrangeRequest:
     """Lay out this edit's new nodes once a canvas has drawn them.
 
-    `direction` is where the flow goes: "right" puts each step of the wiring
-    in a new column, "down" in a new row. `gap` is the space in canvas pixels
-    between those columns (or rows); nodes in the same column sit 40 apart."""
+    `direction` is where the flow goes: "right" puts each step of connecting
+    the nodes in a new column, "down" in a new row. `gap` is the space in
+    canvas pixels between those columns (or rows); nodes in the same column
+    sit 40 apart."""
     direction: str = "right"
     gap: float = DEFAULT_ARRANGE_GAP
 
@@ -179,7 +180,7 @@ def parse_edit(body: Any, *, ports: PortLookup | None = None) -> EditSpec:
 
     unwire_raw = body.get("unwire") or []
     if not isinstance(unwire_raw, list):
-        raise ProposalError(422, "unwire must be a list of wires")
+        raise ProposalError(422, "unwire must be a list of connections")
     unwire: list[ProposedEdge] = []
     for index, raw in enumerate(unwire_raw):
         if not isinstance(raw, dict):
@@ -199,7 +200,7 @@ def parse_edit(body: Any, *, ports: PortLookup | None = None) -> EditSpec:
     gone = set(remove)
     clash = sorted(gone & (additions.references | {k for k in {**rename, **move} if not k.startswith("+")}))
     if clash:
-        raise ProposalError(400, f"{clash[0]} is removed in this edit, so it can't also be wired, changed, renamed or moved")
+        raise ProposalError(400, f"{clash[0]} is removed in this edit, so it can't also be connected, changed, renamed or moved")
 
     arrange = parse_arrange(body.get("arrange"))
     if arrange is not None and not additions.nodes:
@@ -209,7 +210,7 @@ def parse_edit(body: Any, *, ports: PortLookup | None = None) -> EditSpec:
     spec = EditSpec(additions=additions, rename=rename, move=move, remove=remove, unwire=tuple(unwire),
                     arrange=arrange, pending=pending, ready=ready)
     if spec.empty:
-        raise ProposalError(422, "an edit needs at least one node, wire, param change, rename, move, removal or unwire")
+        raise ProposalError(422, "an edit needs at least one node, connection, param change, rename, move, removal or unwire")
     return spec
 
 

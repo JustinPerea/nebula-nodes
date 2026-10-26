@@ -97,19 +97,19 @@ def test_the_wiring_lines_in_gms_form() -> None:
 
     prompt = {"id": "prompt", "label": "Prompt"}
     assert port_contracts._wrong_kind_line(prompt, "prompt") == (
-        "The wire into “Prompt” brings something it can't take. Remove that wire, then connect a matching output.")
+        "The connection into “Prompt” brings something it can't take. Remove that connection, then connect a matching output.")
     # The label exactly as the node shows it, its note included (a quoted
     # label may hold parentheses, 3f judgment 11).
     mask = {"id": "mask", "label": "Mask (white = edit)"}
-    assert port_contracts._wrong_kind_line(mask, "mask").startswith("The wire into “Mask (white = edit)” brings ")
+    assert port_contracts._wrong_kind_line(mask, "mask").startswith("The connection into “Mask (white = edit)” brings ")
     assert port_contracts._too_many_line(prompt, "prompt", 1) == (
-        "“Prompt” takes one wire. Remove the extra one, then run the node again.")
+        "“Prompt” takes one connection. Remove the extra one, then run the node again.")
     images = {"id": "images", "label": "Images (1-4)"}
     assert port_contracts._too_many_line(images, "images", 4) == (
-        "“Images (1-4)” takes up to 4 wires. Remove the extra ones, then run the node again.")
+        "“Images (1-4)” takes up to 4 connections. Remove the extra ones, then run the node again.")
     assert port_contracts.PORT_TYPE_PERSON_HINTS[("krea-2-generate", "moodboard")] == (
         "“Moodboard” takes a Nebula moodboard now. To use a Krea moodboard, put its ID in “Moodboard ID” and "
-        "remove the wire.")
+        "remove the connection.")
     # Agents keep the specific text word for word.
     assert port_contracts.PORT_TYPE_HINTS[("krea-2-generate", "moodboard")].startswith(
         "Krea 2's Moodboard input takes a Nebula moodboard or the Krea Moodboard node's Moodboard output")

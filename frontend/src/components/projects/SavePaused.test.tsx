@@ -106,6 +106,16 @@ describe('the panel', () => {
     return { opener, view };
   }
 
+  it('names the connections row and counts its connections (GM: connection, never wire)', () => {
+    const edge = (id: string) => ({ id, source: 'n1', target: 'n2', data: { note: 'w'.repeat(Math.round(0.3 * MIB)) } });
+    useGraphStore.setState({ edges: [edge('e1'), edge('e2')] } as never);
+    open();
+    const panel = screen.getByRole('dialog', { name: 'Saving paused' });
+    const row = [...panel.querySelectorAll('[data-size-row]')].find((item) => item.textContent?.includes('Connections'));
+    expect(row?.textContent).toContain('2 connections');
+    expect(panel.textContent).not.toMatch(/\bwires?\b/i);
+  });
+
   it("shows GM's heading, the live line, Download a copy and the largest rows of 0.1 MB and up, without ids", () => {
     const { opener } = open();
     const panel = screen.getByRole('dialog', { name: 'Saving paused' });

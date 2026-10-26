@@ -232,7 +232,7 @@ def test_an_agent_builds_an_openrouter_vision_and_image_model_in_one_edit(nebula
         "edges": [{"source": "+photo", "sourceHandle": "image", "target": "+paint", "targetHandle": "images"},
                   {"source": "+paint", "sourceHandle": "image", "target": "+compare", "targetHandle": "imageA"}],
     })
-    assert built["summary"] == "added 3, wired 2"
+    assert built["summary"] == "added 3, connected 2"
     paint = built["idMap"]["+paint"]
     expected = {"inputs": _ids(read["ports"]["inputs"]), "outputs": _ids(read["ports"]["outputs"])}
     assert built["modelPorts"][paint] == {"model": model, **expected}
@@ -255,7 +255,7 @@ def test_an_agent_builds_a_replicate_model_in_one_edit(nebula):
                   {"source": "+style", "sourceHandle": "image", "target": "+edit", "targetHandle": "style_ref"},
                   {"source": "+edit", "sourceHandle": "image", "target": "+compare", "targetHandle": "imageA"}],
     })
-    assert built["summary"] == "added 4, wired 3"
+    assert built["summary"] == "added 4, connected 3"
     edit = built["idMap"]["+edit"]
     expected = {"inputs": _ids(read["ports"]["inputs"]), "outputs": _ids(read["ports"]["outputs"])}
     assert expected == {"inputs": ["input_image", "style_ref"], "outputs": ["image"]}

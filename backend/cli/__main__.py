@@ -103,10 +103,10 @@ def build_parser() -> argparse.ArgumentParser:
     set_p.add_argument("params", nargs="+", metavar="key=value",
                        help="Params to set (e.g. aspect_ratio=9:16)")
 
-    delete_p = sub.add_parser("delete", help="Delete nodes and their wires")
+    delete_p = sub.add_parser("delete", help="Delete nodes and their connections")
     delete_p.add_argument("node_refs", nargs="+", metavar="node", help="Node references (e.g. n3)")
 
-    disconnect_p = sub.add_parser("disconnect", help="Remove a wire")
+    disconnect_p = sub.add_parser("disconnect", help="Remove a connection")
     disconnect_p.add_argument("src", help="Source (e.g. n1:image)")
     disconnect_p.add_argument("dst", help="Destination (e.g. n2:image)")
 
@@ -141,11 +141,11 @@ def build_parser() -> argparse.ArgumentParser:
     project_rename_p.add_argument("name", nargs="+", help="New name")
     project_rename_p.add_argument("--json", action="store_true", help="Print it as JSON, as MCP rename_project returns it")
     project_show_p = project_sub.add_parser(
-        "show", help="Read a saved project without opening it: nodes, wires, cover, run history",
+        "show", help="Read a saved project without opening it: nodes, connections, cover, run history",
         description="Read a saved project without opening it (MCP get_project). Nodes come as `nebula look` "
                     "shows them: name, model, params with secrets hidden, a universal node's ports, which "
                     "outputs exist (never their values), state and the last error, with any key a provider "
-                    "quoted hidden. Then the wires, the cover and the newest 20 runs: what each ran and made.")
+                    "quoted hidden. Then the connections, the cover and the newest 20 runs: what each ran and made.")
     project_show_p.add_argument("project_id", help="Project id (from `nebula projects`), or current: the open one")
     project_show_p.add_argument("--json", action="store_true", help="Print it as JSON, as MCP get_project returns it")
     project_size_p = project_sub.add_parser(
@@ -182,7 +182,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("graph", help="Show current graph state")
     sub.add_parser("selection", help="Show nodes currently selected on the canvas")
 
-    look_p = sub.add_parser("look", help="Read the canvas as data: what's on screen, states, wires, agent cursors")
+    look_p = sub.add_parser("look", help="Read the canvas as data: what's on screen, states, connections, agent cursors")
     look_p.add_argument("--json", action="store_true", help="Print the raw snapshot JSON")
 
     point_p = sub.add_parser(
@@ -286,7 +286,7 @@ def build_parser() -> argparse.ArgumentParser:
     propose_p.add_argument("--set", dest="set_params", action="append", default=[], metavar="nX.key=value",
                            help="Change a param on an existing node, e.g. --set n4.aspect_ratio=16:9 (repeatable)")
     propose_p.add_argument("--wire", action="append", nargs=2, default=[], metavar=("SRC:port", "DST:port"),
-                           help="A wire, e.g. --wire n4:image +up:image (repeatable)")
+                           help="A connection, e.g. --wire n4:image +up:image (repeatable)")
     propose_p.add_argument("--run", action="append", default=[], metavar="REF",
                            help="Run this node after the person accepts (repeatable)")
     propose_p.add_argument("--at", action="append", default=[], metavar="+ref=x,y",
@@ -336,7 +336,7 @@ def build_parser() -> argparse.ArgumentParser:
     apply_p.add_argument("--set", dest="set_params", action="append", default=[], metavar="nX.key=value",
                          help="Change a param on an existing node, e.g. --set n4.prompt=warmer (repeatable)")
     apply_p.add_argument("--wire", action="append", nargs=2, default=[], metavar=("SRC:port", "DST:port"),
-                         help="A wire, e.g. --wire +p:text +img:prompt (repeatable)")
+                         help="A connection, e.g. --wire +p:text +img:prompt (repeatable)")
     apply_p.add_argument("--at", action="append", default=[], metavar="+ref=x,y",
                          help="Where a new node goes, e.g. --at +img=820,140")
     apply_p.add_argument("--rename", action="append", default=[], metavar="REF=name",
@@ -344,9 +344,9 @@ def build_parser() -> argparse.ArgumentParser:
     apply_p.add_argument("--move", action="append", default=[], metavar="REF=x,y",
                          help="Move a node, e.g. --move n4=400,120 (repeatable)")
     apply_p.add_argument("--remove", action="append", default=[], metavar="nX",
-                         help="Delete a node and its wires (repeatable)")
+                         help="Delete a node and its connections (repeatable)")
     apply_p.add_argument("--unwire", action="append", nargs=2, default=[], metavar=("SRC:port", "DST:port"),
-                         help="Remove a wire, e.g. --unwire n1:text n2:prompt (repeatable)")
+                         help="Remove a connection, e.g. --unwire n1:text n2:prompt (repeatable)")
     apply_p.add_argument("--arrange", nargs="?", const="right", default=None, choices=("right", "down"),
                          help="Have the canvas lay out the new nodes by their real size once it draws them; works with --file too "
                               "(flowing right, or down)")
@@ -365,9 +365,9 @@ def build_parser() -> argparse.ArgumentParser:
         "undo",
         help="Undo your own `nebula apply` by the token it printed (parts changed or run since stay as they are)",
         description=("Undo one of your applies with the token it printed. Each part (a node it added, a param, "
-                     "name or position it changed, a node or wire it removed) goes back unless someone changed "
+                     "name or position it changed, a node or connection it removed) goes back unless someone changed "
                      "it since. A node someone else ran since (the person, another agent) stays whole, with "
-                     "its params, name and input wires; your own runs don't count. Several tokens are undone in the order given (a steps plan prints them newest "
+                     "its params, name and input connections; your own runs don't count. Several tokens are undone in the order given (a steps plan prints them newest "
                      "first), stopping at the first one refused. Only you can use your tokens, for 60 minutes, "
                      "while the project you edited is open."),
     )
@@ -432,7 +432,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Remove every node from the open project. It refuses when the project has nodes "
                     "unless you pass --force. To start fresh, run `nebula project new \"<name>\"` "
                     "instead: it keeps this project's work. With the canvas open, the person can undo "
-                    "a clear (Undo, or Cmd-Z), which brings back every node, wire, name and output.")
+                    "a clear (Undo, or Cmd-Z), which brings back every node, connection, name and output.")
     clear_p.add_argument("--force", action="store_true",
                          help="Clear even when the project has nodes")
 

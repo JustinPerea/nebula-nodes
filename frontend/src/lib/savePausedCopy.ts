@@ -43,5 +43,5 @@ export const PART_LABELS = {
 /** Rows that aren't nodes (GM's "Run history"; the others named for what
  * they hold). */
 export const ROW_NAMES = {
-  runHistory: 'Run history', wires: 'Wires', createDraft: 'Create draft', project: 'Project settings',
+  runHistory: 'Run history', wires: 'Connections', createDraft: 'Create draft', project: 'Project settings',
 } as const;

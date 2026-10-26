@@ -4222,7 +4222,7 @@
         },
         "alternatives": [],
         "fixes": [],
-        "message": "Fixture Image can't run on OpenRouter: it takes at most 4 wired images. Disconnect the extra inputs, or switch provider."
+        "message": "Fixture Image can't run on OpenRouter: it takes at most 4 connected images. Disconnect the extra inputs, or switch provider."
       },
       "unavailableLine": "Fixture Image can't run on OpenRouter with more than 4 images connected. Disconnect the extra inputs, or switch provider."
     },
@@ -4703,7 +4703,7 @@
         },
         "alternatives": [],
         "fixes": [],
-        "message": "Fixture Video can't run on OpenRouter: it doesn't take wired keyframes. Disconnect the extra inputs, or switch provider."
+        "message": "Fixture Video can't run on OpenRouter: it doesn't take connected keyframes. Disconnect the extra inputs, or switch provider."
       },
       "unavailableLine": "Fixture Video can't run on OpenRouter with keyframes connected. Disconnect the extra inputs, or switch provider."
     },
@@ -4796,7 +4796,7 @@
         },
         "alternatives": [],
         "fixes": [],
-        "message": "Fixture Video can't run on OpenRouter: it doesn't take wired keyframes. Disconnect the extra inputs, or switch provider."
+        "message": "Fixture Video can't run on OpenRouter: it doesn't take connected keyframes. Disconnect the extra inputs, or switch provider."
       },
       "unavailableLine": "Fixture Video can't run on OpenRouter with keyframes connected. Disconnect the extra inputs, or switch provider."
     },
@@ -4832,7 +4832,7 @@
         },
         "alternatives": [],
         "fixes": [],
-        "message": "Fixture Video can't run on Krea: it doesn't take wired keyframes. Disconnect the extra inputs, or switch provider."
+        "message": "Fixture Video can't run on Krea: it doesn't take connected keyframes. Disconnect the extra inputs, or switch provider."
       },
       "unavailableLine": "Fixture Video can't run on Krea with keyframes connected. Disconnect the extra inputs, or switch provider."
     },
@@ -7658,7 +7658,7 @@
           "bfl"
         ],
         "fixes": [],
-        "message": "FLUX 3 Video can't run on OpenRouter: it doesn't take wired keyframes. Disconnect the extra inputs, or switch provider. Black Forest Labs can take it."
+        "message": "FLUX 3 Video can't run on OpenRouter: it doesn't take connected keyframes. Disconnect the extra inputs, or switch provider. Black Forest Labs can take it."
       },
       "unavailableLine": "FLUX 3 Video can't run on OpenRouter with keyframes connected. Disconnect the extra inputs, or switch provider. Black Forest Labs can take it.",
       "paramKeys": [
@@ -7932,7 +7932,7 @@
         },
         "alternatives": [],
         "fixes": [],
-        "message": "FLUX 3 Video can't run on Black Forest Labs: it takes at most 10 wired images (start + keyframes + end). Disconnect the extra inputs, or switch provider."
+        "message": "FLUX 3 Video can't run on Black Forest Labs: it takes at most 10 connected images (start + keyframes + end). Disconnect the extra inputs, or switch provider."
       },
       "unavailableLine": "FLUX 3 Video can't run on Black Forest Labs with more than 10 images connected. Disconnect the extra inputs, or switch provider."
     },
@@ -7995,7 +7995,7 @@
         },
         "alternatives": [],
         "fixes": [],
-        "message": "FLUX 3 Video can't run on fal.ai: it takes at most 10 wired images (start + keyframes + end). Disconnect the extra inputs, or switch provider."
+        "message": "FLUX 3 Video can't run on fal.ai: it takes at most 10 connected images (start + keyframes + end). Disconnect the extra inputs, or switch provider."
       },
       "unavailableLine": "FLUX 3 Video can't run on fal.ai with more than 10 images connected. Disconnect the extra inputs, or switch provider."
     },
@@ -8034,7 +8034,7 @@
         },
         "alternatives": [],
         "fixes": [],
-        "message": "FLUX 3 Video can't run on Replicate: it takes at most 10 wired images (start + keyframes + end). Disconnect the extra inputs, or switch provider."
+        "message": "FLUX 3 Video can't run on Replicate: it takes at most 10 connected images (start + keyframes + end). Disconnect the extra inputs, or switch provider."
       },
       "unavailableLine": "FLUX 3 Video can't run on Replicate with more than 10 images connected. Disconnect the extra inputs, or switch provider."
     },

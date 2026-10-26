@@ -81,11 +81,11 @@ HINTS: dict[str, dict[str, str]] = {
         "boards": 'moodboard_list(project_id="<project-id>") lists a project\'s boards and Global\'s',
         "read": 'moodboard_get(board="<id or exact name>") gives one in full',
         "nodes": "find_nodes(category=…) gives the rest",
-        "describe": 'describe_node(definition_id="<id>"): a node type\'s ports, params and prices, before you wire it.',
+        "describe": 'describe_node(definition_id="<id>"): a node type\'s ports, params and prices, before you connect it.',
         "build": ('edit_canvas(note="...", nodes=[{"ref": "+p", "definitionId": "text-input", "params": '
                   '{"value": "a lake at dawn"}}, {"ref": "+g", "definitionId": "<id>"}], edges=[{"source": "+p", '
                   '"sourceHandle": "text", "target": "+g", "targetHandle": "prompt"}], arrange=true) adds and '
-                  'wires in one call (idMap: the ids its +refs became); then run_nodes(node_id="n2").'),
+                  'connects in one call (idMap: the ids its +refs became); then run_nodes(node_id="n2").'),
         "propose": ('propose_change(note="...", nodes=..., edges=..., params=[{"nodeId": "n4", "params": {...}}], '
                     'run=["+g"]) takes the same nodes and edges, for a paid run over a limit or reworking their '
                     'graph: the person accepts in Nebula; get_proposal(proposal_id="...", wait_seconds=60) waits.'),
@@ -96,7 +96,7 @@ HINTS: dict[str, dict[str, str]] = {
         "use": ('To show one: edit_canvas(nodes=[{"ref": "+mb", "definitionId": "nebula-moodboard", "params": '
                 '{"moodboard": "<board id>"}}, {"ref": "+pv", "definitionId": "preview"}], edges=[{"source": "+mb", '
                 '"sourceHandle": "moodboard", "target": "+pv", "targetHandle": "input"}]); to style a '
-                'generator, wire "moodboard" to its "moodboard" input instead.'),
+                'generator, connect "moodboard" to its "moodboard" input instead.'),
     },
     "cli": {
         "canvas": "`nebula look` gives every node",
@@ -105,9 +105,9 @@ HINTS: dict[str, dict[str, str]] = {
         "boards": "`nebula moodboard list --project <project-id>` lists a project's boards and Global's",
         "read": "`nebula moodboard show <id>` gives one in full",
         "nodes": "`nebula nodes --category <category>` lists the rest with prices",
-        "describe": "`nebula info <id>`: a node type's ports, params and prices, before you wire or set it.",
+        "describe": "`nebula info <id>`: a node type's ports, params and prices, before you connect or set it.",
         "build": ("`nebula apply --note \"...\" --add +p=text-input --param +p.value=\"a lake at dawn\" "
-                  "--add +g=<id> --wire +p:text +g:prompt --arrange` adds and wires in one step and prints "
+                  "--add +g=<id> --wire +p:text +g:prompt --arrange` adds and connects in one step and prints "
                   "the new ids; then `nebula run <node-id>`."),
         "propose": ("`nebula propose --note \"...\" --add +g=<id> --set nX.key=value --run +g` takes apply's "
                     "--add, --param and --wire too, for a paid run over a limit or reworking their graph; the "
@@ -117,7 +117,7 @@ HINTS: dict[str, dict[str, str]] = {
         "pin": ("Answer a pin with `nebula pin resolve <pin-id> --say \"...\"` once you've acted on it; "
                 "`nebula watch --once --since <cursor> --journal <journal>` waits for the next one."),
         "use": ("To show one: `nebula apply --add +mb=nebula-moodboard --param +mb.moodboard=<board> "
-                "--add +pv=preview --wire +mb:moodboard +pv:input`; to style a generator, wire +mb:moodboard "
+                "--add +pv=preview --wire +mb:moodboard +pv:input`; to style a generator, connect +mb:moodboard "
                 "to its moodboard input instead."),
     },
 }

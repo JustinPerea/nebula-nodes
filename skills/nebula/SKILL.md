@@ -40,7 +40,7 @@ each of your edits, runs and moodboard changes under it too). `nebula apply` and
 ## Start here
 
 Run `nebula context` first. One call gives you the open project and its
-canvas (nodes, wires, the selection, other agents' cursors), the pins the
+canvas (nodes, connections, the selection, other agents' cursors), the pins the
 person left for you, open proposals, every moodboard (this project's,
 Global, and other projects'), the node types that run here with their
 prices, and your spending limits. Only use nodes it lists. `--json` prints
@@ -63,7 +63,7 @@ anyway. With their canvas open that is one undo step for them; with none
 open it can't be undone yet. `nebula selection` is what they have selected.
 `nebula project rename <id> "<name>"` (or `current`) renames one, prints the
 old name and the command that puts it back. `nebula project show <id>` reads
-a saved project without opening it: nodes as `nebula look` shows them, wires,
+a saved project without opening it: nodes as `nebula look` shows them, connections,
 cover and the newest 20 runs (what each ran and made, never the values).
 `nebula project size` (or `<id>`) says how big a project is against the 16
 MB save limit and what takes the space, largest first, with node ids. Over
@@ -84,7 +84,7 @@ describe` is `nebula info`.
 | Command | What it does |
 |---|---|
 | `nebula nodes upscale` | Node types that run here whose id, name or description has every word (`--category image` and so on), best matches first, each with how it runs (key, free, krea, nous) and its price per run at default settings. The last line says how many more need a key; `nebula nodes --all` lists those too, each with what it needs. `--json` prints MCP find_nodes' answer |
-| `nebula info <node-id>` | Ports, params, options, defaults and prices (`PRICE:`: at default settings, or the rate a node priced from its input file is checked at); on a node with a Moodboard port, what a wired board does there (`MOODBOARD:`). Takes a node's exact name too (`nebula info moodboard`), when one node has it, and says the id it used |
+| `nebula info <node-id>` | Ports, params, options, defaults and prices (`PRICE:`: at default settings, or the rate a node priced from its input file is checked at); on a node with a Moodboard port, what a connected board does there (`MOODBOARD:`). Takes a node's exact name too (`nebula info moodboard`), when one node has it, and says the id it used |
 | `nebula keys` | Which provider keys are set: set or not set, never any part of a key (only the app, with the person token, sees an ending; the CLI never has it) |
 | `nebula providers` | Whether each key works (free, read-only checks, cached 5 minutes; `--refresh`) and the Krea account connection |
 | `nebula spend` | The spending limits you work under, and what you used |
@@ -125,7 +125,7 @@ It also prints `Undo: nebula undo <token>`. Run that to take your edit back
 changed or removed comes back, and anything the person changed since stays
 as it is (the output lists it). A run counts as a change: a node the person
 (or another agent) ran since your edit stays with its params, name and
-input wires ("n3 ran since (run by the person), so it stays"). Nodes only
+input connections ("n3 ran since (run by the person), so it stays"). Nodes only
 you ran still go, so you can undo your own experiments. A node you deleted
 comes back with the person's pins on it ("Back on its node: pin_…"; one the
 person deleted since prints "Couldn't re-attach …" with why) and the
@@ -160,8 +160,8 @@ put `"pending": true` on the step that adds them and `{"pending": false,
 "nodeIds": ["+hero"]}` in a later step. MCP: `edit_canvas(pending=True)`,
 then `edit_canvas(pending=False, node_ids=[...])`.
 
-Prompts go into input ports, not params: wire a `text-input` node's `text`
-output into the model's `prompt` (or a chat model's `messages`).
+Prompts go into input ports, not params: connect a `text-input` node's `text`
+output to the model's `prompt` (or a chat model's `messages`).
 
 Lay out branches as a grid: columns are stages (sources, prompts, models,
 outputs) about 400 px apart, rows are branches about 250 px apart. Use
@@ -176,8 +176,8 @@ and gives the node its ports; the output prints `Ports of n5 (model): in ...;
 out ...`.
 
 - OpenRouter / Nous Portal: `messages` always; `images` (Image, several
-  wires) for a model that takes images; `text` and/or `image` out for what it
-  makes. An image model's `image` wires onward like any Image output.
+  connections) for a model that takes images; `text` and/or `image` out for what it
+  makes. An image model's `image` connects onward like any Image output.
 - Replicate: one port per file input, named as the model names it
   (`input_image`, `image`, `audio`), and one output. A file output is typed
   from the model's own data (a content hint in its schema, else the file its
@@ -187,21 +187,21 @@ out ...`.
   kind of file under that file's own port, not the guessed one; a node
   saved before outputs were typed gets the same note: set its model again
   with `--param model_id=...`). The run fills that port,
-  so wire a video model's `video` into a Video input. The model's other
-  inputs are params of the same name: set them with `--param`, don't wire
+  so connect a video model's `video` to a Video input. The model's other
+  inputs are params of the same name: set them with `--param`, don't connect
   them.
 
 To see a model's ports before the apply, an agent on Nebula's MCP server
 calls `model_schema(provider, model_id)` (its `ports`, with types) or
 `model_catalog(provider, query)` (each row's `ports`, as ids). They come from
-the same function the apply configures the node with, so wiring exactly those
+the same function the apply configures the node with, so connecting exactly those
 ports in the apply that sets the model is accepted. There is no `nebula`
 command for the catalogs yet.
 
-Changing the model of a node with wires on ports the new model lacks (or
+Changing the model of a node with connections on ports the new model lacks (or
 clearing it, or naming one Nebula can't read, which leaves the basic ports)
 is refused: `--unwire` them in the same apply. Without the provider's key the
-node keeps its basic ports, and a wire to any other port is refused with the
+node keeps its basic ports, and a connection to any other port is refused with the
 reason (only the person can add a key).
 
 ## Run
@@ -245,7 +245,7 @@ image (quick copies a local image into Nebula first, not a clip). An image
 over 20 MB, one Nebula can't recognise, or a clip over 500 MB can't be
 added at all: propose that run. An input
 another node makes in the same run isn't known yet, so that run is refused:
-wire an Image Input or Video Input holding the file, or propose it. A file
+connect an Image Input or Video Input holding the file, or propose it. A file
 on another host (a URL) is never downloaded to price it either: download it,
 `nebula upload` the local copy, or propose it. A clip with more than one
 video stream, or an image with more than one frame or size, isn't measured
@@ -352,7 +352,7 @@ Direction (what the board is for), Avoid (things to keep out), pinned colours
 board id), with outputs `moodboard`, `style_brief`, `negative_prompt`,
 `representative_images` and `palette`. To show one in a Preview:
 `nebula apply --add +mb=nebula-moodboard --param +mb.moodboard=<board> --add +pv=preview --wire +mb:moodboard +pv:input`;
-wire `+mb:moodboard` to a generator's `moodboard` input to style it.
+connect `+mb:moodboard` to a generator's `moodboard` input to style it.
 
 ```bash
 nebula moodboard new "Nature + tech" ./refs https://example.com/ref.jpg --project current
@@ -383,7 +383,7 @@ nebula character move <character> --to current
 nebula moodboard delete <board>
 ```
 
-- Before wiring a board into a generator's `moodboard` port, `nebula info
+- Before connecting a board to a generator's `moodboard` port, `nebula info
   <node-id>` says what that node takes from it: the `MOODBOARD:` line is the
   card's ("Board images: on · up to 10 to Image Style Refs", or the brief as
   text only), with `(on <route>)` after it on a node with more than one
@@ -465,9 +465,9 @@ nebula moodboard delete <board>
 - Weights and strength run from 0 to 1. On Krea 2 the board's images
   share out its strength: each goes at strength x its weight / the weights
   of the images sent, so they add up to the board's strength (one image
-  goes at the full strength), and your own wired references keep theirs on
+  goes at the full strength), and your own connected references keep theirs on
   top. The run note lists what went. Strength 0 turns the board off for
-  every node it's wired into, text included: no brief, Avoid, negatives or
+  every node it's connected to, text included: no brief, Avoid, negatives or
   images, and the run note "Board strength is 0: board not sent". For
   text without images, use the node's "Send board images" switch instead
   (not in this version yet; until then GPT Image, Nano Banana, FLUX and
@@ -750,7 +750,7 @@ the `nebula project open <id>` that goes back.
 
 ## Port types
 
-Wires must match types; `Any` connects to anything.
+Connections must match types; `Any` connects to anything.
 
 | Type | Carries |
 |---|---|
@@ -783,7 +783,7 @@ Wires must match types; `Any` connects to anything.
 
 1. Run `nebula context` first, and only use nodes it lists.
 2. Start a new project rather than clearing a canvas you didn't make.
-3. Check ports with `nebula info` before wiring.
+3. Check ports with `nebula info` before connecting.
 4. Spending is the person's own money with their providers. Stay inside
    their limits and propose anything bigger.
 5. Canvas edits can be undone, so when the person gives you room, use it.

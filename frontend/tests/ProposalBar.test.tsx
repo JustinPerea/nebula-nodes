@@ -97,7 +97,7 @@ describe('ProposalBar', () => {
     render(<ProposalBar />);
     expect(screen.getByText('Codex')).toBeTruthy();
     expect(screen.getByText('Generate the warm take')).toBeTruthy();
-    expect(screen.getByText('Adds 1 node · 1 wire · changes n1 · runs up to 1 paid model (google)')).toBeTruthy();
+    expect(screen.getByText('Adds 1 node · 1 connection · changes n1 · runs up to 1 paid model (google)')).toBeTruthy();
     expect(screen.getByText(/No list price ·/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Accept & run (1 paid)' })).toBeTruthy();
   });
@@ -106,7 +106,7 @@ describe('ProposalBar', () => {
     open(proposal('p_a', { cost: { paidRuns: 1, freeRuns: 0, upTo: true, providers: ['google'], nodes: [], note: '',
       estimate: { currency: 'usd', low: 0.067, high: 0.067, open: false, unpriced: [], plan: [], plus: [] } } }));
     render(<ProposalBar />);
-    expect(screen.getByText('Adds 1 node · 1 wire · changes n1 · runs up to 1 paid model (google) · ~$0.067')).toBeTruthy();
+    expect(screen.getByText('Adds 1 node · 1 connection · changes n1 · runs up to 1 paid model (google) · ~$0.067')).toBeTruthy();
     expect(screen.getByText(/List prices, not a quote ·/)).toBeTruthy();
   });
 
