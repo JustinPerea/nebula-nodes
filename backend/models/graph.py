@@ -51,6 +51,9 @@ class ExecuteNodeRequest(BaseModel):
     preserve_graph_params: bool = Field(False, alias="preserveGraphParams")
     # The run the person approved by accepting a proposal (services/run_approvals.py).
     approval_id: str | None = Field(None, alias="approvalId", max_length=64)
+    # The agents' paid placeholders the person confirmed running (Q133): the
+    # person's direct run over any runs only with exactly these (main.execute_node).
+    confirmed_placeholders: list[str] | None = Field(None, alias="confirmedPlaceholders", max_length=500)
 
     model_config = {"populate_by_name": True}
 

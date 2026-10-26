@@ -558,6 +558,12 @@ def redacted_node(node_id: str, node: Mapping[str, Any], definition: Mapping[str
     }
     if node.get("label"):
         entry["model"] = definition.get("displayName") or definition_id
+    # An agent's placeholder (Q125 item 3): whose; runs skip it.
+    from services.pending_nodes import owner as pending_owner  # imports this module
+
+    who = pending_owner(node)
+    if who is not None:
+        entry["pending"] = {"agent": who["name"], "agentId": who["id"]}
     # The name the file was uploaded with: params keep only its stored
     # (hashed) path, and the private `_fileName` isn't copied above.
     params = node.get("params")

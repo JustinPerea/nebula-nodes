@@ -67,7 +67,7 @@ RATE_WINDOW_SECONDS = 60.0
 NOTES_DIR = ".notes"
 
 ABOUT_VALUES = ("sinceLastTurn", "analyze", "suggestion", "removedLook", "changedWords", "proposal", "question",
-                "other")
+                "run", "other")
 AGENT_ABOUT = ("sinceLastTurn", "other")
 
 # Edit actions: a closed set, each with its fixed labels and the keys its op
@@ -890,6 +890,53 @@ class AgentNotes:
         "{agent} asked {n} questions."), stored, so the person, list_notes
         and a restart all read the same words."""
         return self._resolve(project_id, note_id, outcome=outcome, by=by, retext=closed_update_text)
+
+    # -- a run's done card (Q125 item 3) ---------------------------------------------
+    def post_run_done(self, *, author: Mapping[str, Any], text: str, run: Mapping[str, Any],
+                      project_id: str | None = None) -> dict[str, Any]:
+        """The card a finished agent run posts on its project's list (GM -
+        Design, 2026-10-25): written by Nebula (``source: "nebula"``) for the
+        agent that started the run, ``about: "run"``, ``refs`` the run's last
+        node (Show on canvas flies there; the node itself shows any error),
+        and ``run``: {id, nodeIds, lastNodeId, outcome, thumbnail?}. The
+        thumbnail is a link to an output Nebula already keeps, never a copy.
+
+        Flood guard (GM): a new card for the same node and the same agent
+        replaces the older one, so an agent iterating on one node leaves one
+        card, not twenty. It skips the agent's rate limit, as a proposal's
+        Update does: Nebula writes it, once per run."""
+        clean_author = _clean_author(author)
+        last = str(run["lastNodeId"])[:64]
+        ref: dict[str, Any] = {
+            "id": str(run["id"])[:128],
+            "nodeIds": [str(node_id)[:64] for node_id in list(run.get("nodeIds") or [])[:200]],
+            "lastNodeId": last,
+            "outcome": str(run["outcome"])[:16],
+        }
+        thumbnail = run.get("thumbnail")
+        if isinstance(thumbnail, Mapping) and str(thumbnail.get("url") or "").startswith("/api/outputs/"):
+            ref["thumbnail"] = {"kind": str(thumbnail.get("kind"))[:8], "url": str(thumbnail["url"])[:1024],
+                                "nodeId": str(thumbnail.get("nodeId") or last)[:64]}
+        note = self._new_note(author=clean_author, source="nebula", about="run", text=clean_note_text(text),
+                              refs=[last] if _NODE_ID.fullmatch(last) else [])
+        note["run"] = ref
+
+        def same_card(old: Mapping[str, Any]) -> bool:
+            old_author = old.get("author") or {}
+            return (old.get("about") == "run" and isinstance(old.get("run"), Mapping)
+                    and old["run"].get("lastNodeId") == last
+                    and old_author.get("kind") == clean_author["kind"] and old_author.get("id") == clean_author["id"])
+
+        def mutate(notes: list[dict[str, Any]], keep: frozenset[str]) -> tuple[int, list[str]]:
+            removed = []
+            for old in [n for n in notes if same_card(n)]:
+                notes.remove(old)
+                removed.append(str(old.get("id")))
+            notes.append(note)
+            return unread_count(notes), removed + _prune(notes, MAX_PROJECT_NOTES, keep)
+
+        project_id, (unread, removed) = self._write_project(mutate, project_id=project_id, keep_open=True)
+        return {"note": note_view(note), "unread": unread, "projectId": project_id, "removed": removed}
 
     def retarget_proposal(self, project_id: str, note_id: str, proposal_id: str) -> dict[str, Any] | None:
         """The agent's other proposal on the same target is still open: the

@@ -24,6 +24,7 @@
 import type { Edge, Node } from '@xyflow/react';
 import type { CinemaSceneSpec, NodeData } from '../types';
 import type { RemovalRecord } from './deleteNotice';
+import { cleanPending, type PendingFlag } from './pendingNodes';
 
 /** Backend (cli_graph) node ids: n1, n2, ... Everything else is frontend-only. */
 export const CLI_NODE_ID_RE = /^n\d+$/;
@@ -289,6 +290,8 @@ interface RestoreNodeBody {
   label?: string;
   position?: { x: number; y: number };
   outputs?: Record<string, unknown>;
+  /** An agent's placeholder flag as the step had it, or null for none (Q125 item 3). */
+  pending?: PendingFlag | null;
 }
 export interface RestoreBody {
   action: 'undo' | 'redo';
@@ -332,15 +335,20 @@ export function restoreRequest(
       // Back whole. A swapped id (it holds another model now, after an
       // import) is also listed in `remove`, so the backend swaps the two.
       if (swapped) body.remove.push(id);
+      const flag = cleanPending(now.data.pending);
       body.nodes.push({ id, definitionId: now.data.definitionId, params: now.data.params, label: now.data.label,
-        position: { ...now.position }, outputs: now.data.outputs ?? {} });
+        position: { ...now.position }, outputs: now.data.outputs ?? {}, ...(flag ? { pending: flag } : {}) });
       continue;
     }
     const item: RestoreNodeBody = { id, definitionId: now.data.definitionId };
     if (stableJson(was.data.params) !== stableJson(now.data.params)) item.params = now.data.params;
     if (was.data.label !== now.data.label) item.label = now.data.label;
     if (!samePosition(was, now)) item.position = { ...now.position };
-    if (item.params || item.label !== undefined || item.position) body.nodes.push(item);
+    // A placeholder the step had (or didn't): the backend takes it from the person's restore only.
+    const wasFlag = cleanPending(was.data.pending);
+    const nowFlag = cleanPending(now.data.pending);
+    if (stableJson(wasFlag) !== stableJson(nowFlag)) item.pending = nowFlag;
+    if (item.params || item.label !== undefined || item.position || item.pending !== undefined) body.nodes.push(item);
   }
   for (const id of prevById.keys()) if (!nextById.has(id)) body.remove.push(id);
   const backendWire = (edge: Edge) => CLI_NODE_ID_RE.test(edge.source) && CLI_NODE_ID_RE.test(edge.target);
@@ -358,6 +366,48 @@ export function restoreRequest(
   }
   const empty = !body.nodes.length && !body.remove.length && !body.wire.length && !body.unwire.length;
   return empty ? null : body;
+}
+
+// -- a placeholder made normal elsewhere -------------------------------------------
+
+/**
+ * Placeholders (Q125 item 3) the backend made normal since these steps were
+ * taken, by something that isn't the person's undoable edit here: the
+ * owning agent's `pending: false` or its run, the 10-minute idle rule, the
+ * person's direct run. The steps on both stacks still hold the flag (a
+ * snapshot of the person's later edit holds the whole canvas), and undoing
+ * or redoing one would send it back and make the node a placeholder again.
+ * Forget it in every step: `history` is every step, `ids` the nodes whose
+ * flag went. A clear that is this tab's own edit's echo (the person edited
+ * the placeholder) is not passed here, so undoing that edit still brings
+ * the placeholder back.
+ *
+ * Changes the entries in place, as foldArrange does: the undo notice's
+ * button and a refused restore find their step by identity.
+ */
+export function forgetClearedPlaceholders(
+  history: Array<ForeignEdit | CanvasSnapshot>,
+  ids: ReadonlySet<string>,
+): void {
+  if (ids.size === 0) return;
+  const without = (node: Node<NodeData>): Node<NodeData> => {
+    if (!ids.has(node.id) || node.data.pending === undefined) return node;
+    const data = { ...node.data };
+    delete data.pending;
+    return { ...node, data };
+  };
+  for (const entry of history) {
+    if (isForeignEdit(entry)) {
+      for (const slice of [entry.before, entry.after]) {
+        for (const id of ids) {
+          const node = slice.nodes[id];
+          if (node) slice.nodes[id] = without(node);
+        }
+      }
+    } else if (entry.nodes.some((node) => ids.has(node.id) && node.data.pending !== undefined)) {
+      entry.nodes = entry.nodes.map(without);
+    }
+  }
 }
 
 // -- a finished arrange -----------------------------------------------------------

@@ -80,11 +80,13 @@ import {
   FailureNotice, REFUSED_FALLBACK_COPY, copyForAnswer, failureCopy, failureDetails, failureMessage, readRefusal, requestError,
   warnFailure,
 } from '../lib/errorCopy';
-import { CANVAS_NOTICE_EVENT, type CanvasNoticeDetail } from '../lib/canvasNotice';
+import { CANVAS_NOTICE_EVENT, showNotice, type CanvasNoticeDetail } from '../lib/canvasNotice';
+import { cleanPending, pendingSkipLine, type PendingSkipSummary } from '../lib/pendingNodes';
 import { cleanRemovals, deletedNoticeText, lateRestoreText, mergeRemovals, notRestoredText, pinsOnAnotherModel, restoredNoticeText, supersededBy, type RemovalRecord } from '../lib/deleteNotice';
 import { NOTHING_RAN_LINE, OTHER_NODE_LINE, SHOT_NOT_STARTED_LINE, validationReadings, writtenReading, type ValidationReading } from '../lib/validationCopy';
 import {
-  RUNTIME_FIELDS, applySlice, diffCanvas, edgeKey, editArrivedText, foldArrange, foreignSource, isForeignEdit, isOwnEcho,
+  RUNTIME_FIELDS, applySlice, diffCanvas, edgeKey, editArrivedText, foldArrange, forgetClearedPlaceholders, foreignSource,
+  isForeignEdit, isOwnEcho,
   restoreRequest, undoNoticeText, type EditOrigin, type ForeignEdit, type RestoreBody,
 } from '../lib/canvasUndo';
 import { TAB_ID } from '../lib/tabId';
@@ -94,6 +96,8 @@ import { usePricingStore } from './pricingStore';
 import { useInputSizeStore } from './inputSizeStore';
 import { useStoredAssetsStore } from './storedAssetsStore';
 import { runCostConfirmMessage, shouldConfirmRunCost, summarizeRunScope, type RunScope } from '../lib/runScope';
+import { placeholderRunConfirm, type PlaceholderRunConfirm } from '../lib/placeholderRunConfirm';
+import { placeholderRunDialogModule } from '../lib/placeholderRunDialogModule';
 import { useCreateDraftStore } from './createDraftStore';
 import { getCinemaUploadIssue, useCinemaUploadStore } from './cinemaUploadStore';
 import { cinemaMotionSource, cinemaMotionTarget, useCinemaMotionStore } from './cinemaMotionStore';
@@ -627,6 +631,12 @@ const cancelledRunIds = new Set<string>();
 // executing, by run. This tab doesn't own those runs, so nothing else settles
 // a node the run never reached (a failed dependency, a Stop): its end does.
 const foreignRunNodes = new Map<string, Set<string>>();
+/** The line under Run when it skipped agents' placeholders (Q125 item 3, GM's copy). */
+function announcePendingSkips(result: object): void {
+  const line = pendingSkipLine((result as { pendingSkipped?: PendingSkipSummary | null }).pendingSkipped);
+  if (line) showNotice(line, 'info');
+}
+
 /** States a run's own events set, which a graphSync over unchanged outputs keeps. */
 const RUN_HELD_STATES: ReadonlySet<NodeState | undefined> = new Set<NodeState | undefined>(['error', 'skipped', 'queued', 'executing']);
 const pendingStartRunIds = new Set<string>();
@@ -2464,6 +2474,7 @@ async function executeHistoricalRun(
       ? await apiExecuteNode(snapshot.nodes, snapshot.edges, targetNodeId, runId, true)
       : await apiExecuteGraph(snapshot.nodes, snapshot.edges, runId, true);
     pendingStartRunIds.delete(runId);
+    announcePendingSkips(result);
     if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
     if (result.status === 'started' && ownsRun(runId)) {
       updateRunPhase(runId, 'running', set);
@@ -2704,6 +2715,20 @@ async function reconcilePendingNodeCreation(
     }));
   }
   return matchedId;
+}
+
+/**
+ * A sync that turned placeholders normal (Q125 item 3) and isn't this tab's
+ * own edit's echo: the steps here forget their flag, so the person's undo of
+ * an unrelated step doesn't make them placeholders again (canvasUndo.ts
+ * forgetClearedPlaceholders).
+ */
+function forgetPlaceholdersMadeNormal(state: GraphState, merged: Node<NodeData>[]): void {
+  const now = new Map(merged.map((node) => [node.id, node]));
+  const cleared = new Set(state.nodes
+    .filter((node) => cleanPending(node.data.pending) && now.has(node.id) && !cleanPending(now.get(node.id)!.data.pending))
+    .map((node) => node.id));
+  forgetClearedPlaceholders([...state.undoStack, ...state.redoStack], cleared);
 }
 
 /**
@@ -3181,6 +3206,9 @@ wsClient.subscribe((event) => {
             ...existing.data,
             ...cliNode.data,
             ...keptUniversalFields(existing, cliNode),
+            // An agent's placeholder is the backend's alone (Q125 item 3): a
+            // sync without the flag means it turned normal there.
+            pending: cleanPending(cliNode.data.pending) ?? undefined,
             outputs: hasCliOutputs ? cliOutputs : keptOutputs(existing, cliNode),
             // The sync says "complete" for any node with outputs. Over the
             // same outputs it must not hide what a run's events said since:
@@ -3278,6 +3306,7 @@ wsClient.subscribe((event) => {
     ], edgeIdentity);
 
     if (!origin && !graphReplaced) foldFinishedArrange(state, arranged, cliNodes as Node<NodeData>[]);
+    if (!graphReplaced && !(origin && isOwnEcho(origin, TAB_ID))) forgetPlaceholdersMadeNormal(state, merged);
     useGraphStore.setState({
       nodes: merged,
       edges: mergedEdges,
@@ -3356,6 +3385,34 @@ function confirmRunCost(nodes: Node<NodeData>[], edges: Edge[], scope: RunScope)
     { pricing, apiKeys: settingsCache.apiKeys, sizes: useInputSizeStore.getState().sizes });
   if (!shouldConfirmRunCost(summary, runCostConfirmUsd)) return true;
   return window.confirm(runCostConfirmMessage(summary));
+}
+
+/**
+ * The person's direct run of a node (Q133, Justin 2026-10-25): when a
+ * placeholder it would make normal calls a paid model, Nebula always asks
+ * first, whatever the costly-run setting, in one dialog that replaces the
+ * costly-run confirm (components/PlaceholderRunDialog.tsx). The dialog's
+ * words, or null when no paid placeholder is in the run (then the costly-run
+ * confirm applies as before).
+ */
+function directRunConfirm(nodes: Node<NodeData>[], edges: Edge[], nodeId: string): PlaceholderRunConfirm | null {
+  if (typeof window === 'undefined') return null;
+  const pricing = usePricingStore.getState().table;
+  const { settingsCache } = useUIStore.getState();
+  const summary = summarizeRunScope(nodes, edges, { kind: 'node', nodeId },
+    pricing ? { pricing, apiKeys: settingsCache.apiKeys, sizes: useInputSizeStore.getState().sizes } : undefined);
+  return placeholderRunConfirm(nodes, edges, nodeId, summary);
+}
+
+/** Shows that dialog: true runs. A dialog that can't load runs nothing. */
+async function askDirectRun(model: PlaceholderRunConfirm): Promise<boolean> {
+  try {
+    const dialog = await placeholderRunDialogModule.load();
+    return await dialog.askPlaceholderRun(model);
+  } catch (error) {
+    console.error("Couldn't open the run confirmation:", error);
+    return false;
+  }
 }
 
 export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get) => ({
@@ -4908,6 +4965,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     try {
       const result = await apiExecuteGraph(snapshot.nodes, snapshot.edges, runId);
       pendingStartRunIds.delete(runId);
+      announcePendingSkips(result);
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
       if (result.status !== 'started' && result.status !== 'validation_error') {
         throw new ExecutionStartRejectedError(
@@ -4952,9 +5010,32 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     if (isExecuting || get().isImportingGraph) return;
     const uploadIssue = pendingCinemaUploadIssue(nodesInExecutionScope(nodes, edges, nodeId));
     if (uploadIssue) { warnPendingCinemaUpload(uploadIssue); return; }
-    if (!confirmRunCost(nodes, edges, { kind: 'node', nodeId })) return;
+    // An accepted proposal's run (approvalId) isn't the person's direct run:
+    // it skips agents' placeholders, so its cost leaves them out (Q125 item 3).
+    // The person's direct run over agents' paid placeholders always asks
+    // first, in one dialog in place of the costly-run confirm (Q133); the
+    // run sends the ones confirmed, and the backend refuses it without them.
+    let placeholderConfirm = options?.approvalId ? null : directRunConfirm(nodes, edges, nodeId);
+    let runNodes = nodes;
+    let runEdges = edges;
+    let confirmedPlaceholders: string[] | undefined;
+    if (!placeholderConfirm && !confirmRunCost(nodes, edges, { kind: 'node', nodeId, direct: !options?.approvalId })) return;
+    while (placeholderConfirm) {
+      if (!await askDirectRun(placeholderConfirm)) return;
+      // The dialog waited for the person: another run may have started, and
+      // an agent may have changed its placeholders. Ask again over new ones.
+      if (get().isExecuting || get().isImportingGraph) return;
+      ({ nodes: runNodes, edges: runEdges } = get());
+      const now = directRunConfirm(runNodes, runEdges, nodeId);
+      if (!now) break;
+      if (now.confirmIds.join('\n') === placeholderConfirm.confirmIds.join('\n')) {
+        confirmedPlaceholders = now.confirmIds;
+        break;
+      }
+      placeholderConfirm = now;
+    }
     resetExecution();
-    const snapshot = captureRunSnapshot(nodes, edges);
+    const snapshot = captureRunSnapshot(runNodes, runEdges);
     const heldStart = blockedProviderStart(
       snapshot,
       get().providerStartAmbiguities,
@@ -4983,8 +5064,10 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     }));
     pendingStartRunIds.add(runId);
     try {
-      const result = await apiExecuteNode(snapshot.nodes, snapshot.edges, nodeId, runId, undefined, options?.approvalId);
+      const result = await apiExecuteNode(snapshot.nodes, snapshot.edges, nodeId, runId, undefined, options?.approvalId,
+        confirmedPlaceholders);
       pendingStartRunIds.delete(runId);
+      announcePendingSkips(result);
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
       if (result.status !== 'started' && result.status !== 'validation_error') {
         throw new ExecutionStartRejectedError(
@@ -5220,6 +5303,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     try {
       const result = await apiExecuteGraph(snapshot.nodes, snapshot.edges, runId, undefined, options?.approvalId);
       pendingStartRunIds.delete(runId);
+      announcePendingSkips(result);
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
       if (result.status !== 'started' && result.status !== 'validation_error') {
         throw new ExecutionStartRejectedError(
@@ -5290,6 +5374,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     try {
       const result = await apiExecuteGraph(snapshot.nodes, snapshot.edges, runId);
       pendingStartRunIds.delete(runId);
+      announcePendingSkips(result);
       if (!ownsRun(runId)) return;
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
       if (result.status === 'started') {

@@ -5,6 +5,8 @@ import { PORT_COLORS } from '../../lib/portCompatibility';
 import { useGraphStore } from '../../store/graphStore';
 import type { CameraRigBundle, NodeData } from '../../types';
 import { NodeRunError } from './NodeError';
+import { PlaceholderLine } from './PlaceholderLine';
+import { pendingAttr } from '../../lib/pendingNodes';
 import '../../styles/camera-rig-node.css';
 
 // The CameraRigNode is the canvas card for the camera-rig utility node. It
@@ -213,7 +215,7 @@ export function CameraRigNode({ id, data, selected }: NodeProps) {
   );
 
   return (
-    <div className={`camera-rig-node ${selected ? 'camera-rig-node--selected' : ''}`}>
+    <div className={`camera-rig-node ${selected ? 'camera-rig-node--selected' : ''}`} data-pending={pendingAttr(data.pending)}>
       <div className="camera-rig-node__title">◈ Camera Rig</div>
       <p className="camera-rig-node__guidance">
         Connect to Cinema Scene for camera prompt guidance. Models may interpret it differently.
@@ -223,6 +225,7 @@ export function CameraRigNode({ id, data, selected }: NodeProps) {
         <SideView rig={rig} />
         <FrameView rig={rig} />
       </div>
+      <PlaceholderLine pending={data.pending} />
 
       <div className="camera-rig-node__sliders">
         {FIELD_ORDER.map((field) => {

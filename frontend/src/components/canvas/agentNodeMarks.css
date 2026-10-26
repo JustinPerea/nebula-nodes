@@ -1,0 +1,204 @@
+/* The agents on the canvas's nodes (Q125 item 3, GM - Design 2026-10-25):
+   the mark above a node and the placeholder's dashed outline. Drawn in flow
+   coordinates inside React Flow's viewport (AgentNodeMarkLayer). Motion runs
+   on the tuned springs (lib/springs.ts, passed in as --spring-pop/--spring-soft);
+   reduced motion keeps only the opacity change. */
+
+.agent-node-marks {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  z-index: 1000; /* above nodes and edges, under the agent cursors (1001) */
+}
+
+/* -- the placeholder: a dashed outline in the agent's colour -------------- */
+
+.agent-placeholder-outline {
+  position: absolute;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.agent-placeholder-outline::before {
+  content: '';
+  position: absolute;
+  /* The same on screen at any zoom, just outside the card. */
+  inset: calc(-5px / var(--anm-zoom, 1));
+  border: calc(1.5px / var(--anm-zoom, 1)) dashed var(--apo-color);
+  border-radius: calc(14px / var(--anm-zoom, 1));
+  animation: agent-node-mark-in var(--spring-pop-ms) var(--spring-pop) both;
+}
+
+/* -- the mark: a tab just above the node's top edge ----------------------- */
+
+.agent-node-mark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  will-change: transform;
+  font-family: var(--sr-ui, 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif);
+}
+
+/* A fixed size on screen at every zoom (GM, 2026-10-25: "like the cursor
+   labels: always 22 px tall, never scaled with the canvas"): the layer sets
+   --anm-scale to 1/zoom and --anm-max to the node's on-screen width. The
+   counter-scale is the `scale` property, not `transform`, so the entrance
+   keyframes (which animate transform) never undo it while they run. */
+.agent-node-mark__row {
+  position: absolute;
+  left: 0;
+  bottom: calc(6px * var(--anm-scale, 1)); /* GM: a 6 px gap above the node's top edge, on screen */
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: max-content;
+  max-width: var(--anm-max);
+  transform-origin: 0 100%;
+  scale: var(--anm-scale, 1);
+  animation: agent-node-mark-in var(--spring-pop-ms) var(--spring-pop) both;
+}
+
+.agent-node-mark__pill,
+.agent-node-mark__more,
+.agent-node-mark__other {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 9px 0 7px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--anm-color, #6e7075) 45%, transparent);
+  background: rgb(14 14 16 / 0.92);
+  color: #ececee;
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.35);
+  box-sizing: border-box;
+}
+
+.agent-node-mark__pill {
+  min-width: 0;
+  overflow: hidden;
+  pointer-events: auto; /* its tooltip */
+}
+
+.agent-node-mark__dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--anm-color);
+}
+
+/* It named itself (no token): a hollow ring, as in the Agents panel. */
+.agent-node-mark__dot[data-verified='false'] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--anm-color);
+}
+
+.agent-node-mark__name {
+  flex: 0 0 auto;
+  font-weight: 600;
+}
+
+.agent-node-mark__status {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #b9bbbf;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-node-mark__more {
+  flex: 0 0 auto;
+  padding: 0 8px;
+  border-color: #3a3a3a;
+  font-weight: 600;
+  cursor: default;
+  pointer-events: auto;
+}
+
+.agent-node-mark__more:focus-visible,
+.agent-node-mark__pill:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #e8e8e6);
+  outline-offset: 2px;
+}
+
+/* The others on the node, one line each, above the chip: the row's 6 px gap,
+   its 22 px and a 4 px gap, all on screen. */
+.agent-node-mark__others {
+  position: absolute;
+  left: 0;
+  bottom: calc(32px * var(--anm-scale, 1));
+  scale: var(--anm-scale, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  transform-origin: 0 100%;
+  animation: agent-node-mark-in var(--spring-pop-ms) var(--spring-pop) both;
+}
+
+.agent-node-mark__other {
+  max-width: 320px;
+}
+
+/* Below 60% zoom: the dot alone, the same size on screen; the words on hover
+   or keyboard focus. The "+N" chip stays (GM: "never hide it ... so you can
+   still find agents from the overview"). */
+.agent-node-mark[data-collapsed='true'] .agent-node-mark__row {
+  max-width: none;
+}
+
+.agent-node-mark[data-collapsed='true'] .agent-node-mark__pill {
+  width: 22px;
+  padding: 0;
+  justify-content: center;
+}
+
+/* The dot alone; the list of the others (from the chip) keeps its words. */
+.agent-node-mark[data-collapsed='true'] .agent-node-mark__pill .agent-node-mark__name,
+.agent-node-mark[data-collapsed='true'] .agent-node-mark__pill .agent-node-mark__status {
+  display: none;
+}
+
+.agent-node-mark[data-collapsed='true'] .agent-node-mark__pill:is(:hover, :focus-visible) {
+  width: auto;
+  max-width: 320px;
+  padding: 0 9px 0 7px;
+  justify-content: flex-start;
+}
+
+.agent-node-mark[data-collapsed='true'] .agent-node-mark__pill:is(:hover, :focus-visible) .agent-node-mark__name,
+.agent-node-mark[data-collapsed='true'] .agent-node-mark__pill:is(:hover, :focus-visible) .agent-node-mark__status {
+  display: inline;
+}
+
+
+@keyframes agent-node-mark-in {
+  from { opacity: 0; transform: translateY(3px) scale(0.96); }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-placeholder-outline::before,
+  .agent-node-mark__row,
+  .agent-node-mark__others {
+    animation-name: agent-node-mark-fade;
+  }
+}
+
+@keyframes agent-node-mark-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

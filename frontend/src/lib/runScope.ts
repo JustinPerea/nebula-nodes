@@ -7,13 +7,14 @@ import { usesKreaAccount } from './kreaConnection';
 import { runRouteProvider } from './modelDiscovery';
 import { cinemaSceneBase, isLocalRun } from './nodeKeys';
 import { awaitsInput, entryForRoute, estimateNode, formatUsd, formatUsdRange, sizingPorts, type InputSize, type PricingTable } from './pricing';
+import { cleanPending, pendingIncludedLine, runSkips, skipSummaryOf, type PendingSkipSummary } from './pendingNodes';
 
 /** What a run would cost, from the curated list prices. Only USD is summed. */
 export interface RunCost {
   low: number;
   high: number;
   /** Priced paid nodes, each with how many times it would run. */
-  lines: Array<{ name: string; low: number; high: number; runs: [number, number] }>;
+  lines: Array<{ name: string; low: number; high: number; runs: [number, number]; nodeId?: string }>;
   /** Paid nodes with no list price for these settings or this route. */
   unpriced: string[];
   /** Nodes billed to a subscription (a Krea account) rather than per run. */
@@ -45,6 +46,13 @@ export interface RunScopeSummary {
    *  Decide's On Pass / On Fail). The estimate still counts them, though the
    *  run may skip them, and a skipped node costs nothing. */
   gated?: string[];
+  /** Agents' placeholders (and what needs them) this run skips, left out of
+   *  `total`, `paid` and `cost` (Q125 item 3). Present only when there are some. */
+  pendingSkipped?: PendingSkipSummary;
+  /** Placeholders (and what needs them) the person's direct run of a node
+   *  makes run, counted in `total`, `paid` and `cost`; the line under the
+   *  cost says so. Present only when there are some. */
+  pendingIncluded?: PendingSkipSummary;
 }
 
 export interface RunCostContext {
@@ -56,7 +64,13 @@ export interface RunCostContext {
 
 const INPUT_NODES: Record<string, 'Image' | 'Video'> = { 'image-input': 'Image', 'video-input': 'Video' };
 
-export type RunScope = { kind: 'graph' } | { kind: 'node'; nodeId: string } | { kind: 'cluster'; nodeIds: string[] };
+/**
+ * `node` with `direct: false` is a run of a node that isn't the person's
+ * direct run (an accepted proposal's run): it skips placeholders like any
+ * other. The person's direct run (the default) runs the placeholders in its
+ * scope (backend main._skip_placeholders).
+ */
+export type RunScope = { kind: 'graph' } | { kind: 'node'; nodeId: string; direct?: boolean } | { kind: 'cluster'; nodeIds: string[] };
 
 const FANOUT_IDS = new Set(['batch', 'iterator-image', 'iterator-text']);
 
@@ -223,6 +237,27 @@ export function summarizeRunScope(
     included = nodes.filter((node) => ids.has(node.id));
   }
 
+  // Agents' placeholders (Q125 item 3), as the backend's run treats them
+  // (main._skip_placeholders): every run skips each one and what needs it,
+  // except the person's direct run of a node, which runs the placeholders in
+  // its scope. So the cost prices what will run, as the spend check does.
+  const flags = new Map(included.flatMap((node) => {
+    const flag = cleanPending(node.data?.pending);
+    return flag ? [[node.id, flag] as const] : [];
+  }));
+  let pendingSkipped: PendingSkipSummary | null = null;
+  let pendingIncluded: PendingSkipSummary | null = null;
+  if (flags.size > 0) {
+    const scopeIds = included.map((node) => node.id);
+    const skips = runSkips(scopeIds, edges, (id) => flags.get(id) ?? null);
+    if (scope.kind === 'node' && scope.direct !== false) {
+      pendingIncluded = skipSummaryOf(skips);
+    } else {
+      pendingSkipped = skipSummaryOf(skips);
+      included = included.filter((node) => !skips.has(node.id));
+    }
+  }
+
   const paid: string[] = [];
   const pricing = costContext?.pricing;
   const cost: RunCost = { low: 0, high: 0, lines: [], unpriced: [], plan: [], plus: [], awaitingInput: [], sizeRefs: [] };
@@ -309,7 +344,7 @@ export function summarizeRunScope(
     const [fewest, most] = multipliers.get(node.id) ?? [1, 1];
     // A cinema scene's base model runs once per shot.
     const runs: [number, number] = [fewest * calls, most * calls];
-    const line = { name, low: estimate.low * runs[0], high: estimate.high * runs[1], runs };
+    const line = { name, low: estimate.low * runs[0], high: estimate.high * runs[1], runs, nodeId: node.id };
     cost.lines.push(line);
     cost.low += line.low;
     cost.high += line.high;
@@ -317,6 +352,8 @@ export function summarizeRunScope(
   }
   const summary: RunScopeSummary = pricing ? { total: included.length, paid, cost } : { total: included.length, paid };
   if (gated.length) summary.gated = gated;
+  if (pendingSkipped) summary.pendingSkipped = pendingSkipped;
+  if (pendingIncluded) summary.pendingIncluded = pendingIncluded;
   return summary;
 }
 
@@ -358,15 +395,18 @@ function runsLabel([low, high]: [number, number]): string {
 
 /** "Runs 2 nodes · 1 calls a paid provider: GPT Image 2.5", then the
  * estimate per node when the price table has loaded. */
-export function describeRunScope({ total, paid, cost, gated }: RunScopeSummary): string {
+export function describeRunScope({ total, paid, cost, gated, pendingIncluded }: RunScopeSummary): string {
   const nodes = `${total} ${total === 1 ? 'node' : 'nodes'}`;
-  if (paid.length === 0) return `Runs ${nodes} · no paid providers`;
+  // GM - Design, 2026-10-25: the run counts the placeholders it runs and says so.
+  const included = pendingIncludedLine(pendingIncluded)?.replace(/\.$/, '');
+  if (paid.length === 0) return [`Runs ${nodes} · no paid providers`, included].filter(Boolean).join('. ');
   const parts = [`Runs ${nodes} · ${paid.length} ${paid.length === 1 ? 'calls a paid provider' : 'call paid providers'}: ${nameList(paid)}`];
   if (cost && cost.lines.length > 0) {
     const total = formatUsdRange(cost.low, cost.high);
     const detail = cost.lines.map((line) => `${line.name} ${formatUsdRange(line.low, line.high)}${runsLabel(line.runs)}`);
     parts.push(`Estimated ${total} at list prices (${detail.join('; ')})`);
   }
+  if (included) parts.push(included);
   if (cost?.plus.length) parts.push(`Not included: ${cost.plus.join(', ')}`);
   const unavailable = Object.keys(cost?.unavailable ?? {});
   const awaiting = cost?.awaitingInput ?? [];
@@ -387,21 +427,31 @@ function gatedNote(gated: string[]): string {
 }
 
 /** The confirm text when a run's estimate reaches the user's threshold. */
-export function runCostConfirmMessage({ cost, gated }: RunScopeSummary): string {
+export function runCostConfirmMessage({ cost, gated, pendingIncluded }: RunScopeSummary): string {
   if (!cost) return 'Run it?';
+  // GM - Design, 2026-10-25: "a line under the cost".
+  const included = pendingIncludedLine(pendingIncluded);
   const lines = cost.lines.map((line) => `• ${line.name}: ${formatUsdRange(line.low, line.high)}${runsLabel(line.runs)}`);
+  return [
+    [`This run could cost up to ${formatUsd(cost.high)} at list prices.`, included].filter(Boolean).join('\n'),
+    lines.join('\n'),
+    ...runCostNotes({ cost, gated }),
+    'Run it?',
+  ].filter(Boolean).join('\n\n');
+}
+
+/** The costly-run confirm's notes under its prices (gates, not included, no
+ * list price, priced once its input is known); the placeholder run dialog
+ * (lib/placeholderRunConfirm.ts) shows the same ones. */
+export function runCostNotes({ cost, gated }: Pick<RunScopeSummary, 'cost' | 'gated'>): string[] {
   const notes: string[] = [];
   if (gated?.length) notes.push(`${gatedNote(gated)}.`);
+  if (!cost) return notes;
   if (cost.plus.length) notes.push(`Not included: ${cost.plus.join(', ')}.`);
   const unpriced = cost.unpriced.filter((name) => !cost.awaitingInput?.includes(name));
   if (unpriced.length) notes.push(`No list price for ${nameList(unpriced)}, so it may cost more.`);
   notes.push(...awaitingNotes(cost).map((note) => `${note}, so it may cost more.`));
-  return [
-    `This run could cost up to ${formatUsd(cost.high)} at list prices.`,
-    lines.join('\n'),
-    ...notes,
-    'Run it?',
-  ].filter(Boolean).join('\n\n');
+  return notes;
 }
 
 /** Whether this run's high estimate reaches the threshold (null never asks). */

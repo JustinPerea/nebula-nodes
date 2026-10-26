@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { fetchAgentRoster, type RosterListing } from '../../lib/agentRoster';
-import { wsClient, type AgentStatusEvent } from '../../lib/wsClient';
-import type { RosterAgent, RosterCursor, RosterStatus } from './agentRosterModel';
+import { wsClient, type AgentRunEvent, type AgentStatusEvent } from '../../lib/wsClient';
+import type { RosterAgent, RosterCursor, RosterRun, RosterStatus } from './agentRosterModel';
 
 /**
  * What the Agents panel (Q125 item 2) knows that no other store holds: each
@@ -10,6 +10,11 @@ import type { RosterAgent, RosterCursor, RosterStatus } from './agentRosterModel
  * `agentStatus` socket events, read again when the socket reconnects (a
  * restart clears every status) and when the canvas's graph is replaced (a
  * project switch). No polling.
+ *
+ * It also keeps the nodes agents' runs are running now (Q125 item 3), from
+ * `agentRun` events and the roster's `running`, for the mark on each node
+ * (components/canvas/AgentNodeMarkLayer.tsx, which reads the roster when it
+ * mounts, so a tab that loads mid-run has them).
  *
  * In the panel's chunk: it loads with the Updates corner, and the panel reads
  * the roster each time it mounts, so nothing sent before is missed.
@@ -21,6 +26,8 @@ interface AgentRosterState {
   statuses: Record<string, RosterStatus>;
   /** Cursors as the last read reported them; the live ones are agentPresenceStore's. */
   cursors: Record<string, RosterCursor>;
+  /** Nodes agents' runs are running now, by `${runId}:${nodeId}`. */
+  runs: Record<string, RosterRun>;
   /** When the last applied read was asked for: it reports every cursor the
    *  backend still had then, so a live cursor heard before it (one a restart
    *  cleared) no longer counts. */
@@ -29,6 +36,7 @@ interface AgentRosterState {
   expanded: boolean;
   setExpanded: (expanded: boolean) => void;
   applyStatus: (event: AgentStatusEvent, now?: number) => void;
+  applyRun: (event: AgentRunEvent, now?: number) => void;
   applyRoster: (listing: RosterListing, fetchedAt?: number) => void;
   reset: () => void;
 }
@@ -50,6 +58,7 @@ const seconds = (value: unknown) => (typeof value === 'number' && Number.isFinit
 export const useAgentRosterStore = create<AgentRosterState>((set) => ({
   statuses: {},
   cursors: {},
+  runs: {},
   readAt: 0,
   expanded: false,
   setExpanded: (expanded) => set({ expanded }),
@@ -74,13 +83,41 @@ export const useAgentRosterStore = create<AgentRosterState>((set) => ({
       return { statuses };
     });
   },
+  applyRun: (event, now = Date.now()) => {
+    const agent = cleanAgent(event.agent);
+    if (!agent || typeof event.runId !== 'string' || typeof event.nodeId !== 'string') return;
+    const key = `${event.runId}:${event.nodeId}`;
+    set((state) => {
+      const runs = { ...state.runs };
+      if (event.change === 'started') {
+        runs[key] = {
+          agent, runId: event.runId, nodeId: event.nodeId,
+          model: typeof event.model === 'string' && event.model ? event.model : null,
+          projectId: typeof event.projectId === 'string' ? event.projectId : null,
+          at: now - seconds(event.secondsAgo) * 1000,
+        };
+      } else {
+        delete runs[key];
+      }
+      return { runs };
+    });
+  },
   applyRoster: (listing, fetchedAt = Date.now()) => {
     const projectId = typeof listing.projectId === 'string' ? listing.projectId : null;
     const statuses: Record<string, RosterStatus> = {};
     const cursors: Record<string, RosterCursor> = {};
+    const runs: Record<string, RosterRun> = {};
     for (const entry of Array.isArray(listing.agents) ? listing.agents : []) {
       const agent = cleanAgent(entry?.agent);
       if (!agent) continue;
+      for (const running of Array.isArray(entry.running) ? entry.running : []) {
+        if (!running || typeof running.runId !== 'string' || typeof running.nodeId !== 'string') continue;
+        runs[`${running.runId}:${running.nodeId}`] = {
+          agent, runId: running.runId, nodeId: running.nodeId, projectId,
+          model: typeof running.model === 'string' && running.model ? running.model : null,
+          at: fetchedAt - seconds(running.secondsAgo) * 1000,
+        };
+      }
       if (entry.status && typeof entry.status.text === 'string' && entry.status.text) {
         statuses[agent.id] = {
           agent, text: entry.status.text, projectId,
@@ -105,12 +142,12 @@ export const useAgentRosterStore = create<AgentRosterState>((set) => ({
         };
       }
     }
-    set({ statuses, cursors, readAt: fetchedAt });
+    set({ statuses, cursors, runs, readAt: fetchedAt });
   },
   reset: () => {
     reading = null;
     pending.length = 0;
-    set({ statuses: {}, cursors: {}, readAt: 0, expanded: false });
+    set({ statuses: {}, cursors: {}, runs: {}, readAt: 0, expanded: false });
   },
 }));
 
@@ -157,6 +194,8 @@ wsClient.subscribe((event) => {
   if (event.type === 'agentStatus') {
     useAgentRosterStore.getState().applyStatus(event);
     if (reading) pending.push(event);
+  } else if (event.type === 'agentRun') {
+    useAgentRosterStore.getState().applyRun(event);
   } else if (event.type === 'socketReconnected' || (event.type === 'graphSync' && event.graphReplaced)) {
     void refreshAgentRoster();
   }

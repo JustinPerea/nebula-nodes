@@ -1320,7 +1320,96 @@ Needs-you row opens its oldest question set or proposal.
   whichever project is open), `waitingSeconds` (the oldest open item's
   age) and `activeSecondsAgo`.
   Counts only: never the text of another agent's questions, the person's
-  answers, a proposal's note, or a cursor's `say`.
+  answers, a proposal's note, or a cursor's `say`. Each entry also lists
+  `pending` (that agent's placeholder ids on the open canvas) and `running`
+  (`[{runId, nodeId, model, secondsAgo}]`: the nodes its runs are running
+  now); an agent with only placeholders is listed too.
+
+### Placeholders, the run mark and done cards
+
+Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
+
+- **Placeholders (pending nodes):** MCP `edit_canvas(..., pending=True)`,
+  CLI `nebula apply --add ... --pending`, HTTP `POST /api/graph/apply` with
+  `"pending": true` makes the call's **new** nodes your placeholders while
+  you set them up: the canvas draws a dashed outline in your colour and
+  dims the preview with "<you> is setting this up." The reply lists them in
+  `pending`. Only new nodes: `pending: true` with no new nodes is refused
+  (422), and no agent marks a node already on the canvas or the person's.
+  In a steps plan, put `"pending": true` on the step that adds them.
+- **Making them ready:** `edit_canvas(pending=False, node_ids=["n4"])`,
+  `nebula apply --ready n4 [--ready n5]`, HTTP `{"pending": false,
+  "nodeIds": [...]}` (a step may name earlier steps' +refs). The reply has
+  `ready` and `notPending`. Only the owner: naming another agent's
+  placeholder refuses the whole call (403, nothing changes). They also turn
+  normal, and nothing is ever deleted, when you run them (your run clears
+  your own once it starts: a run refused before it starts, by the pre-call
+  check, a cycle or the spending check, leaves them pending), after 10
+  minutes with no request from you (the status line's rule and clock), when
+  the person edits one (params, the model picker, name, a real move, a wire
+  to or from it), or when the person runs one directly (its own Run; an
+  accepted proposal's run is not that). The person's direct Run of a node
+  runs what feeds it too, so every placeholder in that run turns normal and
+  runs. Another agent's edit to it, or yours, leaves it pending.
+- **Runs skip them:** every way to run (the toolbar Run, a node's Run,
+  MCP `run_nodes`, `nebula run`, an accepted proposal's run) skips each
+  placeholder and every node downstream that needs its output, before
+  anything is priced: nothing is spent on them. Each gets a `skipped`
+  event with an agent-readable reason ("Codex is still setting this up.",
+  which the canvas's Skipped badge shows as "Skipped: Codex is still
+  setting this up.", or "needs n3 (“Hero prompt”), which Codex is still
+  setting up"); run results list them in `skipped` beside a gate's skips;
+  a canvas run's reply adds `pendingSkipped` ({count, agents}) for the line
+  under Run ("Skipped 3 nodes Codex is still setting up.", "agents" when
+  they are more than one agent's), and the run's Agent log line ends with
+  the same sentence. The cost the person sees before a run matches what it
+  runs: a whole-canvas Run, Run selected and an accepted proposal's run
+  leave the skipped nodes out (a proposal's `cost` adds `pendingSkipped`),
+  and the person's direct Run of a node counts the placeholders it runs,
+  with "Includes 2 nodes Codex is still setting up." under the cost.
+- **The person confirms paid ones:** when the person's direct Run would
+  make a placeholder that calls a paid model normal, the canvas always
+  asks first (whatever "Ask before costly runs" is set to), in one dialog
+  that replaces the costly-run confirm: "Run 2 nodes Codex is still
+  setting up?", a row per paid placeholder with its price, the free ones
+  in one line, the run's total, "Run for $X" / "Cancel". Cancel changes
+  nothing. `/api/execute-node` enforces it: the person's run carries
+  `confirmedPlaceholders` (exactly those paid placeholder ids) or gets
+  409 `placeholder_confirm_required` (with `placeholders`) before anything
+  is priced or changes. Free placeholders need no confirmation. Agents'
+  runs are unchanged: your own placeholders run when you run them.
+- **Saved with the graph:** the flag lives on the node with its owner
+  (`{agent: {id, name, color, verified}, at}`), in the persisted graph, the
+  export (`data.pending`) and the project, so it survives a reload and a
+  project switch. Saves take it from the live graph, never from a tab.
+  `look_at_canvas` shows `pending: {agent, agentId}` on such a node. The
+  person's undo and redo (`POST /api/graph/restore`) put it back as the
+  step had it (`pending` on a node item: the flag, or null). Your own undo
+  (`undo_canvas_edit`, `nebula undo`) does the same from what the server
+  kept: a placeholder you removed comes back as one, and undoing your
+  `pending: false` makes those nodes placeholders again (the reply's
+  `placeholders`; not a node someone else ran since). An agent's restore
+  never sets or clears one otherwise.
+- **The run mark:** while a run an agent started is on a node, the canvas
+  shows that agent's pill above it ("Running FLUX.2 [pro] · 0:41", or a
+  node name in quotes, "Running “Text Input” · 0:03", once the run has
+  gone 1 s; `model` carries the quotes), from
+  `agentRun` socket events (`change`: started or ended, with `agent`,
+  `runId`, `nodeId`, `model`, `projectId`, `secondsAgo`). A status line on
+  a node (`set_status(text, node_id)`) shows the same pill.
+- **Done cards:** when a run an agent started ends (finished, partly
+  failed or failed; not stopped), Nebula posts one Update for it under that
+  agent's name (`source: "nebula"`, `about: "run"`): "Codex finished
+  “Hero shots”.", "Codex finished 2 of 3 nodes. “Upscale” failed.",
+  "Codex's run of 3 nodes failed." Its `run` is `{id, nodeIds, lastNodeId,
+  outcome, thumbnail?}`; `refs` is the last node, which **Show on canvas**
+  flies to. The thumbnail links an output Nebula already keeps
+  (`/api/outputs/...`, never a provider URL or a copy): the last node's
+  first output for a success, the last output that succeeded for a
+  partial run, none for a failure or a text or audio output. A failed run
+  also gets an Agent log line. A newer card for the same node and agent
+  replaces the older one. The agent reads its own with `list_notes`. Runs
+  the person starts get no card.
 
 ### Proposals outside the canvas
 

@@ -69,6 +69,23 @@ export interface AgentStatusEvent {
   rev: number;
 }
 
+/**
+ * A node of a run an agent started began or stopped running (Q125 item 3;
+ * backend services/run_done_cards.py AgentRunBook): the agent's mark on it.
+ */
+export interface AgentRunEvent {
+  type: 'agentRun';
+  agent: { id: string; name: string; color: string; verified: boolean };
+  runId: string;
+  nodeId: string;
+  /** The model as its provider spells it ("FLUX.2 [pro]"), or the node's name. */
+  model: string | null;
+  projectId: string | null;
+  change: 'started' | 'ended';
+  /** How long the node has run (when it started, for `started`: about 0). */
+  secondsAgo: number;
+}
+
 /** A short note the person pinned for agents (backend services/canvas_pins.py). */
 export interface Pin {
   id: string;
@@ -313,6 +330,7 @@ export type ExecutionEvent = (
     }
   | AgentPresenceEvent
   | AgentStatusEvent
+  | AgentRunEvent
   | CanvasPinsEvent
   | AgentNotesEvent
   | StoredAssetChangedEvent

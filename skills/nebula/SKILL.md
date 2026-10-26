@@ -138,6 +138,28 @@ step's token, newest first. Only your own `nebula apply` edits have tokens.
 Single edits also exist: `nebula create`, `connect`, `set`, `rename`, `move`,
 `delete`, `disconnect`.
 
+### Placeholders while you set nodes up
+
+```bash
+nebula apply --add +hero=flux-2-pro --add +p=text-input --wire +p:text +hero:prompt --pending
+nebula apply --ready n4 --ready n5      # they're ready: normal again
+```
+
+`--pending` makes that apply's new nodes your placeholders: the person sees
+a dashed outline in your colour and "<you> is setting this up.", and every
+run (theirs, yours, another agent's) skips them and what needs their output,
+listing them as `skipped` with the reason. Nothing is spent on them. They
+turn normal with `--ready`, when you run them yourself (a run refused
+before it starts leaves them pending), after 10 minutes without a request
+from you, or when the person edits or runs one (when the person's run
+would run a paid placeholder of yours, Nebula asks them first, so leave
+the model and params as they should be). Only new
+nodes can be placeholders, and only you make yours ready. `nebula undo` of
+your `--ready` (or of a delete) makes them placeholders again. In a steps file,
+put `"pending": true` on the step that adds them and `{"pending": false,
+"nodeIds": ["+hero"]}` in a later step. MCP: `edit_canvas(pending=True)`,
+then `edit_canvas(pending=False, node_ids=[...])`.
+
 Prompts go into input ports, not params: wire a `text-input` node's `text`
 output into the model's `prompt` (or a chat model's `messages`).
 
@@ -665,6 +687,14 @@ proposal"), then Working (most recent first), each with its status or its
 cursor's last action ("Added “Text Input” · 2 min ago"). Counts only: you
 never see another agent's questions, the person's answers or another
 agent's proposal notes. MCP: `set_status`, `list_agents`.
+
+While your run is on a node, the person sees your mark above it ("Running
+FLUX.2 [pro] · 0:41"); `nebula agents` lists each agent's running nodes and
+placeholders too. When a run you started ends, Nebula posts your done card
+in Updates ("Codex finished “Hero shots”.", "Codex finished 2 of 3 nodes.
+“Upscale” failed.") with a thumbnail and Show on canvas; read it with
+`nebula notes` (MCP `list_notes`, `about: "run"`). You don't post it
+yourself, and a newer card for the same node replaces yours.
 
 ## Watch and answer the person
 

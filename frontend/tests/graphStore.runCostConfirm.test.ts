@@ -6,6 +6,8 @@ vi.mock('../src/lib/backend', async (importOriginal) => ({
   apiFetch: apiFetchMock,
   getCachedBackendBaseUrl: () => null,
 }));
+const askMock = vi.hoisted(() => vi.fn());
+vi.mock('../src/components/askPlaceholderRun', () => ({ askPlaceholderRun: askMock }));
 vi.mock('../src/lib/wsClient', () => ({ wsClient: {
   connect: vi.fn(), subscribe: vi.fn(), disconnect: vi.fn(),
 } }));
@@ -77,5 +79,109 @@ describe('run cost confirmation', () => {
     usePricingStore.setState({ table: null });
     await useGraphStore.getState().executeGraph();
     expect(confirm).not.toHaveBeenCalled();
+  });
+
+  // Q125 item 3, GM - Design 2026-10-25: the cost shown before a run counts
+  // what that run will do with agents' placeholders.
+  describe('with an agent\'s placeholder', () => {
+    const codex = { agent: { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true }, at: 1 };
+    beforeEach(() => {
+      // a (Codex's placeholder) -> b; c stands alone.
+      useGraphStore.setState({
+        nodes: [{ ...imageNode('a'), data: { ...imageNode('a').data, pending: codex } }, imageNode('b'), imageNode('c')],
+        edges: [{ id: 'e1', source: 'a', target: 'b', sourceHandle: 'image', targetHandle: 'image_input' }],
+      });
+      useUIStore.setState({ runCostConfirmUsd: 0.5 });
+    });
+
+    it("the person's direct run over a free placeholder counts it and says so", async () => {
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      useGraphStore.setState({
+        nodes: [{ id: 'a', type: 'model-node', position: { x: 0, y: 0 }, data: { definitionId: 'text-input', label: 'a',
+          params: { value: 'x' }, state: 'idle', outputs: {}, pending: codex } }, imageNode('b')],
+      });
+      await useGraphStore.getState().executeNode('b');
+      expect(askMock).not.toHaveBeenCalled();
+      expect(confirm).toHaveBeenCalledOnce();
+      expect(confirm.mock.calls[0][0]).toContain('could cost up to $0.60');
+      expect(confirm.mock.calls[0][0]).toContain('Includes 2 nodes Codex is still setting up.');
+    });
+
+    // Q133 (Justin, 2026-10-25): always ask first when a placeholder the run
+    // makes normal calls a paid model, whatever the costly-run setting.
+    describe('a paid placeholder in the run', () => {
+      beforeEach(() => { askMock.mockReset(); });
+
+      it('always asks, even with "Ask before costly runs" off, and Cancel runs and changes nothing', async () => {
+        useUIStore.setState({ runCostConfirmUsd: null });
+        askMock.mockResolvedValue(false);
+        const confirm = vi.spyOn(window, 'confirm');
+        const execute = vi.spyOn(api, 'executeNode');
+        const before = useGraphStore.getState().nodes;
+        await useGraphStore.getState().executeNode('b');
+        expect(askMock).toHaveBeenCalledOnce();
+        expect(askMock.mock.calls[0][0]).toMatchObject({
+          heading: 'Run 1 node Codex is still setting up?',
+          totalLine: 'This run could cost up to $1.20 at list prices.',
+          runLabel: 'Run for $1.20',
+          confirmIds: ['a'],
+        });
+        expect(confirm).not.toHaveBeenCalled();
+        expect(execute).not.toHaveBeenCalled();
+        expect(useGraphStore.getState().nodes).toBe(before);
+        expect(useGraphStore.getState().isExecuting).toBe(false);
+        expect(useGraphStore.getState().runHistory).toEqual([]);
+      });
+
+      it('replaces the costly-run confirm when both apply: one dialog', async () => {
+        useUIStore.setState({ runCostConfirmUsd: 0.01 });
+        askMock.mockResolvedValue(false);
+        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+        await useGraphStore.getState().executeNode('b');
+        expect(askMock).toHaveBeenCalledOnce();
+        expect(confirm).not.toHaveBeenCalled();
+      });
+
+      it('a confirmed run sends exactly the paid placeholders it confirmed', async () => {
+        useUIStore.setState({ runCostConfirmUsd: 0.01 });
+        askMock.mockResolvedValue(true);
+        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const execute = vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'started' } as never);
+        await useGraphStore.getState().executeNode('b');
+        expect(confirm).not.toHaveBeenCalled();
+        expect(execute).toHaveBeenCalledOnce();
+        expect(execute.mock.calls[0][6]).toEqual(['a']);
+      });
+
+      it("an accepted proposal's run never asks (it skips the placeholder)", async () => {
+        useUIStore.setState({ runCostConfirmUsd: null });
+        vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'started' } as never);
+        await useGraphStore.getState().executeNode('b', { approvalId: 'ap1' });
+        expect(askMock).not.toHaveBeenCalled();
+      });
+    });
+
+    it("an accepted proposal's run skips it, so it is not priced", async () => {
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      useUIStore.setState({ runCostConfirmUsd: 0.1 });
+      await useGraphStore.getState().executeNode('b', { approvalId: 'ap1' });
+      expect(confirm).not.toHaveBeenCalled();
+    });
+
+    it('a whole-canvas Run leaves the skipped nodes out of its cost', async () => {
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      await useGraphStore.getState().executeGraph();
+      expect(confirm).toHaveBeenCalledOnce();
+      expect(confirm.mock.calls[0][0]).toContain('could cost up to $0.60');
+      expect(confirm.mock.calls[0][0]).not.toContain('Includes');
+    });
+
+    it('Run selected leaves them out too', async () => {
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      useUIStore.setState({ runCostConfirmUsd: 1 });
+      await useGraphStore.getState().executeCluster(['a', 'b', 'c']);
+      // Only c runs: $0.60, under the $1 threshold.
+      expect(confirm).not.toHaveBeenCalled();
+    });
   });
 });

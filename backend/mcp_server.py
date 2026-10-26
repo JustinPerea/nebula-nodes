@@ -47,7 +47,7 @@ Call start_here first: the canvas, open pins and proposals, every moodboard, the
 
 The loop:
 1. describe_node: a node type's ports, params and prices (find_nodes searches them).
-2. edit_canvas: new nodes ("+img" refs), wires, params, names, moves and removals in one call; all of it lands or none of it (or send `steps`). remove_from_canvas deletes nodes or wires. Each edit returns an undo token: undo_canvas_edit takes your own edit back.
+2. edit_canvas: new nodes ("+img" refs), wires, params, names, moves and removals at once, all or none (or `steps`; `pending` makes new nodes placeholders runs skip). remove_from_canvas deletes nodes or wires. undo_canvas_edit takes back your own edit by its token.
 3. run_nodes: runs a node and what feeds it, within the person's spend limits.
 4. view_output: look at what it made.
 5. propose_change instead, for a run over a limit or without a list price, or reworking their graph: the person accepts or rejects it in Nebula; agents cannot accept.
@@ -472,6 +472,11 @@ def list_notes(board: str | None = None, unread: bool = False, ctx: Context | No
     "Expired" (15 minutes without a decision), "No longer fits", or
     "Closed: Nebula restarted" (Nebula restarted while it was open;
     proposals don't survive a restart, so ask again if you still want it).
+    When a run you started ends, Nebula posts your done card (`about: "run"`,
+    `source: "nebula"`, under your name): its text says how it went, `run` has
+    {id, nodeIds, lastNodeId, outcome: success, partial or failure,
+    thumbnail?}, and `refs` the last node (the person's Show on canvas goes
+    there). A newer card for the same node replaces the older one.
     """
     params = {"unread": 1} if unread else None
     if board:
@@ -564,8 +569,10 @@ def list_agents(ctx: Context | None = None) -> dict[str, Any]:
     and node, its cursor's last action and how long ago, and how many of its
     questions and proposals wait for the person (`needsYou`: counts only,
     never their text). `group` is "needsYou" (first, longest wait first) or
-    "working" (most recent first). Read it to see what the others are on
-    before you start on the same thing.
+    "working" (most recent first). Each agent's `pending` lists its
+    placeholders (nodes it is still setting up; runs skip them) and `running`
+    the nodes its runs are running now ({nodeId, model, secondsAgo}). Read it
+    to see what the others are on before you start on the same thing.
     """
     return _canvas_call("GET", "/api/canvas/agents", ctx)
 
@@ -1163,6 +1170,8 @@ def edit_canvas(
     arrange: bool | dict | None = None,
     remove: list[str] | None = None,
     unwire: list[dict] | None = None,
+    pending: bool | None = None,
+    node_ids: list[str] | None = None,
     steps: list[dict] | None = None,
     ctx: Context | None = None,
 ) -> dict[str, Any]:
@@ -1187,6 +1196,15 @@ def edit_canvas(
       [{"source", "sourceHandle", "target", "targetHandle"}].
     - `note`: one line on what this is for; shown beside your cursor. Your own
       edit only; what you noticed goes in post_note.
+    - `pending`: true makes this call's new nodes your placeholders while you
+      set them up: the person sees a dashed outline in your colour, and every
+      run skips them and what needs their output (run results list them in
+      `skipped`, with why). Only new nodes; never one already on the canvas.
+      When they're ready, call again with `pending: false` and `node_ids` (your
+      placeholders' ids), or run them yourself. They turn normal on their own
+      if you make no request for 10 minutes, or when the person edits or runs
+      one. Another agent's placeholder isn't yours to clear. The result lists
+      `pending` (marked), or `ready` and `notPending`.
     No limit on how much one call adds; it all lands or none of it does.
     Applied in this order: unwire, remove, add and change, rename, move.
     - `steps`: a list of such plans (no `run`), sent one after another, each
@@ -1215,8 +1233,10 @@ def edit_canvas(
     """
     body: dict[str, Any] = {key: value for key, value in {
         "note": note, "nodes": nodes, "edges": edges, "params": params, "rename": rename, "move": move,
-        "arrange": arrange, "remove": remove, "unwire": unwire,
+        "arrange": arrange, "remove": remove, "unwire": unwire, "nodeIds": node_ids,
     }.items() if value}
+    if pending is not None:
+        body["pending"] = pending
     if steps is not None:
         return _edit_in_steps({**body, "steps": steps}, ctx)
     return _canvas_call("POST", "/api/graph/apply", ctx, json=body)
@@ -1335,8 +1355,11 @@ def undo_canvas_edit(token: str | list[str], ctx: Context | None = None) -> dict
     "another-model" or "another-project"), and proposals your delete closed
     reopen when they still fit (`reopened`; the ones that can't, say because
     they expired, are in `notReopened` with the reason).
+    A placeholder you removed comes back as your placeholder, and undoing
+    your `pending=False` makes those nodes placeholders again (`placeholders`),
+    unless someone else ran one since.
     Returns `{status, added, removed, changed, renamed, moved, wired, unwired,
-    skipped, reattached, pinsLeft, reopened, notReopened, message}`
+    placeholders, skipped, reattached, pinsLeft, reopened, notReopened, message}`
     (`message` says what went back and what was left, and why);
     `status` is "undone", "skipped" (nothing could go back; the token still
     works if a changed part is put back, but a node someone ran since stays
@@ -1452,8 +1475,10 @@ async def run_nodes(node_id: str | None = None, wait_seconds: float = DEFAULT_RU
     same run isn't known yet, so wire an Image Input holding the file into
     it, or propose it. Waits up to
     `wait_seconds` (max 300). Finished: outputs per node, errors, `skipped`
-    (nodes a gate such as Jev Decide's On Pass / On Fail withheld, with
-    the reason; they never ran and cost nothing), and small previews of
+    (nodes a gate such as Jev Decide's On Pass / On Fail withheld, and
+    another agent's placeholders with the nodes that need them, each with
+    the reason; they never ran and cost nothing; your own placeholders run
+    and turn normal, unless the run is refused before it starts), and small previews of
     images and videos. Status is "finished", or "failed" when any node
     failed: `errors` has each node's message (also on its card), `error` says
     it in one line, and finished nodes keep their outputs. A node that can't

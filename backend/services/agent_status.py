@@ -89,6 +89,11 @@ class AgentStatusBook:
                          if key not in self._statuses and now - at > STATUS_IDLE_SECONDS]:
             del self._seen[agent_id]
 
+    def last_seen(self, agent_id: str) -> float | None:
+        """When this agent last gave a sign (placeholders use the same idle
+        rule: services/pending_nodes.py), or None when it gave none lately."""
+        return self._seen.get(agent_id)
+
     def _last_sign(self, status: AgentStatus) -> float:
         return max(status.set_at, self._seen.get(status.agent.id, status.set_at))
 
@@ -180,12 +185,17 @@ def _identity(raw: Mapping[str, Any]) -> AgentIdentity:
 
 def build_roster(*, project_id: str | None, now: float, cursors: Iterable[Mapping[str, Any]],
                  statuses: Iterable[AgentStatus], waiting: Iterable[Waiting],
-                 status_view: Callable[[AgentStatus], dict[str, Any]]) -> list[dict[str, Any]]:
+                 status_view: Callable[[AgentStatus], dict[str, Any]],
+                 pending: Mapping[str, Mapping[str, Any]] | None = None,
+                 running: Iterable[tuple[AgentIdentity, list[dict[str, Any]]]] = ()) -> list[dict[str, Any]]:
     """One entry per agent around in ``project_id``, Needs you first (longest
     wait first), then Working (most recent activity first).
 
     ``cursors`` are agent_presence.active() rows (each with its projectId);
-    ``statuses`` and ``waiting`` are already the open project's."""
+    ``statuses`` and ``waiting`` are already the open project's. ``pending``
+    is the open canvas's placeholders by agent (pending_nodes.by_agent) and
+    ``running`` each agent's nodes running now in its runs (Q125 item 3):
+    every entry lists both, and an agent with only placeholders is listed."""
     entries: dict[str, dict[str, Any]] = {}
 
     def entry_for(identity: AgentIdentity) -> dict[str, Any]:
@@ -194,7 +204,7 @@ def build_roster(*, project_id: str | None, now: float, cursors: Iterable[Mappin
             found = entries[identity.id] = {
                 "agent": identity.as_dict(), "group": "working", "status": None, "lastAction": None,
                 "cursor": None, "needsYou": {"questions": 0, "proposals": 0}, "waitingSeconds": None,
-                "activeSecondsAgo": None, "_waitingSince": None,
+                "activeSecondsAgo": None, "_waitingSince": None, "pending": [], "running": [],
             }
         return found
 
@@ -222,6 +232,15 @@ def build_roster(*, project_id: str | None, now: float, cursors: Iterable[Mappin
         view = status_view(status)
         entry["status"] = {"text": view["text"], "nodeId": view["nodeId"], "secondsAgo": view["secondsAgo"]}
         active(entry, view["secondsAgo"])
+
+    for agent, nodes in running:
+        entry = entry_for(agent)
+        entry["running"] = [dict(node) for node in nodes]
+        active(entry, 0.0)
+
+    for mine in (pending or {}).values():
+        entry = entry_for(_identity(mine["agent"]))
+        entry["pending"] = list(mine["nodeIds"])
 
     for item in waiting:
         entry = entry_for(item.agent)

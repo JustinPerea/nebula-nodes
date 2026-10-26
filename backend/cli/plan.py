@@ -12,7 +12,8 @@ The CLI sends each step as its own edit, in order; each lands whole or not
 at all. A step can use the +refs earlier steps created (`+mood` in step 2
 means the node step 1 made for `+mood`): the CLI swaps in the node ids each
 apply returned in `idMap`, so the backend never holds plan state. A step may
-set `arrange` to have the canvas lay out that step's new nodes. The checks
+set `arrange` to have the canvas lay out that step's new nodes, and
+`pending` to make them the agent's placeholders (Q125 item 3). The checks
 and the stop-and-report rule live in backend/apply_steps.py, shared with the
 MCP server's edit_canvas(steps=...).
 """
@@ -211,6 +212,26 @@ def _refuse_apply_only_flags(args: argparse.Namespace) -> None:
                              "does it directly.")
 
 
+def _pending_flags(body: dict[str, Any], args: argparse.Namespace) -> None:
+    """--pending: this apply's new nodes are your placeholders while you set
+    them up (runs skip them). --ready nX: your placeholders are ready."""
+    pending = bool(getattr(args, "pending", False))
+    ready = [str(node_id) for node_id in getattr(args, "ready", None) or []]
+    if pending and ready:
+        raise BuildError("--pending marks the nodes this apply adds; --ready makes your placeholders ready. "
+                         "Use one per apply")
+    if pending:
+        if not body.get("nodes"):
+            raise BuildError("--pending marks the new nodes this apply adds (--add, or the plan's nodes), "
+                             "and it adds none; no agent marks a node that is already on the canvas")
+        body["pending"] = True
+    if ready:
+        if any(node_id.startswith("+") for node_id in ready):
+            raise BuildError("--ready takes your placeholders' node ids (n4), not +refs")
+        body["pending"] = False
+        body["nodeIds"] = list(dict.fromkeys(ready))
+
+
 def body_from_args(args: argparse.Namespace, *, command: str) -> dict[str, Any]:
     """The body for `nebula propose` or `nebula apply`, from --file or the builder flags."""
     if command == "propose":
@@ -234,6 +255,9 @@ def body_from_args(args: argparse.Namespace, *, command: str) -> dict[str, Any]:
                                  "or propose each step on its own")
             if arrange:
                 raise BuildError("with steps, put \"arrange\" in each step whose new nodes the canvas should lay out")
+            if getattr(args, "pending", False) or getattr(args, "ready", None):
+                raise BuildError("with steps, put \"pending\": true in each step whose new nodes are placeholders, "
+                                 "and {\"pending\": false, \"nodeIds\": [...]} in a step that makes them ready")
             return {"steps": check_steps(body, note=args.note)}
         if args.note:
             body["note"] = args.note
@@ -249,6 +273,7 @@ def body_from_args(args: argparse.Namespace, *, command: str) -> dict[str, Any]:
                              "runs it, or apply it without `run` and then `nebula run <node id>`")
         if not body.get("note"):
             body.pop("note", None)
+        _pending_flags(body, args)
     else:
         extra = [key for key in APPLY_ONLY if key in body]
         if extra:

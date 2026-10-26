@@ -147,6 +147,7 @@ from services.canvas_events import (
     MOVE_THRESHOLD_PX,
     TooManyWaiters,
     actor_for_headers,
+    actor_for_identity,
     actor_record,
     actor_label,
     canvas_events,
@@ -212,6 +213,8 @@ from services.agent_questions import (
 from services.agent_presence import request_headers_scope
 # The Agents panel (Q125 item 2): each agent's status line and the roster.
 from services.agent_status import AgentStatusBook, StatusError, Waiting, build_roster, clean_status_text
+from services import pending_nodes
+from services.run_done_cards import AgentRunBook, done_text, thumbnail_for
 from services.local_guard import host_allowed
 from services import run_approvals as approvals
 from services.run_approvals import RunApprovals
@@ -293,6 +296,9 @@ agent_notes = AgentNotes(lambda: project_store)
 agent_questions = QuestionBook(store=lambda: project_store)
 # Each agent's status line (Q125 item 2): in memory only, like cursors.
 agent_status = AgentStatusBook()
+# The runs agents started, while they go (Q125 item 3): the mark on the node
+# they run, and the done card after (services/run_done_cards.py). In memory.
+agent_runs = AgentRunBook()
 
 
 def _agent_sign(identity: AgentIdentity) -> None:
@@ -2171,15 +2177,18 @@ def _settle_hold(run_id: str) -> None:
 
 
 async def _require_run_spend_approval(
-    run_id: str, nodes: list[GraphNode], edges: list[GraphEdge], *, approval_id: str | None = None, **kwargs: Any,
+    run_id: str, nodes: list[GraphNode], edges: list[GraphEdge], *, approval_id: str | None = None,
+    approval_scope: tuple[list[GraphNode], list[GraphEdge]] | None = None, **kwargs: Any,
 ) -> None:
     """The approval and spend checks for a run already noted for its actor: a
     refusal forgets the note. The inputs a price reads are measured first,
     off the event loop (_measure_run_inputs); the approval is taken and the
-    limits checked after that, with no await between them."""
+    limits checked after that, with no await between them. ``approval_scope``:
+    what the run was asked to run, when placeholders were skipped from it
+    (the approval matches the request; only ``nodes`` are priced)."""
     try:
         measured = await _measure_run_inputs(nodes, edges)
-        _check_run_approval(approval_id, nodes, edges)
+        _check_run_approval(approval_id, *(approval_scope or (nodes, edges)))
         _require_spend_approval(nodes, edges, run_id=run_id, measured=measured, **kwargs)
     except (HTTPException, PersonGateError):
         canvas_events.forget_run(run_id)
@@ -4886,6 +4895,68 @@ async def _sweep_agent_statuses() -> None:
     _schedule_status_expiry()
 
 
+# ---------- Placeholders (Q125 item 3): the idle rule ----------
+#
+# A placeholder turns normal when its agent has made no request for
+# pending_nodes.IDLE_SECONDS (the status line's rule and clock: any
+# identified request is a sign). Nothing is deleted.
+
+_pending_expiry: asyncio.TimerHandle | None = None
+_pending_sweeps: set[asyncio.Task[Any]] = set()
+
+
+def _schedule_pending_expiry() -> None:
+    """Check again just after the next placeholder would run out."""
+    global _pending_expiry
+    if _pending_expiry is not None:
+        _pending_expiry.cancel()
+        _pending_expiry = None
+    deadline = pending_nodes.next_deadline(cli_graph.nodes, agent_status.last_seen)
+    if deadline is None:
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:  # no running loop (a script): the next roster read or graph change sweeps
+        return
+    _pending_expiry = loop.call_later(max(0.0, deadline - agent_status.now()) + 0.5, _start_pending_sweep)
+
+
+def _start_pending_sweep() -> None:
+    task = asyncio.get_running_loop().create_task(_sweep_pending_nodes())
+    _pending_sweeps.add(task)
+    task.add_done_callback(_pending_sweeps.discard)
+
+
+async def _sweep_pending_nodes() -> list[str]:
+    """Turn normal the placeholders whose agent went quiet, and tell every canvas."""
+    gone = pending_nodes.expired(cli_graph.nodes, agent_status.last_seen, agent_status.now())
+    cleared = _clear_pending(gone) if gone else []
+    if cleared:
+        await _broadcast_graph_sync()
+    _schedule_pending_expiry()
+    return cleared
+
+
+def _clear_pending(node_ids: Iterable[str]) -> list[str]:
+    """Turn these placeholders normal on the live graph (saved at once); the ids that changed."""
+    ids = [node_id for node_id in dict.fromkeys(node_ids) if pending_nodes.is_pending(cli_graph.nodes.get(node_id))]
+    if not ids:
+        return []
+    candidate = cli_graph.clone()
+    cleared = pending_nodes.clear(candidate.nodes, ids)
+    cli_graph.replace_with(candidate)
+    return cleared
+
+
+def _person_touched(node_ids: Iterable[str]) -> list[str]:
+    """The person edited these nodes (params, name, position, a wire): any
+    placeholder among them turns normal (GM: "on any edit by the person").
+    Agents' edits through the same routes leave them as they are."""
+    if not _is_person_request():
+        return []
+    return _clear_pending(node_ids)
+
+
 async def _forget_status_anchors(*, node_id: str | None = None) -> None:
     """A node deleted (``node_id``) or the graph cleared or replaced: the
     lines on those nodes stay, without them (as cursors re-anchor)."""
@@ -4961,9 +5032,14 @@ async def list_canvas_agents() -> dict[str, Any]:
     await _sweep_proposals()
     await _sweep_asset_proposals()
     project_id = _workspace_context()["activeProjectId"]
+    await _sweep_pending_nodes()
+    running = agent_runs.running_in(project_id)
     agents = build_roster(project_id=project_id, now=agent_status.now(), cursors=agent_presence.active(),
                           statuses=agent_status.for_project(project_id), waiting=_waiting_in(project_id),
-                          status_view=agent_status.view)
+                          status_view=agent_status.view,
+                          # The open canvas's placeholders, and the nodes agents' runs are running now.
+                          pending=pending_nodes.by_agent(cli_graph.nodes),
+                          running=[(agent, running[agent.id]) for agent in agent_runs.agents_in(project_id)])
     return {"projectId": project_id, "agents": agents, "rev": agent_status.revision}
 
 
@@ -6238,11 +6314,18 @@ def _outputs_available(outputs: Any) -> bool:
 
 def _proposal_run_scope(
     candidate: CLIGraph, run_ids: list[str],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str], list[str], bool, list[dict[str, Any]]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str], list[str], bool, list[dict[str, Any]],
+           dict[str, dict[str, Any]]]:
     """A proposal's run as the cost sees it: the staged graph (nodes, edges),
     the nodes it may start (``chosen``: the targets plus ancestors without
     outputs), every node its pre-call check reads (``scope``), whether
-    ancestors are counted (``up_to``), and the chosen nodes as price items."""
+    ancestors are counted (``up_to``), the chosen nodes as price items, and
+    the agents' placeholders the run will skip with what needs them
+    (``skips``, pending_nodes.run_skips). The run after Accept isn't the
+    person's direct run, so it skips them (main._skip_placeholders) and
+    nothing is spent on them: they are left out of ``chosen`` and ``scope``,
+    so the cost the person sees before Accept & run prices only what runs
+    (GM - Design, 2026-10-25)."""
     graph_nodes, graph_edges = candidate.to_execute_format()
     nodes = [GraphNode.model_validate(node) for node in graph_nodes]
     edges = [GraphEdge.model_validate(edge) for edge in graph_edges]
@@ -6262,6 +6345,11 @@ def _proposal_run_scope(
                     continue
                 up_to = True
             chosen.append(node.id)
+    skips = pending_nodes.run_skips(scope, [(edge.source, edge.target) for edge in edges], candidate.nodes,
+                                    label=lambda node_id: str((candidate.nodes.get(node_id) or {}).get("label")
+                                                              or node_id))
+    chosen = [node_id for node_id in chosen if node_id not in skips]
+    scope = [node_id for node_id in scope if node_id not in skips]
     items = [
         {
             "id": node_id,
@@ -6270,7 +6358,7 @@ def _proposal_run_scope(
         }
         for node_id in chosen
     ]
-    return graph_nodes, graph_edges, chosen, scope, up_to, items
+    return graph_nodes, graph_edges, chosen, scope, up_to, items, skips
 
 
 async def _measure_proposal_inputs(candidate: CLIGraph, run_ids: list[str]) -> input_sizes.Measured:
@@ -6283,7 +6371,7 @@ async def _measure_proposal_inputs(candidate: CLIGraph, run_ids: list[str]) -> i
         pricing = model_pricing.load_pricing()
     except (OSError, ValueError):
         return input_sizes.Measured()
-    _graph_nodes, graph_edges, chosen, _scope, _up_to, items = _proposal_run_scope(candidate, run_ids)
+    _graph_nodes, graph_edges, chosen, _scope, _up_to, items, _skips = _proposal_run_scope(candidate, run_ids)
     if not input_sizes.needs_measuring(items, pricing):
         return input_sizes.Measured()
     wired = [(str(e.get("source")), e.get("sourceHandle"), str(e.get("target")), e.get("targetHandle"))
@@ -6310,7 +6398,7 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
     entries: list[dict[str, Any]] = []
     up_to = False
     if run_ids:
-        graph_nodes, graph_edges, chosen, scope, up_to, items = _proposal_run_scope(candidate, run_ids)
+        graph_nodes, graph_edges, chosen, scope, up_to, items, skips = _proposal_run_scope(candidate, run_ids)
         estimate = _estimate_proposal_run(items, graph_nodes, graph_edges, definitions, measured)
         for node_id in chosen:
             definition = definitions.get(str(candidate.nodes[node_id].get("definitionId") or ""), {})
@@ -6334,7 +6422,13 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
         for entry in entries:
             if entry["ref"] in needs:
                 entry["missing"] = needs[entry["ref"]]
-        return summarize_cost(entries, up_to=up_to, estimate=estimate, not_ready=not_ready)
+        cost = summarize_cost(entries, up_to=up_to, estimate=estimate, not_ready=not_ready)
+        skipped = pending_nodes.skip_summary(skips)
+        if skipped is not None:
+            # Agents' placeholders (and what needs them) the run will skip,
+            # left out of the cost above (Q125 item 3).
+            cost["pendingSkipped"] = skipped
+        return cost
     return summarize_cost(entries, up_to=up_to)
 
 
@@ -8525,6 +8619,110 @@ def _watch_for_cross_process_stop(
     execution_task.add_done_callback(lambda _done: watcher.cancel())
 
 
+async def _skip_placeholders(
+    run_id: str, nodes: list[GraphNode], edges: list[GraphEdge], *, direct: str | None = None,
+    announce: bool = True,
+) -> tuple[list[GraphNode], list[GraphEdge], dict[str, dict[str, Any]], list[str]]:
+    """Every way to run skips agents' placeholders (Q125 item 3, GM - Design:
+    "Run skips pending nodes, along with any node downstream that needs their
+    output"), before validation and before anything is priced, so nothing is
+    spent on them. Not skipped, though, are the placeholders this run makes
+    normal (the fourth value, ``ready``): the owning agent's own in the run,
+    and, when the person runs a node directly (``direct``, not an accepted
+    proposal's run), every placeholder in that run: the node and what feeds
+    it, since running it runs them (GM: "counts as their edit: it turns
+    normal and runs"). Nothing changes here: the caller turns ``ready``
+    normal with _make_ready only once the run has passed every check, so a
+    refused run leaves the placeholders as they were. Each skipped node gets
+    a ``skipped`` event with the reason (``announce``; else the caller sends
+    them with _announce_skips once the run is noted); the returned map is
+    what the route reports."""
+    identity = identify_agent(current_request_headers())
+    scope = [node.id for node in nodes]
+    if identity is not None:
+        ready = [node_id for node_id in scope
+                 if (pending_nodes.owner(cli_graph.nodes.get(node_id)) or {}).get("id") == identity.id]
+    elif direct is not None and _is_person_request():
+        ready = [node_id for node_id in scope if pending_nodes.is_pending(cli_graph.nodes.get(node_id))]
+    else:
+        ready = []
+    skips = pending_nodes.run_skips(scope, [(edge.source, edge.target) for edge in edges], cli_graph.nodes,
+                                    label=_node_label, ready=ready)
+    if not skips:
+        return nodes, edges, {}, ready
+    if announce:
+        await _announce_skips(run_id, skips)
+    return ([node for node in nodes if node.id not in skips],
+            [edge for edge in edges if edge.source not in skips and edge.target not in skips], skips, ready)
+
+
+def _paid_placeholders(nodes: list[GraphNode], ready: Iterable[str]) -> list[str]:
+    """The placeholders among ``ready`` that call a paid model with the params
+    this run sends (model_pricing.is_local; an unknown type counts as paid)."""
+    by_id = {node.id: node for node in nodes}
+    paid = []
+    for node_id in ready:
+        node = by_id.get(node_id)
+        if node is None:
+            continue
+        if not model_pricing.is_local(node_registry.get(node.definition_id) or {}, node.params or {}):
+            paid.append(node_id)
+    return sorted(paid, key=_node_order)
+
+
+def _require_placeholder_confirmation(
+    run_id: str, nodes: list[GraphNode], ready: list[str], confirmed: list[str] | None,
+) -> None:
+    """Q133 (Justin, 2026-10-25): the person's direct run that would make an
+    agent's paid placeholder normal runs only with the person's confirmation
+    for exactly those placeholders (the canvas's dialog sends them,
+    components/PlaceholderRunDialog.tsx), so a missed dialog, a stale tab or
+    another client can't skip it. 409 before anything is priced or changes.
+    Agents' runs of their own placeholders are unchanged (their ``ready``
+    holds only their own, and they never confirm)."""
+    if identify_agent(current_request_headers()) is not None or not _is_person_request():
+        return
+    paid = _paid_placeholders(nodes, ready)
+    if not paid or sorted(set(confirmed or [])) == sorted(paid):
+        return
+    canvas_events.forget_run(run_id)
+    owners = []
+    for node_id in paid:
+        name = (pending_nodes.owner(cli_graph.nodes.get(node_id)) or {}).get("name")
+        if name and name not in owners:
+            owners.append(name)
+    who = f"{owners[0]} is" if len(owners) == 1 else "agents are"
+    count = f"{len(paid)} paid {'node' if len(paid) == 1 else 'nodes'}"
+    raise HTTPException(status_code=409, detail={
+        "code": "placeholder_confirm_required",
+        "message": (f"Nothing ran: this run includes {count} {who} still setting up, "
+                    "and Nebula asks before running those. Click Run again to see them."),
+        "placeholders": paid,
+    })
+
+
+async def _make_ready(node_ids: Iterable[str]) -> None:
+    """An admitted run turns the placeholders it runs normal (_skip_placeholders's
+    ``ready``), and every canvas hears it."""
+    if _clear_pending(node_ids):
+        await _broadcast_graph_sync()
+
+
+async def _announce_skips(run_id: str, skips: Mapping[str, Mapping[str, Any]]) -> None:
+    for node_id, info in skips.items():
+        await _emit_and_sync(SkippedEvent(node_id=node_id, reason=info["reason"], run_id=run_id))
+
+
+def _skip_reply(skips: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+    """What a canvas run's reply says about skipped placeholders: per node the
+    reason (``skipped``), and the count and whose (``pendingSkipped``) for the
+    line the canvas shows after Run."""
+    if not skips:
+        return {}
+    return {"skipped": {node_id: info["reason"] for node_id, info in skips.items()},
+            "pendingSkipped": pending_nodes.skip_summary(skips)}
+
+
 @app.post("/api/execute")
 async def execute(request: ExecuteRequest) -> dict:
     _check_workspace_revision()
@@ -8538,16 +8736,18 @@ async def execute(request: ExecuteRequest) -> dict:
     api_keys = settings.get("apiKeys", {})
     nodes = _normalize_execute_nodes(request.nodes)
     _note_run_nodes(run_id, nodes)
+    requested_nodes, requested_edges = nodes, request.edges
+    nodes, edges, skips, ready = await _skip_placeholders(run_id, nodes, request.edges)
     submitted = _submitted_params(nodes)
     _validate_cinema_base_models(nodes)
 
-    errors = validate_graph(nodes, request.edges, api_keys)
+    errors = validate_graph(nodes, edges, api_keys)
     if errors:
         await _announce_validation_errors(errors, run_id)
-        return {**_validation_response(errors), "runId": run_id}
+        return {**_validation_response(errors), "runId": run_id, **_skip_reply(skips)}
 
     try:
-        topological_sort(nodes, request.edges)
+        topological_sort(nodes, edges)
     except CycleError as exc:
         await manager.broadcast(
             ValidationErrorEvent(
@@ -8564,8 +8764,12 @@ async def execute(request: ExecuteRequest) -> dict:
         raise HTTPException(status_code=400, detail=f"Graph contains a cycle: {exc}")
 
     # After validation, so a graph that can't run reports why, not its cost.
-    await _require_run_spend_approval(run_id, nodes, request.edges, approval_id=request.approval_id,
-                                run_ids=_end_node_ids(nodes, request.edges), settings=settings)
+    # The approval matches what the person accepted; only what runs is priced.
+    await _require_run_spend_approval(run_id, nodes, edges, approval_id=request.approval_id,
+                                      approval_scope=(requested_nodes, requested_edges),
+                                      run_ids=_end_node_ids(nodes, edges), settings=settings)
+    await _make_ready(ready)  # admitted: the placeholders it runs turn normal
+    _start_agent_run(run_id, nodes, edges)
 
     handler_registry = get_handler_registry(emit=_emit_and_sync)
     try:
@@ -8580,7 +8784,7 @@ async def execute(request: ExecuteRequest) -> dict:
         try:
             await execute_graph(
                 nodes=nodes,
-                edges=request.edges,
+                edges=edges,
                 api_keys=api_keys,
                 handler_registry=handler_registry,
                 emit=_emit_and_sync,
@@ -8619,6 +8823,7 @@ async def execute(request: ExecuteRequest) -> dict:
             # acknowledgement, and releases only after the task is terminal.
             await _release_paid_worldlabs_starts(run_id)
             _settle_hold(run_id)
+            await _finish_agent_run(run_id)
 
     task: asyncio.Task[None] | None = None
     run_coroutine = _run()
@@ -8660,7 +8865,7 @@ async def execute(request: ExecuteRequest) -> dict:
         await _release_paid_worldlabs_starts(run_id)
         raise
 
-    return {"status": "started", "runId": run_id}
+    return {"status": "started", "runId": run_id, **_skip_reply(skips)}
 
 
 @app.post("/api/execute-node")
@@ -8686,13 +8891,19 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     if not sub_nodes:
         raise _node_gone(request.target_node_id, f"Node '{request.target_node_id}' not found in graph")
     _note_run_nodes(run_id, sub_nodes)
+    requested_nodes, requested_edges = sub_nodes, sub_edges
+    # The person running a placeholder directly makes it theirs; an accepted
+    # proposal's run (approval_id) is not running it directly.
+    sub_nodes, sub_edges, skips, ready = await _skip_placeholders(
+        run_id, sub_nodes, sub_edges, direct=request.target_node_id if request.approval_id is None else None)
+    _require_placeholder_confirmation(run_id, sub_nodes, ready, request.confirmed_placeholders)
 
     _validate_cinema_base_models(sub_nodes)
 
     errors = validate_graph(sub_nodes, sub_edges, api_keys)
     if errors:
         await _announce_validation_errors(errors, run_id)
-        return {**_validation_response(errors), "runId": run_id}
+        return {**_validation_response(errors), "runId": run_id, **_skip_reply(skips)}
 
     try:
         topological_sort(sub_nodes, sub_edges)
@@ -8713,7 +8924,11 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
 
     # After validation, so a graph that can't run reports why, not its cost.
     await _require_run_spend_approval(run_id, sub_nodes, sub_edges, approval_id=request.approval_id,
-                                run_ids=[request.target_node_id], settings=settings)
+                                      approval_scope=(requested_nodes, requested_edges),
+                                      run_ids=[request.target_node_id] if not skips else _end_node_ids(sub_nodes, sub_edges),
+                                      settings=settings)
+    await _make_ready(ready)  # admitted: the placeholders it runs turn normal
+    _start_agent_run(run_id, sub_nodes, sub_edges)
 
     handler_registry = get_handler_registry(emit=_emit_and_sync)
     try:
@@ -8752,6 +8967,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
         finally:
             await _release_paid_worldlabs_starts(run_id)
             _settle_hold(run_id)
+            await _finish_agent_run(run_id)
 
     try:
         task = asyncio.create_task(_run())
@@ -8777,7 +8993,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
         await _release_paid_worldlabs_starts(run_id)
         raise
 
-    return {"status": "started", "nodeCount": len(sub_nodes), "runId": run_id}
+    return {"status": "started", "nodeCount": len(sub_nodes), "runId": run_id, **_skip_reply(skips)}
 
 
 # -- who may stop a run (Justin, 2026-10-20, MCP parity Q61 a) --------------------
@@ -9723,6 +9939,9 @@ async def _broadcast_graph_sync(
         agent_presence.forget_graph()
         await _forget_status_anchors()
     moved_ids = sorted({str(node_id) for node_id in moved if node_id in cli_graph.nodes})
+    # Placeholders on the graph now (a project opened, an agent's edit): when
+    # the next one runs out (pending_nodes' idle rule).
+    _schedule_pending_expiry()
     await manager.broadcast_raw({"type": "graphSync", **export,
                                  **({"graphReplaced": True} if graph_replaced else {}),
                                  **({"moved": moved_ids} if moved_ids and not graph_replaced else {}),
@@ -9932,6 +10151,119 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
     # What get_run reports for the run (services/run_reports.py).
     _run_reports().observe(event, run_id)
     await manager.broadcast(event)
+    await _observe_agent_run(event, run_id)
+
+
+# ---------- Agents' runs: the mark on the node, the done card (Q125 item 3) ----------
+#
+# Justin, 2026-10-24, merge-oks Q125, item 3: "The agent's mark stays on its
+# node with a status line ... A finished run posts a card with a thumbnail
+# and Show on canvas, without the agent having to remember to." Runs an
+# identified agent starts, on any route, are kept in agent_runs while they
+# go (services/run_done_cards.py); the person's runs get neither.
+
+def _run_model_name(node: GraphNode) -> str:
+    """The model a running node shows on its mark, in the provider's own
+    spelling ("FLUX.2 [pro]"): the label of the node's chosen model option,
+    a universal node's model id, else the node's name, quoted (GM - Design,
+    2026-10-25: "A node name in the run pill is quoted: Running “Text
+    Input” · 0:00 ... Provider model names stay unquoted")."""
+    definition = node_registry.get(node.definition_id) or {}
+    params = node.params or {}
+    for spec in [*(definition.get("params") or []), *(definition.get("sharedParams") or [])]:
+        if not isinstance(spec, dict) or spec.get("key") not in ("model", "model_id") or spec.get("type") != "enum":
+            continue
+        value = params.get(spec["key"], spec.get("default"))
+        for option in spec.get("options") or []:
+            if isinstance(option, dict) and option.get("value") == value and option.get("label"):
+                return str(option["label"])[:80]
+    if universal_ports.is_universal(node.definition_id):
+        model = universal_ports.model_of(node.definition_id, params)
+        if model:
+            return str(model)[:80]
+    return f"“{str(definition.get('displayName') or node.definition_id)[:78]}”"
+
+
+def _start_agent_run(run_id: str, nodes: list[GraphNode], edges: list[GraphEdge]) -> None:
+    """Keep this run while it goes when an identified agent started it."""
+    identity = identify_agent(current_request_headers())
+    if identity is None or not nodes:
+        return
+    try:
+        planned = [str(node_id) for node_id in topological_sort(nodes, edges)]
+    except CycleError:
+        planned = [node.id for node in nodes]
+    agent_runs.start(run_id, identity, project_id=_workspace_context()["activeProjectId"], planned=planned,
+                     models={node.id: _run_model_name(node) for node in nodes})
+
+
+async def _observe_agent_run(event: ExecutionEvent, run_id: str | None) -> None:
+    """A node of an agent's run started or ended: its mark follows (agentRun events)."""
+    if agent_runs.get(run_id) is None:
+        return
+    node_id = getattr(event, "node_id", None)
+    if not node_id:
+        return
+    if isinstance(event, ExecutingEvent):
+        change = agent_runs.node_started(run_id, node_id)
+    elif isinstance(event, ExecutedEvent):
+        change = agent_runs.node_ended(run_id, node_id, outputs=event.outputs)
+    elif isinstance(event, ErrorEvent):
+        change = agent_runs.node_ended(run_id, node_id, failed=True)
+    elif isinstance(event, SkippedEvent):
+        change = agent_runs.node_ended(run_id, node_id, ran=False)
+    else:
+        return
+    if change is not None:
+        await _broadcast_status_events([change])
+
+
+async def _finish_agent_run(run_id: str, *, cancelled: bool = False) -> None:
+    """The run ended: its marks go, and unless it was stopped, the agent's
+    done card goes on the run's project's Updates (GM - Design, 2026-10-25).
+    One per run; never fails the run."""
+    run, events = agent_runs.finish(run_id)
+    await _broadcast_status_events(events)
+    record = execution_runs.get(run_id)
+    if run is None or cancelled or (record is not None and record.status in {"cancelling", "cancelled"}):
+        return
+    succeeded = [node_id for node_id in run.planned if node_id in run.succeeded]
+    failed = [node_id for node_id in run.planned if node_id in run.failed]
+    if not succeeded and not failed:
+        return  # nothing ran (every node skipped): nothing finished or failed
+    try:
+        await _post_run_done(run, succeeded, failed)
+    except Exception:  # noqa: BLE001 - the card is a notice; the run's own result stands
+        logging.getLogger("nebula.done_cards").exception("could not post the done card for run %s", run_id)
+
+
+async def _post_run_done(run: Any, succeeded: list[str], failed: list[str]) -> None:
+    labels = {node_id: _node_label(node_id) for node_id in run.planned}
+    text, outcome = done_text(run.agent.name, labels, run.planned, succeeded=succeeded, failed=failed)
+    last = run.planned[-1]
+    ref: dict[str, Any] = {"id": run.run_id, "nodeIds": list(run.planned), "lastNodeId": last, "outcome": outcome}
+    if outcome != "failure" and succeeded:
+        # Success: the last node's first output. Partial: the last output that succeeded.
+        shown = succeeded[-1]
+        thumbnail = thumbnail_for(run.succeeded.get(shown), _output_url_from_ref)
+        if thumbnail is not None:
+            ref["thumbnail"] = {**thumbnail, "nodeId": shown}
+    try:
+        result = await asyncio.to_thread(agent_notes.post_run_done, author={"kind": "agent", **run.agent.as_dict()},
+                                         text=text, run=ref, project_id=run.project_id)
+    except (NoteError, ProjectStoreError):
+        result = None  # no project to post on: the Agent log line below still says a failure
+    if result is not None:
+        note = result["note"]
+        await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"], note=note,
+                                                    unread=result["unread"], removed=result["removed"]))
+        _journal_note(note, "canvas", actor=actor_for_identity(run.agent))
+    if outcome != "success":
+        # GM: "A failed run gets a card, plus the Agent log line."
+        try:
+            await manager.broadcast_raw(_point(run.agent, target=None, action="click", say=text))
+        except Exception:  # noqa: BLE001 - decoration must not break the run
+            pass
 
 
 def _sync_provider_recovery_to_cli_graph(
@@ -10448,6 +10780,8 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    # The person wiring a placeholder edits it: it turns normal (Q125 item 3).
+    _person_touched([edge["source"], edge["target"]])
     await _broadcast_graph_sync(edit=True)
     publish_action(
         f"Wired {edge['source']}:{edge['sourceHandle']} → "
@@ -10568,6 +10902,8 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     # Preserve the raw top-level node contract for existing CLI callers while
     # letting the canvas adopt only a connection explicitly confirmed by us.
     response = {**copy.deepcopy(candidate.nodes[short_id]), "connected": edge is not None, "edge": rf_edge}
+    if edge is not None:
+        _person_touched([src, dst])
     await _broadcast_graph_sync(edit=True)
     publish_action(f"Added {definition_id} ({short_id})")
     _journal_node_added(short_id)
@@ -10878,9 +11214,12 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
                     cli_graph.update_params(node_id, params)
                 except ValueError:
                     raise _node_gone(node_id)
+    changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
+    if changes:
+        # The person changing a placeholder's settings edits it: it turns normal (Q125 item 3).
+        _person_touched([node_id])
     await _broadcast_graph_sync(edit=True)
     publish_action(f"Updated {node_id} params")
-    changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
     if changes:
         _journal(
             "node.params",
@@ -10975,6 +11314,10 @@ async def configure_universal_node(node_id: str, body: dict[str, Any]) -> dict[s
         _drop_outputs_off_ports(candidate, node_id, configured.params)
         candidate.set_params(node_id, configured.params)
         _commit_graph_candidate_with_recoveries(candidate, [candidate.nodes[node_id]], source="update")
+    # The person picking a placeholder's model edits it, even to the same
+    # model: it turns normal (Q125 item 3, GM: "on any edit by the person").
+    # Before the sync, so the canvas gets the node without the flag.
+    _person_touched([node_id])
     await _broadcast_graph_sync(edit=True)
     publish_action(f"Set {node_id}'s model to {model}")
     changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
@@ -11010,6 +11353,9 @@ async def rename_graph_node(node_id: str, body: dict[str, Any]) -> dict:
     _guard_agent_growth_past_save_limit(lambda probe: probe.set_label(node_id, label))
     cli_graph.set_label(node_id, label)
     current = _node_label(node_id)
+    if current != previous:
+        # The person renaming a placeholder edits it: it turns normal (Q125 item 3).
+        _person_touched([node_id])
     await _broadcast_graph_sync(edit=True)
     if current != previous:
         publish_action(f"Renamed {node_id}")
@@ -11093,6 +11439,11 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
         raise HTTPException(status_code=404, detail=str(exc))
     if arrange is None:
         canvas_arrange.forget_nodes(normalized)
+        # The person moving a placeholder edits it: it turns normal (Q125
+        # item 3). Not a write that leaves it where it was drawn, nor the
+        # canvas finishing an agent's arrange.
+        _person_touched([node_id for node_id, position in normalized.items()
+                         if _moved_far_enough(previous.get(node_id), position)])
     if arrange is not None and is_person(current_request_headers()):
         # The person's canvas laying out an agent's new nodes finishes that
         # agent's edit; it is not a new one. No `edit`, so no tab makes it a
@@ -11682,6 +12033,20 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             raise HTTPException(status_code=404, detail=f"{missing[0]} is not on the canvas")
         if moves:
             candidate.update_positions(moves)
+        # Placeholders (Q125 item 3): `pending: false` makes the agent's own
+        # ready (all or nothing: another's refuses the edit); `pending: true`
+        # marks only the nodes this edit adds.
+        made_pending: list[str] = []
+        made_ready: list[str] = []
+        not_pending: list[str] = []
+        if spec.ready:
+            try:
+                mine, not_pending = pending_nodes.check_ready(candidate.nodes, spec.ready, identity)
+            except pending_nodes.PendingError as exc:
+                raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+            made_ready = pending_nodes.clear(candidate.nodes, mine)
+        if spec.pending is True:
+            made_pending = pending_nodes.mark(candidate.nodes, id_map.values(), identity, agent_status.now())
         _refuse_oversized_graph(candidate)
         _refuse_agent_growth_past_save_limit(candidate)
         touched = sorted(set(id_map.values()) | set(params_before))
@@ -11757,8 +12122,12 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         f"moved {len(moves)}" if moves else "",
         f"removed {len(removed)}" if removed else "",
         f"unwired {len(spec.unwire)}" if spec.unwire else "",
+        f"{len(made_pending)} placeholder{'' if len(made_pending) == 1 else 's'}" if made_pending else "",
+        f"made {len(made_ready)} ready" if made_ready else "",
     ]
     summary = ", ".join(part for part in parts if part) or "no change"
+    if made_pending:
+        _schedule_pending_expiry()
     publish_action(f"{identity.name} edited the canvas: {summary}")
     focus = next(iter(added), None) or next(iter(changed or list(renamed) or list(moves)), None)
     if focus is not None and focus in cli_graph.nodes:
@@ -11787,6 +12156,9 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         # or why they can't be known yet (services/universal_ports.py).
         **({"modelPorts": model_report["ports"]} if model_report.get("ports") else {}),
         **({"modelPortNotes": model_report["notes"]} if model_report.get("notes") else {}),
+        # Placeholders this edit made, or made ready (and named ids that weren't).
+        **({"pending": made_pending} if spec.pending is True else {}),
+        **({"ready": made_ready, "notPending": not_pending} if spec.pending is False else {}),
         "undo": undo,
     }
 
@@ -12008,6 +12380,23 @@ async def _restore_graph(
                 if current.get("position") != point:
                     candidate.update_positions({node_id: point})
                     moved.append(node_id)
+        person = _is_person_request()
+        # The person's undo and redo put a placeholder flag back as the step
+        # had it (an object, or null for none; Q125 item 3), and so does an
+        # agent's undo of its own edit, from the inverse the server kept
+        # (``trusted``). Anyone else's restore never sets or clears one.
+        made_pending: list[str] = []
+        for raw in raw_nodes:
+            node = candidate.nodes.get(raw["id"])
+            if node is None or "pending" not in raw or not (person or raw["id"] in trusted):
+                continue
+            flag = pending_nodes.clean(raw["pending"])
+            if flag is None:
+                node.pop(pending_nodes.PENDING_KEY, None)
+            else:
+                if not pending_nodes.is_pending(node) and raw["id"] not in added:
+                    made_pending.append(raw["id"])
+                node[pending_nodes.PENDING_KEY] = flag
         _refuse_agent_billing_change(billing)
         wired: list[dict[str, Any]] = []
         for source, source_handle, target, target_handle in wires:
@@ -12117,6 +12506,8 @@ async def _restore_graph(
         "moved": moved,
         "wired": [_edge_data(edge) for edge in wired],
         "unwired": unwired,
+        # Nodes already on the canvas this restore made placeholders again.
+        "placeholders": sorted(made_pending),
         **undone,
         "removals": removals,
     }
@@ -12151,6 +12542,7 @@ def _canvas_undo_before(spec: EditSpec, shown: Mapping[str, Any]) -> dict[str, A
         renamed=[key for key in spec.rename if not key.startswith("+")],
         moved=[key for key in spec.move if not key.startswith("+")],
         shown=shown,
+        ready=list(spec.ready),
     )
 
 
@@ -12369,7 +12761,7 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         canvas_undo_book.note_events(undo_id, canvas_events.seqs_of_edit(undo_id))
         link_entry = canvas_undo_book.link_of(record.edit_id)
         counts = {key: len(result.get(key) or []) for key in (
-            "added", "removed", "changed", "renamed", "moved", "wired", "unwired")}
+            "added", "removed", "changed", "renamed", "moved", "wired", "unwired", "placeholders")}
         done = ", ".join(f"{verb} {counts[key]}" for key, verb in UNDONE_VERBS if counts[key])
         left = f"; left {len(skipped)} part{'s' if len(skipped) != 1 else ''} as is" if skipped else ""
         _journal("edit.undone", data={
@@ -12385,7 +12777,8 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     extras = _undo_extras_text(result)
     return {"status": "undone", "editId": record.edit_id, "undoId": undo_id,
             **{key: result.get(key) for key in ("added", "removed", "changed", "renamed", "moved", "wired",
-                                                 "unwired", "reattached", "pinsLeft", "reopened", "notReopened")},
+                                                 "unwired", "placeholders", "reattached", "pinsLeft", "reopened",
+                                                 "notReopened")},
             "skipped": skipped,
             "message": f"Undone: {done or 'no change'}." + (f" Also {extras}" if extras else "")
             + (f" {_undo_left_text(skipped)}" if skipped else "")}
@@ -12566,6 +12959,8 @@ async def delete_graph_edge(body: dict[str, Any]) -> dict:
         body.get("targetHandle", ""),
     )
     if removed:
+        # The person unwiring a placeholder edits it: it turns normal (Q125 item 3).
+        _person_touched([str(body.get("source") or ""), str(body.get("target") or "")])
         await _broadcast_graph_sync(edit=True)
         _journal_edge("edge.removed", body)
         publish_action(
@@ -13171,6 +13566,10 @@ def _cli_node_to_rf(n: dict[str, Any], position: dict[str, float], all_defs: dic
     failed = node_errors.card(str(n.get("id") or ""))
     if failed:
         data.update(failed)
+    # An agent's placeholder (Q125 item 3): its owner, for the dashed outline.
+    flag = pending_nodes.clean(n.get(pending_nodes.PENDING_KEY))
+    if flag is not None:
+        data["pending"] = flag
     if is_dynamic_node:
         data.update({
             "isDynamic": True,
@@ -13379,6 +13778,16 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
         else:
             raise HTTPException(status_code=400, detail=retired_message(definition_id) or f"Unknown node definition '{definition_id}'")
         staged_node["id"] = node_id
+        # An agent's placeholder (Q125 item 3) stays one across a save and a
+        # reopen; a malformed flag loads as a normal node. Saves of the live
+        # canvas take the flag from the live graph, never from the tab
+        # (_live_pending_flags).
+        flag = pending_nodes.clean(data.get(pending_nodes.PENDING_KEY))
+        if flag is not None:
+            staged_node[pending_nodes.PENDING_KEY] = flag
+            result["nodes"][index]["data"][pending_nodes.PENDING_KEY] = flag
+        else:
+            result["nodes"][index]["data"].pop(pending_nodes.PENDING_KEY, None)
         candidate.nodes[node_id] = staged_node
         if staged_node["definitionId"] != definition_id:
             # Migrated from a retired definition: the canvas shows the replacement.
@@ -13483,7 +13892,12 @@ def _overlaid_snapshot(project: dict[str, Any], exported: dict[str, Any]) -> dic
     merged_nodes = []
     for node in exported["nodes"]:
         old = old_nodes.get(node["id"], {})
-        merged_nodes.append({**old, **node, "data": {**old.get("data", {}), **node["data"]}})
+        data = {**old.get("data", {}), **node["data"]}
+        if pending_nodes.PENDING_KEY not in node["data"]:
+            # The live graph decides the placeholder flag for every node it
+            # holds: one it has cleared since the last save stays cleared.
+            data.pop(pending_nodes.PENDING_KEY, None)
+        merged_nodes.append({**old, **node, "data": data})
     merged_nodes.extend(node for node in previous["nodes"] if node["id"] not in live_ids and node["id"] not in backend_ids)
     retained_ids = {node["id"] for node in merged_nodes}
     old_edges = {edge["id"]: edge for edge in previous["edges"]}
@@ -13825,6 +14239,8 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         # The body's check covered its snapshot; staging doesn't walk it twice.
         snapshot, candidate = _stage_project_snapshot(body.get("snapshot"), historical=historical,
                                                       ingress=verdict.part("snapshot"))
+        # A recovered copy keeps only the placeholders the live graph has (never a tab's own).
+        _live_pending_flags(snapshot["nodes"], cli_graph.nodes if catalog["activeProjectId"] == source["id"] else {})
         _refuse_agent_billing_in_project(
             candidate, *([cli_graph.nodes] if catalog["activeProjectId"] == source["id"] else []),
             _snapshot_nodes(source["snapshot"]))
@@ -14099,6 +14515,7 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
             staged, candidate = _stage_project_snapshot(body["snapshot"], historical=historical, ingress=ingress)
             _refuse_agent_billing_in_project(candidate, cli_graph.nodes, _snapshot_nodes(project["snapshot"]))
             _keep_person_viewport(staged, project["snapshot"])
+            _live_pending_flags(staged["nodes"], cli_graph.nodes)
             project["snapshot"] = staged
             project["_backendNodeIds"] = sorted(set(cli_graph.nodes) & {node["id"] for node in project["snapshot"]["nodes"]})
             project["_backendEdgeIds"] = sorted({edge["id"] for edge in cli_graph.edges} & {edge["id"] for edge in project["snapshot"]["edges"]})
@@ -14118,6 +14535,21 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
             # The name it had, so a rename can be undone (MCP rename_project).
             result["previousName"] = previous_name
         return result
+
+
+def _live_pending_flags(nodes: list[dict[str, Any]], live: Mapping[str, Mapping[str, Any]]) -> None:
+    """A save keeps each node's placeholder flag as the live graph has it
+    (Q125 item 3): only agents' edits and the backend's rules change one, so
+    a tab that lost the flag, or made one up, never changes it."""
+    for node in nodes:
+        data = node.get("data") if isinstance(node, dict) else None
+        if not isinstance(data, dict):
+            continue
+        flag = pending_nodes.clean((live.get(node.get("id")) or {}).get(pending_nodes.PENDING_KEY))
+        if flag is None:
+            data.pop(pending_nodes.PENDING_KEY, None)
+        else:
+            data[pending_nodes.PENDING_KEY] = flag
 
 
 def _keep_person_viewport(staged: dict[str, Any], stored: dict[str, Any]) -> None:
@@ -14145,6 +14577,8 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict
     _refuse_agent_billing_in_project(candidate, _snapshot_nodes(stored))
     _keep_person_viewport(staged, stored)
     backend_nodes = set(project.get("_backendNodeIds") or [])
+    # Placeholders are the backend's: a node only the tab held never is one.
+    _live_pending_flags([node for node in staged["nodes"] if node["id"] not in backend_nodes], {})
     backend_edges = set(project.get("_backendEdgeIds") or [])
     stored_nodes = {node["id"]: node for node in stored["nodes"]}
     nodes = [stored_nodes.get(node["id"], node) if node["id"] in backend_nodes else node for node in staged["nodes"]]
@@ -14571,12 +15005,16 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         sub_nodes = [GraphNode.model_validate(n) for n in nodes_list]
         sub_edges = [GraphEdge.model_validate(e) for e in edges_list]
 
-    _validate_cinema_base_models(sub_nodes)
     wait = body.get("wait") if body else None
     if wait is not None and (isinstance(wait, bool) or not isinstance(wait, (int, float)) or wait < 0):
         raise HTTPException(status_code=400, detail="wait must be a number of seconds")
 
     run_id = str(uuid4())
+    # Agents' placeholders and what needs them are skipped (Q125 item 3); the
+    # caller's own turn normal and run. Announced once the run is noted.
+    sub_nodes, sub_edges, pending_skips, ready = await _skip_placeholders(run_id, sub_nodes, sub_edges,
+                                                                          announce=False)
+    _validate_cinema_base_models(sub_nodes)
     # The canvas Run's own pre-call check (/api/execute): a node that can't
     # run as set up (no key, a required input unwired) stops the run here,
     # before the spending check and any provider call, and shows on its card.
@@ -14586,7 +15024,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     except CycleError as exc:
         errors.append(ValidationErrorDetail(node_id="", port_id="", message=f"Graph contains a cycle: {exc}"))
     if errors:
-        return await _refused_cli_run(run_id, target, errors)
+        return await _refused_cli_run(run_id, target, errors, pending_skips)
 
     # Checked last: a request refused for anything else must not count.
     measured = await _measure_run_inputs(sub_nodes, sub_edges)
@@ -14594,6 +15032,9 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
                             run_ids=[target] if target else _end_node_ids(sub_nodes, sub_edges))
     _note_run(run_id)
     _note_run_nodes(run_id, sub_nodes)
+    await _make_ready(ready)  # admitted: the caller's own placeholders turn normal
+    await _announce_skips(run_id, pending_skips)
+    _start_agent_run(run_id, sub_nodes, sub_edges)
     publish_action(
         f"Running {target}..." if target else f"Running {len(sub_nodes)} node(s)..."
     )
@@ -14603,8 +15044,11 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         # The whole canvas has no one node to point at: the Agent log only.
         await _say_agent_action(f"Running {len(sub_nodes)} node{'' if len(sub_nodes) == 1 else 's'}")
 
-    outcome: dict[str, Any] = {"results": {}, "errors": {}, "skipped": {}}
-    task = asyncio.create_task(_execute_cli_run(run_id, sub_nodes, sub_edges, api_keys, outcome))
+    # Skipped placeholders are reported as a gate's skips are: node id -> reason.
+    outcome: dict[str, Any] = {"results": {}, "errors": {},
+                               "skipped": {node_id: info["reason"] for node_id, info in pending_skips.items()}}
+    task = asyncio.create_task(_execute_cli_run(run_id, sub_nodes, sub_edges, api_keys, outcome,
+                                                pending_summary=pending_nodes.skip_summary(pending_skips)))
     # Registered like canvas runs: it fences project switching until it ends,
     # and DELETE /api/executions/{runId} (`nebula cancel`) stops it.
     try:
@@ -14620,13 +15064,16 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     return _hide_run_key_echoes(await _cli_run_response(run_id, None if wait is None else float(wait)))
 
 
-async def _refused_cli_run(run_id: str, target: str | None, errors: list[ValidationErrorDetail]) -> dict[str, Any]:
+async def _refused_cli_run(run_id: str, target: str | None, errors: list[ValidationErrorDetail],
+                           pending_skips: Mapping[str, Mapping[str, Any]] | None = None) -> dict[str, Any]:
     """A CLI run the pre-call check stopped: nothing ran and nothing was spent.
 
     The canvas shows it as it shows a refused click on Run
     (_announce_validation_errors); the caller gets the run result's own
     shape with status "failed", each node's message in `errors`."""
     _note_run(run_id)
+    if pending_skips:
+        await _announce_skips(run_id, pending_skips)
     await _announce_validation_errors(errors, run_id)
     messages = _validation_messages(errors)
     per_node = {node_id: message for node_id, message in messages.items() if node_id}
@@ -14650,7 +15097,7 @@ async def _refused_cli_run(run_id: str, target: str | None, errors: list[Validat
         "error": f"Nothing ran, so nothing was spent. {summary}",
         "results": {},
         "errors": per_node,
-        "skipped": {},
+        "skipped": {node_id: info["reason"] for node_id, info in (pending_skips or {}).items()},
         "nodesExecuted": 0,
     }
     _cli_runs.refused(run_id, target, response)
@@ -14659,12 +15106,14 @@ async def _refused_cli_run(run_id: str, target: str | None, errors: list[Validat
 
 async def _execute_cli_run(
     run_id: str, sub_nodes: list[GraphNode], sub_edges: list[GraphEdge], api_keys: dict[str, Any],
-    outcome: dict[str, Any],
+    outcome: dict[str, Any], *, pending_summary: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     results: dict[str, Any] = outcome["results"]
     errors: dict[str, str] = outcome["errors"]
-    # Nodes a gate upstream skipped: node id -> reason. They never ran.
+    # Nodes a gate upstream skipped: node id -> reason. They never ran. The
+    # route put agents' placeholders (and what needs them) here already.
     skipped: dict[str, str] = outcome.setdefault("skipped", {})
+    gated: set[str] = set()
 
     async def collect_events(event: ExecutionEvent) -> None:
         # The response carries what each node made or why it failed. The
@@ -14682,6 +15131,7 @@ async def _execute_cli_run(
             errors[event.node_id] = event.error
         elif isinstance(event, SkippedEvent):
             skipped[event.node_id] = event.reason
+            gated.add(event.node_id)
         await _emit_and_sync(event)
 
     handler_registry = get_handler_registry(emit=collect_events)
@@ -14715,6 +15165,8 @@ async def _execute_cli_run(
     finally:
         await _release_paid_worldlabs_starts(run_id)
         _settle_hold(run_id)
+        # The agent's done card, before the journal forgets who started the run.
+        await _finish_agent_run(run_id)
         canvas_events.forget_run(run_id)
     duration = _time_module.time() - start
 
@@ -14723,7 +15175,10 @@ async def _execute_cli_run(
     # Sync outputs to frontend canvas
     await _broadcast_graph_sync()
 
-    skipped_note = f", {len(skipped)} skipped by a gate" if skipped else ""
+    skipped_note = f", {len(gated)} skipped by a gate" if gated else ""
+    # Agents' placeholders the run skipped, in GM's skip line (Q125 item 3).
+    pending_note = pending_nodes.skip_line(pending_summary)
+    skipped_note += f". {pending_note}" if pending_note else ""
     if errors:
         publish_action(
             f"Ran {len(results) + len(errors)} node(s) in {duration:.1f}s — "

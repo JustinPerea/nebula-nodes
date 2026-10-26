@@ -8,6 +8,8 @@ import { storedImageView } from '../../lib/storedImage';
 import { OutsideImageNote } from '../OutsideImageNote';
 import { useOpenOnDoubleClick } from './useOpenOnDoubleClick';
 import { NodeRunError } from './NodeError';
+import { PlaceholderLine } from './PlaceholderLine';
+import { pendingAttr } from '../../lib/pendingNodes';
 import type { NodeData } from '../../types';
 import '../../styles/character-node.css';
 
@@ -42,7 +44,7 @@ export function CharacterNode({ id, data, selected }: NodeProps) {
   const cardRef = useOpenOnDoubleClick<HTMLDivElement>(canOpen ? () => enterCharacterEditor(characterId) : null);
 
   return (
-    <div ref={cardRef} className={`character-node ${selected ? 'character-node--selected' : ''}`} data-character-status={status}
+    <div ref={cardRef} className={`character-node ${selected ? 'character-node--selected' : ''}`} data-character-status={status} data-pending={pendingAttr(data.pending)}
       data-node-inspector-anchor={id} title={canOpen ? 'Double-click to open in Character Studio' : undefined}>
       <div className="character-node__title">◐ {name}</div>
       <NodeSettingsAction id={id} />
@@ -54,6 +56,8 @@ export function CharacterNode({ id, data, selected }: NodeProps) {
           <div className="character-node__thumb-placeholder">{thumb.outside ? <OutsideImageNote /> : 'character'}</div>
         )}
       </div>
+
+      <PlaceholderLine pending={data.pending} />
 
       <div className="character-node__summary">{summary}</div>
 

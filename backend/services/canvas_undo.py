@@ -48,6 +48,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping
 
+from services import pending_nodes
 from services.canvas_events import actor_record
 
 UNDO_TTL_SECONDS = 3600
@@ -106,15 +107,19 @@ def _wire_text(wire: Wire) -> str:
 
 def capture_before(nodes: Mapping[str, dict[str, Any]], edges: list[dict[str, Any]], *,
                    removed: list[str], changed: list[str], renamed: list[str], moved: list[str],
-                   shown: Mapping[str, Any]) -> dict[str, Any]:
+                   shown: Mapping[str, Any], ready: list[str] | tuple[str, ...] = ()) -> dict[str, Any]:
     """The canvas as an edit is about to change it: only what the edit names.
 
     ``shown`` are the positions the canvas shows (a node without a stored one
     is laid out on export), so undoing a move puts a node back where the
-    person saw it."""
+    person saw it. ``ready`` are the agent's placeholders the edit makes
+    normal (``pending: false``): their flags, so an undo makes them
+    placeholders again, as the person's Cmd+Z does (Q125 item 3). A removed
+    node keeps its flag the same way."""
     def node_copy(node_id: str) -> dict[str, Any]:
         node = nodes[node_id]
         position = node.get("position") or shown.get(node_id)
+        flag = pending_nodes.clean(node.get(pending_nodes.PENDING_KEY))
         return {
             "id": node_id,
             "definitionId": str(node.get("definitionId") or ""),
@@ -123,9 +128,12 @@ def capture_before(nodes: Mapping[str, dict[str, Any]], edges: list[dict[str, An
             **({"position": {"x": float(position["x"]), "y": float(position["y"])}}
                if isinstance(position, Mapping) else {}),
             "outputs": copy.deepcopy(node.get("outputs") or {}),
+            **({"pending": flag} if flag is not None else {}),
         }
 
     return {
+        "ready": {node_id: flag for node_id in dict.fromkeys(ready) if node_id in nodes
+                  if (flag := pending_nodes.clean(nodes[node_id].get(pending_nodes.PENDING_KEY))) is not None},
         "removed": [node_copy(node_id) for node_id in dict.fromkeys(removed) if node_id in nodes],
         "params": {node_id: copy.deepcopy(nodes[node_id].get("params") or {})
                    for node_id in changed if node_id in nodes},
@@ -162,6 +170,10 @@ def build_inverse(before: Mapping[str, Any], nodes: Mapping[str, dict[str, Any]]
         "moved": [],
         "removed": [copy.deepcopy(node) for node in before["removed"] if node["id"] not in nodes],
         "removedWires": sorted(wires_before - wires_after),
+        # Placeholders the edit made ready: undo makes them placeholders again.
+        "ready": [{"id": node_id, "pending": copy.deepcopy(flag)}
+                  for node_id, flag in (before.get("ready") or {}).items()
+                  if node_id in nodes and not pending_nodes.is_pending(nodes[node_id])],
     }
     for node_id, params in before["params"].items():
         now = nodes.get(node_id)
@@ -192,6 +204,8 @@ def describe(inverse: Mapping[str, Any]) -> str:
     earlier = [item["id"] for key in ("changed", "renamed", "moved") for item in inverse[key]]
     if earlier:
         parts.append("returns " + _ids(list(dict.fromkeys(earlier))) + " to how they were")
+    if inverse.get("ready"):
+        parts.append("makes " + _ids([item["id"] for item in inverse["ready"]]) + " placeholders again")
     wires = len(inverse["addedWires"]) + len(inverse["removedWires"])
     if wires and not parts:
         parts.append(f"puts {wires} wire{'s' if wires != 1 else ''} back")
@@ -209,7 +223,7 @@ def touched_nodes(inverse: Mapping[str, Any]) -> list[str]:
     """The nodes on the canvas an undo of this edit would change: those it
     added, changed, renamed or moved, and those its wires go into."""
     ids = [node["id"] for node in inverse["added"]]
-    ids += [item["id"] for key in ("changed", "renamed", "moved") for item in inverse[key]]
+    ids += [item["id"] for key in ("changed", "renamed", "moved", "ready") for item in inverse.get(key) or []]
     ids += [str(wire[2]) for key in ("addedWires", "removedWires") for wire in inverse[key]]
     return list(dict.fromkeys(ids))
 
@@ -417,11 +431,25 @@ def plan_undo(
             continue
         item(node_id)["position"] = dict(move["before"])
 
+    # Placeholders the edit made ready turn placeholders again, unless the
+    # node is one again already or someone else ran it since (a run makes a
+    # placeholder normal for good).
+    for ready in inverse.get("ready") or []:
+        node_id = ready["id"]
+        now = nodes.get(node_id)
+        if now is None or pending_nodes.is_pending(now):
+            continue
+        if node_id in ran:
+            leave(node_id, "placeholder")
+            continue
+        item(node_id)["pending"] = copy.deepcopy(ready["pending"])
+
     back_again: list[str] = []
     for node in inverse["removed"]:
         if node["id"] in nodes:
             continue  # already back: ids are never handed out twice
-        restored = {key: copy.deepcopy(node[key]) for key in ("id", "definitionId", "params", "outputs", "position")
+        restored = {key: copy.deepcopy(node[key]) for key in ("id", "definitionId", "params", "outputs", "position",
+                                                              "pending")
                     if key in node}
         if node.get("label"):
             restored["label"] = node["label"]
@@ -460,7 +488,8 @@ def plan_undo(
 # order: "Undone: removed 1, unwired 1." A wire counts too, so an undo that
 # only took a wire away doesn't read "no change".
 UNDONE_VERBS = (("removed", "removed"), ("added", "put back"), ("changed", "reset"), ("renamed", "renamed"),
-                ("moved", "moved"), ("wired", "wired back"), ("unwired", "unwired"))
+                ("moved", "moved"), ("wired", "wired back"), ("unwired", "unwired"),
+                ("placeholders", "made pending"))
 
 
 def nothing_went_back(skipped: list[dict[str, Any]], left: str = "") -> str:

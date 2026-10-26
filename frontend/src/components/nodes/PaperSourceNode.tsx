@@ -17,6 +17,8 @@ import {
   type PaperSourceRecord,
 } from '../../lib/paperSource';
 import { NodeRunError } from './NodeError';
+import { PlaceholderLine } from './PlaceholderLine';
+import { pendingAttr } from '../../lib/pendingNodes';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import '../../styles/paper-source-node.css';
 import { failureCopy, failureMessage, oneLine, REFUSED_FALLBACK_COPY } from '../../lib/errorCopy';
@@ -172,7 +174,7 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
   const recordDetails = !error && source?.lastError && !source.lastErrorPerson ? source.lastError : '';
 
   return (
-    <div className={`paper-source-node ${selected ? 'paper-source-node--selected' : ''}`}>
+    <div className={`paper-source-node ${selected ? 'paper-source-node--selected' : ''}`} data-pending={pendingAttr(data.pending)}>
       <div className="paper-source-node__header"><Link2 size={15} aria-hidden="true" /> Paper source</div>
       <div className="paper-source-node__status" role="status">{stateLabel}</div>
       {snapshot ? (
@@ -183,6 +185,7 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
       ) : (
         <div className="paper-source-node__empty">Select one editable logo in Paper, then link its actual export.</div>
       )}
+      <PlaceholderLine pending={data.pending} />
       {source && (
         <div className="paper-source-node__identity">
           <strong>{source.identity.objectName}</strong>

@@ -15,6 +15,8 @@ import { useGraphStore } from '../../store/graphStore';
 import { edgesInto } from '../../lib/graphIndex';
 import type { NodeData } from '../../types';
 import { NodeRunError } from './NodeError';
+import { PlaceholderLine } from './PlaceholderLine';
+import { pendingAttr } from '../../lib/pendingNodes';
 import '../../styles/reference-set-node.css';
 
 // The ReferenceSetNode is the canvas card for the reference-set utility node.
@@ -95,7 +97,7 @@ export function ReferenceSetNode({ id, data, selected }: NodeProps) {
   );
 
   return (
-    <div className={`reference-set-node ${selected ? 'reference-set-node--selected' : ''}`}>
+    <div className={`reference-set-node ${selected ? 'reference-set-node--selected' : ''}`} data-pending={pendingAttr(data.pending)}>
       <div className="reference-set-node__title">▤ Reference Set</div>
       <p className="reference-set-node__guidance">
         Connect to Cinema Scene. Reference priority sets image order; 0 excludes.
@@ -156,6 +158,8 @@ export function ReferenceSetNode({ id, data, selected }: NodeProps) {
           ))
         )}
       </div>
+
+      <PlaceholderLine pending={data.pending} />
 
       <NodeRunError data={data as unknown as NodeData} className="reference-set-node__run-error" />
 

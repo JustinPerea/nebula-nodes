@@ -27,6 +27,10 @@ export interface ExecutionStartResult {
   errorCount?: number;
   errors?: ExecutionValidationError[];
   runId?: string;
+  /** Agents' placeholders (and what needs them) the run skipped: node id -> reason (Q125 item 3). */
+  skipped?: Record<string, string>;
+  /** How many it skipped and whose, for the line under Run (lib/pendingNodes.ts). */
+  pendingSkipped?: import('./pendingNodes').PendingSkipSummary | null;
 }
 
 export interface ExecutionCancellationResult {
@@ -160,10 +164,15 @@ export async function executeNode(
   runId?: string,
   preserveGraphParams = false,
   approvalId?: string,
+  /** The agents' paid placeholders the person confirmed running (Q133;
+   * components/PlaceholderRunDialog.tsx): the backend refuses the person's
+   * direct run over any without exactly these. */
+  confirmedPlaceholders?: string[],
 ): Promise<ExecutionStartResult> {
   const response = await startRequest("Couldn't run the node.", '/api/execute-node', {
     nodes, edges, targetNodeId, runId,
     ...(preserveGraphParams ? { preserveGraphParams } : {}), ...(approvalId ? { approvalId } : {}),
+    ...(confirmedPlaceholders?.length ? { confirmedPlaceholders } : {}),
   });
   return response.json();
 }

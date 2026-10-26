@@ -238,7 +238,7 @@ describe('local nodes that call a provider, and wired price settings', () => {
     const qc = (mode: string) => priced(`qc-${mode}`, 'qc-loop-safety', { mode }, `QC ${mode}`);
     const run = summarizeRunScope([qc('jev'), qc('vision-llm'), qc('heuristic')], [], { kind: 'graph' }, shipped);
     expect(run.paid).toEqual(['QC jev', 'QC vision-llm']);
-    expect(run.cost?.lines).toEqual([{ name: 'QC jev', low: 0.0000128, high: 0.0027, runs: [1, 1] }]);
+    expect(run.cost?.lines).toEqual([{ name: 'QC jev', low: 0.0000128, high: 0.0027, runs: [1, 1], nodeId: 'qc-jev' }]);
     expect(run.cost?.unpriced).toEqual(['QC vision-llm']);
     expect(run.cost?.plus).toEqual(['input images']);
     // Without the table entry, Jev mode is paid but unpriced like vision-llm.
@@ -406,7 +406,7 @@ describe('a run priced from its input file (cases shared with the backend)', () 
     const summary = summarizeRunScope([upload({ filePath: '/out/a.png' }), seedvr], wire, { kind: 'node', nodeId: 'up' },
       { ...context, sizes: { '/out/a.png': { width: 1000, height: 1000 } } });
     expect(summary.cost!.sizeRefs).toEqual([]);
-    expect(summary.cost!.lines).toEqual([{ name: 'Upscale', low: 0.004, high: 0.004, runs: [1, 1] }]);
+    expect(summary.cost!.lines).toEqual([{ name: 'Upscale', low: 0.004, high: 0.004, runs: [1, 1], nodeId: 'up' }]);
     expect(runChipLabel(summary)).toBe('~$0.004');
   });
 

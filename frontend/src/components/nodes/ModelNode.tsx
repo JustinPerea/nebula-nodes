@@ -29,6 +29,8 @@ import { MeshPreview } from './DeferredViewers';
 import { RepresentationViewer } from './RepresentationViewer';
 import { NodeError } from './NodeError';
 import { SkippedBadge } from './SkippedBadge';
+import { PlaceholderLine } from './PlaceholderLine';
+import { pendingAttr } from '../../lib/pendingNodes';
 import { VideoEditAction } from './VideoEditAction';
 import { NodeTypeIcon } from './NodeTypeIcon';
 import { useSelectionActionSlot } from '../../lib/selectionActionSlot';
@@ -419,6 +421,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   return (
     <div
       className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''}${isWorldSurface ? ' model-node--world-surface' : ''}${shouldRenderSpatial ? ' model-node--spatial-surface' : ''}${isTextSurface ? ' model-node--text-surface' : ''}${isStructuredSurface ? ' model-node--structured-surface' : ''}${isInlineTextNode ? ' model-node--inline-text' : ''}${isTextInput ? ' model-node--text-input' : ''}${isImageInput ? ' model-node--image-input' : ''}${isStickyNote ? ' model-node--sticky-note' : ''}${isJev ? ' model-node--jev' : ''}${showJevResult ? ' model-node--jev-surface' : ''} ${switchable ? ' model-node--switchable' : ''} ${isNodeSelected ? 'model-node--selected' : ''}${entranceClass}`}
+      data-pending={pendingAttr(nodeData.pending)}
       onClick={() => selectNode(id)}
       style={isJev ? jevBrandStyle() : { ['--node-category-color' as string]: categoryColor }}
     >
@@ -656,6 +659,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         />
       )}
 
+      <PlaceholderLine pending={nodeData.pending} />
       <NodeRunStatus data={nodeData} definition={definition} nodeId={id} />
 
       {jevResult && (
