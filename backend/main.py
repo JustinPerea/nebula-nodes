@@ -2956,6 +2956,11 @@ async def upload_file_consolidated(
         if kept_name is not None:
             node_params[INPUT_FILE_NAME_PARAM] = kept_name
         node_id = cli_graph.add_node(node_type, node_params, position=new_position)
+        # The event as the write made it, and the project it went to: it is
+        # published only once the sync went out (a failed one rolls the node
+        # back), which may be after a switch (round 8 of PR #114).
+        added_event = _node_added_event(node_id)
+        written_to = _open_project_id()
         try:
             await _broadcast_graph_sync(edit=True)
         except Exception as exc:
@@ -2977,7 +2982,7 @@ async def upload_file_consolidated(
         # and the chat's action line credit the node to whoever uploaded it
         # (an agent's `nebula upload` / upload_file, or the person's drop).
         publish_action(f"Added {node_type} ({node_id})")
-        _journal_node_added(node_id)
+        _journal("node.added", project_id=written_to, **added_event)
         await _show_agent({"nodeId": node_id}, say=f"Added {_quoted(_node_label(node_id))}", did=_did("Added", node_id))
         response["nodeId"] = node_id
         if node_type == "image-input":
@@ -3259,11 +3264,12 @@ async def _announce_validation_errors(errors: list[ValidationErrorDetail], run_i
     looks on the canvas like the person's refused click on Run.
     """
     node_errors.record_validation(errors)
-    await manager.broadcast(ValidationErrorEvent(errors=errors, run_id=run_id))
+    # Journaled before the broadcast's await (round 8 of PR #114).
     for node_id, message in _validation_messages(errors).items():
         if node_id:
             _journal_execution_event(ErrorEvent(node_id=node_id, error=message, run_id=run_id), run_id)
     canvas_events.forget_run(run_id)
+    await manager.broadcast(ValidationErrorEvent(errors=errors, run_id=run_id))
 
 
 # ---------- WebSocket endpoint ----------
@@ -4744,8 +4750,16 @@ def _note_node_ran(event: Any, run_id: str | None) -> None:
         pass
 
 
+def _run_project() -> str | None | Any:
+    """The project a run was admitted in (_capture_execution_workspace), for
+    its journal events; ``...`` (the open project) outside a run's context."""
+    captured = _execution_workspace_context.get()
+    return captured["activeProjectId"] if captured else ...
+
+
 def _journal_execution_event(event: Any, run_id: str | None) -> None:
-    """Journal one node's run start/finish/failure, attributed to whoever started the run."""
+    """Journal one node's run start/finish/failure, attributed to whoever
+    started the run, tagged with the project the run was admitted in."""
     try:
         kind = _RUN_EVENT_KINDS.get(type(event))
         if kind is None:
@@ -4777,6 +4791,7 @@ def _journal_execution_event(event: Any, run_id: str | None) -> None:
             data=data,
             summary=f"{_node_label(node_id)} ({node_id}) {_RUN_EVENT_VERBS[kind]}",
             actor=canvas_events.run_actor(run_id),
+            project_id=_run_project(),
         )
     except Exception:  # noqa: BLE001 - never break execution for the journal
         pass
@@ -5112,7 +5127,7 @@ def _journal_provider_hold(hold: str, change: str, *, run_id: str | None, node_i
     what = "a paid start Nebula couldn't confirm" if hold == "startAmbiguity" else "a recovery checkpoint"
     summary = (f"{_node_label(node_id)} ({node_id}) is held: {what}" if change == "held"
                else f"{what} on {_node_label(node_id)} ({node_id}) was cleared")
-    _journal("provider.hold", node_id=node_id, data=data, summary=summary, actor=actor)
+    _journal("provider.hold", node_id=node_id, data=data, summary=summary, actor=actor, project_id=_run_project())
 
 
 def _start_node_notes(rows: list[dict[str, Any]], context: Mapping[str, Any], via: str) -> list[str]:
@@ -5334,11 +5349,12 @@ async def _broadcast_pins() -> None:
         pass
 
 
-async def _journal_detached_pins(pins: list[dict[str, Any]], reason: str) -> None:
-    """Broadcast and journal pins that just lost their node."""
-    if not pins:
-        return
-    await _broadcast_pins()
+def _journal_detached(pins: list[dict[str, Any]], reason: str) -> None:
+    """Journal pins that just lost their node. In the same step as the write
+    that detached them, before any await (round 8 of PR #114): the event then
+    names the project the pins are in, and lands before any switch that
+    follows (a late one named the project opened next, and the --channel
+    listener read A's change as B's)."""
     for pin in pins[:50]:
         node_id = pin.get("detachedFrom")
         _journal(
@@ -5434,23 +5450,35 @@ def _renew_kept_removals(removals: list[dict[str, Any]]) -> None:
         pass
 
 
-async def _announce_removed_nodes(entries: list[dict[str, Any]], *, note: str, pin_reason: Callable[[dict[str, Any]], str],
-                                  journal_removed: bool = True) -> None:
-    """After the delete's graphSync: node.removed, then its pins (pin.detached)
-    and the proposals it closed (proposal.invalidated), node by node, as before."""
+def _journal_removed_nodes(entries: list[dict[str, Any]], *, note: str,
+                           pin_reason: Callable[[dict[str, Any]], str]) -> None:
+    """node.removed, then its pins (pin.detached) and the proposals it closed
+    (proposal.invalidated), node by node. Right after _remove_side_effects,
+    before the delete's graphSync: in the step that made the delete, so each
+    event names the project the node was deleted from (round 8 of PR #114)."""
     for entry in entries:
         gone = entry["gone"]
-        if journal_removed:
-            _journal(
-                "node.removed",
-                node_id=gone["id"],
-                data={"name": gone["name"], "definitionId": gone["definitionId"]},
-                summary=f"removed {gone['name']} ({gone['id']}){note}",
-            )
-        await _journal_detached_pins(entry["detached"], pin_reason(gone))
-        await _announce_closed_proposals(entry["closed"])
-        agent_presence.forget_node(gone["id"])
-        await _forget_status_anchors(node_id=gone["id"])
+        _journal(
+            "node.removed",
+            node_id=gone["id"],
+            data={"name": gone["name"], "definitionId": gone["definitionId"]},
+            summary=f"removed {gone['name']} ({gone['id']}){note}",
+        )
+        _journal_detached(entry["detached"], pin_reason(gone))
+        _journal_closed_proposals(entry["closed"])
+
+
+async def _announce_removed_nodes(entries: list[dict[str, Any]]) -> None:
+    """After the delete's graphSync (its events journaled before it,
+    _journal_removed_nodes): the pins and closed proposals to the open
+    canvases, and the deleted nodes' cursors and status anchors let go."""
+    if any(entry["detached"] for entry in entries):
+        await _broadcast_pins()
+    for entry in entries:
+        await _broadcast_closed_proposals(entry["closed"])
+    for entry in entries:
+        agent_presence.forget_node(entry["gone"]["id"])
+        await _forget_status_anchors(node_id=entry["gone"]["id"])
 
 
 def _restore_removals(raw: Any) -> list[dict[str, Any]]:
@@ -5623,7 +5651,7 @@ async def _undo_removals(records: list[dict[str, Any]], back: Mapping[str, str],
             consumed.setdefault(record["nodeId"], record["id"])
     _note_restored(project_id, back, consumed)
     if pins["reattached"]:
-        await _broadcast_pins()
+        # Journaled in the step that put them back, then broadcast (round 8 of PR #114).
         for pin in pins["reattached"][:50]:
             node_id = (pin.get("anchor") or {}).get("nodeId")
             _journal(
@@ -5631,7 +5659,9 @@ async def _undo_removals(records: list[dict[str, Any]], back: Mapping[str, str],
                 node_id=node_id if isinstance(node_id, str) else None,
                 data={"pinId": pin.get("id"), "text": pin.get("text"), "anchor": pin.get("anchor")},
                 summary=f"note {pin.get('id')} is back on {node_id}: the undo put its node back",
+                project_id=project_id,
             )
+        await _broadcast_pins()
 
     named = {proposal_id for record in relevant for proposal_id in record.get("proposals") or []}
     found = sorted(canvas_proposals.closed_by_pairs(pairs, project_id), key=lambda p: p.created_at)
@@ -5653,6 +5683,14 @@ async def _undo_removals(records: list[dict[str, Any]], back: Mapping[str, str],
                 reason = exc.detail
         if reason is None:
             reopened.append(proposal)
+            # In the step that reopened it, tagged with its project (round 8 of PR #114).
+            _journal(
+                "proposal.reopened",
+                node_id=next(iter(sorted(proposal.references, key=_node_order)), None),
+                data={"proposalId": proposal.id, "agentId": proposal.agent.id, "note": proposal.spec.note},
+                summary=f"reopened {proposal.agent.name}'s proposal {proposal.id}: the undo put back the node it needs",
+                project_id=proposal.project_id,
+            )
         else:
             out["notReopened"].append({"id": proposal.id, "reason": reason})
     assets = [p for p in asset_proposals.closed_by_pairs(pairs, project_id) if isinstance(p, AssetProposal)]
@@ -5670,12 +5708,6 @@ async def _undo_removals(records: list[dict[str, Any]], back: Mapping[str, str],
         # delete's) isn't this undo's: it stays as it is and isn't counted.
     for proposal in reopened:
         out["reopened"].append(proposal.id)
-        _journal(
-            "proposal.reopened",
-            node_id=next(iter(sorted(proposal.references, key=_node_order)), None),
-            data={"proposalId": proposal.id, "agentId": proposal.agent.id, "note": proposal.spec.note},
-            summary=f"reopened {proposal.agent.name}'s proposal {proposal.id}: the undo put back the node it needs",
-        )
         try:
             await manager.broadcast_browser({
                 "type": "proposalOpened",
@@ -5705,14 +5737,14 @@ async def _undo_removals(records: list[dict[str, Any]], back: Mapping[str, str],
         if reason is None:
             reopened_assets.append(proposal)
             out["reopened"].append(proposal.id)
+            _journal(
+                "proposal.reopened",
+                data=_asset_journal_data(proposal),
+                summary=f"reopened {proposal.agent.name}'s proposal {proposal.id}: the undo put back the image it needs",
+            )
         else:
             out["notReopened"].append({"id": proposal.id, "reason": reason})
     for proposal in reopened_assets:
-        _journal(
-            "proposal.reopened",
-            data=_asset_journal_data(proposal),
-            summary=f"reopened {proposal.agent.name}'s proposal {proposal.id}: the undo put back the image it needs",
-        )
         await _reopen_update(proposal.update, proposal.id)
         _schedule_asset_expiry(proposal)
     if reopened_assets:
@@ -5916,13 +5948,15 @@ async def _broadcast_raw_quietly(message: dict[str, Any]) -> None:
 
 
 def _journal_note(note: dict[str, Any], surface: str, *, board: dict[str, Any] | None = None,
-                  actor: dict[str, Any] | None = None) -> None:
+                  actor: dict[str, Any] | None = None, project_id: str | None | Any = ...) -> None:
+    """note.posted. ``project_id``: the project the Update was saved in, when
+    a worker thread saved it (the open project may have changed since)."""
     data: dict[str, Any] = {"surface": surface, "noteId": note.get("id"), "about": note.get("about"),
                             "refs": list(note.get("refs") or [])[:12], "text": note.get("text")}
     if board is not None:
         data["boardId"] = board.get("id")
         data["boardName"] = board.get("name")
-    _journal("note.posted", data=data, summary=note_summary(note), actor=actor)
+    _journal("note.posted", data=data, summary=note_summary(note), actor=actor, project_id=project_id)
 
 
 def _note_author() -> AgentIdentity:
@@ -5954,10 +5988,10 @@ async def post_canvas_agent_note(body: AgentNoteBody) -> Any:
                                          graph_nodes=cli_graph.nodes)
     except NoteError as exc:
         return _raise_note_error(exc)
+    _journal_note(result["note"], "canvas")  # before any await (round 8 of PR #114)
     await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"],
                                                 note=result["note"], unread=result["unread"],
                                                 removed=result["removed"]))
-    _journal_note(result["note"], "canvas")
     return result
 
 
@@ -6024,9 +6058,9 @@ async def post_board_agent_note(moodboard_id: str, body: AgentNoteBody) -> Any:
                                          body.model_dump(exclude_unset=True))
     except NoteError as exc:
         return _raise_note_error(exc)
+    _journal_note(result["note"], "board", board=board)
     await _broadcast_raw_quietly(_notes_message("board", "added", board_id=board["id"], note=result["note"],
                                                 unread=result["unread"], removed=result["removed"]))
-    _journal_note(result["note"], "board", board=board)
     return result
 
 
@@ -6105,7 +6139,15 @@ async def _announce_closed_proposals(
     *,
     actor: dict[str, Any] | None = None,
 ) -> None:
-    """Journal and broadcast proposals that just closed (expired, invalidated, ...)."""
+    """Journal and broadcast proposals that just closed (expired, invalidated, ...):
+    every journal event first, before any await (_journal_closed_proposals)."""
+    _journal_closed_proposals(proposals, actor=actor)
+    await _broadcast_closed_proposals(proposals, actor=actor)
+
+
+def _journal_closed_proposals(proposals: list[Proposal], *, actor: dict[str, Any] | None = None) -> None:
+    """In the step that closed them (round 8 of PR #114), each tagged with
+    the project it was made in."""
     for proposal in proposals:
         kind = f"proposal.{proposal.status}"
         reason = f": {proposal.reason}" if proposal.reason else ""
@@ -6116,7 +6158,13 @@ async def _announce_closed_proposals(
                   "note": proposal.spec.note, "reason": proposal.reason},
             summary=f"{proposal.status} {proposal.agent.name}'s proposal {proposal.id}{reason}",
             actor=actor,
+            project_id=proposal.project_id,
         )
+
+
+async def _broadcast_closed_proposals(proposals: list[Proposal], *, actor: dict[str, Any] | None = None) -> None:
+    """The open canvases hear of proposals already journaled as closed, and each one's Update settles."""
+    for proposal in proposals:
         try:
             await manager.broadcast_raw(_proposal_closed_message(proposal))
         except Exception:  # noqa: BLE001 - the canvas also hides expired proposals locally
@@ -6637,13 +6685,8 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         raise _proposal_http_error(exc) from exc
     # Which node it reads under each id, so only a delete of that very node tags it (second review).
     proposal.lineage = {node_id: node_removals.lineage(proposal.project_id, node_id) for node_id in spec.references}
-    await _post_canvas_update(proposal)  # Q112 a: the person hears of it on every screen
-    view = _proposal_view(proposal)
-    # The agent's other open proposals here that can't run: Justin (Q109)
-    # keeps them, and the agent is told to withdraw one this replaces.
-    still_open = [{"id": p.id, "note": p.spec.note} for p in canvas_proposals.open_unrunnable(proposal)]
     first_reference = next(iter(sorted(proposal.references, key=_node_order)), None)
-    _journal(
+    _journal(  # in the step that made it, before any await (round 8 of PR #114)
         "proposal.created",
         node_id=first_reference,
         data={
@@ -6657,6 +6700,11 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         },
         summary=f'proposed {proposal.id}: "{spec.note}"',
     )
+    await _post_canvas_update(proposal)  # Q112 a: the person hears of it on every screen
+    view = _proposal_view(proposal)
+    # The agent's other open proposals here that can't run: Justin (Q109)
+    # keeps them, and the agent is told to withdraw one this replaces.
+    still_open = [{"id": p.id, "note": p.spec.note} for p in canvas_proposals.open_unrunnable(proposal)]
     if not proposal.is_open:
         # It closed while its Update was being written (see
         # _post_canvas_update): the canvas already heard proposalClosed, so
@@ -6898,8 +6946,8 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
         fingerprint=approvals.fingerprint(cli_graph.nodes, cli_graph.edges, run_ids),
         shape=_approval_shape(cli_graph, run_ids),
     ) if run_ids else None
-    await _broadcast_graph_sync(edit=True)
-    publish_action(f"Accepted {proposal.agent.name}'s proposal ({len(id_map)} nodes)")
+    # Journaled here, before any await (round 8 of PR #114): each event names
+    # the project the accept changed and reads the canvas as it left it.
     person = dict(_PERSON_ACTOR)
     _journal(
         "proposal.accepted",
@@ -6925,6 +6973,15 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
                 summary=f"set {_listed(changes['keys'], 4)} on {_node_label(change.node_id)} ({change.node_id}){note}",
                 actor=person,
             )
+    all_defs = node_registry.get_all()
+    updated = [
+        _cli_node_to_rf(cli_graph.nodes[node_id], cli_graph.nodes[node_id].get("position") or {"x": 0.0, "y": 0.0}, all_defs)
+        for node_id in [change.node_id for change in proposal.spec.params]
+        if node_id in cli_graph.nodes
+    ]
+    created = _rf_created(list(id_map.values()), edge_ids)
+    await _broadcast_graph_sync(edit=True)
+    publish_action(f"Accepted {proposal.agent.name}'s proposal ({len(id_map)} nodes)")
     try:
         await manager.broadcast_raw(_proposal_closed_message(proposal))
     except Exception:  # noqa: BLE001
@@ -6938,12 +6995,6 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
             await manager.broadcast_raw(event)
         except Exception:  # noqa: BLE001 - the cursor is decoration on a committed change
             pass
-    all_defs = node_registry.get_all()
-    updated = [
-        _cli_node_to_rf(cli_graph.nodes[node_id], cli_graph.nodes[node_id].get("position") or {"x": 0.0, "y": 0.0}, all_defs)
-        for node_id in [change.node_id for change in proposal.spec.params]
-        if node_id in cli_graph.nodes
-    ]
     return {
         "status": "accepted",
         "proposalId": proposal.id,
@@ -6951,7 +7002,7 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
         "runNodeIds": run_ids,
         # Only the person's canvas gets this; it sends it with the run it starts.
         "approvalId": approval.id if approval is not None else None,
-        **_rf_created(list(id_map.values()), edge_ids),
+        **created,
         "updatedNodes": updated,
     }
 
@@ -7022,6 +7073,7 @@ async def _send_questions_sync(websocket: WebSocket) -> None:
 
 
 def _journal_question(question_set: QuestionSet, *, actor: dict[str, Any] | None = None) -> None:
+    # Tagged with the project the set is kept on (round 8 of PR #114).
     """One journal event per step. Never the questions' text nor the
     answers: every agent on the canvas reads the journal."""
     kind = "asked" if question_set.is_open else question_set.status
@@ -7035,7 +7087,7 @@ def _journal_question(question_set: QuestionSet, *, actor: dict[str, Any] | None
     }
     _journal(f"question.{kind}", node_id=next(iter(question_set.spec.node_ids), None),
              data={"questionId": question_set.id, "agentId": question_set.agent.id, "count": count},
-             summary=summaries[kind], actor=actor)
+             summary=summaries[kind], actor=actor, project_id=question_set.project_id)
 
 
 def _gone_question_detail(set_id: str) -> str:
@@ -7076,9 +7128,12 @@ async def _post_question_update(question_set: QuestionSet) -> bool:
         question_set.update = None  # never committed: no later save may keep it
         return False
     note = result["note"]
+    # Saved by a worker thread: tagged with the project it went to, journaled
+    # before the broadcast's await (round 8 of PR #114).
+    _journal_note(note, "canvas", project_id=result["projectId"])
+    _journal_question(question_set)  # asked: with its Update, before the broadcast's await
     await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"], note=note,
                                                 unread=result["unread"], removed=result["removed"]))
-    _journal_note(note, "canvas")
     return True
 
 
@@ -7109,9 +7164,11 @@ async def _follow_question_updates(sets: list[QuestionSet]) -> None:
 
 async def _announce_closed_questions(sets: list[QuestionSet], *, actor: dict[str, Any] | None = None) -> None:
     """Journal each, tell the person's sockets (only theirs: the message
-    carries their answers back to them), then settle each one's Update."""
+    carries their answers back to them), then settle each one's Update.
+    Every event first, before any await (round 8 of PR #114)."""
     for question_set in sets:
         _journal_question(question_set, actor=actor)
+    for question_set in sets:
         try:
             await manager.broadcast_browser({"type": "questionsClosed", "questionId": question_set.id,
                                              "status": question_set.status, "agentId": question_set.agent.id,
@@ -7160,7 +7217,6 @@ async def create_agent_questions(body: dict[str, Any]) -> Any:
         agent_questions.drop(question_set.id)
         raise HTTPException(status_code=409, detail=(
             "Couldn't post the questions' Update on the open project, so nothing was asked; try again"))
-    _journal_question(question_set)
     if not question_set.is_open:
         # Withdrawn while its Update was being written: settle that now.
         await _follow_question_updates([question_set])
@@ -7305,7 +7361,8 @@ def _asset_journal_data(proposal: AssetProposal) -> dict[str, Any]:
 
 async def _announce_closed_asset_proposals(proposals: list[AssetProposal], *,
                                            actor: dict[str, Any] | None = None) -> None:
-    """Journal and broadcast asset proposals that just closed."""
+    """Journal and broadcast asset proposals that just closed: every event
+    first, before any await (round 8 of PR #114)."""
     for proposal in proposals:
         reason = f": {proposal.reason}" if proposal.reason and proposal.kind != "commons" else ""
         _journal(
@@ -7314,6 +7371,7 @@ async def _announce_closed_asset_proposals(proposals: list[AssetProposal], *,
             summary=f"{proposal.status} {proposal.agent.name}'s proposal {proposal.id}{reason}",
             actor=actor,
         )
+    for proposal in proposals:
         try:
             await manager.broadcast_raw(_asset_proposal_closed_message(proposal))
         except Exception:  # noqa: BLE001 - the screens also hide expired proposals locally
@@ -7347,9 +7405,11 @@ async def _post_asset_update(proposal: AssetProposal) -> None:
         if isinstance(other, AssetProposal) and _same_asker(other, proposal):
             other.update = dict(ref)
     proposal.update = dict(ref)
+    # Saved by a worker thread: tagged with the project it went to, journaled
+    # before the broadcast's await (round 8 of PR #114).
+    _journal_note(note, "canvas", project_id=result["projectId"])
     await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"], note=note,
                                                 unread=result["unread"], removed=result["removed"]))
-    _journal_note(note, "canvas")
 
 
 def _same_asker(one: AssetProposal, other: AssetProposal) -> bool:
@@ -7598,9 +7658,11 @@ async def _post_canvas_update(proposal: Proposal) -> None:
         return
     note = result["note"]
     proposal.update = {"id": note["id"], "projectId": result["projectId"]}
+    # Saved by a worker thread: tagged with the project it went to, journaled
+    # before the broadcast's await (round 8 of PR #114).
+    _journal_note(note, "canvas", project_id=result["projectId"])
     await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"], note=note,
                                                 unread=result["unread"], removed=result["removed"]))
-    _journal_note(note, "canvas")
     if not proposal.is_open:
         # It closed while the Update was being written (a node it needs
         # deleted, the canvas cleared, another project opened, withdrawn):
@@ -7815,14 +7877,15 @@ async def create_asset_proposal(body: dict[str, Any]) -> dict[str, Any]:
         raise _proposal_http_error(exc) from exc
     proposal.lost_pin = lost
     proposal.auto_cover = auto
+    said = asset_proposal_summary(proposal)
+    # In the step that made it, before any await (round 8 of PR #114).
+    _journal("proposal.created", data={**_asset_journal_data(proposal), "change": sorted(spec.change)},
+             summary=(f"proposed {proposal.id} ({said})" if spec.kind == "commons"
+                      else f'proposed {proposal.id}: "{spec.note}" ({said})'))
     # The Update in the corner (Q92 a), before the view so the answer names it.
     await _post_asset_update(proposal)
     _schedule_asset_expiry(proposal)
     view = _asset_proposal_view(proposal)
-    said = asset_proposal_summary(proposal)
-    _journal("proposal.created", data={**_asset_journal_data(proposal), "change": sorted(spec.change)},
-             summary=(f"proposed {proposal.id} ({said})" if spec.kind == "commons"
-                      else f'proposed {proposal.id}: "{spec.note}" ({said})'))
     try:
         # The accept key goes only to the person's canvas sockets.
         await manager.broadcast_browser({"type": "assetProposalOpened",
@@ -8379,17 +8442,21 @@ async def _finalize_cancelled_execution(
     nodes: list[GraphNode], run_id: str, *, preserve_graph_params: bool = False,
     submitted: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> None:
-    """Sync late live-run params, preserve replay canvas params, then emit Stop."""
-    if not preserve_graph_params and _sync_params_to_cli_graph(nodes, submitted=submitted):
-        await _broadcast_graph_sync()
-    await manager.broadcast(GraphCancelledEvent(run_id=run_id))
+    """Sync late live-run params, preserve replay canvas params, then emit Stop.
+    run.cancelled is journaled first, before any await, with the run's own
+    project (_run_project; round 8 of PR #114)."""
+    synced = not preserve_graph_params and _sync_params_to_cli_graph(nodes, submitted=submitted)
     stopped_by, started_by = _run_cancelled_actor(run_id)
     _journal(
         "run.cancelled",
         data={"runId": run_id, "startedBy": started_by},
         summary="run stopped",
         actor=stopped_by,
+        project_id=_run_project(),
     )
+    if synced:
+        await _broadcast_graph_sync()
+    await manager.broadcast(GraphCancelledEvent(run_id=run_id))
 
 
 def _fresh_paid_worldlabs_claims(
@@ -9860,6 +9927,35 @@ async def _broadcast_graph_sync(
         if reason == "import":
             node_errors.forget_canvas()
             _forget_canvas_undo("a graph was loaded into the project since, so its node ids started again")
+        # Journaled here, in the step that replaced the canvas (a switch's
+        # commit, an import's), before any await (round 8 of PR #114): the
+        # event names the project it opened or loaded into, and lands before
+        # a switch that follows. Late, it named whatever project was open
+        # then, and the --channel listener dropped that project's pins.
+        safe_reason = reason if reason in _REPLACE_REASONS else "import"
+        data: dict[str, Any] = {"reason": safe_reason}
+        summary = f"replaced the canvas ({safe_reason})"
+        if project_switch:
+            data.update({key: project_switch[key] for key in ("projectId", "projectName", "previousProjectId",
+                                                               "previousProjectName") if key in project_switch})
+            verb = "made and opened" if safe_reason == "project-create" else "opened"
+            summary = f"{verb} project “{project_switch.get('projectName', '')}”"
+            if project_switch.get("previousProjectName"):
+                summary += f" (was “{project_switch['previousProjectName']}”)"
+        _journal("canvas.replaced", data=data, summary=summary)
+        # Pins belong to the project record. A project open or create brings
+        # that project's pins; an import into the same project detaches pins
+        # whose nodes did not survive: that project's, so here too.
+        detached: list[dict[str, Any]] = []
+        if safe_reason == "import":
+            try:
+                detached = canvas_pins.reanchor_missing(set(cli_graph.nodes))
+            except (PinError, ProjectStoreError):
+                detached = []
+        _journal_detached(detached, "the canvas was replaced")
+        # Proposals point at node ids that just restarted: none of them still fit.
+        closed = canvas_proposals.invalidate_all("the canvas was replaced")
+        _journal_closed_proposals(closed)
     export = await export_graph_for_frontend()
     # A cover proposal's view follows the live canvas (a pin's image deleted
     # or back). Before the sync goes out: one a delete closes is named in the
@@ -9877,43 +9973,18 @@ async def _broadcast_graph_sync(
                                  **({"edit": _graph_edit_origin()}
                                     if edit and (not graph_replaced or reason == "import") else {})})
     if graph_replaced:
-        # Tag, don't reset: seq stays monotonic, and the new project id rides
-        # on this event and every one after it. The journal takes it from the
-        # catalog (_events_journal), so events from the switch's commit on
-        # already carried it, a pin added meanwhile included (review 5 of PR #114).
-        safe_reason = reason if reason in _REPLACE_REASONS else "import"
-        data: dict[str, Any] = {"reason": safe_reason}
-        summary = f"replaced the canvas ({safe_reason})"
-        if project_switch:
-            data.update({key: project_switch[key] for key in ("projectId", "projectName", "previousProjectId",
-                                                               "previousProjectName") if key in project_switch})
-            verb = "made and opened" if safe_reason == "project-create" else "opened"
-            summary = f"{verb} project “{project_switch.get('projectName', '')}”"
-            if project_switch.get("previousProjectName"):
-                summary += f" (was “{project_switch['previousProjectName']}”)"
-        _journal("canvas.replaced", data=data, summary=summary)
-        # Pins belong to the project record. A project open or create brings
-        # that project's pins; an import into the same project detaches pins
-        # whose nodes did not survive. (The pins listing follows catalog.json,
-        # so one taken between the commit and here names the project open
-        # now: ProjectStore.projection.)
-        detached: list[dict[str, Any]] = []
-        if safe_reason == "import":
-            try:
-                detached = canvas_pins.reanchor_missing(set(cli_graph.nodes))
-            except (PinError, ProjectStoreError):
-                detached = []
+        # Its events went to the journal above, before any await. (The pins
+        # listing follows catalog.json, so one taken between the commit and
+        # here names the project open now: ProjectStore.projection.)
         await _broadcast_pins()
         # Updates belong to the project record too: an open or create brings
         # that project's list; an import keeps the project, and its list.
         if safe_reason != "import":
             await _settle_proposal_updates()
             await _broadcast_raw_quietly(_canvas_notes_message())
-        await _journal_detached_pins(detached, "the canvas was replaced")
-        # Proposals point at node ids that just restarted: none of them still fit.
-        # Nor do runs approved on Accept that haven't started.
+        # Runs approved on Accept that haven't started don't fit either.
         run_approvals.clear()
-        await _announce_closed_proposals(canvas_proposals.invalidate_all("the canvas was replaced"))
+        await _broadcast_closed_proposals(closed)
         # Node ids started again, or another project's are live: no earlier
         # delete's undo may reopen a cover proposal by its node id either.
         asset_proposals.drop_removal_tags("the canvas was replaced")
@@ -10022,9 +10093,9 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
                     "durable": bool(record["durable"]),
                 }
             )
-        await manager.broadcast(event)
         _journal_provider_hold("startAmbiguity", "held", run_id=run_id, node_id=event.node_id, kind=event.kind,
                                durable=event.durable, actor=canvas_events.run_actor(run_id))
+        await manager.broadcast(event)
         if run_id is not None:
             await _broadcast_graph_sync()
         return
@@ -10040,10 +10111,10 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
             event = event.model_copy(
                 update={"durable": False, "warning": durability_warning}
             )
-        await manager.broadcast(event)
         _journal_provider_hold("recovery", "held", run_id=event.run_id or execution_run_id.get(),
                                node_id=event.node_id, durable=event.durable,
                                actor=canvas_events.run_actor(event.run_id or execution_run_id.get()))
+        await manager.broadcast(event)
         if changed or safety_hold_changed:
             await _broadcast_graph_sync()
         return
@@ -10456,6 +10527,11 @@ def _validate_params(definition_id: str, params: dict[str, Any]) -> None:
 
 def _journal_node_added(node_id: str, *, actor: dict[str, Any] | None = None, note: str = "",
                         proposal_id: str | None = None) -> None:
+    _journal("node.added", actor=actor, **_node_added_event(node_id, note=note, proposal_id=proposal_id))
+
+
+def _node_added_event(node_id: str, *, note: str = "", proposal_id: str | None = None) -> dict[str, Any]:
+    """node.added's node_id, data and summary, read from the canvas now."""
     node = cli_graph.nodes.get(node_id) or {}
     data: dict[str, Any] = {
         "definitionId": str(node.get("definitionId") or ""),
@@ -10465,13 +10541,7 @@ def _journal_node_added(node_id: str, *, actor: dict[str, Any] | None = None, no
         data["position"] = node["position"]
     if proposal_id:
         data["proposalId"] = proposal_id
-    _journal(
-        "node.added",
-        node_id=node_id,
-        data=data,
-        summary=f"added {data['name']} ({node_id}){note}",
-        actor=actor,
-    )
+    return {"node_id": node_id, "data": data, "summary": f"added {data['name']} ({node_id}){note}"}
 
 
 def _journal_edge(kind: str, edge: dict[str, Any], *, actor: dict[str, Any] | None = None, note: str = "",
@@ -10576,11 +10646,14 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
             [candidate.nodes[short_id]],
             source="create",
         )
+    # Journaled before any await, so it names the project the node went to
+    # (round 8 of PR #114); the reply is the node as it was made.
+    _journal_node_added(short_id)
+    created = copy.deepcopy(cli_graph.nodes[short_id])
     await _broadcast_graph_sync(edit=True)
     publish_action(f"Added {definition_id} ({short_id})")
-    _journal_node_added(short_id)
     await _show_agent({"nodeId": short_id}, say=f"Added {_quoted(_node_label(short_id))}", did=_did("Added", short_id))
-    return cli_graph.nodes[short_id]
+    return created
 
 
 @app.post("/api/graph/connect")
@@ -10605,12 +10678,12 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    _journal_edge("edge.added", edge)  # before any await (round 8 of PR #114)
     await _broadcast_graph_sync(edit=True)
     publish_action(
         f"Connected {edge['source']}:{edge['sourceHandle']} → "
         f"{edge['target']}:{edge['targetHandle']}"
     )
-    _journal_edge("edge.added", edge)
     await _show_agent(
         {"nodeId": edge["target"], "handle": edge["targetHandle"]},
         origin={"nodeId": edge["source"], "handle": edge["sourceHandle"]},
@@ -10725,11 +10798,13 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     # Preserve the raw top-level node contract for existing CLI callers while
     # letting the canvas adopt only a connection explicitly confirmed by us.
     response = {**copy.deepcopy(candidate.nodes[short_id]), "connected": edge is not None, "edge": rf_edge}
-    await _broadcast_graph_sync(edit=True)
-    publish_action(f"Added {definition_id} ({short_id})")
+    # Before any await (round 8 of PR #114).
     _journal_node_added(short_id)
     if edge is not None:
         _journal_edge("edge.added", edge)
+    await _broadcast_graph_sync(edit=True)
+    publish_action(f"Added {definition_id} ({short_id})")
+    if edge is not None:
         publish_action(
             f"Connected {src}:{connect_spec.get('sourceHandle', '')} → "
             f"{dst}:{connect_spec.get('targetHandle', '')}"
@@ -11035,8 +11110,8 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
                     cli_graph.update_params(node_id, params)
                 except ValueError:
                     raise _node_gone(node_id)
-    await _broadcast_graph_sync(edit=True)
-    publish_action(f"Updated {node_id} params")
+    # Journaled before any await, so it names the project the change was made
+    # in (round 8 of PR #114); the reply is the node as the change left it.
     changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
     if changes:
         _journal(
@@ -11045,10 +11120,13 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
             data=changes,
             summary=f"set {_listed(changes['keys'], 4)} on {_node_label(node_id)} ({node_id})",
         )
+    updated = copy.deepcopy(cli_graph.nodes[node_id])
+    await _broadcast_graph_sync(edit=True)
+    publish_action(f"Updated {node_id} params")
     changed = ", ".join(sorted(str(key) for key in params)[:4])
     await _show_agent({"nodeId": node_id}, say=f"Set {changed}" if changed else f"Updated {_quoted(_node_label(node_id))}",
                       did=_did("Changed", node_id))
-    return cli_graph.nodes[node_id]
+    return updated
 
 
 def _universal_request(body: Any, definition_id: str | None = None) -> tuple[str, str]:
@@ -11132,14 +11210,15 @@ async def configure_universal_node(node_id: str, body: dict[str, Any]) -> dict[s
         _drop_outputs_off_ports(candidate, node_id, configured.params)
         candidate.set_params(node_id, configured.params)
         _commit_graph_candidate_with_recoveries(candidate, [candidate.nodes[node_id]], source="update")
-    await _broadcast_graph_sync(edit=True)
-    publish_action(f"Set {node_id}'s model to {model}")
+    # Before any await (round 8 of PR #114).
     changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
     if changes:
         _journal("node.params", node_id=node_id, data=changes,
                  summary=f"set {_listed(changes['keys'], 4)} on {_node_label(node_id)} ({node_id})")
     for edge in removed:
         _journal_edge("edge.removed", edge)
+    await _broadcast_graph_sync(edit=True)
+    publish_action(f"Set {node_id}'s model to {model}")
     return {
         "params": configured.params,
         "dynamicInputPorts": configured.inputs,
@@ -11167,15 +11246,16 @@ async def rename_graph_node(node_id: str, body: dict[str, Any]) -> dict:
     _guard_agent_growth_past_save_limit(lambda probe: probe.set_label(node_id, label))
     cli_graph.set_label(node_id, label)
     current = _node_label(node_id)
-    await _broadcast_graph_sync(edit=True)
     if current != previous:
-        publish_action(f"Renamed {node_id}")
-        _journal(
+        _journal(  # before any await (round 8 of PR #114)
             "node.renamed",
             node_id=node_id,
             data={"from": previous, "to": current},
             summary=f"renamed {previous} ({node_id}) to {current}",
         )
+    await _broadcast_graph_sync(edit=True)
+    if current != previous:
+        publish_action(f"Renamed {node_id}")
         # An agent's rename is an action like any edit (the Agents panel's
         # line, Q125 item 2); a no-op for the person's own.
         await _show_agent({"nodeId": node_id}, say=f"Renamed {_quoted(current)}", did=_did("Renamed", node_id))
@@ -11250,19 +11330,8 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
         raise HTTPException(status_code=404, detail=str(exc))
     if arrange is None:
         canvas_arrange.forget_nodes(normalized)
-    if arrange is not None and is_person(current_request_headers()):
-        # The person's canvas laying out an agent's new nodes finishes that
-        # agent's edit; it is not a new one. No `edit`, so no tab makes it a
-        # step of its own; `arranged` tells each tab to fold these positions
-        # into the step that added the nodes, so its redo puts them here.
-        # Anyone else's write (an agent or script can read the arrangeId off
-        # a graphSync) stays a normal edit, credited to it, as before.
-        await _broadcast_graph_sync(moved=normalized, arranged={"id": arrange.id, "nodeIds": sorted(normalized)})
-    else:
-        await _broadcast_graph_sync(edit=True, moved=normalized)
-    publish_action(f"Updated layout for {len(normalized)} node(s)")
     # This route is the authoritative move signal (drag end, auto-layout,
-    # paste).
+    # paste). Journaled before any await (round 8 of PR #114).
     moved = [
         node_id
         for node_id, position in normalized.items()
@@ -11279,6 +11348,18 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
             # itself, so it can't put its positions under another agent's name.
             actor=arrange.actor if arrange is not None and not has_agent_marker(current_request_headers()) else None,
         )
+    if arrange is not None and is_person(current_request_headers()):
+        # The person's canvas laying out an agent's new nodes finishes that
+        # agent's edit; it is not a new one. No `edit`, so no tab makes it a
+        # step of its own; `arranged` tells each tab to fold these positions
+        # into the step that added the nodes, so its redo puts them here.
+        # Anyone else's write (an agent or script can read the arrangeId off
+        # a graphSync) stays a normal edit, credited to it, as before.
+        await _broadcast_graph_sync(moved=normalized, arranged={"id": arrange.id, "nodeIds": sorted(normalized)})
+    else:
+        await _broadcast_graph_sync(edit=True, moved=normalized)
+    publish_action(f"Updated layout for {len(normalized)} node(s)")
+    if moved:
         if arrange is None:
             # An agent's move (`nebula move`) is an action too (the Agents
             # panel's line, Q125 item 2); a no-op for the person's drags.
@@ -11323,19 +11404,27 @@ async def clear_graph(force: bool = False) -> dict:
         run_approvals.clear()
         # Ids start again at n1: no node now is one a restore brought back.
         node_removals.forget_project(_workspace_context()["activeProjectId"])
-    agent_presence.forget_graph()
-    await _forget_status_anchors()
-    _forget_canvas_undo("the canvas was cleared since")
-    await _broadcast_graph_sync(edit=True)
-    publish_action("Cleared the canvas")
+    # In the step that cleared it, before any await (round 8 of PR #114): the
+    # pins that lost their nodes are this project's (after an await another
+    # project may be open, and its pins would be detached instead), and every
+    # event names the project cleared.
     _journal("canvas.cleared", summary="cleared the canvas")
     try:
         detached = canvas_pins.reanchor_missing(set())
     except (PinError, ProjectStoreError):
         detached = []
-    await _journal_detached_pins(detached, "the canvas was cleared")
-    await _announce_closed_proposals(canvas_proposals.invalidate_all("the canvas was cleared"))
+    _journal_detached(detached, "the canvas was cleared")
+    closed = canvas_proposals.invalidate_all("the canvas was cleared")
+    _journal_closed_proposals(closed)
     asset_proposals.drop_removal_tags("the canvas was cleared")
+    agent_presence.forget_graph()
+    await _forget_status_anchors()
+    _forget_canvas_undo("the canvas was cleared since")
+    await _broadcast_graph_sync(edit=True)
+    publish_action("Cleared the canvas")
+    if detached:
+        await _broadcast_pins()
+    await _broadcast_closed_proposals(closed)
     return {"status": "cleared"}
 
 
@@ -11411,9 +11500,9 @@ async def delete_provider_recovery(
                     params.pop(param_key, None)
                 current["params"] = params
                 cli_graph._maybe_persist()
-    await _broadcast_graph_sync()
     if removed:
-        _journal_provider_hold("recovery", "cleared", run_id=run_id, node_id=node_id)
+        _journal_provider_hold("recovery", "cleared", run_id=run_id, node_id=node_id)  # before any await
+    await _broadcast_graph_sync()
     return {
         "status": "deleted",
         "runId": run_id,
@@ -11446,9 +11535,9 @@ async def acknowledge_provider_start_ambiguity(
             status_code=507,
             detail="Could not durably acknowledge World Labs paid-start hold",
         ) from exc
-    await _broadcast_graph_sync()
     if removed:
-        _journal_provider_hold("startAmbiguity", "cleared", run_id=run_id, node_id=node_id, kind=kind)
+        _journal_provider_hold("startAmbiguity", "cleared", run_id=run_id, node_id=node_id, kind=kind)  # before any await
+    await _broadcast_graph_sync()
     return {
         "status": "acknowledged",
         "kind": kind,
@@ -11533,6 +11622,7 @@ async def delete_graph_node(node_id: str) -> dict:
     entries = _remove_side_effects(
         [{"id": node_id, "name": label, "definitionId": removed_definition, "position": removed_position}],
         lambda gone: f"{gone['name']} ({gone['id']}) was deleted")
+    _journal_removed_nodes(entries, note="", pin_reason=lambda gone: f"{gone['name']} was deleted")
     removals = _removal_records(entries)
     token = _removals_ctx.set(removals)
     try:
@@ -11542,7 +11632,7 @@ async def delete_graph_node(node_id: str) -> dict:
     _renew_kept_removals(removals)
     publish_action(f"Removed {node_id}")
     last_point = agent_presence.last_point(node_id)
-    await _announce_removed_nodes(entries, note="", pin_reason=lambda gone: f"{gone['name']} was deleted")
+    await _announce_removed_nodes(entries)
     if last_point is not None:
         await _show_agent(last_point, say=f"Removed {_quoted(label)}", did={"verb": "Removed", "nodeId": None, "label": label})
     # What the delete removed, for its undo (POST /api/graph/restore `removals`).
@@ -11860,20 +11950,13 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         arrange = canvas_arrange.add(id_map.values(), direction=spec.arrange.direction, gap=spec.arrange.gap,
                                      actor=actor_for_headers(headers))
     entries = _remove_side_effects(removed, lambda gone: f"{gone['name']} ({gone['id']}) was deleted")
-    removals = _removal_records(entries)
-    removals_token = _removals_ctx.set(removals)
-    try:
-        await _broadcast_graph_sync(edit=True, moved=moves)
-    finally:
-        _removals_ctx.reset(removals_token)
-    # Its undo puts back the pins and proposals these deletes removed (after
-    # the sync, which adds the cover proposals it closed).
-    undo_after["removals"] = copy.deepcopy(removals)
-    _renew_kept_removals(removals)
+    # Every event of the edit is journaled here, before any await (round 8
+    # of PR #114): it names the project the edit was made in and reads the
+    # canvas as the edit left it, and it lands before any switch that follows.
     note = f" ({additions.note})" if additions.note != "edit" else ""
     for edge in spec.unwire:
         _journal_edge("edge.removed", edge.as_dict())
-    await _announce_removed_nodes(entries, note=note, pin_reason=lambda gone: f"{gone['name']} was deleted")
+    _journal_removed_nodes(entries, note=note, pin_reason=lambda gone: f"{gone['name']} was deleted")
     _journal_cluster(list(id_map.values()), edge_ids, note=note)
     changed: list[str] = []
     for node_id, before in params_before.items():
@@ -11905,8 +11988,25 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             data={"nodeIds": moved[:50], "count": len(moved)},
             summary=f"moved {_listed(moved)}",
         )
-
     added = list(id_map.values())
+    # The reply's view of what it added and wired, as the edit left them.
+    added_rows = [{"id": node_id, "definitionId": cli_graph.nodes[node_id].get("definitionId"),
+                   "name": _node_label(node_id)} for node_id in added]
+    wanted = set(edge_ids)
+    wired_rows = [{"id": edge["id"], **_edge_data(edge)} for edge in cli_graph.edges if edge.get("id") in wanted]
+
+    removals = _removal_records(entries)
+    removals_token = _removals_ctx.set(removals)
+    try:
+        await _broadcast_graph_sync(edit=True, moved=moves)
+    finally:
+        _removals_ctx.reset(removals_token)
+    # Its undo puts back the pins and proposals these deletes removed (after
+    # the sync, which adds the cover proposals it closed).
+    undo_after["removals"] = copy.deepcopy(removals)
+    _renew_kept_removals(removals)
+    await _announce_removed_nodes(entries)
+
     parts = [
         f"added {len(added)}" if added else "",
         f"connected {len(edge_ids)}" if edge_ids else "",
@@ -11923,16 +12023,14 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         verb = ("Added" if focus in added else "Changed" if focus in (changed or ())
                 else "Renamed" if focus in renamed else "Moved")
         await _show_agent({"nodeId": focus}, say=additions.note if note else summary, did=_did(verb, focus))
-    wanted = set(edge_ids)
     undo = _canvas_undo_keep(identity, undo_after)
     _canvas_edit_link.reset(edit_link)
     return {
         "status": "applied",
         "summary": summary,
         "idMap": id_map,
-        "added": [{"id": node_id, "definitionId": cli_graph.nodes[node_id].get("definitionId"),
-                   "name": _node_label(node_id)} for node_id in added],
-        "wired": [{"id": edge["id"], **_edge_data(edge)} for edge in cli_graph.edges if edge.get("id") in wanted],
+        "added": added_rows,
+        "wired": wired_rows,
         "changed": changed,
         "renamed": renamed,
         "moved": list(moves),
@@ -12039,8 +12137,8 @@ async def restore_graph_state(body: dict[str, Any]) -> dict[str, Any]:
         return await _restore_graph(body)
     token = _canvas_edit_link.set(link)
     try:
-        result = await _restore_graph(body)
-        _journal_restored_edit(link, body.get("action", "undo"))
+        result = await _restore_graph(
+            body, journal_done=lambda _done: _journal_restored_edit(link, body.get("action", "undo")))
     finally:
         _canvas_edit_link.reset(token)
     return result
@@ -12051,13 +12149,19 @@ async def _restore_graph(
     *,
     trusted: frozenset[str] = frozenset(),
     skipped_wires: list[dict[str, Any]] | None = None,
+    journal_done: Callable[[dict[str, list[Any]]], None] | None = None,
 ) -> dict[str, Any]:
     """The restore itself, for POST /api/graph/restore and an agent's undo
     (POST /api/graph/apply/undo). ``trusted`` are node ids whose items the
     server wrote (an edit's kept inverse): they may carry ``_`` params, a
     billing choice the node had, and a moodboard or character that is gone
     since, as the node had them. With ``skipped_wires`` a wire that can't go
-    back is listed there instead of refusing the whole restore."""
+    back is listed there instead of refusing the whole restore.
+    ``journal_done`` journals the caller's own closing event (edit.undone,
+    edit.redone) with what changed ({added, removed, changed, renamed, moved,
+    wired, unwired}), right after the restore's own events and before any
+    await, so it too names the project the restore was made in (round 8 of
+    PR #114)."""
     _check_workspace_revision()
     _validate_graph_ingress_complexity(body)
     action = body.get("action", "undo")
@@ -12214,16 +12318,11 @@ async def _restore_graph(
     # A redo of a delete (or an undo of an add) deletes like any delete: its
     # own removal records, which the canvas keeps for the next undo.
     entries = _remove_side_effects(removed, lambda gone: f"{gone['name']} ({gone['id']}) was removed{note}")
-    removals = _removal_records(entries)
-    removals_token = _removals_ctx.set(removals)
-    try:
-        await _broadcast_graph_sync(edit=True, moved=moved)
-    finally:
-        _removals_ctx.reset(removals_token)
-    _renew_kept_removals(removals)
+    # Every event of the restore is journaled here, before any await (round
+    # 8 of PR #114): it names the project the restore was made in.
     for edge in unwired:
         _journal_edge("edge.removed", edge, note=note)
-    await _announce_removed_nodes(entries, note=note, pin_reason=lambda gone: f"{gone['name']} was removed{note}")
+    _journal_removed_nodes(entries, note=note, pin_reason=lambda gone: f"{gone['name']} was removed{note}")
     for node_id in added:
         _journal_node_added(node_id, note=note)
     for node_id, before in changed.items():
@@ -12255,6 +12354,18 @@ async def _restore_graph(
         )
     for edge in wired:
         _journal_edge("edge.added", edge, note=note)
+    if journal_done is not None:
+        journal_done({"added": added, "removed": [gone["id"] for gone in removed], "changed": sorted(changed),
+                      "renamed": sorted(renamed), "moved": moved, "wired": [_edge_data(edge) for edge in wired],
+                      "unwired": unwired})
+    removals = _removal_records(entries)
+    removals_token = _removals_ctx.set(removals)
+    try:
+        await _broadcast_graph_sync(edit=True, moved=moved)
+    finally:
+        _removals_ctx.reset(removals_token)
+    _renew_kept_removals(removals)
+    await _announce_removed_nodes(entries)
     publish_action(f"{action.capitalize()} on the canvas: {len(added)} back, {len(removed)} removed, "
                    f"{len(changed)} changed, {len(wired)} connected, {len(unwired)} disconnected")
     # The nodes it brought back: their pins on them again, and the proposals
@@ -12510,11 +12621,10 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     link = {"id": undo_id, "undoes": record.edit_id, "of": owner}
     canvas_undo_book.link(undo_id, kind="undo", actor=actor, target=record.edit_id)
     wire_skips: list[dict[str, Any]] = []
-    context = _canvas_edit_link.set(link)
-    try:
-        # The pins and proposals the edit's deletes removed go back with the nodes.
-        restore = {**plan.restore, **({"removals": record.removals} if record.removals else {})}
-        result = await _restore_graph(restore, trusted=plan.trusted, skipped_wires=wire_skips)
+    said: dict[str, Any] = {}
+
+    def journal_undone(changed: dict[str, list[Any]]) -> None:
+        # With the restore's own events, before any await (round 8 of PR #114).
         skipped = plan.skipped + [{
             "part": "wire", "nodeId": wire["target"], "reason": "can't be wired now",
             "wire": {key: wire[key] for key in ("source", "sourceHandle", "target", "targetHandle")},
@@ -12524,7 +12634,7 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         record.last_skipped = skipped
         canvas_undo_book.note_events(undo_id, canvas_events.seqs_of_edit(undo_id))
         link_entry = canvas_undo_book.link_of(record.edit_id)
-        counts = {key: len(result.get(key) or []) for key in (
+        counts = {key: len(changed.get(key) or []) for key in (
             "added", "removed", "changed", "renamed", "moved", "wired", "unwired")}
         done = ", ".join(f"{verb} {counts[key]}" for key, verb in UNDONE_VERBS if counts[key])
         left = f"; left {len(skipped)} part{'s' if len(skipped) != 1 else ''} as is" if skipped else ""
@@ -12532,6 +12642,15 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             "editId": record.edit_id, "undoId": undo_id, "of": owner, "editKind": "edit",
             "events": link_entry.events if link_entry else [], "counts": counts, "skipped": len(skipped)},
             summary=f"undid {_undo_owner_text(owner, by=actor)} ({done or 'no change'}){left}")
+        said.update(skipped=skipped, done=done, left=left)
+
+    context = _canvas_edit_link.set(link)
+    try:
+        # The pins and proposals the edit's deletes removed go back with the nodes.
+        restore = {**plan.restore, **({"removals": record.removals} if record.removals else {})}
+        result = await _restore_graph(restore, trusted=plan.trusted, skipped_wires=wire_skips,
+                                      journal_done=journal_undone)
+        skipped, done, left = said["skipped"], said["done"], said["left"]
     finally:
         _canvas_edit_link.reset(context)
     stays = [item["nodeId"] for item in skipped if item.get("reason") == "ran since"]
@@ -12722,8 +12841,8 @@ async def delete_graph_edge(body: dict[str, Any]) -> dict:
         body.get("targetHandle", ""),
     )
     if removed:
+        _journal_edge("edge.removed", body)  # before any await (round 8 of PR #114)
         await _broadcast_graph_sync(edit=True)
-        _journal_edge("edge.removed", body)
         publish_action(
             f"Disconnected {body.get('source', '')}:{body.get('sourceHandle', '')} → "
             f"{body.get('target', '')}:{body.get('targetHandle', '')}"
@@ -13227,11 +13346,12 @@ async def add_graph_cluster(body: dict[str, Any]) -> dict:
             [candidate.nodes[node_id] for node_id in id_map.values()],
             source="cluster",
         )
+    _journal_cluster(list(id_map.values()), created_edge_ids)  # before any await (round 8 of PR #114)
+    created = _rf_created(list(id_map.values()), created_edge_ids)
     await _broadcast_graph_sync(edit=True)
     publish_action(f"Created cluster ({len(id_map)} nodes)")
-    _journal_cluster(list(id_map.values()), created_edge_ids)
 
-    return {"idMap": id_map, **_rf_created(list(id_map.values()), created_edge_ids)}
+    return {"idMap": id_map, **created}
 
 
 def _rewrite_output_paths(outputs: dict[str, Any]) -> dict[str, Any]:
@@ -13999,8 +14119,8 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         catalog["projects"][recovery_id] = project
         project_store.commit(catalog)
         result = {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
+    _journal_project_change("project.created", result["project"])  # before any await (round 8 of PR #114)
     await _broadcast_projects_changed("created", recovery_id)
-    _journal_project_change("project.created", result["project"])
     return result
 
 
@@ -14116,10 +14236,12 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
         catalog["workspaceRevision"] = uuid4().hex
         _commit_project_workspace(catalog, CLIGraph())
         revision = catalog["workspaceRevision"]
+    # In the step that made it, before any await (round 8 of PR #114); its
+    # canvas.replaced follows (_broadcast_graph_sync journals it first thing).
+    _journal_project_change("project.created", project)
     await _broadcast_graph_sync(graph_replaced=True, reason="project-create",
                                 project_switch=_switch_notice(start, project, created=True))
     await _broadcast_projects_changed("created", project["id"])
-    _journal_project_change("project.created", project)
     # A bundle built for another version doesn't load it (projectStore.ts activate).
     return {"project": public_project(project), "workspaceRevision": revision, "paramsVersion": PARAMS_VERSION}
 
@@ -14222,10 +14344,11 @@ async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
         # Its refusal comes where the check ran before (_IngressVerdict).
         verdict = await _ingress_verdict_off_loop(body["snapshot"])
     result = _save_project(project_id, body, ingress=verdict)
+    if "previousName" in result and result["previousName"] != result["project"]["name"]:
+        # Before any await (round 8 of PR #114).
+        _journal_project_change("project.renamed", result["project"], previous_name=result["previousName"])
     # A save moves the card up and can change its picture and node count.
     await _broadcast_projects_changed("renamed" if "name" in body else "saved", project_id)
-    if "previousName" in result and result["previousName"] != result["project"]["name"]:
-        _journal_project_change("project.renamed", result["project"], previous_name=result["previousName"])
     return result
 
 
@@ -14475,10 +14598,11 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
             "activeProjectId": catalog["activeProjectId"],
             "workspaceRevision": catalog["workspaceRevision"],
         }
+    # Before any await (round 8 of PR #114).
+    _journal_project_change("project.deleted", result["trashedProject"], was_open=deleting_active)
     if deleting_active:
         await _broadcast_graph_sync(graph_replaced=True, reason="project-delete")
     await _broadcast_projects_changed("deleted", project_id)
-    _journal_project_change("project.deleted", result["trashedProject"], was_open=deleting_active)
     return result
 
 
@@ -14511,8 +14635,8 @@ async def restore_saved_project(project_id: str) -> dict[str, Any]:
         kept = set(catalog["projects"]) | set(catalog.get("trash") or {})
     if expired:
         agent_questions.keep_projects(kept)
+    _journal_project_change("project.restored", result["project"])  # before any await (round 8 of PR #114)
     await _broadcast_projects_changed("restored", project_id)
-    _journal_project_change("project.restored", result["project"])
     return result
 
 
@@ -16680,9 +16804,9 @@ async def purge_trashed(kind: str, item_id: str) -> dict[str, Any]:
     except KeyError:
         raise refusal_copy.refusal(404, f"{_asset_noun(kind)} '{item_id}' isn't in Recently deleted", refusal_copy.gone_from_trash(_person_noun(kind)))
     # A card that showed it "in Recently deleted" now says it's gone.
-    await _broadcast_stored_asset(kind, None, item_id, deleted=True)
     if kind == "style":
-        _journal_style("purged", record, style_id=item_id)
+        _journal_style("purged", record, style_id=item_id)  # before any await (round 8 of PR #114)
+    await _broadcast_stored_asset(kind, None, item_id, deleted=True)
     return {"purged": kind, "id": item_id}
 
 
@@ -16712,9 +16836,9 @@ async def empty_trash(kind: str | None = None, scope: str | None = None,
                 except KeyError:
                     continue
                 purged += 1
-                await _broadcast_stored_asset(asset_kind, None, record["id"], deleted=True)
                 if asset_kind == "style":
-                    _journal_style("purged", record, style_id=record["id"])
+                    _journal_style("purged", record, style_id=record["id"])  # before any await
+                await _broadcast_stored_asset(asset_kind, None, record["id"], deleted=True)
     if kind in (None, "project") and scope is None:
         with project_store.transaction() as catalog:
             trash = catalog.get("trash") or {}

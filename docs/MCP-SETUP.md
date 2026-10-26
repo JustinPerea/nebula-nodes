@@ -617,7 +617,9 @@ answers at once when newer events exist, otherwise waits. Resume with
 your own edits never wake you. `gap: true` means the 500-event buffer
 overwrote events you hadn't read, and `reset: true` means the backend
 restarted; run `nebula look` in both cases. Every event carries the project
-id it happened in. Param values go through the same redaction as the
+id it happened in, which can be one closed since (an Update saved as the
+person opened another project); the answer's own `projectId` is the project
+open now. Param values go through the same redaction as the
 snapshot, and outputs never appear.
 
 ### Claude Code channels (experiment)

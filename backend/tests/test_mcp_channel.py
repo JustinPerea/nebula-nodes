@@ -1411,6 +1411,29 @@ def test_a_pin_is_dropped_when_the_journal_names_another_open_project():
     assert [(at, p.wake, p.gate) for at, p in pushes] == [(138.0, "change", True)]
 
 
+def test_an_event_about_a_project_closed_since_never_drops_the_open_projects_pin():
+    # Round 8 (review 7, item 1): an event names the project its change was
+    # made in, which can be one closed since: an Update a worker thread saved
+    # on proj_1 is journaled after the person opened proj_2 and pinned there,
+    # and a proposal the switch closed is tagged with its own project. Neither
+    # says proj_1 is open (the answer does), so proj_2's pin still wakes.
+    state = ChannelState(now=0.0)
+    _young_window(state)
+    switched = ev(2, "canvas.replaced", data={"reason": "project-open"}, summary="opened project")
+    state.observe(_in_project("proj_2", switched, pin(3)), now=110.0)
+    late = ev(4, "note.posted", actor={"kind": "agent", "id": "agent:o", "name": "O"},
+              data={"surface": "canvas", "noteId": "note_1", "text": "x"}, summary="posted an Update")
+    closed = ev(5, "proposal.invalidated", actor={"kind": "system"},
+                data={"proposalId": "prop_9", "reason": "the canvas was replaced"})
+    answer = resp(late, closed)  # both tagged proj_1
+    answer["projectId"] = "proj_2"
+    state.observe(answer, now=111.0)
+    assert "pin_00000003" in state._pins
+    pushes = drain(state, 111.0, 400.0)
+    assert [(at, p.wake, p.gate) for at, p in pushes] == [(168.5, "pin", False)]
+    assert _pins_shown(pushes[0][1]) == {"pin_00000003"}
+
+
 def test_an_import_into_the_same_project_keeps_the_pin():
     state = ChannelState(now=0.0)
     _young_window(state)
@@ -2120,7 +2143,9 @@ def test_a_pin_check_that_hangs_never_holds_an_accept():
         pushes.append((clock["t"], dict(meta), content))
 
     async def sleep(seconds):
-        clock["t"] += min(seconds, 1.0)
+        # Each wait ends at its own time (the pin check's bound is a wait of
+        # its own since round 8): waits running together don't add up.
+        clock["t"] = max(clock["t"], round(clock["t"] + min(seconds, 1.0), 6))
         if clock["t"] > 200.0:
             raise _Done()
         await anyio.sleep(0)
@@ -2274,17 +2299,21 @@ def test_a_check_that_fails_with_no_pin_waiting_ends_the_episode():
     assert logs and all(at >= 3601.0 + 60.0 for at, _ in logs), logs
 
 
-def test_the_listener_bounds_a_pin_check_that_never_answers(monkeypatch):
+def test_the_listener_bounds_a_pin_check_that_never_answers():
     # Review 6, LOW-3: the listener bounds its own check (it relied on the
     # caller's fetch_pins to time out): one that never answers fails after
-    # PIN_CHECK_TIMEOUT, and the pins wait for the retry.
-    monkeypatch.setattr(mcp_channel, "PIN_CHECK_TIMEOUT", 0.2)
+    # PIN_CHECK_TIMEOUT, and the pins wait for the retry. Review 7, item 3:
+    # on the listener's own clock and sleep, like its other waits (it ran on
+    # real time, so a fake clock never saw it fire): this rig's clock moves
+    # only through those waits, and the test has one real second.
     state = ChannelState(now=0.0)
+    state.last_person = 100.0
     state.observe(resp(pin(1)), now=100.0)
-    asked: list = []
+    clock = {"t": 100.0}
+    asked: list[float] = []
 
     async def fetch_pins():
-        asked.append(True)
+        asked.append(clock["t"])
         await anyio.sleep_forever()
 
     async def never(*args):
@@ -2293,20 +2322,40 @@ def test_the_listener_bounds_a_pin_check_that_never_answers(monkeypatch):
     async def push(content, meta):
         pass
 
-    listener = mcp_channel.Listener(state, fetch_events=never, fetch_run=never, push=push, clock=lambda: 110.0,
-                                    log=lambda line: None, fetch_pins=fetch_pins)
+    async def sleep(seconds):
+        clock["t"] = round(clock["t"] + min(seconds, 0.5), 6)
+        if clock["t"] > 130.0:
+            raise _Done()
+        await anyio.sleep(0)
+
+    listener = mcp_channel.Listener(state, fetch_events=never, fetch_run=never, push=push, clock=lambda: clock["t"],
+                                    log=lambda line: None, sleep=sleep, fetch_pins=fetch_pins)
+    taken: list = []
+    original = listener._take_check_answer
+
+    def take(now):
+        if listener._check_answer is not None:
+            taken.append((now, listener._check_answer))
+        return original(now)
+
+    listener._take_check_answer = take
 
     async def main():
-        with anyio.fail_after(3):
-            await listener._ask_nebula(["pin_00000001"])
+        with anyio.fail_after(1):
+            try:
+                await listener._push_when_due()
+            except _Done:
+                pass
+            except BaseExceptionGroup as group:
+                if not group.subgroup(_Done):
+                    raise
 
     anyio.run(main)
-    assert asked and listener._check_answer is not None
-    outcome, error = listener._check_answer
-    assert outcome == "failed" and isinstance(error, TimeoutError), listener._check_answer
-    listener._check_out = ["pin_00000001"]
-    assert listener._take_check_answer(110.0)
-    assert state._pin_retry_at == 110.0 + mcp_channel.PIN_RETRY_MIN and "pin_00000001" in state._pins
+    at, (outcome, error) = taken[0]
+    assert outcome == "failed" and isinstance(error, TimeoutError), taken
+    assert at == asked[0] + mcp_channel.PIN_CHECK_TIMEOUT, (asked, at)
+    # The pins waited for the retry, which counts from the failure.
+    assert asked[1] == at + mcp_channel.PIN_RETRY_MIN and "pin_00000001" in state._pins, asked
 
 
 def test_the_pin_check_gives_up_after_a_few_seconds(nebula):

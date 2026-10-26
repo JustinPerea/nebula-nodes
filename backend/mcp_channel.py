@@ -497,7 +497,11 @@ class ChannelState:
         if actor == "person":
             self.last_person = now
         # Before the actor filter: what anyone does to a pin or a proposal.
-        self._project_open(event.get("projectId"))
+        # An event's projectId names the project its change was made in
+        # (round 8), which may be one closed since (an Update a worker thread
+        # saved, a proposal a switch closed): it never says which project is
+        # open. The answer's projectId does (observe), and so does a
+        # canvas.replaced that opened another (_pin_event).
         self._pin_event(kind, event)
         if kind in DECISIONS:
             proposal_id = str(data.get("proposalId") or "")
@@ -1035,7 +1039,7 @@ MIN_POLL = 0.05      # the shortest sleep between push decisions
 RUN_WATCH_FAILURES = 10  # errors in a row (about 6 minutes with the backoff) before it stops following a run
 PIN_RETRY_MIN, PIN_RETRY_MAX = 5.0, 60.0  # a failed pin check is tried again after 5, 10, 20, 40, 60, 60... s
 PIN_CHECK_SAY_AFTER = 60.0  # a pin check failing this long is logged (once)
-PIN_CHECK_TIMEOUT = 4.0  # GET /api/canvas/pins is local and quick; past this it failed (mcp_server)
+PIN_CHECK_TIMEOUT = 4.0  # GET /api/canvas/pins is local and quick; past this it failed (Listener._check_timed_out)
 PIN_CHECK_GRACE = 1.0    # decisions wait this long for a check out; then the rest goes without its pins
 
 
@@ -1072,6 +1076,8 @@ class Listener:
         # decisions stop waiting for it, and its answer once it came.
         self._check_out: list[str] | None = None
         self._check_grace_until = -math.inf
+        self._check_deadline = math.inf
+        self._check_scope: anyio.CancelScope | None = None
         self._check_answer: tuple[str, Any] | None = None
         self._push = push
         self._clock = clock
@@ -1162,15 +1168,22 @@ class Listener:
         """The pin check itself, as a task of its own: a slow or hanging
         Nebula holds only this, never the decisions (review 5, L1). Its
         answer (or what went wrong) waits for the next decision. Bounded
-        here, whatever ``fetch_pins`` does: past PIN_CHECK_TIMEOUT it failed
-        (review 6, LOW-3)."""
-        try:
-            with anyio.fail_after(PIN_CHECK_TIMEOUT):
+        whatever ``fetch_pins`` does: the decisions give up on it at
+        ``_check_deadline``, PIN_CHECK_TIMEOUT after it started (review 6,
+        LOW-3), on the listener's own clock and ``sleep`` like every other
+        wait it makes (review 7, item 3; _check_timed_out)."""
+        with anyio.CancelScope() as scope:
+            self._check_scope = scope
+            try:
                 listing: Any = await self._fetch_pins()
-        except Exception as exc:  # noqa: BLE001 - Nebula down, restarting, slow or refusing
-            self._check_answer = ("failed", exc)
-        else:
-            self._check_answer = ("answered", listing)
+            except Exception as exc:  # noqa: BLE001 - Nebula down, restarting, slow or refusing
+                answer: tuple[str, Any] = ("failed", exc)
+            else:
+                answer = ("answered", listing)
+            if not scope.cancel_called:  # past its deadline, the decisions already said it failed
+                self._check_answer = answer
+        if self._check_scope is scope:
+            self._check_scope = None
         self._nudge()
 
     def _start_check(self, group: anyio.abc.TaskGroup, checked: list[str], now: float) -> None:
@@ -1178,7 +1191,16 @@ class Listener:
         self._check_out = checked
         self._check_answer = None
         self._check_grace_until = now + PIN_CHECK_GRACE
+        self._check_deadline = now + PIN_CHECK_TIMEOUT
         group.start_soon(self._ask_nebula, checked)
+
+    def _check_timed_out(self, now: float) -> None:
+        """The check out passed its deadline unanswered: it failed (and stops)."""
+        if self._check_out is None or self._check_answer is not None or now < self._check_deadline:
+            return
+        self._check_answer = ("failed", TimeoutError(f"no answer in {PIN_CHECK_TIMEOUT:g} s"))
+        if self._check_scope is not None:
+            self._check_scope.cancel()
 
     def _take_check_answer(self, now: float) -> bool:
         """Apply the answer of the check out, if it came, to the decision made
@@ -1275,6 +1297,7 @@ class Listener:
                 return
             if not self.state.pins_waiting():
                 self._pin_episode_over()
+            self._check_timed_out(now)
             answered = self._take_check_answer(now)
             if not answered:
                 if self._check_out is not None:
@@ -1306,6 +1329,8 @@ class Listener:
             delay = self.state.next_check(now)
             idle_in = self.state.last_person + self.state.limits.idle_off - now
             wait = min(idle_in, math.inf if delay is None else delay)
+            if self._check_out is not None:
+                wait = min(wait, self._check_deadline - now)  # a check out fails at its deadline
             await self._wait(max(MIN_POLL, wait))  # a check's answer nudges it
 
     async def _poll_events(self) -> None:

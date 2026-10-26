@@ -252,7 +252,10 @@ def test_submit_returns_a_view_broadcasts_the_key_to_browsers_only_and_journals(
     opened = [m for m in api.browser if m["type"] == "proposalOpened"]
     assert len(opened) == 1 and len(opened[0]["acceptKey"]) >= 24
     assert all(m.get("type") != "proposalOpened" for m in api.sent)
-    event = api.journal.read(after=0)["events"][-1]
+    events = api.journal.read(after=0)["events"]
+    # Journaled when it was made, before its Update (round 8 of PR #114).
+    assert [e["kind"] for e in events][-2:] == ["proposal.created", "note.posted"]
+    event = events[-2]
     assert event["kind"] == "proposal.created" and event["actor"]["name"] == "Claude Code"
     assert event["data"]["paidRuns"] == 1 and event["data"]["adds"] == 1
     # The agent's cursor moves to what it is talking about.
