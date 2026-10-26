@@ -56,7 +56,11 @@ MAX_EDIT_BYTES = 16 * 1024 * 1024
 MAX_TOTAL_BYTES = 64 * 1024 * 1024
 MAX_LINKS = 500
 MAX_GONE = 500
+# A link keeps at most this many of its bulk events (node.*, edge.*, ...),
+# oldest first. Its pin.* and proposal.* events are always kept: they are few
+# and agents act on them. A cut link says so (EditLink.truncated, .total).
 MAX_LINK_EVENTS = 50
+LINK_KEPT_KINDS = ("pin.", "proposal.")
 MAX_TRACKED_RUNS = 256
 MAX_RUN_NODES = 2000
 
@@ -518,6 +522,18 @@ class EditLink:
     actor: dict[str, Any]
     target: str | None = None  # for an undo or redo: the edit id it acts on
     events: list[int] = field(default_factory=list)
+    # Every event noted under it (``events`` may hold fewer), and whether any was cut.
+    total: int = 0
+    truncated: bool = False
+    kinds: dict[int, str] = field(default_factory=dict)  # of ``events``, for a later merge
+
+    def events_view(self) -> dict[str, Any]:
+        """``events`` for an edit.undone / edit.redone, with ``eventsTruncated``
+        and ``eventsTotal`` when the link was cut."""
+        view: dict[str, Any] = {"events": list(self.events)}
+        if self.truncated:
+            view.update(eventsTruncated=True, eventsTotal=self.total)
+        return view
 
 
 @dataclass
@@ -595,10 +611,23 @@ class CanvasUndoBook:
     def link_of(self, edit_id: str | None) -> EditLink | None:
         return self._links.get(edit_id) if edit_id else None
 
-    def note_events(self, edit_id: str, seqs: list[int]) -> None:
+    def note_events(self, edit_id: str, events: list[tuple[int, str]], *, merge: bool = False) -> None:
+        """The link's events, from (seq, kind) pairs: every pin.* and proposal.*
+        one, and the oldest MAX_LINK_EVENTS of the rest. ``merge`` adds them to
+        what it kept before (events that left the journal's buffer since stay,
+        and still count in ``total``)."""
         entry = self._links.get(edit_id)
-        if entry is not None:
-            entry.events = list(seqs)[:MAX_LINK_EVENTS]
+        if entry is None:
+            return
+        found = {**(entry.kinds if merge else {}), **dict(events)}
+        total = max(entry.total, len(found)) if merge else len(found)
+        ordered = sorted(found.items())
+        kept = sorted([pair for pair in ordered if pair[1].startswith(LINK_KEPT_KINDS)]
+                      + [pair for pair in ordered if not pair[1].startswith(LINK_KEPT_KINDS)][:MAX_LINK_EVENTS])
+        entry.events = [seq for seq, _kind in kept]
+        entry.kinds = dict(kept)
+        entry.total = total
+        entry.truncated = len(kept) < total
 
     # -- runs
     def mark(self) -> int:

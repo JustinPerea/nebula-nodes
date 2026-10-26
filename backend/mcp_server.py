@@ -618,7 +618,9 @@ def wait_for_canvas_change(
     (your `undo.editId`); an undo's events carry `undoes` (the edit id it
     reverted) and `of` (whose edit), and end with `edit.undone` (only a
     `proposal.reopened` the undo brought back can follow it; a later
-    `edit.undone` of that undo lists all of them in `events`), so you learn
+    `edit.undone` of that undo lists them in `events`: every pin and
+    proposal event, and at most 50 others, with `eventsTruncated` and
+    `eventsTotal` when it cut some), so you learn
     when the person undoes your change with Cmd+Z. Your own
     edits are skipped unless `include_self`; that only covers your
     `nebula` CLI calls too when NEBULA_AGENT_NAME is set, because without

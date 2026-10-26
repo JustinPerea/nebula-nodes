@@ -431,7 +431,9 @@ And these canvas tools:
   say so: each has `edit.undoes` (your `undo.editId`) and `edit.of` (you),
   and an `edit.undone` event follows (a `proposal.reopened` the undo brought
   back can come after it, since its fit check finishes later; a later
-  `edit.undone` of that undo lists every one of them in its `events`). If you also use the `nebula` CLI, set `NEBULA_AGENT_NAME`
+  `edit.undone` of that undo lists them in its `events`: every pin and
+  proposal event, and at most 50 others, with `eventsTruncated: true` and
+  `eventsTotal` when it left some out). If you also use the `nebula` CLI, set `NEBULA_AGENT_NAME`
   so both share one name; otherwise your CLI edits arrive as `anonymous`
   (the result then carries a `note`). Pass the returned `cursor` back as `since`; see
   [Watching for changes](#watching-for-changes). The wait holds only its own
@@ -596,7 +598,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `project.created` / `project.deleted` / `project.restored` | anyone made a project (new, or a stale tab's recovered copy), moved one to Recently deleted, or brought one back | `projectId`, `name`; `wasOpen` on a delete; `createdBy` when an agent made it |
 | `project.renamed` | a project's name changed (saving the same name again isn't journaled) | `projectId`, `from`, `to` |
 | `provider.hold` | a paid start was held (a World Labs recovery checkpoint, or a start Nebula couldn't confirm) or cleared, attributed to whoever started the run or cleared it | `hold` (`recovery` or `startAmbiguity`), `change` (`held` or `cleared`), `runId`, `kind`, `durable` |
-| `edit.undone` / `edit.redone` | a whole edit was undone (an agent's `undo_canvas_edit`, or the person's Cmd+Z of a step the canvas knew the edit of) or redone; after the node and connection events it made and the pins it put back (`pin.reattached`), and before any `proposal.reopened` of the same undo, which can follow it | `editId` (the edit reverted), `of` (whose), `editKind`, `events` (that edit's event cursors: every event journaled under it, its `pin.reattached` and `proposal.reopened` too, but its own `edit.undone`), `undid` (for an undo of an undo), `counts`, `skipped` |
+| `edit.undone` / `edit.redone` | a whole edit was undone (an agent's `undo_canvas_edit`, or the person's Cmd+Z of a step the canvas knew the edit of) or redone; after the node and connection events it made and the pins it put back (`pin.reattached`), and before any `proposal.reopened` of the same undo, which can follow it | `editId` (the edit reverted), `of` (whose), `editKind`, `events` (that edit's event cursors, oldest first: every event journaled under it but its own `edit.undone`, its `pin.*` and `proposal.*` ones always, and at most 50 of the rest), `eventsTruncated: true` and `eventsTotal` (how many it had) when that cut some, `undid` (for an undo of an undo), `counts`, `skipped` |
 | `note.posted` | an agent posted an update to the person (Updates, `post_note`) | `surface` (canvas or board), `noteId`, `about`, `refs` (up to 12), `text`; `boardId`, `boardName` on a board |
 | `style.created` / `style.updated` / `style.deleted` / `style.restored` / `style.purged` | a Style was saved, changed, moved to Recently deleted, restored from it, or deleted for good, by the person (Create, the Assets panel) or an agent (`style_*`, `nebula style`) | `styleId`, `styleName`, `scope` (`global` or the project id); `fields` (what an update changed: `name`, `category`, `prompt`, `params`, `modelId`, `refImages`, `thumbnail`); never a prompt or a setting's value |
 
@@ -2311,6 +2313,20 @@ one step at a time, exactly as `nebula apply` does (both use
 undo}`, or `{status: "stopped", failedStep, steps, error, applied, idMap,
 undo}` when a step is refused, and refuses a plan whose refs don't add up
 before anything is sent.
+
+A write lands only on the canvas that was open when it was asked. Node ids
+start again in each project and after Clear or a loaded graph, and some
+writes wait on something first (the model catalog for a universal node's
+model, a run's spend check, an upload's file). If the person opens another
+project meanwhile, the write is refused with 409 and nothing changes:
+"Another project is open now, so nothing was changed. Read the canvas again
+and send the change again if it still fits." After a Clear or a loaded graph
+on the same project the detail starts "The canvas was cleared or replaced
+since". This covers `edit_canvas` and `remove_from_canvas` (`nebula
+apply`), `propose_change`, `upload_file` with a node, `load_graph_file`,
+`run_nodes` (`nebula run`), and the routes under them (`PUT
+/api/graph/node/{id}`, `POST /api/graph/node`, the canvas's own Run and a
+Cinema shot). Read the canvas again (`look_at_canvas`) before you retry.
 
 #### Universal nodes: ports from the model
 

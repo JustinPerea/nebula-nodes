@@ -758,3 +758,7 @@ Connections must match types; `Any` connects to anything.
    their limits and propose anything bigger.
 5. Canvas edits can be undone, so when the person gives you room, use it.
    Ask before anything that can't be undone.
+6. A 409 "Another project is open now" (or "The canvas was cleared or
+   replaced since") means the person switched or cleared the canvas while
+   your change was on its way: nothing changed. Read the canvas again before
+   you retry, since node ids start again in each project.

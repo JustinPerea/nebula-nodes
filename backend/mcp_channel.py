@@ -1181,7 +1181,13 @@ class Listener:
                 answer: tuple[str, Any] = ("failed", exc)
             else:
                 answer = ("answered", listing)
-            if not scope.cancel_called:  # past its deadline, the decisions already said it failed
+            # In time only strictly before its deadline, on the listener's own
+            # clock (review 9: an answer at the deadline, taken before the
+            # decision looked, was applied). A late one is dropped here; the
+            # decision then finds the check unanswered past its deadline and
+            # fails it (_check_timed_out). A cancelled one the decisions
+            # already called failed.
+            if not scope.cancel_called and self._check_scope is scope and self._clock() < self._check_deadline:
                 self._check_answer = answer
         if self._check_scope is scope:
             self._check_scope = None

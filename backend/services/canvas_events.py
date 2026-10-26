@@ -517,7 +517,11 @@ class CanvasEventJournal:
     def seqs_of_edit(self, edit_id: str, *, skip_kinds: frozenset[str] = frozenset()) -> list[int]:
         """The buffered events of one canvas edit (``edit.id``), oldest first,
         but those of a kind in ``skip_kinds``."""
-        return [event["seq"] for event in self._events
+        return [seq for seq, _kind in self.events_of_edit(edit_id, skip_kinds=skip_kinds)]
+
+    def events_of_edit(self, edit_id: str, *, skip_kinds: frozenset[str] = frozenset()) -> list[tuple[int, str]]:
+        """``seqs_of_edit`` with each event's kind: (seq, kind)."""
+        return [(event["seq"], str(event.get("kind"))) for event in self._events
                 if (event.get("edit") or {}).get("id") == edit_id and event.get("kind") not in skip_kinds]
 
     @property

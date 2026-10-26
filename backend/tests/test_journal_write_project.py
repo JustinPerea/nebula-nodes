@@ -516,3 +516,186 @@ def test_an_undo_never_reopens_a_proposal_after_another_project_opened(race, mon
     assert main.canvas_proposals.get(proposal_id).status == "invalidated"
     assert not [e for e in race.events() if e["seq"] > since and e["kind"] == "proposal.reopened"]
     assert not [m for m in race.browser[browser_before:] if m.get("type") == "proposalOpened"]
+
+
+# -- review 9 (round 10) ---------------------------------------------------------------
+# Item 2: a timer armed inside an undo ran with the undo's request context
+# (loop.call_later copies it), so a reopened proposal's later proposal.expired,
+# and every other proposal swept with it, carried the undo's edit tag and could
+# land in the link's events (review 9, Q1). Timers now run in a fresh context.
+
+def _propose_value(race: Race, headers: dict, node_id: str, value: str) -> str:
+    made = race.client.post("/api/canvas/proposals", headers=headers, json={
+        "note": f"set {value}", "params": [{"nodeId": node_id, "params": {"value": value}}]})
+    assert made.status_code == 201, made.text
+    return made.json()["proposal"]["id"]
+
+
+def _two_proposals_deleted(race: Race) -> tuple[str, str, str, str, str, str]:
+    """k1, k2 each with a proposal; another agent's proposal on a third node;
+    then an agent deletes k1 and k2. Returns k1, k2, p1, p2, p3 and the undo token."""
+    k1 = race.graph.add_node("text-input", {"value": "one"}, position={"x": 0, "y": 0})
+    k2 = race.graph.add_node("text-input", {"value": "two"}, position={"x": 0, "y": 200})
+    other = race.graph.add_node("text-input", {"value": "other"}, position={"x": 0, "y": 400})
+    p1 = _propose_value(race, AGENT, k1, "uno")
+    p2 = _propose_value(race, AGENT, k2, "dos")
+    p3 = _propose_value(race, {"X-Nebula-Agent": "Codex"}, other, "unrelated")
+    made = race.client.post("/api/graph/apply", headers=AGENT, json={"remove": [k1, k2]})
+    assert made.status_code == 200, made.text
+    return k1, k2, p1, p2, p3, made.json()["undo"]["token"]
+
+
+def _async_client(race: Race):
+    import httpx
+
+    return httpx.AsyncClient(transport=httpx.ASGITransport(app=race.main.app), base_url="http://testserver")
+
+
+def test_a_reopened_proposals_expiry_never_carries_the_undos_edit_link(race, monkeypatch):
+    import asyncio
+
+    main = race.main
+    _k1, _k2, p1, p2, p3, token = _two_proposals_deleted(race)
+    now = main.canvas_proposals.now()
+    main.canvas_proposals.get(p1).expires_at = now + 0.4
+    main.canvas_proposals.get(p3).expires_at = now + 0.4
+    real = main._reopen_update
+
+    async def slow_reopen_update(ref, proposal_id):
+        # p2's Update write is slow (disk I/O under load): p1's timer, armed
+        # in the undo, fires while the undo is still inside its link.
+        if proposal_id == p2:
+            await asyncio.sleep(1.5)
+        return await real(ref, proposal_id)
+
+    monkeypatch.setattr(main, "_reopen_update", slow_reopen_update)
+
+    async def go():
+        async with _async_client(race) as client:
+            undo = await client.post("/api/graph/apply/undo", headers=AGENT, json={"token": token})
+            await asyncio.sleep(1.2)
+            return undo
+
+    undo = asyncio.run(go())
+    assert undo.status_code == 200, undo.text
+    assert undo.json()["reopened"] == [p1, p2]
+    undo_id = undo.json()["undoId"]
+    expired = [e for e in race.events() if e["kind"] == "proposal.expired"]
+    assert {e["data"]["proposalId"] for e in expired} == {p1, p3}, [e["data"] for e in expired]
+    assert [e.get("edit") for e in expired] == [None, None], expired
+    link = main.canvas_undo_book.link_of(undo_id)
+    assert not {e["seq"] for e in expired} & set(link.events), (link.events, expired)
+
+
+# Item 4: the person's Cmd+Z of an agent's undo, while that undo still awaits a
+# later proposal's fit check, lists the proposals it reopened before then
+# (review 9, Q2): the link takes each proposal.reopened as it is journaled.
+
+def test_the_persons_cmd_z_during_a_later_proposals_check_lists_an_earlier_reopen(race, monkeypatch):
+    import asyncio
+
+    main = race.main
+    k1, k2, p1, _p2, _p3, token = _two_proposals_deleted(race)
+    real = main._look_up_models
+    state: dict[str, Any] = {}
+
+    async def look_up(wanted):
+        state["n"] = state.get("n", 0) + 1
+        if state["n"] == 2:  # p2's check: the person's Cmd+Z lands here
+            state["entered"].set()
+            await state["release"].wait()
+        return await real(wanted)
+
+    monkeypatch.setattr(main, "_look_up_models", look_up)
+
+    async def go():
+        state["entered"], state["release"] = asyncio.Event(), asyncio.Event()
+        async with _async_client(race) as client:
+            undo_task = asyncio.create_task(client.post("/api/graph/apply/undo", headers=AGENT,
+                                                        json={"token": token}))
+            await asyncio.wait_for(state["entered"].wait(), 10)
+            undo_id = next(e for e in race.events() if e["kind"] == "edit.undone")["data"]["undoId"]
+            again = await client.post("/api/graph/restore", headers=PERSON, json={
+                "action": "undo", "edit": undo_id, "remove": [k1, k2], "nodes": []})
+            state["release"].set()
+            return await undo_task, again, undo_id
+
+    undo, again, undo_id = asyncio.run(go())
+    assert undo.status_code == 200 and again.status_code == 200, (undo.text, again.text)
+    reopened = [e for e in race.events() if e["kind"] == "proposal.reopened" and e["data"]["proposalId"] == p1]
+    assert len(reopened) == 1 and (reopened[0].get("edit") or {}).get("id") == undo_id, reopened
+    persons = [e for e in race.events() if e["kind"] == "edit.undone" and e["data"].get("editId") == undo_id][-1]
+    assert reopened[0]["seq"] in persons["data"]["events"], (persons["data"]["events"], reopened[0]["seq"])
+
+
+# Item 3: a link kept only its oldest 50 events, so a big undo's
+# pin.reattached / proposal.reopened fell off silently (review 9, Q6, a
+# 55-node delete). Every pin.* and proposal.* event is kept; only the bulk
+# node and wire events are capped, and a cut says so (eventsTruncated, eventsTotal).
+
+def _all_events(race: Race) -> list[dict]:
+    out: list[dict] = []
+    after = 0
+    while True:
+        page = race.journal.read(after=after, limit=200)["events"]
+        if not page:
+            return out
+        out += page
+        after = page[-1]["seq"]
+
+
+def test_a_big_undos_link_keeps_its_pins_and_proposals_and_says_it_was_cut(race):
+    from services.canvas_undo import MAX_LINK_EVENTS
+
+    main = race.main
+    nodes = [race.graph.add_node("text-input", {"value": f"v{i}"}, position={"x": 0, "y": 60 * i})
+             for i in range(MAX_LINK_EVENTS + 5)]
+    pin_id = _pin_on(race, nodes[-1])
+    proposal_id = _propose_value(race, CLAUDE, nodes[-1], "changed")
+    made = race.client.post("/api/graph/apply", headers=AGENT, json={"remove": nodes})
+    assert made.status_code == 200, made.text
+    edit_id = made.json()["undo"]["editId"]
+    undo = race.client.post("/api/graph/apply/undo", headers=AGENT, json={"token": made.json()["undo"]["token"]})
+    assert undo.status_code == 200, undo.text
+    assert undo.json()["reattached"] == [pin_id] and undo.json()["reopened"] == [proposal_id]
+    undo_id = undo.json()["undoId"]
+    events = _all_events(race)
+
+    def tagged(link_id: str, *skip: str) -> list[tuple[int, str]]:
+        return [(e["seq"], e["kind"]) for e in events if (e.get("edit") or {}).get("id") == link_id
+                and e["kind"] not in skip]
+
+    # The undo's own link.
+    mine = tagged(undo_id, "edit.undone")
+    link = main.canvas_undo_book.link_of(undo_id)
+    special = [seq for seq, kind in mine if kind.startswith(("pin.", "proposal."))]
+    assert len(special) == 2, mine
+    assert set(special) <= set(link.events), (special, link.events)
+    assert len([seq for seq in link.events if seq not in special]) == MAX_LINK_EVENTS
+    assert link.truncated is True and link.total == len(mine), (link.total, len(mine))
+    # The edit.undone of the agent's undo lists the edit's link, cut the same way.
+    undone = next(e for e in events if e["kind"] == "edit.undone" and e["data"].get("undoId") == undo_id)
+    edits = tagged(edit_id)
+    detached = [seq for seq, kind in edits if kind.startswith(("pin.", "proposal."))]
+    assert len(detached) == 2, edits
+    assert set(detached) <= set(undone["data"]["events"])
+    assert undone["data"]["eventsTruncated"] is True and undone["data"]["eventsTotal"] == len(edits)
+    # The person's Cmd+Z of that undo lists the undo's link, its pin and proposal included.
+    again = race.client.post("/api/graph/restore", headers=PERSON, json={
+        "action": "undo", "edit": undo_id, "remove": nodes, "nodes": []})
+    assert again.status_code == 200, again.text
+    last = [e for e in _all_events(race) if e["kind"] == "edit.undone"][-1]
+    assert last["data"]["editId"] == undo_id
+    assert set(special) <= set(last["data"]["events"])
+    assert last["data"]["eventsTruncated"] is True and last["data"]["eventsTotal"] == len(mine)
+
+
+def test_a_small_undo_lists_every_event_and_no_cut(race):
+    keep, _pin_id, _proposal_id = _pinned_and_proposed(race, pin=True, proposal=True)
+    made = race.client.post("/api/graph/apply", headers=AGENT, json={"remove": [keep]})
+    undo = race.client.post("/api/graph/apply/undo", headers=AGENT, json={"token": made.json()["undo"]["token"]})
+    assert undo.status_code == 200, undo.text
+    undone = next(e for e in race.events() if e["kind"] == "edit.undone")
+    assert "eventsTruncated" not in undone["data"] and "eventsTotal" not in undone["data"]
+    link = race.main.canvas_undo_book.link_of(undo.json()["undoId"])
+    assert link.truncated is False

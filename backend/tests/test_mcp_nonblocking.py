@@ -114,7 +114,30 @@ def test_long_polls_cannot_starve_other_calls(fake_nebula, monkeypatch):
     # calls have their own pool and still answer at once.
     monkeypatch.setattr(mcp_server._WAIT_LIMITER, "total_tokens", 2)
     times = anyio.run(_wait_then_look, 3, 2.0)
-    assert times["look"] < 1.5, times
+    _assert_look_never_queued_behind_the_waits(times)
+
+
+def _assert_look_never_queued_behind_the_waits(times: dict[str, float]) -> None:
+    """Order, not a wall-clock bound (review 9 of PR #114: `look < 1.5 s`
+    failed at 1.65 s on a loaded machine). Starved, look takes a slot only
+    once a wait gives one back, so it lands after the first wait ends; with
+    its own pool it lands while both slots are still held. Load delays look
+    and the waits alike, so the order holds where a fixed bound doesn't."""
+    ends = sorted(times[f"wait{index}"] for index in range(3))
+    # The waits held their slots (2 s each) and the third queued behind them.
+    assert ends[0] >= 1.9 and ends[2] >= ends[0] + 1.9, times
+    assert times["look"] < ends[0], times
+
+
+def test_the_starvation_check_catches_a_shared_pool(fake_nebula, monkeypatch):
+    # The check above, on a server whose ordinary calls share the waits' pool:
+    # it must fail, or it proves nothing.
+    shared = anyio.CapacityLimiter(2)
+    monkeypatch.setattr(mcp_server, "_WAIT_LIMITER", shared)
+    monkeypatch.setattr(mcp_server, "_CALL_LIMITER", shared)
+    times = anyio.run(_wait_then_look, 3, 2.0)
+    with pytest.raises(AssertionError):
+        _assert_look_never_queued_behind_the_waits(times)
 
 
 def _borrowed() -> int:

@@ -2975,3 +2975,56 @@ def test_the_limits_come_from_the_answers_by_default():
     limits = Limits.from_env({})
     assert (limits.quiet, limits.max_hold, limits.min_gap, limits.per_hour, limits.idle_off) == (8, 30, 30, 20, 7200)
     assert Limits.from_env({"NEBULA_CHANNEL_QUIET": "nonsense"}).quiet == 8
+
+
+@pytest.mark.parametrize("arrives_at, applied", [
+    (mcp_channel.PIN_CHECK_TIMEOUT, False),          # exactly at the deadline: too late
+    (mcp_channel.PIN_CHECK_TIMEOUT - 0.001, True),   # just before it: in time
+])
+def test_a_check_answer_counts_only_strictly_before_its_deadline(arrives_at, applied):
+    # Review 9 fuzz (seeds 6468, 6594), the coordinator's rule: an answer is
+    # in time only if it arrived strictly before the deadline, on the
+    # listener's clock. One that arrived at or after it is dropped and the
+    # check fails, even when the decision only looks later.
+    state = ChannelState(now=0.0)
+    state.last_person = 100.0
+    state.observe(resp(pin(1)), now=100.0)
+    clock = {"t": 100.0}
+
+    async def fetch_pins():
+        clock["t"] = 100.0 + arrives_at
+        return {"projectId": None, "pins": [{"id": "pin_00000001", "status": "open"}]}
+
+    async def never(*args):
+        await anyio.sleep_forever()
+
+    async def push(content, meta):
+        pass
+
+    listener = mcp_channel.Listener(state, fetch_events=never, fetch_run=never, push=push,
+                                    clock=lambda: clock["t"], log=lambda line: None, fetch_pins=fetch_pins)
+
+    class HeldGroup:
+        def __init__(self) -> None:
+            self.held: list = []
+
+        def start_soon(self, fn, *args):
+            self.held.append((fn, args))
+
+    group = HeldGroup()
+
+    async def main():
+        listener._start_check(group, ["pin_00000001"], 100.0)
+        fn, args = group.held[0]
+        with anyio.fail_after(1):
+            await fn(*args)  # the answer arrives (at 100 + arrives_at)
+        # The decision looks only now, a little later.
+        later = 100.0 + mcp_channel.PIN_CHECK_TIMEOUT + 0.2
+        listener._check_timed_out(later)
+        return listener._check_answer
+
+    answer = anyio.run(main)
+    assert answer is not None
+    assert (answer[0] == "answered") is applied, answer
+    if not applied:
+        assert isinstance(answer[1], TimeoutError), answer
